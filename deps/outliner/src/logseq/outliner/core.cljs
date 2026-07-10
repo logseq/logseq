@@ -15,6 +15,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
@@ -187,6 +188,70 @@
                                  tags'))))))))
       m)))
 
+(defn- new-page-ref?
+  [ref]
+  (and (map? ref)
+       (contains? #{"page" "journal"} (:block/type ref))
+       (nil? (:db/id ref))
+       (nil? (:db/ident ref))))
+
+(defn- resolve-page-ref
+  [db ref tag-names]
+  (if (new-page-ref? ref)
+    (let [class? (contains? tag-names (:block/name ref))]
+      (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
+        [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
+                (select-keys ref [:block.temp/original-page-name]))
+         nil]
+        (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
+                                                                 {:uuid (:block/uuid ref)
+                                                                  :class? class?
+                                                                  :journal? (= "journal" (:block/type ref))})]
+          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                          :block/uuid page-uuid)
+             class? (assoc :db/ident (or (some :db/ident tx-data)
+                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
+           tx-data])))
+    [ref nil]))
+
+(defn- resolve-page-refs
+  [db block]
+  (if-let [refs (seq (:block/refs block))]
+    (let [tag-names (into #{} (keep :block/name) (:block/tags block))
+          resolved-refs (mapv #(resolve-page-ref db % tag-names) refs)
+          refs' (mapv first resolved-refs)
+          page-txs (mapcat second resolved-refs)
+          tag-refs (into {} (keep (fn [ref]
+                                    (when (:db/ident ref)
+                                      [(:block/name ref) ref])))
+                         refs')
+          tags' (mapv (fn [tag]
+                        (if-let [ref (get tag-refs (:block/name tag))]
+                          (merge (dissoc tag :block/type)
+                                 (select-keys ref [:block/uuid :db/ident]))
+                          tag))
+                      (:block/tags block))
+          replacements (keep (fn [[ref ref']]
+                               (when (not= (:block/uuid ref) (:block/uuid ref'))
+                                 [(:block/uuid ref) (:block/uuid ref')]))
+                             (map vector refs refs'))
+          replace-refs (fn [title]
+                         (reduce (fn [title [old-uuid new-uuid]]
+                                   (string/replace title
+                                                   (page-ref/->page-ref old-uuid)
+                                                   (page-ref/->page-ref new-uuid)))
+                                 title
+                                 replacements))]
+      {:block (cond-> (assoc block :block/refs refs'
+                                     :block/tags tags')
+                (and (seq replacements) (string? (:block/title block)))
+                (update :block/title replace-refs)
+
+                (and (seq replacements) (string? (:block/raw-title block)))
+                (update :block/raw-title replace-refs))
+       :page-txs page-txs})
+    {:block block}))
+
 (defn- remove-tags-when-title-changed
   [block new-content]
   (when (and (:block/raw-title block) new-content)
@@ -276,13 +341,13 @@
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
           data' (remove-disallowed-inline-classes db data)
+          {:keys [block page-txs]} (resolve-page-refs db
+                                                       (dissoc data' :block/children :block/meta :block/unordered
+                                                               :block.temp/ast-title :block.temp/ast-body :block/level
+                                                               :block.temp/load-status :block.temp/has-children?))
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
-              (-> data'
-                  (dissoc :block/children :block/meta :block/unordered
-                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
-                          :block.temp/has-children?)
-                  (fix-tag-ids db))
+              (fix-tag-ids block db)
                (not collapse-or-expand?)
                block-with-updated-at)
           db-id (:db/id this)
@@ -319,6 +384,9 @@
             (when-not uuid-not-changed?
               (js/console.error "Block UUID shouldn't be changed once created"))
             (assert uuid-not-changed? "Block UUID changed"))))
+
+      (when (seq page-txs)
+        (swap! *txs-state into page-txs))
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes

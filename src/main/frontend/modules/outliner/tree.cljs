@@ -48,15 +48,13 @@
                                        (let [id (:db/id block)
                                              children (-> (block-children id (inc level))
                                                           ldb/sort-by-order)]
-                                         (-> block
-                                             (assoc :block/level level
-                                                    :block/children children
-                                                    :block/parent {:db/id parent})
-                                             (dissoc :block/tx-id)))))))]
+                                         (assoc block
+                                                :block/level level
+                                                :block/children children
+                                                :block/parent {:db/id parent}))))))]
       (if (and (entity/page? root) (not (:link option)))
         (block-children root-id 1)
-        [(-> (assoc root :block/children (block-children root-id 1))
-             (dissoc :block/tx-id))]))))
+        [(assoc root :block/children (block-children root-id 1))]))))
 
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."

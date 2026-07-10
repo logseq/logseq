@@ -99,8 +99,8 @@
               (p/then
                (fn []
                  (let [calls' (vec (remove #(= :thread-api/update-thread-atom (first %)) @calls))
-                       insert-call (last calls')
-                       insert-opts (nth insert-call 4)]
+                       insert-call (some #(when (= :insert-command (first %)) %) calls')
+                       insert-opts (nth insert-call 4 nil)]
                    (is (= [[:stop event]
                            [:clear-editor-action]
                            [:get-block "test" page-id {:children? false}]
@@ -108,8 +108,14 @@
                            [:insert-command "edit-input" "[[Page]]" :markdown
                             {:last-pattern "[[Pa"
                              :end-pattern "]]"
-                             :command :page-ref}]]
-                          (update-in calls' [4 4] dissoc :postfix-fn)))
+                             :command :page-ref}]
+                           [:conj-block-ref loaded-page]]
+                          (mapv (fn [call]
+                                  (if (= :insert-command (first call))
+                                    (update call 4 dissoc :postfix-fn)
+                                    call))
+                                calls'))
+                        (pr-str calls'))
                    (is (fn? (:postfix-fn insert-opts))))))
               (p/catch
                (fn [error]
@@ -182,10 +188,11 @@
       (-> (page-handler/<reorder-favorites! [page-a page-b])
           (p/then
            (fn []
-             (is (= [[:thread-api/build-reorder-favorites-ops "test" [page-a page-b]]
-                     [:thread-api/apply-outliner-ops "test" ops nil]
-                     [:favorites-updated]]
-                    @calls))))
+             (let [calls' (vec (remove #(= :thread-api/update-thread-atom (first %)) @calls))]
+               (is (= [[:thread-api/build-reorder-favorites-ops "test" [page-a page-b]]
+                       [:thread-api/apply-outliner-ops "test" ops nil]
+                       [:favorites-updated]]
+                      calls')))))
           (p/catch
            (fn [error]
              (is false (str error))))
@@ -199,17 +206,19 @@
 (deftest today-journal-actions-load-page-through-worker-test
   (async done
     (let [calls (atom [])
-          worker-results (atom [nil {:db/id 42}])
+          journal-page-results (atom [nil {:db/id 42}])
           created-page {:block/title "Jul 7th, 2026"}
           previous-state @state/state
           previous-worker @state/*db-worker]
       (swap! state/state assoc :git/current-repo "test")
       (reset! state/*db-worker
               (fn [& args]
-                (let [result (first @worker-results)]
-                  (swap! worker-results rest)
-                  (swap! calls conj (vec args))
-                  (p/resolved result))))
+                (if (= :thread-api/get-journal-page-by-day (first args))
+                  (let [result (first @journal-page-results)]
+                    (swap! journal-page-results rest)
+                    (swap! calls conj (vec args))
+                    (p/resolved result))
+                  (p/resolved nil))))
       (p/with-redefs [date/today (constantly "Jul 7th, 2026")
                       date/today-journal-day (constantly 20260707)
                       state/set-today!
