@@ -387,8 +387,10 @@ let first_entity value =
   match
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
   with
-  | Some values, _, _ when not (Vec.is_empty values) -> Some (Vec.hd values)
-  | _, Some values, _ when not (Vec.is_empty values) -> Some (Vec.hd values)
+  | Some values, _, _ when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
+  | _, Some values, _ when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
   | _, _, Some _ -> Some value
   | _ -> None
 

@@ -463,26 +463,26 @@ let first_entity value =
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
   with
   | Some values, _, _ when not (Vec.is_empty values) -> (
-      let first = Vec.hd values in
+      let first = Vec.peek_front values in
       match map_value first with
       | Some _ as result -> result
       | None -> (
           match (Edn_util.as_vector first, Edn_util.as_list first) with
           | Some nested_values, _ when not (Vec.is_empty nested_values) ->
-              map_value (Vec.hd nested_values)
+              map_value (Vec.peek_front nested_values)
           | _, Some nested_values when not (Vec.is_empty nested_values) ->
-              map_value (Vec.hd nested_values)
+              map_value (Vec.peek_front nested_values)
           | _ -> None))
   | _, Some values, _ when not (Vec.is_empty values) -> (
-      let first = Vec.hd values in
+      let first = Vec.peek_front values in
       match map_value first with
       | Some _ as result -> result
       | None -> (
           match (Edn_util.as_vector first, Edn_util.as_list first) with
           | Some nested_values, _ when not (Vec.is_empty nested_values) ->
-              map_value (Vec.hd nested_values)
+              map_value (Vec.peek_front nested_values)
           | _, Some nested_values when not (Vec.is_empty nested_values) ->
-              map_value (Vec.hd nested_values)
+              map_value (Vec.peek_front nested_values)
           | _ -> None))
   | _, _, Some _ -> Some value
   | _ -> None
@@ -814,8 +814,7 @@ let common_options common =
           common.order)
 
 let add_bool key enabled fields =
-  if enabled then
-    Vec.push_back fields (Edn_util.keyword key, Edn_util.bool true)
+  if enabled then Vec.push_back fields (Edn_util.keyword key, Edn_util.bool true)
   else fields
 
 let add_optional_bool key value fields =
@@ -870,8 +869,7 @@ let options_of_parsed = function
            (if Vec.is_empty opts.properties then None
             else Some (value_of_string_list opts.properties))
       |> Edn_util.map_vec
-  | Parsed_asset opts ->
-      Edn_util.map_vec (opts.common |> common_options)
+  | Parsed_asset opts -> Edn_util.map_vec (opts.common |> common_options)
 
 let build ?registry:_ config _globals parsed =
   Error.bind (normalize_options parsed) (fun parsed ->

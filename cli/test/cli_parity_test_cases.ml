@@ -1363,7 +1363,7 @@ let () =
              |])
       in
       expect_int "collected uuid refs" 1 (Vec.length refs);
-      expect_equal "collected uuid" uuid (Vec.hd refs));
+      expect_equal "collected uuid" uuid (Vec.peek_front refs));
 
   test "CLI parity human count helpers use grouped counts and pluralization"
     (fun () ->
@@ -1453,7 +1453,7 @@ let () =
       in
       let lines = Profile_types.render_lines report in
       expect_equal "profile headline" "42ms command=graph-list status=ok"
-        (Vec.hd lines);
+        (Vec.peek_front lines);
       expect_bool "profile stages heading" true
         (Vec.exists (fun line -> String.trim line = "stages") lines);
       expect_bool "profile total line" true
@@ -1891,7 +1891,7 @@ let () =
       let result = List_command.apply_offset_limit opts items in
       expect_int "window size" 2 (Vec.length result);
       expect_int64 "first window id" 2L
-        (expect_some "id" (Vec.hd result).Entity.id));
+        (expect_some "id" (Vec.peek_front result).Entity.id));
 
   test "CLI parity list build action validates repo and option contracts"
     (fun () ->
@@ -2188,7 +2188,8 @@ let () =
           in
           expect_int "asset limit" 1 (Vec.length items);
           expect_int64 "newest asset first" 2L
-            (expect_some "asset id" (Edn_util.get_int64 (Vec.hd items) "db/id"));
+            (expect_some "asset id"
+               (Edn_util.get_int64 (Vec.peek_front items) "db/id"));
           expect_int "pull plus list calls" 2 (Vec.length !calls);
           Js.Promise.resolve pass));
 
@@ -2439,11 +2440,12 @@ let () =
           in
           let title =
             expect_some "title"
-              (Edn_util.get_string (Vec.hd items) "block/title")
+              (Edn_util.get_string (Vec.peek_front items) "block/title")
           in
           expect_equal "replaced uuid ref" "foo [[bar]]" title;
           expect_int "q and pull calls" 2 (Vec.length !calls);
-          expect_named_contains "pull lookup uuid" (Vec.hd !calls) ref_uuid;
+          expect_named_contains "pull lookup uuid" (Vec.peek_front !calls)
+            ref_uuid;
           Js.Promise.resolve pass));
 
   test "CLI parity remove validation rejects ambiguous and blank targets"
@@ -3275,7 +3277,8 @@ let () =
           expect_int "update property count" 1
             (Vec.length update.update_properties);
           expect_equal "update property key" "p1"
-            (property_key_text (Vec.hd update.update_properties).Property.key)
+            (property_key_text
+               (Vec.peek_front update.update_properties).Property.key)
       | _ -> fail_test "expected Upsert_block update action");
 
   test "CLI parity upsert tag parses schema property vectors" (fun () ->
@@ -3295,9 +3298,9 @@ let () =
           { mode = Upsert.Create; add_properties; remove_properties; _ } ->
           expect_int "add property count" 2 (Vec.length add_properties);
           expect_equal "add property by name" "status"
-            (property_key_text (Vec.hd add_properties));
+            (property_key_text (Vec.peek_front add_properties));
           expect_equal "remove property by id" "123"
-            (property_key_text (Vec.hd remove_properties))
+            (property_key_text (Vec.peek_front remove_properties))
       | _ -> fail_test "expected Upsert_tag create action");
       expect_error_code "add-properties map" "invalid-options"
         (Upsert.build (config ~repo:"demo" ()) (Global_opts.create ())
@@ -3595,7 +3598,7 @@ let () =
       expect_int "root tags" 2 (Vec.length root.tags);
       expect_int "root children" 1 (Vec.length root.children);
       expect_equal "child content title" "Child"
-        (expect_some "child title" (Vec.hd root.children).title);
+        (expect_some "child title" (Vec.peek_front root.children).title);
       expect_equal "string block title" "Loose"
         (expect_some "loose title" (Vec.nth parsed 1).title);
       expect_error_code "blocks must be vector" "invalid-blocks"
@@ -3740,8 +3743,8 @@ let () =
       expect_int "property assignments" 2 (Vec.length action.properties);
       expect_int "block count" 1 (Vec.length action.blocks);
       expect_equal "content block" "Hello from add"
-        (expect_some "block title" (Vec.hd action.blocks).title);
-      ignore (expect_some "generated uuid" (Vec.hd action.blocks).uuid));
+        (expect_some "block title" (Vec.peek_front action.blocks).title);
+      ignore (expect_some "generated uuid" (Vec.peek_front action.blocks).uuid));
 
   test "CLI parity add metadata ops apply status tags and properties by uuid"
     (fun () ->
@@ -4513,7 +4516,7 @@ let () =
           expect_int "query inputs length" 1 (Vec.length inputs);
           expect_equal "query input" "Hello"
             (expect_some "query input string"
-               (Edn_util.as_string (Vec.hd inputs)));
+               (Edn_util.as_string (Vec.peek_front inputs)));
           expect_none "query name none" name
       | Query.List -> fail_test "expected query run");
       expect_error_code "query invalid edn" "invalid-options"
@@ -4602,7 +4605,7 @@ let () =
             (expect_some "named query name" name);
           expect_equal "named query input" "Alpha"
             (expect_some "named query input"
-               (Edn_util.as_string (Vec.hd inputs)))
+               (Edn_util.as_string (Vec.peek_front inputs)))
       | Query.List -> fail_test "expected named query run");
       expect_error_code "unknown named query" "unknown-query"
         (Query.build
@@ -4849,6 +4852,27 @@ let () =
         (Command_id.requires_graph Command_id.Show);
       expect_bool "login does not require auth" false
         (Command_id.requires_auth Command_id.Login));
+
+  test "CLI parity command lookup compares path contents" (fun () ->
+      let registry = (Cli.make_app_context ()).Cli.registry in
+      let path = Vec.push_front (Vec.singleton "list") "graph" in
+      let command =
+        expect_some "graph list command"
+          (Command_registry.find_by_path path registry)
+      in
+      expect_equal "graph list command id" "graph-list"
+        (Command_id.to_string command.id));
+
+  test "CLI parity example lookup compares selector contents" (fun () ->
+      let selector = Vec.push_front (Vec.singleton "list") "graph" in
+      let action =
+        expect_ok "graph list examples"
+          (Example.resolve_selector Command_registry.empty selector)
+      in
+      expect_equal "graph list selector" "graph list" action.selector;
+      expect_named_contains "graph list example"
+        (Vec.peek_front action.examples)
+        "logseq graph list");
 
   test "CLI parity example selector returns matched commands and examples"
     (fun () ->
@@ -5411,7 +5435,7 @@ let () =
           expect_bool "backup create ok" false (Cli_result.is_error result);
           expect_int "backup invoke count" 1 (Vec.length !invoke_calls);
           expect_equal "backup method repo" "logseq_db_demo"
-            (invoke_arg_string (Vec.hd !invoke_calls) 0);
+            (invoke_arg_string (Vec.peek_front !invoke_calls) 0);
           expect_equal "final sqlite payload" "sqlite-copy" (read_file db_path);
           let data =
             expect_some "backup create data" (Cli_result.data_value result)
@@ -5545,7 +5569,7 @@ let () =
           expect_int "only current graph backups" 1 (Vec.length backups);
           expect_equal "backup name" "demo-nightly"
             (expect_some "backup name"
-               (Edn_util.get_string (Vec.hd backups) "name"));
+               (Edn_util.get_string (Vec.peek_front backups) "name"));
           let* missing_restore =
             effect_to_promise
               (execute_with_output Graph.execute
@@ -5690,7 +5714,7 @@ let () =
           in
           expect_bool "sqlite export ok" false
             (Cli_result.is_error sqlite_result);
-          let sqlite_path = invoke_arg_string (Vec.hd !calls) 1 in
+          let sqlite_path = invoke_arg_string (Vec.peek_front !calls) 1 in
           expect_named_contains "default sqlite export path" sqlite_path
             (Node.Path.join [| root; "graphs"; "demo"; "export"; "demo_" |]);
           expect_bool "default sqlite export suffix" true
@@ -6307,7 +6331,7 @@ let () =
       in
       expect_int "local only" 1 (Vec.length local_only);
       expect_equal "local only scope" "local"
-        (keyword_text (Vec.hd local_only).scope));
+        (keyword_text (Vec.peek_front local_only).scope));
 
   test "CLI parity skill show and install read source and preserve neighbors"
     (fun () ->
@@ -6386,7 +6410,7 @@ let () =
           (Example.resolve_selector registry (Vec.singleton "graph"))
       in
       expect_equal "registry example" "custom graph list example"
-        (Vec.hd action.examples);
+        (Vec.peek_front action.examples);
       let defaults =
         expect_ok "default examples"
           (Example.resolve_selector Command_registry.empty
@@ -6394,7 +6418,8 @@ let () =
       in
       expect_equal "default selector" "graph list" defaults.selector;
       expect_named_contains "default graph list example"
-        (Vec.hd defaults.examples) "logseq graph list");
+        (Vec.peek_front defaults.examples)
+        "logseq graph list");
 
   test "CLI parity config update writes sanitized patch and removes null fields"
     (fun () ->
@@ -6992,7 +7017,7 @@ let () =
           let* () = effect_to_promise (subscription.Transport.close ()) in
           let* () = sleep_ms 50 in
           let event_type, payload =
-            match Vec.peek_front (Vec.rev !received) with
+            match Vec.peek_back_opt !received with
             | Some event -> event
             | None ->
                 fail_test "received event: expected Some value";
