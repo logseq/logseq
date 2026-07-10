@@ -19,10 +19,13 @@
    [frontend.worker.db.validate :as worker-db-validate]
    [frontend.worker.export :as worker-export]
    [frontend.worker.graph-view :as graph-view]
-   [frontend.worker.handler.comments :as worker-comments]
+   [frontend.worker.handler.comments]
+   [frontend.worker.handler.property]
+   [frontend.worker.handler.view]
    [frontend.worker.markdown-mirror :as markdown-mirror]
    [frontend.worker.pipeline :as worker-pipeline]
    [frontend.worker.platform :as platform]
+   [frontend.worker.plain-value :as worker-plain]
    [frontend.worker.publish]
    [frontend.worker.query-dsl :as query-dsl]
    [frontend.worker.search :as search]
@@ -1237,36 +1240,6 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (block-page-info @conn block-ref)))
 
-(def-thread-api :thread-api/get-comments-area-block
-  [repo block-ref]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/get-comments-area-block @conn block-ref)))
-
-(def-thread-api :thread-api/resolve-comments-area
-  [repo block-ref]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/resolve-comments-area @conn block-ref)))
-
-(def-thread-api :thread-api/resolve-comments-area-for-blocks
-  [repo block-refs]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/resolve-comments-area-for-blocks @conn block-refs)))
-
-(def-thread-api :thread-api/get-comment-delete-targets
-  [repo comment-block-ref]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/get-comment-delete-targets @conn comment-block-ref)))
-
-(def-thread-api :thread-api/get-comment-threads-for-block
-  [repo block-uuid]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/get-comment-threads-for-block @conn block-uuid)))
-
-(def-thread-api :thread-api/get-comment-thread-block-uuids
-  [repo block-uuids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-comments/get-comment-thread-block-uuids @conn block-uuids)))
-
 (def-thread-api :thread-api/get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1303,77 +1276,6 @@
                           (entity-util/entity->map default-value)
                           default-value)])))
              (into {}))))))
-
-(defn- get-all-classes
-  [db {:keys [except-root-class? except-private-tags? except-extends-hidden-tags?]
-       :or {except-root-class? false
-            except-private-tags? true
-            except-extends-hidden-tags? false}}]
-  (let [classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
-                     (map (fn [datom]
-                            (d/entity db (:e datom))))
-                     (remove ldb/recycled?)
-                     (remove (fn [class]
-                               (and except-private-tags?
-                                    (contains? ldb/private-tags (:db/ident class)))))
-                     (remove (fn [class]
-                               (and except-extends-hidden-tags?
-                                    (contains? ldb/extends-hidden-tags (:db/ident class))))))]
-    (cond->> classes
-      except-root-class?
-      (remove #(= :logseq.class/Root (:db/ident %)))
-
-      true
-      (map entity-util/entity->map))))
-
-(def-thread-api :thread-api/get-all-classes
-  [repo opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (get-all-classes @conn opts)))
-
-(def-thread-api :thread-api/get-structured-children
-  [repo class-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (db-class/get-structured-children @conn class-id)))
-
-(defn- class-extends-children-tree
-  ([db class-id]
-   (class-extends-children-tree db class-id #{}))
-  ([db class-id seen]
-   (when-not (contains? seen class-id)
-     (let [seen' (conj seen class-id)]
-       (->> (d/datoms db :avet :logseq.property.class/extends class-id)
-            (keep (fn [datom]
-                    (when-let [child (d/entity db (:e datom))]
-                      (assoc (select-keys (entity-util/entity->map child)
-                                          [:db/id :block/title :block/uuid :db/ident])
-                             :class/children
-                             (class-extends-children-tree db (:e datom) seen')))))
-            (sort-by :block/title)
-            vec)))))
-
-(def-thread-api :thread-api/get-class-extends-children-tree
-  [repo class-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (class-extends-children-tree @conn class-id)))
-
-(def-thread-api :thread-api/get-alias-source-page
-  [repo page-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (some-> (ldb/get-alias-source-page @conn page-id)
-            entity-util/entity->map)))
-
-(def-thread-api :thread-api/get-property-closed-values
-  [repo property-ident]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (when-let [property (d/entity @conn property-ident)]
-      (mapv (fn [entity]
-              (select-keys (entity-util/entity->map entity)
-                           [:db/id :block/uuid :block/title :block/order
-                            :logseq.property/value
-                            :logseq.property/icon
-                            :logseq.property/choice-checkbox-state]))
-            (:block/_closed-value-property property)))))
 
 (defn- route-title-info
   [db route-name]
@@ -1794,240 +1696,6 @@
       :else
       nil)))
 
-(defn- ref-value->summary
-  [db value]
-  (if-let [entity (d/entity db value)]
-    (let [raw-title (or (:block/raw-title entity) (:block/title entity))]
-      (cond-> {:db/id (:db/id entity)}
-      (:block/uuid entity)
-      (assoc :block/uuid (:block/uuid entity))
-      raw-title
-      (assoc :block/title raw-title
-             :block/raw-title raw-title)
-      (:block/name entity)
-      (assoc :block/name (:block/name entity))
-      (:block/journal-day entity)
-      (assoc :block/journal-day (:block/journal-day entity))
-      (:logseq.property/icon entity)
-      (assoc :logseq.property/icon (:logseq.property/icon entity))
-      (:logseq.property/choice-checkbox-state entity)
-      (assoc :logseq.property/choice-checkbox-state (:logseq.property/choice-checkbox-state entity))
-      (:db/ident entity)
-      (assoc :db/ident (:db/ident entity))))
-    {:db/id value}))
-
-(defn- ref-attr?
-  [db attr]
-  (= :db.type/ref (:db/valueType (d/entity db attr))))
-
-(defn- many-attr?
-  [db attr]
-  (= :db.cardinality/many (:db/cardinality (d/entity db attr))))
-
-(defn- datom-value->plain
-  [db attr value]
-  (if (ref-attr? db attr)
-    (ref-value->summary db value)
-    value))
-
-(defn- number->letters
-  [n]
-  (when (pos? n)
-    (loop [n n
-           result ""]
-      (if (pos? n)
-        (let [offset (mod (dec n) 26)
-              ch (.fromCharCode js/String (+ 65 offset))]
-          (recur (quot (- n offset) 26) (str ch result)))
-        result))))
-
-(defn- number->roman
-  [n]
-  (when (pos? n)
-    (let [pairs [[1000 "M"] [900 "CM"] [500 "D"] [400 "CD"]
-                 [100 "C"] [90 "XC"] [50 "L"] [40 "XL"]
-                 [10 "X"] [9 "IX"] [5 "V"] [4 "IV"] [1 "I"]]]
-      (loop [n n
-             [[value numeral] & more] pairs
-             result ""]
-        (cond
-          (zero? n) result
-          (>= n value) (recur (- n value) pairs (str result numeral))
-          :else (recur n more result))))))
-
-(defn- order-list-type
-  [block]
-  (some-> (db-property/lookup block :logseq.property/order-list-type)
-          str
-          string/lower-case))
-
-(defn- order-list-index
-  [block target-order-list-type]
-  (let [order-block? (fn [block]
-                       (= target-order-list-type (order-list-type block)))
-        prev-block-fn ldb/get-left-sibling
-        prev-block (prev-block-fn block)]
-    (letfn [(order-sibling-list [b]
-              (lazy-seq
-               (when (order-block? b)
-                 (cons b (order-sibling-list (prev-block-fn b))))))
-            (order-parent-list [b]
-              (lazy-seq
-               (when (order-block? b)
-                 (cons b (order-parent-list (:block/parent b))))))]
-      (let [idx (if prev-block
-                  (count (order-sibling-list block))
-                  1)
-            order-parents-count (dec (count (order-parent-list block)))
-            delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
-        (cond
-          (zero? delta) idx
-          (= delta 1) (some-> (number->letters idx) string/lower-case)
-          :else (number->roman idx))))))
-
-(defn- entity-forward-map
-  [db entity {:keys [properties]}]
-  (when entity
-    (let [property-set (some-> properties set)
-          raw-title (or (:block/raw-title entity)
-                        (:block/title entity)
-                        (:block/name entity))
-          list-type (order-list-type entity)
-          datoms (cond->> (d/datoms db :eavt (:db/id entity))
-                   (seq property-set)
-                   (filter #(contains? property-set (:a %))))
-          result (reduce
-                  (fn [m {:keys [a v]}]
-                    (let [v' (datom-value->plain db a v)]
-                      (if (many-attr? db a)
-                        (update m a (fnil conj []) v')
-                        (assoc m a v'))))
-                  {:db/id (:db/id entity)}
-                  datoms)]
-      (cond-> result
-        raw-title
-        (assoc :block/title raw-title
-               :block/raw-title raw-title)
-
-        list-type
-        (assoc :block.temp/order-list-index
-               (order-list-index entity list-type))))))
-
-(defn- ref-db-id
-  [value]
-  (cond
-    (map? value) (:db/id value)
-    (integer? value) value
-    :else nil))
-
-(defn- ref-uuid
-  [value]
-  (when (map? value)
-    (:block/uuid value)))
-
-(defn- ref-ident
-  [value]
-  (when (map? value)
-    (:db/ident value)))
-
-(defn- with-explicit-ref-fields
-  [m]
-  (let [alias-source (first (:block/_alias m))]
-    (cond-> m
-      (contains? m :block/parent)
-      (assoc :block/parent-id (ref-db-id (:block/parent m))
-             :block/parent-uuid (ref-uuid (:block/parent m)))
-
-      (contains? m :block/page)
-      (assoc :block/page-id (ref-db-id (:block/page m))
-             :block/page-uuid (ref-uuid (:block/page m))
-             :block/page-name (when (map? (:block/page m))
-                                (:block/name (:block/page m))))
-
-      (contains? m :block/link)
-      (assoc :block/link-id (ref-db-id (:block/link m)))
-
-      (contains? m :logseq.property/query)
-      (assoc :logseq.property/query-id (ref-db-id (:logseq.property/query m)))
-
-      (contains? m :logseq.property/view-for)
-      (assoc :logseq.property/view-for-id (ref-db-id (:logseq.property/view-for m)))
-
-      (contains? m :logseq.property.view/type)
-      (assoc :logseq.property.view/type-id (ref-db-id (:logseq.property.view/type m))
-             :logseq.property.view/type-ident (ref-ident (:logseq.property.view/type m)))
-
-      (contains? m :logseq.property.view/gallery-asset-property)
-      (assoc :logseq.property.view/gallery-asset-property-ident
-             (ref-ident (:logseq.property.view/gallery-asset-property m)))
-
-      (contains? m :logseq.property/_view-for)
-      (assoc :logseq.property/views (:logseq.property/_view-for m))
-
-      (contains? m :block/_alias)
-      (assoc :block/alias-source-page-id (ref-db-id alias-source)
-             :block/alias-source-page-uuid (ref-uuid alias-source)
-             :block/alias-source-page-class? (boolean (and alias-source
-                                                           (ldb/class? alias-source))))
-
-      (contains? m :logseq.property/_query)
-      (assoc :logseq.property/query-block? (seq (:logseq.property/_query m)))
-
-      (contains? m :logseq.property.comments/_blocks)
-      (assoc :block/comment-threads (:logseq.property.comments/_blocks m))
-
-      (contains? m :logseq.property/description)
-      (assoc :logseq.property/description-title
-             (when (map? (:logseq.property/description m))
-               (:block/title (:logseq.property/description m))))
-
-      (contains? m :logseq.property.recycle/original-page)
-      (assoc :logseq.property.recycle/original-page-title
-             (when (map? (:logseq.property.recycle/original-page m))
-               (:block/title (:logseq.property.recycle/original-page m)))))))
-
-(defn- with-explicit-ref-fields-recursive
-  [form]
-  (walk/postwalk
-   (fn [value]
-     (if (map? value)
-       (with-explicit-ref-fields value)
-       value))
-   form))
-
-(declare worker-plain-value)
-
-(defn- worker-plain-map
-  [db m]
-  (with-explicit-ref-fields
-    (persistent!
-     (reduce-kv
-      (fn [result k v]
-        (assoc! result k (worker-plain-value db v)))
-      (transient {})
-      m))))
-
-(defn- worker-plain-value
-  [db value]
-  (cond
-    (de/entity? value)
-    (worker-plain-map db (entity-forward-map db value {}))
-
-    (map? value)
-    (worker-plain-map db value)
-
-    (vector? value)
-    (mapv #(worker-plain-value db %) value)
-
-    (set? value)
-    (set (map #(worker-plain-value db %) value))
-
-    (sequential? value)
-    (mapv #(worker-plain-value db %) value)
-
-    :else
-    value))
-
 (defn- block-has-children?
   [db block-id]
   (some? (first (d/datoms db :avet :block/parent block-id))))
@@ -2065,7 +1733,7 @@
           children' (when children?
                       (map (fn [child]
                              (let [collapsed? (:block/collapsed? child)]
-                               (-> (entity-forward-map db child {})
+                               (-> (worker-plain/entity-forward-map db child {})
                                    (assoc :block.temp/has-children? (block-has-children? db (:db/id child))
                                           :block.temp/load-status (if (and (not collapsed?)
                                                                            (or (and large-page?
@@ -2074,7 +1742,7 @@
                                                                     :full
                                                                     :self)))))
                            children))
-          block' (cond-> (entity-forward-map db block {:properties properties})
+          block' (cond-> (worker-plain/entity-forward-map db block {:properties properties})
                    block-refs-count?
                    (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:db/id block)))
                    true
@@ -2097,7 +1765,7 @@
          (mapv (fn [{:keys [id opts]}]
                  (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
                    (-> (get-block-and-children db id' opts)
-                       with-explicit-ref-fields-recursive
+                       worker-plain/with-explicit-ref-fields-recursive
                        (assoc :id id)))))
          ldb/write-transit-str)))
 
@@ -2112,8 +1780,8 @@
     (->> (db-reference/get-linked-references @conn id)
          :ref-blocks
          (keep (fn [block]
-                 (some-> (entity-forward-map @conn block {})
-                         with-explicit-ref-fields-recursive))))))
+                 (some-> (worker-plain/entity-forward-map @conn block {})
+                         worker-plain/with-explicit-ref-fields-recursive))))))
 
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
@@ -2693,7 +2361,7 @@
                         (get-block-and-children @conn page-id
                                                 {:children? true
                                                  :include-collapsed-children? true}))]
-        (worker-plain-value @conn {:result result
+        (worker-plain/worker-plain-value @conn {:result result
                                    :page-tree page-tree}))
       (catch :default e
         (let [data (ex-data e)
@@ -2842,159 +2510,12 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (fsrs-due-card-block-ids @conn cards-id)))
 
-(def ^:private broad-scoped-node-class-idents
-  #{:logseq.class/Page})
-
-(defn- broad-scoped-node-property?
-  [property classes]
-  (and (= :node (:logseq.property/type property))
-       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
-
-(defn- property-node-selector-initial-choices
-  [db property non-root-classes option]
-  (cond
-    (= :property (:logseq.property/type property))
-    nil
-
-    (seq non-root-classes)
-    (if (broad-scoped-node-property? property non-root-classes)
-      (db-view/get-property-values db (:db/ident property) option)
-      (->> non-root-classes
-           (mapcat (fn [class] (db-class/get-class-objects db (:db/id class))))
-           distinct
-           (mapv #(worker-plain-value db %))))
-
-    :else
-    (db-view/get-property-values db (:db/ident property) option)))
-
-(def-thread-api :thread-api/get-property-node-selector-data
-  [repo {:keys [property block] :as option}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          all-classes (get-all-classes db {:except-root-class? false
-                                           :except-private-tags? false})
-          class-options (get-all-classes db {:except-root-class? true
-                                             :except-private-tags? (not (contains? #{:logseq.property/template-applied-to}
-                                                                                   (:db/ident property)))})
-          extends-class-options (get-all-classes db {:except-extends-hidden-tags? true})
-          classes (:logseq.property/classes property)
-          class? (= :class (:logseq.property/type property))
-          tag-class (some (fn [class]
-                            (when (= :logseq.class/Tag (:db/ident class))
-                              class))
-                          all-classes)
-          non-root-classes (cond-> (remove (fn [class]
-                                             (= (:db/ident class) :logseq.class/Root))
-                                           classes)
-                             (and class? tag-class)
-                             (conj tag-class))
-          extends-property? (= (:db/ident property) :logseq.property.class/extends)
-          class-ids (->> (concat all-classes classes [(when extends-property? block)])
-                         (keep :db/id)
-                         distinct)
-          structured-children-by-class-id (->> class-ids
-                                               (map (fn [class-id]
-                                                      [class-id (db-class/get-structured-children db class-id)]))
-                                               (into {}))]
-      {:all-classes all-classes
-       :class-options class-options
-       :extends-class-options extends-class-options
-       :structured-children-by-class-id structured-children-by-class-id
-       :initial-choices (property-node-selector-initial-choices db property non-root-classes option)})))
-
-(defn- view-filter-operators
-  [property]
-  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
-    [:before :after]
-    (vec
-     (concat
-      [:is :is-not]
-      (case (:logseq.property/type property)
-        (:datetime)
-        [:before :after]
-        (:default :url :node)
-        [:text-contains :text-not-contains]
-        (:date)
-        [:date-before :date-after]
-        :number
-        [:number-gt :number-lt :number-gte :number-lte :between]
-        nil)))))
-
-(defn- view-filter-value-after-operator-change
-  [operator value]
-  (case operator
-    (:is :is-not)
-    (when (set? value) value)
-
-    (:text-contains :text-not-contains)
-    (when (string? value) value)
-
-    (:number-gt :number-lt :number-gte :number-lte)
-    (when (number? value) value)
-
-    :between
-    (when (and (vector? value) (every? number? value))
-      value)
-
-    (:date-before :date-after :before :after)
-    (when (number? value) value)))
-
-(defn- view-filter-value-source
-  [property operator]
-  (let [type (:logseq.property/type property)]
-    (cond
-      (contains? #{:before :after} operator)
-      :timestamp
-
-      (= :checkbox type)
-      :checkbox
-
-      (contains? #{:data :datetime :checkbox} type)
-      nil
-
-      :else
-      :property-values)))
-
-(defn- view-filter-many?
-  [property operator]
-  (not (or (contains? #{:date-before :date-after :before :after} operator)
-           (= :checkbox (:logseq.property/type property)))))
-
-(defn- normalize-view-filter-value
-  [value]
-  (if (map? (:value value))
-    (assoc value :value (:block/uuid (:value value)))
-    value))
-
-(def-thread-api :thread-api/get-view-filter-data
-  [repo {:keys [property property-ident operator value] :as option}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          property (or property
-                       (some-> (d/entity db property-ident)
-                               entity-util/entity->map))
-          operator (or operator :is)
-          value-source (view-filter-value-source property operator)
-          values (when (= :property-values value-source)
-                   (mapv normalize-view-filter-value
-                         (db-view/get-property-values db (:db/ident property) option)))]
-      {:operators (view-filter-operators property)
-       :value-source value-source
-       :many? (view-filter-many? property operator)
-       :values values
-       :value-after-operator-change (view-filter-value-after-operator-change operator value)})))
-
-(def-thread-api :thread-api/get-view-data
-  [repo view-id option]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (worker-plain-value db (db-view/get-view-data db view-id option))))
-
 (def-thread-api :thread-api/get-class-objects
   [repo class-id]
   (let [db @(worker-state/get-datascript-conn repo)]
     (->> (db-class/get-class-objects db class-id)
-         (map #(worker-plain-value db %))
-         with-explicit-ref-fields-recursive)))
+         (map #(worker-plain/worker-plain-value db %))
+         worker-plain/with-explicit-ref-fields-recursive)))
 
 (def-thread-api :thread-api/validate-block-tag
   [repo block-id tag-id]
@@ -3057,8 +2578,8 @@
 
 (defn- entity->plain-map
   [db entity]
-  (some-> (entity-forward-map db entity {})
-          with-explicit-ref-fields-recursive))
+  (some-> (worker-plain/entity-forward-map db entity {})
+          worker-plain/with-explicit-ref-fields-recursive))
 
 (def-thread-api :thread-api/get-favorite-pages
   [repo]
