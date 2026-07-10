@@ -172,6 +172,12 @@
   [name]
   (page-handler/<delete! name nil))
 
+(defn delete_recycled_page_permanently
+  [id-or-page-name]
+  (when-let [page (db-model/get-page id-or-page-name)]
+    (when (ldb/recycled? page)
+      (page-handler/delete-recycled-permanently! (:block/uuid page)))))
+
 (defn restore_page
   [id-or-page-name]
   (p/let [page (<get-block id-or-page-name {:children? false})]
