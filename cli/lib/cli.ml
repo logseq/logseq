@@ -40,11 +40,8 @@ let make_app ?version:_ () =
 let make_app_context = make_app
 let env_lookup env key = Vec.assoc_opt key env
 let is_option token = String.length token > 0 && token.[0] = '-'
-
-let option_value key options =
-  Vec.find_map (fun (k, v) -> if k = key then v else None) options
-
-let option_present key options = Vec.exists (fun (k, _) -> k = key) options
+let option_value key options = Option.join (Vec.assoc_opt key options)
+let option_present key options = Vec.mem_assoc key options
 
 let normalize_key = function
   | "-g" -> Some "graph"
@@ -111,8 +108,7 @@ let parse_tokens argv =
                     loop
                       (Vec.push_back options (key, Some value))
                       positional tail
-                | _ -> loop (Vec.push_back options (key, None)) positional rest
-                )
+                | _ -> loop (Vec.push_back options (key, None)) positional rest)
             | None -> loop options (Vec.push_back positional token) rest))
   in
   loop Vec.empty Vec.empty argv
@@ -120,7 +116,7 @@ let parse_tokens argv =
 let stdin_required_for_show_id argv =
   let options, positional = parse_tokens argv in
   Vec.length positional = 1
-  && Vec.hd positional = "show"
+  && Vec.peek_front positional = "show"
   && option_present "id" options
   && Option.is_none (option_value "id" options)
 

@@ -146,7 +146,7 @@ let build_stage_tree spans =
     (fun span ->
       let node = node_of_span span in
       let current_stack = trim_stack node !stack in
-      (match Vec.peek_front current_stack with
+      (match Vec.peek_front_opt current_stack with
       | Some parent -> parent.children <- Vec.push_back parent.children node
       | None -> roots := Vec.push_back !roots node);
       stack := Vec.push_front current_stack node)

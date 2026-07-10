@@ -260,58 +260,52 @@ let options_for_command =
           value ~required:true "input" "path" "Input file";
         |]
   | List_page ->
-      Vec.append
+      Vec.append_array
         (common_list_options list_page_sort_choices)
-        (Vec.of_array
-           [|
-             flag "expand" "Expand page data";
-             optional_value "include-built-in" "bool" "Include built-in pages";
-             optional_value "include-journal" "bool" "Include journal pages";
-             flag "journal-only" "Only include journal pages";
-             flag "include-hidden" "Include hidden pages";
-             value "updated-after" "timestamp"
-               "Only include pages updated after timestamp";
-             value "created-after" "timestamp"
-               "Only include pages created after timestamp";
-           |])
+        [|
+          flag "expand" "Expand page data";
+          optional_value "include-built-in" "bool" "Include built-in pages";
+          optional_value "include-journal" "bool" "Include journal pages";
+          flag "journal-only" "Only include journal pages";
+          flag "include-hidden" "Include hidden pages";
+          value "updated-after" "timestamp"
+            "Only include pages updated after timestamp";
+          value "created-after" "timestamp"
+            "Only include pages created after timestamp";
+        |]
   | List_tag ->
-      Vec.append
+      Vec.append_array
         (common_list_options list_tag_sort_choices)
-        (Vec.of_array
-           [|
-             flag "expand" "Expand tag data";
-             optional_value "include-built-in" "bool" "Include built-in tags";
-             flag "with-properties" "Include properties";
-             flag "with-extends" "Include extends data";
-           |])
+        [|
+          flag "expand" "Expand tag data";
+          optional_value "include-built-in" "bool" "Include built-in tags";
+          flag "with-properties" "Include properties";
+          flag "with-extends" "Include extends data";
+        |]
   | List_property ->
-      Vec.append
+      Vec.append_array
         (common_list_options list_property_sort_choices)
-        (Vec.of_array
-           [|
-             flag "expand" "Expand property data";
-             optional_value "include-built-in" "bool"
-               "Include built-in properties";
-             flag "with-classes" "Include classes";
-             flag "with-type" "Include property type";
-           |])
+        [|
+          flag "expand" "Expand property data";
+          optional_value "include-built-in" "bool" "Include built-in properties";
+          flag "with-classes" "Include classes";
+          flag "with-type" "Include property type";
+        |]
   | List_task ->
-      Vec.append
+      Vec.append_array
         (common_list_options list_task_sort_choices)
-        (Vec.of_array
-           [|
-             value "status" "status" "Task status";
-             value "priority" "priority" "Task priority";
-             value "content" "text" "Task content filter";
-           |])
+        [|
+          value "status" "status" "Task status";
+          value "priority" "priority" "Task priority";
+          value "content" "text" "Task content filter";
+        |]
   | List_node ->
-      Vec.append
+      Vec.append_array
         (common_list_options list_node_sort_choices)
-        (Vec.of_array
-           [|
-             value "tags" "tags" "Comma-separated tag filters";
-             value "properties" "properties" "Comma-separated property filters";
-           |])
+        [|
+          value "tags" "tags" "Comma-separated tag filters";
+          value "properties" "properties" "Comma-separated property filters";
+        |]
   | List_asset -> common_list_options list_asset_sort_choices
   | Remove_block -> selector_options
   | Remove_page ->
@@ -433,8 +427,7 @@ let options_for_command =
           value "email" "email" "Account email";
         |]
   | Debug_pull ->
-      Vec.append selector_options
-        (Vec.singleton (value "ident" "ident" "Entity ident"))
+      Vec.push_back selector_options (value "ident" "ident" "Entity ident")
   | Doctor -> Vec.singleton (flag "dev-script" "Use development script")
   | Completion ->
       Vec.singleton
@@ -462,7 +455,8 @@ let make commands =
 let add command t =
   { t with commands = Vec.push_front t.commands (with_catalog_options command) }
 
-let find_by_path path t = Vec.find_opt (fun c -> c.path = path) t.commands
+let find_by_path path t =
+  Vec.find_opt (fun c -> Vec.equal String.equal c.path path) t.commands
 
 let top_level_group_doc = function
   | "agent" -> Some "Agent bridge commands"
@@ -590,23 +584,21 @@ let render_help ?group (t : t) =
     let examples =
       if Vec.is_empty command.examples then Vec.empty
       else
-        Vec.append
-          (Vec.of_array [| ""; "Examples:" |])
+        Vec.prepend_array
           (command.examples |> Vec.map (fun example -> "  " ^ example))
+          [| ""; "Examples:" |]
     in
     Vec.string_concat "\n"
-      (Vec.append
-         (Vec.of_array
-            [|
-              "Usage: logseq " ^ command_label command ^ " [options]";
-              "";
-              "Global options:";
-              global_options_help;
-              "";
-              "Command options:";
-              command_options_help command;
-            |])
-         examples)
+      (Vec.prepend_array examples
+         [|
+           "Usage: logseq " ^ command_label command ^ " [options]";
+           "";
+           "Global options:";
+           global_options_help;
+           "";
+           "Command options:";
+           command_options_help command;
+         |])
   in
   match group with
   | None -> top_level_help ()

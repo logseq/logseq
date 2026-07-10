@@ -483,12 +483,9 @@ let assert_created_at_column_aligned stdout =
       in
       let expected = display_width (String.sub header 0 created_index) in
       let data_rows =
-        match Vec.rev rows with
-        | reversed when Vec.is_empty reversed -> Vec.empty
-        | reversed -> (
-            match Vec.pop_front reversed with
-            | Some (_footer, reversed_data_rows) -> Vec.rev reversed_data_rows
-            | None -> Vec.empty)
+        match Vec.pop_back rows with
+        | Some (_footer, data_rows) -> data_rows
+        | None -> Vec.empty
       in
       data_rows
       |> Vec.iter (fun line ->

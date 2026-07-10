@@ -297,7 +297,8 @@ let matching_entries entries selector =
         | Some first -> first = group
         | None -> false)
       entries
-  else Vec.filter (fun entry -> entry.path = selector) entries
+  else
+    Vec.filter (fun entry -> Vec.equal String.equal entry.path selector) entries
 
 let resolve_selector registry selector =
   match selector with
