@@ -6540,6 +6540,94 @@
             (is (empty? (non-recycle-validation-entities validation))
                 (str (:errors validation)))))))))
 
+(deftest apply-remote-txs-computes-remote-deletes-once-per-batch-test
+  (testing "a large remote batch keeps delete filtering without repeatedly rescanning the pull"
+    (let [{:keys [conn parent child2]} (setup-parent-child)
+          parent-id (:db/id parent)
+          child2-uuid (:block/uuid child2)
+          delete-set-computations (atom 0)
+          original-delete-set-fn (deref (var sync-apply/remote-txs-retract-entity-block-uuid-suffixes))
+          remote-txs (conj (mapv (fn [index]
+                                   {:tx-data [[:db/add parent-id
+                                               :block/title
+                                               (str "remote title " index)]]})
+                                 (range 128))
+                            {:tx-data [[:db/retractEntity [:block/uuid child2-uuid]]]})]
+      (with-redefs [sync-apply/remote-txs-retract-entity-block-uuid-suffixes
+                    (fn [txs]
+                      (swap! delete-set-computations inc)
+                      (original-delete-set-fn txs))]
+        (with-datascript-conns conn nil
+          (fn []
+            (#'sync-apply/apply-remote-txs! test-repo nil remote-txs)
+            (is (= 1 @delete-set-computations))
+            (is (= "remote title 127"
+                   (:block/title (d/entity @conn parent-id))))
+            (is (nil? (d/entity @conn [:block/uuid child2-uuid])))))))))
+
+(deftest apply-remote-txs-skips-block-ref-filters-when-txs-have-no-block-uuid-refs-test
+  (testing "plain remote title updates avoid block-ref filters"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          parent-id (:db/id parent)
+          stale-deleted-ref-filter-computations (atom 0)
+          missing-ref-filter-computations (atom 0)
+          original-stale-deleted-ref-filter-fn (deref (var sync-apply/drop-stale-deleted-block-ref-ops))
+          original-missing-ref-filter-fn (deref (var sync-apply/drop-missing-block-ref-ops))
+          remote-txs (mapv (fn [index]
+                             {:tx-data [[:db/add parent-id
+                                         :block/title
+                                         (str "remote title " index)]]})
+                           (range 128))]
+      (with-redefs [sync-apply/drop-stale-deleted-block-ref-ops
+                    (fn [db deleted-block-uuids tx-data]
+                      (swap! stale-deleted-ref-filter-computations inc)
+                      (original-stale-deleted-ref-filter-fn db deleted-block-uuids tx-data))
+                    sync-apply/drop-missing-block-ref-ops
+                    (fn [db tx-data]
+                      (swap! missing-ref-filter-computations inc)
+                      (original-missing-ref-filter-fn db tx-data))]
+        (with-datascript-conns conn nil
+          (fn []
+            (#'sync-apply/apply-remote-txs! test-repo nil remote-txs)
+            (is (zero? @stale-deleted-ref-filter-computations))
+            (is (zero? @missing-ref-filter-computations))
+            (is (= "remote title 127"
+                   (:block/title (d/entity @conn parent-id))))))))))
+
+(deftest apply-remote-txs-keeps-refs-to-block-recreated-after-earlier-delete-test
+  (testing "a later remote tx can recreate a block uuid deleted earlier in the same batch"
+    (let [{:keys [conn parent child2]} (setup-parent-child)
+          child2-uuid (:block/uuid child2)
+          parent-uuid (:block/uuid parent)
+          page-uuid (:block/uuid (:block/page parent))
+          recreated-child-uuid (random-uuid)
+          now (.now js/Date)]
+      (with-datascript-conns conn nil
+        (fn []
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/retractEntity [:block/uuid child2-uuid]]]}
+            {:tx-data [[:db/add -1 :block/uuid child2-uuid]
+                       [:db/add -1 :block/title "child 2 recreated"]
+                       [:db/add -1 :block/parent [:block/uuid parent-uuid]]
+                       [:db/add -1 :block/page [:block/uuid page-uuid]]
+                       [:db/add -1 :block/order "b2"]
+                       [:db/add -1 :block/created-at now]
+                       [:db/add -1 :block/updated-at now]
+                       [:db/add -2 :block/uuid recreated-child-uuid]
+                       [:db/add -2 :block/title "child 2 descendant"]
+                       [:db/add -2 :block/parent [:block/uuid child2-uuid]]
+                       [:db/add -2 :block/page [:block/uuid page-uuid]]
+                       [:db/add -2 :block/order "b2a"]
+                       [:db/add -2 :block/created-at now]
+                       [:db/add -2 :block/updated-at now]]}])
+          (let [recreated-child2 (d/entity @conn [:block/uuid child2-uuid])
+                descendant (d/entity @conn [:block/uuid recreated-child-uuid])]
+            (is (= "child 2 recreated" (:block/title recreated-child2)))
+            (is (= "child 2 descendant" (:block/title descendant)))
+            (is (= child2-uuid (:block/uuid (:block/parent descendant))))))))))
+
 (deftest apply-remote-txs-local-fallback-delete-parent-retracts-remote-child-test
   (testing "rebasing a fallback local retractEntity deletes remote children inserted while the local tx was reversed"
     (async done
