@@ -406,18 +406,32 @@
     (keep block-uuid-lookup-ref-value
           [(second item) (nth item 3 nil)])))
 
+(defn- tx-data-has-block-uuid-ref?
+  [tx-data]
+  (boolean
+   (some (fn [item]
+           (seq (tx-item-ref-block-uuids item)))
+         tx-data)))
+
 (defn- tx-item-retract-entity-block-uuid
   [item]
   (when (and (vector? item)
              (contains? #{:db/retractEntity :db.fn/retractEntity} (first item)))
     (block-uuid-lookup-ref-value (second item))))
 
-(defn- remote-txs-retract-entity-block-uuids
+(defn- remote-txs-retract-entity-block-uuid-suffixes
   [remote-txs]
-  (->> remote-txs
-       (mapcat :tx-data)
-       (keep tx-item-retract-entity-block-uuid)
-       set))
+  (-> (reduce (fn [{:keys [deleted-block-uuids suffixes]} remote-tx]
+                (let [deleted-block-uuids' (into deleted-block-uuids
+                                                  (keep tx-item-retract-entity-block-uuid)
+                                                  (:tx-data remote-tx))]
+                  {:deleted-block-uuids deleted-block-uuids'
+                   :suffixes (conj suffixes deleted-block-uuids')}))
+              {:deleted-block-uuids #{}
+               :suffixes '()}
+              (reverse remote-txs))
+      :suffixes
+      vec))
 
 (defn- tx-item-missing-deleted-block-ref?
   [db deleted-block-uuids item]
@@ -1155,30 +1169,37 @@
 
 (defn- transact-remote-txs!
   [conn remote-txs & {:keys [db-before-local-reversal]}]
-  (loop [remaining remote-txs
-         results []]
-    (let [db @conn]
-      (if-let [remote-tx (first remaining)]
-        (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
-              tx-data (some->> (:tx-data remote-tx)
-                               (map (partial resolve-temp-id db))
-                               (tx-sanitize/sanitize-tx db)
-                               drop-stale-adds-after-remote-entity-delete
-                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                               (drop-missing-block-ref-ops db))
-              tx-data (cond->> tx-data
-                        db-before-local-reversal
-                        (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-              tx-data (seq tx-data)
-              tx-meta (apply-tx-meta remote-tx)
-              report (ldb/transact! conn tx-data tx-meta)
-              results' (cond-> results
-                         tx-data
-                         (conj {:tx-data tx-data
-                                :report report}))]
-          (recur (next remaining)
-                 results'))
-        results))))
+  (let [deleted-block-uuid-suffixes (remote-txs-retract-entity-block-uuid-suffixes remote-txs)]
+    (loop [remaining remote-txs
+           deleted-block-uuid-suffixes deleted-block-uuid-suffixes
+           results []]
+      (let [db @conn]
+        (if-let [remote-tx (first remaining)]
+          (let [deleted-block-uuids (first deleted-block-uuid-suffixes)
+                tx-data (some->> (:tx-data remote-tx)
+                                 (map (partial resolve-temp-id db))
+                                 (tx-sanitize/sanitize-tx db)
+                                 drop-stale-adds-after-remote-entity-delete)
+                tx-data (cond->> tx-data
+                          (seq deleted-block-uuids)
+                          (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
+
+                          (tx-data-has-block-uuid-ref? tx-data)
+                          (drop-missing-block-ref-ops db))
+                tx-data (cond->> tx-data
+                          db-before-local-reversal
+                          (drop-local-reversal-stale-target-ops db-before-local-reversal db))
+                tx-data (seq tx-data)
+                tx-meta (apply-tx-meta remote-tx)
+                report (ldb/transact! conn tx-data tx-meta)
+                results' (cond-> results
+                           tx-data
+                           (conj {:tx-data tx-data
+                                  :report report}))]
+            (recur (next remaining)
+                   (next deleted-block-uuid-suffixes)
+                   results'))
+          results)))))
 
 (defn reverse-local-txs!
   [conn local-txs]
