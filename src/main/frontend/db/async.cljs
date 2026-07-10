@@ -148,6 +148,10 @@
   [graph property-ident]
   (<invoke-db-worker :thread-api/get-property-closed-values graph property-ident))
 
+(defn <get-property-node-selector-data
+  [graph option]
+  (<invoke-db-worker :thread-api/get-property-node-selector-data graph option))
+
 (defn <get-files
   [graph]
   (p/let [result (<q graph
@@ -172,6 +176,14 @@
   (when property-id
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
+
+(defn <get-view-filter-data
+  [property & {:as opts}]
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/get-view-filter-data repo
+                             (assoc opts
+                                    :property property
+                                    :property-ident (:db/ident property)))))
 
 (defn <get-bidirectional-properties
   [target-id]
