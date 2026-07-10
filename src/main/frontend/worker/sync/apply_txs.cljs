@@ -412,12 +412,19 @@
              (contains? #{:db/retractEntity :db.fn/retractEntity} (first item)))
     (block-uuid-lookup-ref-value (second item))))
 
-(defn- remote-txs-retract-entity-block-uuids
+(defn- remote-txs-retract-entity-block-uuid-suffixes
   [remote-txs]
-  (->> remote-txs
-       (mapcat :tx-data)
-       (keep tx-item-retract-entity-block-uuid)
-       set))
+  (-> (reduce (fn [{:keys [deleted-block-uuids suffixes]} remote-tx]
+                (let [deleted-block-uuids' (into deleted-block-uuids
+                                                  (keep tx-item-retract-entity-block-uuid)
+                                                  (:tx-data remote-tx))]
+                  {:deleted-block-uuids deleted-block-uuids'
+                   :suffixes (conj suffixes deleted-block-uuids')}))
+              {:deleted-block-uuids #{}
+               :suffixes '()}
+              (reverse remote-txs))
+      :suffixes
+      vec))
 
 (defn- tx-item-missing-deleted-block-ref?
   [db deleted-block-uuids item]
@@ -1155,12 +1162,14 @@
 
 (defn- transact-remote-txs!
   [conn remote-txs & {:keys [db-before-local-reversal]}]
-  (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remote-txs)]
+  (let [deleted-block-uuid-suffixes (remote-txs-retract-entity-block-uuid-suffixes remote-txs)]
     (loop [remaining remote-txs
+           deleted-block-uuid-suffixes deleted-block-uuid-suffixes
            results []]
       (let [db @conn]
         (if-let [remote-tx (first remaining)]
-          (let [tx-data (some->> (:tx-data remote-tx)
+          (let [deleted-block-uuids (first deleted-block-uuid-suffixes)
+                tx-data (some->> (:tx-data remote-tx)
                                  (map (partial resolve-temp-id db))
                                  (tx-sanitize/sanitize-tx db)
                                  drop-stale-adds-after-remote-entity-delete
@@ -1177,6 +1186,7 @@
                            (conj {:tx-data tx-data
                                   :report report}))]
             (recur (next remaining)
+                   (next deleted-block-uuid-suffixes)
                    results'))
           results)))))
 
