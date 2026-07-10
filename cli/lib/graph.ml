@@ -523,8 +523,8 @@ let export_payload opts =
            (Option.map Vec.is_empty (Edn_util.as_map value))
            ~default:false ->
       ()
-  | _ -> fields := Vec.push_front !fields (kw "graph-options", graph_options));
-  Edn_util.map_vec (!fields |> Vec.rev)
+  | _ -> fields := Vec.push_back !fields (kw "graph-options", graph_options));
+  Edn_util.map_vec !fields
 
 let write_pretty_edn path data =
   try

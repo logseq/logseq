@@ -696,16 +696,16 @@ let cleanup_revision_mismatched_servers config ~cli_revision =
                    mismatched = Vec.length mismatched;
                    eligible = Vec.length eligible;
                    skipped_owner = Vec.length skipped;
-                   killed = Vec.rev killed;
-                   failed = Vec.rev failed;
+                   killed;
+                   failed;
                  })
         | Some (server, rest) ->
             bind (shutdown_server server) (fun stopped ->
                 if stopped then
-                  stop_loop (Vec.push_front killed server) failed rest
+                  stop_loop (Vec.push_back killed server) failed rest
                 else
                   stop_loop killed
-                    (Vec.push_front failed
+                    (Vec.push_back failed
                        ( server,
                          Error.make Error.Server_cleanup_failed
                            "failed to stop revision-mismatched server" ))
