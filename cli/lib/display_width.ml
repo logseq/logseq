@@ -36,12 +36,12 @@ let width text =
 
 let take text max_width =
   let rec loop chars index acc_width acc =
-    if index >= Array.length chars then Vec.string_concat "" (Vec.rev acc)
+    if index >= Array.length chars then Vec.string_concat "" acc
     else
       let ch = chars.(index) in
       let next_width = acc_width + char_width (code_point ch) in
-      if next_width > max_width then Vec.string_concat "" (Vec.rev acc)
-      else loop chars (index + 1) next_width (Vec.push_front acc ch)
+      if next_width > max_width then Vec.string_concat "" acc
+      else loop chars (index + 1) next_width (Vec.push_back acc ch)
   in
   if max_width <= 0 then "" else loop (unicode_chars text) 0 0 Vec.empty
 

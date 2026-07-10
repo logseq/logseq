@@ -77,10 +77,10 @@ let parse_tags_option = function
           | Some values ->
               let rec loop acc values =
                 match Vec.pop_front values with
-                | None -> Ok (Vec.rev acc)
+                | None -> Ok acc
                 | Some (value, rest) -> (
                     match tag_of_value value with
-                    | Some tag -> loop (Vec.push_front acc tag) rest
+                    | Some tag -> loop (Vec.push_back acc tag) rest
                     | None ->
                         Error
                           (Error.invalid_options
@@ -120,11 +120,11 @@ let parse_properties_option ?(allow_non_built_in = false) = function
           | Some fields ->
               let rec loop acc fields =
                 match Vec.pop_front fields with
-                | None -> Ok (Vec.rev acc)
+                | None -> Ok acc
                 | Some ((key, value), rest) -> (
                     match property_key_of_value key with
                     | Some key ->
-                        loop (Vec.push_front acc { Property.key; value }) rest
+                        loop (Vec.push_back acc { Property.key; value }) rest
                     | None ->
                         Error
                           (Error.invalid_options
@@ -146,10 +146,10 @@ let parse_properties_vector_option ?(allow_non_built_in = false) = function
           | Some values ->
               let rec loop acc values =
                 match Vec.pop_front values with
-                | None -> Ok (Vec.rev acc)
+                | None -> Ok acc
                 | Some (value, rest) -> (
                     match property_key_of_value value with
-                    | Some key -> loop (Vec.push_front acc key) rest
+                    | Some key -> loop (Vec.push_back acc key) rest
                     | None ->
                         Error
                           (Error.invalid_options
@@ -698,7 +698,7 @@ let collect_uuids_from_value value =
               (Edn_util.get value "block/uuid")
               Edn_util.as_string_like
           with
-          | Some uuid -> Vec.push_front acc uuid
+          | Some uuid -> Vec.push_back acc uuid
           | _ -> acc
         in
         Vec.fold_left (fun acc (k, v) -> loop (loop acc k) v) acc fields
@@ -707,7 +707,7 @@ let collect_uuids_from_value value =
         | Some values -> Vec.fold_left loop acc values
         | None -> acc)
   in
-  Vec.rev (loop Vec.empty value)
+  loop Vec.empty value
 
 let collect_action_block_uuids blocks =
   blocks |> flatten_blocks
@@ -826,7 +826,7 @@ let resolve_created_ids config repo blocks insert_result =
   in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Ok (Vec.rev acc))
+    | None -> pure (Ok acc)
     | Some (uuid, rest) ->
         bind
           (pull_entity config repo
@@ -835,7 +835,7 @@ let resolve_created_ids config repo blocks insert_result =
                 (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
           (fun entity ->
             match id_of_entity entity with
-            | Some id -> loop (Vec.push_front acc id) rest
+            | Some id -> loop (Vec.push_back acc id) rest
             | None ->
                 pure
                   (Error
@@ -959,13 +959,13 @@ let resolve_title_page_refs invoke_config repo title =
   let page_names = extract_page_refs title in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Ok (Vec.rev acc))
+    | None -> pure (Ok acc)
     | Some (page_name, rest) ->
         bind (ensure_page_entity invoke_config repo page_name) (function
           | Error err -> pure (Error err)
           | Ok entity -> (
               match page_ref_value entity page_name with
-              | Some ref_value -> loop (Vec.push_front acc ref_value) rest
+              | Some ref_value -> loop (Vec.push_back acc ref_value) rest
               | None -> pure (Error (page_not_found ()))))
   in
   loop Vec.empty page_names
@@ -982,13 +982,13 @@ let rec resolve_block_title_page_refs invoke_config repo block =
     | Ok refs ->
         let rec resolve_children acc remaining =
           match Vec.pop_front remaining with
-          | None -> pure (Ok (Vec.rev acc))
+          | None -> pure (Ok acc)
           | Some (child, rest) ->
               bind (resolve_block_title_page_refs invoke_config repo child)
                 (function
                 | Error err -> pure (Error err)
                 | Ok child_refs ->
-                    resolve_children (Vec.rev_append child_refs acc) rest)
+                    resolve_children (Vec.append acc child_refs) rest)
         in
         bind (resolve_children Vec.empty block.Block.children) (function
           | Error err -> pure (Error err)
@@ -1005,11 +1005,11 @@ let resolve_blocks_title_page_refs invoke_config repo blocks =
   let open Cli_effect in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Ok (Vec.rev acc))
+    | None -> pure (Ok acc)
     | Some (block, rest) ->
         bind (resolve_block_title_page_refs invoke_config repo block) (function
           | Error err -> pure (Error err)
-          | Ok refs -> loop (Vec.rev_append refs acc) rest)
+          | Ok refs -> loop (Vec.append acc refs) rest)
   in
   loop Vec.empty blocks
 

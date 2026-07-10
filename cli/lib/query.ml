@@ -717,8 +717,8 @@ let normalize_inputs entry inputs =
                 | Some pair -> pair
                 | None -> failwith "non-empty vector must have a front value"
               in
-              fill (Vec.push_front acc value) rest_specs rest_values
-          | None -> Vec.rev_append acc values
+              fill (Vec.push_back acc value) rest_specs rest_values
+          | None -> Vec.append acc values
           | Some (spec, rest) ->
               let default =
                 match spec.default with
@@ -729,7 +729,7 @@ let normalize_inputs entry inputs =
                     Edn_util.int64 (current_epoch_ms ())
                 | None -> Edn_util.nil
               in
-              fill (Vec.push_front acc default) rest Vec.empty
+              fill (Vec.push_back acc default) rest Vec.empty
         in
         fill Vec.empty entry.inputs inputs
         |> normalize_task_search_inputs (Some entry)
@@ -756,13 +756,14 @@ let query_in_ends_with_percent query =
         | Some (_, rest) -> find_in rest
       and collect_in acc values =
         match Vec.pop_front values with
-        | None -> Vec.rev acc
+        | None -> acc
         | Some (keyword, _) when Option.is_some (Edn_util.as_keyword keyword) ->
-            Vec.rev acc
-        | Some (value, rest) -> collect_in (Vec.push_front acc value) rest
+            acc
+        | Some (value, rest) -> collect_in (Vec.push_back acc value) rest
       in
-      match Vec.rev (find_in values) with
-      | values when not (Vec.is_empty values) -> symbol_is "%" (Vec.hd values)
+      match find_in values with
+      | values when not (Vec.is_empty values) ->
+          symbol_is "%" (Vec.nth values (Vec.length values - 1))
       | _ -> false)
   | _ -> false
 

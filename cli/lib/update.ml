@@ -146,11 +146,11 @@ let parse_properties_edn value =
           | Some fields ->
               let rec loop acc remaining =
                 match Vec.pop_front remaining with
-                | None -> Ok (Vec.rev acc)
+                | None -> Ok acc
                 | Some ((key, value), rest) -> (
                     match property_key_of_value key with
                     | Some key ->
-                        loop (Vec.push_front acc { Property.key; value }) rest
+                        loop (Vec.push_back acc { Property.key; value }) rest
                     | None ->
                         Error
                           (Error.invalid_options
@@ -173,10 +173,10 @@ let parse_property_keys_edn value =
           | Some values ->
               let rec loop acc remaining =
                 match Vec.pop_front remaining with
-                | None -> Ok (Vec.rev acc)
+                | None -> Ok acc
                 | Some (value, rest) -> (
                     match property_key_of_value value with
-                    | Some key -> loop (Vec.push_front acc key) rest
+                    | Some key -> loop (Vec.push_back acc key) rest
                     | None ->
                         Error
                           (Error.invalid_options
@@ -574,45 +574,42 @@ let resolve_property_ident invoke_config repo = function
                          (Error.make Error.Property_not_found
                             "property not found"))))
 
-let rec resolve_tag_ids invoke_config repo tags =
-  match Vec.pop_front tags with
-  | None -> Cli_effect.pure (Ok Vec.empty)
-  | Some (tag, rest) ->
-      let open Cli_effect in
-      bind (resolve_tag_id invoke_config repo tag) (function
-        | Error err -> pure (Error err)
-        | Ok id ->
-            bind (resolve_tag_ids invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok ids -> pure (Ok (Vec.push_front ids id))))
+let resolve_tag_ids invoke_config repo tags =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (tag, rest) ->
+        bind (resolve_tag_id invoke_config repo tag) (function
+          | Error err -> pure (Error err)
+          | Ok id -> loop (Vec.push_back acc id) rest)
+  in
+  loop Vec.empty tags
 
-let rec resolve_property_keys invoke_config repo keys =
-  match Vec.pop_front keys with
-  | None -> Cli_effect.pure (Ok Vec.empty)
-  | Some (key, rest) ->
-      let open Cli_effect in
-      bind (resolve_property_ident invoke_config repo key) (function
-        | Error err -> pure (Error err)
-        | Ok ident ->
-            bind (resolve_property_keys invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok idents -> pure (Ok (Vec.push_front idents ident))))
+let resolve_property_keys invoke_config repo keys =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (key, rest) ->
+        bind (resolve_property_ident invoke_config repo key) (function
+          | Error err -> pure (Error err)
+          | Ok ident -> loop (Vec.push_back acc ident) rest)
+  in
+  loop Vec.empty keys
 
-let rec resolve_property_assignments invoke_config repo assignments =
-  match Vec.pop_front assignments with
-  | None -> Cli_effect.pure (Ok Vec.empty)
-  | Some (assignment, rest) ->
-      let open Cli_effect in
-      bind (resolve_property_ident invoke_config repo assignment.Property.key)
-        (function
-        | Error err -> pure (Error err)
-        | Ok ident ->
-            bind (resolve_property_assignments invoke_config repo rest)
-              (function
-              | Error err -> pure (Error err)
-              | Ok assignments ->
-                  pure
-                    (Ok (Vec.push_front assignments (ident, assignment.value)))))
+let resolve_property_assignments invoke_config repo assignments =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (assignment, rest) ->
+        bind (resolve_property_ident invoke_config repo assignment.Property.key)
+          (function
+          | Error err -> pure (Error err)
+          | Ok ident -> loop (Vec.push_back acc (ident, assignment.value)) rest)
+  in
+  loop Vec.empty assignments
 
 let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
     ~remove_properties =

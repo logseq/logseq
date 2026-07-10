@@ -126,10 +126,10 @@ let config_result ?value key =
   let fields = Vec.singleton (Edn_util.keyword "key", key_value key) in
   let fields =
     match value with
-    | Some value -> Vec.push_front fields (Edn_util.keyword "value", value)
+    | Some value -> Vec.push_back fields (Edn_util.keyword "value", value)
     | None -> fields
   in
-  Edn_util.map_rev_vec fields
+  Edn_util.map_vec fields
 
 let action_with_repo config make message =
   match config.Cli_config.repo with
@@ -286,7 +286,7 @@ let sync_config_value config =
 let add_runtime_auth key value fields =
   match value with
   | Some value when String.trim value <> "" ->
-      Vec.push_front fields (Edn_util.keyword key, Edn_util.string value)
+      Vec.push_back fields (Edn_util.keyword key, Edn_util.string value)
   | _ -> fields
 
 let runtime_auth_state config =
@@ -296,7 +296,7 @@ let runtime_auth_state config =
     |> add_runtime_auth "auth/access-token" config.Cli_config.access_token
     |> add_runtime_auth "auth/refresh-token" config.Cli_config.refresh_token
   in
-  if Vec.is_empty fields then None else Some (Edn_util.map_t_rev_vec fields)
+  if Vec.is_empty fields then None else Some (Edn_util.map_t_vec fields)
 
 let config_with_auth config (auth : Auth_state.auth_data) =
   {
@@ -718,10 +718,10 @@ let ensure_keys_args ~upload_keys ~e2ee_password =
     let fields =
       match e2ee_password with
       | Some password when String.trim password <> "" ->
-          Vec.push_front fields (kw "password", Edn_util.string password)
+          Vec.push_back fields (kw "password", Edn_util.string password)
       | _ -> fields
     in
-    Some (Edn_util.map_t_vec (fields |> Vec.rev))
+    Some (Edn_util.map_t_vec fields)
 
 let e2ee_password_not_found repo =
   Error.make ~hint:"Provide --e2ee-password to verify and persist it."

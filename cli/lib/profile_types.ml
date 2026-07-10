@@ -38,7 +38,7 @@ let next_span_id session =
   session.next_span_id <- session.next_span_id + 1;
   session.next_span_id
 
-let record_span (s : session) span = s.spans <- Vec.push_front s.spans span
+let record_span (s : session) span = s.spans <- Vec.push_back s.spans span
 
 let record_timed_span session stage span_id start_time end_time =
   let elapsed_span = Time.non_negative_diff ~start_time ~end_time in
@@ -65,7 +65,7 @@ let summarize_stages spans =
   Vec.iter
     (fun (span : span) ->
       if not (Hashtbl.mem table span.stage) then
-        order := Vec.push_front !order span.stage;
+        order := Vec.push_back !order span.stage;
       let count, total_span =
         Option.value
           (Hashtbl.find_opt table span.stage)
@@ -74,15 +74,16 @@ let summarize_stages spans =
       Hashtbl.replace table span.stage
         (count + 1, Time.add_span_value total_span span.elapsed_span))
     spans;
-  Vec.rev !order
-  |> Vec.map (fun stage ->
+  Vec.map
+    (fun stage ->
       let count, total_span = Hashtbl.find table stage in
       { stage; count; total_span; avg_span = Time.avg_span total_span count })
+    !order
 
 let report (s : session) ~command ~status =
   let end_time = Time.now () in
   let total_span = Time.non_negative_diff ~start_time:s.start_time ~end_time in
-  let spans : span Rrbvec.t = Vec.rev s.spans in
+  let spans : span Rrbvec.t = s.spans in
   let spans =
     if Vec.exists (fun (span : span) -> span.stage = "cli.total") spans then
       spans

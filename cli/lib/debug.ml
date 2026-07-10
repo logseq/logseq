@@ -38,16 +38,15 @@ let resolve_selector opts =
   let selectors =
     Vec.empty
     |> (fun acc ->
-    match opts.id with Some id -> Vec.push_front acc (By_id id) | None -> acc)
+    match opts.id with Some id -> Vec.push_back acc (By_id id) | None -> acc)
     |> (fun acc ->
     match uuid with
-    | Some uuid -> Vec.push_front acc (By_uuid uuid)
+    | Some uuid -> Vec.push_back acc (By_uuid uuid)
     | None -> acc)
     |> (fun acc ->
     match opts.ident with
-    | Some ident -> Vec.push_front acc (By_ident ident)
+    | Some ident -> Vec.push_back acc (By_ident ident)
     | None -> acc)
-    |> Vec.rev
   in
   match (Vec.length selectors, Vec.nth_opt selectors 0) with
   | 0, _ ->

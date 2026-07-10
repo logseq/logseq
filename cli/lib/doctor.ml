@@ -35,28 +35,28 @@ let check_value (check : check) =
   let fields =
     match check.code with
     | Some code ->
-        Vec.push_front fields
+        Vec.push_back fields
           (Edn_util.keyword "code", Edn_util.any (Error.code_to_keyword code))
     | None -> fields
   in
   let fields =
     match check.path with
     | Some path ->
-        Vec.push_front fields (Edn_util.keyword "path", Edn_util.string path)
+        Vec.push_back fields (Edn_util.keyword "path", Edn_util.string path)
     | None -> fields
   in
   let fields =
     if Vec.is_empty check.servers then fields
     else
-      Vec.push_front fields
+      Vec.push_back fields
         (Edn_util.keyword "servers", Edn_util.vector_vec check.servers)
   in
   let fields =
     match check.raw with
-    | Some raw -> Vec.push_front fields (Edn_util.keyword "raw", raw)
+    | Some raw -> Vec.push_back fields (Edn_util.keyword "raw", raw)
     | None -> fields
   in
-  Edn_util.map_rev_vec fields
+  Edn_util.map_vec fields
 
 let check_db_worker_script (Doctor { script_path }) =
   let path =

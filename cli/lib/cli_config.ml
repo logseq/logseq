@@ -109,12 +109,12 @@ let parse_int_value value =
 let env_string key env value_key fields =
   match env key with
   | Some value when String.trim value <> "" ->
-      Vec.push_front fields (Edn_util.keyword value_key, Edn_util.string value)
+      Vec.push_back fields (Edn_util.keyword value_key, Edn_util.string value)
   | _ -> fields
 
 let env_int key env value_key fields =
   match Option.bind (env key) parse_int_value with
-  | Some value -> Vec.push_front fields (Edn_util.keyword value_key, value)
+  | Some value -> Vec.push_back fields (Edn_util.keyword value_key, value)
   | None -> fields
 
 let env_config env =
@@ -130,7 +130,7 @@ let env_config env =
     |> env_string "LOGSEQ_CLI_WS_URL" env "ws-url"
     |> env_string "LOGSEQ_CLI_HTTP_BASE" env "http-base"
   in
-  Edn_util.map_t_rev_vec fields
+  Edn_util.map_t_vec fields
 
 let validate_env_int_value key env =
   match env key with

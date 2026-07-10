@@ -27,16 +27,16 @@ let login_value (result : Auth_state.login_result) =
   let fields =
     match result.email with
     | Some email ->
-        Vec.push_front fields (Edn_util.keyword "email", Edn_util.string email)
+        Vec.push_back fields (Edn_util.keyword "email", Edn_util.string email)
     | None -> fields
   in
   let fields =
     match result.sub with
     | Some sub ->
-        Vec.push_front fields (Edn_util.keyword "sub", Edn_util.string sub)
+        Vec.push_back fields (Edn_util.keyword "sub", Edn_util.string sub)
     | None -> fields
   in
-  Edn_util.map_rev_vec fields
+  Edn_util.map_vec fields
 
 let logout_value (result : Auth_state.logout_result) =
   Edn_util.map_vec

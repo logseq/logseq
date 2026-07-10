@@ -87,33 +87,33 @@ let boolean_literal value =
 let parse_tokens argv =
   let rec loop options positional remaining =
     match Vec.pop_front remaining with
-    | None -> (Vec.rev options, Vec.rev positional)
-    | Some ("--", rest) -> (Vec.rev options, Vec.rev_append positional rest)
+    | None -> (options, positional)
+    | Some ("--", rest) -> (options, Vec.append positional rest)
     | Some (token, rest) -> (
         match split_equals_option token with
         | Some (key, value) ->
-            loop (Vec.push_front options (key, Some value)) positional rest
+            loop (Vec.push_back options (key, Some value)) positional rest
         | None -> (
             match normalize_key token with
             | Some key when boolean_option key -> (
                 match Vec.pop_front rest with
                 | Some (value, tail) when boolean_literal value ->
                     loop
-                      (Vec.push_front options (key, Some value))
+                      (Vec.push_back options (key, Some value))
                       positional tail
                 | _ ->
                     loop
-                      (Vec.push_front options (key, Some "true"))
+                      (Vec.push_back options (key, Some "true"))
                       positional rest)
             | Some key -> (
                 match Vec.pop_front rest with
                 | Some (value, tail) when not (is_option value) ->
                     loop
-                      (Vec.push_front options (key, Some value))
+                      (Vec.push_back options (key, Some value))
                       positional tail
-                | _ -> loop (Vec.push_front options (key, None)) positional rest
+                | _ -> loop (Vec.push_back options (key, None)) positional rest
                 )
-            | None -> loop options (Vec.push_front positional token) rest))
+            | None -> loop options (Vec.push_back positional token) rest))
   in
   loop Vec.empty Vec.empty argv
 

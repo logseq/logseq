@@ -10,10 +10,10 @@ let lower_uuid uuid = String.lowercase_ascii uuid
 let unique_preserve_order values =
   let rec loop seen acc values =
     match Vec.pop_front values with
-    | None -> Vec.rev acc
+    | None -> acc
     | Some (value, rest) ->
         if Vec.mem value seen then loop seen acc rest
-        else loop (Vec.push_front seen value) (Vec.push_front acc value) rest
+        else loop (Vec.push_front seen value) (Vec.push_back acc value) rest
   in
   loop Vec.empty Vec.empty values
 
@@ -30,16 +30,16 @@ let find_substring_from ~needle haystack start =
 let extract_wiki_refs value =
   let rec loop start acc =
     match find_substring_from ~needle:"[[" value start with
-    | None -> Vec.rev acc |> unique_preserve_order
+    | None -> unique_preserve_order acc
     | Some open_index -> (
         let content_start = open_index + 2 in
         match find_substring_from ~needle:"]]" value content_start with
-        | None -> Vec.rev acc |> unique_preserve_order
+        | None -> unique_preserve_order acc
         | Some close_index ->
             let candidate =
               String.sub value content_start (close_index - content_start)
             in
-            loop (close_index + 2) (Vec.push_front acc candidate))
+            loop (close_index + 2) (Vec.push_back acc candidate))
   in
   loop 0 Vec.empty
 
@@ -167,7 +167,7 @@ let fetch_uuid_entities config repo uuids =
     | Ok invoke_config ->
         let rec pull acc uuids =
           match Vec.pop_front uuids with
-          | None -> pure (Vec.rev acc)
+          | None -> pure acc
           | Some (uuid, rest) ->
               bind
                 (Transport.thread_api_pull invoke_config ~repo
@@ -180,7 +180,7 @@ let fetch_uuid_entities config repo uuids =
                     match value_uuid value with
                     | None -> acc
                     | Some uuid ->
-                        Vec.push_front acc
+                        Vec.push_back acc
                           {
                             uuid;
                             id = Edn_util.get_int64 value "db/id";
