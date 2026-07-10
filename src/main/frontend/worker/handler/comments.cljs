@@ -1,6 +1,8 @@
 (ns frontend.worker.handler.comments
   "Comments operations for the db worker."
   (:require [datascript.core :as d]
+            [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-util :as entity-util]))
@@ -221,3 +223,33 @@
                 db
                 block-uuids)
            (mapv str)))))
+
+(def-thread-api :thread-api/get-comments-area-block
+  [repo block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (get-comments-area-block @conn block-ref)))
+
+(def-thread-api :thread-api/resolve-comments-area
+  [repo block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (resolve-comments-area @conn block-ref)))
+
+(def-thread-api :thread-api/resolve-comments-area-for-blocks
+  [repo block-refs]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (resolve-comments-area-for-blocks @conn block-refs)))
+
+(def-thread-api :thread-api/get-comment-delete-targets
+  [repo comment-block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (get-comment-delete-targets @conn comment-block-ref)))
+
+(def-thread-api :thread-api/get-comment-threads-for-block
+  [repo block-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (get-comment-threads-for-block @conn block-uuid)))
+
+(def-thread-api :thread-api/get-comment-thread-block-uuids
+  [repo block-uuids]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (get-comment-thread-block-uuids @conn block-uuids)))
