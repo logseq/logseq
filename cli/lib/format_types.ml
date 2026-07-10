@@ -285,7 +285,7 @@ let title_max_display_width config =
   else (Cli_config.defaults ()).list_title_max_display_width
 
 let truncate_title_cell max_width value =
-  let first_line = Vec.split_on_char '\n' value |> Vec.hd in
+  let first_line = Vec.split_on_char '\n' value |> Vec.peek_front in
   Display_width.truncate first_line max_width
 
 let is_list_command = function

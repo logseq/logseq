@@ -104,8 +104,8 @@ let default_task_prompt_template =
         |]
     |> fun lines ->
       Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append lines
-        (Vec.of_array [| ""; "Task block tree:"; "{{task-block-tree}}" |]) )
+      Vec.append_array lines [| ""; "Task block tree:"; "{{task-block-tree}}" |]
+    )
 
 let default_comment_prompt_template =
   Vec.string_concat "\n"
@@ -122,20 +122,19 @@ let default_comment_prompt_template =
         |]
     |> fun lines ->
       Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append lines
-        (Vec.of_array
-           [|
-             "";
-             "Comment target context:";
-             "{{comment-target-context}}";
-             "";
-             "Comment thread context:";
-             "{{comment-thread-context}}";
-             "";
-             "Requesting comment:";
-             "{{requesting-comment}}";
-             "";
-           |])
+      Vec.append_array lines
+        [|
+          "";
+          "Comment target context:";
+          "{{comment-target-context}}";
+          "";
+          "Comment thread context:";
+          "{{comment-thread-context}}";
+          "";
+          "Requesting comment:";
+          "{{requesting-comment}}";
+          "";
+        |]
       |> fun lines -> Vec.append lines comment_reply_instruction_lines )
 
 let trim_non_empty value =
@@ -306,15 +305,14 @@ let codex_command_prefix config =
   Vec.of_array [| codex_bin config; "--sandbox"; "danger-full-access"; "exec" |]
 
 let build_codex_command config prompt =
-  Vec.append
+  Vec.append_array
     (codex_command_prefix config)
-    (Vec.of_array [| "--json"; "--skip-git-repo-check"; prompt |])
+    [| "--json"; "--skip-git-repo-check"; prompt |]
 
 let build_codex_resume_command config session_id prompt =
-  Vec.append
+  Vec.append_array
     (codex_command_prefix config)
-    (Vec.of_array
-       [| "resume"; "--json"; "--skip-git-repo-check"; session_id; prompt |])
+    [| "resume"; "--json"; "--skip-git-repo-check"; session_id; prompt |]
 
 let shell_env () = Cli_unix.environment ()
 
@@ -330,7 +328,7 @@ let start_command_capture_session_line command =
       Cli_unix.start_process_capture_session_line bin args (shell_env ())
 
 let start_command_detached command =
-  match Vec.peek_front command with
+  match Vec.peek_front_opt command with
   | None -> Error (Error.make Error.Codex_start_failed "missing command")
   | Some bin -> (
       try
@@ -444,36 +442,32 @@ let build_master_task_dispatch_prompt config ~graph ~agent_name
         |]
     |> fun lines ->
       Vec.append lines (project_dir_line config) |> fun lines ->
-      Vec.append lines
-        (Vec.of_array
-           [|
-             "";
-             graph_scope_line;
-             "Only the master agent may write task results back into the \
-              target graph.";
-             "Subagents may read graph context but must not write graph \
-              content.";
-             "Route this request according to the master prompt policy.";
-             "After launching the subagent with `codex exec`, write that \
-              subagent session id to the task block's \
-              `:logseq.property.agent/session-id` property.";
-             "";
-             "Write task results back into the graph.";
-             task_finish_reaction_line;
-           |])
+      Vec.append_array lines
+        [|
+          "";
+          graph_scope_line;
+          "Only the master agent may write task results back into the target \
+           graph.";
+          "Subagents may read graph context but must not write graph content.";
+          "Route this request according to the master prompt policy.";
+          "After launching the subagent with `codex exec`, write that subagent \
+           session id to the task block's `:logseq.property.agent/session-id` \
+           property.";
+          "";
+          "Write task results back into the graph.";
+          task_finish_reaction_line;
+        |]
       |> fun lines ->
       Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append lines (Vec.of_array [| ""; "Block UUID: " ^ uuid; "" |])
-      |> fun lines ->
+      Vec.append_array lines [| ""; "Block UUID: " ^ uuid; "" |] |> fun lines ->
       Vec.append lines (inherited_task_session_lines inherited_session)
       |> fun lines ->
-      Vec.append lines
-        (Vec.of_array
-           [|
-             "";
-             "Task block tree:";
-             Option.value tree_text ~default:(block_title block);
-           |]) )
+      Vec.append_array lines
+        [|
+          "";
+          "Task block tree:";
+          Option.value tree_text ~default:(block_title block);
+        |] )
 
 let dispatch_task_to_master config ~graph ~agent_name ~master_session
     ?inherited_session ?tree_text block =
@@ -498,30 +492,28 @@ let build_master_comment_dispatch_prompt config ~graph ~agent_name
         |]
     |> fun lines ->
       Vec.append lines (project_dir_line config) |> fun lines ->
-      Vec.append lines
-        (Vec.of_array [| ""; graph_scope_line; comment_completion_line |])
+      Vec.append_array lines [| ""; graph_scope_line; comment_completion_line |]
       |> fun lines ->
       Vec.append lines graph_report_lines |> fun lines ->
-      Vec.append lines (Vec.singleton "") |> fun lines ->
+      Vec.push_back lines "" |> fun lines ->
       Vec.append lines comment_reply_instruction_lines |> fun lines ->
-      Vec.append lines
-        (Vec.of_array
-           [|
-             "";
-             "Comment UUID: " ^ uuid;
-             "";
-             "Comment target context:";
-             Vec.string_concat "\n"
-               (Vec.filter
-                  (fun value -> String.trim value <> "")
-                  target_tree_texts);
-             "";
-             "Comment thread context:";
-             comments_area_tree_text;
-             "";
-             "Requesting comment:";
-             comment_tree_text;
-           |]) )
+      Vec.append_array lines
+        [|
+          "";
+          "Comment UUID: " ^ uuid;
+          "";
+          "Comment target context:";
+          Vec.string_concat "\n"
+            (Vec.filter
+               (fun value -> String.trim value <> "")
+               target_tree_texts);
+          "";
+          "Comment thread context:";
+          comments_area_tree_text;
+          "";
+          "Requesting comment:";
+          comment_tree_text;
+        |] )
 
 let dispatch_comment_to_master config ~graph ~agent_name ~master_session
     ~target_tree_texts ~comments_area_tree_text ~comment_tree_text comment_block
@@ -689,11 +681,11 @@ let prompt_template_from_block kind block =
     |> Vec.filter (fun body ->
         validate_prompt_template ((prompt_template_for_kind kind) body) = Ok ())
   in
-  if Vec.length renderable = 1 then Ok (Vec.hd renderable)
+  if Vec.length renderable = 1 then Ok (Vec.peek_front renderable)
   else
     match templates with
     | templates when Vec.length templates = 1 -> (
-        let body = Vec.hd templates in
+        let body = Vec.peek_front templates in
         match
           validate_prompt_template ((prompt_template_for_kind kind) body)
         with
@@ -1348,7 +1340,7 @@ let master_prompt_from_block block =
         |> Vec.filter_map (fun child ->
             Option.bind (Edn_util.get_string child "block/title") trim_non_empty)
       in
-      if Vec.length prompts = 1 then Ok (Vec.hd prompts)
+      if Vec.length prompts = 1 then Ok (Vec.peek_front prompts)
       else if Vec.is_empty prompts then
         Error
           (Error.make Error.Agent_master_prompt_invalid

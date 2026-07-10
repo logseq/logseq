@@ -78,9 +78,7 @@ let normalize_stdin_id = function
       else if bracketed_id_vector text || is_integer_text text then Some text
       else
         let lines = split_lines text in
-        let last_line =
-          Option.value (Vec.peek_front (Vec.rev lines)) ~default:""
-        in
+        let last_line = Option.value (Vec.peek_back_opt lines) ~default:"" in
         if bracketed_id_vector last_line then Some last_line
         else
           let tokens = split_ws text in
@@ -563,8 +561,8 @@ let row_entity value =
   match
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
   with
-  | Some values, _, _ when Vec.length values = 1 -> Some (Vec.hd values)
-  | _, Some values, _ when Vec.length values = 1 -> Some (Vec.hd values)
+  | Some values, _, _ when Vec.length values = 1 -> Some (Vec.peek_front values)
+  | _, Some values, _ when Vec.length values = 1 -> Some (Vec.peek_front values)
   | _, _, Some _ -> Some value
   | _ -> None
 
@@ -722,8 +720,7 @@ let attach_page_hierarchy config repo ?max_depth root =
                   | Some (child, rest) ->
                       bind
                         (attach_node (depth + 1) visited child)
-                        (fun child ->
-                          attach_all (Vec.push_back acc child) rest)
+                        (fun child -> attach_all (Vec.push_back acc child) rest)
                 in
                 bind (attach_all Vec.empty children) (fun children ->
                     pure (assoc_children node children))))
@@ -1081,9 +1078,8 @@ let fallback_property_title key =
       String.sub key 1 (String.length key - 1)
     else key
   in
-  match Vec.rev (Vec.split_on_char '/' key) with
-  | values when (not (Vec.is_empty values)) && Vec.hd values <> "" ->
-      Vec.hd values
+  match Vec.peek_back_opt (Vec.split_on_char '/' key) with
+  | Some value when value <> "" -> value
   | _ -> key
 
 let entity_label_from_value value =
@@ -1233,7 +1229,7 @@ let append_label_lines lines ~id_width ~id ~prefix ~branch ~continuation_prefix
   match Vec.split_on_char '\n' label with
   | values when Vec.is_empty values -> lines
   | values ->
-      let first = Vec.hd values in
+      let first = Vec.peek_front values in
       let rest =
         match Vec.pop_front values with
         | Some (_, rest) -> rest
@@ -1322,7 +1318,8 @@ let property_line metadata (key, _, value) =
   | Some title -> (
       match property_value_items metadata value with
       | values when Vec.is_empty values -> None
-      | values when Vec.length values = 1 -> Some (title ^ ": " ^ Vec.hd values)
+      | values when Vec.length values = 1 ->
+          Some (title ^ ": " ^ Vec.peek_front values)
       | values ->
           Some
             (title ^ ":\n"
@@ -1338,7 +1335,7 @@ let append_property_lines lines ~id_width ~prefix metadata value =
     match Vec.split_on_char '\n' line with
     | values when Vec.is_empty values -> lines
     | values ->
-        let first = Vec.hd values in
+        let first = Vec.peek_front values in
         let rest =
           match Vec.pop_front values with
           | Some (_, rest) -> rest

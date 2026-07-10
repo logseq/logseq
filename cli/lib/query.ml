@@ -690,7 +690,7 @@ let normalize_task_search_inputs (entry : query_entry option) inputs =
   | _ -> inputs
 
 let validate_recent_updated_inputs (entry : query_entry option) inputs =
-  match (entry, Vec.peek_front inputs) with
+  match (entry, Vec.peek_front_opt inputs) with
   | ( Some { name = "recent-updated"; source = Built_in; _ },
       Some recent_days_value )
     when Option.value (Edn_util.as_int recent_days_value) ~default:0 > 0 ->
