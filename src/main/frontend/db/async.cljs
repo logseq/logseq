@@ -329,6 +329,10 @@
                                               {:id id :opts (assoc opts :children? false)})
                                             ids*))))
 
+(defn <get-page-blocks-window
+  [graph id-uuid-or-name opts]
+  (<invoke-db-worker :thread-api/get-page-blocks-window graph id-uuid-or-name opts))
+
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))

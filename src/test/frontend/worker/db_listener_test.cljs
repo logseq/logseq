@@ -1,7 +1,11 @@
 (ns frontend.worker.db-listener-test
   (:require [cljs.test :refer [deftest is testing]]
+            [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.markdown-mirror :as markdown-mirror]))
+            [frontend.worker.markdown-mirror :as markdown-mirror]
+            [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.shared-service :as shared-service]
+            [frontend.worker.sync :as db-sync]))
 
 (deftest transit-safe-tx-meta-keeps-outliner-ops-test
   (testing "worker tx-meta sanitization should preserve semantic outliner ops"
@@ -28,3 +32,19 @@
        tx-report))
     (is (= [["repo" nil tx-report {:defer? true}]]
            @calls))))
+
+(deftest db-listener-persists-local-tx-before-broadcasting-ui-refresh-test
+  (let [conn (d/create-conn)
+        calls (atom [])]
+    (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _]
+                                             (swap! calls conj :persist-local-tx))
+                  worker-pipeline/invoke-hooks (fn [_conn tx-report _context]
+                                                 {:tx-report tx-report})
+                  shared-service/broadcast-to-clients! (fn [event _payload]
+                                                         (when (= :sync-db-changes event)
+                                                           (swap! calls conj :broadcast-ui-refresh)))]
+      (db-listener/listen-db-changes! "repo" conn :handler-keys [:sync-db-to-main-thread :db-sync])
+      (d/transact! conn [{:db/id -1 :block/title "b1"}] {:local-tx? true}))
+    (is (= [:persist-local-tx :broadcast-ui-refresh] @calls)
+        "UI refresh broadcasts must wait until the local tx has been persisted.")))

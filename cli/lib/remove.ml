@@ -261,6 +261,17 @@ let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t ops) ~options:(Edn_util.map_t [])
 
+let normalize_apply_result result =
+  if Edn_util.is_null result then Edn_util.bool true
+  else
+    match Edn_util.get result "result" with
+    | Some result -> result
+    | None -> result
+
+let normalize_apply_effect task =
+  let open Cli_effect in
+  bind task (fun result -> pure (normalize_apply_result result))
+
 let delete_block_uuids config repo uuids =
   let op =
     Edn_util.vector
@@ -273,7 +284,7 @@ let delete_block_uuids config repo uuids =
           ];
       ]
   in
-  apply_outliner_ops config repo [ op ]
+  normalize_apply_effect (apply_outliner_ops config repo [ op ])
 
 let delete_page_uuid config repo uuid =
   let op =
@@ -283,7 +294,7 @@ let delete_page_uuid config repo uuid =
         Edn_util.vector [ Edn_util.uuid uuid; Edn_util.map [] ];
       ]
   in
-  apply_outliner_ops config repo [ op ]
+  normalize_apply_effect (apply_outliner_ops config repo [ op ])
 
 let entities_of_value value =
   match

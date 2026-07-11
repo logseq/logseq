@@ -2482,6 +2482,45 @@ let () =
         (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
            (Remove.Parsed_page { id = None; page = None })));
 
+  test_promise "CLI parity remove page unwraps apply result map" (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/cli-list-pages" body then
+              "[[\"^ \
+               \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "[\"^ \",\"~:result\",true]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = None;
+                page = Some "Home";
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "remove page succeeds" false (Cli_result.is_error result);
+          let data = expect_some "remove page data" (Cli_result.data_value result) in
+          expect_bool "remove page result" true
+            (expect_some "remove page result bool"
+               (Edn_util.get_bool data "result"));
+          Js.Promise.resolve pass));
+
   test_promise "CLI parity remove block rejects page entities before delete"
     (fun () ->
       let apply_called = ref false in

@@ -27,6 +27,38 @@
     (nil? (:db-sync/tx-id tx-meta))
     (assoc :db-sync/tx-id (random-uuid))))
 
+(defn- now-ms []
+  (if (and (exists? js/performance)
+           (.-now js/performance))
+    (.now js/performance)
+    (js/Date.now)))
+
+(defn- log-outliner-op-perf!
+  [data]
+  (when goog.DEBUG
+    (log/info :db/outliner-op-perf data)))
+
+(defn- on-next-frame!
+  [f]
+  (if (exists? js/requestAnimationFrame)
+    (js/requestAnimationFrame f)
+    (js/setTimeout f 0)))
+
+(defn- outliner-ops-need-page-tree?
+  [_ops]
+  false)
+
+(defn- outliner-ops-need-page-window-refresh?
+  [ops]
+  (boolean
+   (some (comp #{:insert-blocks
+                 :delete-blocks
+                 :move-blocks
+                 :move-blocks-up-down
+                 :indent-outdent-blocks}
+               first)
+         ops)))
+
 (defn- op-block-uuids
   [ops]
   (->> ops
@@ -51,7 +83,7 @@
                    :indent-outdent-blocks
                    (first args)
 
-                   (:set-block-property :remove-block-property :delete-property-value)
+                   (:set-block-property :set-block-properties :remove-block-property :delete-property-value)
                    [(first args)]
 
                    (:batch-set-property :batch-remove-property :batch-delete-property-value)
@@ -59,6 +91,12 @@
 
                    :create-property-text-block
                    [(first args)]
+
+                   (:class-add-property :class-remove-property)
+                   [(first args)]
+
+                   :delete-closed-value
+                   [(second args)]
 
                    :delete-blocks
                    (first args)
@@ -77,11 +115,13 @@
         updated-ids (apply disj affected-ids deleted-ids)]
     (when (seq affected-ids)
       (state/set-state! :db/latest-transacted-entity-uuids
-                        {:updated-ids updated-ids
-                         :deleted-ids deleted-ids
-                         :page-tree page-tree
-                         :editor/edit-block-fn-id (:editor/edit-block-fn-id tx-meta)
-                         :tx-id (:db-sync/tx-id tx-meta)}))))
+                        (cond-> {:updated-ids updated-ids
+                                 :deleted-ids deleted-ids
+                                 :page-window-refresh? (outliner-ops-need-page-window-refresh? ops)
+                                 :editor/edit-block-fn-id (:editor/edit-block-fn-id tx-meta)
+                                 :tx-id (:db-sync/tx-id tx-meta)}
+                          (and page-tree (outliner-ops-need-page-tree? ops))
+                          (assoc :page-tree page-tree))))))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
@@ -101,11 +141,14 @@
   (when (seq ops)
     (if (and util/node-test? conn)
       (outliner-op/apply-ops! conn ops opts)
-      (let [opts' (-> opts
+      (let [started-at (now-ms)
+            perf-id (random-uuid)
+            page-tree-requested? (outliner-ops-need-page-tree? ops)
+            opts' (-> opts
                       ensure-local-op-tx-id
                       (assoc
                        :client-id (:client-id @state/state)
-                       :ui/page-id (state/get-current-page)
+                       :ui/perf-id perf-id
                        :local-tx? true))
             request #(state/<invoke-db-worker
                       :thread-api/apply-outliner-ops
@@ -118,6 +161,19 @@
             (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                      (state/get-current-repo)
                                      (state/get-editor-info))
-            (p/let [{:keys [result page-tree]} (request)]
+            (p/let [{:keys [result page-tree]} (request)
+                    worker-returned-at (now-ms)]
               (refresh-worker-op-blocks! ops opts' page-tree)
+              (let [state-updated-at (now-ms)]
+                (on-next-frame!
+                 (fn []
+                   (log-outliner-op-perf!
+                    {:stage :ui-updated
+                     :perf-id perf-id
+                     :op-names (mapv first ops)
+                     :op-count (count ops)
+                     :page-tree-requested? page-tree-requested?
+                     :worker-roundtrip-ms (- worker-returned-at started-at)
+                     :state-update-ms (- state-updated-at worker-returned-at)
+                     :total-to-next-frame-ms (- (now-ms) started-at)}))))
               result))))))))
