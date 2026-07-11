@@ -180,13 +180,16 @@
                    self #js {:sql sql :conn conn :schema-ready true}
                    requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
                              (semantic-json-request (str "/semantic/pages/" page-id "/blocks?graph-id=graph-1") "GET" nil)
-                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=blocks" "GET" nil)]]
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=blocks" "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap" "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=" "GET" nil)]]
                (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
                             bodies (p/all (map json-body responses))]
-                     (is (= [200 200 200] (mapv #(.-status %) responses)) (pr-str (nth bodies 1)))
+                     (is (= [200 200 200 200 200] (mapv #(.-status %) responses)) (pr-str bodies))
                      (is (= "Inbox" (get-in bodies [0 :blocks 0 :title])))
                      (is (= "Review roadmap" (get-in bodies [1 :blocks 0 :title])))
-                     (is (= (str block-id) (get-in bodies [2 :results 0 :uuid]))))
+                     (doseq [index [2 3 4]]
+                       (is (= (str block-id) (get-in bodies [index :results 0 :uuid])))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

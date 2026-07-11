@@ -187,12 +187,13 @@
 (defn- search-results [db query types]
   (let [needle (string/lower-case query)
         enabled (if (seq types) (set (string/split types #",")) #{"blocks" "tags" "properties" "assets"})
-        title-matches (d/q '[:find [?e ...]
-                             :in $ ?needle
-                             :where
-                             [?e :block/title ?title]
-                             [(clojure.string/lower-case ?title) ?lower]
-                             [(clojure.string/includes? ?lower ?needle)]] db needle)]
+        title-matches (keep (fn [datom]
+                              (try
+                                (when (string/includes? (string/lower-case (:v datom)) needle)
+                                  (:e datom))
+                                (catch :default _
+                                  nil)))
+                            (d/datoms db :avet :block/title))]
     (->> title-matches
          (map #(d/entity db %))
          (keep (fn [entity]
