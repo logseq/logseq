@@ -49,6 +49,8 @@ The Worker will add these initial endpoints:
 - `POST /api/v1/graphs/:graph-id/block-properties/batch-set`
 - `POST /api/v1/graphs/:graph-id/block-properties/batch-delete`
 - `POST /api/v1/graphs/:graph-id/capture`
+- `GET /api/v1/graphs/:graph-id/tasks`
+- `POST /api/v1/graphs/:graph-id/tasks`
 - `GET /api/v1/graphs/:graph-id/tags`
 - `POST /api/v1/graphs/:graph-id/tags`
 - `GET /api/v1/graphs/:graph-id/tags/:tag-id`
@@ -90,9 +92,13 @@ Blocks are the base semantic resource. A page is a block entity with page identi
 
 `POST /capture` appends a supplied block tree to the end of today's journal page. It derives the journal title through Logseq date utilities, creates the journal page through `logseq.outliner.page/create!` when absent, and inserts through `deps/outliner`. It does not require a client to discover or create today's page first.
 
-Single property assignment uses idempotent `PUT` because the addressed block-property pair has one resulting representation; deletion uses idempotent `DELETE` on the same URL. They resolve property identifiers through graph entities and call `logseq.outliner.property/set-block-property!` or `logseq.outliner.property/remove-block-property!`. Batch set and batch delete use explicit collection endpoints because they affect multiple block-property pairs and are not single-resource replacements. Each batch validates every block and property before applying changes and returns the affected count; invalid input fails before mutation rather than partially applying an unvalidated request.
+Single property assignment uses idempotent `PUT` because the addressed block-property pair has one resulting representation; deletion uses idempotent `DELETE` on the same URL. They resolve property identifiers through graph entities and call the existing `logseq.outliner.property` setters. A cardinality-many array replaces the collection by removing the prior values and adding each validated entity through `batch-set-property!`; scalar writes continue through `set-block-property!`. Batch set and batch delete use explicit collection endpoints because they affect multiple block-property pairs and are not single-resource replacements. Each batch validates every block and property before applying changes and returns the affected count; invalid input fails before mutation rather than partially applying an unvalidated request.
 
 Tags and properties are exposed as focused resources because callers need their schemas, but their identities remain Logseq graph entities rather than a parallel server model.
+
+Tasks are first-class semantic resources backed by ordinary blocks or pages tagged with `:logseq.class/Task`. `GET /tasks` walks the indexed Task-class AVET range, supports cursor pagination plus status, priority, and title-content filters, and returns typed task properties. It never substitutes title search for class membership. `POST /tasks` creates a normal outliner block, assigns the Task class, and sets typed status, priority, scheduled, and deadline values. Task titles never encode file-graph Markdown markers such as `TODO`. Status and priority aliases cover built-in choices only; clients may also select user-defined choices by UUID, ident, or exact title. Property responses expose the graph's current `choices` so agents can discover extensions instead of assuming a closed enum.
+
+Property writes accept JSON scalar values for scalar properties. For ref properties, entity selectors may be stable UUIDs, qualified idents, or exact titles; cardinality-many properties accept arrays of those selectors. The handler resolves selectors to existing entity IDs before calling `deps/outliner`. Class-valued properties such as `:block/tags` additionally require every resolved entity to be a class and return `400` with a stable actionable error when resolution fails.
 
 Assets remain blocks tagged as assets. `GET /assets/:asset-block-id` resolves the asset block and returns a short-lived, signed Worker URL for its R2 object. The URL expires after five minutes and does not contain an OAuth bearer token. There is no semantic asset upload endpoint. Asset deletion uses the same `DELETE /blocks/:block-id` operation as every other block, ensuring the outliner transaction and asset reference cleanup follow one deletion path.
 
@@ -104,7 +110,7 @@ The per-graph Durable Object will open its existing DataScript connection throug
 - `logseq.outliner.core/move-blocks!` for block movement.
 - `logseq.outliner.page/delete!` for page deletion and `logseq.outliner.core/delete-blocks!` for ordinary block deletion.
 - `logseq.outliner.property/upsert-property!` for property creation or update.
-- `logseq.outliner.property/set-block-property!` for single and batch property assignment.
+- `logseq.outliner.property/set-block-property!` and `batch-set-property!` for scalar and collection property assignment.
 
 The existing storage listener records each outliner transaction in `tx_log`, advances `t`, and updates the checksum. After a successful semantic mutation, the Durable Object broadcasts the normal `changed` message so connected clients pull the transaction through the existing sync protocol.
 

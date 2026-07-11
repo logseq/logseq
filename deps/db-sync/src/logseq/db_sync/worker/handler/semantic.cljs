@@ -40,7 +40,8 @@
   (string? (:logseq.property.asset/type entity)))
 
 (defn- entity-ident [entity]
-  (some-> (:db/ident entity) str))
+  (when-let [ident (:db/ident entity)]
+    (str (namespace ident) "/" (name ident))))
 
 (defn- tag? [entity]
   (ldb/class? entity))
@@ -70,12 +71,20 @@
    :ident (entity-ident entity)
    :title (:block/title entity)})
 
-(defn- property-response [entity]
+(defn- property-choice-response [entity]
   {:uuid (uuid-string (:block/uuid entity))
    :ident (entity-ident entity)
    :title (:block/title entity)
-   :type (some-> (:logseq.property/type entity) name)
-   :cardinality (some-> (:db/cardinality entity) name)})
+   :value (:logseq.property/value entity)})
+
+(defn- property-response [entity]
+  (cond-> {:uuid (uuid-string (:block/uuid entity))
+           :ident (entity-ident entity)
+           :title (:block/title entity)
+           :type (some-> (:logseq.property/type entity) name)
+           :cardinality (some-> (:db/cardinality entity) name)}
+    (seq (:block/_closed-value-property entity))
+    (assoc :choices (mapv property-choice-response (:block/_closed-value-property entity)))))
 
 (defn- asset-response [entity]
   {:uuid (uuid-string (:block/uuid entity))
@@ -143,7 +152,12 @@
               (http/json-response nil (cond-> {response-key items}
                                         next-cursor (assoc :next-cursor next-cursor)))))))
 
-(defn- indexed-reference-response [db url response-key attribute target-id]
+(defn- indexed-reference-response
+  ([db url response-key attribute target-id]
+   (indexed-reference-response db url response-key attribute target-id {}))
+  ([db url response-key attribute target-id {:keys [entity-filter response-fn]
+                                              :or {entity-filter (constantly true)
+                                                   response-fn block-response}}]
   (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
         cursor-e (when (= "entity-id" (first cursor))
                    (js/parseInt (second cursor) 10))]
@@ -153,15 +167,16 @@
       :else
       (let [datoms (cond->> (d/datoms db :avet attribute target-id)
                      cursor-e (drop-while #(<= (:e %) cursor-e))
-                     true (remove #(entity-util/hidden? (d/entity db (:e %)))))
+                     true (remove #(entity-util/hidden? (d/entity db (:e %))))
+                     true (filter #(entity-filter (d/entity db (:e %)))))
             selected (vec (take (inc limit) datoms))
             more? (> (count selected) limit)
             page (take limit selected)]
         (http/json-response
          nil
-         (cond-> {response-key (mapv #(block-response (d/entity db (:e %))) page)}
+         (cond-> {response-key (mapv #(response-fn (d/entity db (:e %))) page)}
            more? (assoc :next-cursor
-                        (encode-cursor ["entity-id" (str (:e (last page)))]))))))))
+                        (encode-cursor ["entity-id" (str (:e (last page)))])))))))))
 
 (defn- find-entity [db id]
   (when-let [parsed (try (uuid id) (catch :default _ nil))]
@@ -265,6 +280,79 @@
   (or (when-let [entity (find-entity db value)] (:db/ident entity))
       (when (string? value)
         (let [ident (keyword value)] (when (d/entity db ident) ident)))))
+
+(defn- resolve-ref-entity [db property-ident value]
+  (let [entity (cond
+                 (number? value) (d/entity db value)
+                 (qualified-keyword? value) (d/entity db value)
+                 (and (string? value) (common-util/uuid-string? value))
+                 (d/entity db [:block/uuid (uuid value)])
+                 (string? value)
+                 (or (d/entity db (keyword value))
+                     (some->> (d/datoms db :avet :block/title value)
+                              (map #(d/entity db (:e %)))
+                              (filter #(if (= property-ident :block/tags)
+                                         (entity-util/class? %)
+                                         true))
+                              first))
+                 :else nil)]
+    (when (and entity
+               (or (not= property-ident :block/tags) (entity-util/class? entity)))
+      (:db/id entity))))
+
+(defn- prepare-property-value [db property-ident value]
+  (let [property (d/entity db property-ident)]
+    (if-not (= :db.type/ref (:db/valueType property))
+      {:value value}
+      (let [many-input? (or (sequential? value) (set? value))
+            values (if many-input? value [value])
+            resolved (mapv #(resolve-ref-entity db property-ident %) values)]
+        (if (every? some? resolved)
+          {:value (if many-input? resolved (first resolved))}
+          {:error (if (= property-ident :block/tags)
+                    "property value must resolve to an existing class by UUID, ident, or title"
+                    "property value must resolve to an existing entity by UUID, ident, or title")})))))
+
+(defn- set-prepared-property! [conn block-id property-ident value]
+  (if (coll? value)
+    (do
+      (outliner-property/remove-block-property! conn block-id property-ident)
+      (doseq [item value]
+        (outliner-property/batch-set-property! conn [block-id] property-ident item {:entity-id? true})))
+    (outliner-property/set-block-property! conn block-id property-ident value)))
+
+(def ^:private task-status-idents
+  {"todo" :logseq.property/status.todo
+   "doing" :logseq.property/status.doing
+   "in-review" :logseq.property/status.in-review
+   "done" :logseq.property/status.done
+   "canceled" :logseq.property/status.canceled
+   "backlog" :logseq.property/status.backlog})
+
+(def ^:private task-priority-idents
+  {"low" :logseq.property/priority.low
+   "medium" :logseq.property/priority.medium
+   "high" :logseq.property/priority.high
+   "urgent" :logseq.property/priority.urgent})
+
+(defn- task-response [task]
+  (cond-> (block-response task)
+    (:logseq.property/status task)
+    (assoc :status (property-choice-response (:logseq.property/status task)))
+    (:logseq.property/priority task)
+    (assoc :priority (property-choice-response (:logseq.property/priority task)))
+    (:logseq.property/scheduled task) (assoc :scheduled (:logseq.property/scheduled task))
+    (:logseq.property/deadline task) (assoc :deadline (:logseq.property/deadline task))))
+
+(defn- resolve-property-choice [db property-ident aliases selector]
+  (let [selector (get aliases selector selector)
+        choice-id (resolve-ref-entity db property-ident selector)
+        choice (when choice-id (d/entity db choice-id))
+        property-id (d/entid db property-ident)]
+    (when (and choice-id
+               (some #(= property-id (:v %))
+                     (d/datoms db :eavt choice-id :block/closed-value-property)))
+      choice)))
 
 (defn- search-results [db query types]
   (let [needle (string/lower-case query)
@@ -420,12 +508,15 @@
     :semantic/blocks-set-property
     (p/let [body (body-clj request)
             block (find-entity db (:block-id path-params))
-            property-ident (resolve-property-ident db (:property-id path-params))]
+            property-ident (resolve-property-ident db (:property-id path-params))
+            prepared (when property-ident (prepare-property-value db property-ident (:value body)))]
       (if (or (nil? block) (nil? property-ident) (not (contains? body :value)))
         (http/bad-request "invalid block, property, or value")
-        (do (outliner-property/set-block-property! conn (:db/id block) property-ident (:value body))
-            (broadcast-change! self)
-            (http/json-response nil {:updated true}))))
+        (if-let [error (:error prepared)]
+          (http/bad-request error)
+          (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared))
+              (broadcast-change! self)
+              (http/json-response nil {:updated true})))))
 
     :semantic/blocks-delete-property
     (let [block (find-entity db (:block-id path-params))
@@ -441,15 +532,20 @@
     (p/let [body (body-clj request)
             entries (:entries body)
             resolved (mapv (fn [{:keys [block-id property-id value]}]
-                             {:block (find-entity db block-id)
-                              :property-ident (resolve-property-ident db property-id) :value value}) entries)]
-      (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
+                             (let [property-ident (resolve-property-ident db property-id)]
+                               {:block (find-entity db block-id)
+                                :property-ident property-ident
+                                :prepared (when property-ident
+                                            (prepare-property-value db property-ident value))})) entries)]
+      (if (or (not (seq entries))
+              (some #(or (nil? (:block %)) (nil? (:property-ident %))
+                         (:error (:prepared %))) resolved))
         (http/bad-request "invalid batch property entry")
         (do (ldb/batch-transact-with-temp-conn!
              conn {:outliner-op :batch-set-property}
              (fn [temp-conn]
-               (doseq [{:keys [block property-ident value]} resolved]
-                 (outliner-property/set-block-property! temp-conn (:db/id block) property-ident value))))
+               (doseq [{:keys [block property-ident prepared]} resolved]
+                 (set-prepared-property! temp-conn (:db/id block) property-ident (:value prepared)))))
             (broadcast-change! self)
             (http/json-response nil {:updated (count resolved)}))))
 
@@ -525,6 +621,65 @@
           (broadcast-change! self)
           (js/Response. nil #js {:status 204})))
       (http/not-found))))
+
+(defn- handle-tasks [{:keys [^js self request ^js url conn db handler]}]
+  (case handler
+    :semantic/tasks-list
+    (let [status (.get (.-searchParams url) "status")
+          priority (.get (.-searchParams url) "priority")
+          content (some-> (.get (.-searchParams url) "content") string/lower-case)
+          status-choice (when status (resolve-property-choice db :logseq.property/status
+                                                              task-status-idents status))
+          priority-choice (when priority (resolve-property-choice db :logseq.property/priority
+                                                                  task-priority-idents priority))]
+      (cond
+        (and status (nil? status-choice)) (http/bad-request "invalid task status")
+        (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
+        :else
+        (indexed-reference-response
+         db url :tasks :block/tags :logseq.class/Task
+         {:entity-filter
+          (fn [entity]
+            (and (or (nil? status-choice)
+                     (= (:db/id status-choice) (:db/id (:logseq.property/status entity))))
+                 (or (nil? priority-choice)
+                     (= (:db/id priority-choice) (:db/id (:logseq.property/priority entity))))
+                 (or (nil? content)
+                     (string/includes? (string/lower-case (or (:block/title entity) "")) content))))
+          :response-fn task-response})))
+
+    :semantic/tasks-create
+    (p/let [body (body-clj request)]
+      (let [status (or (:status body) "todo")
+            priority (:priority body)
+            status-choice (resolve-property-choice db :logseq.property/status task-status-idents status)
+            priority-choice (when priority
+                              (resolve-property-choice db :logseq.property/priority
+                                                       task-priority-idents priority))
+            target (if-let [page-id (:page-id body)]
+                     (find-entity db page-id)
+                     (ensure-today-page! conn))]
+        (cond
+          (not (seq (:title body))) (http/bad-request "missing task title")
+          (nil? status-choice) (http/bad-request "invalid task status")
+          (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
+          (not (page? target)) (http/bad-request "invalid task page-id")
+          :else
+          (let [inserted (first (insert-tree! conn target [{:title (:title body)}] "append"))
+                task (d/entity @conn [:block/uuid (uuid (:uuid inserted))])]
+            (outliner-property/set-block-property! conn (:db/id task) :block/tags
+                                                   (:db/id (d/entity @conn :logseq.class/Task)))
+            (outliner-property/set-block-property! conn (:db/id task) :logseq.property/status
+                                                   (:db/id status-choice))
+            (when priority-choice
+              (outliner-property/set-block-property! conn (:db/id task) :logseq.property/priority
+                                                     (:db/id priority-choice)))
+            (doseq [property-ident [:logseq.property/scheduled :logseq.property/deadline]
+                    :let [value (get body (keyword (name property-ident)))]
+                    :when (some? value)]
+              (outliner-property/set-block-property! conn (:db/id task) property-ident value))
+            (broadcast-change! self)
+            (http/json-response nil (task-response (d/entity @conn (:db/id task))) 201)))))))
 
 (defn- handle-properties-assets-and-search
   [{:keys [^js self request ^js url conn db handler path-params]}]
@@ -610,6 +765,9 @@
   #{:semantic/capture :semantic/tags-list :semantic/tags-create :semantic/tags-get :semantic/tags-objects
     :semantic/tags-update :semantic/tags-delete})
 
+(def ^:private task-handlers
+  #{:semantic/tasks-list :semantic/tasks-create})
+
 (def ^:private property-asset-and-search-handlers
   #{:semantic/properties-list :semantic/properties-create :semantic/properties-get
     :semantic/properties-update :semantic/properties-delete :semantic/assets-get :semantic/search})
@@ -623,5 +781,6 @@
       (contains? block-handlers handler) (handle-blocks context)
       (contains? block-property-handlers handler) (handle-block-properties context)
       (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
+      (contains? task-handlers handler) (handle-tasks context)
       (contains? property-asset-and-search-handlers handler) (handle-properties-assets-and-search context)
       :else (http/not-found))))

@@ -14,8 +14,10 @@
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
@@ -440,6 +442,138 @@
                             list-body (json-body (first responses))]
                      (is (= [200 404 404] (mapv #(.-status %) responses)))
                      (is (= ["Page"] (mapv :title (:blocks list-body)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-set-block-property-resolves-class-values-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-ids (repeatedly 4 random-uuid)
+                   task (d/entity @conn :logseq.class/Task)
+                   tags-property (d/entity @conn :block/tags)
+                   _ (d/transact! conn
+                                  (into [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page
+                                          :block/created-at 1 :block/updated-at 1}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)
+                                            :block/created-at 1 :block/updated-at 1})
+                                         block-ids)))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   property-id (:block/uuid tags-property)
+                   values [(str (:block/uuid task)) "logseq.class/Task" "Task" [(str (:block/uuid task))]]
+                   request-for (fn [block-id value]
+                                 (semantic-json-request
+                                  (str "/semantic/blocks/" block-id "/properties/" property-id
+                                       "?graph-id=graph-1")
+                                  "PUT" {:value value}))]
+               (-> (p/let [response-1 (sync-handler/handle-http self (request-for (nth block-ids 0) (nth values 0)))
+                            response-2 (sync-handler/handle-http self (request-for (nth block-ids 1) (nth values 1)))
+                            response-3 (sync-handler/handle-http self (request-for (nth block-ids 2) (nth values 2)))
+                            response-4 (sync-handler/handle-http self (request-for (nth block-ids 3) (nth values 3)))
+                            invalid-response (sync-handler/handle-http
+                                              self (request-for (first block-ids) "Missing Class"))
+                            invalid-body (json-body invalid-response)]
+                     (is (= [200 200 200 200]
+                            (mapv #(.-status %) [response-1 response-2 response-3 response-4])))
+                     (doseq [block-id block-ids]
+                       (is (= #{:logseq.class/Task}
+                              (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid block-id])))))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= "property value must resolve to an existing class by UUID, ident, or title"
+                            (:error invalid-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-task-routes-create-and-list-db-tasks-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   todo-id (random-uuid)
+                   second-todo-id (random-uuid)
+                   done-id (random-uuid)
+                   hidden-id (random-uuid)
+                   custom-status-id (random-uuid)
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid todo-id :block/title "Alpha todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid second-todo-id :block/title "Beta todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid done-id :block/title "Completed"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.done
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid hidden-id :block/title "Hidden todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :logseq.property/hide? true
+                                         :block/created-at 1 :block/updated-at 1}])
+                   _ (outliner-property/upsert-closed-value!
+                      conn :logseq.property/status {:id custom-status-id :value "Blocked"})
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   list-request (semantic-json-request
+                                 "/semantic/tasks?graph-id=graph-1&status=todo&limit=1" "GET" nil)
+                   create-request (semantic-json-request
+                                   "/semantic/tasks?graph-id=graph-1" "POST"
+                                   {:title "Ship task API" :page-id (str page-id)
+                                    :status (str custom-status-id) :priority "high"})
+                   invalid-request (semantic-json-request
+                                    "/semantic/tasks?graph-id=graph-1" "POST"
+                                    {:title "Invalid task" :page-id (str page-id)
+                                     :status "not-a-status"})
+                   status-property-id (:block/uuid (d/entity @conn :logseq.property/status))
+                   property-request (semantic-json-request
+                                     (str "/semantic/properties/" status-property-id "?graph-id=graph-1")
+                                     "GET" nil)]
+               (-> (p/let [list-response (sync-handler/handle-http self list-request)
+                            list-body (json-body list-response)
+                            create-response (sync-handler/handle-http self create-request)
+                            create-body (json-body create-response)
+                            invalid-response (sync-handler/handle-http self invalid-request)
+                            invalid-body (json-body invalid-response)
+                            property-response (sync-handler/handle-http self property-request)
+                            property-body (json-body property-response)]
+                     (is (= 200 (.-status list-response)))
+                     (is (= ["Alpha todo"] (mapv :title (:tasks list-body))))
+                     (is (= ["logseq.property/status.todo"]
+                            (mapv #(get-in % [:status :ident]) (:tasks list-body))))
+                     (is (string? (:next-cursor list-body)))
+                     (is (= 201 (.-status create-response)))
+                     (is (= "Ship task API" (:title create-body)))
+                     (is (= (str custom-status-id) (get-in create-body [:status :uuid])))
+                     (is (= "logseq.property/priority.high" (get-in create-body [:priority :ident])))
+                     (let [created (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
+                       (is (= #{:logseq.class/Task} (set (map :db/ident (:block/tags created)))))
+                       (is (= custom-status-id
+                              (:block/uuid (:logseq.property/status created))))
+                       (is (= :logseq.property/priority.high
+                              (:db/ident (:logseq.property/priority created)))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= "invalid task status" (:error invalid-body)))
+                     (is (= 200 (.-status property-response)))
+                     (is (contains? (set (map :uuid (:choices property-body)))
+                                    (str custom-status-id))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

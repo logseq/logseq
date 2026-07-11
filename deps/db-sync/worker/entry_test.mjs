@@ -39,3 +39,13 @@ test("ChatGPT tools require DB graph property semantics", () => {
     assert.match(tool.description, /key:: value/);
   }
 });
+
+test("ChatGPT tools describe the DB Task workflow", () => {
+  const descriptors = chatGptToolDescriptors();
+
+  for (const tool of descriptors) {
+    assert.match(tool.description, /\/tasks/);
+    assert.match(tool.description, /never use Markdown TODO/);
+    assert.match(tool.description, /never use graph search to list tasks/);
+  }
+});

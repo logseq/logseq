@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.routes.semantic
   (:require [clojure.string :as string]
+            [flatland.ordered.map :refer [ordered-map]]
             [reitit.core :as r]))
 
 (def operations
@@ -41,6 +42,10 @@
     :handler :semantic/blocks-batch-delete-property :operation-id "batchDeleteBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/capture" :internal-path "/semantic/capture"
     :handler :semantic/capture :operation-id "captureToToday" :scope "logseq/write" :rate-class :write}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/tasks" :internal-path "/semantic/tasks"
+    :handler :semantic/tasks-list :operation-id "listTasks" :scope "logseq/read" :rate-class :read}
+   {:method "POST" :path "/api/v1/graphs/:graph-id/tasks" :internal-path "/semantic/tasks"
+    :handler :semantic/tasks-create :operation-id "createTask" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
     :handler :semantic/tags-list :operation-id "listTags" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
@@ -88,6 +93,8 @@
    "batchSetBlockProperty" ["Set block properties in a batch" "Atomically adds or replaces multiple typed block-property values in a DB graph after validating every entry. Property IDs are UUIDs or idents; never use legacy file-graph key:: value syntax."]
    "batchDeleteBlockProperty" ["Delete block properties in a batch" "Atomically removes multiple block-property values after validating every entry."]
    "captureToToday" ["Capture to today's journal" "Creates today's journal page when necessary and appends the supplied recursive block trees to its end."]
+   "listTasks" ["List DB tasks" "Lists cursor-paginated DB Task objects using the Task class index, with optional status, priority, and title-content filters. Use this operation instead of graph search to retrieve tasks."]
+   "createTask" ["Create a DB task" "Creates a DB Task object with the Task class and typed status, priority, scheduled, and deadline properties. Never encode a task as Markdown TODO text."]
    "listTags" ["List tags" "Returns a cursor-paginated list of tag entities in the graph."]
    "createTag" ["Create a tag" "Creates a Logseq tag with the supplied title."]
    "getTag" ["Get a tag" "Returns one tag by UUID."]
@@ -155,7 +162,8 @@
                        :properties {:target-id {:type "string"}
                                     :position {:enum ["append" "prepend"] :default "append"}
                                     :blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
-    "setBlockProperty" {:required ["value"] :properties {:value {}}}
+    "setBlockProperty" {:required ["value"]
+                        :properties {:value {:$ref "#/components/schemas/PropertyValue"}}}
     "batchSetBlockProperty" {:required ["entries"]
                              :properties {:entries {:type "array"
                                                     :items {:type "object" :required ["block-id" "property-id" "value"]
@@ -169,6 +177,14 @@
                                                                             :property-id {:type "string"}}}}}}
     "captureToToday" {:required ["blocks"]
                       :properties {:blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
+    "createTask" {:required ["title"]
+                  :properties {:title {:type "string"}
+                               :page-id {:type "string"
+                                         :description "Destination page UUID. Omit to append to today's journal."}
+                               :status {:$ref "#/components/schemas/TaskStatusSelector"}
+                               :priority {:$ref "#/components/schemas/TaskPrioritySelector"}
+                               :scheduled {:type "integer" :description "Scheduled date as YYYYMMDD."}
+                               :deadline {:type "integer" :description "Deadline date as YYYYMMDD."}}}
     "createTag" {:required ["title"] :properties {:title {:type "string"}}}
     "updateTag" {:required ["title"] :properties {:title {:type "string"}}}
     "createProperty" {:required ["title"]
@@ -180,7 +196,7 @@
 
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
-    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTags"
+    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
                  "listTagObjects" "listProperties" "searchGraph"} operation-id)
     (into pagination-parameters)
     (= "listGraphs" operation-id)
@@ -188,14 +204,20 @@
             :description "Exact graph name, matched case-insensitively."}])
     (= "searchGraph" operation-id)
     (into [{:name "q" :in "query" :required true :schema {:type "string"}}
-           {:name "types" :in "query" :schema {:type "string"}}])))
+           {:name "types" :in "query" :schema {:type "string"}}])
+    (= "listTasks" operation-id)
+    (into [{:name "status" :in "query" :schema {:$ref "#/components/schemas/TaskStatusSelector"}}
+           {:name "priority" :in "query" :schema {:$ref "#/components/schemas/TaskPrioritySelector"}}
+           {:name "content" :in "query" :schema {:type "string"}
+            :description "Case-insensitive task title filter."}])))
 
 (defn openapi-document [issuer]
   {:openapi "3.1.0"
    :info {:title "Logseq Semantic API" :version "1.0.0"}
    :servers [{:url "/"}]
    :components
-   {:schemas {:BlockTree {:type "object" :required ["title"]
+   {:schemas (ordered-map
+              :BlockTree {:type "object" :required ["title"]
                           :properties {:title {:type "string"}
                                        :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
               :BlockResponse {:type "object" :required ["uuid" "kind" "title"]
@@ -206,7 +228,42 @@
                                            :parent-id {:type "string"}
                                            :page-id {:type "string"}
                                            :children {:type "array"
-                                                      :items {:$ref "#/components/schemas/BlockResponse"}}}}}
+                                                      :items {:$ref "#/components/schemas/BlockResponse"}}}}
+              :EntitySelector {:type "string"
+                               :description "An existing entity UUID, qualified ident, or exact title."}
+              :TaskStatusSelector
+              {:description "A built-in status alias or any user-extensible Status property choice selected by UUID, ident, or exact title."
+               :anyOf [{:type "string" :enum ["todo" "doing" "in-review" "done" "canceled" "backlog"]}
+                       {:$ref "#/components/schemas/EntitySelector"}]}
+              :TaskPrioritySelector
+              {:description "A built-in priority alias or any user-extensible Priority property choice selected by UUID, ident, or exact title."
+               :anyOf [{:type "string" :enum ["low" "medium" "high" "urgent"]}
+                       {:$ref "#/components/schemas/EntitySelector"}]}
+              :PropertyChoice {:type "object" :required ["uuid" "title"]
+                               :properties {:uuid {:type "string"}
+                                            :ident {:type "string"}
+                                            :title {:type "string"}
+                                            :value {}}}
+              :PropertyResponse {:type "object" :required ["uuid" "title" "type" "cardinality"]
+                                 :properties {:uuid {:type "string"}
+                                              :ident {:type "string"}
+                                              :title {:type "string"}
+                                              :type {:type "string"}
+                                              :cardinality {:type "string"}
+                                              :choices {:type "array"
+                                                        :description "The current user-extensible choices for this property."
+                                                        :items {:$ref "#/components/schemas/PropertyChoice"}}}}
+              :TaskResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}
+                                     {:type "object"
+                                      :required ["status"]
+                                      :properties {:status {:$ref "#/components/schemas/PropertyChoice"}
+                                                   :priority {:$ref "#/components/schemas/PropertyChoice"}
+                                                   :scheduled {:type "integer"}
+                                                   :deadline {:type "integer"}}}]}
+              :PropertyValue
+              {:description "For ref properties, pass an existing entity by UUID, ident, or title. Class properties such as Tags accept a class UUID, ident, or title, or an array of those selectors. Scalar properties accept their JSON scalar value."
+               :oneOf [{:type "string"} {:type "number"} {:type "boolean"}
+                       {:type "array" :items {:oneOf [{:type "string"} {:type "number"}]}}]})
     :securitySchemes
     {:oauth {:type "oauth2"
              :flows {:authorizationCode
@@ -223,7 +280,8 @@
                                 :description description
                                 :parameters (operation-parameters operation)
                                 :security [{:oauth [scope]}]
-                                :responses {"200" (if (= operation-id "listPageBlocks")
+                                :responses (merge {"200" (case operation-id
+                                                    "listPageBlocks"
                                                     {:description "A cursor page of top-level block trees"
                                                      :content {"application/json"
                                                                {:schema {:type "object"
@@ -231,14 +289,30 @@
                                                                          :properties {:blocks {:type "array"
                                                                                                :items {:$ref "#/components/schemas/BlockResponse"}}
                                                                                       :next-cursor {:type "string"}}}}}}
+                                                    "listTasks"
+                                                    {:description "A cursor page of DB Task objects"
+                                                     :content {"application/json"
+                                                               {:schema {:type "object"
+                                                                         :required ["tasks"]
+                                                                         :properties {:tasks {:type "array"
+                                                                                              :items {:$ref "#/components/schemas/TaskResponse"}}
+                                                                                      :next-cursor {:type "string"}}}}}}
+                                                    "getProperty"
+                                                    {:description "A property definition and its user-extensible choices"
+                                                     :content {"application/json"
+                                                               {:schema {:$ref "#/components/schemas/PropertyResponse"}}}}
                                                     {:description "Success"})
                                             "400" {:description "Invalid request"}
                                             "403" {:description "Forbidden"}
                                             "409" {:description "Unavailable for E2EE graphs"}
-                                            "429" {:description "Rate limit exceeded"}}}
+                                            "429" {:description "Rate limit exceeded"}}
+                                           (when (= "createTask" operation-id)
+                                             {"201" {:description "The created DB Task object"
+                                                     :content {"application/json"
+                                                               {:schema {:$ref "#/components/schemas/TaskResponse"}}}}}))}
                          (request-schema operation-id)
                          (assoc :requestBody {:required true
                                               :content {"application/json"
                                                         {:schema (assoc (request-schema operation-id) :type "object")}}})))))
-           {}
+           (ordered-map)
            operations)})

@@ -71,3 +71,11 @@
                     "GET" "/api/v1/graphs/graph-1/pages/page-1/references"))))
   (is (= :semantic/pages-references
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages/page-1/references")))))
+
+(deftest semantic-task-routes-test
+  (doseq [[method handler] [["GET" :semantic/tasks-list]
+                            ["POST" :semantic/tasks-create]]]
+    (is (= handler
+           (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/tasks"))))
+    (is (= handler
+           (:handler (semantic-routes/match-internal method "/semantic/tasks"))))))
