@@ -231,14 +231,28 @@
              :skip-validate-db? true))))
 
 (declare apply-history-action!)
+
+(defn- perf-time-ms []
+  (if (and (exists? js/performance)
+           (.-now js/performance))
+    (.now js/performance)
+    (js/Date.now)))
+
+(defn- log-outliner-op-perf!
+  [data]
+  (when (and goog.DEBUG (:perf-id data))
+    (log/info :db-worker/outliner-op-perf data)))
+
 (defn- persist-local-tx!
   [repo {:keys [db-before db-after tx-data tx-meta] :as tx-report} normalized-tx-data reversed-datoms]
   (when (client-ops-conn repo)
-    (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
+    (let [started-at (perf-time-ms)
+          tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
           outliner-op (tx-meta-outliner-op tx-meta)
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
+          history-at (perf-time-ms)
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)
           {:keys [should-inc-pending?]}
           (client-op/upsert-local-tx-entry!
@@ -256,18 +270,31 @@
             :inverse-outliner-ops inverse-outliner-ops
             :inferred-outliner-ops? inferred-outliner-ops?'
             :normalized-tx-data normalized-tx-data
-            :reversed-tx-data reversed-datoms})]
+            :reversed-tx-data reversed-datoms})
+          upsert-at (perf-time-ms)]
       ;; (prn :debug :forward-outliner-ops)
       ;; (cljs.pprint/pprint forward-outliner-ops)
       ;; (prn :debug :inverse-outliner-ops)
       ;; (cljs.pprint/pprint inverse-outliner-ops)
       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                       {:apply-history-action! apply-history-action!})
-      (when should-inc-pending?
-        (client-op/adjust-pending-local-tx-count! repo 1)
-        (when-let [client (current-client repo)]
-          (broadcast-rtc-state! client)))
-      tx-id)))
+      (let [undo-at (perf-time-ms)]
+        (when should-inc-pending?
+          (client-op/adjust-pending-local-tx-count! repo 1)
+          (when-let [client (current-client repo)]
+            (broadcast-rtc-state! client)))
+        (log-outliner-op-perf!
+         {:stage :persist-local-tx
+          :perf-id (:ui/perf-id tx-meta)
+          :outliner-op outliner-op
+          :tx-count (count tx-data)
+          :normalized-tx-count (count normalized-tx-data)
+          :history-ms (- history-at started-at)
+          :upsert-ms (- upsert-at history-at)
+          :undo-ms (- undo-at upsert-at)
+          :pending-ms (- (perf-time-ms) undo-at)
+          :total-ms (- (perf-time-ms) started-at)})
+        tx-id))))
 
 (defn- missing-datom-repair-tx?
   [tx-data]

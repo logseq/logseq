@@ -55,6 +55,7 @@
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
+          :thread-api/get-page-blocks-window
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
@@ -1992,6 +1993,7 @@
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:block/title "Scheduled task"
                            :block/uuid block-id
+                           :block/properties {:unsafe "map value"}
                            :logseq.property/scheduled 1783612800000}])
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [block-db-id (:db/id (d/entity @conn [:block/uuid block-id]))
@@ -2003,6 +2005,144 @@
                                       result)]
          (is (= "Scheduled" (:block/title scheduled-property)))
          (is (= :datetime (:logseq.property/type scheduled-property))))))))
+
+(deftest get-blocks-includes-render-critical-property-data
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get-thread-api :thread-api/get-blocks)
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Scheduled task"
+                           :block/uuid block-id
+                           :block/properties {:unsafe "map value"}
+                           :logseq.property/status :logseq.property/status.backlog
+                           :logseq.property/scheduled 1783612800000}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (-> (get-blocks! test-repo
+                                      (ldb/write-transit-str
+                                       [{:id block-id
+                                         :opts {:children? false}}]))
+                        ldb/read-transit-str
+                        first
+                        :block)
+             positioned-properties (:block.temp/positioned-properties result)
+             status-property (some (fn [property]
+                                     (when (= :logseq.property/status (:db/ident property))
+                                       property))
+                                   (:block-left positioned-properties))
+             scheduled-property (some (fn [property]
+                                        (when (= :logseq.property/scheduled (:db/ident property))
+                                          property))
+                                      (:block-below positioned-properties))]
+         (is (= "Status" (:block/title status-property)))
+         (is (= :default (:logseq.property/type status-property)))
+         (is (= "Scheduled" (:block/title scheduled-property)))
+         (is (= :datetime (:logseq.property/type scheduled-property)))
+         (is (contains? result :block.temp/positioned-properties))
+         (is (not (contains? result :block/properties))))))))
+
+(deftest get-blocks-preserves-page-tagged-block-title
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get-thread-api :thread-api/get-blocks)
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page block"
+                           :block/uuid block-id
+                           :block/tags :logseq.class/Page}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (-> (get-blocks! test-repo
+                                      (ldb/write-transit-str
+                                       [{:id block-id
+                                         :opts {:children? false}}]))
+                        ldb/read-transit-str
+                        first
+                        :block)
+             tag-idents (set (map :db/ident (:block/tags result)))]
+         (is (= "Page block" (:block/title result)))
+         (is (= "Page block" (:block/raw-title result)))
+         (is (contains? tag-idents :logseq.class/Page)))))))
+
+(deftest get-page-blocks-window-preserves-page-tagged-block-title
+  (restoring-worker-state
+   (fn []
+     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Page block"
+                           :block/uuid block-id
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"
+                           :block/tags :logseq.class/Page}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-window! test-repo page-id {:limit 10})
+             row (first (:rows result))
+             tag-idents (set (map :db/ident (:block/tags row)))]
+         (is (= "Page block" (:block/title row)))
+         (is (= "Page block" (:block/raw-title row)))
+         (is (contains? tag-idents :logseq.class/Page)))))))
+
+(deftest get-page-blocks-window-returns-flat-paginated-render-rows
+  (restoring-worker-state
+   (fn []
+     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-1 #uuid "11111111-1111-1111-1111-111111111111"
+           block-2 #uuid "22222222-2222-2222-2222-222222222222"
+           block-3 #uuid "33333333-3333-3333-3333-333333333333"
+           block-4 #uuid "44444444-4444-4444-4444-444444444444"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "One"
+                           :block/uuid block-1
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"
+                           :logseq.property/scheduled 1783612800000}
+                          {:block/title "Two"
+                           :block/uuid block-2
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid block-1]
+                           :block/order "a0"}
+                          {:block/title "Three"
+                           :block/uuid block-3
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a1"}
+                          {:block/title "Four"
+                           :block/uuid block-4
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a2"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [top-window (get-window! test-repo page-id {:anchor :top :limit 3})
+             bottom-window (get-window! test-repo page-id {:anchor :bottom :limit 2})
+             scheduled-property (some (fn [property]
+                                        (when (= :logseq.property/scheduled (:db/ident property))
+                                          property))
+                                      (get-in (first (:rows top-window))
+                                              [:block.temp/positioned-properties :block-below]))]
+         (is (= 4 (:total-count top-window)))
+         (is (= 0 (:offset top-window)))
+         (is (= [block-1 block-2 block-3] (mapv :block/uuid (:rows top-window))))
+         (is (= [1 2 1] (mapv :block/level (:rows top-window))))
+         (is (= 2 (:offset bottom-window)))
+         (is (= [block-3 block-4] (mapv :block/uuid (:rows bottom-window))))
+         (is (= "Scheduled" (:block/title scheduled-property)))
+         (is (contains? (first (:rows top-window)) :block.temp/positioned-properties)))))))
 
 (deftest route-title-returns-page-and-block-data
   (restoring-worker-state
