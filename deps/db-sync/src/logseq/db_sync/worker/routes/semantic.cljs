@@ -68,6 +68,10 @@
     :handler :semantic/properties-update :operation-id "updateProperty" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/properties/:property-id" :internal-path "/semantic/properties/:property-id"
     :handler :semantic/properties-delete :operation-id "deleteProperty" :scope "logseq/write" :rate-class :write}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/assets" :internal-path "/semantic/assets"
+    :handler :semantic/assets-list :operation-id "listAssets" :scope "logseq/read" :rate-class :read}
+   {:method "POST" :path "/api/v1/graphs/:graph-id/assets" :internal-path "/semantic/assets"
+    :handler :semantic/assets-create :operation-id "createAsset" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/assets/:asset-block-id" :internal-path "/semantic/assets/:asset-block-id"
     :handler :semantic/assets-get :operation-id "getAsset" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/search" :internal-path "/semantic/search"
@@ -106,6 +110,8 @@
    "getProperty" ["Get a property definition" "Returns one property definition by UUID."]
    "updateProperty" ["Update a property definition" "Updates the name, value type, or cardinality of one typed property definition in a DB graph. Never use legacy file-graph key:: value syntax."]
    "deleteProperty" ["Delete a property definition" "Deletes one property definition through Logseq's property deletion rules."]
+   "listAssets" ["List assets" "Returns a cursor-paginated list of asset blocks with optional creation and update time filters."]
+   "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum."]
    "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed download URL for the asset block's R2 object."]
    "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]})
 
@@ -154,6 +160,19 @@
    {:name "updated-after" :in "query"
     :description "Return entities updated strictly after this Unix epoch timestamp in milliseconds."
     :schema {:type "integer" :minimum 0}}])
+
+(def ^:private asset-upload-parameters
+  [{:name "file-name" :in "query" :required true :schema {:type "string"}}
+   {:name "size" :in "query" :required true
+    :description "Exact file size in bytes; uploads larger than 100MB are rejected before reading the body."
+    :schema {:type "integer" :minimum 0 :maximum 104857600}}
+   {:name "title" :in "query" :schema {:type "string"}}
+   {:name "page-id" :in "query"
+    :description "Destination page UUID. Omit to append to today's journal."
+    :schema {:type "string"}}
+   {:name "checksum" :in "query" :required true
+    :description "Lowercase or uppercase SHA-256 hex digest of the file."
+    :schema {:type "string" :pattern "^[0-9a-fA-F]{64}$"}}])
 
 (defn- request-schema [operation-id]
   (case operation-id
@@ -210,11 +229,13 @@
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
     (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
-                 "listTagObjects" "listProperties" "searchGraph"} operation-id)
+                 "listTagObjects" "listProperties" "listAssets" "searchGraph"} operation-id)
     (into pagination-parameters)
-    (contains? #{"listPages" "listTasks" "listTags" "listTagObjects" "listProperties" "searchGraph"}
+    (contains? #{"listPages" "listTasks" "listTags" "listTagObjects" "listProperties" "listAssets" "searchGraph"}
                operation-id)
     (into time-filter-parameters)
+    (= "createAsset" operation-id)
+    (into asset-upload-parameters)
     (= "listGraphs" operation-id)
     (into [{:name "name" :in "query" :schema {:type "string"}
             :description "Exact graph name, matched case-insensitively."}])
@@ -226,6 +247,61 @@
            {:name "priority" :in "query" :schema {:$ref "#/components/schemas/TaskPrioritySelector"}}
            {:name "content" :in "query" :schema {:type "string"}
             :description "Case-insensitive task title filter."}])))
+
+(defn- request-body [operation-id]
+  (if (= "createAsset" operation-id)
+    {:required true
+     :content {"application/octet-stream"
+               {:schema {:type "string" :format "binary"}}}}
+    (when-let [schema (request-schema operation-id)]
+      {:required true
+       :content {"application/json" {:schema (assoc schema :type "object")}}})))
+
+(defn- operation-responses [operation-id]
+  (merge {"200" (case operation-id
+                  "listPageBlocks"
+                  {:description "A cursor page of top-level block trees"
+                   :content {"application/json"
+                             {:schema {:type "object"
+                                       :required ["blocks"]
+                                       :properties {:blocks {:type "array"
+                                                             :items {:$ref "#/components/schemas/BlockResponse"}}
+                                                    :next-cursor {:type "string"}}}}}}
+                  "listTasks"
+                  {:description "A cursor page of DB Task objects"
+                   :content {"application/json"
+                             {:schema {:type "object"
+                                       :required ["tasks"]
+                                       :properties {:tasks {:type "array"
+                                                            :items {:$ref "#/components/schemas/TaskResponse"}}
+                                                    :next-cursor {:type "string"}}}}}}
+                  "listAssets"
+                  {:description "A cursor page of asset blocks"
+                   :content {"application/json"
+                             {:schema {:type "object"
+                                       :required ["assets"]
+                                       :properties {:assets {:type "array"
+                                                             :items {:$ref "#/components/schemas/AssetResponse"}}
+                                                    :next-cursor {:type "string"}}}}}}
+                  "getProperty"
+                  {:description "A property definition and its user-extensible choices"
+                   :content {"application/json"
+                             {:schema {:$ref "#/components/schemas/PropertyResponse"}}}}
+                  {:description "Success"})
+          "400" {:description "Invalid request"}
+          "403" {:description "Forbidden"}
+          "409" {:description "Unavailable for E2EE graphs"}
+          "429" {:description "Rate limit exceeded"}}
+         (case operation-id
+           "createTask"
+           {"201" {:description "The created DB Task object"
+                   :content {"application/json"
+                             {:schema {:$ref "#/components/schemas/TaskResponse"}}}}}
+           "createAsset"
+           {"201" {:description "The created asset block"
+                   :content {"application/json"
+                             {:schema {:$ref "#/components/schemas/AssetResponse"}}}}}
+           {})))
 
 (defn openapi-document [issuer]
   {:openapi "3.1.0"
@@ -269,6 +345,12 @@
                                               :choices {:type "array"
                                                         :description "The current user-extensible choices for this property."
                                                         :items {:$ref "#/components/schemas/PropertyChoice"}}}}
+              :AssetResponse {:type "object" :required ["uuid" "title" "type" "size" "checksum"]
+                              :properties {:uuid {:type "string"}
+                                           :title {:type "string"}
+                                           :type {:type "string"}
+                                           :size {:type "integer" :minimum 0 :maximum 104857600}
+                                           :checksum {:type "string" :pattern "^[0-9a-f]{64}$"}}}
               :TaskResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}
                                      {:type "object"
                                       :required ["status"]
@@ -296,39 +378,8 @@
                                 :description description
                                 :parameters (operation-parameters operation)
                                 :security [{:oauth [scope]}]
-                                :responses (merge {"200" (case operation-id
-                                                    "listPageBlocks"
-                                                    {:description "A cursor page of top-level block trees"
-                                                     :content {"application/json"
-                                                               {:schema {:type "object"
-                                                                         :required ["blocks"]
-                                                                         :properties {:blocks {:type "array"
-                                                                                               :items {:$ref "#/components/schemas/BlockResponse"}}
-                                                                                      :next-cursor {:type "string"}}}}}}
-                                                    "listTasks"
-                                                    {:description "A cursor page of DB Task objects"
-                                                     :content {"application/json"
-                                                               {:schema {:type "object"
-                                                                         :required ["tasks"]
-                                                                         :properties {:tasks {:type "array"
-                                                                                              :items {:$ref "#/components/schemas/TaskResponse"}}
-                                                                                      :next-cursor {:type "string"}}}}}}
-                                                    "getProperty"
-                                                    {:description "A property definition and its user-extensible choices"
-                                                     :content {"application/json"
-                                                               {:schema {:$ref "#/components/schemas/PropertyResponse"}}}}
-                                                    {:description "Success"})
-                                            "400" {:description "Invalid request"}
-                                            "403" {:description "Forbidden"}
-                                            "409" {:description "Unavailable for E2EE graphs"}
-                                            "429" {:description "Rate limit exceeded"}}
-                                           (when (= "createTask" operation-id)
-                                             {"201" {:description "The created DB Task object"
-                                                     :content {"application/json"
-                                                               {:schema {:$ref "#/components/schemas/TaskResponse"}}}}}))}
-                         (request-schema operation-id)
-                         (assoc :requestBody {:required true
-                                              :content {"application/json"
-                                                        {:schema (assoc (request-schema operation-id) :type "object")}}})))))
+                                :responses (operation-responses operation-id)}
+                         (request-body operation-id)
+                         (assoc :requestBody (request-body operation-id))))))
            (ordered-map)
            operations)})

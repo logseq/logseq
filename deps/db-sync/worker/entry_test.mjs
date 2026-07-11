@@ -49,3 +49,11 @@ test("ChatGPT tools describe the DB Task workflow", () => {
     assert.match(tool.description, /never use graph search to list tasks/);
   }
 });
+
+test("ChatGPT tools describe streaming asset uploads", () => {
+  for (const tool of chatGptToolDescriptors()) {
+    assert.match(tool.description, /\/assets/);
+    assert.match(tool.description, /SHA-256/);
+    assert.match(tool.description, /100MB/);
+  }
+});

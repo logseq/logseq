@@ -63,6 +63,8 @@ The Worker will add these initial endpoints:
 - `PATCH /api/v1/graphs/:graph-id/properties/:property-id`
 - `DELETE /api/v1/graphs/:graph-id/properties/:property-id`
 - `GET /api/v1/graphs/:graph-id/pages/:page-id/references`
+- `GET /api/v1/graphs/:graph-id/assets`
+- `POST /api/v1/graphs/:graph-id/assets`
 - `GET /api/v1/graphs/:graph-id/assets/:asset-block-id`
 - `GET /api/v1/graphs/:graph-id/search?q=...&types=blocks,tags,properties,assets`
 
@@ -102,7 +104,7 @@ Tasks are first-class semantic resources backed by ordinary blocks or pages tagg
 
 Property paths accept a property UUID, qualified ident, or exact title. Property writes accept JSON scalar values for scalar properties. For ref properties, entity selectors may be stable UUIDs, qualified idents, or exact titles; cardinality-many properties accept arrays of those selectors. Status and Priority additionally normalize case-insensitive built-in aliases such as `TODO`, `DONE`, and `HIGH` to their DB choice entities, while user-defined choices remain selectable by UUID, ident, or exact title. The handler resolves selectors to existing entity IDs before calling `deps/outliner`. Class-valued properties such as `:block/tags` additionally require every resolved entity to be a class and return `400` with a stable actionable error when resolution fails.
 
-Assets remain blocks tagged as assets. `GET /assets/:asset-block-id` resolves the asset block and returns a short-lived, signed Worker URL for its R2 object. The URL expires after five minutes and does not contain an OAuth bearer token. There is no semantic asset upload endpoint. Asset deletion uses the same `DELETE /blocks/:block-id` operation as every other block, ensuring the outliner transaction and asset reference cleanup follow one deletion path.
+Assets remain blocks tagged with `:logseq.class/Asset`. `GET /assets` lists asset blocks with cursor pagination and time filters. `POST /assets` accepts a raw binary request body plus declared file name, exact byte size, and client-computed SHA-256 checksum. The body is wrapped in a fixed-length stream and passed directly to R2; the Durable Object never calls `arrayBuffer()` or realizes the full payload in memory. The declared size is required, and values over 100MB are rejected before reading the body. After R2 accepts the stream, the handler creates the asset block through `deps/outliner`; if block creation fails, it deletes the new R2 object. Duplicate checksums return `409`. `GET /assets/:asset-block-id` returns a five-minute signed Worker URL without an OAuth bearer token. Asset deletion uses the same `DELETE /blocks/:block-id` operation as every other block.
 
 The per-graph Durable Object will open its existing DataScript connection through `logseq.db-sync.storage/open-conn`. Semantic mutations use:
 

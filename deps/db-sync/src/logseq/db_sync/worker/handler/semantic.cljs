@@ -8,8 +8,10 @@
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
+            [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -739,7 +741,78 @@
             (broadcast-change! self)
             (http/json-response nil (task-response (d/entity @conn [:block/uuid @task-id])) 201)))))))
 
-(defn- handle-properties-assets-and-search
+(defn- handle-assets
+  [{:keys [^js self request ^js url conn db handler path-params]}]
+  (case handler
+    :semantic/assets-list
+    (paginated-response url :assets
+                        (entities-by-avet db :logseq.property.asset/type)
+                        asset-response)
+
+    :semantic/assets-create
+    (let [file-name (.get (.-searchParams url) "file-name")
+          raw-size (.get (.-searchParams url) "size")
+          size (when (and raw-size (re-matches #"\d+" raw-size))
+                 (js/parseInt raw-size 10))
+          checksum (some-> (.get (.-searchParams url) "checksum") string/lower-case)
+          asset-type (when (string? file-name) (db-asset/asset-path->type file-name))
+          page-id (.get (.-searchParams url) "page-id")
+          target (when page-id (find-entity db page-id))
+          ^js bucket (some-> (.-env self) (aget "LOGSEQ_SYNC_ASSETS"))]
+      (cond
+        (or (not (seq file-name)) (not (seq asset-type))) (http/bad-request "invalid asset file-name")
+        (nil? size) (http/bad-request "invalid asset size")
+        (> size assets-handler/max-asset-size) (http/error-response "asset too large" 413)
+        (not (and (string? checksum) (re-matches #"[0-9a-f]{64}" checksum)))
+        (http/bad-request "invalid asset checksum")
+        (and page-id (not (page? target))) (http/bad-request "invalid asset page-id")
+        (nil? bucket) (http/error-response "missing assets bucket" 500)
+        (seq (d/datoms db :avet :logseq.property.asset/checksum checksum))
+        (http/error-response "asset checksum already exists" 409)
+        :else
+        (let [asset-id (random-uuid)
+              key (str (.get (.-searchParams url) "graph-id") "/" asset-id "." asset-type)
+              title (or (.get (.-searchParams url) "title")
+                        (db-asset/asset-name->title file-name))]
+          (-> (p/let [upload-response (assets-handler/<put-stream!
+                                       bucket key (.-body request)
+                                       {:size size
+                                        :content-type (.get (.-headers request) "content-type")
+                                        :checksum checksum
+                                        :asset-type asset-type})]
+                (if-not (.-ok upload-response)
+                  upload-response
+                  (-> (p/let [target (or target (ensure-today-page! conn))
+                              block {:block/uuid asset-id
+                                     :block/title title
+                                     :block/tags #{:logseq.class/Asset}
+                                     :logseq.property.asset/type asset-type
+                                     :logseq.property.asset/size size
+                                     :logseq.property.asset/checksum checksum}
+                              _ (outliner-core/insert-blocks! conn [block] target
+                                                              {:sibling? false :bottom? true
+                                                               :keep-uuid? true})
+                              asset (d/entity @conn [:block/uuid asset-id])]
+                        (broadcast-change! self)
+                        (http/json-response nil (asset-response asset) 201))
+                      (p/catch (fn [error]
+                                 (p/let [_ (.delete bucket key)]
+                                   (throw error)))))))
+              (p/catch (fn [error]
+                         (http/error-response (or (.-message error) "asset upload failed") 500)))))))
+
+    :semantic/assets-get
+    (if-let [asset (find-visible-entity db (:asset-block-id path-params))]
+      (if-not (asset? asset)
+        (http/bad-request "block is not an asset")
+        (p/let [link (asset-link/<temporary-url request (.-env self)
+                                                (.get (.-searchParams url) "graph-id")
+                                                (:block/uuid asset)
+                                                (:logseq.property.asset/type asset))]
+          (http/json-response nil (merge (asset-response asset) link))))
+      (http/not-found))))
+
+(defn- handle-properties-and-search
   [{:keys [^js self request ^js url conn db handler path-params]}]
   (case handler
 
@@ -789,17 +862,6 @@
           (js/Response. nil #js {:status 204})))
       (http/not-found))
 
-    :semantic/assets-get
-    (if-let [asset (find-visible-entity db (:asset-block-id path-params))]
-      (if-not (asset? asset)
-        (http/bad-request "block is not an asset")
-        (p/let [link (asset-link/<temporary-url request (.-env self)
-                                                (.get (.-searchParams url) "graph-id")
-                                                (:block/uuid asset)
-                                                (:logseq.property.asset/type asset))]
-          (http/json-response nil (merge (asset-response asset) link))))
-      (http/not-found))
-
     :semantic/search
     (let [query (.get (.-searchParams url) "q")]
       (if-not (seq query)
@@ -827,9 +889,13 @@
 (def ^:private task-handlers
   #{:semantic/tasks-list :semantic/tasks-create})
 
-(def ^:private property-asset-and-search-handlers
+(def ^:private asset-handlers
+  #{:semantic/assets-list :semantic/assets-create :semantic/assets-get})
+
+(def ^:private property-and-search-handlers
   #{:semantic/properties-list :semantic/properties-create :semantic/properties-get
-    :semantic/properties-update :semantic/properties-delete :semantic/assets-get :semantic/search})
+    :semantic/properties-update :semantic/properties-delete
+    :semantic/search})
 
 (defn handle [{:keys [^js self route] :as context}]
   (let [conn (ensure-conn! self)
@@ -841,5 +907,6 @@
       (contains? block-property-handlers handler) (handle-block-properties context)
       (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
       (contains? task-handlers handler) (handle-tasks context)
-      (contains? property-asset-and-search-handlers handler) (handle-properties-assets-and-search context)
+      (contains? asset-handlers handler) (handle-assets context)
+      (contains? property-and-search-handlers handler) (handle-properties-and-search context)
       :else (http/not-found))))

@@ -836,6 +836,92 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-asset-list-and-upload-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   old-asset-id (random-uuid)
+                   puts (atom [])
+                   deletes (atom [])
+                   bucket #js {:put (fn [key payload options]
+                                      (swap! puts conj [key payload options])
+                                      (p/resolved #js {}))
+                              :delete (fn [key]
+                                        (swap! deletes conj key)
+                                        (p/resolved nil))}
+                   env #js {"LOGSEQ_SYNC_ASSETS" bucket}
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid old-asset-id :block/title "Old asset"
+                                         :logseq.property.asset/type "png"
+                                         :logseq.property.asset/size 1
+                                         :logseq.property.asset/checksum "old"
+                                         :block/tags :logseq.class/Asset
+                                         :block/created-at 1000 :block/updated-at 1000}])
+                   self #js {:sql sql :conn conn :schema-ready true :env env}
+                   checksum (apply str (repeat 64 "a"))
+                   upload-request (fn [filename title size file-checksum]
+                                    (js/Request.
+                                     (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                          "&file-name=" (js/encodeURIComponent filename)
+                                          "&title=" (js/encodeURIComponent title)
+                                          "&page-id=" page-id
+                                          "&size=" size
+                                          "&checksum=" file-checksum)
+                                     #js {:method "POST"
+                                          :headers #js {"content-type" "application/octet-stream"}
+                                          :body (js/Blob. #js [(js/Uint8Array. #js [1 2 3 4])])}))]
+               (-> (p/let [create-response (sync-handler/handle-http
+                                            self (upload-request "photo.png" "Photo" 4 checksum))
+                            create-body (json-body create-response)
+                            list-response (sync-handler/handle-http
+                                           self (semantic-json-request
+                                                 "/semantic/assets?graph-id=graph-1&created-after=2000"
+                                                 "GET" nil))
+                            list-body (json-body list-response)
+                            duplicate-response (sync-handler/handle-http
+                                                self (upload-request "copy.png" "Copy" 4 checksum))
+                            failed-response (p/with-redefs
+                                              [outliner-core/insert-blocks!
+                                               (fn [& _] (throw (js/Error. "insert failed")))]
+                                              (sync-handler/handle-http
+                                               self (upload-request "broken.pdf" "Broken" 4
+                                                                    (apply str (repeat 64 "b")))))
+                            oversized-response (sync-handler/handle-http
+                                                self (upload-request "huge.zip" "Huge" 104857601
+                                                                     (apply str (repeat 64 "c"))))]
+                     (is (= 201 (.-status create-response)))
+                     (is (= "Photo" (:title create-body)))
+                     (is (= "png" (:type create-body)))
+                     (is (= 4 (:size create-body)))
+                     (is (= 64 (count (:checksum create-body))))
+                     (is (= 2 (count @puts)))
+                     (when-let [[key payload options] (first @puts)]
+                       (is (= (str "graph-1/" (:uuid create-body) ".png") key))
+                       (is (fn? (.-getReader payload)))
+                       (is (= "application/octet-stream" (aget (aget options "httpMetadata") "contentType")))
+                       (is (= (:checksum create-body) (aget (aget options "customMetadata") "checksum"))))
+                     (when (string? (:uuid create-body))
+                       (let [asset (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
+                         (is (= page-id (:block/uuid (:block/page asset))))
+                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))))
+                     (is (= 200 (.-status list-response)))
+                     (is (= [(:uuid create-body)] (mapv :uuid (:assets list-body))))
+                     (is (= 409 (.-status duplicate-response)))
+                     (is (= 500 (.-status failed-response)))
+                     (is (= 1 (count @deletes)))
+                     (is (some-> (first @deletes) (string/ends-with? ".pdf") true?))
+                     (is (= 413 (.-status oversized-response)))
+                     (is (= 2 (count @puts))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (defn- seeded-rng
   [seed0]
   (let [state (atom (bit-or (long seed0) 0))]

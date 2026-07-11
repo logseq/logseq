@@ -81,6 +81,14 @@
     (is (= handler
            (:handler (semantic-routes/match-internal method "/semantic/tasks"))))))
 
+(deftest semantic-asset-collection-routes-test
+  (doseq [[method handler] [["GET" :semantic/assets-list]
+                            ["POST" :semantic/assets-create]]]
+    (is (= handler
+           (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/assets"))))
+    (is (= handler
+           (:handler (semantic-routes/match-internal method "/semantic/assets"))))))
+
 (deftest every-semantic-operation-has-a-working-route-test
   (doseq [{:keys [method path internal-path handler]} semantic-routes/operations]
     (let [concrete-path (string/replace path #":([^/]+)" "$1")]

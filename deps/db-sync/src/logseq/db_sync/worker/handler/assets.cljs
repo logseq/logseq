@@ -5,7 +5,7 @@
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
-(def ^:private max-asset-size (* 100 1024 1024))
+(def max-asset-size (* 100 1024 1024))
 
 (defn- parse-size
   [size]
@@ -16,16 +16,56 @@
                        n))
     :else nil))
 
-(defn- maybe-fixed-length-body
+(defn- fixed-length-body
   [body size]
-  (if (and (number? size)
-           (exists? js/FixedLengthStream)
-           (some? body)
-           (fn? (.-pipeTo body)))
+  (when (and (number? size)
+             (exists? js/FixedLengthStream)
+             (some? body)
+             (fn? (.-pipeTo body)))
     (let [^js fixed (js/FixedLengthStream. size)]
-      (.catch (.pipeTo body (.-writable fixed)) (fn [_] nil))
-      (.-readable fixed))
-    body))
+      {:body (.-readable fixed)
+       :pipe-promise (.pipeTo body (.-writable fixed))})))
+
+(defn- response-fixed-length-body
+  [body size]
+  (let [{stream-body :body pipe-promise :pipe-promise} (fixed-length-body body size)]
+    (when pipe-promise
+      ;; The response consumes the paired readable stream after this handler returns.
+      (p/catch pipe-promise (fn [_] nil)))
+    stream-body))
+
+(defn <put-stream!
+  "Streams `body` with a declared byte length to the R2 `bucket` without buffering it in Worker memory.
+
+  Options:
+
+  | key             | description |
+  |-----------------|-------------|
+  | `:size`         | Exact payload size in bytes |
+  | `:content-type` | HTTP content type stored in R2 metadata |
+  | `:checksum`     | Client-computed SHA-256 checksum |
+  | `:asset-type`   | File extension stored in custom metadata |"
+  [^js bucket key body {:keys [size content-type checksum asset-type]}]
+  (cond
+    (or (not (number? size)) (neg? size))
+    (p/resolved (http/error-response "invalid asset size" 400))
+
+    (> size max-asset-size)
+    (p/resolved (http/error-response "asset too large" 413))
+
+    (nil? body)
+    (p/resolved (http/error-response "missing asset body" 400))
+
+    :else
+    (let [{stream-body :body pipe-promise :pipe-promise} (fixed-length-body body size)
+          put-promise (.put bucket key (or stream-body body)
+                            #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}
+                                 :customMetadata #js {:checksum checksum :type asset-type}})]
+      (-> (if pipe-promise
+            (p/all [put-promise pipe-promise])
+            put-promise)
+          (p/then (fn [_]
+                    (http/json-response :assets/put {:ok true} 200)))))))
 
 (defn- <body-with-known-length
   [body size]
@@ -36,7 +76,7 @@
     (and (number? size)
          (exists? js/FixedLengthStream)
          (fn? (some-> body .-pipeTo)))
-    (p/resolved (maybe-fixed-length-body body size))
+    (p/resolved (response-fixed-length-body body size))
 
     ;; Some runtimes drop content-length for streamed bodies without a fixed-length wrapper.
     ;; Buffer as a fallback so clients still receive the header.

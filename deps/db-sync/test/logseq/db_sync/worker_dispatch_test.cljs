@@ -160,6 +160,7 @@
                              "/api/v1/graphs/{graph-id}/tags"
                              "/api/v1/graphs/{graph-id}/tags/{tag-id}/objects"
                              "/api/v1/graphs/{graph-id}/properties"
+                             "/api/v1/graphs/{graph-id}/assets"
                              "/api/v1/graphs/{graph-id}/search"]]
                  (is (= #{"created-after" "updated-after"}
                         (->> (get-in body [:paths (keyword path) :get :parameters])
@@ -167,6 +168,26 @@
                              (filter #{"created-after" "updated-after"})
                              set))
                      path))
+               (is (= "listAssets"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :get :operationId])))
+               (is (= "createAsset"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post :operationId])))
+               (is (= "binary"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post
+                                    :requestBody :content :application/octet-stream :schema :format])))
+               (is (= #{"file-name" "size" "title" "page-id" "checksum"}
+                      (->> (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets")
+                                         :post :parameters])
+                           (map :name)
+                           (filter #{"file-name" "size" "title" "page-id" "checksum"})
+                           set)))
+               (is (= "#/components/schemas/AssetResponse"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :get
+                                    :responses :200 :content :application/json :schema
+                                    :properties :assets :items :$ref])))
+               (is (= "#/components/schemas/AssetResponse"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post
+                                    :responses :201 :content :application/json :schema :$ref])))
                (doseq [[path method] [["/api/v1/graphs/{graph-id}/properties" :post]
                                       ["/api/v1/graphs/{graph-id}/properties/{property-id}" :patch]
                                       ["/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}" :put]
