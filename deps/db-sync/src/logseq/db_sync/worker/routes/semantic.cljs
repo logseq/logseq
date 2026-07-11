@@ -264,7 +264,7 @@
                                                    :scheduled {:type "integer"}
                                                    :deadline {:type "integer"}}}]}
               :PropertyValue
-              {:description "For ref properties, pass an existing entity by UUID, ident, or title. Class properties such as Tags accept a class UUID, ident, or title, or an array of those selectors. Scalar properties accept their JSON scalar value."
+              {:description "For ref properties, pass an existing entity by UUID, ident, or title. Status and Priority also accept case-insensitive built-in aliases such as TODO, DONE, and HIGH; user-defined choices use UUID, ident, or exact title. Class properties such as Tags accept a class UUID, ident, or title, or an array of those selectors. Scalar properties accept their JSON scalar value."
                :oneOf [{:type "string"} {:type "number"} {:type "boolean"}
                        {:type "array" :items {:oneOf [{:type "string"} {:type "number"}]}}]})
     :securitySchemes

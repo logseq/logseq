@@ -281,8 +281,30 @@
       (when (string? value)
         (let [ident (keyword value)] (when (d/entity db ident) ident)))))
 
+(def ^:private task-status-idents
+  {"todo" :logseq.property/status.todo
+   "doing" :logseq.property/status.doing
+   "in-review" :logseq.property/status.in-review
+   "done" :logseq.property/status.done
+   "canceled" :logseq.property/status.canceled
+   "backlog" :logseq.property/status.backlog})
+
+(def ^:private task-priority-idents
+  {"low" :logseq.property/priority.low
+   "medium" :logseq.property/priority.medium
+   "high" :logseq.property/priority.high
+   "urgent" :logseq.property/priority.urgent})
+
+(def ^:private property-choice-aliases
+  {:logseq.property/status task-status-idents
+   :logseq.property/priority task-priority-idents})
+
 (defn- resolve-ref-entity [db property-ident value]
-  (let [entity (cond
+  (let [value (if (string? value)
+                (get-in property-choice-aliases
+                        [property-ident (string/lower-case value)] value)
+                value)
+        entity (cond
                  (number? value) (d/entity db value)
                  (qualified-keyword? value) (d/entity db value)
                  (and (string? value) (common-util/uuid-string? value))
@@ -321,20 +343,6 @@
       (doseq [item value]
         (outliner-property/batch-set-property! conn [block-id] property-ident item {:entity-id? true})))
     (outliner-property/set-block-property! conn block-id property-ident value)))
-
-(def ^:private task-status-idents
-  {"todo" :logseq.property/status.todo
-   "doing" :logseq.property/status.doing
-   "in-review" :logseq.property/status.in-review
-   "done" :logseq.property/status.done
-   "canceled" :logseq.property/status.canceled
-   "backlog" :logseq.property/status.backlog})
-
-(def ^:private task-priority-idents
-  {"low" :logseq.property/priority.low
-   "medium" :logseq.property/priority.medium
-   "high" :logseq.property/priority.high
-   "urgent" :logseq.property/priority.urgent})
 
 (defn- task-response [task]
   (cond-> (block-response task)
@@ -667,21 +675,27 @@
           (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
           (not (page? target)) (http/bad-request "invalid task page-id")
           :else
-          (let [inserted (first (insert-tree! conn target [{:title (:title body)}] "append"))
-                task (d/entity @conn [:block/uuid (uuid (:uuid inserted))])]
-            (outliner-property/set-block-property! conn (:db/id task) :block/tags
-                                                   (:db/id (d/entity @conn :logseq.class/Task)))
-            (outliner-property/set-block-property! conn (:db/id task) :logseq.property/status
-                                                   (:db/id status-choice))
-            (when priority-choice
-              (outliner-property/set-block-property! conn (:db/id task) :logseq.property/priority
-                                                     (:db/id priority-choice)))
-            (doseq [property-ident [:logseq.property/scheduled :logseq.property/deadline]
-                    :let [value (get body (keyword (name property-ident)))]
-                    :when (some? value)]
-              (outliner-property/set-block-property! conn (:db/id task) property-ident value))
+          (let [task-id (atom nil)]
+            (ldb/batch-transact-with-temp-conn!
+             conn {:outliner-op :create-task}
+             (fn [temp-conn]
+               (let [inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append"))
+                     task-uuid (uuid (:uuid inserted))
+                     task (d/entity @temp-conn [:block/uuid task-uuid])]
+                 (reset! task-id task-uuid)
+                 (outliner-property/set-block-property! temp-conn (:db/id task) :block/tags
+                                                        (:db/id (d/entity @temp-conn :logseq.class/Task)))
+                 (outliner-property/set-block-property! temp-conn (:db/id task) :logseq.property/status
+                                                        (:db/id status-choice))
+                 (when priority-choice
+                   (outliner-property/set-block-property! temp-conn (:db/id task) :logseq.property/priority
+                                                          (:db/id priority-choice)))
+                 (doseq [property-ident [:logseq.property/scheduled :logseq.property/deadline]
+                         :let [value (get body (keyword (name property-ident)))]
+                         :when (some? value)]
+                   (outliner-property/set-block-property! temp-conn (:db/id task) property-ident value)))))
             (broadcast-change! self)
-            (http/json-response nil (task-response (d/entity @conn (:db/id task))) 201)))))))
+            (http/json-response nil (task-response (d/entity @conn [:block/uuid @task-id])) 201)))))))
 
 (defn- handle-properties-assets-and-search
   [{:keys [^js self request ^js url conn db handler path-params]}]

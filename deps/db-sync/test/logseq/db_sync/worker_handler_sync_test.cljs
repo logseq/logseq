@@ -546,6 +546,50 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-status-property-accepts-built-in-aliases-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-ids (repeatedly 2 random-uuid)
+                   status-property (d/entity @conn :logseq.property/status)
+                   _ (d/transact! conn
+                                  (into [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page
+                                          :block/created-at 1 :block/updated-at 1}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)
+                                            :block/created-at 1 :block/updated-at 1})
+                                         block-ids)))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   property-id (:block/uuid status-property)
+                   single-request (semantic-json-request
+                                   (str "/semantic/blocks/" (first block-ids) "/properties/"
+                                        property-id "?graph-id=graph-1")
+                                   "PUT" {:value "TODO"})
+                   batch-request (semantic-json-request
+                                  "/semantic/block-properties/batch-set?graph-id=graph-1"
+                                  "POST" {:entries [{:block-id (str (second block-ids))
+                                                     :property-id (str property-id)
+                                                     :value "DONE"}]})]
+               (-> (p/let [single-response (sync-handler/handle-http self single-request)
+                            batch-response (sync-handler/handle-http self batch-request)]
+                     (is (= [200 200] (mapv #(.-status %) [single-response batch-response])))
+                     (is (= [:logseq.property/status.todo :logseq.property/status.done]
+                            (mapv #(-> (d/entity @conn [:block/uuid %])
+                                       :logseq.property/status :db/ident)
+                                  block-ids))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-task-routes-create-and-list-db-tasks-test
   (async done
          (with-memory-sql-async
@@ -625,6 +669,40 @@
                                     (str custom-status-id))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-create-task-uses-one-transaction-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   tx-reports (atom [])
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page
+                                         :block/created-at 1 :block/updated-at 1}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/tasks?graph-id=graph-1" "POST"
+                            {:title "Atomic task" :page-id (str page-id)
+                             :status "TODO" :priority "HIGH"
+                             :scheduled 20260713 :deadline 20260714})]
+               (d/listen! conn ::semantic-create-task-tx
+                          #(swap! tx-reports conj %))
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (d/unlisten! conn ::semantic-create-task-tx)
+                     (is (= 201 (.-status response)))
+                     (is (= 1 (count @tx-reports)))
+                     (is (= "logseq.property/status.todo" (get-in body [:status :ident])))
+                     (is (= "logseq.property/priority.high" (get-in body [:priority :ident])))
+                     (is (= 20260713 (:scheduled body)))
+                     (is (= 20260714 (:deadline body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (d/unlisten! conn ::semantic-create-task-tx)
                               (is false (str error))
                               (done)))))))))
 
