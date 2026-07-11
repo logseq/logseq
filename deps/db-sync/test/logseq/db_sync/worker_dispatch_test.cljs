@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker-dispatch-test
   (:require [cljs.test :refer [async deftest is]]
+            [logseq.db-sync.common :as common]
+            [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
@@ -34,6 +36,146 @@
                    (is (= 200 (.-status resp)))
                    (is (= true (:ok body)))
                    (is (= 0 @access-check-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(defn- json-body [response]
+  (p/let [text (.text response)]
+    (js->clj (js/JSON.parse text) :keywordize-keys true)))
+
+(defn- semantic-request
+  ([path scope]
+   (semantic-request path scope "GET"))
+  ([path scope method]
+   {:request (js/Request. (str "http://localhost" path)
+                          #js {:method method
+                               :headers #js {"authorization" "Bearer semantic-token"}})
+    :claims #js {"sub" "user-1" "scope" scope}}))
+
+(defn- graph-row [e2ee?]
+  #js {:graph_e2ee (if e2ee? 1 0)})
+
+(defn- rate-limiter [success? calls]
+  #js {:limit (fn [opts]
+                (swap! calls conj (js->clj opts :keywordize-keys true))
+                (p/resolved #js {:success success?}))})
+
+(defn- capturing-do-namespace [requests]
+  #js {:idFromName (fn [graph-id] graph-id)
+       :get (fn [_]
+              #js {:fetch (fn [request]
+                            (swap! requests conj request)
+                            (p/resolved (ok-json-response)))})})
+
+(deftest openapi-document-describes-semantic-api-and-oauth-scopes-test
+  (async done
+         (-> (p/let [response (dispatch/handle-worker-fetch
+                               (js/Request. "http://localhost/openapi.json")
+                               #js {})
+                     body (json-body response)]
+               (is (= 200 (.-status response)))
+               (is (= "3.1.0" (:openapi body)))
+               (is (= ["logseq:read"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages") :get :security 0 :oauth])))
+               (is (= ["logseq:write"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}") :patch :security 0 :oauth])))
+               (is (= ["logseq:write"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages/{page-id}") :delete :security 0 :oauth])))
+               (doseq [path ["/api/v1/graphs/{graph-id}/pages/{page-id}"
+                             "/api/v1/graphs/{graph-id}/tags/{tag-id}"
+                             "/api/v1/graphs/{graph-id}/properties/{property-id}"]]
+                 (is (= #{:get :patch :delete} (set (keys (get-in body [:paths (keyword path)]))))))
+               (is (= ["logseq:write"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}")
+                                    :delete :security 0 :oauth])))
+               (is (= ["logseq:write"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-delete")
+                                    :post :security 0 :oauth])))
+               (doseq [[_ path-operations] (:paths body)
+                       [_ operation] path-operations]
+                 (is (seq (:summary operation)))
+                 (is (seq (:description operation)))))
+             (p/then (fn [] (done)))
+             (p/catch (fn [error]
+                        (is false (str error))
+                        (done))))))
+
+(deftest semantic-api-rejects-missing-operation-scope-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:write")]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
+                 (p/let [response (dispatch/handle-worker-fetch request #js {})
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-rejects-e2ee-graphs-before-durable-object-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:read")
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 409 (.-status response)))
+                   (is (= "semantic-api-unavailable-for-e2ee" (:error body)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-rate-limit-rejection-does-not-call-durable-object-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:read")
+               forwarded (atom [])
+               limit-calls (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter false limit-calls)}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row false)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)]
+                   (is (= 429 (.-status response)))
+                   (is (= "60" (.get (.-headers response) "retry-after")))
+                   (is (= 1 (count @limit-calls)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-forwards-authorized-non-e2ee-request-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages?limit=10" "logseq:read")
+               forwarded (atom [])
+               limit-calls (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true limit-calls)}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row false)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         forwarded-request (first @forwarded)
+                         forwarded-url (some-> forwarded-request .-url js/URL.)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (when forwarded-url
+                     (is (= "/semantic/pages" (.-pathname forwarded-url)))
+                     (is (= "10" (.get (.-searchParams forwarded-url) "limit")))
+                     (is (= "graph-1" (.get (.-searchParams forwarded-url) "graph-id"))))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))

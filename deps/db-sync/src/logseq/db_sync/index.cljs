@@ -305,6 +305,15 @@
             row (first rows)]
       (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
 
+(defn <graph-e2ee?
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select graph_e2ee from graphs where graph_id = ?"
+                                   graph-id)
+            row (first (common/get-sql-rows result))]
+      (graph-e2ee-sql->bool (some-> row (aget "graph_e2ee"))))))
+
 (defn <graph-ready-for-use-set!
   [db graph-id graph-ready-for-use?]
   (when (string? graph-id)

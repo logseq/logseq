@@ -11,8 +11,11 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
@@ -46,6 +49,224 @@
       (f sql)
       (finally
         (.close sql)))))
+
+(defn- with-memory-sql-async [f]
+  (let [db (new sqlite ":memory:" nil)
+        sql #js {:_db db
+                 :exec (fn [sql-str & args]
+                         (let [stmt (.prepare db sql-str)]
+                           (if (select-sql? sql-str)
+                             (all-sql stmt args)
+                             (do (run-sql stmt args) nil))))
+                 :close (fn [] (.close db))}]
+    (-> (f sql)
+        (p/finally #(.close sql)))))
+
+(defn- semantic-json-request [path method body]
+  (js/Request. (str "http://localhost" path)
+               (clj->js (cond-> {:method method
+                                 :headers {"content-type" "application/json"}}
+                          body (assoc :body (js/JSON.stringify (clj->js body)))))))
+
+(defn- json-body [response]
+  (p/let [text (.text response)]
+    (js->clj (js/JSON.parse text) :keywordize-keys true)))
+
+(deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   calls (atom [])
+                   broadcasts (atom [])
+                   page-id (random-uuid)
+                   request (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Inbox"})]
+               (-> (p/with-redefs [outliner-page/create! (fn [conn title opts]
+                                                           (swap! calls conj [conn title opts])
+                                                           [title page-id])
+                                   ws/broadcast! (fn [_ sender message]
+                                                   (swap! broadcasts conj [sender message]))]
+                     (p/let [response (sync-handler/handle-http self request)
+                             body (json-body response)]
+                       (is (= 201 (.-status response)))
+                       (is (= "Inbox" (:title body)))
+                       (is (= (str page-id) (:uuid body)))
+                       (is (= 1 (count @calls)))
+                       (is (= "Inbox" (second (first @calls))))
+                       (is (= 1 (count @broadcasts)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-delete-page-delegates-to-outliner-and-broadcasts-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   _ (d/transact! (.-conn self) [{:block/uuid page-id :block/name "inbox" :block/title "Inbox"}])
+                   calls (atom [])
+                   broadcasts (atom [])
+                   request (semantic-json-request (str "/semantic/pages/" page-id "?graph-id=graph-1") "DELETE" nil)]
+               (-> (p/with-redefs [outliner-page/delete! (fn [conn id]
+                                                           (swap! calls conj [conn id]))
+                                   ws/broadcast! (fn [_ sender message]
+                                                   (swap! broadcasts conj [sender message]))]
+                     (p/let [response (sync-handler/handle-http self request)]
+                       (is (= 204 (.-status response)))
+                       (is (= [[(.-conn self) page-id]] @calls))
+                       (is (= 1 (count @broadcasts)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-block-write-routes-delegate-to-outliner-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   _ (d/transact! (.-conn self) [{:block/uuid page-id :block/name "page" :block/title "Page"}
+                                                  {:block/uuid block-id :block/title "Existing"
+                                                   :block/page [:block/uuid page-id]
+                                                   :block/parent [:block/uuid page-id]
+                                                   :block/order "a0"}])
+                   calls (atom [])
+                   requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
+                                                    {:position "append" :blocks [{:title "New block"}]})
+                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
+                                                    {:title "Edited block"})
+                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
+               (-> (p/with-redefs [outliner-core/insert-blocks! (fn [_ blocks target opts]
+                                                                  (swap! calls conj [:insert blocks target opts])
+                                                                  {:tx-data []})
+                                   outliner-core/save-block! (fn [_ block & opts]
+                                                               (swap! calls conj [:save block opts])
+                                                               {:tx-data []})
+                                   outliner-core/delete-blocks! (fn [_ blocks opts]
+                                                                 (swap! calls conj [:delete blocks opts])
+                                                                 {:tx-data []})
+                                   ws/broadcast! (fn [& _] nil)]
+                     (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))]
+                       (is (= [201 200 204] (mapv #(.-status %) responses)))
+                       (is (= #{:insert :save :delete} (set (map first @calls))))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-read-routes-return-pages-page-tree-and-search-results-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   _ (d/transact! conn [{:block/uuid page-id
+                                         :block/name "inbox"
+                                         :block/title "Inbox"}
+                                        {:block/uuid block-id
+                                         :block/title "Review roadmap"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "a0"}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" page-id "/blocks?graph-id=graph-1") "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=blocks" "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            bodies (p/all (map json-body responses))]
+                     (is (= [200 200 200] (mapv #(.-status %) responses)) (pr-str (nth bodies 1)))
+                     (is (= "Inbox" (get-in bodies [0 :blocks 0 :title])))
+                     (is (= "Review roadmap" (get-in bodies [1 :blocks 0 :title])))
+                     (is (= (str block-id) (get-in bodies [2 :results 0 :uuid]))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-routes-use-cursor-pagination-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   pages (mapv (fn [title]
+                                 {:block/uuid (random-uuid)
+                                  :block/name (string/lower-case title)
+                                  :block/title title})
+                               ["Alpha" "Beta" "Gamma"])
+                   _ (d/transact! conn pages)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   first-request (semantic-json-request "/semantic/pages?graph-id=graph-1&limit=2" "GET" nil)]
+               (-> (p/let [first-response (sync-handler/handle-http self first-request)
+                            first-body (json-body first-response)
+                            cursor (:next-cursor first-body)
+                            second-response (sync-handler/handle-http
+                                             self
+                                             (semantic-json-request
+                                              (str "/semantic/pages?graph-id=graph-1&limit=2&cursor="
+                                                   (js/encodeURIComponent cursor))
+                                              "GET" nil))
+                            second-body (json-body second-response)]
+                     (is (= ["Alpha" "Beta"] (mapv :title (:blocks first-body))))
+                     (is (string? cursor))
+                     (is (= ["Gamma"] (mapv :title (:blocks second-body))))
+                     (is (nil? (:next-cursor second-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-route-rejects-invalid-cursor-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   request (semantic-json-request "/semantic/pages?graph-id=graph-1&cursor=not-a-cursor" "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-asset-get-returns-valid-temporary-link-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   asset-id (random-uuid)
+                   env #js {"ASSET_LINK_SECRET" "test-asset-link-secret"}
+                   _ (d/transact! conn [{:block/uuid asset-id
+                                         :block/title "diagram.png"
+                                         :logseq.property.asset/type "png"
+                                         :logseq.property.asset/size 42}])
+                   self #js {:sql sql :conn conn :schema-ready true :env env}
+                   request (semantic-json-request
+                            (str "/semantic/assets/" asset-id "?graph-id=graph-1") "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)
+                            link-request (js/Request. (:url body))
+                            valid? (asset-link/<valid-request? link-request env)]
+                     (is (= 200 (.-status response)))
+                     (is (= (str asset-id) (:uuid body)))
+                     (is (true? valid?)))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
 
 (defn- seeded-rng
   [seed0]

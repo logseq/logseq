@@ -23,18 +23,22 @@
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "test:large-op-128m": "clojure -M:cljs release db-sync-large-op-memory-test && node --max-old-space-size=128 worker/dist/large-op-memory-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
+    "test:mcp": "cd worker && pnpm exec wrangler deploy --dry-run --env=\"\"",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
     "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
     "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
   },
   "dependencies": {
+    "@cloudflare/codemode": "^0.4.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sentry/cloudflare": "^10.45.0",
     "@sentry/node": "^10.45.0",
     "better-sqlite3": "^12.8.0",
     "shadow-cljs": "^3.4.4",
     "transit-js": "^0.8.874",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@sentry/cli": "^3.3.3"
