@@ -1446,6 +1446,26 @@
   (when @*auto-save-timeout
     (js/clearTimeout @*auto-save-timeout)))
 
+(defn- block-title-for-editor-compare
+  [block]
+  (when-let [title (:block/title block)]
+    (if (number? (:block/level block))
+      (common-util/safe-subs title (:block/level block))
+      title)))
+
+(defn- current-editor-value
+  [input-id current-block edit-block]
+  (if (= (:block/uuid current-block) (:block/uuid edit-block))
+    (:block/title current-block)
+    (when-let [elem (and input-id (gdom/getElement input-id))]
+      (gobj/get elem "value"))))
+
+(defn- editor-title-changed?
+  [block value]
+  (when-let [title (block-title-for-editor-compare block)]
+    (not= (string/trim title)
+          (string/trim value))))
+
 (defn save-current-block!
   ([]
    (save-current-block! {}))
@@ -1458,25 +1478,14 @@
        (try
          (let [input-id (state/get-edit-input-id)
                block (state/get-edit-block)
-               db-block block
-               elem (and input-id (gdom/getElement input-id))
-               db-content (:block/title db-block)
-               db-content-without-heading (and db-content
-                                               (if (number? (:block/level db-block))
-                                                 (common-util/safe-subs db-content (:block/level db-block))
-                                                 db-content))
-               value (if (= (:block/uuid current-block) (:block/uuid block))
-                       (:block/title current-block)
-                       (and elem (gobj/get elem "value")))]
+               value (current-editor-value input-id current-block block)]
            (when value
              (cond
                force?
-               (save-block-aux! db-block value opts)
+               (save-block-aux! block value opts)
 
-               (and block value db-content-without-heading
-                    (not= (string/trim db-content-without-heading)
-                          (string/trim value)))
-               (save-block-aux! db-block value opts))))
+               (editor-title-changed? block value)
+               (save-block-aux! block value opts))))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
@@ -1723,8 +1732,12 @@
   [q]
   (let [editing-block (state/get-edit-block)
         non-page-block? (and editing-block (not (entity/page? editing-block)))]
-    (p/let [all-classes (db-async/<get-all-classes (state/get-current-repo) {:except-root-class? true})]
-      (let [page-class (some #(when (= :logseq.class/Page (:db/ident %)) %) all-classes)
+    (p/let [all-classes (db-async/<get-all-classes (state/get-current-repo) {:except-root-class? true})
+            private-classes (when non-page-block?
+                              (db-async/<get-all-classes (state/get-current-repo)
+                                                         {:except-root-class? true
+                                                          :except-private-tags? false}))]
+      (let [page-class (some #(when (= :logseq.class/Page (:db/ident %)) %) private-classes)
             all-classes (cond-> all-classes
                           (and non-page-block? page-class)
                           (conj page-class))
@@ -1732,7 +1745,7 @@
                          (mapcat (fn [class]
                                    (conj (:block/alias class) class)))
                          (common-util/distinct-by :db/id)
-                         (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
+                         (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title]))))]
         (search/fuzzy-search classes q {:extract-fn :block/title})))))
 
 (defn <get-matched-blocks

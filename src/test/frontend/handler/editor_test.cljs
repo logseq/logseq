@@ -822,6 +822,7 @@
           class {:db/id 1
                  :block/uuid class-uuid
                  :block/title "Project Tag"
+                 :db/ident :user.class/project-tag
                  :block/alias #{alias}}
           original-<get-all-classes db-async/<get-all-classes
           original-<invoke-db-worker state/<invoke-db-worker
@@ -836,6 +837,12 @@
             (is (= ["Project Tag"]
                    (map :block/title title-matches))
                 "Existing tag title matching still works")
+            (is (= [{:db/id 1
+                     :db/ident :user.class/project-tag
+                     :block/uuid class-uuid
+                     :block/title "Project Tag"}]
+                   (map #(select-keys % [:db/id :db/ident :block/uuid :block/title]) title-matches))
+                "Existing class choices keep their identity so they are not recreated")
             (is (= ["Alias Only"]
                    (map :block/title alias-matches))
                 "Tag aliases stay available as tag completion choices"))
@@ -845,6 +852,29 @@
                        (set! db-async/<get-all-classes original-<get-all-classes)
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
                        (reset! state/*db-worker previous-worker)
+                       (done)))))))
+
+(deftest get-matched-classes-includes-page-class-for-blocks
+  (async done
+    (let [page-class {:db/id 3
+                      :db/ident :logseq.class/Page
+                      :block/title "Page"}
+          original-<get-all-classes db-async/<get-all-classes]
+      (state/set-state! :editor/block {:block/uuid (random-uuid)
+                                       :block/title "Editing block"})
+      (set! db-async/<get-all-classes
+            (fn [_repo opts]
+              (p/resolved (if (false? (:except-private-tags? opts))
+                            [page-class]
+                            []))))
+      (-> (p/let [matches (editor/get-matched-classes "Page")]
+            (is (= [page-class]
+                   (map #(select-keys % [:db/id :db/ident :block/title]) matches))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (state/set-state! :editor/block nil)
                        (done)))))))
 
 (deftest tag-search-does-not-convert-class-aliases
@@ -883,8 +913,48 @@
                        (set! db-async/<get-block original-<get-block)
                        (set! db-async/<get-all-classes original-<get-all-classes)
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
-                       (reset! state/*db-worker previous-worker)
+	                       (reset! state/*db-worker previous-worker)
+	                       (done)))))))
+
+(deftest tag-search-does-not-prepend-new-tag-for-matched-page-class
+  (async done
+    (let [matched-pages (atom nil)
+          page-class {:db/id 3
+                      :db/ident :logseq.class/Page
+                      :block/uuid #uuid "00000002-1484-3403-2900-000000000000"
+                      :block/title "Page"}
+          original-<get-block db-async/<get-block
+          original-<get-all-classes db-async/<get-all-classes]
+      (state/set-state! :editor/block {:block/uuid (random-uuid)
+                                       :block/title "Editing block"})
+      (set! db-async/<get-block (fn [& _args] (p/resolved nil)))
+      (set! db-async/<get-all-classes
+            (fn [_repo opts]
+              (p/resolved (if (false? (:except-private-tags? opts))
+                            [page-class]
+                            []))))
+      (-> (#'editor-component/search-pages "Page" true #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (= ["Page"]
+                    (map :block/title @matched-pages))
+                 "An exact built-in Page class match should be chosen before creating a new tag.")
+             (is (= [:logseq.class/Page]
+                    (map :db/ident @matched-pages)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-block original-<get-block)
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (state/set-state! :editor/block nil)
                        (done)))))))
+
+(deftest tag-search-does-not-offer-new-tag-while-class-search-is-pending
+  (is (nil? (seq (#'editor-component/matched-pages-with-new-page nil true "Page" nil)))
+      "Pending tag search should not show a create-new result before existing classes load.")
+  (is (seq (#'editor-component/matched-pages-with-new-page [] true "Missing tag" nil))
+      "Resolved empty tag search can still offer a create-new result."))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
