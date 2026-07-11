@@ -584,10 +584,9 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               persist-db/<fetch-init-data (fn [repo _opts]
+                               persist-db/<open-and-fetch-schema (fn [repo _opts]
                                                              (reset! runtime-bound-repo repo)
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! invoke-calls conj args)
                                                          (let [[op repo] args]
@@ -629,9 +628,8 @@
                                user-handler/<ensure-id&access-token! (fn []
                                                                        (p/resolved true))
                                util/electron? (fn [] true)
-                               persist-db/<fetch-init-data (fn [_repo _opts]
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -657,10 +655,9 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] false)
-                               persist-db/<fetch-init-data (fn [& args]
+                               persist-db/<open-and-fetch-schema (fn [& args]
                                                              (swap! runtime-rebind-calls conj args)
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -682,9 +679,8 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               persist-db/<fetch-init-data (fn [_repo _opts]
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))

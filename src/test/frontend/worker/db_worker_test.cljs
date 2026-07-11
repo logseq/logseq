@@ -41,7 +41,7 @@
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
-          :thread-api/get-initial-data :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
+          :thread-api/get-db-schema :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
           :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock

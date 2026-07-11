@@ -356,15 +356,15 @@
         (protocol/<import-db client repo data))
       (protocol/<import-db (get-impl) repo data))))
 
-(defn <fetch-init-data
+(defn <open-and-fetch-schema
   ([repo]
-   (<fetch-init-data repo {}))
+   (<open-and-fetch-schema repo {}))
   ([repo opts]
    (when repo
      (if (electron-runtime?)
        (p/let [client (<ensure-remote! repo)]
-         (protocol/<fetch-initial-data client repo opts))
-       (protocol/<fetch-initial-data (get-impl) repo opts)))))
+         (protocol/<open-and-fetch-schema client repo opts))
+       (protocol/<open-and-fetch-schema (get-impl) repo opts)))))
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
