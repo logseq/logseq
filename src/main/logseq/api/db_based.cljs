@@ -239,9 +239,11 @@
              (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
            (p/let [opts (bean/->clj opts)
                    class-ident-namespace (api-block/resolve-class-prefix-for-db this)
-                   opts' (assoc opts
-                                :redirect? false
-                                :class-ident-namespace class-ident-namespace)
+                    opts' (cond-> (assoc opts
+                                         :redirect? false
+                                         :class-ident-namespace class-ident-namespace)
+                            (string? (:uuid opts))
+                            (update :uuid uuid))
                    tag-properties (:tagProperties opts)
                    tag (db-page-handler/<create-class! title opts')
                    properties (when (seq tag-properties)
