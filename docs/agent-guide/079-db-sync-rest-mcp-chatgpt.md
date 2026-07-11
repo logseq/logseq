@@ -30,6 +30,7 @@ The initial API supports pages, blocks, tags, properties, assets, capture, and c
 The Worker will add these initial endpoints:
 
 - `GET /openapi.json`
+- `GET /api-docs`
 - `GET /api/v1/graphs`
 - `GET /api/v1/graphs/:graph-id/pages`
 - `POST /api/v1/graphs/:graph-id/pages`
@@ -66,6 +67,8 @@ The Worker will add these initial endpoints:
 The existing sync HTTP and WebSocket protocol remains unchanged.
 
 One operation registry owns the HTTP method, path template, operation ID, required scope, rate-limit class, and OpenAPI operation. Route matching, authorization, rate-limit selection, and OpenAPI generation derive from that registry so they cannot drift independently.
+
+The release build exports that same generated OpenAPI document and runs Redocly CLI `build-docs` to create a standalone HTML reference. The Worker serves the generated artifact at `/api-docs` and `/api-docs/`; the documentation is public like `/openapi.json`, while executing graph operations still requires their declared OAuth scopes. The generated artifact is embedded at build time and is never fetched from a previous deployment.
 
 Every collection endpoint and cross-resource search uses cursor pagination. Requests accept `limit` (default 50, maximum 200) and an opaque `cursor`. Responses contain the resource collection and include `next-cursor` only when another page exists. Ordering uses a deterministic resource-specific key with UUID as the final tie breaker; cursors encode that key rather than an offset, so a stable graph snapshot does not skip or duplicate results. Invalid cursors return `400` and never fall back to the first page.
 

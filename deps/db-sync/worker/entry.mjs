@@ -3,6 +3,8 @@ import { openApiMcpServer } from "@cloudflare/codemode/mcp";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import { apiDocsResponse } from "./api_docs.mjs";
+import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
 
 function protectedResourceMetadata(request, env) {
@@ -79,6 +81,8 @@ async function handleMcp(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    const docsResponse = apiDocsResponse(path, apiDocsHtml);
+    if (docsResponse) return docsResponse;
     if (path === "/.well-known/oauth-protected-resource" ||
         path === "/.well-known/oauth-protected-resource/mcp") {
       return protectedResourceMetadata(request, env);

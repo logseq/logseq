@@ -43,6 +43,12 @@
                                                       :warnings {:fn-deprecated false
                                                                  :redef false}}
                                    :devtools {:enabled false}}
+  :db-sync-api-docs {:target :node-script
+                     :output-to "worker/dist/api-docs-spec.js"
+                     :main logseq.db-sync.node.api-docs/main
+                     :compiler-options {:warnings {:fn-deprecated false
+                                                  :redef false}}
+                     :devtools {:enabled false}}
   :db-sync-test {:target :node-test
                  :output-to "worker/dist/worker-test.js"
                  :devtools {:enabled false}
