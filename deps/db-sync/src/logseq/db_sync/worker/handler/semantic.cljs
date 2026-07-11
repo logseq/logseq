@@ -313,10 +313,11 @@
                     "property value must resolve to an existing class by UUID, ident, or title"
                     "property value must resolve to an existing entity by UUID, ident, or title")})))))
 
-(defn- set-prepared-property! [conn block-id property-ident value]
+(defn- set-prepared-property! [conn block-id property-ident value reset-existing-values?]
   (if (coll? value)
     (do
-      (outliner-property/remove-block-property! conn block-id property-ident)
+      (when reset-existing-values?
+        (outliner-property/remove-block-property! conn block-id property-ident))
       (doseq [item value]
         (outliner-property/batch-set-property! conn [block-id] property-ident item {:entity-id? true})))
     (outliner-property/set-block-property! conn block-id property-ident value)))
@@ -514,7 +515,7 @@
         (http/bad-request "invalid block, property, or value")
         (if-let [error (:error prepared)]
           (http/bad-request error)
-          (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared))
+          (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared) true)
               (broadcast-change! self)
               (http/json-response nil {:updated true})))))
 
@@ -545,7 +546,8 @@
              conn {:outliner-op :batch-set-property}
              (fn [temp-conn]
                (doseq [{:keys [block property-ident prepared]} resolved]
-                 (set-prepared-property! temp-conn (:db/id block) property-ident (:value prepared)))))
+                 (set-prepared-property! temp-conn (:db/id block) property-ident (:value prepared)
+                                         (true? (:isResetExistingValues body))))))
             (broadcast-change! self)
             (http/json-response nil {:updated (count resolved)}))))
 

@@ -165,11 +165,14 @@
     "setBlockProperty" {:required ["value"]
                         :properties {:value {:$ref "#/components/schemas/PropertyValue"}}}
     "batchSetBlockProperty" {:required ["entries"]
-                             :properties {:entries {:type "array"
+                             :properties {:isResetExistingValues
+                                          {:type "boolean" :default false
+                                           :description "For cardinality-many values, replace existing values when true; append when false or omitted."}
+                                          :entries {:type "array"
                                                     :items {:type "object" :required ["block-id" "property-id" "value"]
                                                             :properties {:block-id {:type "string"}
                                                                          :property-id {:type "string"}
-                                                                         :value {}}}}}}
+                                                                         :value {:$ref "#/components/schemas/PropertyValue"}}}}}}
     "batchDeleteBlockProperty" {:required ["entries"]
                                 :properties {:entries {:type "array"
                                                        :items {:type "object" :required ["block-id" "property-id"]

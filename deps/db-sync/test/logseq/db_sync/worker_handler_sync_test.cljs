@@ -497,6 +497,55 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-batch-set-many-property-can-append-or-reset-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   project-id (random-uuid)
+                   task (d/entity @conn :logseq.class/Task)
+                   tags-property (d/entity @conn :block/tags)
+                   _ (d/transact! conn
+                                  [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                    :block/tags :logseq.class/Page
+                                    :block/created-at 1 :block/updated-at 1}
+                                   {:db/ident :user.class/Project
+                                    :block/uuid project-id :block/name "project" :block/title "Project"
+                                    :block/tags :logseq.class/Tag}
+                                   {:block/uuid block-id :block/title "Block"
+                                    :block/page [:block/uuid page-id]
+                                    :block/parent [:block/uuid page-id]
+                                    :block/order "a0" :block/tags :user.class/Project
+                                    :block/created-at 1 :block/updated-at 1}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request-for (fn [body]
+                                 (semantic-json-request
+                                  "/semantic/block-properties/batch-set?graph-id=graph-1"
+                                  "POST" body))
+                   entry {:block-id (str block-id)
+                          :property-id (str (:block/uuid tags-property))
+                          :value [(str (:block/uuid task))]}]
+               (-> (p/let [append-response (sync-handler/handle-http
+                                            self (request-for {:entries [entry]}))
+                            _ (is (= 200 (.-status append-response)))
+                            _ (is (= #{:user.class/Project :logseq.class/Task}
+                                     (set (map :db/ident
+                                               (:block/tags (d/entity @conn [:block/uuid block-id]))))))
+                            reset-response (sync-handler/handle-http
+                                            self (request-for {:entries [entry]
+                                                               :isResetExistingValues true}))]
+                     (is (= 200 (.-status reset-response)))
+                     (is (= #{:logseq.class/Task}
+                            (set (map :db/ident
+                                      (:block/tags (d/entity @conn [:block/uuid block-id])))))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-task-routes-create-and-list-db-tasks-test
   (async done
          (with-memory-sql-async

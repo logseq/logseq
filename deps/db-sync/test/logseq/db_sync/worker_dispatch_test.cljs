@@ -138,6 +138,12 @@
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}")
                                     :put :requestBody :content :application/json :schema
                                     :properties :value :$ref])))
+               (is (= {:type "boolean" :default false}
+                      (select-keys
+                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-set")
+                                     :post :requestBody :content :application/json :schema
+                                     :properties :isResetExistingValues])
+                       [:type :default])))
                (is (string/includes?
                     (get-in body [:components :schemas :PropertyValue :description])
                     "UUID, ident, or title"))
