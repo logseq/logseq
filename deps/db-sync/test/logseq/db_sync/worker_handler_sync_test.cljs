@@ -134,8 +134,12 @@
              (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
                    page-id (random-uuid)
                    block-id (random-uuid)
+                   reference-id (random-uuid)
+                   created-reference-id (random-uuid)
                    _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
                                                   {:block/uuid page-id :block/name "page" :block/title "Page"
+                                                   :block/tags :logseq.class/Page}
+                                                  {:block/uuid reference-id :block/name "reference" :block/title "Reference"
                                                    :block/tags :logseq.class/Page}
                                                   {:block/uuid block-id :block/title "Existing"
                                                    :block/page [:block/uuid page-id]
@@ -144,10 +148,11 @@
                    calls (atom [])
                    requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
                                                     {:position "append"
-                                                     :blocks [{:title "New block"
-                                                               :children [{:title "Nested block"}]}]})
+                                                     :blocks [{:title (str "New block links to [[Reference]], [[New Reference]], and [["
+                                                                           block-id "]]")
+                                                               :children [{:title "Nested block links to [[Reference]]"}]}]})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
-                                                    {:title "Edited block"})
+                                                    {:title "Edited block links to [[Reference]]"})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
                (-> (p/with-redefs [outliner-core/insert-blocks! (fn [_ blocks target opts]
                                                                   (swap! calls conj [:insert blocks target opts])
@@ -158,11 +163,30 @@
                                    outliner-core/delete-blocks! (fn [_ blocks opts]
                                                                  (swap! calls conj [:delete blocks opts])
                                                                  {:tx-data []})
+                                   outliner-page/create! (fn [conn title _]
+                                                           (d/transact! conn [{:block/uuid created-reference-id
+                                                                              :block/name "new reference"
+                                                                              :block/title title
+                                                                              :block/tags :logseq.class/Page}])
+                                                           [title created-reference-id])
                                    ws/broadcast! (fn [& _] nil)]
                      (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
                               insert-body (json-body (first responses))]
                        (is (= [201 200 204] (mapv #(.-status %) responses)))
                        (is (uuid? (some-> (get-in insert-body [:blocks 0 :children 0 :uuid]) uuid)))
+                       (let [[[_ inserted-blocks _ _] [_ nested-blocks _ _]] (filter #(= :insert (first %)) @calls)
+                             [_ saved-block _] (first (filter #(= :save (first %)) @calls))
+                             expected-refs #{reference-id created-reference-id block-id}]
+                         (is (= (str "New block links to [[" reference-id "]], [[" created-reference-id
+                                     "]], and [[" block-id "]]")
+                                (:block/title (first inserted-blocks))))
+                         (is (= expected-refs (set (map :block/uuid (:block/refs (first inserted-blocks))))))
+                         (is (= (str "Nested block links to [[" reference-id "]]")
+                                (:block/title (first nested-blocks))))
+                         (is (= #{reference-id} (set (map :block/uuid (:block/refs (first nested-blocks))))))
+                         (is (= (str "Edited block links to [[" reference-id "]]")
+                                (:block/title saved-block)))
+                         (is (= #{reference-id} (set (map :block/uuid (:block/refs saved-block))))))
                        (is (= #{:insert :save :delete} (set (map first @calls))))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]

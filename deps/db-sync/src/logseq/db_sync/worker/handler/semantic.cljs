@@ -1,13 +1,16 @@
 (ns logseq.db-sync.worker.handler.semantic
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
@@ -158,12 +161,51 @@
        (mapcat #(entities-by-avet db :block/tags %))
        (mapv block-response)))
 
-(defn- tree-block [node]
-  {:block/uuid (random-uuid) :block/title (:title node)})
+(defn- page-ref-values [title]
+  (when (string? title)
+    (->> (re-seq page-ref/page-ref-re title)
+         (map (comp string/trim second))
+         (remove string/blank?)
+         distinct)))
+
+(defn- integer-string? [value]
+  (boolean (re-matches #"-?\d+" value)))
+
+(defn- resolve-page-ref! [conn value]
+  (cond
+    (common-util/uuid-string? value)
+    (when-let [entity (d/entity @conn [:block/uuid (uuid value)])]
+      {:block/uuid (:block/uuid entity)
+       :block/title value})
+
+    (integer-string? value)
+    (when-let [entity (d/entity @conn (js/parseInt value 10))]
+      {:block/uuid (:block/uuid entity)
+       :block/title value})
+
+    :else
+    (let [page (or (ldb/get-page @conn value)
+                   (let [[_ page-id] (outliner-page/create! conn value {})]
+                     (d/entity @conn [:block/uuid page-id])))]
+      {:block/uuid (:block/uuid page)
+       :block/title (:block/title page)})))
+
+(defn- prepare-block-title! [conn title]
+  (let [refs (->> (page-ref-values title)
+                  (keep #(resolve-page-ref! conn %))
+                  (reduce (fn [result ref]
+                            (assoc result (:block/uuid ref) ref)) {})
+                  vals
+                  vec)]
+    {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
+     :block/refs refs}))
+
+(defn- tree-block [conn node]
+  (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
 
 (defn- insert-tree! [conn target nodes position]
   (let [nodes (vec nodes)
-        blocks (mapv tree-block nodes)]
+        blocks (mapv #(tree-block conn %) nodes)]
     (when (seq blocks)
       (outliner-core/insert-blocks! conn blocks target
                                     {:sibling? false :top? (= position "prepend")
@@ -277,7 +319,9 @@
       (if (or (nil? block) (not (seq (:title body))))
         (http/bad-request "invalid block-id or title")
         (do
-          (outliner-core/save-block! conn {:block/uuid (:block/uuid block) :block/title (:title body)})
+          (outliner-core/save-block! conn
+                                     (assoc (prepare-block-title! conn (:title body))
+                                            :block/uuid (:block/uuid block)))
           (broadcast-change! self)
           (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
 
