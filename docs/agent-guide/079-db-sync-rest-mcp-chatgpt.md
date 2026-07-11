@@ -51,6 +51,7 @@ The Worker will add these initial endpoints:
 - `GET /api/v1/graphs/:graph-id/tags`
 - `POST /api/v1/graphs/:graph-id/tags`
 - `GET /api/v1/graphs/:graph-id/tags/:tag-id`
+- `GET /api/v1/graphs/:graph-id/tags/:tag-id/objects`
 - `PATCH /api/v1/graphs/:graph-id/tags/:tag-id`
 - `DELETE /api/v1/graphs/:graph-id/tags/:tag-id`
 - `GET /api/v1/graphs/:graph-id/properties`
@@ -58,6 +59,7 @@ The Worker will add these initial endpoints:
 - `GET /api/v1/graphs/:graph-id/properties/:property-id`
 - `PATCH /api/v1/graphs/:graph-id/properties/:property-id`
 - `DELETE /api/v1/graphs/:graph-id/properties/:property-id`
+- `GET /api/v1/graphs/:graph-id/pages/:page-id/references`
 - `GET /api/v1/graphs/:graph-id/assets/:asset-block-id`
 - `GET /api/v1/graphs/:graph-id/search?q=...&types=blocks,tags,properties,assets`
 
@@ -70,6 +72,8 @@ Every collection endpoint and cross-resource search uses cursor pagination. Requ
 `GET /api/v1/graphs` resolves the authenticated user's available non-E2EE graphs before graph-scoped operations. It supports `name` for an exact case-insensitive graph-name match and the same `limit`/`cursor` contract. The implementation reads bounded metadata rows from D1; it does not open graph databases or load graph entities.
 
 Pages, tags, and properties provide full create, read, update, and delete operations. Their collection `GET` operations are paginated; item `GET` operations are bounded to one entity. `GET /pages/:page-id/blocks` paginates top-level blocks in outliner order, and each selected top-level block includes its complete descendant tree. The `limit` and cursor apply to top-level roots, so pagination never splits a returned parent from its descendants. `GET /blocks/:block-id` returns only the addressed block, so a page lookup cannot accidentally return an unbounded tree. Page and tag deletion use `logseq.outliner.page/delete!`; page deletion is kept separate from block deletion so the page-specific cleanup path remains explicit. Property updates and deletion use the corresponding `deps/outliner` property operations rather than raw datoms.
+
+`GET /tags/:tag-id/objects` returns blocks and pages whose `:block/tags` contains the addressed tag. `GET /pages/:page-id/references` returns blocks and pages whose `:block/refs` contains the addressed page. Both endpoints are cursor-paginated flat collections; they do not recursively expand children or referenced entities. Their implementations walk the indexed AVET range for the exact tag or page entity and only materialize the requested page, so they never scan or load all graph entities. Results use deterministic DataScript entity-ID order from that index and an opaque cursor, avoiding an in-memory sort of all matches.
 
 ### 2. Use `deps/outliner` for semantic mutations
 

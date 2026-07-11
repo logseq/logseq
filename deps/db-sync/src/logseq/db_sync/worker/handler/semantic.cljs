@@ -12,6 +12,7 @@
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
@@ -84,10 +85,11 @@
    :checksum (:logseq.property.asset/checksum entity)})
 
 (defn- entities-by-avet [db attribute & [value]]
-  (map #(d/entity db (:e %))
-       (if (some? value)
+  (->> (if (some? value)
          (d/datoms db :avet attribute value)
-         (d/datoms db :avet attribute))))
+         (d/datoms db :avet attribute))
+       (map #(d/entity db (:e %)))
+       (remove entity-util/hidden?)))
 
 (defn- parse-limit [url]
   (let [raw (.get (.-searchParams url) "limit")
@@ -126,10 +128,14 @@
     (cond-> {:items page}
       more? (assoc :next-cursor (encode-cursor (sort-key (last page)))))))
 
+(defn- pagination-options [url]
+  (let [raw-cursor (.get (.-searchParams url) "cursor")]
+    {:limit (parse-limit url)
+     :raw-cursor raw-cursor
+     :cursor (decode-cursor raw-cursor)}))
+
 (defn- paginated-response [url response-key items]
-  (let [limit (parse-limit url)
-        raw-cursor (.get (.-searchParams url) "cursor")
-        cursor (decode-cursor raw-cursor)]
+  (let [{:keys [limit raw-cursor cursor]} (pagination-options url)]
     (cond
       (nil? limit) (http/bad-request "invalid limit")
       (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
@@ -137,16 +143,41 @@
               (http/json-response nil (cond-> {response-key items}
                                         next-cursor (assoc :next-cursor next-cursor)))))))
 
+(defn- indexed-reference-response [db url response-key attribute target-id]
+  (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
+        cursor-e (when (= "entity-id" (first cursor))
+                   (js/parseInt (second cursor) 10))]
+    (cond
+      (nil? limit) (http/bad-request "invalid limit")
+      (and raw-cursor (or (nil? cursor) (js/isNaN cursor-e))) (http/bad-request "invalid cursor")
+      :else
+      (let [datoms (cond->> (d/datoms db :avet attribute target-id)
+                     cursor-e (drop-while #(<= (:e %) cursor-e))
+                     true (remove #(entity-util/hidden? (d/entity db (:e %)))))
+            selected (vec (take (inc limit) datoms))
+            more? (> (count selected) limit)
+            page (take limit selected)]
+        (http/json-response
+         nil
+         (cond-> {response-key (mapv #(block-response (d/entity db (:e %))) page)}
+           more? (assoc :next-cursor
+                        (encode-cursor ["entity-id" (str (:e (last page)))]))))))))
+
 (defn- find-entity [db id]
   (when-let [parsed (try (uuid id) (catch :default _ nil))]
     (d/entity db [:block/uuid parsed])))
+
+(defn- find-visible-entity [db id]
+  (when-let [entity (find-entity db id)]
+    (when-not (entity-util/hidden? entity) entity)))
 
 (defn- page-blocks [db page]
   (let [blocks (ldb/get-page-blocks db (:db/id page)
                                     :pull-keys [:db/id :block/uuid :block/title :block/order
                                                 {:block/parent [:db/id :block/uuid]}
                                                 {:block/page [:db/id :block/uuid]}])]
-    (mapv block-response (otree/non-consecutive-blocks->vec-tree blocks))))
+    (mapv block-response (otree/non-consecutive-blocks->vec-tree
+                          (remove #(entity-util/hidden? (d/entity db (:db/id %))) blocks)))))
 
 (defn- body-clj [request]
   (p/let [body (common/read-json request)]
@@ -198,7 +229,7 @@
                   vals
                   vec)]
     {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
-     :block/refs refs}))
+     :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
 
 (defn- tree-block [conn node]
   (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
@@ -247,6 +278,7 @@
                             (d/datoms db :avet :block/title))]
     (->> title-matches
          (map #(d/entity db %))
+         (remove entity-util/hidden?)
          (keep (fn [entity]
                  (let [kind (block-kind entity)
                        type (case kind "tag" "tags" "property" "properties" "asset" "assets" "blocks")
@@ -274,14 +306,21 @@
           (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
 
     :semantic/pages-blocks
-    (if-let [page (find-entity db (:page-id path-params))]
+    (if-let [page (find-visible-entity db (:page-id path-params))]
       (if-not (page? page)
         (http/bad-request "block is not a page")
         (paginated-response url :blocks (page-blocks db page)))
       (http/not-found))
 
+    :semantic/pages-references
+    (if-let [page (find-visible-entity db (:page-id path-params))]
+      (if (page? page)
+        (indexed-reference-response db url :references :block/refs (:db/id page))
+        (http/not-found))
+      (http/not-found))
+
     :semantic/pages-get
-    (if-let [page (find-entity db (:page-id path-params))]
+    (if-let [page (find-visible-entity db (:page-id path-params))]
       (if (page? page) (http/json-response nil (block-response page)) (http/not-found))
       (http/not-found))
 
@@ -309,7 +348,7 @@
   (case handler
 
     :semantic/blocks-get
-    (if-let [block (find-entity db (:block-id path-params))]
+    (if-let [block (find-visible-entity db (:block-id path-params))]
       (http/json-response nil (block-response block))
       (http/not-found))
 
@@ -456,8 +495,15 @@
           (http/json-response nil {:uuid (str tag-id) :title title} 201))))
 
     :semantic/tags-get
-    (if-let [tag (find-entity db (:tag-id path-params))]
+    (if-let [tag (find-visible-entity db (:tag-id path-params))]
       (if (tag? tag) (http/json-response nil (tag-response tag)) (http/not-found))
+      (http/not-found))
+
+    :semantic/tags-objects
+    (if-let [tag (find-visible-entity db (:tag-id path-params))]
+      (if (tag? tag)
+        (indexed-reference-response db url :objects :block/tags (:db/id tag))
+        (http/not-found))
       (http/not-found))
 
     :semantic/tags-update
@@ -485,7 +531,9 @@
   (case handler
 
     :semantic/properties-list
-    (paginated-response url :properties (mapv property-response (db-db/get-all-properties db)))
+    (paginated-response url :properties (->> (db-db/get-all-properties db)
+                                              (remove entity-util/hidden?)
+                                              (mapv property-response)))
 
     :semantic/properties-create
     (p/let [body (body-clj request)]
@@ -500,7 +548,7 @@
           (http/json-response nil (property-response property) 201))))
 
     :semantic/properties-get
-    (if-let [property (find-entity db (:property-id path-params))]
+    (if-let [property (find-visible-entity db (:property-id path-params))]
       (if (property? property) (http/json-response nil (property-response property)) (http/not-found))
       (http/not-found))
 
@@ -529,7 +577,7 @@
       (http/not-found))
 
     :semantic/assets-get
-    (if-let [asset (find-entity db (:asset-block-id path-params))]
+    (if-let [asset (find-visible-entity db (:asset-block-id path-params))]
       (if-not (asset? asset)
         (http/bad-request "block is not an asset")
         (p/let [link (asset-link/<temporary-url request (.-env self)
@@ -547,7 +595,7 @@
                             (search-results db query (.get (.-searchParams url) "types")))))))
 
 (def ^:private page-handlers
-  #{:semantic/pages-list :semantic/pages-create :semantic/pages-blocks :semantic/pages-get
+  #{:semantic/pages-list :semantic/pages-create :semantic/pages-blocks :semantic/pages-references :semantic/pages-get
     :semantic/pages-update :semantic/pages-delete})
 
 (def ^:private block-handlers
@@ -559,7 +607,7 @@
     :semantic/blocks-batch-set-property :semantic/blocks-batch-delete-property})
 
 (def ^:private capture-and-tag-handlers
-  #{:semantic/capture :semantic/tags-list :semantic/tags-create :semantic/tags-get
+  #{:semantic/capture :semantic/tags-list :semantic/tags-create :semantic/tags-get :semantic/tags-objects
     :semantic/tags-update :semantic/tags-delete})
 
 (def ^:private property-asset-and-search-handlers

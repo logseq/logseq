@@ -11,6 +11,8 @@
     :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/blocks" :internal-path "/semantic/pages/:page-id/blocks"
     :handler :semantic/pages-blocks :operation-id "listPageBlocks" :scope "logseq/read" :rate-class :read}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/references" :internal-path "/semantic/pages/:page-id/references"
+    :handler :semantic/pages-references :operation-id "listPageReferences" :scope "logseq/read" :rate-class :read}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/pages/:page-id" :internal-path "/semantic/pages/:page-id"
     :handler :semantic/pages-delete :operation-id "deletePage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id" :internal-path "/semantic/pages/:page-id"
@@ -45,6 +47,8 @@
     :handler :semantic/tags-create :operation-id "createTag" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
     :handler :semantic/tags-get :operation-id "getTag" :scope "logseq/read" :rate-class :read}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/tags/:tag-id/objects" :internal-path "/semantic/tags/:tag-id/objects"
+    :handler :semantic/tags-objects :operation-id "listTagObjects" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
     :handler :semantic/tags-update :operation-id "updateTag" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
@@ -69,6 +73,7 @@
    "listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
    "createPage" ["Create a page" "Creates a page block with the supplied title."]
    "listPageBlocks" ["List a page's blocks" "Returns a cursor-paginated list of the page's top-level blocks, including each selected block's descendant tree."]
+   "listPageReferences" ["List references to a page" "Returns a cursor-paginated flat list of blocks and pages that reference the addressed page. Results are not recursively expanded."]
    "getPage" ["Get a page" "Returns one page block by UUID without loading its block tree."]
    "updatePage" ["Update a page" "Renames one page identified by its block UUID."]
    "deletePage" ["Delete a page" "Deletes one page through Logseq's page deletion rules, including its block tree."]
@@ -86,6 +91,7 @@
    "listTags" ["List tags" "Returns a cursor-paginated list of tag entities in the graph."]
    "createTag" ["Create a tag" "Creates a Logseq tag with the supplied title."]
    "getTag" ["Get a tag" "Returns one tag by UUID."]
+   "listTagObjects" ["List objects with a tag" "Returns a cursor-paginated flat list of blocks and pages tagged with the addressed tag. Results are not recursively expanded."]
    "updateTag" ["Update a tag" "Renames one tag identified by UUID."]
    "deleteTag" ["Delete a tag" "Deletes one tag through Logseq's page deletion rules."]
    "listProperties" ["List property definitions" "Returns a cursor-paginated list of property definitions in the graph."]
@@ -174,7 +180,8 @@
 
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
-    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listTags" "listProperties" "searchGraph"} operation-id)
+    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTags"
+                 "listTagObjects" "listProperties" "searchGraph"} operation-id)
     (into pagination-parameters)
     (= "listGraphs" operation-id)
     (into [{:name "name" :in "query" :schema {:type "string"}

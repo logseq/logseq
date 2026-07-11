@@ -180,13 +180,14 @@
                          (is (= (str "New block links to [[" reference-id "]], [[" created-reference-id
                                      "]], and [[" block-id "]]")
                                 (:block/title (first inserted-blocks))))
-                         (is (= expected-refs (set (map :block/uuid (:block/refs (first inserted-blocks))))))
+                         (is (= (set (map #(vector :block/uuid %) expected-refs))
+                                (set (:block/refs (first inserted-blocks)))))
                          (is (= (str "Nested block links to [[" reference-id "]]")
                                 (:block/title (first nested-blocks))))
-                         (is (= #{reference-id} (set (map :block/uuid (:block/refs (first nested-blocks))))))
+                         (is (= #{[:block/uuid reference-id]} (set (:block/refs (first nested-blocks)))))
                          (is (= (str "Edited block links to [[" reference-id "]]")
                                 (:block/title saved-block)))
-                         (is (= #{reference-id} (set (map :block/uuid (:block/refs saved-block))))))
+                         (is (= #{[:block/uuid reference-id]} (set (:block/refs saved-block)))))
                        (is (= #{:insert :save :delete} (set (map first @calls))))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
@@ -202,6 +203,7 @@
                    page-id (random-uuid)
                    block-id (random-uuid)
                    child-id (random-uuid)
+                   hidden-id (random-uuid)
                    second-root-id (random-uuid)
                    _ (d/transact! conn [{:db/ident :logseq.class/Page}
                                         {:block/uuid page-id
@@ -218,6 +220,12 @@
                                          :block/page [:block/uuid page-id]
                                          :block/parent [:block/uuid block-id]
                                          :block/order "a0"}
+                                        {:block/uuid hidden-id
+                                         :block/title "Hidden roadmap"
+                                         :logseq.property/hide? true
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "00"}
                                         {:block/uuid second-root-id
                                          :block/title "Second root"
                                          :block/page [:block/uuid page-id]
@@ -340,6 +348,48 @@
                             body (json-body response)]
                      (is (= 400 (.-status response)))
                      (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-reverse-reference-routes-use-indexed-pagination-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   tag-id (random-uuid)
+                   hidden-id (random-uuid)
+                   block-ids [(random-uuid) (random-uuid)]
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:db/ident :logseq.class/Tag}
+                                        {:block/uuid page-id :block/name "target" :block/title "Target"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid tag-id :block/name "project" :block/title "Project"
+                                         :block/tags :logseq.class/Tag}
+                                        {:block/uuid hidden-id :block/title "Hidden"
+                                         :logseq.property/hide? true
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}
+                                        {:block/uuid (first block-ids) :block/title "Alpha"
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}
+                                        {:block/uuid (second block-ids) :block/title "Beta"
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request
+                              (str "/semantic/tags/" tag-id "/objects?graph-id=graph-1&limit=1") "GET" nil)
+                             (semantic-json-request
+                              (str "/semantic/pages/" page-id "/references?graph-id=graph-1&limit=1") "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            bodies (p/all (map json-body responses))]
+                     (is (= [200 200] (mapv #(.-status %) responses)))
+                     (is (= ["Alpha"] (mapv :title (:objects (first bodies)))))
+                     (is (= ["Alpha"] (mapv :title (:references (second bodies)))))
+                     (is (every? string? (map :next-cursor bodies))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

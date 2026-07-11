@@ -59,3 +59,15 @@
   (is (= :semantic/blocks-move
          (:handler (semantic-routes/match-internal "POST" "/semantic/block-moves"))))
   (is (nil? (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/blocks/block-1/move"))))
+
+(deftest semantic-reverse-reference-routes-test
+  (is (= :semantic/tags-objects
+         (:handler (semantic-routes/match-public
+                    "GET" "/api/v1/graphs/graph-1/tags/tag-1/objects"))))
+  (is (= :semantic/tags-objects
+         (:handler (semantic-routes/match-internal "GET" "/semantic/tags/tag-1/objects"))))
+  (is (= :semantic/pages-references
+         (:handler (semantic-routes/match-public
+                    "GET" "/api/v1/graphs/graph-1/pages/page-1/references"))))
+  (is (= :semantic/pages-references
+         (:handler (semantic-routes/match-internal "GET" "/semantic/pages/page-1/references")))))
