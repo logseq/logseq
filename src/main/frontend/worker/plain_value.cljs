@@ -4,8 +4,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db :as ldb]))
 
 (defn- ref-value->summary
   [db value]
@@ -70,9 +69,13 @@
 
 (defn- order-list-type
   [block]
-  (some-> (db-property/lookup block :logseq.property/order-list-type)
+  (some-> (:logseq.property/order-list-type block)
           str
           string/lower-case))
+
+(def ^:private unsafe-plain-attrs
+  #{:block/properties
+    :block/properties-text-values})
 
 (defn- order-list-index
   [block target-order-list-type]
@@ -107,6 +110,9 @@
                         (:block/name entity))
           list-type (order-list-type entity)
           datoms (cond->> (d/datoms db :eavt (:db/id entity))
+                   true
+                   (remove #(contains? unsafe-plain-attrs (:a %)))
+
                    (seq property-set)
                    (filter #(contains? property-set (:a %))))
           result (reduce

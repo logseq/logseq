@@ -171,21 +171,22 @@
   (:block/alias-source-page-class? page))
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q exact-page]
-  (let [page-exists? (and (nil? (:block/parent exact-page))
-                          (if db-tag?
-                            (entity/class? exact-page)
-                            (entity/page? exact-page)))]
-    (if (or page-exists?
-            (and db-tag? (class-alias? exact-page)))
-      partial-matched-pages
-      (if db-tag?
-        (concat
-         ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
-         (when-not (and (entity/internal-page? exact-page) (= (:block/title exact-page) q))
-           [{:block/title (str (t :editor/new-tag) " " q)}])
-         partial-matched-pages)
-        (cons {:block/title (str (t :editor/new-page) " " q)}
-              partial-matched-pages)))))
+  (when (some? partial-matched-pages)
+    (let [page-exists? (and (nil? (:block/parent exact-page))
+                            (if db-tag?
+                              (entity/class? exact-page)
+                              (entity/page? exact-page)))]
+      (if (or page-exists?
+              (and db-tag? (class-alias? exact-page)))
+        partial-matched-pages
+        (if db-tag?
+          (concat
+           ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
+           (when-not (and (entity/internal-page? exact-page) (= (:block/title exact-page) q))
+             [{:block/title (str (t :editor/new-tag) " " q)}])
+           partial-matched-pages)
+          (cons {:block/title (str (t :editor/new-page) " " q)}
+                partial-matched-pages))))))
 
 (defn- search-pages
   [q db-tag? set-matched-pages! set-exact-page!]

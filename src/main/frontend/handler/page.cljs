@@ -310,8 +310,16 @@
 
 (defn on-chosen-handler
   [input id pos format]
-  (let [current-pos (cursor/pos input)
-        edit-content (state/get-edit-content)
+  (let [cursor-pos (cursor/pos input)
+        input-value (some-> input .-value)
+        edit-content (if (nil? input-value)
+                       (state/get-edit-content)
+                       input-value)
+        current-pos (if (and (number? cursor-pos)
+                             (number? pos)
+                             (< cursor-pos pos))
+                      (count edit-content)
+                      cursor-pos)
         action (state/get-editor-action)
         hashtag? (= action :page-search-hashtag)
         q (or

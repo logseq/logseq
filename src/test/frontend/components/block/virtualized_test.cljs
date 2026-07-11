@@ -31,4 +31,9 @@
       (is (string/includes? block-list-source ":skipAnimationFrameInResizeObserver true")))
     (testing "blocks-list-wrap must not mirror Virtuoso internal height"
       (is (not (re-find #"(?s)ResizeObserver[\s\S]*\.-height\s+\(\.-style" block-list-source))
-          "Do not copy the internal Virtuoso height to the outer blocks-list-wrap; it can compound stale measurements after Enter splits multiline blocks"))))
+          "Do not copy the internal Virtuoso height to the outer blocks-list-wrap; it can compound stale measurements after Enter splits multiline blocks"))
+    (testing "paginated flat windows are owned by Virtuoso indexes"
+      (is (string/includes? block-list-source ":virtual/total-count"))
+      (is (string/includes? block-list-source ":virtual/on-range-changed"))
+      (is (string/includes? block-list-source ":hide-children? true"))
+      (is (string/includes? block-list-source "-placeholder-")))))

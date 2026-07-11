@@ -3023,27 +3023,36 @@
         (property-component/new-property block (assoc opts
                                                       :property-position :block-below
                                                       :bottom-row-nav? true
-                                                      :icon-only? true
-                                                      :tab-index 0)))]]))
+                                                     :icon-only? true
+                                                     :tab-index 0)))]]))
+
+(defn- block-positioned-properties-from-payload
+  [block position]
+  (get-in block [:block.temp/positioned-properties position]))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (let [[positioned-properties set-positioned-properties!] (hooks/use-state nil)
+  (let [payload-positioned-properties (block-positioned-properties-from-payload block position)
+        [positioned-properties set-positioned-properties!] (hooks/use-state payload-positioned-properties)
         [current-block set-current-block!] (hooks/use-state block)
         latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
         _ (hooks/use-effect!
            (fn []
-             (p/let [repo (state/get-current-repo)
-	                     properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
-	                                                            repo
-	                                                            {:block-id (:db/id block)
-	                                                             :position position})
-	                     current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
-	               (set-positioned-properties! properties)
-	               (when current-block
-	                 (set-current-block! current-block)))
+             (if (some? payload-positioned-properties)
+               (do
+                 (set-positioned-properties! payload-positioned-properties)
+                 (set-current-block! block))
+               (p/let [repo (state/get-current-repo)
+                       properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
+                                                              repo
+                                                              {:block-id (:db/id block)
+                                                               :position position})
+                       current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
+                 (set-positioned-properties! properties)
+                 (when current-block
+                   (set-current-block! current-block))))
 	             nil)
-           [(:db/id block) (:block/uuid block) position latest-transacted-entity-uuids])
+           [(:db/id block) (:block/uuid block) payload-positioned-properties position latest-transacted-entity-uuids])
         block (or current-block block)
         properties (cond->> positioned-properties
 		                     (= position :block-below)
@@ -3057,11 +3066,16 @@
                      :inline-text inline-text
                      :other-position? true
                      :property-position position})
-        has-hidden-properties? (property-component/use-has-hidden-properties
-                                block
-                                config
-                                (and has-viewable-properties?
-                                     (not config/publishing?)))
+        payload-has-hidden-properties? (:block.temp/has-hidden-properties? block)
+        async-has-hidden-properties? (property-component/use-has-hidden-properties
+                                      block
+                                      config
+                                      (and (nil? payload-has-hidden-properties?)
+                                           has-viewable-properties?
+                                           (not config/publishing?)))
+        has-hidden-properties? (if (nil? payload-has-hidden-properties?)
+                                 async-has-hidden-properties?
+                                 payload-has-hidden-properties?)
         page? (entity/page? block)
         show-hidden-properties-pill-toggle? (and has-hidden-properties?
                                                  (not page?))
@@ -4729,10 +4743,12 @@
     (state/get-container-id (generated-container-id-key config block))))
 
 (defn- block-in-latest-tx?
-  [latest-transacted-entity-uuids block-uuid]
+  [latest-transacted-entity-uuids block]
   (let [{:keys [updated-ids deleted-ids]} latest-transacted-entity-uuids]
-    (boolean (or (contains? updated-ids block-uuid)
-                 (contains? deleted-ids block-uuid)))))
+    (boolean (some (fn [id]
+                     (or (contains? updated-ids id)
+                         (contains? deleted-ids id)))
+                   [(:block/uuid block) (:db/id block)]))))
 
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
@@ -4802,7 +4818,7 @@
                          (when-not (or (:page-title? config)
                                        (:view? config))
                            (p/let [{:keys [block children]}
-                                   (db-async/<get-block-with-children
+                             (db-async/<get-block-with-children
                                     (state/get-current-repo)
                                     id
                                     {:children? load-children?
@@ -4822,7 +4838,7 @@
     [id load-children? ignore-block-collapsed? temporary-collapsed-state])
     (hooks/use-effect!
      (fn []
-       (when (block-in-latest-tx? latest-transacted-entity-uuids block-uuid)
+       (when (block-in-latest-tx? latest-transacted-entity-uuids block)
          (refresh-block!))
        nil)
      [block-uuid latest-transacted-entity-uuids])
@@ -5248,24 +5264,37 @@
 (hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
   (let [blocks-count (count blocks)
+        virtual-total-count (:virtual/total-count config)
+        virtual-offset (or (:virtual/offset config) 0)
+        virtual-window? (and (integer? virtual-total-count)
+                             (> virtual-total-count blocks-count))
         zoomed-child-blocks? (and (:block-children? config)
                                   (not (and (:id config)
                                             (= (:id config)
                                                (str (:block/parent-uuid (first blocks)))))))
         disable-virtualized? (or (util/rtc-test?)
                                  (:journals? config)
-                                 (< blocks-count 10)
+                                 (and (not virtual-window?)
+                                      (< blocks-count 10))
                                  zoomed-child-blocks?)
         [virtualized? _] (hooks/use-state (not disable-virtualized?))
+        block-at-index (fn [idx]
+                         (if virtual-window?
+                           (let [window-idx (- idx virtual-offset)]
+                             (when (<= 0 window-idx (dec blocks-count))
+                               (nth blocks window-idx)))
+                           (nth blocks idx)))
         render-item (fn [idx]
-                      (let [top? (zero? idx)
-                            bottom? (= (dec blocks-count) idx)
-                            block (nth blocks idx)
-                            config' (assoc config :top? top?)]
-                        (block-item config'
-                                    block
-                                    {:top? top?
-                                     :bottom? bottom?})))
+                      (when-let [block (block-at-index idx)]
+                        (let [top? (zero? idx)
+                              bottom? (= (dec (or virtual-total-count blocks-count)) idx)
+                              config' (cond-> (assoc config :top? top?)
+                                        (:virtual/flat-list? config)
+                                        (assoc :hide-children? true))]
+                          (block-item config'
+                                      block
+                                      {:top? top?
+                                       :bottom? bottom?}))))
         virtualized? (and virtualized? (seq blocks))
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
@@ -5282,24 +5311,29 @@
                        {:ref *virtualized-ref
                         :custom-scroll-parent scroll-container
                         :compute-item-key (fn [idx]
-                                            (let [block (nth blocks idx)]
-                                              (str (:container-id config) "-" (:db/id block))))
+                                            (if-let [block (block-at-index idx)]
+                                              (str (:container-id config) "-" (:db/id block))
+                                              (str (:container-id config) "-placeholder-" idx)))
                         ;; Leave some space for the new inserted block
                         :increase-viewport-by 254
                         :overscan 254
                         :skipAnimationFrameInResizeObserver true
-                        :total-count blocks-count
+                        :total-count (or virtual-total-count blocks-count)
+                        :rangeChanged (:virtual/on-range-changed config)
                         :item-content (fn [idx]
-                                        (let [top? (zero? idx)
-                                              bottom? (= (dec blocks-count) idx)
-                                              block (nth blocks idx)
-                                              config' (assoc config
-                                                             :top? top?
-                                                             :selection/block-ids selection-block-ids)]
-                                          (block-item config'
-                                                      block
-                                                      {:top? top?
-                                                       :bottom? bottom?})))})]
+                                        (if-let [block (block-at-index idx)]
+                                          (let [top? (zero? idx)
+                                                bottom? (= (dec (or virtual-total-count blocks-count)) idx)
+                                                config' (cond-> (assoc config
+                                                                       :top? top?
+                                                                       :selection/block-ids selection-block-ids)
+                                                          (:virtual/flat-list? config)
+                                                          (assoc :hide-children? true))]
+                                            (block-item config'
+                                                        block
+                                                        {:top? top?
+                                                         :bottom? bottom?}))
+                                          [:div {:style {:height 29}}]))})]
     (hooks/use-effect!
      (fn []
        (when virtualized?
