@@ -1,6 +1,8 @@
 import { DynamicWorkerExecutor } from "@cloudflare/codemode";
 import { openApiMcpServer } from "@cloudflare/codemode/mcp";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
 
 function protectedResourceMetadata(request, env) {
@@ -8,7 +10,7 @@ function protectedResourceMetadata(request, env) {
   return Response.json({
     resource: `${url.origin}/mcp`,
     authorization_servers: [env.COGNITO_ISSUER],
-    scopes_supported: ["logseq:read", "logseq:write"],
+    scopes_supported: ["logseq/read", "logseq/write"],
     bearer_methods_supported: ["header"],
   });
 }
@@ -24,13 +26,6 @@ async function semanticSpec(request, env, ctx) {
 
 async function handleMcp(request, env, ctx) {
   const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) {
-    return new Response("Bearer token required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Bearer resource_metadata="/.well-known/oauth-protected-resource/mcp"' },
-    });
-  }
-
   const server = openApiMcpServer({
     spec: await semanticSpec(request, env, ctx),
     executor: new DynamicWorkerExecutor({ loader: env.LOADER }),
@@ -44,7 +39,8 @@ async function handleMcp(request, env, ctx) {
       for (const [key, value] of Object.entries(options.query ?? {})) {
         if (value !== undefined) url.searchParams.set(key, String(value));
       }
-      const headers = { authorization };
+      const headers = {};
+      if (authorization) headers.authorization = authorization;
       if (options.contentType) headers["content-type"] = options.contentType;
       else if (options.body !== undefined) headers["content-type"] = "application/json";
 
@@ -74,6 +70,9 @@ async function handleMcp(request, env, ctx) {
 
   const transport = new WebStandardStreamableHTTPServerTransport();
   await server.connect(transport);
+  server.server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: chatGptToolDescriptors(),
+  }));
   return transport.handleRequest(request);
 }
 

@@ -66,6 +66,7 @@ cpu_ms = 300000
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+COGNITO_CLIENT_IDS = "7cm3bi0ng53iitncabjnb4hs52"
 SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
 SENTRY_ENVIRONMENT = "staging"
 SENTRY_TRACES_SAMPLE_RATE = "0.1"

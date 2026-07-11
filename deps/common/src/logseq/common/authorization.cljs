@@ -76,6 +76,13 @@
   (let [data (base64url->uint8array part)]
     (js/JSON.parse (.decode text-decoder data))))
 
+(defn client-id-allowed? [env client-id]
+  (let [primary-client-id (aget env "COGNITO_CLIENT_ID")
+        additional-client-ids (->> (string/split (or (aget env "COGNITO_CLIENT_IDS") "") #",")
+                                   (map string/trim)
+                                   (remove string/blank?))]
+    (contains? (set (cons primary-client-id additional-client-ids)) client-id)))
+
 (defn- import-rsa-key [jwk]
   (.importKey js/crypto.subtle
               "jwk"
@@ -97,11 +104,10 @@
         (p/let [header (decode-jwt-part header-part)
                 payload (decode-jwt-part payload-part)
                 issuer (aget env "COGNITO_ISSUER")
-                client-id (aget env "COGNITO_CLIENT_ID")
                 client-id-claim (or (aget payload "aud")
                                     (aget payload "client_id"))
                 _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
-                _ (when (not= client-id-claim client-id) (throw (ex-info "aud not found" {})))
+                _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
                 _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))
                     (throw (ex-info "exp" {})))
                 jwks-url (aget env "COGNITO_JWKS_URL")

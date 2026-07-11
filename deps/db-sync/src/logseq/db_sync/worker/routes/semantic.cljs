@@ -4,63 +4,63 @@
 
 (def operations
   [{:method "GET" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
-    :handler :semantic/pages-list :operation-id "listPages" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/pages-list :operation-id "listPages" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
-    :handler :semantic/pages-create :operation-id "createPage" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/blocks" :internal-path "/semantic/pages/:page-id/blocks"
-    :handler :semantic/pages-blocks :operation-id "listPageBlocks" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/pages-blocks :operation-id "listPageBlocks" :scope "logseq/read" :rate-class :read}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/pages/:page-id" :internal-path "/semantic/pages/:page-id"
-    :handler :semantic/pages-delete :operation-id "deletePage" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/pages-delete :operation-id "deletePage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id" :internal-path "/semantic/pages/:page-id"
-    :handler :semantic/pages-get :operation-id "getPage" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/pages-get :operation-id "getPage" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/pages/:page-id" :internal-path "/semantic/pages/:page-id"
-    :handler :semantic/pages-update :operation-id "updatePage" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/pages-update :operation-id "updatePage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
-    :handler :semantic/blocks-get :operation-id "getBlock" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/blocks-get :operation-id "getBlock" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
-    :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
-    :handler :semantic/blocks-delete :operation-id "deleteBlock" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-delete :operation-id "deleteBlock" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/blocks/:block-id/move" :internal-path "/semantic/blocks/:block-id/move"
-    :handler :semantic/blocks-move :operation-id "moveBlock" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-move :operation-id "moveBlock" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/blocks/:block-id/children" :internal-path "/semantic/blocks/:block-id/children"
-    :handler :semantic/blocks-insert-children :operation-id "insertBlockChildren" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-insert-children :operation-id "insertBlockChildren" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-trees" :internal-path "/semantic/block-trees"
-    :handler :semantic/blocks-insert-tree :operation-id "insertBlockTree" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-insert-tree :operation-id "insertBlockTree" :scope "logseq/write" :rate-class :write}
    {:method "PUT" :path "/api/v1/graphs/:graph-id/blocks/:block-id/properties/:property-id" :internal-path "/semantic/blocks/:block-id/properties/:property-id"
-    :handler :semantic/blocks-set-property :operation-id "setBlockProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-set-property :operation-id "setBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id/properties/:property-id" :internal-path "/semantic/blocks/:block-id/properties/:property-id"
-    :handler :semantic/blocks-delete-property :operation-id "deleteBlockProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-delete-property :operation-id "deleteBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-properties/batch-set" :internal-path "/semantic/block-properties/batch-set"
-    :handler :semantic/blocks-batch-set-property :operation-id "batchSetBlockProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-batch-set-property :operation-id "batchSetBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-properties/batch-delete" :internal-path "/semantic/block-properties/batch-delete"
-    :handler :semantic/blocks-batch-delete-property :operation-id "batchDeleteBlockProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/blocks-batch-delete-property :operation-id "batchDeleteBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/capture" :internal-path "/semantic/capture"
-    :handler :semantic/capture :operation-id "captureToToday" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/capture :operation-id "captureToToday" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
-    :handler :semantic/tags-list :operation-id "listTags" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/tags-list :operation-id "listTags" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
-    :handler :semantic/tags-create :operation-id "createTag" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/tags-create :operation-id "createTag" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
-    :handler :semantic/tags-get :operation-id "getTag" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/tags-get :operation-id "getTag" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
-    :handler :semantic/tags-update :operation-id "updateTag" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/tags-update :operation-id "updateTag" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/tags/:tag-id" :internal-path "/semantic/tags/:tag-id"
-    :handler :semantic/tags-delete :operation-id "deleteTag" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/tags-delete :operation-id "deleteTag" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/properties" :internal-path "/semantic/properties"
-    :handler :semantic/properties-list :operation-id "listProperties" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/properties-list :operation-id "listProperties" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/properties" :internal-path "/semantic/properties"
-    :handler :semantic/properties-create :operation-id "createProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/properties-create :operation-id "createProperty" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/properties/:property-id" :internal-path "/semantic/properties/:property-id"
-    :handler :semantic/properties-get :operation-id "getProperty" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/properties-get :operation-id "getProperty" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/properties/:property-id" :internal-path "/semantic/properties/:property-id"
-    :handler :semantic/properties-update :operation-id "updateProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/properties-update :operation-id "updateProperty" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/properties/:property-id" :internal-path "/semantic/properties/:property-id"
-    :handler :semantic/properties-delete :operation-id "deleteProperty" :scope "logseq:write" :rate-class :write}
+    :handler :semantic/properties-delete :operation-id "deleteProperty" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/assets/:asset-block-id" :internal-path "/semantic/assets/:asset-block-id"
-    :handler :semantic/assets-get :operation-id "getAsset" :scope "logseq:read" :rate-class :read}
+    :handler :semantic/assets-get :operation-id "getAsset" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/search" :internal-path "/semantic/search"
-    :handler :semantic/search :operation-id "searchGraph" :scope "logseq:read" :rate-class :read}])
+    :handler :semantic/search :operation-id "searchGraph" :scope "logseq/read" :rate-class :read}])
 
 (def ^:private operation-docs
   {"listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
@@ -187,8 +187,8 @@
              :flows {:authorizationCode
                      {:authorizationUrl (str issuer "/oauth2/authorize")
                       :tokenUrl (str issuer "/oauth2/token")
-                      :scopes {:logseq:read "Read pages and blocks"
-                               :logseq:write "Create and edit pages and blocks"}}}}}}
+                      :scopes {:logseq/read "Read pages and blocks"
+                               :logseq/write "Create and edit pages and blocks"}}}}}}
    :paths
    (reduce (fn [paths {:keys [method path operation-id scope] :as operation}]
              (let [[summary description] (get operation-docs operation-id)]

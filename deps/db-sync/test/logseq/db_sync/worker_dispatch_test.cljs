@@ -77,20 +77,20 @@
                      body (json-body response)]
                (is (= 200 (.-status response)))
                (is (= "3.1.0" (:openapi body)))
-               (is (= ["logseq:read"]
+               (is (= ["logseq/read"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages") :get :security 0 :oauth])))
-               (is (= ["logseq:write"]
+               (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}") :patch :security 0 :oauth])))
-               (is (= ["logseq:write"]
+               (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages/{page-id}") :delete :security 0 :oauth])))
                (doseq [path ["/api/v1/graphs/{graph-id}/pages/{page-id}"
                              "/api/v1/graphs/{graph-id}/tags/{tag-id}"
                              "/api/v1/graphs/{graph-id}/properties/{property-id}"]]
                  (is (= #{:get :patch :delete} (set (keys (get-in body [:paths (keyword path)]))))))
-               (is (= ["logseq:write"]
+               (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}")
                                     :delete :security 0 :oauth])))
-               (is (= ["logseq:write"]
+               (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-delete")
                                     :post :security 0 :oauth])))
                (doseq [[_ path-operations] (:paths body)
@@ -104,7 +104,7 @@
 
 (deftest semantic-api-rejects-missing-operation-scope-test
   (async done
-         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:write")]
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/write")]
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
                  (p/let [response (dispatch/handle-worker-fetch request #js {})
                          body (json-body response)]
@@ -117,7 +117,7 @@
 
 (deftest semantic-api-rejects-e2ee-graphs-before-durable-object-test
   (async done
-         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:read")
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")
                forwarded (atom [])
                env #js {"DB" #js {}
                         "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
@@ -137,7 +137,7 @@
 
 (deftest semantic-api-rate-limit-rejection-does-not-call-durable-object-test
   (async done
-         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq:read")
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")
                forwarded (atom [])
                limit-calls (atom [])
                env #js {"DB" #js {}
@@ -158,7 +158,7 @@
 
 (deftest semantic-api-forwards-authorized-non-e2ee-request-test
   (async done
-         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages?limit=10" "logseq:read")
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages?limit=10" "logseq/read")
                forwarded (atom [])
                limit-calls (atom [])
                env #js {"DB" #js {}
