@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker-routes-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db-sync.worker.routes.index :as routes]))
+            [logseq.db-sync.worker.routes.index :as routes]
+            [logseq.db-sync.worker.routes.semantic :as semantic-routes]))
 
 (deftest match-route-graphs-test
   (testing "graphs routes"
@@ -46,3 +47,8 @@
   (testing "method mismatch returns nil"
     (is (nil? (routes/match-route "GET" "/graphs/graph-1/members/user-9")))
     (is (nil? (routes/match-route "PUT" "/e2ee/user-keys")))))
+
+(deftest semantic-internal-routes-ignore-public-only-operations-test
+  (is (nil? (semantic-routes/match-internal "GET" "/api/v1/graphs")))
+  (is (= :semantic/pages-list
+         (:handler (semantic-routes/match-internal "GET" "/semantic/pages")))))

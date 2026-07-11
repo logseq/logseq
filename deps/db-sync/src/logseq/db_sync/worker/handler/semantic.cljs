@@ -30,7 +30,7 @@
   (when value (str value)))
 
 (defn- page? [entity]
-  (or (ldb/page? entity) (string? (:block/name entity))))
+  (or (ldb/internal-page? entity) (ldb/journal? entity)))
 
 (defn- asset? [entity]
   (string? (:logseq.property.asset/type entity)))
@@ -94,14 +94,21 @@
       (or (js/isNaN parsed) (not (pos? parsed))) nil
       :else (min parsed max-limit))))
 
+(def ^:private text-encoder (js/TextEncoder.))
+(def ^:private text-decoder (js/TextDecoder.))
+
 (defn- encode-cursor [key]
-  (js/btoa (js/JSON.stringify (clj->js key))))
+  (let [payload (.encode text-encoder (js/JSON.stringify (clj->js key)))
+        binary (.join (.map (js/Array.from payload) #(js/String.fromCharCode %)) "")]
+    (js/btoa binary)))
 
 (defn- decode-cursor [value]
   (when value
     (try
-      (let [decoded (js->clj (js/JSON.parse (js/atob value)))]
-        (when (and (vector? decoded) (= 2 (count decoded))) decoded))
+      (let [binary (js/atob value)
+            payload (js/Uint8Array.from (js/Array.from binary #(.charCodeAt % 0)))
+            decoded (js->clj (js/JSON.parse (.decode text-decoder payload)))]
+        (when (and (vector? decoded) (= 2 (count decoded)) (every? string? decoded)) decoded))
       (catch :default _ nil))))
 
 (defn- sort-key [item]
@@ -146,7 +153,10 @@
   (ws/broadcast! self nil {:type "changed" :t (storage/get-t (.-sql self))}))
 
 (defn- list-pages [db]
-  (mapv block-response (entities-by-avet db :block/name)))
+  (->> [:logseq.class/Page :logseq.class/Journal]
+       (keep #(d/entid db %))
+       (mapcat #(entities-by-avet db :block/tags %))
+       (mapv block-response)))
 
 (defn- tree-block [node]
   {:block/uuid (random-uuid) :block/title (:title node)})
@@ -158,14 +168,13 @@
       (outliner-core/insert-blocks! conn blocks target
                                     {:sibling? false :top? (= position "prepend")
                                      :bottom? (not= position "prepend") :keep-uuid? true})
-      (doseq [[node block] (map vector nodes blocks)]
-        (when (seq (:children node))
-          (insert-tree! conn (d/entity @conn [:block/uuid (:block/uuid block)])
-                        (:children node) "append"))))
-    (mapv (fn [node block]
-            (cond-> {:uuid (str (:block/uuid block)) :title (:title node)}
-              (seq (:children node)) (assoc :children (:children node))))
-          nodes blocks)))
+      (mapv (fn [node block]
+              (let [children (when (seq (:children node))
+                               (insert-tree! conn (d/entity @conn [:block/uuid (:block/uuid block)])
+                                             (:children node) "append"))]
+                (cond-> {:uuid (str (:block/uuid block)) :title (:title node)}
+                  (seq children) (assoc :children children))))
+            nodes blocks))))
 
 (defn- today-journal-day []
   (let [now (js/Date.)]

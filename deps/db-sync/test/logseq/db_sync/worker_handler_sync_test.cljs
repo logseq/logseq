@@ -107,7 +107,9 @@
              (storage/init-schema! sql)
              (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
                    page-id (random-uuid)
-                   _ (d/transact! (.-conn self) [{:block/uuid page-id :block/name "inbox" :block/title "Inbox"}])
+                   _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
+                                                  {:block/uuid page-id :block/name "inbox" :block/title "Inbox"
+                                                   :block/tags :logseq.class/Page}])
                    calls (atom [])
                    broadcasts (atom [])
                    request (semantic-json-request (str "/semantic/pages/" page-id "?graph-id=graph-1") "DELETE" nil)]
@@ -132,14 +134,18 @@
              (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
                    page-id (random-uuid)
                    block-id (random-uuid)
-                   _ (d/transact! (.-conn self) [{:block/uuid page-id :block/name "page" :block/title "Page"}
+                   _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
+                                                  {:block/uuid page-id :block/name "page" :block/title "Page"
+                                                   :block/tags :logseq.class/Page}
                                                   {:block/uuid block-id :block/title "Existing"
                                                    :block/page [:block/uuid page-id]
                                                    :block/parent [:block/uuid page-id]
                                                    :block/order "a0"}])
                    calls (atom [])
                    requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
-                                                    {:position "append" :blocks [{:title "New block"}]})
+                                                    {:position "append"
+                                                     :blocks [{:title "New block"
+                                                               :children [{:title "Nested block"}]}]})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
                                                     {:title "Edited block"})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
@@ -153,8 +159,10 @@
                                                                  (swap! calls conj [:delete blocks opts])
                                                                  {:tx-data []})
                                    ws/broadcast! (fn [& _] nil)]
-                     (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))]
+                     (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                              insert-body (json-body (first responses))]
                        (is (= [201 200 204] (mapv #(.-status %) responses)))
+                       (is (uuid? (some-> (get-in insert-body [:blocks 0 :children 0 :uuid]) uuid)))
                        (is (= #{:insert :save :delete} (set (map first @calls))))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
@@ -169,9 +177,11 @@
              (let [conn (storage/open-conn sql)
                    page-id (random-uuid)
                    block-id (random-uuid)
-                   _ (d/transact! conn [{:block/uuid page-id
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:block/uuid page-id
                                          :block/name "inbox"
-                                         :block/title "Inbox"}
+                                         :block/title "Inbox"
+                                         :block/tags :logseq.class/Page}
                                         {:block/uuid block-id
                                          :block/title "Review roadmap"
                                          :block/page [:block/uuid page-id]
@@ -204,9 +214,10 @@
                    pages (mapv (fn [title]
                                  {:block/uuid (random-uuid)
                                   :block/name (string/lower-case title)
-                                  :block/title title})
-                               ["Alpha" "Beta" "Gamma"])
-                   _ (d/transact! conn pages)
+                                  :block/title title
+                                  :block/tags :logseq.class/Page})
+                               ["Alpha" "中文页面" "日本語ページ"])
+                   _ (d/transact! conn (into [{:db/ident :logseq.class/Page}] pages))
                    self #js {:sql sql :conn conn :schema-ready true}
                    first-request (semantic-json-request "/semantic/pages?graph-id=graph-1&limit=2" "GET" nil)]
                (-> (p/let [first-response (sync-handler/handle-http self first-request)
@@ -219,9 +230,11 @@
                                                    (js/encodeURIComponent cursor))
                                               "GET" nil))
                             second-body (json-body second-response)]
-                     (is (= ["Alpha" "Beta"] (mapv :title (:blocks first-body))))
+                     (is (= 2 (count (:blocks first-body))))
                      (is (string? cursor))
-                     (is (= ["Gamma"] (mapv :title (:blocks second-body))))
+                     (is (= 1 (count (:blocks second-body))))
+                     (is (= #{"Alpha" "中文页面" "日本語ページ"}
+                            (set (map :title (concat (:blocks first-body) (:blocks second-body))))))
                      (is (nil? (:next-cursor second-body))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
@@ -239,6 +252,56 @@
                             body (json-body response)]
                      (is (= 400 (.-status response)))
                      (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-route-rejects-invalid-cursor-element-types-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   cursor (js/btoa (js/JSON.stringify #js ["a" #js {}]))
+                   request (semantic-json-request
+                            (str "/semantic/pages?graph-id=graph-1&cursor=" (js/encodeURIComponent cursor))
+                            "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-page-routes-exclude-tags-and-properties-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   tag-id (random-uuid)
+                   property-id (random-uuid)
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:db/ident :logseq.class/Tag}
+                                        {:db/ident :logseq.class/Property}
+                                        {:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid tag-id :block/name "tag" :block/title "Tag"
+                                         :block/tags :logseq.class/Tag}
+                                        {:block/uuid property-id :block/name "property" :block/title "Property"
+                                         :block/tags :logseq.class/Property}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" tag-id "?graph-id=graph-1") "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" property-id "?graph-id=graph-1") "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            list-body (json-body (first responses))]
+                     (is (= [200 404 404] (mapv #(.-status %) responses)))
+                     (is (= ["Page"] (mapv :title (:blocks list-body)))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

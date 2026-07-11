@@ -80,8 +80,13 @@
   (let [primary-client-id (aget env "COGNITO_CLIENT_ID")
         additional-client-ids (->> (string/split (or (aget env "COGNITO_CLIENT_IDS") "") #",")
                                    (map string/trim)
-                                   (remove string/blank?))]
-    (contains? (set (cons primary-client-id additional-client-ids)) client-id)))
+                                   (remove string/blank?))
+        allowed-client-ids (cond-> (set additional-client-ids)
+                             (and (string? primary-client-id) (not (string/blank? primary-client-id)))
+                             (conj primary-client-id))]
+    (and (string? client-id)
+         (not (string/blank? client-id))
+         (contains? allowed-client-ids client-id))))
 
 (defn- import-rsa-key [jwk]
   (.importKey js/crypto.subtle

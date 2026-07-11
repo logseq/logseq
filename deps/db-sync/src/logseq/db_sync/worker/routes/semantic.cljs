@@ -98,6 +98,7 @@
 
 (defn- operation-routes [path-key]
   (->> operations
+       (filter path-key)
        (group-by path-key)
        (mapv (fn [[path path-operations]]
                [path {:methods (into {} (map (juxt :method identity)) path-operations)}]))))
