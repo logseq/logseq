@@ -34,6 +34,45 @@
                        (fn? v))))
          (into {}))))
 
+(defn- tx-datom-attr-ident
+  [db datom]
+  (let [attr (:a datom)]
+    (if (keyword? attr)
+      attr
+      (:db/ident (d/entity db attr)))))
+
+(defn- tx-datom-entity-id
+  [datom]
+  (when (int? (:e datom))
+    (:e datom)))
+
+(defn- tx-change-summary
+  [{:keys [db-after tx-data]}]
+  (let [changed-entity-ids (->> tx-data
+                                (keep tx-datom-entity-id)
+                                distinct
+                                vec)
+        route-candidate-ids
+        (fn [pred]
+          (->> tx-data
+               (keep (fn [datom]
+                       (let [attr-ident (tx-datom-attr-ident db-after datom)]
+                         (when (pred datom attr-ident)
+                           (tx-datom-entity-id datom)))))
+               distinct
+               vec))]
+    {:changed-entity-ids changed-entity-ids
+     :task-route-candidate-ids (route-candidate-ids
+                                (fn [_datom attr-ident]
+                                  (contains? #{:block/tags
+                                               :logseq.property/status
+                                               :logseq.property/assignee}
+                                             attr-ident)))
+     :comment-route-candidate-ids (route-candidate-ids
+                                   (fn [datom attr-ident]
+                                     (and (:added datom)
+                                          (= :block/title attr-ident))))}))
+
 (defn- main-thread-sync-result
   "Return the processed tx-report and deferred main-thread broadcast data."
   [repo conn {:keys [tx-meta] :as tx-report}]
@@ -49,8 +88,8 @@
          :pipeline-at pipeline-at
          :data (merge {:repo repo
                        :request-id (:request-id tx-meta)
-                       :tx-data (:tx-data tx-report')
                        :tx-meta (transit-safe-tx-meta tx-meta)}
+                      (tx-change-summary tx-report')
                       (dissoc result :tx-report))}))))
 
 (defn- broadcast-main-thread-sync!
@@ -93,11 +132,20 @@
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
+(defn- invoke-listener-handler!
+  [handler-timings k handler-fn opt tx-report]
+  (let [handler-started-at (perf-time-ms)]
+    (handler-fn k opt tx-report)
+    (swap! handler-timings conj
+           [k (- (perf-time-ms) handler-started-at)])))
+
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
   (let [handlers (if (seq handler-keys)
                    (select-keys (methods listen-db-changes) handler-keys)
                    (methods listen-db-changes))
+        persist-local-tx-handler (get handlers :db-sync)
+        deferred-handlers (dissoc handlers :db-sync)
         sync-db-to-main-thread?
         (or (nil? handler-keys)
             (contains? (set handler-keys) :sync-db-to-main-thread))]
@@ -112,28 +160,33 @@
                        (let [started-at (perf-time-ms)]
                          (db-sync/update-local-sync-checksum! repo tx-report)
                          (let [checksum-at (perf-time-ms)
-                               sync-result (when sync-db-to-main-thread?
-                                             (main-thread-sync-result repo conn tx-report))
-                               tx-report' (if sync-db-to-main-thread?
-                                            (:tx-report sync-result)
-                                            tx-report)
-                               sync-main-at (perf-time-ms)
                                opt {:repo repo}
                                handler-timings (atom [])]
-                           (when tx-report'
-                             (doseq [[k handler-fn] handlers]
-                               (let [handler-started-at (perf-time-ms)]
-                                 (handler-fn k opt tx-report')
-                                 (swap! handler-timings conj
-                                        [k (- (perf-time-ms) handler-started-at)]))))
-                           (when sync-result
-                             (broadcast-main-thread-sync! repo tx-report sync-result))
-                           (log-outliner-op-perf!
-                            {:stage :db-listener-complete
-                             :perf-id (:ui/perf-id tx-meta)
-                             :outliner-op (:outliner-op tx-meta)
-                             :tx-count (count tx-data)
-                             :checksum-ms (- checksum-at started-at)
-                             :sync-main-ms (- sync-main-at checksum-at)
-                             :handlers-ms @handler-timings
-                             :total-ms (- (perf-time-ms) started-at)}))))))))))
+                           (when persist-local-tx-handler
+                             (invoke-listener-handler! handler-timings
+                                                       :db-sync
+                                                       persist-local-tx-handler
+                                                       opt
+                                                       tx-report))
+                           (let [persist-at (perf-time-ms)
+                                 sync-result (when sync-db-to-main-thread?
+                                               (main-thread-sync-result repo conn tx-report))
+                                 tx-report' (if sync-db-to-main-thread?
+                                              (:tx-report sync-result)
+                                              tx-report)
+                                 sync-main-at (perf-time-ms)]
+                             (when tx-report'
+                               (doseq [[k handler-fn] deferred-handlers]
+                                 (invoke-listener-handler! handler-timings k handler-fn opt tx-report')))
+                             (when sync-result
+                               (broadcast-main-thread-sync! repo tx-report sync-result))
+                             (log-outliner-op-perf!
+                              {:stage :db-listener-complete
+                               :perf-id (:ui/perf-id tx-meta)
+                               :outliner-op (:outliner-op tx-meta)
+                               :tx-count (count tx-data)
+                               :checksum-ms (- checksum-at started-at)
+                               :persist-ms (- persist-at checksum-at)
+                               :sync-main-ms (- sync-main-at persist-at)
+                               :handlers-ms @handler-timings
+                               :total-ms (- (perf-time-ms) started-at)})))))))))))
