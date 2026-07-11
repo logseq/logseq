@@ -23,8 +23,8 @@
     :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
     :handler :semantic/blocks-delete :operation-id "deleteBlock" :scope "logseq/write" :rate-class :write}
-   {:method "POST" :path "/api/v1/graphs/:graph-id/blocks/:block-id/move" :internal-path "/semantic/blocks/:block-id/move"
-    :handler :semantic/blocks-move :operation-id "moveBlock" :scope "logseq/write" :rate-class :write}
+   {:method "POST" :path "/api/v1/graphs/:graph-id/block-moves" :internal-path "/semantic/block-moves"
+    :handler :semantic/blocks-move :operation-id "moveBlocks" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/blocks/:block-id/children" :internal-path "/semantic/blocks/:block-id/children"
     :handler :semantic/blocks-insert-children :operation-id "insertBlockChildren" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-trees" :internal-path "/semantic/block-trees"
@@ -75,7 +75,7 @@
    "getBlock" ["Get a block" "Returns one block or page by UUID without loading an unbounded tree."]
    "updateBlock" ["Update a block" "Replaces the title of one block identified by UUID."]
    "deleteBlock" ["Delete a block" "Deletes one block and its descendants. Asset blocks are deleted through this same operation."]
-   "moveBlock" ["Move a block" "Moves a block before, after, into the first-child position, or into the last-child position of a target block."]
+   "moveBlocks" ["Move blocks" "Moves one or more blocks together before, after, into the first-child position, or into the last-child position of a target block. Logseq preserves the blocks' outliner order."]
    "insertBlockChildren" ["Insert child block trees" "Appends or prepends one or more recursive block trees as children of the addressed block."]
    "insertBlockTree" ["Insert block trees" "Inserts one or more recursive block trees relative to an explicit target block."]
    "setBlockProperty" ["Set a block property" "Idempotently adds or replaces one typed property value on one block in a DB graph. The property path value may be its UUID or ident. Never write legacy file-graph key:: value syntax into the block title."]
@@ -137,9 +137,11 @@
     "createPage" {:required ["title"] :properties {:title {:type "string"}}}
     "updatePage" {:required ["title"] :properties {:title {:type "string"}}}
     "updateBlock" {:required ["title"] :properties {:title {:type "string"}}}
-    "moveBlock" {:required ["target-id" "position"]
-                 :properties {:target-id {:type "string"}
-                              :position {:enum ["before" "after" "first-child" "last-child"]}}}
+    "moveBlocks" {:required ["block-ids" "target-id" "position"]
+                  :properties {:block-ids {:type "array" :minItems 1 :uniqueItems true
+                                           :items {:type "string"}}
+                               :target-id {:type "string"}
+                               :position {:enum ["before" "after" "first-child" "last-child"]}}}
     "insertBlockChildren" {:required ["position" "blocks"]
                            :properties {:position {:enum ["append" "prepend"]}
                                         :blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
@@ -188,7 +190,16 @@
    :components
    {:schemas {:BlockTree {:type "object" :required ["title"]
                           :properties {:title {:type "string"}
-                                       :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}}
+                                       :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
+              :BlockResponse {:type "object" :required ["uuid" "kind" "title"]
+                              :properties {:uuid {:type "string"}
+                                           :kind {:type "string"}
+                                           :title {:type "string"}
+                                           :order {:type "string"}
+                                           :parent-id {:type "string"}
+                                           :page-id {:type "string"}
+                                           :children {:type "array"
+                                                      :items {:$ref "#/components/schemas/BlockResponse"}}}}}
     :securitySchemes
     {:oauth {:type "oauth2"
              :flows {:authorizationCode
@@ -205,7 +216,15 @@
                                 :description description
                                 :parameters (operation-parameters operation)
                                 :security [{:oauth [scope]}]
-                                :responses {"200" {:description "Success"}
+                                :responses {"200" (if (= operation-id "listPageBlocks")
+                                                    {:description "A cursor page of top-level block trees"
+                                                     :content {"application/json"
+                                                               {:schema {:type "object"
+                                                                         :required ["blocks"]
+                                                                         :properties {:blocks {:type "array"
+                                                                                               :items {:$ref "#/components/schemas/BlockResponse"}}
+                                                                                      :next-cursor {:type "string"}}}}}}
+                                                    {:description "Success"})
                                             "400" {:description "Invalid request"}
                                             "403" {:description "Forbidden"}
                                             "409" {:description "Unavailable for E2EE graphs"}

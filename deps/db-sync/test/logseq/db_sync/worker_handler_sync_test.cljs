@@ -201,6 +201,8 @@
              (let [conn (storage/open-conn sql)
                    page-id (random-uuid)
                    block-id (random-uuid)
+                   child-id (random-uuid)
+                   second-root-id (random-uuid)
                    _ (d/transact! conn [{:db/ident :logseq.class/Page}
                                         {:block/uuid page-id
                                          :block/name "inbox"
@@ -210,10 +212,20 @@
                                          :block/title "Review roadmap"
                                          :block/page [:block/uuid page-id]
                                          :block/parent [:block/uuid page-id]
-                                         :block/order "a0"}])
+                                         :block/order "a0"}
+                                        {:block/uuid child-id
+                                         :block/title "Child block"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid block-id]
+                                         :block/order "a0"}
+                                        {:block/uuid second-root-id
+                                         :block/title "Second root"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "a1"}])
                    self #js {:sql sql :conn conn :schema-ready true}
                    requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
-                             (semantic-json-request (str "/semantic/pages/" page-id "/blocks?graph-id=graph-1") "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" page-id "/blocks?graph-id=graph-1&limit=1") "GET" nil)
                              (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=blocks" "GET" nil)
                              (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap" "GET" nil)
                              (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=" "GET" nil)]]
@@ -222,8 +234,60 @@
                      (is (= [200 200 200 200 200] (mapv #(.-status %) responses)) (pr-str bodies))
                      (is (= "Inbox" (get-in bodies [0 :blocks 0 :title])))
                      (is (= "Review roadmap" (get-in bodies [1 :blocks 0 :title])))
+                     (is (= "Child block" (get-in bodies [1 :blocks 0 :children 0 :title])))
+                     (is (string? (get-in bodies [1 :next-cursor])))
                      (doseq [index [2 3 4]]
                        (is (= (str block-id) (get-in bodies [index :results 0 :uuid])))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-move-blocks-moves-all-addressed-blocks-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   block-ids [(random-uuid) (random-uuid)]
+                   target-id (random-uuid)
+                   _ (d/transact! conn
+                                  (into [{:db/ident :logseq.class/Page}
+                                         {:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id
+                                            :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)})
+                                         (conj block-ids target-id))))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   calls (atom [])
+                   valid-request (semantic-json-request "/semantic/block-moves?graph-id=graph-1" "POST"
+                                                        {:block-ids (mapv str block-ids)
+                                                         :target-id (str target-id)
+                                                         :position "last-child"})
+                   missing-request (semantic-json-request "/semantic/block-moves?graph-id=graph-1" "POST"
+                                                          {:block-ids [(str (random-uuid))]
+                                                           :target-id (str target-id)
+                                                           :position "last-child"})]
+               (-> (p/with-redefs [outliner-core/move-blocks! (fn [_ blocks target opts]
+                                                                (swap! calls conj [blocks target opts]))
+                                   ws/broadcast! (fn [& _] nil)]
+                     (p/let [valid-response (sync-handler/handle-http self valid-request)
+                              valid-body (json-body valid-response)
+                              missing-response (sync-handler/handle-http self missing-request)]
+                       (is (= 200 (.-status valid-response)))
+                       (is (= (mapv str block-ids) (:uuids valid-body)))
+                       (is (= 400 (.-status missing-response)))
+                       (is (= 1 (count @calls)))
+                       (let [[blocks target opts] (first @calls)]
+                         (is (= block-ids (mapv :block/uuid blocks)))
+                         (is (= target-id (:block/uuid target)))
+                         (is (= {:sibling? false :bottom? true} opts)))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

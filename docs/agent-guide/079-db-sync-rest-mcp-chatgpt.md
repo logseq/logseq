@@ -40,7 +40,7 @@ The Worker will add these initial endpoints:
 - `GET /api/v1/graphs/:graph-id/blocks/:block-id`
 - `PATCH /api/v1/graphs/:graph-id/blocks/:block-id`
 - `DELETE /api/v1/graphs/:graph-id/blocks/:block-id`
-- `POST /api/v1/graphs/:graph-id/blocks/:block-id/move`
+- `POST /api/v1/graphs/:graph-id/block-moves`
 - `POST /api/v1/graphs/:graph-id/blocks/:block-id/children` with `position: "append"|"prepend"`
 - `POST /api/v1/graphs/:graph-id/block-trees`
 - `PUT /api/v1/graphs/:graph-id/blocks/:block-id/properties/:property-id`
@@ -69,7 +69,7 @@ Every collection endpoint and cross-resource search uses cursor pagination. Requ
 
 `GET /api/v1/graphs` resolves the authenticated user's available non-E2EE graphs before graph-scoped operations. It supports `name` for an exact case-insensitive graph-name match and the same `limit`/`cursor` contract. The implementation reads bounded metadata rows from D1; it does not open graph databases or load graph entities.
 
-Pages, tags, and properties provide full create, read, update, and delete operations. Their collection `GET` operations are paginated; item `GET` operations are bounded to one entity. `GET /pages/:page-id/blocks` paginates top-level blocks in outliner order, and each selected top-level block includes its descendant tree. `GET /blocks/:block-id` returns only the addressed block, so a page lookup cannot accidentally return an unbounded tree. Page and tag deletion use `logseq.outliner.page/delete!`; page deletion is kept separate from block deletion so the page-specific cleanup path remains explicit. Property updates and deletion use the corresponding `deps/outliner` property operations rather than raw datoms.
+Pages, tags, and properties provide full create, read, update, and delete operations. Their collection `GET` operations are paginated; item `GET` operations are bounded to one entity. `GET /pages/:page-id/blocks` paginates top-level blocks in outliner order, and each selected top-level block includes its complete descendant tree. The `limit` and cursor apply to top-level roots, so pagination never splits a returned parent from its descendants. `GET /blocks/:block-id` returns only the addressed block, so a page lookup cannot accidentally return an unbounded tree. Page and tag deletion use `logseq.outliner.page/delete!`; page deletion is kept separate from block deletion so the page-specific cleanup path remains explicit. Property updates and deletion use the corresponding `deps/outliner` property operations rather than raw datoms.
 
 ### 2. Use `deps/outliner` for semantic mutations
 
@@ -79,7 +79,7 @@ Blocks are the base semantic resource. A page is a block entity with page identi
 
 `POST /blocks/:block-id/children` inserts one or more block trees as the first or last children of the target. `POST /block-trees` inserts a recursive tree relative to an explicit target block and position. Both recursively flatten the request only to coordinate `deps/outliner` calls; they do not construct raw mutation datoms.
 
-`POST /blocks/:block-id/move` accepts a target block UUID and one of `before`, `after`, `first-child`, or `last-child`. It maps to `logseq.outliner.core/move-blocks!`.
+`POST /block-moves` accepts one or more unique source block UUIDs, a target block UUID, and one of `before`, `after`, `first-child`, or `last-child`. It validates every source before mutation and delegates the complete source collection to `logseq.outliner.core/move-blocks!`, which preserves Logseq's outliner ordering rules.
 
 `POST /capture` appends a supplied block tree to the end of today's journal page. It derives the journal title through Logseq date utilities, creates the journal page through `logseq.outliner.page/create!` when absent, and inserts through `deps/outliner`. It does not require a client to discover or create today's page first.
 

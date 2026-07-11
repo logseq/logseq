@@ -143,7 +143,7 @@
 
 (defn- page-blocks [db page]
   (let [blocks (ldb/get-page-blocks db (:db/id page)
-                                    :pull-keys [:block/uuid :block/title :block/order
+                                    :pull-keys [:db/id :block/uuid :block/title :block/order
                                                 {:block/parent [:db/id :block/uuid]}
                                                 {:block/page [:db/id :block/uuid]}])]
     (mapv block-response (otree/non-consecutive-blocks->vec-tree blocks))))
@@ -337,20 +337,24 @@
 
     :semantic/blocks-move
     (p/let [body (body-clj request)
-            block (find-entity db (:block-id path-params))
+            block-ids (:block-ids body)
+            blocks (mapv #(find-entity db %) block-ids)
             target (find-entity db (:target-id body))]
-      (if (or (nil? block) (nil? target)
+      (if (or (not (seq block-ids))
+              (some nil? blocks) (nil? target)
+              (not= (count blocks) (count (distinct (map :db/id blocks))))
+              (some #(= (:db/id target) (:db/id %)) blocks)
               (not (contains? #{"before" "after" "first-child" "last-child"} (:position body))))
-        (http/bad-request "invalid block, target, or position")
+        (http/bad-request "invalid blocks, target, or position")
         (let [position (:position body)
               opts (case position
                      "before" {:sibling? true :top? true}
                      "after" {:sibling? true :bottom? true}
                      "first-child" {:sibling? false :top? true}
                      "last-child" {:sibling? false :bottom? true})]
-          (outliner-core/move-blocks! conn [block] target opts)
+          (outliner-core/move-blocks! conn blocks target opts)
           (broadcast-change! self)
-          (http/json-response nil {:uuid (str (:block/uuid block)) :moved true}))))
+          (http/json-response nil {:uuids (mapv #(str (:block/uuid %)) blocks) :moved true}))))
 
     :semantic/blocks-insert-children
     (p/let [body (body-clj request)

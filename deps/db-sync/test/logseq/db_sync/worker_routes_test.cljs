@@ -52,3 +52,10 @@
   (is (nil? (semantic-routes/match-internal "GET" "/api/v1/graphs")))
   (is (= :semantic/pages-list
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages")))))
+
+(deftest semantic-move-blocks-route-test
+  (is (= :semantic/blocks-move
+         (:handler (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/block-moves"))))
+  (is (= :semantic/blocks-move
+         (:handler (semantic-routes/match-internal "POST" "/semantic/block-moves"))))
+  (is (nil? (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/blocks/block-1/move"))))

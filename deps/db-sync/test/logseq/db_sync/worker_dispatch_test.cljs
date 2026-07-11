@@ -97,6 +97,19 @@
                (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-delete")
                                     :post :security 0 :oauth])))
+               (is (= ["block-ids" "target-id" "position"]
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-moves")
+                                    :post :requestBody :content :application/json :schema :required])))
+               (is (= "array"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-moves")
+                                    :post :requestBody :content :application/json :schema
+                                    :properties :block-ids :type])))
+               (is (= "#/components/schemas/BlockResponse"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages/{page-id}/blocks")
+                                    :get :responses :200 :content :application/json :schema
+                                    :properties :blocks :items :$ref])))
+               (is (= "#/components/schemas/BlockResponse"
+                      (get-in body [:components :schemas :BlockResponse :properties :children :items :$ref])))
                (doseq [[path method] [["/api/v1/graphs/{graph-id}/properties" :post]
                                       ["/api/v1/graphs/{graph-id}/properties/{property-id}" :patch]
                                       ["/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}" :put]
