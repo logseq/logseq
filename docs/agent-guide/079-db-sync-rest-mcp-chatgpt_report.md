@@ -84,4 +84,4 @@ ChatGPT resolves user-facing graph names through the paginated `GET /api/v1/grap
 
 The staging developer app uses `plugin_asdk_app_6a523b64b8d481919e4d3ee457ab54b7`, backed by a dedicated Cognito client with callback URL `https://chatgpt.com/connector/oauth/XmPLN1TTetYY`. Cognito exposes the resource-server scopes as `logseq/read` and `logseq/write`; the Worker accepts this client audience only in staging while retaining the existing Logseq client.
 
-The local installable plugin references that real app ID and validates successfully. End-to-end verification remains open until a user completes the Cognito login and ChatGPT successfully invokes both tools against a non-E2EE staging graph.
+The local installable plugin references that real app ID and validates successfully. End-to-end verification completed against the non-E2EE `test-mcp` staging graph: Cognito linking succeeded, ChatGPT discovered both tools, created the `ChatGPT` page, wrote a weather block to it, resolved `test-mcp` by name without reusing its UUID, and listed the first five pages.
