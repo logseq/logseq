@@ -339,6 +339,92 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-list-routes-filter-by-created-and-updated-time-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   old-page-id (random-uuid)
+                   new-page-id (random-uuid)
+                   target-tag-id (random-uuid)
+                   old-tag-id (random-uuid)
+                   new-tag-id (random-uuid)
+                   old-property-id (random-uuid)
+                   new-property-id (random-uuid)
+                   old-object-id (random-uuid)
+                   new-object-id (random-uuid)
+                   old-task-id (random-uuid)
+                   new-task-id (random-uuid)
+                   _ (d/transact!
+                      conn
+                      [{:block/uuid old-page-id :block/name "old timed page" :block/title "Old timed page"
+                        :block/tags :logseq.class/Page :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-page-id :block/name "new timed page" :block/title "New timed page"
+                        :block/tags :logseq.class/Page :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.class/TimeTarget :block/uuid target-tag-id
+                        :block/name "time target" :block/title "Time target"
+                        :block/tags :logseq.class/Tag :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.class/OldTimed :block/uuid old-tag-id
+                        :block/name "old timed tag" :block/title "Old timed tag"
+                        :block/tags :logseq.class/Tag :block/created-at 1000 :block/updated-at 1000}
+                       {:db/ident :user.class/NewTimed :block/uuid new-tag-id
+                        :block/name "new timed tag" :block/title "New timed tag"
+                        :block/tags :logseq.class/Tag :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.property/old-timed :block/uuid old-property-id
+                        :block/name "old timed property" :block/title "Old timed property"
+                        :block/tags :logseq.class/Property :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one :block/created-at 1000 :block/updated-at 1000}
+                       {:db/ident :user.property/new-timed :block/uuid new-property-id
+                        :block/name "new timed property" :block/title "New timed property"
+                        :block/tags :logseq.class/Property :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one :block/created-at 3000 :block/updated-at 3000}
+                       {:block/uuid old-object-id :block/title "Old timed object"
+                        :block/page [:block/uuid old-page-id] :block/parent [:block/uuid old-page-id]
+                        :block/order "a0" :block/tags :user.class/TimeTarget
+                        :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-object-id :block/title "New timed object"
+                        :block/page [:block/uuid new-page-id] :block/parent [:block/uuid new-page-id]
+                        :block/order "a0" :block/tags :user.class/TimeTarget
+                        :block/created-at 3000 :block/updated-at 3000}
+                       {:block/uuid old-task-id :block/title "Old timed task"
+                        :block/page [:block/uuid old-page-id] :block/parent [:block/uuid old-page-id]
+                        :block/order "a1" :block/tags :logseq.class/Task
+                        :logseq.property/status :logseq.property/status.todo
+                        :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-task-id :block/title "New timed task"
+                        :block/page [:block/uuid new-page-id] :block/parent [:block/uuid new-page-id]
+                        :block/order "a1" :block/tags :logseq.class/Task
+                        :logseq.property/status :logseq.property/status.todo
+                        :block/created-at 3000 :block/updated-at 3000}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   paths [(str "/semantic/pages?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/tasks?graph-id=graph-1&updated-after=2000")
+                          (str "/semantic/tags?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/tags/" target-tag-id "/objects?graph-id=graph-1&updated-after=2000")
+                          (str "/semantic/properties?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/search?graph-id=graph-1&q=timed&types=blocks&updated-after=2000")]
+                   keys [:blocks :tasks :tags :objects :properties :results]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http
+                                                   self (semantic-json-request % "GET" nil)) paths))
+                            bodies (p/all (map json-body responses))
+                            invalid-response (sync-handler/handle-http
+                                              self (semantic-json-request
+                                                    "/semantic/pages?graph-id=graph-1&created-after=week"
+                                                    "GET" nil))]
+                     (is (= [200 200 200 200 200 200] (mapv #(.-status %) responses)))
+                     (doseq [[body response-key] (map vector bodies keys)]
+                       (let [titles (set (map :title (get body response-key)))]
+                         (is (some #(string/starts-with? % "New timed") titles)
+                             (str response-key " " titles))
+                         (is (not-any? #(string/starts-with? % "Old timed") titles)
+                             (str response-key " " titles))))
+                     (is (= 400 (.-status invalid-response))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-collection-route-rejects-invalid-cursor-test
   (async done
          (with-memory-sql-async

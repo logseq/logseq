@@ -147,6 +147,14 @@
   [{:name "limit" :in "query" :schema {:type "integer" :minimum 1 :maximum 200 :default 50}}
    {:name "cursor" :in "query" :schema {:type "string"}}])
 
+(def ^:private time-filter-parameters
+  [{:name "created-after" :in "query"
+    :description "Return entities created strictly after this Unix epoch timestamp in milliseconds."
+    :schema {:type "integer" :minimum 0}}
+   {:name "updated-after" :in "query"
+    :description "Return entities updated strictly after this Unix epoch timestamp in milliseconds."
+    :schema {:type "integer" :minimum 0}}])
+
 (defn- request-schema [operation-id]
   (case operation-id
     "createPage" {:required ["title"] :properties {:title {:type "string"}}}
@@ -204,6 +212,9 @@
     (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
                  "listTagObjects" "listProperties" "searchGraph"} operation-id)
     (into pagination-parameters)
+    (contains? #{"listPages" "listTasks" "listTags" "listTagObjects" "listProperties" "searchGraph"}
+               operation-id)
+    (into time-filter-parameters)
     (= "listGraphs" operation-id)
     (into [{:name "name" :in "query" :schema {:type "string"}
             :description "Exact graph name, matched case-insensitively."}])

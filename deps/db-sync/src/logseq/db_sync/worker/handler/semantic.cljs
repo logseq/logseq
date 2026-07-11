@@ -126,7 +126,9 @@
       (catch :default _ nil))))
 
 (defn- sort-key [item]
-  [(or (:order item) (string/lower-case (or (:title item) ""))) (or (:uuid item) "")])
+  [(or (:order item) (:block/order item)
+       (string/lower-case (or (:title item) (:block/title item) "")))
+   (str (or (:uuid item) (:block/uuid item) ""))])
 
 (defn- paginate [items limit cursor]
   (let [sorted (sort-by sort-key items)
@@ -143,14 +145,41 @@
      :raw-cursor raw-cursor
      :cursor (decode-cursor raw-cursor)}))
 
-(defn- paginated-response [url response-key items]
-  (let [{:keys [limit raw-cursor cursor]} (pagination-options url)]
-    (cond
-      (nil? limit) (http/bad-request "invalid limit")
-      (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
-      :else (let [{:keys [items next-cursor]} (paginate items limit cursor)]
-              (http/json-response nil (cond-> {response-key items}
-                                        next-cursor (assoc :next-cursor next-cursor)))))))
+(defn- parse-timestamp [raw]
+  (cond
+    (nil? raw) nil
+    (not (re-matches #"\d+" raw)) ::invalid
+    :else (js/parseInt raw 10)))
+
+(defn- time-filter-options [url]
+  (let [created-after (parse-timestamp (.get (.-searchParams url) "created-after"))
+        updated-after (parse-timestamp (.get (.-searchParams url) "updated-after"))]
+    {:created-after created-after
+     :updated-after updated-after
+     :invalid? (or (= ::invalid created-after) (= ::invalid updated-after))}))
+
+(defn- after-time-filters? [entity {:keys [created-after updated-after]}]
+  (and (or (nil? created-after)
+           (and (number? (:block/created-at entity))
+                (> (:block/created-at entity) created-after)))
+       (or (nil? updated-after)
+           (and (number? (:block/updated-at entity))
+                (> (:block/updated-at entity) updated-after)))))
+
+(defn- paginated-response
+  ([url response-key items]
+   (paginated-response url response-key items identity))
+  ([url response-key items response-fn]
+   (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
+         time-filters (time-filter-options url)]
+     (cond
+       (nil? limit) (http/bad-request "invalid limit")
+       (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
+       (:invalid? time-filters) (http/bad-request "invalid time filter")
+       :else (let [items (filter #(after-time-filters? % time-filters) items)
+                   {:keys [items next-cursor]} (paginate items limit cursor)]
+               (http/json-response nil (cond-> {response-key (mapv response-fn items)}
+                                         next-cursor (assoc :next-cursor next-cursor))))))))
 
 (defn- indexed-reference-response
   ([db url response-key attribute target-id]
@@ -159,15 +188,18 @@
                                               :or {entity-filter (constantly true)
                                                    response-fn block-response}}]
   (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
+        time-filters (time-filter-options url)
         cursor-e (when (= "entity-id" (first cursor))
                    (js/parseInt (second cursor) 10))]
     (cond
       (nil? limit) (http/bad-request "invalid limit")
       (and raw-cursor (or (nil? cursor) (js/isNaN cursor-e))) (http/bad-request "invalid cursor")
+      (:invalid? time-filters) (http/bad-request "invalid time filter")
       :else
       (let [datoms (cond->> (d/datoms db :avet attribute target-id)
                      cursor-e (drop-while #(<= (:e %) cursor-e))
                      true (remove #(entity-util/hidden? (d/entity db (:e %))))
+                     true (filter #(after-time-filters? (d/entity db (:e %)) time-filters))
                      true (filter #(entity-filter (d/entity db (:e %)))))
             selected (vec (take (inc limit) datoms))
             more? (> (count selected) limit)
@@ -204,8 +236,7 @@
 (defn- list-pages [db]
   (->> [:logseq.class/Page :logseq.class/Journal]
        (keep #(d/entid db %))
-       (mapcat #(entities-by-avet db :block/tags %))
-       (mapv block-response)))
+       (mapcat #(entities-by-avet db :block/tags %))))
 
 (defn- page-ref-values [title]
   (when (string? title)
@@ -369,6 +400,16 @@
                      (d/datoms db :eavt choice-id :block/closed-value-property)))
       choice)))
 
+(defn- search-result-response [entity]
+  (let [kind (block-kind entity)
+        type (case kind "tag" "tags" "property" "properties" "asset" "assets" "blocks")
+        response (case kind
+                   "tag" (tag-response entity)
+                   "property" (property-response entity)
+                   "asset" (asset-response entity)
+                   (block-response entity))]
+    (assoc response :resource type)))
+
 (defn- search-results [db query types]
   (let [needle (string/lower-case query)
         enabled (if (seq types) (set (string/split types #",")) #{"blocks" "tags" "properties" "assets"})
@@ -382,23 +423,17 @@
     (->> title-matches
          (map #(d/entity db %))
          (remove entity-util/hidden?)
-         (keep (fn [entity]
-                 (let [kind (block-kind entity)
-                       type (case kind "tag" "tags" "property" "properties" "asset" "assets" "blocks")
-                       response (case kind
-                                  "tag" (tag-response entity)
-                                  "property" (property-response entity)
-                                  "asset" (asset-response entity)
-                                  (block-response entity))]
-                   (when (and (contains? enabled type)
-                              (string/includes? (string/lower-case (or (:title response) "")) needle))
-                     (assoc response :resource type)))))
+         (filter (fn [entity]
+                   (let [kind (block-kind entity)
+                         type (case kind "tag" "tags" "property" "properties" "asset" "assets" "blocks")]
+                     (and (contains? enabled type)
+                          (string/includes? (string/lower-case (or (:block/title entity) "")) needle)))))
          vec)))
 
 (defn- handle-pages [{:keys [^js self request ^js url conn db handler path-params]}]
   (case handler
     :semantic/pages-list
-    (paginated-response url :blocks (list-pages db))
+    (paginated-response url :blocks (list-pages db) block-response)
 
     :semantic/pages-create
     (p/let [body (body-clj request)]
@@ -597,8 +632,7 @@
           (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
 
     :semantic/tags-list
-    (paginated-response url :tags (->> (entities-by-avet db :block/tags :logseq.class/Tag)
-                                       (mapv tag-response)))
+    (paginated-response url :tags (entities-by-avet db :block/tags :logseq.class/Tag) tag-response)
 
     :semantic/tags-create
     (p/let [body (body-clj request)]
@@ -711,8 +745,8 @@
 
     :semantic/properties-list
     (paginated-response url :properties (->> (db-db/get-all-properties db)
-                                              (remove entity-util/hidden?)
-                                              (mapv property-response)))
+                                              (remove entity-util/hidden?))
+                        property-response)
 
     :semantic/properties-create
     (p/let [body (body-clj request)]
@@ -771,7 +805,8 @@
       (if-not (seq query)
         (http/bad-request "missing q")
         (paginated-response url :results
-                            (search-results db query (.get (.-searchParams url) "types")))))))
+                            (search-results db query (.get (.-searchParams url) "types"))
+                            search-result-response)))))
 
 (def ^:private page-handlers
   #{:semantic/pages-list :semantic/pages-create :semantic/pages-blocks :semantic/pages-references :semantic/pages-get

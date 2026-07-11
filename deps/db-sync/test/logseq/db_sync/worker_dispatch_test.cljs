@@ -155,6 +155,18 @@
                (is (string/includes?
                     (get-in body [:components :schemas :PropertyValue :description])
                     "TODO"))
+               (doseq [path ["/api/v1/graphs/{graph-id}/pages"
+                             "/api/v1/graphs/{graph-id}/tasks"
+                             "/api/v1/graphs/{graph-id}/tags"
+                             "/api/v1/graphs/{graph-id}/tags/{tag-id}/objects"
+                             "/api/v1/graphs/{graph-id}/properties"
+                             "/api/v1/graphs/{graph-id}/search"]]
+                 (is (= #{"created-after" "updated-after"}
+                        (->> (get-in body [:paths (keyword path) :get :parameters])
+                             (map :name)
+                             (filter #{"created-after" "updated-after"})
+                             set))
+                     path))
                (doseq [[path method] [["/api/v1/graphs/{graph-id}/properties" :post]
                                       ["/api/v1/graphs/{graph-id}/properties/{property-id}" :patch]
                                       ["/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}" :put]
