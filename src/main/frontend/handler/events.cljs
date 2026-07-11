@@ -485,10 +485,11 @@
 
 ;; db-worker -> UI
 (defevent! :db/sync-changes [[_ data]]
-  (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) (:tx-data data))
-        retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
-        tx-data (concat (:tx-data data) retracted-tx-data)]
-    (pipeline/invoke-hooks (assoc data :tx-data tx-data))
+  (when-let [tx-data (seq (:tx-data data))]
+    (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) tx-data)
+          retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
+          tx-data (concat tx-data retracted-tx-data)]
+      (pipeline/invoke-hooks (assoc data :tx-data tx-data)))
 
     nil))
 

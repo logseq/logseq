@@ -28,9 +28,8 @@
   (<release-access-handles [_ _repo]
     (p/resolved true))
 
-  (<fetch-initial-data [_ repo _opts]
-    (p/resolved {:schema {:repo repo}
-                 :initial-data []}))
+  (<open-and-fetch-schema [_ repo _opts]
+    (p/resolved {:schema {:repo repo}}))
 
   (<export-db [_ _repo _opts]
     (p/resolved nil))
@@ -285,7 +284,7 @@
     (is (= #{1 2 4 8 16 32 64 128}
            (set (filter loggable? (range 1 130)))))))
 
-(deftest electron-fetch-init-data-starts-remote-runtime
+(deftest electron-open-and-fetch-schema-starts-remote-runtime
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
@@ -305,10 +304,8 @@
                             (swap! start-calls conj repo)
                             (->FakeRemote repo wrapped-worker)))
       (set! remote/stop! (fn [_] (p/resolved true)))
-      (-> (p/let [result (persist-db/<fetch-init-data "logseq_db_graph_a" {})]
-            (is (= {:schema {:repo "logseq_db_graph_a"}
-                    :initial-data []}
-                   result))
+      (-> (p/let [result (persist-db/<open-and-fetch-schema "logseq_db_graph_a" {})]
+            (is (= {:schema {:repo "logseq_db_graph_a"}} result))
             (is (= [["db-worker-runtime" "logseq_db_graph_a"]] @ipc-calls))
             (is (= ["logseq_db_graph_a"] @start-calls))
             (is (= wrapped-worker @state/*db-worker)))
@@ -321,7 +318,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest electron-fetch-init-data-reuses-runtime-for-same-repo-and-restarts-for-new-repo
+(deftest electron-open-and-fetch-schema-reuses-runtime-for-same-repo-and-restarts-for-new-repo
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
@@ -608,14 +605,10 @@
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj (:repo client))
                            (p/resolved true)))
-      (-> (p/let [first-result (persist-db/<fetch-init-data "demo" {})
-                  second-result (persist-db/<fetch-init-data "logseq_db_demo" {})]
-            (is (= {:schema {:repo "demo"}
-                    :initial-data []}
-                   first-result))
-            (is (= {:schema {:repo "logseq_db_demo"}
-                    :initial-data []}
-                   second-result))
+      (-> (p/let [first-result (persist-db/<open-and-fetch-schema "demo" {})
+                  second-result (persist-db/<open-and-fetch-schema "logseq_db_demo" {})]
+            (is (= {:schema {:repo "demo"}} first-result))
+            (is (= {:schema {:repo "logseq_db_demo"}} second-result))
             (is (= [["db-worker-runtime" "demo"]] @ipc-calls))
             (is (= ["demo"] @start-calls))
             (is (empty? @stop-calls)))
@@ -628,7 +621,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest electron-fetch-init-data-then-set-current-repo-does-not-rebind-runtime
+(deftest electron-open-and-fetch-schema-then-set-current-repo-does-not-rebind-runtime
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
@@ -655,7 +648,7 @@
       (set! storage/set (fn [& _] nil))
       (set! storage/remove (fn [& _] nil))
       (-> (p/let [repo "logseq_db_graph_a"
-                  _ (persist-db/<fetch-init-data repo {})
+                  _ (persist-db/<open-and-fetch-schema repo {})
                   _ (state/set-current-repo! repo)]
             (is (= [["db-worker-runtime" "logseq_db_graph_a"]
                     ["setCurrentGraph" "logseq_db_graph_a"]]
@@ -843,7 +836,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest browser-fetch-initial-data-pushes-graph-markdown-mirror-setting-test
+(deftest browser-open-and-fetch-schema-pushes-graph-markdown-mirror-setting-test
   (async done
     (let [worker-calls (atom [])
           original-state @state/state
@@ -860,10 +853,9 @@
               (case qkw
                 :thread-api/create-or-open-db (p/resolved nil)
                 :thread-api/markdown-mirror-set-enabled (p/resolved nil)
-                :thread-api/get-initial-data (p/resolved {:schema {:repo (first args)}
-                                                          :initial-data []})
+                :thread-api/get-db-schema (p/resolved {:schema {:repo (first args)}})
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
-      (-> (protocol/<fetch-initial-data (browser/->InBrowser) "logseq_db_graph_a" {})
+      (-> (protocol/<open-and-fetch-schema (browser/->InBrowser) "logseq_db_graph_a" {})
           (p/then (fn [_]
                     (is (= [:thread-api/markdown-mirror-set-enabled
                             ["logseq_db_graph_a" false]]

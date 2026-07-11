@@ -40,11 +40,30 @@
                   db-sync/handle-local-tx! (fn [& _]
                                              (swap! calls conj :persist-local-tx))
                   worker-pipeline/invoke-hooks (fn [_conn tx-report _context]
+                                                 (swap! calls conj :build-ui-refresh)
                                                  {:tx-report tx-report})
                   shared-service/broadcast-to-clients! (fn [event _payload]
                                                          (when (= :sync-db-changes event)
                                                            (swap! calls conj :broadcast-ui-refresh)))]
       (db-listener/listen-db-changes! "repo" conn :handler-keys [:sync-db-to-main-thread :db-sync])
       (d/transact! conn [{:db/id -1 :block/title "b1"}] {:local-tx? true}))
-    (is (= [:persist-local-tx :broadcast-ui-refresh] @calls)
-        "UI refresh broadcasts must wait until the local tx has been persisted.")))
+    (is (= [:persist-local-tx :build-ui-refresh :broadcast-ui-refresh] @calls)
+        "UI refresh work must wait until the local tx has been persisted.")))
+
+(deftest db-listener-broadcasts-lightweight-change-summary-test
+  (let [conn (d/create-conn)
+        payloads (atom [])]
+    (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  worker-pipeline/invoke-hooks (fn [_conn tx-report _context]
+                                                 {:tx-report tx-report})
+                  shared-service/broadcast-to-clients! (fn [event payload]
+                                                         (when (= :sync-db-changes event)
+                                                           (swap! payloads conj payload)))]
+      (db-listener/listen-db-changes! "repo" conn :handler-keys [:sync-db-to-main-thread :db-sync])
+      (d/transact! conn [{:db/id -1 :block/title "hello"}] {:local-tx? true}))
+    (let [payload (first @payloads)]
+      (is (not (contains? payload :tx-data))
+          "UI sync broadcasts should not send tx-report tx-data.")
+      (is (= [1] (:changed-entity-ids payload)))
+      (is (= [1] (:comment-route-candidate-ids payload))))))

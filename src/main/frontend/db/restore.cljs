@@ -11,7 +11,7 @@
   [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          {:keys [schema]} (persist-db/<fetch-init-data repo opts)
+          {:keys [schema]} (persist-db/<open-and-fetch-schema repo opts)
           _ (state/set-current-repo! repo)
           ;; Without valid schema app fails hard downstream
           _ (when (nil? schema)

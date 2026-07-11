@@ -15,11 +15,10 @@
           events (atom [])
           current-repos (atom [])]
       (reset! db-conn/conns {})
-      (p/with-redefs [persist-db/<fetch-init-data
+      (p/with-redefs [persist-db/<open-and-fetch-schema
                       (fn [repo' _opts]
                         (is (= repo repo'))
-                        (p/resolved {:schema db-schema/schema
-                                     :initial-data []}))
+                        (p/resolved {:schema db-schema/schema}))
                       state/pub-event!
                       (fn [event]
                         (swap! events conj event)

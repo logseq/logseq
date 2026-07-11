@@ -2271,13 +2271,10 @@
   [repo]
   (worker-undo-redo/get-debug-state repo))
 
-(def-thread-api :thread-api/get-initial-data
-  [repo opts]
+(def-thread-api :thread-api/get-db-schema
+  [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (if (:file-graph-import? opts)
-      {:schema (:schema @conn)
-       :initial-data (vec (d/datoms @conn :eavt))}
-      (common-initial-data/get-initial-data @conn))))
+    {:schema (:schema @conn)}))
 
 (def-thread-api :thread-api/build-publishing-html
   [repo options]

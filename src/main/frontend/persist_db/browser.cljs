@@ -284,10 +284,10 @@
   (<release-access-handles [_this repo]
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
-  (<fetch-initial-data [_this repo opts]
+  (<open-and-fetch-schema [_this repo opts]
     (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
                 _ (<sync-markdown-mirror-setting! repo)]
-          (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
+          (state/<invoke-db-worker :thread-api/get-db-schema repo))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
