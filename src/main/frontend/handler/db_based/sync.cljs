@@ -152,7 +152,7 @@
 (defn- <ensure-download-runtime-bound!
   [repo]
   (if (util/electron?)
-    (p/let [_ (persist-db/<fetch-init-data repo {:sync-download-graph? true})
+    (p/let [_ (persist-db/<open-and-fetch-schema repo {:sync-download-graph? true})
             _ (<sync-auth-state-to-db-worker!)]
       nil)
     (p/resolved nil)))

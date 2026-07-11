@@ -60,7 +60,7 @@
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
-          :thread-api/get-initial-data :thread-api/build-publishing-html :thread-api/reset-db
+          :thread-api/get-db-schema :thread-api/build-publishing-html :thread-api/reset-db
           :thread-api/get-file-content :thread-api/get-all-properties :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
@@ -1658,30 +1658,15 @@
        (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd"]])
        (is (= "yyyy-MM-dd" (get-date-formatter! test-repo "MMM do, yyyy")))))))
 
-;; ---- get-initial-data tests ----
-
-(deftest get-initial-data-returns-schema-and-datoms-for-file-graph
+(deftest get-db-schema-returns-schema-for-open-graph
   (restoring-worker-state
    (fn []
-     (let [get-initial-data! (get @thread-api/*thread-apis :thread-api/get-initial-data)
+     (let [get-db-schema! (get @thread-api/*thread-apis :thread-api/get-db-schema)
            conn (d/create-conn db-schema/schema)]
        (d/transact! conn [{:block/title "test page"}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [result (get-initial-data! test-repo {:file-graph-import? true})]
-         (is (contains? result :schema))
-         (is (contains? result :initial-data))
-        (is (vector? (:initial-data result))))))))
-
-(deftest get-initial-data-returns-common-data-for-normal-graph
-  (restoring-worker-state
-   (fn []
-     (let [get-initial-data! (get @thread-api/*thread-apis :thread-api/get-initial-data)
-           conn (d/create-conn db-schema/schema)]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [common-initial-data/get-initial-data (fn [_db] {:ok true})]
-         (let [result (get-initial-data! test-repo {})]
-         ;; Should return common-initial-data format
-           (is (= {:ok true} result))))))))
+       (is (= {:schema db-schema/schema}
+              (get-db-schema! test-repo)))))))
 
 ;; ---- q / datoms / pull thread-api tests ----
 
