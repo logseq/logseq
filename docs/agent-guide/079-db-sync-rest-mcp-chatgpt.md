@@ -30,6 +30,7 @@ The initial API supports pages, blocks, tags, properties, assets, capture, and c
 The Worker will add these initial endpoints:
 
 - `GET /openapi.json`
+- `GET /api/v1/graphs`
 - `GET /api/v1/graphs/:graph-id/pages`
 - `POST /api/v1/graphs/:graph-id/pages`
 - `GET /api/v1/graphs/:graph-id/pages/:page-id/blocks`
@@ -65,6 +66,8 @@ The existing sync HTTP and WebSocket protocol remains unchanged.
 One operation registry owns the HTTP method, path template, operation ID, required scope, rate-limit class, and OpenAPI operation. Route matching, authorization, rate-limit selection, and OpenAPI generation derive from that registry so they cannot drift independently.
 
 Every collection endpoint and cross-resource search uses cursor pagination. Requests accept `limit` (default 50, maximum 200) and an opaque `cursor`. Responses contain the resource collection and include `next-cursor` only when another page exists. Ordering uses a deterministic resource-specific key with UUID as the final tie breaker; cursors encode that key rather than an offset, so a stable graph snapshot does not skip or duplicate results. Invalid cursors return `400` and never fall back to the first page.
+
+`GET /api/v1/graphs` resolves the authenticated user's available non-E2EE graphs before graph-scoped operations. It supports `name` for an exact case-insensitive graph-name match and the same `limit`/`cursor` contract. The implementation reads bounded metadata rows from D1; it does not open graph databases or load graph entities.
 
 Pages, tags, and properties provide full create, read, update, and delete operations. Their collection `GET` operations are paginated; item `GET` operations are bounded to one entity. `GET /pages/:page-id/blocks` paginates top-level blocks in outliner order, and each selected top-level block includes its descendant tree. `GET /blocks/:block-id` returns only the addressed block, so a page lookup cannot accidentally return an unbounded tree. Page and tag deletion use `logseq.outliner.page/delete!`; page deletion is kept separate from block deletion so the page-specific cleanup path remains explicit. Property updates and deletion use the corresponding `deps/outliner` property operations rather than raw datoms.
 

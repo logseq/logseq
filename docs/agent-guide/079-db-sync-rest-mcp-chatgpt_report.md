@@ -78,6 +78,8 @@ Use `https://logseq-sync-staging.logseq.workers.dev/mcp` and verify:
 9. An E2EE graph returns `semantic-api-unavailable-for-e2ee`.
 10. Expired or insufficient-scope tokens trigger reauthorization rather than a generic tool failure.
 
+ChatGPT resolves user-facing graph names through the paginated `GET /api/v1/graphs?name=...` operation before calling graph-scoped endpoints. This keeps prompts natural without treating a graph name as its UUID.
+
 ## Plugin packaging gate
 
 The staging developer app uses `plugin_asdk_app_6a523b64b8d481919e4d3ee457ab54b7`, backed by a dedicated Cognito client with callback URL `https://chatgpt.com/connector/oauth/XmPLN1TTetYY`. Cognito exposes the resource-server scopes as `logseq/read` and `logseq/write`; the Worker accepts this client audience only in staging while retaining the existing Logseq client.

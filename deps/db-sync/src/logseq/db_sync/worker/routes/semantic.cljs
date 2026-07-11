@@ -3,7 +3,9 @@
             [reitit.core :as r]))
 
 (def operations
-  [{:method "GET" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
+  [{:method "GET" :path "/api/v1/graphs"
+    :handler :semantic/graphs-list :operation-id "listGraphs" :scope "logseq/read" :rate-class :read}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
     :handler :semantic/pages-list :operation-id "listPages" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
     :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write}
@@ -63,7 +65,8 @@
     :handler :semantic/search :operation-id "searchGraph" :scope "logseq/read" :rate-class :read}])
 
 (def ^:private operation-docs
-  {"listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
+  {"listGraphs" ["List available graphs" "Returns cursor-paginated non-E2EE graphs available to the authenticated user. Use the optional exact name filter to resolve a graph name to its UUID."]
+   "listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
    "createPage" ["Create a page" "Creates a page block with the supplied title."]
    "listPageBlocks" ["List a page's blocks" "Returns a cursor-paginated list of the page's top-level blocks, including each selected block's descendant tree."]
    "getPage" ["Get a page" "Returns one page block by UUID without loading its block tree."]
@@ -168,8 +171,11 @@
 
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
-    (contains? #{"listPages" "listPageBlocks" "listTags" "listProperties" "searchGraph"} operation-id)
+    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listTags" "listProperties" "searchGraph"} operation-id)
     (into pagination-parameters)
+    (= "listGraphs" operation-id)
+    (into [{:name "name" :in "query" :schema {:type "string"}
+            :description "Exact graph name, matched case-insensitively."}])
     (= "searchGraph" operation-id)
     (into [{:name "q" :in "query" :required true :schema {:type "string"}}
            {:name "types" :in "query" :schema {:type "string"}}])))

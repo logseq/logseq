@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker-dispatch-test
   (:require [cljs.test :refer [async deftest is]]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
@@ -78,6 +79,8 @@
                (is (= 200 (.-status response)))
                (is (= "3.1.0" (:openapi body)))
                (is (= ["logseq/read"]
+                      (get-in body [:paths (keyword "/api/v1/graphs") :get :security 0 :oauth])))
+               (is (= ["logseq/read"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/pages") :get :security 0 :oauth])))
                (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}") :patch :security 0 :oauth])))
@@ -101,6 +104,31 @@
              (p/catch (fn [error]
                         (is false (str error))
                         (done))))))
+
+(deftest semantic-api-lists-non-e2ee-graphs-with-pagination-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs?name=test-mcp&limit=1" "logseq/read")
+               calls (atom [])
+               limit-calls (atom [])
+               env #js {"DB" #js {}
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true limit-calls)}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index/<semantic-graphs-list
+                               (fn [_db user-id opts]
+                                 (swap! calls conj [user-id opts])
+                                 (p/resolved {:graphs [{:graph-id "graph-1" :graph-name "test-mcp"}]
+                                              :next-cursor "cursor-1"}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 200 (.-status response)))
+                   (is (= [{:graph-id "graph-1" :graph-name "test-mcp"}] (:graphs body)))
+                   (is (= "cursor-1" (:next-cursor body)))
+                   (is (= [["user-1" {:name "test-mcp" :limit 1 :cursor nil}]] @calls))
+                   (is (= 1 (count @limit-calls)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest semantic-api-rejects-missing-operation-scope-test
   (async done

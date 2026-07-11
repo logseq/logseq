@@ -53,11 +53,42 @@
                      :headers #js {"content-type" "application/json"
                                    "retry-after" "60"}}))
 
+(defn- semantic-limit [^js url]
+  (let [raw (.get (.-searchParams url) "limit")
+        parsed (when raw (js/parseInt raw 10))]
+    (cond
+      (nil? raw) 50
+      (or (js/isNaN parsed) (not (pos? parsed))) nil
+      :else (min parsed 200))))
+
+(defn- handle-semantic-graphs-list [^js env ^js url claims operation]
+  (let [limit (semantic-limit url)
+        cursor (.get (.-searchParams url) "cursor")
+        name (.get (.-searchParams url) "name")]
+    (cond
+      (nil? limit) (http/bad-request "invalid limit")
+      (and cursor (nil? (index/decode-semantic-graph-cursor cursor))) (http/bad-request "invalid cursor")
+      :else
+      (let [^js limiter (aget env "SEMANTIC_READ_RATE_LIMITER")]
+        (if-not limiter
+          (http/error-response "rate limiter unavailable" 503)
+          (p/let [result (.limit limiter #js {:key (str (aget claims "sub") ":"
+                                                       (:operation-id operation))})]
+            (if (false? (aget result "success"))
+              (rate-limit-response)
+              (p/let [result (index/<semantic-graphs-list
+                               (aget env "DB")
+                               (aget claims "sub")
+                               {:name name :limit limit :cursor cursor})]
+                (http/json-response nil result)))))))))
+
 (defn- handle-semantic-request [request ^js env ^js url operation]
   (p/let [claims (auth/auth-claims request env)]
     (cond
       (nil? claims) (http/unauthorized)
       (not (contains? (scopes claims) (:scope operation))) (http/error-response "insufficient scope" 403)
+      (= :semantic/graphs-list (:handler operation))
+      (handle-semantic-graphs-list env url claims operation)
       :else
       (let [graph-id (get-in operation [:path-params :graph-id])]
         (p/let [access (index-handler/graph-access-response request env graph-id)]
