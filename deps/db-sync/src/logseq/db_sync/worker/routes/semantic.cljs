@@ -138,7 +138,9 @@
 
 (defn- path-parameters [path]
   (mapv (fn [[_ parameter]]
-          {:name parameter :in "path" :required true :schema {:type "string"}})
+          (cond-> {:name parameter :in "path" :required true :schema {:type "string"}}
+            (= "property-id" parameter)
+            (assoc :description "Property UUID, qualified ident, or exact title.")))
         (re-seq #":([^/]+)" path)))
 
 (def ^:private pagination-parameters

@@ -553,7 +553,7 @@
              (storage/init-schema! sql)
              (let [conn (sqlite-export/create-conn)
                    page-id (random-uuid)
-                   block-ids (repeatedly 2 random-uuid)
+                   block-ids (repeatedly 3 random-uuid)
                    status-property (d/entity @conn :logseq.property/status)
                    _ (d/transact! conn
                                   (into [{:block/uuid page-id :block/name "page" :block/title "Page"
@@ -577,14 +577,31 @@
                                   "/semantic/block-properties/batch-set?graph-id=graph-1"
                                   "POST" {:entries [{:block-id (str (second block-ids))
                                                      :property-id (str property-id)
-                                                     :value "DONE"}]})]
+                                                     :value "DONE"}]})
+                   priority-request (semantic-json-request
+                                     (str "/semantic/blocks/" (nth block-ids 2)
+                                          "/properties/Priority?graph-id=graph-1")
+                                     "PUT" {:value "urgent"})
+                   invalid-property-request (semantic-json-request
+                                             (str "/semantic/blocks/" (nth block-ids 2)
+                                                  "/properties/Missing%20Property?graph-id=graph-1")
+                                             "PUT" {:value "urgent"})]
                (-> (p/let [single-response (sync-handler/handle-http self single-request)
-                            batch-response (sync-handler/handle-http self batch-request)]
-                     (is (= [200 200] (mapv #(.-status %) [single-response batch-response])))
+                            batch-response (sync-handler/handle-http self batch-request)
+                            priority-response (sync-handler/handle-http self priority-request)
+                            invalid-property-response (sync-handler/handle-http self invalid-property-request)
+                            invalid-property-body (json-body invalid-property-response)]
+                     (is (= [200 200 200]
+                            (mapv #(.-status %) [single-response batch-response priority-response])))
                      (is (= [:logseq.property/status.todo :logseq.property/status.done]
                             (mapv #(-> (d/entity @conn [:block/uuid %])
                                        :logseq.property/status :db/ident)
-                                  block-ids))))
+                                  (take 2 block-ids))))
+                     (is (= :logseq.property/priority.urgent
+                            (-> (d/entity @conn [:block/uuid (nth block-ids 2)])
+                                :logseq.property/priority :db/ident)))
+                     (is (= 400 (.-status invalid-property-response)))
+                     (is (= "property not found" (:error invalid-property-body))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

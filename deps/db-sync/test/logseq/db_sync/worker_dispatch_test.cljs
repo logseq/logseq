@@ -95,6 +95,11 @@
                (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}")
                                     :delete :security 0 :oauth])))
+               (let [description (->> (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}")
+                                                     :put :parameters])
+                                      (filter #(= "property-id" (:name %))) first :description)]
+                 (is (and (string? description)
+                          (string/includes? description "exact title"))))
                (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-delete")
                                     :post :security 0 :oauth])))

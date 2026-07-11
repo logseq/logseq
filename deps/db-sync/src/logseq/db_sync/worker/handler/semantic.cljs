@@ -279,7 +279,13 @@
 (defn- resolve-property-ident [db value]
   (or (when-let [entity (find-entity db value)] (:db/ident entity))
       (when (string? value)
-        (let [ident (keyword value)] (when (d/entity db ident) ident)))))
+        (let [ident (keyword value)]
+          (or (when (d/entity db ident) ident)
+              (some->> (d/datoms db :avet :block/title value)
+                       (map #(d/entity db (:e %)))
+                       (filter property?)
+                       first
+                       :db/ident))))))
 
 (def ^:private task-status-idents
   {"todo" :logseq.property/status.todo
@@ -519,13 +525,15 @@
             block (find-entity db (:block-id path-params))
             property-ident (resolve-property-ident db (:property-id path-params))
             prepared (when property-ident (prepare-property-value db property-ident (:value body)))]
-      (if (or (nil? block) (nil? property-ident) (not (contains? body :value)))
-        (http/bad-request "invalid block, property, or value")
-        (if-let [error (:error prepared)]
-          (http/bad-request error)
-          (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared) true)
-              (broadcast-change! self)
-              (http/json-response nil {:updated true})))))
+      (cond
+        (nil? block) (http/bad-request "block not found")
+        (nil? property-ident) (http/bad-request "property not found")
+        (not (contains? body :value)) (http/bad-request "missing property value")
+        (:error prepared) (http/bad-request (:error prepared))
+        :else
+        (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared) true)
+            (broadcast-change! self)
+            (http/json-response nil {:updated true}))))
 
     :semantic/blocks-delete-property
     (let [block (find-entity db (:block-id path-params))
