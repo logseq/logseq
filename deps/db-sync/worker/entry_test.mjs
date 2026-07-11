@@ -29,3 +29,13 @@ test("ChatGPT tool descriptors declare titles, impact, and per-tool auth", () =>
   ]);
   assert.deepEqual(execute._meta.securitySchemes, execute.securitySchemes);
 });
+
+test("ChatGPT tools require DB graph property semantics", () => {
+  const descriptors = chatGptToolDescriptors();
+
+  for (const tool of descriptors) {
+    assert.match(tool.description, /DB graph/);
+    assert.match(tool.description, /typed properties/);
+    assert.match(tool.description, /key:: value/);
+  }
+});

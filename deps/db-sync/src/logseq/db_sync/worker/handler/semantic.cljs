@@ -3,12 +3,12 @@
             [datascript.core :as d]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.db :as db-db]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.db :as db-db]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
@@ -209,274 +209,314 @@
                      (assoc response :resource type)))))
          vec)))
 
-(defn handle [{:keys [^js self request ^js url route]}]
-  (let [conn (ensure-conn! self)
-        db @conn
-        {:keys [handler path-params]} route]
-    (case handler
-      :semantic/pages-list
-      (paginated-response url :blocks (list-pages db))
+(defn- handle-pages [{:keys [^js self request ^js url conn db handler path-params]}]
+  (case handler
+    :semantic/pages-list
+    (paginated-response url :blocks (list-pages db))
 
-      :semantic/pages-create
-      (p/let [body (body-clj request)]
-        (if-not (seq (:title body))
-          (http/bad-request "missing title")
-          (let [[title page-id] (outliner-page/create! conn (:title body) {})]
-            (broadcast-change! self)
-            (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
-
-      :semantic/pages-blocks
-      (if-let [page (find-entity db (:page-id path-params))]
-        (if-not (page? page)
-          (http/bad-request "block is not a page")
-          (paginated-response url :blocks (page-blocks db page)))
-        (http/not-found))
-
-      :semantic/pages-get
-      (if-let [page (find-entity db (:page-id path-params))]
-        (if (page? page) (http/json-response nil (block-response page)) (http/not-found))
-        (http/not-found))
-
-      :semantic/pages-update
-      (p/let [body (body-clj request)
-              page (find-entity db (:page-id path-params))]
-        (if (or (not (page? page)) (not (seq (:title body))))
-          (http/bad-request "invalid page-id or title")
-          (do
-            (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)})
-            (broadcast-change! self)
-            (http/json-response nil (assoc (block-response page) :title (:title body))))))
-
-      :semantic/pages-delete
-      (if-let [page (find-entity db (:page-id path-params))]
-        (if-not (page? page)
-          (http/bad-request "block is not a page")
-          (do
-            (outliner-page/delete! conn (:block/uuid page))
-            (broadcast-change! self)
-            (js/Response. nil #js {:status 204})))
-        (http/not-found))
-
-      :semantic/blocks-get
-      (if-let [block (find-entity db (:block-id path-params))]
-        (http/json-response nil (block-response block))
-        (http/not-found))
-
-      :semantic/blocks-update
-      (p/let [body (body-clj request)
-              block (find-entity db (:block-id path-params))]
-        (if (or (nil? block) (not (seq (:title body))))
-          (http/bad-request "invalid block-id or title")
-          (do
-            (outliner-core/save-block! conn {:block/uuid (:block/uuid block) :block/title (:title body)})
-            (broadcast-change! self)
-            (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
-
-      :semantic/blocks-delete
-      (if-let [block (find-entity db (:block-id path-params))]
-        (do
-          (if (page? block)
-            (outliner-page/delete! conn (:block/uuid block))
-            (outliner-core/delete-blocks! conn [block] {}))
+    :semantic/pages-create
+    (p/let [body (body-clj request)]
+      (if-not (seq (:title body))
+        (http/bad-request "missing title")
+        (let [[title page-id] (outliner-page/create! conn (:title body) {})]
           (broadcast-change! self)
-          (js/Response. nil #js {:status 204}))
-        (http/not-found))
+          (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
 
-      :semantic/blocks-move
-      (p/let [body (body-clj request)
-              block (find-entity db (:block-id path-params))
-              target (find-entity db (:target-id body))]
-        (if (or (nil? block) (nil? target)
-                (not (contains? #{"before" "after" "first-child" "last-child"} (:position body))))
-          (http/bad-request "invalid block, target, or position")
-          (let [position (:position body)
-                opts (case position
-                       "before" {:sibling? true :top? true}
-                       "after" {:sibling? true :bottom? true}
-                       "first-child" {:sibling? false :top? true}
-                       "last-child" {:sibling? false :bottom? true})]
-            (outliner-core/move-blocks! conn [block] target opts)
-            (broadcast-change! self)
-            (http/json-response nil {:uuid (str (:block/uuid block)) :moved true}))))
+    :semantic/pages-blocks
+    (if-let [page (find-entity db (:page-id path-params))]
+      (if-not (page? page)
+        (http/bad-request "block is not a page")
+        (paginated-response url :blocks (page-blocks db page)))
+      (http/not-found))
 
-      :semantic/blocks-insert-children
-      (p/let [body (body-clj request)
-              target (find-entity db (:block-id path-params))]
-        (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
-                (not (seq (:blocks body))))
-          (http/bad-request "invalid target, position, or blocks")
-          (let [inserted (insert-tree! conn target (:blocks body) (:position body))]
-            (broadcast-change! self)
-            (http/json-response nil {:blocks inserted} 201))))
+    :semantic/pages-get
+    (if-let [page (find-entity db (:page-id path-params))]
+      (if (page? page) (http/json-response nil (block-response page)) (http/not-found))
+      (http/not-found))
 
-      :semantic/blocks-insert-tree
-      (p/let [body (body-clj request)
-              target (find-entity db (:target-id body))]
-        (if (or (nil? target) (not (seq (:blocks body))))
-          (http/bad-request "invalid target or blocks")
-          (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append"))]
-            (broadcast-change! self)
-            (http/json-response nil {:blocks inserted} 201))))
+    :semantic/pages-update
+    (p/let [body (body-clj request)
+            page (find-entity db (:page-id path-params))]
+      (if (or (not (page? page)) (not (seq (:title body))))
+        (http/bad-request "invalid page-id or title")
+        (do
+          (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)})
+          (broadcast-change! self)
+          (http/json-response nil (assoc (block-response page) :title (:title body))))))
 
-      :semantic/blocks-set-property
-      (p/let [body (body-clj request)
-              block (find-entity db (:block-id path-params))
-              property-ident (resolve-property-ident db (:property-id path-params))]
-        (if (or (nil? block) (nil? property-ident) (not (contains? body :value)))
-          (http/bad-request "invalid block, property, or value")
-          (do (outliner-property/set-block-property! conn (:db/id block) property-ident (:value body))
-              (broadcast-change! self)
-              (http/json-response nil {:updated true}))))
-
-      :semantic/blocks-delete-property
-      (let [block (find-entity db (:block-id path-params))
-            property-ident (resolve-property-ident db (:property-id path-params))]
-        (if (or (nil? block) (nil? property-ident))
-          (http/bad-request "invalid block or property")
-          (do
-            (outliner-property/remove-block-property! conn (:db/id block) property-ident)
-            (broadcast-change! self)
-            (js/Response. nil #js {:status 204}))))
-
-      :semantic/blocks-batch-set-property
-      (p/let [body (body-clj request)
-              entries (:entries body)
-              resolved (mapv (fn [{:keys [block-id property-id value]}]
-                               {:block (find-entity db block-id)
-                                :property-ident (resolve-property-ident db property-id) :value value}) entries)]
-        (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
-          (http/bad-request "invalid batch property entry")
-          (do (ldb/batch-transact-with-temp-conn!
-               conn {:outliner-op :batch-set-property}
-               (fn [temp-conn]
-                 (doseq [{:keys [block property-ident value]} resolved]
-                   (outliner-property/set-block-property! temp-conn (:db/id block) property-ident value))))
-              (broadcast-change! self)
-              (http/json-response nil {:updated (count resolved)}))))
-
-      :semantic/blocks-batch-delete-property
-      (p/let [body (body-clj request)
-              entries (:entries body)
-              resolved (mapv (fn [{:keys [block-id property-id]}]
-                               {:block (find-entity db block-id)
-                                :property-ident (resolve-property-ident db property-id)}) entries)]
-        (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
-          (http/bad-request "invalid batch property entry")
-          (do
-            (ldb/batch-transact-with-temp-conn!
-             conn {:outliner-op :batch-remove-property}
-             (fn [temp-conn]
-               (doseq [{:keys [block property-ident]} resolved]
-                 (outliner-property/remove-block-property! temp-conn (:db/id block) property-ident))))
-            (broadcast-change! self)
-            (http/json-response nil {:deleted (count resolved)}))))
-
-      :semantic/capture
-      (p/let [body (body-clj request)]
-        (if-not (seq (:blocks body))
-          (http/bad-request "missing blocks")
-          (let [today (ensure-today-page! conn)
-                inserted (insert-tree! conn today (:blocks body) "append")]
-            (broadcast-change! self)
-            (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
-
-      :semantic/tags-list
-      (paginated-response url :tags (->> (entities-by-avet db :block/tags :logseq.class/Tag)
-                                         (mapv tag-response)))
-
-      :semantic/tags-create
-      (p/let [body (body-clj request)]
-        (if-not (seq (:title body))
-          (http/bad-request "missing title")
-          (let [[title tag-id] (outliner-page/create! conn (:title body) {:class? true})]
-            (broadcast-change! self)
-            (http/json-response nil {:uuid (str tag-id) :title title} 201))))
-
-      :semantic/tags-get
-      (if-let [tag (find-entity db (:tag-id path-params))]
-        (if (tag? tag) (http/json-response nil (tag-response tag)) (http/not-found))
-        (http/not-found))
-
-      :semantic/tags-update
-      (p/let [body (body-clj request)
-              tag (find-entity db (:tag-id path-params))]
-        (if (or (not (tag? tag)) (not (seq (:title body))))
-          (http/bad-request "invalid tag-id or title")
-          (do
-            (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)})
-            (broadcast-change! self)
-            (http/json-response nil (assoc (tag-response tag) :title (:title body))))))
-
-      :semantic/tags-delete
-      (if-let [tag (find-entity db (:tag-id path-params))]
-        (if-not (tag? tag)
-          (http/not-found)
-          (do
-            (outliner-page/delete! conn (:block/uuid tag))
-            (broadcast-change! self)
-            (js/Response. nil #js {:status 204})))
-        (http/not-found))
-
-      :semantic/properties-list
-      (paginated-response url :properties (mapv property-response (db-db/get-all-properties db)))
-
-      :semantic/properties-create
-      (p/let [body (body-clj request)]
-        (if-not (seq (:title body))
-          (http/bad-request "missing title")
-          (let [property (outliner-property/upsert-property!
-                          conn nil
-                          {:logseq.property/type (keyword (or (:type body) "default"))
-                           :db/cardinality (keyword (or (:cardinality body) "db.cardinality/one"))}
-                          {:property-name (:title body)})]
-            (broadcast-change! self)
-            (http/json-response nil (property-response property) 201))))
-
-      :semantic/properties-get
-      (if-let [property (find-entity db (:property-id path-params))]
-        (if (property? property) (http/json-response nil (property-response property)) (http/not-found))
-        (http/not-found))
-
-      :semantic/properties-update
-      (p/let [body (body-clj request)
-              property (find-entity db (:property-id path-params))]
-        (if (or (not (property? property)) (empty? body))
-          (http/bad-request "invalid property-id or update")
-          (let [schema (cond-> {}
-                         (:type body) (assoc :logseq.property/type (keyword (:type body)))
-                         (:cardinality body) (assoc :db/cardinality (keyword (:cardinality body))))
-                updated (outliner-property/upsert-property!
-                         conn (:db/ident property) schema
-                         (cond-> {} (:title body) (assoc :property-name (:title body))))]
-            (broadcast-change! self)
-            (http/json-response nil (property-response updated)))))
-
-      :semantic/properties-delete
-      (if-let [property (find-entity db (:property-id path-params))]
-        (if-not (property? property)
-          (http/not-found)
-          (do
-            (outliner-page/delete! conn (:block/uuid property))
-            (broadcast-change! self)
-            (js/Response. nil #js {:status 204})))
-        (http/not-found))
-
-      :semantic/assets-get
-      (if-let [asset (find-entity db (:asset-block-id path-params))]
-        (if-not (asset? asset)
-          (http/bad-request "block is not an asset")
-          (p/let [link (asset-link/<temporary-url request (.-env self)
-                                                  (.get (.-searchParams url) "graph-id")
-                                                  (:block/uuid asset)
-                                                  (:logseq.property.asset/type asset))]
-            (http/json-response nil (merge (asset-response asset) link))))
-        (http/not-found))
-
-      :semantic/search
-      (let [query (.get (.-searchParams url) "q")]
-        (if-not (seq query)
-          (http/bad-request "missing q")
-          (paginated-response url :results
-                              (search-results db query (.get (.-searchParams url) "types")))))
-
+    :semantic/pages-delete
+    (if-let [page (find-entity db (:page-id path-params))]
+      (if-not (page? page)
+        (http/bad-request "block is not a page")
+        (do
+          (outliner-page/delete! conn (:block/uuid page))
+          (broadcast-change! self)
+          (js/Response. nil #js {:status 204})))
       (http/not-found))))
+
+(defn- handle-blocks [{:keys [^js self request conn db handler path-params]}]
+  (case handler
+
+    :semantic/blocks-get
+    (if-let [block (find-entity db (:block-id path-params))]
+      (http/json-response nil (block-response block))
+      (http/not-found))
+
+    :semantic/blocks-update
+    (p/let [body (body-clj request)
+            block (find-entity db (:block-id path-params))]
+      (if (or (nil? block) (not (seq (:title body))))
+        (http/bad-request "invalid block-id or title")
+        (do
+          (outliner-core/save-block! conn {:block/uuid (:block/uuid block) :block/title (:title body)})
+          (broadcast-change! self)
+          (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
+
+    :semantic/blocks-delete
+    (if-let [block (find-entity db (:block-id path-params))]
+      (do
+        (if (page? block)
+          (outliner-page/delete! conn (:block/uuid block))
+          (outliner-core/delete-blocks! conn [block] {}))
+        (broadcast-change! self)
+        (js/Response. nil #js {:status 204}))
+      (http/not-found))
+
+    :semantic/blocks-move
+    (p/let [body (body-clj request)
+            block (find-entity db (:block-id path-params))
+            target (find-entity db (:target-id body))]
+      (if (or (nil? block) (nil? target)
+              (not (contains? #{"before" "after" "first-child" "last-child"} (:position body))))
+        (http/bad-request "invalid block, target, or position")
+        (let [position (:position body)
+              opts (case position
+                     "before" {:sibling? true :top? true}
+                     "after" {:sibling? true :bottom? true}
+                     "first-child" {:sibling? false :top? true}
+                     "last-child" {:sibling? false :bottom? true})]
+          (outliner-core/move-blocks! conn [block] target opts)
+          (broadcast-change! self)
+          (http/json-response nil {:uuid (str (:block/uuid block)) :moved true}))))
+
+    :semantic/blocks-insert-children
+    (p/let [body (body-clj request)
+            target (find-entity db (:block-id path-params))]
+      (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
+              (not (seq (:blocks body))))
+        (http/bad-request "invalid target, position, or blocks")
+        (let [inserted (insert-tree! conn target (:blocks body) (:position body))]
+          (broadcast-change! self)
+          (http/json-response nil {:blocks inserted} 201))))
+
+    :semantic/blocks-insert-tree
+    (p/let [body (body-clj request)
+            target (find-entity db (:target-id body))]
+      (if (or (nil? target) (not (seq (:blocks body))))
+        (http/bad-request "invalid target or blocks")
+        (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append"))]
+          (broadcast-change! self)
+          (http/json-response nil {:blocks inserted} 201))))))
+
+(defn- handle-block-properties [{:keys [^js self request conn db handler path-params]}]
+  (case handler
+
+    :semantic/blocks-set-property
+    (p/let [body (body-clj request)
+            block (find-entity db (:block-id path-params))
+            property-ident (resolve-property-ident db (:property-id path-params))]
+      (if (or (nil? block) (nil? property-ident) (not (contains? body :value)))
+        (http/bad-request "invalid block, property, or value")
+        (do (outliner-property/set-block-property! conn (:db/id block) property-ident (:value body))
+            (broadcast-change! self)
+            (http/json-response nil {:updated true}))))
+
+    :semantic/blocks-delete-property
+    (let [block (find-entity db (:block-id path-params))
+          property-ident (resolve-property-ident db (:property-id path-params))]
+      (if (or (nil? block) (nil? property-ident))
+        (http/bad-request "invalid block or property")
+        (do
+          (outliner-property/remove-block-property! conn (:db/id block) property-ident)
+          (broadcast-change! self)
+          (js/Response. nil #js {:status 204}))))
+
+    :semantic/blocks-batch-set-property
+    (p/let [body (body-clj request)
+            entries (:entries body)
+            resolved (mapv (fn [{:keys [block-id property-id value]}]
+                             {:block (find-entity db block-id)
+                              :property-ident (resolve-property-ident db property-id) :value value}) entries)]
+      (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
+        (http/bad-request "invalid batch property entry")
+        (do (ldb/batch-transact-with-temp-conn!
+             conn {:outliner-op :batch-set-property}
+             (fn [temp-conn]
+               (doseq [{:keys [block property-ident value]} resolved]
+                 (outliner-property/set-block-property! temp-conn (:db/id block) property-ident value))))
+            (broadcast-change! self)
+            (http/json-response nil {:updated (count resolved)}))))
+
+    :semantic/blocks-batch-delete-property
+    (p/let [body (body-clj request)
+            entries (:entries body)
+            resolved (mapv (fn [{:keys [block-id property-id]}]
+                             {:block (find-entity db block-id)
+                              :property-ident (resolve-property-ident db property-id)}) entries)]
+      (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
+        (http/bad-request "invalid batch property entry")
+        (do
+          (ldb/batch-transact-with-temp-conn!
+           conn {:outliner-op :batch-remove-property}
+           (fn [temp-conn]
+             (doseq [{:keys [block property-ident]} resolved]
+               (outliner-property/remove-block-property! temp-conn (:db/id block) property-ident))))
+          (broadcast-change! self)
+          (http/json-response nil {:deleted (count resolved)}))))))
+
+(defn- handle-capture-and-tags [{:keys [^js self request ^js url conn db handler path-params]}]
+  (case handler
+
+    :semantic/capture
+    (p/let [body (body-clj request)]
+      (if-not (seq (:blocks body))
+        (http/bad-request "missing blocks")
+        (let [today (ensure-today-page! conn)
+              inserted (insert-tree! conn today (:blocks body) "append")]
+          (broadcast-change! self)
+          (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
+
+    :semantic/tags-list
+    (paginated-response url :tags (->> (entities-by-avet db :block/tags :logseq.class/Tag)
+                                       (mapv tag-response)))
+
+    :semantic/tags-create
+    (p/let [body (body-clj request)]
+      (if-not (seq (:title body))
+        (http/bad-request "missing title")
+        (let [[title tag-id] (outliner-page/create! conn (:title body) {:class? true})]
+          (broadcast-change! self)
+          (http/json-response nil {:uuid (str tag-id) :title title} 201))))
+
+    :semantic/tags-get
+    (if-let [tag (find-entity db (:tag-id path-params))]
+      (if (tag? tag) (http/json-response nil (tag-response tag)) (http/not-found))
+      (http/not-found))
+
+    :semantic/tags-update
+    (p/let [body (body-clj request)
+            tag (find-entity db (:tag-id path-params))]
+      (if (or (not (tag? tag)) (not (seq (:title body))))
+        (http/bad-request "invalid tag-id or title")
+        (do
+          (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)})
+          (broadcast-change! self)
+          (http/json-response nil (assoc (tag-response tag) :title (:title body))))))
+
+    :semantic/tags-delete
+    (if-let [tag (find-entity db (:tag-id path-params))]
+      (if-not (tag? tag)
+        (http/not-found)
+        (do
+          (outliner-page/delete! conn (:block/uuid tag))
+          (broadcast-change! self)
+          (js/Response. nil #js {:status 204})))
+      (http/not-found))))
+
+(defn- handle-properties-assets-and-search
+  [{:keys [^js self request ^js url conn db handler path-params]}]
+  (case handler
+
+    :semantic/properties-list
+    (paginated-response url :properties (mapv property-response (db-db/get-all-properties db)))
+
+    :semantic/properties-create
+    (p/let [body (body-clj request)]
+      (if-not (seq (:title body))
+        (http/bad-request "missing title")
+        (let [property (outliner-property/upsert-property!
+                        conn nil
+                        {:logseq.property/type (keyword (or (:type body) "default"))
+                         :db/cardinality (keyword (or (:cardinality body) "db.cardinality/one"))}
+                        {:property-name (:title body)})]
+          (broadcast-change! self)
+          (http/json-response nil (property-response property) 201))))
+
+    :semantic/properties-get
+    (if-let [property (find-entity db (:property-id path-params))]
+      (if (property? property) (http/json-response nil (property-response property)) (http/not-found))
+      (http/not-found))
+
+    :semantic/properties-update
+    (p/let [body (body-clj request)
+            property (find-entity db (:property-id path-params))]
+      (if (or (not (property? property)) (empty? body))
+        (http/bad-request "invalid property-id or update")
+        (let [schema (cond-> {}
+                       (:type body) (assoc :logseq.property/type (keyword (:type body)))
+                       (:cardinality body) (assoc :db/cardinality (keyword (:cardinality body))))
+              updated (outliner-property/upsert-property!
+                       conn (:db/ident property) schema
+                       (cond-> {} (:title body) (assoc :property-name (:title body))))]
+          (broadcast-change! self)
+          (http/json-response nil (property-response updated)))))
+
+    :semantic/properties-delete
+    (if-let [property (find-entity db (:property-id path-params))]
+      (if-not (property? property)
+        (http/not-found)
+        (do
+          (outliner-page/delete! conn (:block/uuid property))
+          (broadcast-change! self)
+          (js/Response. nil #js {:status 204})))
+      (http/not-found))
+
+    :semantic/assets-get
+    (if-let [asset (find-entity db (:asset-block-id path-params))]
+      (if-not (asset? asset)
+        (http/bad-request "block is not an asset")
+        (p/let [link (asset-link/<temporary-url request (.-env self)
+                                                (.get (.-searchParams url) "graph-id")
+                                                (:block/uuid asset)
+                                                (:logseq.property.asset/type asset))]
+          (http/json-response nil (merge (asset-response asset) link))))
+      (http/not-found))
+
+    :semantic/search
+    (let [query (.get (.-searchParams url) "q")]
+      (if-not (seq query)
+        (http/bad-request "missing q")
+        (paginated-response url :results
+                            (search-results db query (.get (.-searchParams url) "types")))))))
+
+(def ^:private page-handlers
+  #{:semantic/pages-list :semantic/pages-create :semantic/pages-blocks :semantic/pages-get
+    :semantic/pages-update :semantic/pages-delete})
+
+(def ^:private block-handlers
+  #{:semantic/blocks-get :semantic/blocks-update :semantic/blocks-delete :semantic/blocks-move
+    :semantic/blocks-insert-children :semantic/blocks-insert-tree})
+
+(def ^:private block-property-handlers
+  #{:semantic/blocks-set-property :semantic/blocks-delete-property
+    :semantic/blocks-batch-set-property :semantic/blocks-batch-delete-property})
+
+(def ^:private capture-and-tag-handlers
+  #{:semantic/capture :semantic/tags-list :semantic/tags-create :semantic/tags-get
+    :semantic/tags-update :semantic/tags-delete})
+
+(def ^:private property-asset-and-search-handlers
+  #{:semantic/properties-list :semantic/properties-create :semantic/properties-get
+    :semantic/properties-update :semantic/properties-delete :semantic/assets-get :semantic/search})
+
+(defn handle [{:keys [^js self route] :as context}]
+  (let [conn (ensure-conn! self)
+        handler (:handler route)
+        context (assoc context :conn conn :db @conn :handler handler :path-params (:path-params route))]
+    (cond
+      (contains? page-handlers handler) (handle-pages context)
+      (contains? block-handlers handler) (handle-blocks context)
+      (contains? block-property-handlers handler) (handle-block-properties context)
+      (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
+      (contains? property-asset-and-search-handlers handler) (handle-properties-assets-and-search context)
+      :else (http/not-found))))

@@ -11,7 +11,7 @@ export function chatGptToolDescriptors() {
     {
       name: "search",
       title: "Discover Logseq operations",
-      description: "Search the Logseq OpenAPI document before making requests. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
+      description: "Search the Logseq DB graph OpenAPI document before making requests. This API uses DB-version typed properties; never use legacy file-graph key:: value syntax. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
       inputSchema: {
         type: "object",
         properties: {
@@ -36,7 +36,7 @@ export function chatGptToolDescriptors() {
     {
       name: "execute",
       title: "Use Logseq",
-      description: "Read or change the user's non-encrypted Logseq graph through the semantic API. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
+      description: "Read or change the user's non-encrypted Logseq DB graph through the semantic API. Use DB-version typed properties and property UUIDs or idents; never write legacy file-graph key:: value syntax into block titles. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
       inputSchema: {
         type: "object",
         properties: {

@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-dispatch-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
@@ -96,6 +97,14 @@
                (is (= ["logseq/write"]
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/block-properties/batch-delete")
                                     :post :security 0 :oauth])))
+               (doseq [[path method] [["/api/v1/graphs/{graph-id}/properties" :post]
+                                      ["/api/v1/graphs/{graph-id}/properties/{property-id}" :patch]
+                                      ["/api/v1/graphs/{graph-id}/blocks/{block-id}/properties/{property-id}" :put]
+                                      ["/api/v1/graphs/{graph-id}/block-properties/batch-set" :post]]]
+                 (let [description (get-in body [:paths (keyword path) method :description])]
+                   (is (string/includes? description "DB graph"))
+                   (is (string/includes? description "typed"))
+                   (is (string/includes? description "key:: value"))))
                (doseq [[_ path-operations] (:paths body)
                        [_ operation] path-operations]
                  (is (seq (:summary operation)))
