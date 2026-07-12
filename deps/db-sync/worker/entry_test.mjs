@@ -64,7 +64,7 @@ test("ChatGPT tool descriptors declare titles, impact, and per-tool auth", () =>
 });
 
 test("ChatGPT tools require DB graph property semantics", () => {
-  const descriptors = chatGptToolDescriptors();
+  const descriptors = chatGptToolDescriptors().filter((tool) => tool.name !== "get_asset_image");
 
   for (const tool of descriptors) {
     assert.match(tool.description, /DB graph/);
@@ -74,7 +74,7 @@ test("ChatGPT tools require DB graph property semantics", () => {
 });
 
 test("ChatGPT tools describe the DB Task workflow", () => {
-  const descriptors = chatGptToolDescriptors();
+  const descriptors = chatGptToolDescriptors().filter((tool) => tool.name !== "get_asset_image");
 
   for (const tool of descriptors) {
     assert.match(tool.description, /\/tasks/);
@@ -84,7 +84,7 @@ test("ChatGPT tools describe the DB Task workflow", () => {
 });
 
 test("ChatGPT tools describe streaming asset uploads", () => {
-  for (const tool of chatGptToolDescriptors()) {
+  for (const tool of chatGptToolDescriptors().filter((descriptor) => descriptor.name !== "get_asset_image")) {
     assert.match(tool.description, /\/assets/);
     assert.match(tool.description, /SHA-256/);
     assert.match(tool.description, /100MB/);
@@ -92,4 +92,17 @@ test("ChatGPT tools describe streaming asset uploads", () => {
     assert.match(tool.description, /decoded/);
     assert.match(tool.description, /recalculates the decoded size/);
   }
+});
+
+test("ChatGPT exposes a read-only image asset tool", () => {
+  const tool = chatGptToolDescriptors().find((descriptor) => descriptor.name === "get_asset_image");
+
+  assert.equal(tool.title, "Display Logseq image asset");
+  assert.deepEqual(tool.annotations, {
+    readOnlyHint: true,
+    openWorldHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+  });
+  assert.deepEqual(tool.securitySchemes, [{ type: "oauth2", scopes: ["logseq/read"] }]);
 });

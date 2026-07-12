@@ -2,7 +2,9 @@ import { DynamicWorkerExecutor } from "@cloudflare/codemode";
 import { openApiMcpServer } from "@cloudflare/codemode/mcp";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import { assertDisplayableImageMetadata, assetImageResult } from "./asset_image.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
@@ -62,6 +64,35 @@ async function handleMcp(request, env, ctx) {
       }
       return result;
     },
+  });
+
+  server.registerTool("get_asset_image", {
+    description: "Return a Logseq image asset as MCP image content for direct display.",
+    inputSchema: {
+      graphId: z.string(),
+      assetBlockId: z.string(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  }, async ({ graphId, assetBlockId }) => {
+    const metadataUrl = new URL(
+      `/api/v1/graphs/${encodeURIComponent(graphId)}/assets/${encodeURIComponent(assetBlockId)}`,
+      request.url,
+    );
+    const metadataResponse = await worker.fetch(new Request(metadataUrl, {
+      headers: authorization ? { authorization } : {},
+    }), env, ctx);
+    const metadata = await metadataResponse.json();
+    if (!metadataResponse.ok) {
+      throw new Error(`Logseq API request failed: ${metadataResponse.status} ${JSON.stringify(metadata)}`);
+    }
+    assertDisplayableImageMetadata(metadata);
+    const imageResponse = await worker.fetch(new Request(metadata.url), env, ctx);
+    return assetImageResult(imageResponse, metadata);
   });
 
   const transport = new WebStandardStreamableHTTPServerTransport();

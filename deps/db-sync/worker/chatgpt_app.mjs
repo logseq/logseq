@@ -7,6 +7,7 @@ function oauthSecurity(scopes) {
 export function chatGptToolDescriptors() {
   const searchSecurity = oauthSecurity(writeScopes);
   const executeSecurity = oauthSecurity(writeScopes);
+  const imageSecurity = oauthSecurity(["logseq/read"]);
   return [
     {
       name: "search",
@@ -55,6 +56,32 @@ export function chatGptToolDescriptors() {
         securitySchemes: executeSecurity,
         "openai/toolInvocation/invoking": "Updating Logseq…",
         "openai/toolInvocation/invoked": "Logseq request complete",
+      },
+    },
+    {
+      name: "get_asset_image",
+      title: "Display Logseq image asset",
+      description: "Fetch an image asset up to 10MB from a non-encrypted Logseq DB graph and return it as image content that ChatGPT can display directly. Use this tool instead of getAsset when the user asks to view or display an image. It is read-only and does not download to local storage or modify the graph.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          graphId: { type: "string", description: "Graph UUID" },
+          assetBlockId: { type: "string", description: "Image asset block UUID" },
+        },
+        required: ["graphId", "assetBlockId"],
+        additionalProperties: false,
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+      securitySchemes: imageSecurity,
+      _meta: {
+        securitySchemes: imageSecurity,
+        "openai/toolInvocation/invoking": "Loading Logseq image…",
+        "openai/toolInvocation/invoked": "Logseq image ready",
       },
     },
   ];

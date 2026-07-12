@@ -21,7 +21,7 @@
     "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
     "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
-    "test:chatgpt-app": "node --test worker/entry_test.mjs",
+    "test:chatgpt-app": "node --test worker/entry_test.mjs worker/asset_image_test.mjs",
     "build:api-docs": "export COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 && clojure -M:cljs release db-sync-api-docs && node worker/dist/api-docs-spec.js && redocly build-docs worker/dist/openapi.json --output=worker/dist/api-docs.html --title=\"Logseq Semantic API\" --disableGoogleFont && node worker/scripts/embed_api_docs.mjs",
     "test:api-docs": "pnpm build:api-docs && node --test worker/api_docs_test.mjs worker/api_docs_build_test.mjs",
     "test:large-op-128m": "clojure -M:cljs release db-sync-large-op-memory-test && node --max-old-space-size=128 worker/dist/large-op-memory-test.js",
