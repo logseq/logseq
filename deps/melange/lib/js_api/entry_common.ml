@@ -185,9 +185,6 @@ module Make (M : Db_platform.S with type value = Js.Json.t) = struct
     | M.Env.Runtime_browser -> "browser"
     | Runtime_node -> "node"
 
-  external set_prop : 'object_ -> string -> 'value -> unit = ""
-  [@@mel.set_index]
-
   let set_optional_string object_ key = function
     | Some value -> Js.Dict.set object_ key (Js.Json.string value)
     | None -> ()
@@ -343,16 +340,8 @@ module Make (M : Db_platform.S with type value = Js.Json.t) = struct
     let metadata () = js_vector_metadata index in
     let set_metadata = js_vector_set_metadata index in
     let close () = js_vector_close index in
-    let vector_index =
-      make_vector_index ~query ~upsert ~delete ~truncate ~metadata
-        ~setMetadata:set_metadata ~close ()
-    in
-    set_prop vector_index "upsert!" upsert;
-    set_prop vector_index "delete!" delete;
-    set_prop vector_index "truncate!" truncate;
-    set_prop vector_index "set-metadata!" set_metadata;
-    set_prop vector_index "close!" close;
-    vector_index
+    make_vector_index ~query ~upsert ~delete ~truncate ~metadata
+      ~setMetadata:set_metadata ~close ()
 
   let js_vector_open_index opts =
     M.Vector.open_index
@@ -370,17 +359,10 @@ module Make (M : Db_platform.S with type value = Js.Json.t) = struct
     let root_dir = Js.Nullable.fromOption root_dir in
     let owner_source = owner_source_string owner_source in
     let recreate_lock_fn = Js.Nullable.fromOption recreate_lock_fn in
-    let env =
-      make_env ~publishing:M.Env.publishing
-        ~runtime:(runtime_string M.Env.runtime)
-        ~rootDir:root_dir ~ownerSource:owner_source
-        ~recreateLockFn:recreate_lock_fn ()
-    in
-    set_prop env "publishing?" M.Env.publishing;
-    set_prop env "root-dir" root_dir;
-    set_prop env "owner-source" owner_source;
-    set_prop env "recreate-lock-fn" recreate_lock_fn;
-    env
+    make_env ~publishing:M.Env.publishing
+      ~runtime:(runtime_string M.Env.runtime)
+      ~rootDir:root_dir ~ownerSource:owner_source
+      ~recreateLockFn:recreate_lock_fn ()
 
   let storage =
     let install_opfs_pool = M.Storage.install_opfs_pool in
@@ -406,81 +388,33 @@ module Make (M : Db_platform.S with type value = Js.Json.t) = struct
     let asset_stat = js_asset_stat in
     let asset_delete = Js.Nullable.fromOption M.Storage.asset_delete in
     let transfer = Js.Nullable.fromOption M.Storage.transfer in
-    let storage =
-      make_storage ~installOpfsPool:install_opfs_pool ~listGraphs:list_graphs
-        ~dbExists:db_exists ~resolveDbPath:resolve_db_path
-        ~exportFile:export_file ~importDb:import_db ~removeVfs:remove_vfs
-        ~readText:read_text ~writeText:write_text
-        ~writeTextAtomic:write_text_atomic ~deleteFile:delete_file
-        ~mirrorReadText:mirror_read_text ~assetReadBytes:asset_read_bytes
-        ~assetWriteBytes:asset_write_bytes ~assetStat:asset_stat
-        ~assetDelete:asset_delete ~transfer ()
-    in
-    set_prop storage "install-opfs-pool" install_opfs_pool;
-    set_prop storage "list-graphs" list_graphs;
-    set_prop storage "db-exists?" db_exists;
-    set_prop storage "resolve-db-path" resolve_db_path;
-    set_prop storage "export-file" export_file;
-    set_prop storage "import-db" import_db;
-    set_prop storage "remove-vfs!" remove_vfs;
-    set_prop storage "read-text!" read_text;
-    set_prop storage "write-text!" write_text;
-    set_prop storage "write-text-atomic!" write_text_atomic;
-    set_prop storage "delete-file!" delete_file;
-    set_prop storage "mirror-read-text!" mirror_read_text;
-    set_prop storage "asset-read-bytes!" asset_read_bytes;
-    set_prop storage "asset-write-bytes!" asset_write_bytes;
-    set_prop storage "asset-stat" asset_stat;
-    set_prop storage "asset-delete!" asset_delete;
-    set_prop storage "transfer" transfer;
-    storage
+    make_storage ~installOpfsPool:install_opfs_pool ~listGraphs:list_graphs
+      ~dbExists:db_exists ~resolveDbPath:resolve_db_path ~exportFile:export_file
+      ~importDb:import_db ~removeVfs:remove_vfs ~readText:read_text
+      ~writeText:write_text ~writeTextAtomic:write_text_atomic
+      ~deleteFile:delete_file ~mirrorReadText:mirror_read_text
+      ~assetReadBytes:asset_read_bytes ~assetWriteBytes:asset_write_bytes
+      ~assetStat:asset_stat ~assetDelete:asset_delete ~transfer ()
 
-  let kv =
-    let kv = make_kv ~get:js_kv_get ~set:js_kv_set () in
-    set_prop kv "set!" js_kv_set;
-    kv
-
-  let broadcast =
-    let post_message = M.Broadcast.post_message in
-    let broadcast = make_broadcast ~postMessage:post_message () in
-    set_prop broadcast "post-message!" post_message;
-    broadcast
-
+  let kv = make_kv ~get:js_kv_get ~set:js_kv_set ()
+  let broadcast = make_broadcast ~postMessage:M.Broadcast.post_message ()
   let websocket = make_websocket ~connect:M.Websocket.connect ()
 
   let sqlite =
     let close_db = M.Sqlite.close_db in
     let transaction = M.Sqlite.transaction in
     let backup_db = Js.Nullable.fromOption M.Sqlite.backup_db in
-    let sqlite =
-      make_sqlite ~init:js_sqlite_init ~openDb:js_sqlite_open_db
-        ~closeDb:close_db ~exec:js_sqlite_exec ~transaction ~backupDb:backup_db
-        ()
-    in
-    set_prop sqlite "init!" js_sqlite_init;
-    set_prop sqlite "open-db" js_sqlite_open_db;
-    set_prop sqlite "close-db" close_db;
-    set_prop sqlite "backup-db" backup_db;
-    sqlite
+    make_sqlite ~init:js_sqlite_init ~openDb:js_sqlite_open_db ~closeDb:close_db
+      ~exec:js_sqlite_exec ~transaction ~backupDb:backup_db ()
 
   let crypto =
     let save_secret_text = M.Crypto.save_secret_text in
     let delete_secret_text = M.Crypto.delete_secret_text in
-    let crypto =
-      make_crypto ~saveSecretText:save_secret_text
-        ~readSecretText:js_crypto_read_secret_text
-        ~deleteSecretText:delete_secret_text ()
-    in
-    set_prop crypto "save-secret-text!" save_secret_text;
-    set_prop crypto "read-secret-text" js_crypto_read_secret_text;
-    set_prop crypto "delete-secret-text!" delete_secret_text;
-    crypto
+    make_crypto ~saveSecretText:save_secret_text
+      ~readSecretText:js_crypto_read_secret_text
+      ~deleteSecretText:delete_secret_text ()
 
-  let timers =
-    let set_interval = M.Timers.set_interval in
-    let timers = make_timers ~setInterval:set_interval () in
-    set_prop timers "set-interval!" set_interval;
-    timers
+  let timers = make_timers ~setInterval:M.Timers.set_interval ()
 
   let base_platform_with ~root_dir ~owner_source ~recreate_lock_fn () =
     make_base_platform
@@ -495,18 +429,11 @@ module Make (M : Db_platform.S with type value = Js.Json.t) = struct
     let open_index =
       Option.value open_vector_index_fn ~default:js_vector_open_index
     in
-    let vector = make_vector ~openIndex:open_index () in
-    set_prop vector "open-index" open_index;
-    vector
+    make_vector ~openIndex:open_index ()
 
   let embedding ?(model_id = M.Embedding.model_id)
       ?(dimension = M.Embedding.dimension) () =
-    let embedding =
-      make_embedding ~modelId:model_id ~dimension ~embedTexts:js_embed_texts ()
-    in
-    set_prop embedding "model-id" model_id;
-    set_prop embedding "embed-texts" js_embed_texts;
-    embedding
+    make_embedding ~modelId:model_id ~dimension ~embedTexts:js_embed_texts ()
 
   let platform_with ~root_dir ~owner_source ~recreate_lock_fn ?model_id
       ?dimension ?open_vector_index_fn () =

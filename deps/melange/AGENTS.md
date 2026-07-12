@@ -4,3 +4,4 @@
 - MUST not use magic methods to cast types.
 - Before adding a new external JavaScript function, first check whether a corresponding implementation already exists in `melange.js` or `melange.node`. Avoid adding new externals whenever possible.
 - MUST not disable compiler warnings
+- use rrbvec to replace List

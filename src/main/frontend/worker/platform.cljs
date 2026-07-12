@@ -21,6 +21,13 @@
     (fn [& args]
       (.apply f object (to-array args)))))
 
+(defn- js-method-map
+  [object method-bindings]
+  (reduce-kv (fn [result platform-key js-key]
+               (assoc result platform-key (js-fn object js-key)))
+             {}
+             method-bindings))
+
 (defn- js-array->vec
   [value]
   (when (some? value)
@@ -90,23 +97,23 @@
             (js-vector-results->vec
              ((js-fn index "query") (clj->js embedding) limit page)))
    :upsert! (fn [docs]
-              ((js-fn index "upsert!") (clj->js docs)))
+              ((js-fn index "upsert") (clj->js docs)))
    :delete! (fn [ids]
-              ((js-fn index "delete!") (clj->js ids)))
-   :truncate! (js-fn index "truncate!")
+              ((js-fn index "delete") (clj->js ids)))
+   :truncate! (js-fn index "truncate")
    :metadata (fn []
                (js->clj ((js-fn index "metadata")) :keywordize-keys true))
    :set-metadata! (fn [metadata]
-                    ((js-fn index "set-metadata!") (clj->js metadata)))
-   :close! (js-fn index "close!")})
+                    ((js-fn index "setMetadata") (clj->js metadata)))
+   :close! (js-fn index "close")})
 
 (defn- js-platform-env->map
   [env]
-  {:publishing? (js-value env "publishing?")
+  {:publishing? (js-value env "publishing")
    :runtime (runtime-keyword (js-value env "runtime"))
-   :root-dir (js-value env "root-dir")
-   :owner-source (owner-source-keyword (js-value env "owner-source"))
-   :recreate-lock-fn (js-value env "recreate-lock-fn")})
+   :root-dir (js-value env "rootDir")
+   :owner-source (owner-source-keyword (js-value env "ownerSource"))
+   :recreate-lock-fn (js-value env "recreateLockFn")})
 
 (defn- ensure-pool-aliases
   [pool]
@@ -119,41 +126,41 @@
 (defn- js-platform-storage->map
   [env storage]
   (cond-> {:install-opfs-pool (fn [sqlite pool-name]
-                                (p/then ((js-fn storage "install-opfs-pool")
+                                (p/then ((js-fn storage "installOpfsPool")
                                          sqlite
                                          pool-name)
                                         ensure-pool-aliases))
            :list-graphs (fn []
-                          (promise-js-array->vec ((js-fn storage "list-graphs"))))
-           :db-exists? (js-fn storage "db-exists?")
-           :resolve-db-path (js-fn storage "resolve-db-path")
-           :export-file (js-fn storage "export-file")
-           :import-db (js-fn storage "import-db")
-           :remove-vfs! (js-fn storage "remove-vfs!")
-           :read-text! (js-fn storage "read-text!")
-           :write-text! (js-fn storage "write-text!")
-           :asset-read-bytes! (js-fn storage "asset-read-bytes!")
-           :asset-write-bytes! (js-fn storage "asset-write-bytes!")
+                          (promise-js-array->vec ((js-fn storage "listGraphs"))))
+           :db-exists? (js-fn storage "dbExists")
+           :resolve-db-path (js-fn storage "resolveDbPath")
+           :export-file (js-fn storage "exportFile")
+           :import-db (js-fn storage "importDb")
+           :remove-vfs! (js-fn storage "removeVfs")
+           :read-text! (js-fn storage "readText")
+           :write-text! (js-fn storage "writeText")
+           :asset-read-bytes! (js-fn storage "assetReadBytes")
+           :asset-write-bytes! (js-fn storage "assetWriteBytes")
            :asset-stat (fn [repo file-name]
                          (promise-asset-stat->map
-                          ((js-fn storage "asset-stat") repo file-name)))}
-    (js-value storage "write-text-atomic!")
+                          ((js-fn storage "assetStat") repo file-name)))}
+    (js-value storage "writeTextAtomic")
     (assoc :write-text-atomic! (if (= :browser (:runtime env))
                                  unsupported-browser-mirror-storage!
-                                 (js-fn storage "write-text-atomic!")))
+                                 (js-fn storage "writeTextAtomic")))
 
-    (js-value storage "delete-file!")
+    (js-value storage "deleteFile")
     (assoc :delete-file! (if (= :browser (:runtime env))
                            unsupported-browser-mirror-storage!
-                           (js-fn storage "delete-file!")))
+                           (js-fn storage "deleteFile")))
 
-    (js-value storage "mirror-read-text!")
+    (js-value storage "mirrorReadText")
     (assoc :mirror-read-text! (if (= :browser (:runtime env))
                                 unsupported-browser-mirror-storage!
-                                (js-fn storage "mirror-read-text!")))
+                                (js-fn storage "mirrorReadText")))
 
-    (js-value storage "asset-delete!")
-    (assoc :asset-delete! (js-fn storage "asset-delete!"))
+    (js-value storage "assetDelete")
+    (assoc :asset-delete! (js-fn storage "assetDelete"))
 
     (js-value storage "transfer")
     (assoc :transfer (js-fn storage "transfer"))))
@@ -169,13 +176,13 @@
 
 (defn- js-platform-sqlite->map
   [sqlite]
-  (cond-> {:init! (js-fn sqlite "init!")
+  (cond-> {:init! (js-fn sqlite "init")
            :open-db (fn [opts]
-                      (p/then ((js-fn sqlite "open-db") (clj->js opts))
+                      (p/then ((js-fn sqlite "openDb") (clj->js opts))
                               (fn [db]
                                 (js-sqlite-db-wrapper sqlite db))))
            :close-db (fn [db]
-                       ((js-fn sqlite "close-db") (raw-sqlite-db db)))
+                       ((js-fn sqlite "closeDb") (raw-sqlite-db db)))
            :exec (fn [db sql-or-opts]
                    ((js-fn sqlite "exec")
                     (raw-sqlite-db db)
@@ -187,9 +194,9 @@
                            (raw-sqlite-db db)
                            (fn [tx-db]
                              (f (js-sqlite-db-wrapper sqlite tx-db)))))}
-    (js-value sqlite "backup-db")
+    (js-value sqlite "backupDb")
     (assoc :backup-db (fn [db path]
-                        ((js-fn sqlite "backup-db")
+                        ((js-fn sqlite "backupDb")
                          (raw-sqlite-db db)
                          path)))))
 
@@ -213,57 +220,54 @@
     wrapper))
 
 (defn- js-platform-vector->map
-  [vector]
-  (when (some? vector)
+  [vector-api]
+  (when (some? vector-api)
     {:open-index (fn [opts]
-                   (p/then ((js-fn vector "open-index") (clj->js opts))
+                   (p/then ((js-fn vector-api "openIndex") (clj->js opts))
                            js-vector-index->map))}))
 
 (defn- js-platform-embedding->map
   [embedding]
   (when (some? embedding)
-    {:model-id (js-value embedding "model-id")
+    {:model-id (js-value embedding "modelId")
      :dimension (js-value embedding "dimension")
      :embed-texts (fn [texts]
-                    (p/then ((js-fn embedding "embed-texts") (clj->js texts))
+                    (p/then ((js-fn embedding "embedTexts") (clj->js texts))
                             (fn [embeddings]
                               (mapv js-array->vec (array-seq embeddings)))))}))
 
 (defn js-platform->platform
   [js-platform]
-  (let [env (js-platform-env->map (js-value js-platform "env"))]
+  (let [env-js (js-value js-platform "env")
+        storage-js (js-value js-platform "storage")
+        kv-js (js-value js-platform "kv")
+        broadcast-js (js-value js-platform "broadcast")
+        websocket-js (js-value js-platform "websocket")
+        sqlite-js (js-value js-platform "sqlite")
+        crypto-js (js-value js-platform "crypto")
+        timers-js (js-value js-platform "timers")
+        vector-js (js-value js-platform "vector")
+        embedding-js (js-value js-platform "embedding")
+        env (js-platform-env->map env-js)]
     (cond-> {:env env
-              :storage (js-platform-storage->map
-                        env
-                        (js-value js-platform "storage"))
-              :kv {:get (js-fn (js-value js-platform "kv") "get")
-                   :set! (js-fn (js-value js-platform "kv") "set!")}
-              :broadcast {:post-message!
-                          (js-fn (js-value js-platform "broadcast")
-                                 "post-message!")}
-              :websocket {:connect
-                          (js-fn (js-value js-platform "websocket") "connect")}
-              :sqlite (js-platform-sqlite->map
-                       (js-value js-platform "sqlite"))
-              :crypto {:save-secret-text!
-                       (js-fn (js-value js-platform "crypto")
-                              "save-secret-text!")
-                       :read-secret-text
-                       (js-fn (js-value js-platform "crypto")
-                              "read-secret-text")
-                       :delete-secret-text!
-                       (js-fn (js-value js-platform "crypto")
-                              "delete-secret-text!")}
-              :timers {:set-interval!
-                       (js-fn (js-value js-platform "timers")
-                              "set-interval!")}}
-      (some? (js-value js-platform "vector"))
-      (assoc :vector (js-platform-vector->map (js-value js-platform "vector")))
+              :storage (js-platform-storage->map env storage-js)
+              :kv (js-method-map kv-js {:get "get"
+                                        :set! "set"})
+              :broadcast (js-method-map broadcast-js
+                                        {:post-message! "postMessage"})
+              :websocket (js-method-map websocket-js {:connect "connect"})
+              :sqlite (js-platform-sqlite->map sqlite-js)
+              :crypto (js-method-map crypto-js
+                                     {:save-secret-text! "saveSecretText"
+                                      :read-secret-text "readSecretText"
+                                      :delete-secret-text! "deleteSecretText"})
+              :timers (js-method-map timers-js
+                                     {:set-interval! "setInterval"})}
+      (some? vector-js)
+      (assoc :vector (js-platform-vector->map vector-js))
 
-      (some? (js-value js-platform "embedding"))
-      (assoc :embedding
-             (js-platform-embedding->map
-              (js-value js-platform "embedding"))))))
+      (some? embedding-js)
+      (assoc :embedding (js-platform-embedding->map embedding-js)))))
 
 (def ^:private required-sections
   [:env :storage :kv :broadcast :websocket :crypto :timers :sqlite])

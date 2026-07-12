@@ -30,45 +30,35 @@ function assertFunction(object, key) {
   assert.equal(typeof object[key], "function", `${key} should be a function`);
 }
 
+function assertCamelCaseProperties(object) {
+  for (const key of Object.keys(object)) {
+    assert.doesNotMatch(key, /[-!?]/, `${key} should use camelCase`);
+  }
+}
+
 function assertBrowserPlatformShape(browser) {
   assert.equal(browser.env.runtime, "browser");
-  assert.equal(typeof browser.env["publishing?"], "boolean");
-  assert.equal(browser.env["root-dir"], undefined);
-  assert.equal(typeof browser.env["owner-source"], "string");
+  assert.equal(typeof browser.env.publishing, "boolean");
+  assert.equal(browser.env.rootDir, undefined);
+  assert.equal(typeof browser.env.ownerSource, "string");
 
   for (const key of [
     "installOpfsPool",
-    "install-opfs-pool",
     "listGraphs",
-    "list-graphs",
     "dbExists",
-    "db-exists?",
     "resolveDbPath",
-    "resolve-db-path",
     "exportFile",
-    "export-file",
     "importDb",
-    "import-db",
     "removeVfs",
-    "remove-vfs!",
     "readText",
-    "read-text!",
     "writeText",
-    "write-text!",
     "writeTextAtomic",
-    "write-text-atomic!",
     "deleteFile",
-    "delete-file!",
     "mirrorReadText",
-    "mirror-read-text!",
     "assetReadBytes",
-    "asset-read-bytes!",
     "assetWriteBytes",
-    "asset-write-bytes!",
     "assetStat",
-    "asset-stat",
     "assetDelete",
-    "asset-delete!",
     "transfer",
   ]) {
     assertFunction(browser.storage, key);
@@ -76,34 +66,24 @@ function assertBrowserPlatformShape(browser) {
 
   assertFunction(browser.kv, "get");
   assertFunction(browser.kv, "set");
-  assertFunction(browser.kv, "set!");
   assertFunction(browser.broadcast, "postMessage");
-  assertFunction(browser.broadcast, "post-message!");
   assertFunction(browser.websocket, "connect");
 
   for (const key of [
     "init",
-    "init!",
     "openDb",
-    "open-db",
     "closeDb",
-    "close-db",
     "exec",
     "transaction",
   ]) {
     assertFunction(browser.sqlite, key);
   }
   assert.equal(browser.sqlite.backupDb, undefined);
-  assert.equal(browser.sqlite["backup-db"], undefined);
 
   assertFunction(browser.crypto, "saveSecretText");
-  assertFunction(browser.crypto, "save-secret-text!");
   assertFunction(browser.crypto, "readSecretText");
-  assertFunction(browser.crypto, "read-secret-text");
   assertFunction(browser.crypto, "deleteSecretText");
-  assertFunction(browser.crypto, "delete-secret-text!");
   assertFunction(browser.timers, "setInterval");
-  assertFunction(browser.timers, "set-interval!");
   assert.equal(browser.vector, undefined);
   assert.equal(browser.embedding, undefined);
 }
@@ -145,21 +125,17 @@ async function startEmbeddingServer() {
 
 async function assertNodeSqlite(sqlite, rootDir) {
   assertFunction(sqlite, "init");
-  assertFunction(sqlite, "init!");
   assertFunction(sqlite, "openDb");
-  assertFunction(sqlite, "open-db");
   assertFunction(sqlite, "closeDb");
-  assertFunction(sqlite, "close-db");
   assertFunction(sqlite, "exec");
   assertFunction(sqlite, "transaction");
   assertFunction(sqlite, "backupDb");
-  assertFunction(sqlite, "backup-db");
 
-  assert.equal(await sqlite["init!"](), undefined);
+  assert.equal(await sqlite["init"](), undefined);
 
   const dbPath = path.join(rootDir, "sqlite-test.sqlite");
   const backupPath = path.join(rootDir, "sqlite-test-backup.sqlite");
-  const db = await sqlite["open-db"]({ path: dbPath });
+  const db = await sqlite["openDb"]({ path: dbPath });
 
   try {
     sqlite.exec(
@@ -231,98 +207,84 @@ async function assertNodeSqlite(sqlite, rootDir) {
       [["outer"], ["outer-after"]],
     );
 
-    await sqlite["backup-db"](db, backupPath);
+    await sqlite["backupDb"](db, backupPath);
     assert.equal(fs.existsSync(backupPath), true);
   } finally {
-    sqlite["close-db"](db);
+    sqlite["closeDb"](db);
   }
 }
 
 async function assertNodeStorage(storage, rootDir) {
   assertFunction(storage, "installOpfsPool");
-  assertFunction(storage, "install-opfs-pool");
   assertFunction(storage, "listGraphs");
-  assertFunction(storage, "list-graphs");
   assertFunction(storage, "dbExists");
-  assertFunction(storage, "db-exists?");
   assertFunction(storage, "resolveDbPath");
-  assertFunction(storage, "resolve-db-path");
   assertFunction(storage, "exportFile");
-  assertFunction(storage, "export-file");
   assertFunction(storage, "importDb");
-  assertFunction(storage, "import-db");
   assertFunction(storage, "removeVfs");
-  assertFunction(storage, "remove-vfs!");
   assertFunction(storage, "readText");
-  assertFunction(storage, "read-text!");
   assertFunction(storage, "writeText");
-  assertFunction(storage, "write-text!");
   assertFunction(storage, "writeTextAtomic");
-  assertFunction(storage, "write-text-atomic!");
   assertFunction(storage, "deleteFile");
-  assertFunction(storage, "delete-file!");
   assert.equal(storage.mirrorReadText, undefined);
-  assert.equal(storage["mirror-read-text!"], undefined);
   assertFunction(storage, "assetReadBytes");
-  assertFunction(storage, "asset-read-bytes!");
   assertFunction(storage, "assetWriteBytes");
-  assertFunction(storage, "asset-write-bytes!");
   assertFunction(storage, "assetStat");
-  assertFunction(storage, "asset-stat");
   assertFunction(storage, "assetDelete");
-  assertFunction(storage, "asset-delete!");
   assert.equal(storage.transfer, undefined);
 
-  const pool = await storage["install-opfs-pool"](null, "graph-a");
+  const pool = await storage["installOpfsPool"](null, "graph-a");
   assert.equal(
-    storage["resolve-db-path"]("graph-a", pool, "/db.sqlite"),
+    storage["resolveDbPath"]("graph-a", pool, "/db.sqlite"),
     path.join(rootDir, "graphs", "graph-a", "db.sqlite"),
   );
 
-  await storage["import-db"](pool, "/db.sqlite", "sqlite-bytes");
-  assert.equal(await storage["db-exists?"]("graph-a"), true);
-  assert.deepEqual(await storage["list-graphs"](), ["graph-a"]);
-  assert.equal(await storage["export-file"](pool, "/db.sqlite"), "sqlite-bytes");
+  const dbPayload = new Uint8Array([0, 1, 2, 127, 128, 255]);
+  await storage["importDb"](pool, "/db.sqlite", dbPayload);
+  assert.equal(await storage["dbExists"]("graph-a"), true);
+  assert.deepEqual(await storage["listGraphs"](), ["graph-a"]);
+  const exportedDb = await storage["exportFile"](pool, "/db.sqlite");
+  assert.equal(exportedDb instanceof Uint8Array, true);
+  assert.deepEqual(Array.from(exportedDb), Array.from(dbPayload));
 
   const textPath = path.join(rootDir, "graphs", "notes", "a.txt");
   const atomicTextPath = path.join(rootDir, "graphs", "notes", "b.txt");
-  await storage["write-text!"]("notes/a.txt", "alpha");
+  await storage["writeText"]("notes/a.txt", "alpha");
   assert.equal(fs.readFileSync(textPath, "utf8"), "alpha");
-  assert.equal(await storage["read-text!"]("notes/a.txt"), "alpha");
-  await storage["write-text-atomic!"]("notes/b.txt", "beta");
+  assert.equal(await storage["readText"]("notes/a.txt"), "alpha");
+  await storage["writeTextAtomic"]("notes/b.txt", "beta");
   assert.equal(fs.readFileSync(atomicTextPath, "utf8"), "beta");
   assert.equal(await storage.readText("notes/b.txt"), "beta");
   assert.equal(fs.existsSync(path.join(rootDir, "notes", "a.txt")), false);
-  await storage["delete-file!"]("notes/a.txt");
+  await storage["deleteFile"]("notes/a.txt");
   assert.equal(fs.existsSync(textPath), false);
   let missingRead;
   assert.doesNotThrow(() => {
-    missingRead = storage["read-text!"]("notes/a.txt");
+    missingRead = storage["readText"]("notes/a.txt");
   });
   await assert.rejects(missingRead, /ENOENT/);
 
-  await storage["asset-write-bytes!"]("graph-a", "asset.bin", "asset-bytes");
-  assert.equal(
-    await storage["asset-read-bytes!"]("graph-a", "asset.bin"),
-    "asset-bytes",
-  );
-  assert.deepEqual(await storage["asset-stat"]("graph-a", "asset.bin"), {
-    size: 11,
+  const assetPayload = new Uint8Array([255, 128, 0, 42]);
+  await storage["assetWriteBytes"]("graph-a", "asset.bin", assetPayload);
+  const exportedAsset = await storage["assetReadBytes"]("graph-a", "asset.bin");
+  assert.equal(exportedAsset instanceof Uint8Array, true);
+  assert.deepEqual(Array.from(exportedAsset), Array.from(assetPayload));
+  assert.deepEqual(await storage["assetStat"]("graph-a", "asset.bin"), {
+    size: assetPayload.byteLength,
     isFile: true,
   });
-  await storage["asset-delete!"]("graph-a", "asset.bin");
-  assert.equal(await storage["asset-stat"]("graph-a", "asset.bin"), undefined);
+  await storage["assetDelete"]("graph-a", "asset.bin");
+  assert.equal(await storage["assetStat"]("graph-a", "asset.bin"), undefined);
 
-  await storage["remove-vfs!"](pool);
-  assert.equal(await storage["db-exists?"]("graph-a"), false);
+  await storage["removeVfs"](pool);
+  assert.equal(await storage["dbExists"]("graph-a"), false);
 }
 
 async function assertNodeKv(kv) {
   assertFunction(kv, "get");
   assertFunction(kv, "set");
-  assertFunction(kv, "set!");
 
-  await kv["set!"]("plain-js-kv", { ok: true });
+  await kv["set"]("plain-js-kv", { ok: true });
   assert.deepEqual(await kv.get("plain-js-kv"), { ok: true });
   await kv.set("plain-js-kv", null);
   assert.equal(await kv.get("plain-js-kv"), undefined);
@@ -334,12 +296,12 @@ async function assertNodeKvPreservesBinaryAcrossReload(rootDir) {
   const freshNodePlatform = () => {
     delete require.cache[require.resolve(nodeJsApiModulePath)];
     return require(nodeJsApiModulePath).Platform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
+      "rootDir": rootDir,
+      "ownerSource": "cli",
     });
   };
 
-  await freshNodePlatform().kv["set!"](key, payload);
+  await freshNodePlatform().kv["set"](key, payload);
   const reloaded = await freshNodePlatform().kv.get(key);
 
   assert.equal(reloaded instanceof Uint8Array, true);
@@ -352,15 +314,15 @@ async function assertNodeKvIsScopedByRootDir(rootDir) {
   );
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
+      "rootDir": rootDir,
+      "ownerSource": "cli",
     });
     const otherNode = NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
     });
 
-    await rootNode.kv["set!"]("root-key", "root-value");
+    await rootNode.kv["set"]("root-key", "root-value");
     assert.equal(await otherNode.kv.get("root-key"), undefined);
   } finally {
     fs.rmSync(otherRootDir, { recursive: true, force: true });
@@ -373,15 +335,15 @@ async function assertNodeStorageIsScopedByRootDir(rootDir) {
   );
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
+      "rootDir": rootDir,
+      "ownerSource": "cli",
     });
     NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
     });
 
-    await rootNode.storage["write-text!"]("graph-a/pages/a.md", "root");
+    await rootNode.storage["writeText"]("graph-a/pages/a.md", "root");
 
     assert.equal(
       fs.readFileSync(
@@ -409,17 +371,17 @@ async function assertNodeBroadcastIsScopedByOptions(rootDir) {
   const otherEvents = [];
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
-      "event-fn": (type, payload) => rootEvents.push([type, payload]),
+      "rootDir": rootDir,
+      "ownerSource": "cli",
+      "eventFn": (type, payload) => rootEvents.push([type, payload]),
     });
     NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
-      "event-fn": (type, payload) => otherEvents.push([type, payload]),
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
+      "eventFn": (type, payload) => otherEvents.push([type, payload]),
     });
 
-    rootNode.broadcast["post-message!"]("root-event", { ok: true });
+    rootNode.broadcast["postMessage"]("root-event", { ok: true });
 
     assert.deepEqual(rootEvents, [["root-event", { ok: true }]]);
     assert.deepEqual(otherEvents, []);
@@ -436,15 +398,15 @@ async function assertNodeCryptoIsScopedByRootDir(rootDir) {
   process.env.CLI_E2E_TEST = "1";
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
+      "rootDir": rootDir,
+      "ownerSource": "cli",
     });
     const otherNode = NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
     });
 
-    await rootNode.crypto["save-secret-text!"]("scoped-secret", "root-secret");
+    await rootNode.crypto["saveSecretText"]("scoped-secret", "root-secret");
 
     assert.equal(await rootNode.kv.get("scoped-secret"), "root-secret");
     assert.equal(await otherNode.kv.get("scoped-secret"), undefined);
@@ -466,28 +428,28 @@ async function assertNodeSqliteIsScopedByOptions(rootDir) {
   let otherGuardCalls = 0;
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
-      "write-guard-fn": () => {
+      "rootDir": rootDir,
+      "ownerSource": "cli",
+      "writeGuardFn": () => {
         rootGuardCalls += 1;
       },
     });
     NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
-      "write-guard-fn": () => {
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
+      "writeGuardFn": () => {
         otherGuardCalls += 1;
       },
     });
 
     const dbPath = path.join(rootDir, "sqlite-scope.sqlite");
     const backupPath = path.join(rootDir, "backup", "sqlite-scope.sqlite");
-    const db = await rootNode.sqlite["open-db"]({ path: dbPath });
+    const db = await rootNode.sqlite["openDb"]({ path: dbPath });
     try {
       rootNode.sqlite.exec(db, "create table kvs(addr text primary key, content text)");
-      await rootNode.sqlite["backup-db"](db, backupPath);
+      await rootNode.sqlite["backupDb"](db, backupPath);
     } finally {
-      rootNode.sqlite["close-db"](db);
+      rootNode.sqlite["closeDb"](db);
     }
 
     assert.equal(rootGuardCalls, 1);
@@ -506,19 +468,19 @@ async function assertNodeEmbeddingIsScopedByOptions(rootDir) {
   );
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
-      "embedding-endpoint": rootServer.url,
-      "embedding-model-id": "BAAI/bge-m3",
+      "rootDir": rootDir,
+      "ownerSource": "cli",
+      "embeddingEndpoint": rootServer.url,
+      "embeddingModelId": "BAAI/bge-m3",
     });
     NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
-      "embedding-endpoint": otherServer.url,
-      "embedding-model-id": "Qwen/Qwen3-Embedding-4B",
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
+      "embeddingEndpoint": otherServer.url,
+      "embeddingModelId": "Qwen/Qwen3-Embedding-4B",
     });
 
-    const embeddings = await rootNode.embedding["embed-texts"](["root"]);
+    const embeddings = await rootNode.embedding["embedTexts"](["root"]);
 
     assert.equal(rootServer.requests.length, 1);
     assert.equal(otherServer.requests.length, 0);
@@ -526,7 +488,7 @@ async function assertNodeEmbeddingIsScopedByOptions(rootDir) {
       model: "BAAI/bge-m3",
       input: ["root"],
     });
-    assert.equal(rootNode.embedding["model-id"], "BAAI/bge-m3");
+    assert.equal(rootNode.embedding["modelId"], "BAAI/bge-m3");
     assert.equal(rootNode.embedding.dimension, 1024);
     assert.equal(embeddings[0].length, 1024);
   } finally {
@@ -544,39 +506,39 @@ async function assertNodeVectorIsScopedByOptions(rootDir) {
   let otherOpenCalls = 0;
   try {
     const rootNode = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
-      "open-vector-index-fn": (opts) => {
+      "rootDir": rootDir,
+      "ownerSource": "cli",
+      "openVectorIndexFn": (opts) => {
         rootOpenCalls += 1;
         return Promise.resolve({
           query: () => [{ id: "root-doc", page: opts.path, vectorScore: 1 }],
-          "upsert!": () => {},
-          "delete!": () => {},
-          "truncate!": () => {},
+          "upsert": () => {},
+          "delete": () => {},
+          "truncate": () => {},
           metadata: () => ({ owner: "root" }),
-          "set-metadata!": () => {},
-          "close!": () => {},
+          "setMetadata": () => {},
+          "close": () => {},
         });
       },
     });
     NodePlatform.node_platform({
-      "root-dir": otherRootDir,
-      "owner-source": "cli",
-      "open-vector-index-fn": () => {
+      "rootDir": otherRootDir,
+      "ownerSource": "cli",
+      "openVectorIndexFn": () => {
         otherOpenCalls += 1;
         return Promise.resolve({
           query: () => [{ id: "other-doc", vectorScore: 1 }],
-          "upsert!": () => {},
-          "delete!": () => {},
-          "truncate!": () => {},
+          "upsert": () => {},
+          "delete": () => {},
+          "truncate": () => {},
           metadata: () => ({ owner: "other" }),
-          "set-metadata!": () => {},
-          "close!": () => {},
+          "setMetadata": () => {},
+          "close": () => {},
         });
       },
     });
 
-    const index = await rootNode.vector["open-index"]({
+    const index = await rootNode.vector["openIndex"]({
       path: path.join(rootDir, "root-vector"),
       dimension: 1024,
     });
@@ -598,22 +560,19 @@ async function assertNodeVectorIsScopedByOptions(rootDir) {
 
 async function assertNodeCrypto(crypto) {
   assertFunction(crypto, "saveSecretText");
-  assertFunction(crypto, "save-secret-text!");
   assertFunction(crypto, "readSecretText");
-  assertFunction(crypto, "read-secret-text");
   assertFunction(crypto, "deleteSecretText");
-  assertFunction(crypto, "delete-secret-text!");
 
   const previousCliE2e = process.env.CLI_E2E_TEST;
   process.env.CLI_E2E_TEST = "1";
   try {
-    await crypto["save-secret-text!"]("plain-js-secret", "secret-value");
+    await crypto["saveSecretText"]("plain-js-secret", "secret-value");
     assert.equal(
-      await crypto["read-secret-text"]("plain-js-secret"),
+      await crypto["readSecretText"]("plain-js-secret"),
       "secret-value",
     );
-    await crypto["delete-secret-text!"]("plain-js-secret");
-    assert.equal(await crypto["read-secret-text"]("plain-js-secret"), undefined);
+    await crypto["deleteSecretText"]("plain-js-secret");
+    assert.equal(await crypto["readSecretText"]("plain-js-secret"), undefined);
   } finally {
     if (previousCliE2e === undefined) {
       delete process.env.CLI_E2E_TEST;
@@ -625,12 +584,11 @@ async function assertNodeCrypto(crypto) {
 
 async function assertNodeTimers(timers) {
   assertFunction(timers, "setInterval");
-  assertFunction(timers, "set-interval!");
 
   let ticks = 0;
   let interval;
   await new Promise((resolve) => {
-    interval = timers["set-interval!"](() => {
+    interval = timers["setInterval"](() => {
       ticks += 1;
       if (ticks === 2) {
         clearInterval(interval);
@@ -667,13 +625,12 @@ async function assertNodeWebsocket(websocket) {
 }
 
 async function assertNodeEmbedding(embedding, requests) {
-  assert.equal(embedding["model-id"], "BAAI/bge-m3");
+  assert.equal(embedding["modelId"], "BAAI/bge-m3");
   assert.equal(embedding.modelId, "BAAI/bge-m3");
   assert.equal(embedding.dimension, 1024);
-  assertFunction(embedding, "embed-texts");
   assertFunction(embedding, "embedTexts");
 
-  const embeddings = await embedding["embed-texts"](["first", "second"]);
+  const embeddings = await embedding["embedTexts"](["first", "second"]);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].method, "POST");
   assert.deepEqual(requests[0].payload, {
@@ -711,6 +668,7 @@ test("Platform Js_api can be called from plain JavaScript", async () => {
 
   const browser = BrowserPlatform.browser_platform();
   assertBrowserPlatformShape(browser);
+  Object.values(browser).forEach(assertCamelCaseProperties);
 
   const rootDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "logseq-js-api-js-test-"),
@@ -730,85 +688,86 @@ test("Platform Js_api can be called from plain JavaScript", async () => {
         vectorCalls.push(["query", embedding, limit, page]);
         return [{ id: "doc-1", page, vectorScore: 0.9 }];
       },
-      "upsert!": (docs) => {
-        vectorCalls.push(["upsert!", docs]);
+      "upsert": (docs) => {
+        vectorCalls.push(["upsert", docs]);
       },
-      "delete!": (ids) => {
-        vectorCalls.push(["delete!", ids]);
+      "delete": (ids) => {
+        vectorCalls.push(["delete", ids]);
       },
-      "truncate!": () => {
-        vectorCalls.push(["truncate!"]);
+      "truncate": () => {
+        vectorCalls.push(["truncate"]);
       },
       metadata: () => vectorMetadata,
-      "set-metadata!": (metadata) => {
+      "setMetadata": (metadata) => {
         vectorMetadata = metadata;
-        vectorCalls.push(["set-metadata!", metadata]);
+        vectorCalls.push(["setMetadata", metadata]);
       },
-      "close!": () => {
-        vectorCalls.push(["close!"]);
+      "close": () => {
+        vectorCalls.push(["close"]);
       },
     };
 
     const node = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "cli",
-      "event-fn": () => {
+      "rootDir": rootDir,
+      "ownerSource": "cli",
+      "eventFn": () => {
         eventCalled = true;
       },
-      "write-guard-fn": () => {
+      "writeGuardFn": () => {
         guardCalled = true;
         return Promise.resolve();
       },
-      "recreate-lock-fn": () => {
+      "recreateLockFn": () => {
         lockCalled = true;
       },
-      "embedding-endpoint": embeddingServer.url,
-      "embedding-model-id": "BAAI/bge-m3",
-      "open-vector-index-fn": () => {
+      "embeddingEndpoint": embeddingServer.url,
+      "embeddingModelId": "BAAI/bge-m3",
+      "openVectorIndexFn": () => {
         openCalled = true;
         return Promise.resolve(vectorIndex);
       },
     });
 
     assert.equal(node.env.runtime, "node");
-    assert.equal(node.env["root-dir"], rootDir);
-    assert.equal(node.env["owner-source"], "cli");
+    assert.equal(node.env["rootDir"], rootDir);
+    assert.equal(node.env["ownerSource"], "cli");
+    Object.values(node).forEach(assertCamelCaseProperties);
 
-    node.env["recreate-lock-fn"]();
+    node.env["recreateLockFn"]();
     assert.equal(lockCalled, true);
 
-    node.broadcast["post-message!"]("event", null);
+    node.broadcast["postMessage"]("event", null);
     assert.equal(eventCalled, true);
 
     await assertNodeEmbedding(node.embedding, embeddingServer.requests);
 
-    assertFunction(node.vector, "open-index");
     assertFunction(node.vector, "openIndex");
-    const index = await node.vector["open-index"]({
+    const index = await node.vector["openIndex"]({
       path: path.join(rootDir, "vector"),
       dimension: 1024,
     });
+    assertCamelCaseProperties(index);
     assert.equal(openCalled, true);
     assertFunction(index, "query");
-    assertFunction(index, "upsert!");
-    assertFunction(index, "delete!");
-    assertFunction(index, "truncate!");
+    assertFunction(index, "upsert");
+    assertFunction(index, "delete");
+    assertFunction(index, "truncate");
     assertFunction(index, "metadata");
-    assertFunction(index, "set-metadata!");
-    assertFunction(index, "close!");
+    assertFunction(index, "setMetadata");
+    assertFunction(index, "close");
     assert.deepEqual(index.query([0.1, 0.2], 1, "page-a"), [
       { id: "doc-1", page: "page-a", vectorScore: 0.9 },
     ]);
-    index["upsert!"]([{ id: "doc-1", page: "page-a" }]);
-    index["delete!"](["doc-1"]);
-    index["truncate!"]();
+    index["upsert"]([{ id: "doc-1", page: "page-a" }]);
+    index["delete"](["doc-1"]);
+    index["truncate"]();
     assert.deepEqual(index.metadata(), { ready: true });
-    index["set-metadata!"]({ ready: false });
+    index["setMetadata"]({ ready: false });
     assert.deepEqual(index.metadata(), { ready: false });
-    index["close!"]();
+    index["close"]();
     assert.deepEqual(
       vectorCalls.map((call) => call[0]),
-      ["query", "upsert!", "delete!", "truncate!", "set-metadata!", "close!"],
+      ["query", "upsert", "delete", "truncate", "setMetadata", "close"],
     );
 
     await assertNodeSqlite(node.sqlite, rootDir);
@@ -826,7 +785,7 @@ test("Platform Js_api can be called from plain JavaScript", async () => {
     await assertNodeTimers(node.timers);
     await assertNodeWebsocket(node.websocket);
 
-    await node.storage["write-text!"]("probe.txt", "content");
+    await node.storage["writeText"]("probe.txt", "content");
     assert.equal(guardCalled, true);
   } finally {
     if (embeddingServer !== undefined) {
@@ -845,7 +804,7 @@ test("Browser post-message uses Logseq transit payload semantics", () => {
 
     const browser = BrowserPlatform.browser_platform();
     const payload = { ok: true };
-    browser.broadcast["post-message!"]("event", payload);
+    browser.broadcast["postMessage"]("event", payload);
 
     assert.equal(messages.length, 1);
     assert.equal(messages[0].length, 1);
@@ -871,25 +830,25 @@ test("Node sqlite write guard accepts the synchronous db-worker lock check", asy
 
   try {
     const node = NodePlatform.node_platform({
-      "root-dir": rootDir,
-      "owner-source": "electron",
-      "write-guard-fn": () => {
+      "rootDir": rootDir,
+      "ownerSource": "electron",
+      "writeGuardFn": () => {
         guardCalled = true;
       },
     });
 
     const dbPath = path.join(rootDir, "sqlite-sync-guard.sqlite");
     const backupPath = path.join(rootDir, "backup", "copy.sqlite");
-    const db = await node.sqlite["open-db"]({ path: dbPath });
+    const db = await node.sqlite["openDb"]({ path: dbPath });
     try {
       await node.sqlite.exec(db, "create table kvs(addr text primary key, content text)");
       await node.sqlite.exec(db, {
         sql: "insert into kvs values (?, ?)",
         bind: ["a", "b"],
       });
-      await node.sqlite["backup-db"](db, backupPath);
+      await node.sqlite["backupDb"](db, backupPath);
     } finally {
-      node.sqlite["close-db"](db);
+      node.sqlite["closeDb"](db);
     }
 
     assert.equal(guardCalled, true);

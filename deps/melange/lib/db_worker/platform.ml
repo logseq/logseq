@@ -660,7 +660,7 @@ end
 
 module Node = struct
   type value = Js.Json.t
-  type binary = string
+  type binary = Node.buffer
   type transferables = Js.Json.t
   type sqlite_module
   type storage_pool = { repo_dir : string }
@@ -776,6 +776,12 @@ module Node = struct
 
     external stat_sync : string -> stat = "statSync" [@@mel.module "fs"]
 
+    external read_file_bytes_sync : string -> binary = "readFileSync"
+    [@@mel.module "fs"]
+
+    external write_file_bytes_sync : string -> binary -> unit = "writeFileSync"
+    [@@mel.module "fs"]
+
     external mkdir_sync : string -> mkdir_options -> unit = "mkdirSync"
     [@@mel.module "fs"]
 
@@ -834,14 +840,14 @@ module Node = struct
     let resolve_db_path = Some (fun _repo pool path -> pool_path pool path)
 
     let export_file pool path =
-      Js.Promise.resolve (Node.Fs.readFileSync (pool_path pool path) `latin1)
+      Js.Promise.resolve (Fs.read_file_bytes_sync (pool_path pool path))
 
     let import_db pool path payload =
       write_guard ()
       |> Js.Promise.then_ (fun () ->
           let full_path = pool_path pool path in
           ensure_dir (Node.Path.dirname full_path);
-          Node.Fs.writeFileSync full_path payload `latin1;
+          Fs.write_file_bytes_sync full_path payload;
           Js.Promise.resolve ())
 
     let remove_vfs pool =
@@ -890,14 +896,14 @@ module Node = struct
 
     let asset_read_bytes repo file_name =
       Js.Promise.resolve
-        (Node.Fs.readFileSync (asset_file_path repo file_name) `latin1)
+        (Fs.read_file_bytes_sync (asset_file_path repo file_name))
 
     let asset_write_bytes repo file_name payload =
       write_guard ()
       |> Js.Promise.then_ (fun () ->
           let full_path = asset_file_path repo file_name in
           ensure_dir (Node.Path.dirname full_path);
-          Node.Fs.writeFileSync full_path payload `latin1;
+          Fs.write_file_bytes_sync full_path payload;
           Js.Promise.resolve ())
 
     let asset_stat repo file_name =
@@ -930,13 +936,17 @@ module Node = struct
     let state : (string * value Js.Dict.t) option ref = ref None
     let kv_path () = Node.Path.join [| root_dir (); "kv-store.json" |]
 
-    external is_binary_view : value -> bool = "isView" [@@mel.scope "ArrayBuffer"]
-    external array_from_binary : value -> int array = "from" [@@mel.scope "Array"]
+    external is_binary_view : value -> bool = "isView"
+    [@@mel.scope "ArrayBuffer"]
+
+    external array_from_binary : value -> int array = "from"
+    [@@mel.scope "Array"]
+
     external uint8_array : int array -> value = "Uint8Array" [@@mel.new]
 
     let binary_to_string value =
-      value |> array_from_binary |> Array.to_list
-      |> List.map Char.chr |> List.to_seq |> String.of_seq
+      value |> array_from_binary |> Array.to_list |> List.map Char.chr
+      |> List.to_seq |> String.of_seq
 
     let string_to_binary text =
       Array.init (String.length text) (fun index -> Char.code text.[index])
@@ -957,7 +967,7 @@ module Node = struct
             Map
               (object_ |> Js.Dict.entries |> Array.to_list
               |> List.map (fun (key, value) ->
-                     (Transit.Json.String key, value_to_transit value)))
+                  (Transit.Json.String key, value_to_transit value)))
 
     let rec transit_to_value = function
       | Transit.Json.Null -> Js.Json.null
@@ -997,7 +1007,10 @@ module Node = struct
 
     let parse_state payload =
       try
-        match payload |> Transit.Json.of_string |> transit_to_value |> Js.Json.decodeObject with
+        match
+          payload |> Transit.Json.of_string |> transit_to_value
+          |> Js.Json.decodeObject
+        with
         | Some object_ -> object_
         | None -> Js.Dict.empty ()
       with _ -> Js.Dict.empty ()
@@ -1229,8 +1242,7 @@ module Node = struct
     [@@mel.send]
 
     external keytar_delete_password :
-      keytar_module -> string -> string -> bool Js.Promise.t
-      = "deletePassword"
+      keytar_module -> string -> string -> bool Js.Promise.t = "deletePassword"
     [@@mel.send]
 
     let keychain_service = "Logseq E2EE"
