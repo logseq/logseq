@@ -4,7 +4,12 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
-import { assertDisplayableImageMetadata, assetImageResult } from "./asset_image.mjs";
+import {
+  ASSET_IMAGE_RESOURCE_URI,
+  assertDisplayableImageMetadata,
+  assetImageResource,
+  assetImageResult,
+} from "./asset_image.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
@@ -66,17 +71,34 @@ async function handleMcp(request, env, ctx) {
     },
   });
 
+  server.registerResource("asset-image", ASSET_IMAGE_RESOURCE_URI, {
+    title: "Logseq image asset",
+    description: "Renders a Logseq image asset returned by the image asset tool.",
+    mimeType: "text/html;profile=mcp-app",
+  }, assetImageResource);
+
   server.registerTool("get_asset_image", {
+    title: "Display Logseq image asset",
     description: "Return a Logseq image asset as MCP image content for direct display.",
     inputSchema: {
       graphId: z.string(),
       assetBlockId: z.string(),
+    },
+    outputSchema: {
+      uuid: z.string(),
+      title: z.string(),
+      mimeType: z.string(),
+      size: z.number().int().nonnegative(),
     },
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,
       idempotentHint: true,
+    },
+    _meta: {
+      ui: { resourceUri: ASSET_IMAGE_RESOURCE_URI },
+      "openai/outputTemplate": ASSET_IMAGE_RESOURCE_URI,
     },
   }, async ({ graphId, assetBlockId }) => {
     const metadataUrl = new URL(

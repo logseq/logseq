@@ -1,4 +1,18 @@
+import { ASSET_IMAGE_RESOURCE_URI } from "./asset_image.mjs";
+
 const writeScopes = ["logseq/read", "logseq/write"];
+
+const imageOutputSchema = {
+  type: "object",
+  properties: {
+    uuid: { type: "string", description: "Image asset block UUID" },
+    title: { type: "string", description: "Image asset title" },
+    mimeType: { type: "string", description: "Image MIME type" },
+    size: { type: "integer", description: "Image size in bytes" },
+  },
+  required: ["uuid", "title", "mimeType", "size"],
+  additionalProperties: false,
+};
 
 function oauthSecurity(scopes) {
   return [{ type: "oauth2", scopes }];
@@ -71,6 +85,7 @@ export function chatGptToolDescriptors() {
         required: ["graphId", "assetBlockId"],
         additionalProperties: false,
       },
+      outputSchema: imageOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -80,6 +95,8 @@ export function chatGptToolDescriptors() {
       securitySchemes: imageSecurity,
       _meta: {
         securitySchemes: imageSecurity,
+        ui: { resourceUri: ASSET_IMAGE_RESOURCE_URI },
+        "openai/outputTemplate": ASSET_IMAGE_RESOURCE_URI,
         "openai/toolInvocation/invoking": "Loading Logseq image…",
         "openai/toolInvocation/invoked": "Logseq image ready",
       },

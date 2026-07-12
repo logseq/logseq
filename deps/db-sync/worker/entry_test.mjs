@@ -106,3 +106,13 @@ test("ChatGPT exposes a read-only image asset tool", () => {
   });
   assert.deepEqual(tool.securitySchemes, [{ type: "oauth2", scopes: ["logseq/read"] }]);
 });
+
+test("ChatGPT image asset tool declares a UI resource for ordinary chat rendering", () => {
+  const tool = chatGptToolDescriptors().find((descriptor) => descriptor.name === "get_asset_image");
+
+  assert.ok(tool._meta?.ui);
+  assert.equal(tool._meta.ui.resourceUri, "ui://logseq/asset-image.html");
+  assert.equal(tool._meta["openai/outputTemplate"], "ui://logseq/asset-image.html");
+  assert.equal(tool.outputSchema.type, "object");
+  assert.deepEqual(tool.outputSchema.required, ["uuid", "title", "mimeType", "size"]);
+});

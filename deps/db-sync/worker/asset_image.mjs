@@ -9,6 +9,124 @@ function bytesToBase64(bytes) {
 
 const MAX_DISPLAY_IMAGE_SIZE = 10 * 1024 * 1024;
 
+export const ASSET_IMAGE_RESOURCE_URI = "ui://logseq/asset-image.html";
+
+const ASSET_IMAGE_COMPONENT_HTML = `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 8px;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      figure { margin: 0; }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: min(70vh, 720px);
+        object-fit: contain;
+        border-radius: 8px;
+      }
+      figcaption {
+        margin-top: 6px;
+        color: rgba(127, 127, 127, 0.95);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .error {
+        color: #b42318;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <figure>
+      <img id="image" alt="">
+      <figcaption id="caption"></figcaption>
+    </figure>
+    <p id="error" class="error" hidden>Image data was not provided by the tool result.</p>
+    <script>
+      let objectUrl;
+
+      function currentToolResult() {
+        const metadata = window.openai?.toolResponseMetadata;
+        return metadata?.mcp_tool_result
+          || metadata?.call_tool_result
+          || { structuredContent: window.openai?.toolOutput };
+      }
+
+      function imageFromResult(result) {
+        const metadataImage = result?._meta?.image;
+        if (metadataImage?.data && metadataImage?.mimeType) return metadataImage;
+
+        const contentImage = result?.content?.find((item) => item?.type === "image");
+        if (!contentImage?.data || !contentImage?.mimeType) return null;
+
+        const details = result?.structuredContent || {};
+        return {
+          data: contentImage.data,
+          mimeType: contentImage.mimeType,
+          title: details.title,
+          uuid: details.uuid,
+        };
+      }
+
+      function bytesFromBase64(base64) {
+        const raw = atob(base64);
+        const payload = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i += 1) payload[i] = raw.charCodeAt(i);
+        return payload;
+      }
+
+      function render(result) {
+        const image = imageFromResult(result);
+        const imageElement = document.getElementById("image");
+        const captionElement = document.getElementById("caption");
+        const errorElement = document.getElementById("error");
+
+        if (!image) {
+          imageElement.hidden = true;
+          captionElement.textContent = "";
+          errorElement.hidden = false;
+          return;
+        }
+
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = URL.createObjectURL(new Blob([bytesFromBase64(image.data)], { type: image.mimeType }));
+        imageElement.src = objectUrl;
+        imageElement.alt = image.title || "Logseq image asset";
+        imageElement.hidden = false;
+        errorElement.hidden = true;
+        captionElement.textContent = image.title
+          ? image.uuid ? image.title + " (" + image.uuid + ")" : image.title
+          : image.uuid || "";
+      }
+
+      render(currentToolResult());
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) return;
+        const message = event.data;
+        if (!message || message.jsonrpc !== "2.0") return;
+        if (message.method !== "ui/notifications/tool-result") return;
+        render(message.params);
+      }, { passive: true });
+
+      window.addEventListener("openai:set_globals", (event) => {
+        const metadata = event.detail?.globals?.toolResponseMetadata;
+        const output = event.detail?.globals?.toolOutput;
+        render(metadata?.mcp_tool_result || metadata?.call_tool_result || { structuredContent: output });
+      }, { passive: true });
+    </script>
+  </body>
+</html>
+`.trim();
+
 export function assertDisplayableImageMetadata(metadata) {
   if (!Number.isSafeInteger(metadata.size) || metadata.size < 0) {
     throw new Error("asset has an invalid size");
@@ -23,11 +141,45 @@ export async function assetImageResult(response, metadata) {
   if (!response.ok || !mimeType?.startsWith("image/")) {
     throw new Error(`asset response is not an image (${response.status} ${mimeType ?? "unknown"})`);
   }
-  const data = bytesToBase64(new Uint8Array(await response.arrayBuffer()));
+  const payload = new Uint8Array(await response.arrayBuffer());
+  const data = bytesToBase64(payload);
+  const title = metadata.title ?? "Image asset";
+  const uuid = metadata.uuid;
   return {
+    structuredContent: {
+      uuid,
+      title,
+      mimeType,
+      size: payload.length,
+    },
     content: [
       { type: "image", data, mimeType },
-      { type: "text", text: `${metadata.title ?? "Image asset"} (${metadata.uuid})` },
+      { type: "text", text: `${title} (${uuid})` },
+    ],
+    _meta: {
+      image: {
+        data,
+        mimeType,
+        title,
+        uuid,
+      },
+    },
+  };
+}
+
+export async function assetImageResource() {
+  return {
+    contents: [
+      {
+        uri: ASSET_IMAGE_RESOURCE_URI,
+        mimeType: "text/html;profile=mcp-app",
+        text: ASSET_IMAGE_COMPONENT_HTML,
+        _meta: {
+          ui: {
+            prefersBorder: true,
+          },
+        },
+      },
     ],
   };
 }
