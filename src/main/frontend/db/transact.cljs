@@ -55,7 +55,9 @@
                  :delete-blocks
                  :move-blocks
                  :move-blocks-up-down
-                 :indent-outdent-blocks}
+                 :indent-outdent-blocks
+                 :apply-template
+                 :collapse-expand-blocks}
                first)
          ops)))
 
@@ -83,6 +85,9 @@
                    :indent-outdent-blocks
                    (first args)
 
+                   :apply-template
+                   [(second args)]
+
                    (:set-block-property :set-block-properties :remove-block-property :delete-property-value)
                    [(first args)]
 
@@ -100,6 +105,9 @@
 
                    :delete-blocks
                    (first args)
+
+                   :collapse-expand-blocks
+                   (map :block/uuid (first args))
 
                    [])))
        (remove nil?)

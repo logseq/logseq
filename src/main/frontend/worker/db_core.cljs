@@ -1830,7 +1830,9 @@
       (d/entity db eid)
 
       (string? id-or-page-name)
-      (d/entity db (common-initial-data/get-first-page-by-name db (name id-or-page-name)))
+      (if (common-util/uuid-string? id-or-page-name)
+        (d/entity db [:block/uuid (uuid id-or-page-name)])
+        (d/entity db (common-initial-data/get-first-page-by-name db (name id-or-page-name))))
 
       :else
       nil)))
@@ -1937,19 +1939,56 @@
         (max 0)
         (min (max 0 (- total-count limit))))))
 
-(defn- flat-child-block-entries
-  [db root]
-  (letfn [(walk [parent level]
-            (mapcat
-             (fn [child]
-               (let [entry {:block child
-                            :level level
-                            :parent-id (:db/id parent)}]
-                 (if (:block/collapsed? child)
-                   [entry]
-                   (cons entry (walk child (inc level))))))
-             (direct-child-blocks db (:db/id parent))))]
-    (vec (walk root 1))))
+(defn- flat-child-block-window
+  [db root opts]
+  (let [limit (clamp-page-block-window-limit (:limit opts))
+        requested-offset (case (:anchor opts)
+                           :bottom nil
+                           :top 0
+                           (max 0 (or (:offset opts) 0)))
+        requested-end (some-> requested-offset (+ limit))
+        tail-entries (object-array limit)
+        !tail-start (volatile! 0)
+        !tail-count (volatile! 0)
+        !idx (volatile! 0)
+        !entries (volatile! [])]
+    (letfn [(walk [parent level]
+              (loop [children (seq (direct-child-blocks db (:db/id parent)))]
+                (when (seq children)
+                  (let [child (first children)
+                        idx @!idx
+                        entry {:block child
+                               :level level
+                               :parent-id (:db/id parent)}]
+                    (vswap! !idx inc)
+                    (let [tail-count @!tail-count
+                          tail-start @!tail-start
+                          tail-idx (if (< tail-count limit)
+                                     tail-count
+                                     tail-start)]
+                      (aset tail-entries tail-idx entry)
+                      (if (< tail-count limit)
+                        (vswap! !tail-count inc)
+                        (vreset! !tail-start (mod (inc tail-start) limit))))
+                    (when (and requested-offset
+                               (>= idx requested-offset)
+                               (< idx requested-end))
+                      (vswap! !entries conj entry))
+                    (when-not (:block/collapsed? child)
+                      (walk child (inc level)))
+                    (recur (next children))))))]
+      (walk root 1)
+      (let [total-count @!idx
+            offset (page-block-window-offset total-count (assoc opts :limit limit))
+            entries (if (= requested-offset offset)
+                      @!entries
+                      (mapv (fn [idx]
+                              (aget tail-entries (mod (+ @!tail-start idx) limit)))
+                            (range @!tail-count)))]
+        {:entries entries
+         :offset offset
+         :limit limit
+         :total-count total-count}))))
 
 (defn- flat-child-block-row
   [db {:keys [block level parent-id]}]
@@ -1966,13 +2005,8 @@
   [repo id-or-page-name opts]
   (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
     (when-let [root (resolve-block-entity db id-or-page-name)]
-      (let [entries (flat-child-block-entries db root)
-            total-count (count entries)
-            limit (clamp-page-block-window-limit (:limit opts))
-            offset (page-block-window-offset total-count (assoc opts :limit limit))
+      (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
             rows (->> entries
-                      (drop offset)
-                      (take limit)
                       (mapv #(flat-child-block-row db %))
                       worker-plain/with-explicit-ref-fields-recursive)
             root-row (->> (assoc-render-property-data db
