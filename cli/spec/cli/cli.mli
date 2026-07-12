@@ -1,12 +1,12 @@
 type run_input = {
-  argv : string list;
-  env : (string * string) list;
+  argv : string Rrbvec.t;
+  env : (string * string) Rrbvec.t;
   cwd : Cli_primitive.path;
   stdin : string option;
 }
 (** Top-level CLI lifecycle contract. *)
 
-val env_lookup : (string * string) list -> Cli_config.env
+val env_lookup : (string * string) Rrbvec.t -> Cli_config.env
 
 type raw_argv
 type parsed_argv

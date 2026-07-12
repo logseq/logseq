@@ -19,7 +19,7 @@ type install_target = {
 type update_status = {
   installed : bool;
   outdated : bool;
-  outdated_targets : install_target list;
+  outdated_targets : install_target Rrbvec.t;
   error : Error.t option;
 }
 
@@ -38,15 +38,16 @@ external process_argv : string array = "argv" [@@mel.module "process"]
 let executable_dir_candidates () =
   let candidates_for_script script =
     let script_dir = Filename.dirname script in
-    [
-      skill_file_under script_dir;
-      skill_file_under (Filename.dirname script_dir);
-    ]
+    Vec.of_array
+      [|
+        skill_file_under script_dir;
+        skill_file_under (Filename.dirname script_dir);
+      |]
   in
-  match Array.to_list process_argv with
-  | _node :: script :: _ -> candidates_for_script script
-  | script :: _ -> candidates_for_script script
-  | [] -> []
+  if Array.length process_argv >= 2 then candidates_for_script process_argv.(1)
+  else if Array.length process_argv = 1 then
+    candidates_for_script process_argv.(0)
+  else Vec.empty
 
 let non_empty value =
   match Option.map String.trim value with
@@ -57,8 +58,7 @@ let resolve_install_target ~global ~cwd ~home_dir =
   match (global, non_empty home_dir) with
   | true, None ->
       Error
-        (Error.make
-           (Error.Skill_home_dir_unavailable)
+        (Error.make Error.Skill_home_dir_unavailable
            "home directory is unavailable; cannot resolve --global install \
             target")
   | _ ->
@@ -77,8 +77,8 @@ let resolve_install_target ~global ~cwd ~home_dir =
 let installed_skill_targets ~cwd ~home_dir =
   let local = resolve_install_target ~global:false ~cwd ~home_dir in
   let global = resolve_install_target ~global:true ~cwd ~home_dir in
-  [ local; global ]
-  |> List.filter_map (function Ok target -> Some target | Error _ -> None)
+  Vec.of_array [| local; global |]
+  |> Vec.filter_map (function Ok target -> Some target | Error _ -> None)
 
 let read_file = Cli_unix.read_text_file
 
@@ -97,15 +97,17 @@ let default_source_candidates config =
   let executable = executable_dir_candidates () in
   let project =
     match config.Cli_config.project_dir with
-    | Some project_dir -> [ skill_file_under project_dir ]
-    | None -> []
+    | Some project_dir -> Vec.singleton (skill_file_under project_dir)
+    | None -> Vec.empty
   in
   let home =
     match Sys.getenv_opt "HOME" with
-    | Some home -> [ skill_file_under home ]
-    | None -> []
+    | Some home -> Vec.singleton (skill_file_under home)
+    | None -> Vec.empty
   in
-  executable @ project @ home @ [ skill_file_under (Sys.getcwd ()) ]
+  Vec.append executable project |> fun candidates ->
+  Vec.append candidates home |> fun candidates ->
+  Vec.push_back candidates (skill_file_under (Sys.getcwd ()))
 
 let resolve_source_path ?source_path config =
   match non_empty source_path with
@@ -113,22 +115,23 @@ let resolve_source_path ?source_path config =
   | Some path ->
       Error
         (Error.make
-           ~context:(Edn_util.vector [ Edn_util.string path ])
-           (Error.Skill_source_not_found)
+           ~context:
+             (Edn_util.vector_vec (Vec.of_array [| Edn_util.string path |]))
+           Error.Skill_source_not_found
            ("skill source file not found: " ^ path))
   | None -> (
       let candidates = default_source_candidates config in
-      match List.find_opt Cli_unix.file_exists candidates with
+      match Vec.find_opt Cli_unix.file_exists candidates with
       | Some path -> Ok path
       | None ->
           Error
             (Error.make
                ~context:
-                 (Edn_util.vector
-                    (List.map (fun path -> Edn_util.string path) candidates))
-               (Error.Skill_source_not_found)
+                 (Edn_util.vector_vec
+                    (candidates |> Vec.map (fun path -> Edn_util.string path)))
+               Error.Skill_source_not_found
                ("skill source file not found. Checked paths: "
-               ^ String.concat ", " candidates)))
+               ^ Vec.string_concat ", " candidates)))
 
 let command_id = function
   | Parsed_show -> Command_id.Skill_show
@@ -175,18 +178,18 @@ let execute_show config mode source_path =
       | exception exn ->
           Cli_effect.pure
             (Output_mode.error ~command mode
-               (Error.make
-                  (Error.Skill_show_failed)
+               (Error.make Error.Skill_show_failed
                   ("failed to read skill source: " ^ Printexc.to_string exn))))
 
 let install_value ~source ~file =
-  Edn_util.map
-    [
-      (Edn_util.keyword "source-path", Edn_util.string source);
-      (Edn_util.keyword "installed-path", Edn_util.string file);
-      ( Edn_util.keyword "message",
-        Edn_util.string ("Installed skill to " ^ file) );
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         (Edn_util.keyword "source-path", Edn_util.string source);
+         (Edn_util.keyword "installed-path", Edn_util.string file);
+         ( Edn_util.keyword "message",
+           Edn_util.string ("Installed skill to " ^ file) );
+       |])
 
 let execute_install config mode ~global ~source_path ~destination_dir
     ~destination_file =
@@ -209,8 +212,7 @@ let execute_install config mode ~global ~source_path ~destination_dir
           with exn ->
             Cli_effect.pure
               (Output_mode.error ~command mode
-                 (Error.make
-                    (Error.Skill_install_failed)
+                 (Error.make Error.Skill_install_failed
                     ("failed to install skill: " ^ Printexc.to_string exn)))))
 
 let execute_with_mode action config mode =
@@ -226,20 +228,21 @@ let meta id doc =
     path = Command_id.to_path id;
     doc;
     long_doc = None;
-    examples = [];
-    options = [];
+    examples = Vec.empty;
+    options = Vec.empty;
     category = Command_registry.Utilities;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta Command_id.Skill_show "Show built-in logseq-cli skill";
-    meta Skill_install "Install built-in logseq-cli skill";
-  ]
+  Vec.of_array
+    [|
+      meta Command_id.Skill_show "Show built-in logseq-cli skill";
+      meta Skill_install "Install built-in logseq-cli skill";
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in

@@ -15,19 +15,19 @@ let rec value_of_json json =
       if is_integral_float value then Edn_util.int64 (Int64.of_float value)
       else Edn_util.float value
   | JSONArray values ->
-      Edn_util.vector (values |> Array.to_list |> List.map value_of_json)
+      Edn_util.vector_vec (values |> Rrbvec.of_array |> Vec.map value_of_json)
   | JSONObject fields ->
-      fields |> Js.Dict.entries |> Array.to_list
-      |> List.map (fun (key, value) ->
+      fields |> Js.Dict.entries |> Rrbvec.of_array
+      |> Vec.map (fun (key, value) ->
           (Edn_util.string key, value_of_json value))
-      |> Edn_util.map
+      |> Edn_util.map_vec
 
 let value_of_json_string text = Js.Json.parseExn text |> value_of_json
 let object_of_json_string text = Js.Json.decodeObject (Js.Json.parseExn text)
 
 let json_of_string_fields fields =
   let object_ = Js.Dict.empty () in
-  List.iter
+  Vec.iter
     (fun (key, value) -> Js.Dict.set object_ key (Js.Json.string value))
     fields;
   Js.Json.object_ object_

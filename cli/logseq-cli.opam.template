@@ -4,4 +4,5 @@ pin-depends: [
   ["melange-transit-core.0.1.0" "git+https://github.com/RCmerci/melange-transit.git#main"]
   ["melange-transit-melange.0.1.0" "git+https://github.com/RCmerci/melange-transit.git#main"]
   ["humanize.dev" "git+https://github.com/rcmerci/humanize.git#main"]
+  ["rrbvec.dev" "git+https://github.com/RCmerci/rrbvec.git#main"]
 ]
