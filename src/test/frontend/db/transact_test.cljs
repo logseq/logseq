@@ -48,6 +48,25 @@
   (is (true? (#'db-transact/outliner-ops-need-page-window-refresh?
               [[:move-blocks [[(random-uuid)] (random-uuid) {}]]]))))
 
+(deftest collapse-expand-ops-refresh-page-window-test
+  (let [block-id (random-uuid)
+        tx-id (random-uuid)]
+    (is (true? (#'db-transact/outliner-ops-need-page-window-refresh?
+                [[:collapse-expand-blocks [[{:block/uuid block-id
+                                              :block/collapsed? true}]
+                                           {}]]])))
+    (state/set-state! :db/latest-transacted-entity-uuids {})
+    (#'db-transact/refresh-worker-op-blocks!
+     [[:collapse-expand-blocks [[{:block/uuid block-id
+                                   :block/collapsed? true}]
+                                {}]]]
+     {:db-sync/tx-id tx-id}
+     nil)
+    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
+      (is (= #{block-id} (:updated-ids latest)))
+      (is (true? (:page-window-refresh? latest)))
+      (is (= tx-id (:tx-id latest))))))
+
 (deftest refresh-worker-op-blocks-skips-page-tree-for-content-ops-test
   (let [block-id (random-uuid)
         tx-id (random-uuid)

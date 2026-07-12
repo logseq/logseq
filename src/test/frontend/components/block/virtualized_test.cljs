@@ -37,3 +37,13 @@
       (is (string/includes? block-list-source ":virtual/on-range-changed"))
       (is (string/includes? block-list-source ":hide-children? true"))
       (is (string/includes? block-list-source "-placeholder-")))))
+
+(deftest flat-virtualized-rows-do-not-load-children-per-row
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-container-source (form-source source "(hsx/defc block-container\n")]
+    (is (some? block-container-source)
+        "block-container component should exist")
+    (is (string/includes? block-container-source "(not (:hide-children? config))")
+        "Flat virtualized row config should be part of the single load-children? decision.")
+    (is (string/includes? block-container-source ":children? load-children?")
+        "Flat virtualized rows should not issue row-level child hydration; expansion is owned by page-window refresh.")))
