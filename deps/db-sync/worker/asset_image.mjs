@@ -9,7 +9,7 @@ function bytesToBase64(bytes) {
 
 const MAX_DISPLAY_IMAGE_SIZE = 10 * 1024 * 1024;
 
-export const ASSET_IMAGE_RESOURCE_URI = "ui://logseq/asset-image.html";
+export const ASSET_IMAGE_RESOURCE_URI = "ui://widget/logseq-asset-image.html";
 
 const ASSET_IMAGE_COMPONENT_HTML = `
 <!doctype html>
@@ -157,6 +157,8 @@ export async function assetImageResult(response, metadata) {
       { type: "text", text: `${title} (${uuid})` },
     ],
     _meta: {
+      ui: { resourceUri: ASSET_IMAGE_RESOURCE_URI },
+      "openai/outputTemplate": ASSET_IMAGE_RESOURCE_URI,
       image: {
         data,
         mimeType,

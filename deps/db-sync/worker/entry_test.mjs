@@ -111,8 +111,8 @@ test("ChatGPT image asset tool declares a UI resource for ordinary chat renderin
   const tool = chatGptToolDescriptors().find((descriptor) => descriptor.name === "get_asset_image");
 
   assert.ok(tool._meta?.ui);
-  assert.equal(tool._meta.ui.resourceUri, "ui://logseq/asset-image.html");
-  assert.equal(tool._meta["openai/outputTemplate"], "ui://logseq/asset-image.html");
+  assert.equal(tool._meta.ui.resourceUri, "ui://widget/logseq-asset-image.html");
+  assert.equal(tool._meta["openai/outputTemplate"], "ui://widget/logseq-asset-image.html");
   assert.equal(tool.outputSchema.type, "object");
   assert.deepEqual(tool.outputSchema.required, ["uuid", "title", "mimeType", "size"]);
 });

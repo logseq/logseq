@@ -20,6 +20,8 @@ test("asset image result returns MCP image content", async () => {
       { type: "text", text: "Photo (asset-1)" },
     ],
     _meta: {
+      ui: { resourceUri: "ui://widget/logseq-asset-image.html" },
+      "openai/outputTemplate": "ui://widget/logseq-asset-image.html",
       image: {
         data: "AQIDBA==",
         mimeType: "image/jpeg",
@@ -50,6 +52,7 @@ test("asset image resource is an MCP app component that renders tool results", a
   const content = resource.contents[0];
 
   assert.equal(content.uri, assetImage.ASSET_IMAGE_RESOURCE_URI);
+  assert.equal(assetImage.ASSET_IMAGE_RESOURCE_URI, "ui://widget/logseq-asset-image.html");
   assert.equal(content.mimeType, "text/html;profile=mcp-app");
   assert.match(content.text, /ui\/notifications\/tool-result/);
   assert.match(content.text, /toolResponseMetadata/);
