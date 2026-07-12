@@ -631,6 +631,58 @@
     (is (string/includes? use-page-block-state-source "set-page-window-row-overrides!")
         "Latest block tx refresh should store updated row payloads separately from page window structure.")))
 
+(deftest page-window-structural-refresh-does-not-run-row-overrides-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        use-page-block-state-source (subs source
+                                          (string/index-of source "(defn- use-page-block-state")
+                                          (string/index-of source "(hsx/defc page-blocks-cp"))
+        refresh-index (string/index-of use-page-block-state-source "refresh-page-window-row-overrides!")
+        refresh-source (when refresh-index
+                         (subs use-page-block-state-source
+                               (max 0 (- refresh-index 160))
+                               (min (count use-page-block-state-source)
+                                    (+ refresh-index 220))))]
+    (is (some? refresh-index)
+        "Page window rows should still support row-level refreshes for content-only txs.")
+    (is (string/includes? refresh-source "when-not (:page-window-refresh? latest-transacted-entity-uuids)")
+        "Structural page-window refreshes must not also invalidate their own full-window response via row overrides.")))
+
+(deftest page-window-flat-rows-keep-worker-order-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        page-blocks-source (subs source
+                                 (string/index-of source "(hsx/defc page-blocks-cp")
+                                 (string/index-of source "(hsx/defc today-queries"))]
+    (is (re-find #"(?s)page-window\?\s+children" page-blocks-source)
+        "Paginated page-window rows should be handled explicitly.")
+    (is (not (re-find #"(?s)page-window\?\s+\(ldb/sort-by-order children\)" page-blocks-source))
+        "Worker page-window rows are already flat DFS ordered and must not be sorted globally by :block/order.")))
+
+(deftest page-route-loads-page-root-without-full-children-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        page-aux-source (subs source
+                              (string/index-of source "(hsx/defc page-aux")
+                              (string/index-of source "(hsx/defc page-cp"))]
+    (is (string/includes? page-aux-source "db-async/<get-page-blocks-window")
+        "Page route should load the initial top page-window together with page/root metadata.")
+    (is (string/includes? page-aux-source ":initial-page-window initial-page-window")
+        "Initial page-window rows should be passed into page rendering so the first rows are visible immediately.")
+    (is (not (string/includes? page-aux-source ":children? true"))
+        "Opening a page should not eagerly load the full block tree when page-window rendering owns rows.")
+    (is (not (string/includes? page-aux-source ":include-collapsed-children? true"))
+        "Opening a page should not eagerly load collapsed children before expansion.")))
+
+(deftest page-block-state-uses-initial-page-window-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        use-page-block-state-source (subs source
+                                          (string/index-of source "(defn- use-page-block-state")
+                                          (string/index-of source "(hsx/defc page-blocks-cp"))]
+    (is (string/includes? use-page-block-state-source "[block* initial-page-window]")
+        "Page block state should accept the initial page-window from page route loading.")
+    (is (string/includes? use-page-block-state-source "(hooks/use-state initial-page-window)")
+        "The first render should use initial page-window rows instead of waiting for a second async request.")
+    (is (string/includes? use-page-block-state-source "(or initial-page-window")
+        "Resetting page block state should keep initial page-window rows for the current page.")))
+
 (deftest loaded-children-rows-update-from-latest-block-tx-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
         use-page-block-state-source (subs source
