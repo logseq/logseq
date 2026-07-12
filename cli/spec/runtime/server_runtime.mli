@@ -22,7 +22,7 @@ type start_result = {
 }
 
 type stop_result = { repo : Cli_primitive.repo }
-type revision_mismatch = { cli_revision : string; servers : server list }
+type revision_mismatch = { cli_revision : string; servers : server Rrbvec.t }
 
 type cleanup_result = {
   cli_revision : string;
@@ -30,8 +30,8 @@ type cleanup_result = {
   mismatched : int;
   eligible : int;
   skipped_owner : int;
-  killed : server list;
-  failed : (server * Error.t) list;
+  killed : server Rrbvec.t;
+  failed : (server * Error.t) Rrbvec.t;
 }
 
 val resolve_root_dir : Cli_config.t -> Cli_primitive.path
@@ -64,9 +64,9 @@ val restart_server :
   Cli_primitive.repo ->
   start_result Error.build_result Cli_effect.t
 
-val list_servers : Cli_config.t -> server list Cli_effect.t
-val list_graph_items : Cli_config.t -> Graph_types.graph_item list
-val list_graphs : Cli_config.t -> Cli_primitive.graph list
+val list_servers : Cli_config.t -> server Rrbvec.t Cli_effect.t
+val list_graph_items : Cli_config.t -> Graph_types.graph_item Rrbvec.t
+val list_graphs : Cli_config.t -> Cli_primitive.graph Rrbvec.t
 
 val cleanup_revision_mismatched_servers :
   Cli_config.t ->

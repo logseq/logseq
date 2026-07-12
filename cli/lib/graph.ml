@@ -13,7 +13,7 @@ type export_opts = {
   pretty_print : bool;
   include_timestamps : bool;
   exclude_built_in_pages : bool;
-  exclude_namespaces : string list;
+  exclude_namespaces : string Rrbvec.t;
 }
 
 type import_opts = { import_type : import_type; input : Cli_primitive.path }
@@ -253,8 +253,7 @@ let build ?registry:_ config globals parsed =
                       in
                       if dst = "" then
                         Error
-                          (Error.make
-                             (Error.Missing_dst)
+                          (Error.make Error.Missing_dst
                              "destination graph name is required")
                       else
                         let dst_graph = Cli_primitive.create_graph dst in
@@ -381,12 +380,13 @@ let classify_graph_dir graphs_root dir_name =
     match decoded_canonical with
     | Some graph_name when canonical_dir_name dir_name graph_name ->
         Some
-          (Edn_util.map
-             [
-               (Edn_util.keyword "kind", Edn_util.keyword "canonical");
-               (Edn_util.keyword "graph-name", Edn_util.string graph_name);
-               (Edn_util.keyword "graph-dir", Edn_util.string dir_name);
-             ])
+          (Edn_util.map_vec
+             (Vec.of_array
+                [|
+                  (Edn_util.keyword "kind", Edn_util.keyword "canonical");
+                  (Edn_util.keyword "graph-name", Edn_util.string graph_name);
+                  (Edn_util.keyword "graph-dir", Edn_util.string dir_name);
+                |]))
     | _ -> (
         let legacy_graph_name =
           match decoded_canonical with
@@ -400,38 +400,41 @@ let classify_graph_dir graphs_root dir_name =
         | Some graph_name ->
             let target_graph_dir = Graph_dir.encode_graph_dir_name graph_name in
             Some
-              (Edn_util.map
-                 [
-                   (Edn_util.keyword "kind", Edn_util.keyword "legacy");
-                   (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
-                   (Edn_util.keyword "graph-name", Edn_util.string graph_name);
-                   ( Edn_util.keyword "target-graph-dir",
-                     Edn_util.string target_graph_dir );
-                   ( Edn_util.keyword "conflict",
-                     Edn_util.bool
-                       (target_graph_dir <> dir_name
-                       && Cli_unix.file_exists
-                            (Filename.concat graphs_root target_graph_dir)) );
-                 ])
+              (Edn_util.map_vec
+                 (Vec.of_array
+                    [|
+                      (Edn_util.keyword "kind", Edn_util.keyword "legacy");
+                      (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
+                      (Edn_util.keyword "graph-name", Edn_util.string graph_name);
+                      ( Edn_util.keyword "target-graph-dir",
+                        Edn_util.string target_graph_dir );
+                      ( Edn_util.keyword "conflict",
+                        Edn_util.bool
+                          (target_graph_dir <> dir_name
+                          && Cli_unix.file_exists
+                               (Filename.concat graphs_root target_graph_dir))
+                      );
+                    |]))
         | None ->
             if legacy_derivation_signal dir_name then
               Some
-                (Edn_util.map
-                   [
-                     ( Edn_util.keyword "kind",
-                       Edn_util.keyword "legacy-undecodable" );
-                     (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
-                     ( Edn_util.keyword "reason",
-                       Edn_util.keyword "graph-name-not-derivable" );
-                   ])
+                (Edn_util.map_vec
+                   (Vec.of_array
+                      [|
+                        ( Edn_util.keyword "kind",
+                          Edn_util.keyword "legacy-undecodable" );
+                        (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
+                        ( Edn_util.keyword "reason",
+                          Edn_util.keyword "graph-name-not-derivable" );
+                      |]))
             else None)
 
 let graph_name_of_canonical_item value =
   match Edn_util.as_map value with
   | Some fields -> (
       match
-        ( List.assoc_opt (Edn_util.keyword "kind") fields,
-          List.assoc_opt (Edn_util.keyword "graph-name") fields )
+        ( Vec.assoc_opt (Edn_util.keyword "kind") fields,
+          Vec.assoc_opt (Edn_util.keyword "graph-name") fields )
       with
       | Some kind, Some graph -> (
           match (Edn_util.as_keyword kind, Edn_util.as_string graph) with
@@ -441,24 +444,24 @@ let graph_name_of_canonical_item value =
   | None -> None
 
 let graph_list_value graph_items =
-  let graphs = List.filter_map graph_name_of_canonical_item graph_items in
-  Edn_util.map
-    [
-      ( Edn_util.keyword "graphs",
-        Edn_util.vector (List.map (fun graph -> Edn_util.string graph) graphs)
-      );
-      (Edn_util.keyword "graph-items", Edn_util.vector graph_items);
-    ]
+  let graphs = Vec.filter_map graph_name_of_canonical_item graph_items in
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         ( Edn_util.keyword "graphs",
+           Edn_util.vector_vec
+             (graphs |> Vec.map (fun graph -> Edn_util.string graph)) );
+         (Edn_util.keyword "graph-items", Edn_util.vector_vec graph_items);
+       |])
 
 let list_graph_items config =
   let dir = graphs_dir config in
   if Cli_unix.file_exists dir then
-    Cli_unix.readdir dir |> Array.to_list
-    |> List.filter (fun name ->
-        Cli_unix.is_directory (Filename.concat dir name))
-    |> List.sort_uniq String.compare
-    |> List.filter_map (classify_graph_dir dir)
-  else []
+    Cli_unix.readdir dir |> Vec.of_array
+    |> Vec.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
+    |> Vec.sort_uniq String.compare
+    |> Vec.filter_map (classify_graph_dir dir)
+  else Vec.empty
 
 let backup_root_path config graph =
   Filename.concat (graph_path config graph) "backup"
@@ -497,12 +500,12 @@ let default_sqlite_export_path config repo =
 let export_payload opts =
   let edn_option_fields =
     match opts.edn_options with
-    | Some value -> Option.value (Edn_util.as_map value) ~default:[]
-    | None -> []
+    | Some value -> Option.value (Edn_util.as_map value) ~default:Vec.empty
+    | None -> Vec.empty
   in
   let export_type =
     Option.value
-      (List.find_map
+      (Vec.find_map
          (fun (key, value) ->
            if Edn_util.key_matches "export-type" key then Some value else None)
          edn_option_fields)
@@ -510,15 +513,18 @@ let export_payload opts =
   in
   let graph_options =
     edn_option_fields
-    |> List.filter (fun (key, _) ->
-        not (Edn_util.key_matches "export-type" key))
-    |> Edn_util.map
+    |> Vec.filter (fun (key, _) -> not (Edn_util.key_matches "export-type" key))
+    |> Edn_util.map_vec
   in
-  let fields = ref [ (kw "export-type", export_type) ] in
+  let fields = ref (Vec.singleton (kw "export-type", export_type)) in
   (match graph_options with
-  | value when Edn_util.as_map value = Some [] -> ()
-  | _ -> fields := (kw "graph-options", graph_options) :: !fields);
-  Edn_util.map (List.rev !fields)
+  | value
+    when Option.value
+           (Option.map Vec.is_empty (Edn_util.as_map value))
+           ~default:false ->
+      ()
+  | _ -> fields := Vec.push_back !fields (kw "graph-options", graph_options));
+  Edn_util.map_vec !fields
 
 let write_pretty_edn path data =
   try
@@ -540,49 +546,70 @@ let graph_import_message mode _config graph opts new_graph =
   in
   Cli_result.ok ~command:Command_id.Graph_import mode
     (Raw
-       (Edn_util.map
-          [ (kw "new-graph?", bool new_graph); (kw "message", string message) ]))
+       (Edn_util.map_vec
+          (Vec.of_array
+             [|
+               (kw "new-graph?", bool new_graph); (kw "message", string message);
+             |])))
 
 let validation_errors value =
   match Edn_util.as_map value with
   | Some _ -> (
       match Option.bind (Edn_util.get value "errors") Edn_util.as_seq with
       | Some errors -> errors
-      | None -> [])
-  | None -> []
+      | None -> Vec.empty)
+  | None -> Vec.empty
 
 let format_count count noun = Humanize_types.format_count_with_noun count noun
 
 let graph_validate_result mode _config result =
-  match validation_errors result with
-  | [] ->
-      Cli_result.ok ~command:Command_id.Graph_validate mode
-        (Raw (Edn_util.map [ (kw "result", result) ]))
-  | errors ->
-      let count = List.length errors in
-      Cli_result.error ~command:Command_id.Graph_validate mode
-        (Error.make
-           (Error.Graph_validation_failed)
-           ("Graph invalid. Found "
-           ^ format_count count "entity"
-           ^ " with errors:\n"
-           ^ Melange_edn_melange.to_edn_string (Edn_util.vector errors)))
+  let errors = validation_errors result in
+  if Vec.is_empty errors then
+    Cli_result.ok ~command:Command_id.Graph_validate mode
+      (Raw (Edn_util.map_vec (Vec.of_array [| (kw "result", result) |])))
+  else
+    let count = Vec.length errors in
+    Cli_result.error ~command:Command_id.Graph_validate mode
+      (Error.make Error.Graph_validation_failed
+         ("Graph invalid. Found "
+         ^ format_count count "entity"
+         ^ " with errors:\n"
+         ^ Melange_edn_melange.to_edn_string (Edn_util.vector_vec errors)))
 
 let sym name = Edn_util.symbol name
-let vector_t values = Edn_util.vector_t values
-let list values = Edn_util.list values
+let vector_t_vec values = Edn_util.vector_t_vec values
+let list_vec values = Edn_util.list_vec values
 
 let graph_info_query =
   Cli_primitive.(
     make_datascript_query
-      ~find:[ sym "?ident"; sym "?value" ]
+      ~find:(Vec.of_array [| sym "?ident"; sym "?value" |])
       ~where:
-        [
-          V (vector_t [ sym "?e"; kw "db/ident"; sym "?ident" ]);
-          V (vector_t [ list [ sym "namespace"; sym "?ident" ]; sym "?ns" ]);
-          V (vector_t [ list [ sym "="; string "logseq.kv"; sym "?ns" ] ]);
-          V (vector_t [ sym "?e"; kw "kv/value"; sym "?value" ]);
-        ]
+        (Vec.of_array
+           [|
+             V
+               (vector_t_vec
+                  (Vec.of_array [| sym "?e"; kw "db/ident"; sym "?ident" |]));
+             V
+               (vector_t_vec
+                  (Vec.of_array
+                     [|
+                       list_vec
+                         (Vec.of_array [| sym "namespace"; sym "?ident" |]);
+                       sym "?ns";
+                     |]));
+             V
+               (vector_t_vec
+                  (Vec.of_array
+                     [|
+                       list_vec
+                         (Vec.of_array
+                            [| sym "="; string "logseq.kv"; sym "?ns" |]);
+                     |]));
+             V
+               (vector_t_vec
+                  (Vec.of_array [| sym "?e"; kw "kv/value"; sym "?value" |]));
+           |])
       ()
     |> datascript_query_to_edn)
 
@@ -600,11 +627,15 @@ let graph_info_key value =
 let graph_info_kv rows =
   let row_fields row =
     match (Edn_util.as_vector row, Edn_util.as_list row) with
-    | Some [ key; value ], _ | _, Some [ key; value ] ->
-        Some (Edn_util.string (graph_info_key key), value)
+    | Some values, _ when Vec.length values = 2 ->
+        Some
+          (Edn_util.string (graph_info_key (Vec.nth values 0)), Vec.nth values 1)
+    | _, Some values when Vec.length values = 2 ->
+        Some
+          (Edn_util.string (graph_info_key (Vec.nth values 0)), Vec.nth values 1)
     | _ -> None
   in
-  rows |> List.filter_map row_fields
+  rows |> Vec.filter_map row_fields
 
 let parse_positive_int64 text =
   let text = String.trim text in
@@ -636,7 +667,7 @@ let graph_info_datetime_value : type a.
 let graph_info_result mode _config graph rows =
   let graph = Cli_primitive.string_of_graph graph in
   let kv = graph_info_kv rows in
-  let kv_value key = List.assoc_opt (Edn_util.string key) kv in
+  let kv_value key = Vec.assoc_opt (Edn_util.string key) kv in
   let graph_created_at =
     Option.value
       (kv_value "logseq.kv/graph-created-at"
@@ -650,7 +681,7 @@ let graph_info_result mode _config graph rows =
       ( kw "logseq.kv/schema-version",
         Option.value (kv_value "logseq.kv/schema-version") ~default:Edn_util.nil
       );
-      (kw "kv", Edn_util.map kv);
+      (kw "kv", Edn_util.map_vec kv);
     ]
   in
   Cli_result.ok ~command:Command_id.Graph_info mode (Raw (Edn_util.map fields))
@@ -684,32 +715,36 @@ let backup_entry root name =
   then
     let stat = Cli_unix.stat db_path in
     let fields =
-      [
-        (kw "name", string name);
-        (kw "created-at", Edn_util.float stat.Cli_unix.st_mtime);
-        (kw "size-bytes", Edn_util.int stat.Cli_unix.st_size);
-      ]
+      Vec.of_array
+        [|
+          (kw "name", string name);
+          (kw "created-at", Edn_util.float stat.Cli_unix.st_mtime);
+          (kw "size-bytes", Edn_util.int stat.Cli_unix.st_size);
+        |]
     in
     let fields =
       match metadata_source dir with
-      | Some source -> fields @ [ (kw "source", string source) ]
+      | Some source -> Vec.push_back fields (kw "source", string source)
       | None -> fields
     in
-    Some (Edn_util.map fields)
+    Some (Edn_util.map_vec fields)
   else None
 
 let list_backups config graph =
   let root = backup_root_path config graph in
-  if not (Cli_unix.file_exists root) then []
+  if not (Cli_unix.file_exists root) then Vec.empty
   else
-    Cli_unix.readdir root |> Array.to_list |> List.sort String.compare
-    |> List.filter_map (backup_entry root)
+    Cli_unix.readdir root |> Vec.of_array |> Vec.sort String.compare
+    |> Vec.filter_map (backup_entry root)
 
 let graph_backup_list_result mode config graph =
   Cli_result.ok ~command:Command_id.Graph_backup_list mode
     (Raw
-       (Edn_util.map
-          [ (kw "backups", Edn_util.vector (list_backups config graph)) ]))
+       (Edn_util.map_vec
+          (Vec.of_array
+             [|
+               (kw "backups", Edn_util.vector_vec (list_backups config graph));
+             |])))
 
 let graph_backup_remove_result mode config graph src =
   let dir = backup_dir_path config graph src in
@@ -719,9 +754,7 @@ let graph_backup_remove_result mode config graph src =
       (Message ("Removed backup " ^ src)))
   else
     Cli_result.error ~command:Command_id.Graph_backup_remove mode
-      (Error.make
-         (Error.Backup_not_found)
-         ("backup not found: " ^ src))
+      (Error.make Error.Backup_not_found ("backup not found: " ^ src))
 
 let unlink_graph_dir config graph repo =
   let graphs_root = graphs_dir config in
@@ -776,15 +809,16 @@ let write_backup_metadata dir ~backup_name ~repo ~db_path =
   let created_at_ms = Time.time_to_epoch_ms (Time.now ()) in
   write_file (backup_metadata_path dir)
     (Melange_edn_melange.to_edn_string
-       (Edn_util.map
-          [
-            (kw "schema-version", Edn_util.int 1);
-            (kw "name", string backup_name);
-            (kw "repo", string repo);
-            (kw "source", kw "cli");
-            (kw "created-at-ms", Edn_util.int64 created_at_ms);
-            (kw "db-path", string db_path);
-          ]))
+       (Edn_util.map_vec
+          (Vec.of_array
+             [|
+               (kw "schema-version", Edn_util.int 1);
+               (kw "name", string backup_name);
+               (kw "repo", string repo);
+               (kw "source", kw "cli");
+               (kw "created-at-ms", Edn_util.int64 created_at_ms);
+               (kw "db-path", string db_path);
+             |])))
 
 let graph_backup_create_result mode config graph repo name backup_name =
   let open Cli_effect in
@@ -803,12 +837,13 @@ let graph_backup_create_result mode config graph repo name backup_name =
         let success_result () =
           Cli_result.ok ~command:Command_id.Graph_backup_create mode
             (Raw
-               (Edn_util.map
-                  [
-                    (kw "backup-name", string backup_name);
-                    (kw "path", string db_path);
-                    (kw "message", string ("Created backup " ^ backup_name));
-                  ]))
+               (Edn_util.map_vec
+                  (Vec.of_array
+                     [|
+                       (kw "backup-name", string backup_name);
+                       (kw "path", string db_path);
+                       (kw "message", string ("Created backup " ^ backup_name));
+                     |])))
         in
         let error_result code message =
           Cli_result.error ~command:Command_id.Graph_backup_create mode
@@ -834,8 +869,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
               (Cli_result.error ~command:Command_id.Graph_backup_create mode
                  (Error.make
                     ~context:(Edn_util.string (Printexc.to_string exn))
-                    (Error.Backup_create_failed)
-                    "backup create failed"))))
+                    Error.Backup_create_failed "backup create failed"))))
 
 let graph_create_data result =
   Option.value (Cli_result.data_value result) ~default:Edn_util.nil
@@ -844,18 +878,20 @@ let graph_create_enable_sync_result mode _config graph repo create_result
     upload_result start_result =
   Cli_result.ok ~command:Command_id.Graph_create mode
     (Raw
-       (Edn_util.map
-          [
-            (kw "graph", string (Cli_primitive.string_of_graph graph));
-            (kw "repo", string (Cli_primitive.string_of_repo repo));
-            ( kw "stages",
-              Edn_util.map
-                [
-                  (kw "create", graph_create_data create_result);
-                  (kw "upload", graph_create_data upload_result);
-                  (kw "start", graph_create_data start_result);
-                ] );
-          ]))
+       (Edn_util.map_vec
+          (Vec.of_array
+             [|
+               (kw "graph", string (Cli_primitive.string_of_graph graph));
+               (kw "repo", string (Cli_primitive.string_of_repo repo));
+               ( kw "stages",
+                 Edn_util.map_vec
+                   (Vec.of_array
+                      [|
+                        (kw "create", graph_create_data create_result);
+                        (kw "upload", graph_create_data upload_result);
+                        (kw "start", graph_create_data start_result);
+                      |]) );
+             |])))
 
 let execute_graph_create_invoke mode _graph repo config =
   let open Cli_effect in
@@ -866,11 +902,13 @@ let execute_graph_create_invoke mode _graph repo config =
     | Ok invoke_config ->
         bind
           (Transport.thread_api_create_or_open_db invoke_config ~repo
-             ~options:(Edn_util.map_t []))
+             ~options:(Edn_util.map_t_vec Vec.empty))
           (fun result ->
             pure
               (Cli_result.ok ~command:Command_id.Graph_create mode
-                 (Raw (Edn_util.map [ (kw "result", result) ])))))
+                 (Raw
+                    (Edn_util.map_vec
+                       (Vec.of_array [| (kw "result", result) |]))))))
 
 let execute_graph_create_enable_sync mode graph repo opts config =
   let open Cli_effect in
@@ -1010,9 +1048,7 @@ let execute_graph_backup_restore mode source_graph dst_graph dst_repo src config
   if not (Cli_unix.file_exists db_path) then
     Cli_effect.pure
       (Cli_result.error ~command:Command_id.Graph_backup_restore mode
-         (Error.make
-            (Error.Backup_not_found)
-            ("backup not found: " ^ src)))
+         (Error.make Error.Backup_not_found ("backup not found: " ^ src)))
   else
     let opts = { import_type = Import_sqlite; input = db_path } in
     Cli_effect.map
@@ -1028,7 +1064,8 @@ let execute_graph_validate mode repo fix config =
     | Ok invoke_config ->
         bind
           (Transport.thread_api_validate_db invoke_config ~repo
-             ~options:(Edn_util.map_t [ (kw "fix", bool fix) ]))
+             ~options:
+               (Edn_util.map_t_vec (Vec.of_array [| (kw "fix", bool fix) |])))
           (fun result -> pure (graph_validate_result mode config result)))
 
 let execute_graph_info mode graph repo config =
@@ -1040,13 +1077,14 @@ let execute_graph_info mode graph repo config =
     | Ok invoke_config ->
         bind
           (Transport.thread_api_q invoke_config ~repo
-             ~query:(vector_t [ Edn_util.any graph_info_query ]))
+             ~query:
+               (vector_t_vec (Vec.of_array [| Edn_util.any graph_info_query |])))
           (fun result ->
             let rows =
               match Edn_util.as_seq result with
               | Some rows -> rows
-              | _ when Edn_util.is_null result -> []
-              | _ -> [ result ]
+              | _ when Edn_util.is_null result -> Vec.empty
+              | _ -> Vec.singleton result
             in
             pure (graph_info_result mode config graph rows)))
 
@@ -1056,7 +1094,7 @@ let execute_graph_switch mode graph repo config =
   if not (graph_exists config graph) then
     pure
       (Cli_result.error ~command:Command_id.Graph_switch mode
-         (Error.make (Error.Graph_not_exists) "graph not exists"))
+         (Error.make Error.Graph_not_exists "graph not exists"))
   else
     bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
       (function
@@ -1065,7 +1103,8 @@ let execute_graph_switch mode graph repo config =
       | Ok _ ->
           bind
             (Cli_config.update_config config
-               (Edn_util.map [ (kw "graph", string graph_name) ]))
+               (Edn_util.map_vec
+                  (Vec.of_array [| (kw "graph", string graph_name) |])))
             (function
               | Error err ->
                   pure
@@ -1085,7 +1124,7 @@ let execute_graph_remove mode graph repo config =
   if not (graph_exists config graph) then
     pure
       (Cli_result.error ~command:Command_id.Graph_remove mode
-         (Error.make (Error.Graph_not_exists) "graph not exists"))
+         (Error.make Error.Graph_not_exists "graph not exists"))
   else
     bind (Server_runtime.stop_server config repo) (function
       | Error err when err.Error.code = Error.Server_not_found -> (
@@ -1094,9 +1133,8 @@ let execute_graph_remove mode graph repo config =
           | None ->
               pure
                 (Cli_result.error ~command:Command_id.Graph_remove mode
-                   (Error.make
-                      (Error.Graph_not_removed)
-                      "unable to remove graph")))
+                   (Error.make Error.Graph_not_removed "unable to remove graph"))
+          )
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_remove mode err)
       | Ok _ -> (
@@ -1105,9 +1143,8 @@ let execute_graph_remove mode graph repo config =
           | None ->
               pure
                 (Cli_result.error ~command:Command_id.Graph_remove mode
-                   (Error.make
-                      (Error.Graph_not_removed)
-                      "unable to remove graph"))))
+                   (Error.make Error.Graph_not_removed "unable to remove graph"))
+          ))
 
 let execute_with_mode action config mode =
   let pure = Cli_effect.pure in
@@ -1138,87 +1175,97 @@ let execute_with_mode action config mode =
   | Graph_import { graph; repo; opts; _ } ->
       execute_graph_import mode graph repo opts config
 
-let meta ?(examples = []) id doc =
+let meta ?(examples = Vec.empty) id doc =
   {
     Command_registry.id;
     path = Command_id.to_path id;
     doc;
     long_doc = None;
     examples;
-    options = [];
+    options = Vec.empty;
     category = Command_registry.Graph_management;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta ~examples:[ "logseq graph list" ] Command_id.Graph_list "List graphs";
-    meta
-      ~examples:
-        [
-          "logseq graph create --graph my-graph";
-          "logseq graph create --graph my-graph --enable-sync";
-          "logseq graph create --graph my-graph --enable-sync --e2ee-password \
-           \"my-secret\"";
-        ]
-      Graph_create "Create graph";
-    meta
-      ~examples:[ "logseq graph switch --graph my-graph" ]
-      Graph_switch "Switch current graph";
-    meta
-      ~examples:[ "logseq graph remove --graph my-graph" ]
-      Graph_remove "Remove graph";
-    meta
-      ~examples:
-        [
-          "logseq graph validate --graph my-graph";
-          "logseq graph validate --graph my-graph --fix";
-        ]
-      Graph_validate "Validate graph";
-    meta
-      ~examples:[ "logseq graph info --graph my-graph" ]
-      Graph_info "Graph metadata";
-    meta
-      ~examples:
-        [
-          "logseq graph export --graph my-graph --type edn --file \
-           /tmp/my-graph.edn --edn-options '{:export-type :graph \
-           :include-timestamps? true}' --pretty-print";
-          "logseq graph export --graph my-graph --type sqlite --file \
-           /tmp/my-graph.sqlite";
-        ]
-      Graph_export "Export graph";
-    meta
-      ~examples:
-        [
-          "logseq graph import --graph my-graph --type edn --input \
-           /tmp/my-graph.edn";
-        ]
-      Graph_import "Import graph";
-    meta
-      ~examples:[ "logseq graph backup list --graph my-graph" ]
-      Graph_backup_list "List graph backups";
-    meta
-      ~examples:
-        [
-          "logseq graph backup create --graph my-graph";
-          "logseq graph backup create --graph my-graph --name nightly";
-        ]
-      Graph_backup_create "Create graph backup";
-    meta
-      ~examples:
-        [
-          "logseq graph backup restore --src my-graph-nightly --dst \
-           my-graph-restore";
-        ]
-      Graph_backup_restore "Restore graph backup";
-    meta
-      ~examples:[ "logseq graph backup remove --src my-graph-nightly" ]
-      Graph_backup_remove "Remove graph backup";
-  ]
+  Vec.of_array
+    [|
+      meta
+        ~examples:(Vec.singleton "logseq graph list")
+        Command_id.Graph_list "List graphs";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph create --graph my-graph";
+               "logseq graph create --graph my-graph --enable-sync";
+               "logseq graph create --graph my-graph --enable-sync \
+                --e2ee-password \"my-secret\"";
+             |])
+        Graph_create "Create graph";
+      meta
+        ~examples:(Vec.singleton "logseq graph switch --graph my-graph")
+        Graph_switch "Switch current graph";
+      meta
+        ~examples:(Vec.singleton "logseq graph remove --graph my-graph")
+        Graph_remove "Remove graph";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph validate --graph my-graph";
+               "logseq graph validate --graph my-graph --fix";
+             |])
+        Graph_validate "Validate graph";
+      meta
+        ~examples:(Vec.singleton "logseq graph info --graph my-graph")
+        Graph_info "Graph metadata";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph export --graph my-graph --type edn --file \
+                /tmp/my-graph.edn --edn-options '{:export-type :graph \
+                :include-timestamps? true}' --pretty-print";
+               "logseq graph export --graph my-graph --type sqlite --file \
+                /tmp/my-graph.sqlite";
+             |])
+        Graph_export "Export graph";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph import --graph my-graph --type edn --input \
+                /tmp/my-graph.edn";
+             |])
+        Graph_import "Import graph";
+      meta
+        ~examples:(Vec.singleton "logseq graph backup list --graph my-graph")
+        Graph_backup_list "List graph backups";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph backup create --graph my-graph";
+               "logseq graph backup create --graph my-graph --name nightly";
+             |])
+        Graph_backup_create "Create graph backup";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq graph backup restore --src my-graph-nightly --dst \
+                my-graph-restore";
+             |])
+        Graph_backup_restore "Restore graph backup";
+      meta
+        ~examples:
+          (Vec.singleton "logseq graph backup remove --src my-graph-nightly")
+        Graph_backup_remove "Remove graph backup";
+    |]
 
 let repo = function
   | Graph_list -> None
