@@ -416,8 +416,11 @@
         import-graph-fn (or (:import-graph-fn opts)
                             (fn [user-inputs]
                               (let [files (->> file-objs
-                                               (map #(hash-map :file-object %
-                                                               :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
+                                              (map #(hash-map :file-object %
+                                                               :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
+                                                               :fs-path (when (util/electron?)
+                                                                          (js/window.apis.getFilePath %))
+                                                               :last-modified-at (some-> (.-lastModified %) js/Date.)))
                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                              (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
