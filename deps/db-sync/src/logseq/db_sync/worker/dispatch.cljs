@@ -200,19 +200,26 @@
                       "/"
                       (subs rest-path slash-idx))
                new-url (js/URL. (str (.-origin url) tail (.-search url)))]
-           (if (seq graph-id)
-               (if (= method "OPTIONS")
-                 (common/options-response)
-                 (if (admin-token-valid? request env)
-                   (forward-sync-request request env graph-id new-url)
-                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                     (if (.-ok access-resp)
-                       (p/let [response (forward-sync-request request env graph-id new-url)
-                               _ (when (< (.-status response) 400)
-                                   (<safe-touch-activity! request env graph-id))]
-                         response)
-                       access-resp))))
-             (http/bad-request "missing graph id")))
+           (cond
+             (not (seq graph-id))
+             (http/bad-request "missing graph id")
+
+             (or (= tail "/semantic")
+                 (string/starts-with? tail "/semantic/"))
+             (http/not-found)
+
+             :else
+             (if (= method "OPTIONS")
+               (common/options-response)
+               (if (admin-token-valid? request env)
+                 (forward-sync-request request env graph-id new-url)
+                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                   (if (.-ok access-resp)
+                     (p/let [response (forward-sync-request request env graph-id new-url)
+                             _ (when (< (.-status response) 400)
+                                 (<safe-touch-activity! request env graph-id))]
+                       response)
+                     access-resp))))))
 
          :else
          (http/not-found))))

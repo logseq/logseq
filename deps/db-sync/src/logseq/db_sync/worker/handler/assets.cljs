@@ -7,6 +7,24 @@
 
 (def max-asset-size (* 100 1024 1024))
 
+(def ^:private asset-type->content-type
+  {"png" "image/png"
+   "jpg" "image/jpeg"
+   "jpeg" "image/jpeg"
+   "gif" "image/gif"
+   "webp" "image/webp"
+   "bmp" "image/bmp"
+   "svg" "image/svg+xml"
+   "ico" "image/x-icon"
+   "pdf" "application/pdf"})
+
+(defn- response-content-type [stored-content-type asset-type]
+  (if (contains? #{nil "application/octet-stream" "text/plain"} stored-content-type)
+    (or (get asset-type->content-type (string/lower-case asset-type))
+        stored-content-type
+        "application/octet-stream")
+    stored-content-type))
+
 (defn- parse-size
   [size]
   (cond
@@ -137,8 +155,7 @@
            (if (nil? obj)
              (http/error-response "not found" 404)
              (let [metadata (.-httpMetadata obj)
-                   content-type (or (.-contentType metadata)
-                                    "application/octet-stream")
+                   content-type (response-content-type (.-contentType metadata) asset-type)
                    content-encoding (.-contentEncoding metadata)
                    cache-control (.-cacheControl metadata)
                    size (parse-size (or (.-size obj)
@@ -149,6 +166,8 @@
                                     :else nil)]
                (p/let [body (<body-with-known-length (.-body obj) size)
                        headers (cond-> {"content-type" content-type
+                                        "content-disposition" (str "inline; filename=\""
+                                                                   (last (string/split key #"/")) "\"")
                                         "x-asset-type" asset-type}
                                  (and (string? content-length)
                                       (pos? (.-length content-length)))

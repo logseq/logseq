@@ -15,6 +15,7 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
@@ -319,6 +320,25 @@
                        (filter property?)
                        first
                        :db/ident))))))
+
+(defn- resolve-property [db value]
+  (when-let [ident (resolve-property-ident db value)]
+    (let [property (d/entity db ident)]
+      (when-not (entity-util/hidden? property)
+        property))))
+
+(def ^:private allowed-property-types
+  (into (set db-property-type/user-built-in-property-types)
+        db-property-type/user-allowed-internal-property-types))
+
+(def ^:private allowed-cardinalities
+  #{:db.cardinality/one :db.cardinality/many})
+
+(defn- valid-property-schema? [{:keys [type cardinality]}]
+  (and (or (nil? type)
+           (and (string? type) (contains? allowed-property-types (keyword type))))
+       (or (nil? cardinality)
+           (and (string? cardinality) (contains? allowed-cardinalities (keyword cardinality))))))
 
 (def ^:private task-status-idents
   {"todo" :logseq.property/status.todo
@@ -710,20 +730,22 @@
             priority-choice (when priority
                               (resolve-property-choice db :logseq.property/priority
                                                        task-priority-idents priority))
-            target (if-let [page-id (:page-id body)]
-                     (find-entity db page-id)
-                     (ensure-today-page! conn))]
+            target (when-let [page-id (:page-id body)]
+                     (find-entity db page-id))]
         (cond
           (not (seq (:title body))) (http/bad-request "missing task title")
           (nil? status-choice) (http/bad-request "invalid task status")
           (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
-          (not (page? target)) (http/bad-request "invalid task page-id")
+          (and (:page-id body) (not (page? target))) (http/bad-request "invalid task page-id")
           :else
           (let [task-id (atom nil)]
             (ldb/batch-transact-with-temp-conn!
              conn {:outliner-op :create-task}
              (fn [temp-conn]
-               (let [inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append"))
+               (let [target (if target
+                              (d/entity @temp-conn [:block/uuid (:block/uuid target)])
+                              (ensure-today-page! temp-conn))
+                     inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append"))
                      task-uuid (uuid (:uuid inserted))
                      task (d/entity @temp-conn [:block/uuid task-uuid])]
                  (reset! task-id task-uuid)
@@ -826,8 +848,8 @@
 
     :semantic/properties-create
     (p/let [body (body-clj request)]
-      (if-not (seq (:title body))
-        (http/bad-request "missing title")
+      (if (or (not (seq (:title body))) (not (valid-property-schema? body)))
+        (http/bad-request "invalid property schema")
         (let [property (outliner-property/upsert-property!
                         conn nil
                         {:logseq.property/type (keyword (or (:type body) "default"))
@@ -837,14 +859,14 @@
           (http/json-response nil (property-response property) 201))))
 
     :semantic/properties-get
-    (if-let [property (find-visible-entity db (:property-id path-params))]
+    (if-let [property (resolve-property db (:property-id path-params))]
       (if (property? property) (http/json-response nil (property-response property)) (http/not-found))
       (http/not-found))
 
     :semantic/properties-update
     (p/let [body (body-clj request)
-            property (find-entity db (:property-id path-params))]
-      (if (or (not (property? property)) (empty? body))
+            property (resolve-property db (:property-id path-params))]
+      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body)))
         (http/bad-request "invalid property-id or update")
         (let [schema (cond-> {}
                        (:type body) (assoc :logseq.property/type (keyword (:type body)))
@@ -856,13 +878,14 @@
           (http/json-response nil (property-response updated)))))
 
     :semantic/properties-delete
-    (if-let [property (find-entity db (:property-id path-params))]
+    (if-let [property (resolve-property db (:property-id path-params))]
       (if-not (property? property)
         (http/not-found)
-        (do
-          (outliner-page/delete! conn (:block/uuid property))
-          (broadcast-change! self)
-          (js/Response. nil #js {:status 204})))
+        (if (outliner-page/delete! conn (:block/uuid property))
+          (do
+            (broadcast-change! self)
+            (js/Response. nil #js {:status 204}))
+          (http/bad-request "property cannot be deleted")))
       (http/not-found))
 
     :semantic/search

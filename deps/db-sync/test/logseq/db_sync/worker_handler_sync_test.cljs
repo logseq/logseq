@@ -693,6 +693,65 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-property-routes-accept-ident-and-title-selectors-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   property (outliner-property/upsert-property!
+                             conn nil {:logseq.property/type :default
+                                       :db/cardinality :db.cardinality/one}
+                             {:property-name "API estimate"})
+                   property-ident (:db/ident property)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   get-request (fn [selector]
+                                 (semantic-json-request
+                                  (str "/semantic/properties/"
+                                       (js/encodeURIComponent selector)
+                                       "?graph-id=graph-1") "GET" nil))]
+               (-> (p/let [ident-selector (str (namespace property-ident) "/" (name property-ident))
+                            ident-response (sync-handler/handle-http self (get-request ident-selector))
+                            ident-body (json-body ident-response)
+                            title-response (sync-handler/handle-http self (get-request "API estimate"))
+                            title-body (json-body title-response)]
+                     (is (= 200 (.-status ident-response)))
+                     (is (= ident-selector (:ident ident-body)))
+                     (is (= 200 (.-status title-response)))
+                     (is (= (:uuid ident-body) (:uuid title-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-property-routes-reject-invalid-schema-and-built-in-delete-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   status-id (:block/uuid (d/entity @conn :logseq.property/status))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   invalid-create (semantic-json-request
+                                   "/semantic/properties?graph-id=graph-1" "POST"
+                                   {:title "Broken" :type "not-a-property-type"})
+                   invalid-update (semantic-json-request
+                                   (str "/semantic/properties/" status-id "?graph-id=graph-1") "PATCH"
+                                   {:cardinality "not-a-cardinality"})
+                   delete-built-in (semantic-json-request
+                                    (str "/semantic/properties/" status-id "?graph-id=graph-1") "DELETE" nil)]
+               (-> (p/let [create-response (sync-handler/handle-http self invalid-create)
+                            update-response (sync-handler/handle-http self invalid-update)
+                            delete-response (sync-handler/handle-http self delete-built-in)]
+                     (is (= 400 (.-status create-response)))
+                     (is (= 400 (.-status update-response)))
+                     (is (= 400 (.-status delete-response)))
+                     (is (some? (d/entity @conn :logseq.property/status))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-task-routes-create-and-list-db-tasks-test
   (async done
          (with-memory-sql-async
@@ -781,16 +840,11 @@
            (fn [sql]
              (storage/init-schema! sql)
              (let [conn (sqlite-export/create-conn)
-                   page-id (random-uuid)
                    tx-reports (atom [])
-                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
-                                         :block/tags :logseq.class/Page
-                                         :block/created-at 1 :block/updated-at 1}])
                    self #js {:sql sql :conn conn :schema-ready true}
                    request (semantic-json-request
                             "/semantic/tasks?graph-id=graph-1" "POST"
-                            {:title "Atomic task" :page-id (str page-id)
-                             :status "TODO" :priority "HIGH"
+                            {:title "Atomic task" :status "TODO" :priority "HIGH"
                              :scheduled 20260713 :deadline 20260714})]
                (d/listen! conn ::semantic-create-task-tx
                           #(swap! tx-reports conj %))
@@ -799,6 +853,7 @@
                      (d/unlisten! conn ::semantic-create-task-tx)
                      (is (= 201 (.-status response)))
                      (is (= 1 (count @tx-reports)))
+                     (is (= 1 (count (d/datoms @conn :avet :block/journal-day))))
                      (is (= "logseq.property/status.todo" (get-in body [:status :ident])))
                      (is (= "logseq.property/priority.high" (get-in body [:priority :ident])))
                      (is (= 20260713 (:scheduled body)))
@@ -806,6 +861,26 @@
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (d/unlisten! conn ::semantic-create-task-tx)
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-invalid-task-does-not-create-today-journal-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/tasks?graph-id=graph-1" "POST"
+                            {:title "Invalid task" :status "not-a-status"})]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid task status" (:error body)))
+                     (is (empty? (d/datoms @conn :avet :block/journal-day))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
                               (is false (str error))
                               (done)))))))))
 

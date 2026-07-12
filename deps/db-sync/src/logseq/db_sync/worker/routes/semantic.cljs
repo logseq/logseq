@@ -112,7 +112,7 @@
    "deleteProperty" ["Delete a property definition" "Deletes one property definition through Logseq's property deletion rules."]
    "listAssets" ["List assets" "Returns a cursor-paginated list of asset blocks with optional creation and update time filters."]
    "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum."]
-   "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed download URL for the asset block's R2 object."]
+   "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed URL for the asset block's R2 object. For an image asset, fetch or use the URL directly to display image content; it does not require an Authorization header."]
    "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]})
 
 (defn- operation-routes [path-key]
@@ -223,9 +223,9 @@
     "createTag" {:required ["title"] :properties {:title {:type "string"}}}
     "updateTag" {:required ["title"] :properties {:title {:type "string"}}}
     "createProperty" {:required ["title"]
-                      :properties {:title {:type "string"} :type {:type "string"}
+                      :properties {:title {:type "string"} :type {:$ref "#/components/schemas/PropertyType"}
                                    :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
-    "updateProperty" {:properties {:title {:type "string"} :type {:type "string"}
+    "updateProperty" {:properties {:title {:type "string"} :type {:$ref "#/components/schemas/PropertyType"}
                                     :cardinality {:enum ["db.cardinality/one" "db.cardinality/many"]}}}
     nil))
 
@@ -260,50 +260,58 @@
       {:required true
        :content {"application/json" {:schema (assoc schema :type "object")}}})))
 
+(defn- list-response [response-key schema description]
+  {:description description
+   :content {"application/json"
+             {:schema {:type "object"
+                       :required [(name response-key)]
+                       :properties {response-key {:type "array"
+                                                  :items {:$ref (str "#/components/schemas/" schema)}}
+                                    :next-cursor {:type "string"}}}}}})
+
+(defn- entity-response [schema description]
+  {:description description
+   :content {"application/json" {:schema {:$ref (str "#/components/schemas/" schema)}}}})
+
 (defn- operation-responses [operation-id]
   (merge {"200" (case operation-id
+                  "listPages" (list-response :pages "PageResponse" "A cursor page of pages")
                   "listPageBlocks"
-                  {:description "A cursor page of top-level block trees"
-                   :content {"application/json"
-                             {:schema {:type "object"
-                                       :required ["blocks"]
-                                       :properties {:blocks {:type "array"
-                                                             :items {:$ref "#/components/schemas/BlockResponse"}}
-                                                    :next-cursor {:type "string"}}}}}}
+                  (list-response :blocks "BlockResponse" "A cursor page of top-level block trees")
+                  "listPageReferences" (list-response :references "BlockResponse" "A cursor page of page references")
                   "listTasks"
-                  {:description "A cursor page of DB Task objects"
-                   :content {"application/json"
-                             {:schema {:type "object"
-                                       :required ["tasks"]
-                                       :properties {:tasks {:type "array"
-                                                            :items {:$ref "#/components/schemas/TaskResponse"}}
-                                                    :next-cursor {:type "string"}}}}}}
+                  (list-response :tasks "TaskResponse" "A cursor page of DB Task objects")
+                  "listTags" (list-response :tags "TagResponse" "A cursor page of tags")
+                  "listTagObjects" (list-response :objects "BlockResponse" "A cursor page of tagged objects")
+                  "listProperties" (list-response :properties "PropertyResponse" "A cursor page of property definitions")
                   "listAssets"
-                  {:description "A cursor page of asset blocks"
-                   :content {"application/json"
-                             {:schema {:type "object"
-                                       :required ["assets"]
-                                       :properties {:assets {:type "array"
-                                                             :items {:$ref "#/components/schemas/AssetResponse"}}
-                                                    :next-cursor {:type "string"}}}}}}
+                  (list-response :assets "AssetResponse" "A cursor page of asset blocks")
+                  "searchGraph" (list-response :results "SearchResultResponse" "A cursor page of search results")
+                  "getPage" (entity-response "PageResponse" "A page")
+                  "updatePage" (entity-response "PageResponse" "The updated page")
+                  "getBlock" (entity-response "BlockResponse" "A block")
+                  "updateBlock" (entity-response "BlockResponse" "The updated block")
+                  "getTag" (entity-response "TagResponse" "A tag")
+                  "updateTag" (entity-response "TagResponse" "The updated tag")
                   "getProperty"
-                  {:description "A property definition and its user-extensible choices"
-                   :content {"application/json"
-                             {:schema {:$ref "#/components/schemas/PropertyResponse"}}}}
+                  (entity-response "PropertyResponse" "A property definition and its user-extensible choices")
+                  "updateProperty" (entity-response "PropertyResponse" "The updated property definition")
+                  "getAsset" (entity-response "AssetResponse" "Asset metadata and a temporary URL")
                   {:description "Success"})
           "400" {:description "Invalid request"}
           "403" {:description "Forbidden"}
           "409" {:description "Unavailable for E2EE graphs"}
           "429" {:description "Rate limit exceeded"}}
          (case operation-id
+           "createPage" {"201" (entity-response "PageResponse" "The created page")}
+           "insertBlockChildren" {"201" {:description "The inserted block trees"}}
+           "insertBlockTree" {"201" {:description "The inserted block trees"}}
+           "createTag" {"201" (entity-response "TagResponse" "The created tag")}
+           "createProperty" {"201" (entity-response "PropertyResponse" "The created property definition")}
            "createTask"
-           {"201" {:description "The created DB Task object"
-                   :content {"application/json"
-                             {:schema {:$ref "#/components/schemas/TaskResponse"}}}}}
+           {"201" (entity-response "TaskResponse" "The created DB Task object")}
            "createAsset"
-           {"201" {:description "The created asset block"
-                   :content {"application/json"
-                             {:schema {:$ref "#/components/schemas/AssetResponse"}}}}}
+           {"201" (entity-response "AssetResponse" "The created asset block")}
            {})))
 
 (defn openapi-document [issuer]
@@ -324,6 +332,15 @@
                                            :page-id {:type "string"}
                                            :children {:type "array"
                                                       :items {:$ref "#/components/schemas/BlockResponse"}}}}
+              :PageResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}]}
+              :TagResponse {:type "object" :required ["uuid" "title"]
+                            :properties {:uuid {:type "string"}
+                                         :title {:type "string"}
+                                         :ident {:type "string"}}}
+              :SearchResultResponse {:type "object" :required ["uuid" "title" "resource"]
+                                     :properties {:uuid {:type "string"}
+                                                  :title {:type "string"}
+                                                  :resource {:enum ["blocks" "tags" "properties" "assets"]}}}
               :EntitySelector {:type "string"
                                :description "An existing entity UUID, qualified ident, or exact title."}
               :TaskStatusSelector
@@ -348,12 +365,17 @@
                                               :choices {:type "array"
                                                         :description "The current user-extensible choices for this property."
                                                         :items {:$ref "#/components/schemas/PropertyChoice"}}}}
+              :PropertyType {:type "string"
+                             :enum ["default" "number" "date" "datetime" "checkbox" "url" "node" "asset"
+                                    "map" "json" "string"]}
               :AssetResponse {:type "object" :required ["uuid" "title" "type" "size" "checksum"]
                               :properties {:uuid {:type "string"}
                                            :title {:type "string"}
                                            :type {:type "string"}
                                            :size {:type "integer" :minimum 0 :maximum 104857600}
-                                           :checksum {:type "string" :pattern "^[0-9a-f]{64}$"}}}
+                                           :checksum {:type "string" :pattern "^[0-9a-f]{64}$"}
+                                           :url {:type "string" :format "uri"}
+                                           :expires-at {:type "integer"}}}
               :TaskResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}
                                      {:type "object"
                                       :required ["status"]

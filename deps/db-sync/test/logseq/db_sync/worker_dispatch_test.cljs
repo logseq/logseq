@@ -22,6 +22,8 @@
               #js {:fetch (fn [_request]
                             (js/Promise.resolve (ok-json-response)))})})
 
+(declare capturing-do-namespace json-body)
+
 (deftest admin-token-bypasses-graph-access-check-for-sync-route-test
   (async done
          (let [access-check-calls (atom 0)
@@ -39,6 +41,44 @@
                    (is (= 200 (.-status resp)))
                    (is (= true (:ok body)))
                    (is (= 0 @access-check-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest public-sync-route-rejects-semantic-tail-without-touching-durable-object-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/semantic/pages"
+                                    #js {:method "GET"})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/with-redefs [index-handler/graph-access-response
+                               (fn [_request _env _graph-id]
+                                 (p/resolved (ok-json-response)))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 404 (.-status response)))
+                   (is (= "not found" (:error body)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest public-sync-route-still-forwards-legacy-snapshot-request-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/snapshot/download"
+                                    #js {:method "GET"})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/with-redefs [index-handler/graph-access-response
+                               (fn [_request _env _graph-id]
+                                 (p/resolved (ok-json-response)))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (= "/snapshot/download"
+                          (.-pathname (js/URL. (.-url (first @forwarded))))))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
@@ -136,6 +176,22 @@
                (is (= "#/components/schemas/PropertyResponse"
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/properties/{property-id}")
                                     :get :responses :200 :content :application/json :schema :$ref])))
+               (is (= ["default" "number" "date" "datetime" "checkbox" "url" "node" "asset"
+                       "map" "json" "string"]
+                      (get-in body [:components :schemas :PropertyType :enum])))
+               (is (= "#/components/schemas/PropertyType"
+                      (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/properties")
+                                    :post :requestBody :content :application/json :schema
+                                    :properties :type :$ref])))
+               (doseq [[path response-key schema]
+                       [["/api/v1/graphs/{graph-id}/pages" :pages "PageResponse"]
+                        ["/api/v1/graphs/{graph-id}/tags" :tags "TagResponse"]
+                        ["/api/v1/graphs/{graph-id}/properties" :properties "PropertyResponse"]
+                        ["/api/v1/graphs/{graph-id}/search" :results "SearchResultResponse"]]]
+                 (is (= (str "#/components/schemas/" schema)
+                        (get-in body [:paths (keyword path) :get :responses :200
+                                      :content :application/json :schema :properties
+                                      response-key :items :$ref]))))
                (is (= "#/components/schemas/PropertyChoice"
                       (get-in body [:components :schemas :PropertyResponse :properties
                                     :choices :items :$ref])))
@@ -172,6 +228,10 @@
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :get :operationId])))
                (is (= "createAsset"
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post :operationId])))
+               (is (string/includes?
+                    (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets/{asset-block-id}")
+                                  :get :description])
+                    "display image"))
                (is (= "binary"
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post
                                     :requestBody :content :application/octet-stream :schema :format])))
