@@ -729,9 +729,19 @@
   [repo]
   (db-sync/status repo))
 
+(defn- db-sync-dbs-open?
+  [repo]
+  (and (some? (worker-state/get-datascript-conn repo))
+       (some? (worker-state/get-client-ops-conn repo))))
+
+(declare start-db!)
 (def-thread-api :thread-api/db-sync-start
   [repo]
-  (db-sync/start! repo))
+  (if (db-sync-dbs-open? repo)
+    (db-sync/start! repo)
+    (p/do!
+     (start-db! repo {:close-other-db? false})
+     (db-sync/start! repo))))
 
 (def-thread-api :thread-api/db-sync-stop
   []
@@ -744,6 +754,14 @@
 (def-thread-api :thread-api/db-sync-request-asset-download
   [repo asset-uuid]
   (db-sync/request-asset-download! repo asset-uuid))
+
+(def-thread-api :thread-api/db-sync-download-missing-assets
+  [repo graph-id]
+  (db-sync/download-missing-assets! repo graph-id))
+
+(def-thread-api :thread-api/db-sync-retry-asset-upload
+  [repo]
+  (db-sync/retry-asset-upload! repo))
 
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
@@ -1535,15 +1553,18 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (when-not conn
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
-    (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
-          tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta (cond-> {::sqlite-export/imported-data? true}
-                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
-                    ;; to keep pipeline from reverting their import
-                    (= :datoms (::sqlite-export/graph-format export-edn))
-                    (assoc :initial-db? true))]
-      (ldb/transact! conn tx-data tx-meta)
-      {:tx-count (count tx-data)})))
+    (let [txs (sqlite-export/build-import export-edn @conn {})
+          validation (sqlite-export/validate-import-txs txs @conn)]
+      (if-let [error (:error validation)]
+        {:error error}
+        (let [tx-data (:tx-data validation)
+              tx-meta (cond-> {::sqlite-export/imported-data? true}
+                        ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
+                        ;; to keep pipeline from reverting their import
+                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        (assoc :initial-db? true))]
+          (ldb/transact! conn tx-data tx-meta)
+          {:tx-count (count tx-data)})))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]

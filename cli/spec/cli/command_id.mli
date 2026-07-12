@@ -63,7 +63,7 @@ type t =
   | Agent_bridge
 
 val to_string : t -> string
-val to_path : t -> string list
+val to_path : t -> string Rrbvec.t
 val is_write : t -> bool
 val requires_graph : t -> bool
 val requires_auth : t -> bool

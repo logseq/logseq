@@ -1,7 +1,8 @@
 (ns logseq.db-sync.tx-sanitize
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.kv-entity :as kv-entity]))
 
 (def ^:private retract-entity-ops
   #{:db/retractEntity :db.fn/retractEntity})
@@ -27,6 +28,75 @@
 (def ^:private entity-op-kinds
   #{:db/add :db/retract :db/cas :db.fn/cas})
 
+(defn- entity-op?
+  [item]
+  (and (vector? item)
+       (<= 4 (count item))
+       (contains? entity-op-kinds (first item))))
+
+(def ^:private ignored-kv-entities
+  (into #{}
+        (keep (fn [[kw config]]
+                (when (get-in config [:rtc :rtc/ignore-entity-when-init-upload])
+                  kw)))
+        kv-entity/kv-entities))
+
+(defn- tx-ignored-kv-entity-refs
+  [tx-data]
+  (into ignored-kv-entities
+        (keep (fn [item]
+                (cond
+                  (and (map? item)
+                       (contains? ignored-kv-entities (:db/ident item)))
+                  (:db/id item)
+
+                  (and (entity-op? item)
+                       (= :db/ident (nth item 2))
+                       (contains? ignored-kv-entities (nth item 3)))
+                  (second item))))
+        tx-data))
+
+(defn- ignored-kv-entity-ref?
+  [db ignored-entity-refs entity-ref]
+  (or (contains? ignored-entity-refs entity-ref)
+      (when-let [eid (entity-ref->eid db entity-ref)]
+        (contains? ignored-kv-entities (:db/ident (d/entity db eid))))))
+
+(defn- ignored-kv-entity-op?
+  [db ignored-entity-refs item]
+  (cond
+    (and (map? item) (contains? item :db/id))
+    (ignored-kv-entity-ref? db ignored-entity-refs (:db/id item))
+
+    (retract-entity-op? item)
+    (ignored-kv-entity-ref? db ignored-entity-refs (second item))
+
+    (entity-op? item)
+    (ignored-kv-entity-ref? db ignored-entity-refs (second item))
+
+    :else
+    false))
+
+(defn- strip-ignored-kv-entity-ops
+  [db tx-data]
+  (let [ignored-entity-refs (tx-ignored-kv-entity-refs tx-data)]
+    (remove (partial ignored-kv-entity-op? db ignored-entity-refs) tx-data)))
+
+(defn- drop-ops-targeting-retracted-entities
+  [db tx-data]
+  (let [retract-eids (->> tx-data
+                          (keep (fn [item]
+                                  (when (retract-entity-op? item)
+                                    (entity-ref->eid db (second item)))))
+                          set)]
+    (if (empty? retract-eids)
+      tx-data
+      (remove (fn [item]
+                (and (entity-op? item)
+                     (contains? retract-eids
+                                (entity-ref->eid db (second item)))))
+              tx-data))))
+
 (def ^:private migration-deleted-attrs
   #{:block/path-refs
     :block/pre-block?
@@ -38,7 +108,7 @@
   (keep (fn [item]
           (when-not (and (vector? item)
                          (<= 4 (count item))
-                         (contains? entity-op-kinds (first item))
+                         (entity-op? item)
                          (contains? migration-deleted-attrs (nth item 2)))
             item))
         tx-data))
@@ -97,13 +167,21 @@
 (defn sanitize-tx
   ([db tx-data]
    (sanitize-tx db tx-data nil))
-  ([db tx-data {:keys [drop-missing-retract-ops?]
-                :or {drop-missing-retract-ops? false}}]
+  ([db tx-data {:keys [drop-missing-retract-ops?
+                       drop-ops-targeting-retracted-entities?
+                       retract-touched-descendants?]
+                :or {drop-missing-retract-ops? false
+                     drop-ops-targeting-retracted-entities? false
+                     retract-touched-descendants? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
+                    (seq ignored-kv-entities)
+                    (strip-ignored-kv-entity-ops db)
                     drop-missing-retract-ops?
                     (remove (fn [item]
                               (and (retract-entity-op? item)
-                                   (nil? (entity-ref->eid db (second item)))))))
+                                   (nil? (entity-ref->eid db (second item))))))
+                    drop-ops-targeting-retracted-entities?
+                    (drop-ops-targeting-retracted-entities db))
          tx-data* (drop-conflicted-encrypted-retracts tx-data*)
          tx-data* (vec tx-data*)
          retract-eids (->> tx-data*
@@ -121,7 +199,10 @@
                                                   (when (:block/uuid entity)
                                                     (ldb/get-block-full-children-ids db eid)))))
                                       set)
-         missing-retract-eids (sort (set/difference descendant-retract-eids retract-eids touched-eids))]
+         preserved-eids (cond-> retract-eids
+                          (not retract-touched-descendants?)
+                          (set/union touched-eids))
+         missing-retract-eids (sort (set/difference descendant-retract-eids preserved-eids))]
      (cond-> tx-data*
        (seq missing-retract-eids)
        (into (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids))))))

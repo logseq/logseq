@@ -18,9 +18,10 @@
  (deps
   (alias ../bin/melange)
   (alias ./melange)
+  (alias ../dist/bundle)
   (:test_cases ./node/test/test_cases.js)
   (:fake_codex ./node/test/fake_codex.js)
-  (:entrypoint ../bin/logseq_cli_melange/bin/main.js))
+  (:entrypoint ../dist/logseq-cli.js))
  (action
   (setenv
    LOGSEQ_CLI_MELANGE_ENTRYPOINT

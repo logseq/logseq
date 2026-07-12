@@ -236,9 +236,13 @@
   (let [refresh-token (js/localStorage.getItem "refresh-token")
         id-token (js/localStorage.getItem "id-token")
         access-token (js/localStorage.getItem "access-token")
+        refresh-token-present?
+        (and (string? refresh-token) (not (string/blank? refresh-token)))
+        _ (when refresh-token-present?
+            (state/set-auth-refresh-token refresh-token))
         restored-from-cache?
         (boolean
-         (when (and (string? refresh-token) (not (string/blank? refresh-token))
+         (when (and refresh-token-present?
                     (string? id-token) (not (string/blank? id-token))
                     (string? access-token) (not (string/blank? access-token)))
            (when-let [parsed (parse-jwt-safe id-token)]
@@ -246,8 +250,7 @@
                (set-tokens! id-token access-token refresh-token)
                true))))
         should-refresh?
-        (and (string? refresh-token)
-             (not (string/blank? refresh-token))
+        (and refresh-token-present?
              (or (not restored-from-cache?)
                  (some-> (state/get-auth-id-token)
                          parse-jwt-safe

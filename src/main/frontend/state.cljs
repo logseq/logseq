@@ -396,7 +396,8 @@
              :inputs [:today :7d-after]
              :group-by-page? false
              :collapsed? true}]}
-          :ui/hide-empty-properties? false}))
+          :ui/hide-empty-properties? false
+          :ui/mask-email? true}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo set-state!)

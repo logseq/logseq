@@ -10,7 +10,7 @@ type query_entry = {
   name : string;
   source : source;
   doc : string option;
-  inputs : input_spec list;
+  inputs : input_spec Rrbvec.t;
   query : Melange_edn_melange.any;
 }
 
@@ -27,20 +27,22 @@ type action =
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
       query : Melange_edn_melange.any;
-      inputs : Melange_edn_melange.any list;
+      inputs : Melange_edn_melange.any Rrbvec.t;
       name : string option;
     }
   | List
 
-val built_in_queries : query_entry list
+val built_in_queries : query_entry Rrbvec.t
 val normalize_query_name : string -> string option
-val list_queries : Cli_config.t -> query_entry list
+val list_queries : Cli_config.t -> query_entry Rrbvec.t
 val find_query : Cli_config.t -> string -> query_entry option
-val validate_query : Melange_edn_melange.any -> Melange_edn_melange.any Error.build_result
+
+val validate_query :
+  Melange_edn_melange.any -> Melange_edn_melange.any Error.build_result
 
 val normalize_inputs :
   query_entry option ->
-  Melange_edn_melange.any list ->
-  Melange_edn_melange.any list Error.build_result
+  Melange_edn_melange.any Rrbvec.t ->
+  Melange_edn_melange.any Rrbvec.t Error.build_result
 
 include Command_spec.S with type parsed := parsed and type action := action

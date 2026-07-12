@@ -95,7 +95,7 @@ const buildWorkflow = readText(".github/workflows/build.yml");
 assert.match(buildWorkflow, /pnpm cli:release/, "db graph workflow should build release CLI");
 assertNotContains(buildWorkflow, "clojure -M:cljs release logseq-cli", "db graph workflow");
 assert.match(buildWorkflow, /pnpm db-worker-node:release:bundle/, "db graph workflow should build release db-worker-node runtime");
-assert.match(buildWorkflow, /pnpm --dir dist\/cli-package install --prod/, "db graph workflow should install prepared CLI package dependencies");
+assert.match(buildWorkflow, /pnpm --dir dist\/cli-package install --prod --ignore-workspace/, "db graph workflow should install prepared CLI package dependencies");
 assert.match(buildWorkflow, /libsecret-1-0/, "db graph workflow should install keytar's Linux runtime dependency");
 assert.match(buildWorkflow, /pnpm --dir dist\/cli-package pack --pack-destination \.\.\//, "db graph workflow should verify the prepared CLI package with pnpm pack");
 assertNotContains(buildWorkflow, "create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph --subset", "db graph workflow");
@@ -123,7 +123,7 @@ assert.match(
 );
 assert.match(
   desktopReleaseWorkflow,
-  /pnpm --dir cli install --frozen-lockfile/,
+  /pnpm --dir cli install --frozen-lockfile --ignore-workspace/,
   "desktop release workflow should install cli/ pnpm deps",
 );
 assert.match(
@@ -149,6 +149,18 @@ assertCliReleaseCommand(rootPackage.scripts?.["cli:release"], "cli:release");
 for (const [scriptName, command] of Object.entries(rootPackage.scripts ?? {})) {
   assertRootScriptDoesNotBuildShadowCli(scriptName, command);
 }
+
+const gulpfile = readText("gulpfile.js");
+assert.match(
+  gulpfile,
+  /pnpm cli:release/,
+  "Electron maker preparation should stage the CLI runtime",
+);
+assert.ok(
+  gulpfile.indexOf("pnpm cli:release") <
+    gulpfile.indexOf("pnpm desktop:prepare-runtime-js"),
+  "Electron maker preparation should stage the CLI before preparing desktop runtime scripts",
+);
 
 const stageScriptPath = path.join(repoRoot, "scripts", "stage-cli-runtime.mjs");
 assert.equal(
@@ -364,6 +376,11 @@ assert.match(
   prepareDesktopRuntimeScript,
   /cli[\\/]_build[\\/]default[\\/]dist[\\/]logseq-cli\.js/,
   "desktop runtime preparation should compare the staged CLI against the cli/ bundle",
+);
+assert.match(
+  prepareDesktopRuntimeScript,
+  /fs\.chmod\(to, stats\.mode \| 0o200\)/,
+  "desktop runtime preparation should overwrite read-only staged runtime files",
 );
 assertNotContains(
   prepareDesktopRuntimeScript,

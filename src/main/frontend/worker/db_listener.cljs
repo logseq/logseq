@@ -7,7 +7,6 @@
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker-common.util :as worker-util]
             [frontend.worker.sync :as db-sync]
             [promesa.core :as p]))
 
@@ -80,14 +79,14 @@
                (fn listen-db-changes!-inner
                  [{:keys [tx-data tx-meta] :as tx-report}]
                  (when (seq tx-data)
-                   (when (and worker-util/dev-or-test?
-                              (not (:batch-final-tx-report? tx-meta)))
-                     (db-sync/update-local-sync-checksum! repo tx-report))
-                   (when-not (:batch-tx? @conn)
-                     (let [tx-report' (if sync-db-to-main-thread?
-                                        (sync-db-to-main-thread repo conn tx-report)
-                                        tx-report)
-                           opt {:repo repo}]
-                       (when tx-report'
-                         (doseq [[k handler-fn] handlers]
-                           (handler-fn k opt tx-report'))))))))))
+                   (let [update-checksum? (or (:batch-final-tx-report? tx-meta)
+                                               (not (:batch-tx-report? tx-meta)))]
+                     (when update-checksum?
+                       (db-sync/update-local-sync-checksum! repo tx-report)
+                       (let [tx-report' (if sync-db-to-main-thread?
+                                          (sync-db-to-main-thread repo conn tx-report)
+                                          tx-report)
+                             opt {:repo repo}]
+                         (when tx-report'
+                           (doseq [[k handler-fn] handlers]
+                             (handler-fn k opt tx-report')))))))))))

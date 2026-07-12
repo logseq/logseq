@@ -245,7 +245,7 @@ module HTTP = struct
     let body = request_body method_ body in
     let init =
       Fetch.RequestInit.make ~method_
-        ~headers:(Fetch.HeadersInit.makeWithArray (Array.of_list headers))
+        ~headers:(Fetch.HeadersInit.makeWithArray (Rrbvec.to_array headers))
         ?body
         ~signal:(Fetch.AbortController.signal controller)
         ()
@@ -358,13 +358,12 @@ module Events = struct
             reader_ref := Some reader;
             read_loop closed (make_decoder ()) reader on_chunk
     in
-    ignore
-      (Fetch.fetchWithInit url init
-       |> Js.Promise.then_ handle_response
-       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-        : unit Js.Promise.t);
+    let request =
+      Fetch.fetchWithInit url init
+      |> Js.Promise.then_ handle_response
+      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+    in
     let close () =
-      closed := true;
       Fetch.AbortController.abort controller;
       (match !reader_ref with
       | None -> ()
@@ -372,7 +371,8 @@ module Events = struct
           ignore
             (cancel reader |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
               : unit Js.Promise.t));
-      Cli_effect.pure ()
+      Cli_effect.catch (HTTP.promise_to_effect request) (fun _ ->
+          Cli_effect.pure ())
     in
     Cli_effect.pure { close }
 end

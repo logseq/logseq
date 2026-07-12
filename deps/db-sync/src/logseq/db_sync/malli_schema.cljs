@@ -14,6 +14,9 @@
    [:tx :string]
    [:outliner-op {:optional true} [:maybe :keyword]]])
 
+(def client-revision-entry
+  [:client-revision {:optional true} :string])
+
 (def ws-client-message-schema
   [:multi {:dispatch :type}
    ["hello"
@@ -31,6 +34,7 @@
    ["tx/batch"
     [:map
      [:type [:= "tx/batch"]]
+     client-revision-entry
      [:t-before :int]
      [:txs [:sequential tx-entry-schema]]]]
    ["ping"
@@ -81,10 +85,6 @@
    [:t :int]
    [:checksum {:optional true} :string]])
 
-(def repair-blocks-response-schema
-  [:map
-   [:tx :string]])
-
 (def ws-server-message-schema
   [:multi {:dispatch :type}
    ["hello"
@@ -123,9 +123,6 @@
 
 (def graph-member-role-schema
   [:enum "manager" "member"])
-
-(def client-revision-entry
-  [:client-revision {:optional true} :string])
 
 (def graph-info-schema
   [:map
@@ -272,7 +269,6 @@
    :worker/health http-ok-response-schema
    :sync/health http-ok-response-schema
    :sync/pull pull-ok-schema
-   :sync/repair-blocks repair-blocks-response-schema
    :sync/tx-batch [:or tx-batch-ok-schema tx-reject-schema http-error-response-schema]
    :sync/snapshot-download snapshot-download-response-schema
    :sync/snapshot-upload snapshot-upload-response-schema

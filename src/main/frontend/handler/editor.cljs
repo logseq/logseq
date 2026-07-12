@@ -829,6 +829,7 @@
 
                   (and concat-prev-block?
                        (string/blank? (:block/title prev-block))
+                       (not= (:db/id prev-block) (:db/id (:block/parent block)))
                        (not (editor-block-preserved-on-empty-title-merge? prev-block))
                        (not delete-concat?)) ; backspace
                   (p/do!

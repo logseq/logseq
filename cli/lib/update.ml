@@ -26,17 +26,18 @@ type action = {
   target_uuid : Cli_primitive.uuid option;
   target_page : string option;
   pos : Block.position option;
-  update_tags : Selector.tag list;
-  update_properties : Property.assignment list;
-  remove_tags : Selector.tag list;
-  remove_properties : Property.key list;
+  update_tags : Selector.tag Rrbvec.t;
+  update_properties : Property.assignment Rrbvec.t;
+  remove_tags : Selector.tag Rrbvec.t;
+  remove_properties : Property.key Rrbvec.t;
   content : string option;
   source_label : string option;
   target_label : string option;
 }
 
 let kw value = Edn_util.keyword value
-let vector values = Edn_util.vector values
+let vector_vec values = Edn_util.vector_vec values
+let vector values = vector_vec values
 
 let trim_non_empty = function
   | None -> None
@@ -45,7 +46,7 @@ let trim_non_empty = function
       if value = "" then None else Some value
 
 let count_present values =
-  List.fold_left
+  Vec.fold_left
     (fun count -> function Some _ -> count + 1 | None -> count)
     0 values
 
@@ -58,15 +59,17 @@ let invalid_uuid_option option_name = function
 
 let invalid_options (opts : opts) =
   let source_selectors =
-    [ Option.map Int64.to_string opts.id; trim_non_empty opts.uuid ]
+    Vec.of_array
+      [| Option.map Int64.to_string opts.id; trim_non_empty opts.uuid |]
   in
   let target_page = trim_non_empty opts.target_page in
   let target_selectors =
-    [
-      Option.map Int64.to_string opts.target_id;
-      trim_non_empty opts.target_uuid;
-      target_page;
-    ]
+    Vec.of_array
+      [|
+        Option.map Int64.to_string opts.target_id;
+        trim_non_empty opts.target_uuid;
+        target_page;
+      |]
   in
   let has_target = count_present target_selectors > 0 in
   let has_updates =
@@ -109,8 +112,8 @@ let validate_parsed (Parsed_update_block opts) =
 
 let parse_tags_edn _label value =
   match value with
-  | None -> Ok []
-  | Some text when String.trim text = "" -> Ok []
+  | None -> Ok Vec.empty
+  | Some text when String.trim text = "" -> Ok Vec.empty
   | Some _ -> Add.parse_tags_vector_option value
 
 let property_key_of_value value =
@@ -133,67 +136,69 @@ let edn_value_of_string ~label text =
 
 let parse_properties_edn value =
   match value with
-  | None -> Ok []
-  | Some text when String.trim text = "" -> Ok []
+  | None -> Ok Vec.empty
+  | Some text when String.trim text = "" -> Ok Vec.empty
   | Some text ->
       Error.bind (edn_value_of_string ~label:"properties" text) (fun parsed ->
           match Edn_util.as_map parsed with
-          | Some [] ->
+          | Some fields when Vec.is_empty fields ->
               Error (Error.invalid_options "properties must be a non-empty map")
           | Some fields ->
-              let rec loop acc = function
-                | [] -> Ok (List.rev acc)
-                | (key, value) :: rest -> (
+              let rec loop acc remaining =
+                match Vec.pop_front remaining with
+                | None -> Ok acc
+                | Some ((key, value), rest) -> (
                     match property_key_of_value key with
-                    | Some key -> loop ({ Property.key; value } :: acc) rest
+                    | Some key ->
+                        loop (Vec.push_back acc { Property.key; value }) rest
                     | None ->
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
                              ^ Melange_edn_melange.to_edn_string key)))
               in
-              loop [] fields
+              loop Vec.empty fields
           | None -> Error (Error.invalid_options "properties must be a map"))
 
 let parse_property_keys_edn value =
   match value with
-  | None -> Ok []
-  | Some text when String.trim text = "" -> Ok []
+  | None -> Ok Vec.empty
+  | Some text when String.trim text = "" -> Ok Vec.empty
   | Some text ->
       Error.bind (edn_value_of_string ~label:"properties" text) (fun parsed ->
           match Edn_util.as_vector parsed with
-          | Some [] ->
+          | Some values when Vec.is_empty values ->
               Error
                 (Error.invalid_options "properties must be a non-empty vector")
           | Some values ->
-              let rec loop acc = function
-                | [] -> Ok (List.rev acc)
-                | value :: rest -> (
+              let rec loop acc remaining =
+                match Vec.pop_front remaining with
+                | None -> Ok acc
+                | Some (value, rest) -> (
                     match property_key_of_value value with
-                    | Some key -> loop (key :: acc) rest
+                    | Some key -> loop (Vec.push_back acc key) rest
                     | None ->
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
                              ^ Melange_edn_melange.to_edn_string value)))
               in
-              loop [] values
+              loop Vec.empty values
           | None -> Error (Error.invalid_options "properties must be a vector"))
 
 let status_assignment = function
-  | None -> Ok []
+  | None -> Ok Vec.empty
   | Some status -> (
       match Add.normalize_status status with
       | Some ident ->
           Ok
-            [
-              {
-                Property.key =
-                  Property.Key_ident
-                    (Edn_util.keyword_t "logseq.property/status");
-                value = Edn_util.any ident;
-              };
-            ]
+            (Vec.singleton
+               {
+                 Property.key =
+                   Property.Key_ident
+                     (Edn_util.keyword_t "logseq.property/status");
+                 value = Edn_util.any ident;
+               })
       | None -> Error (Error.invalid_options ("invalid status: " ^ status)))
 
 let source_label (opts : opts) =
@@ -228,11 +233,7 @@ let build_action opts repo =
   | Some message -> Error (Error.invalid_options message)
   | None ->
       if Option.is_none opts.id && Option.is_none (trim_non_empty opts.uuid)
-      then
-        Error
-          (Error.make
-             (Error.Missing_source)
-             "source block is required")
+      then Error (Error.make Error.Missing_source "source block is required")
       else
         Error.bind (status_assignment opts.status) (fun status_properties ->
             Error.bind (parse_tags_edn "update-tags" opts.update_tags_edn)
@@ -261,7 +262,7 @@ let build_action opts repo =
                                    else None);
                                 update_tags;
                                 update_properties =
-                                  status_properties @ update_properties;
+                                  Vec.append status_properties update_properties;
                                 remove_tags;
                                 remove_properties;
                                 content = opts.content;
@@ -275,30 +276,36 @@ let build ?registry:_ config _globals (Parsed_update_block opts) =
   | Some repo -> build_action opts repo
 
 let block_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector_vec
+    (Vec.of_array
+       [| kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" |])
 
 let page_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/name";
-      kw "block/title";
-      kw "logseq.property/deleted-at";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/name";
+         kw "block/title";
+         kw "logseq.property/deleted-at";
+       |])
 
 let tag_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector_vec
+    (Vec.of_array
+       [| kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" |])
 
 let property_selector =
-  vector
-    [
-      kw "db/id";
-      kw "db/ident";
-      kw "block/name";
-      kw "block/title";
-      kw "logseq.property/type";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "db/ident";
+         kw "block/name";
+         kw "block/title";
+         kw "logseq.property/type";
+       |])
 
 let id_of_entity value = Edn_util.get_int64 value "db/id"
 
@@ -313,11 +320,8 @@ let page_entity value = Option.is_some (Edn_util.get_string value "block/name")
 let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
-let page_not_found () =
-  Error.make (Error.Page_not_found) "page not found"
-
-let recycled_page_error () =
-  Error.make (Error.Recycled_page) "page is recycled"
+let page_not_found () = Error.make Error.Page_not_found "page not found"
+let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
 
 let pull invoke_config repo selector lookup =
   Transport.thread_api_pull invoke_config ~repo
@@ -329,107 +333,114 @@ let pull_by_id invoke_config repo selector id =
 
 let pull_by_uuid invoke_config repo selector uuid =
   pull invoke_config repo selector
-    (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
+    (vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
 
 let normalized_page_name value = String.lowercase_ascii (String.trim value)
 let variable value = Edn_util.symbol value
-let list values = Edn_util.list values
-let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+let list_vec values = Edn_util.list_vec values
+let list values = list_vec values
 
-let tag_query selector =
-  vector
-    [
-      Edn_util.map [ (kw "title", variable "?title") ];
-      kw "where";
-      vector [ variable "?tag"; kw "block/title"; variable "?title" ];
-      vector [ variable "?tag"; kw "block/tags"; kw "logseq.class/Tag" ];
-      list
-        [
-          Edn_util.symbol "clojure.string/includes?";
-          variable "?title";
-          variable "?query";
-        ];
-      kw "in";
-      variable "$";
-      variable "?query";
-      kw "result-transform";
-      list
-        [
-          Edn_util.symbol "fn";
-          vector [ variable "result" ];
-          list
-            [
-              Edn_util.symbol "map";
-              list
-                [
-                  Edn_util.symbol "fn";
-                  vector
-                    [
-                      Edn_util.map [ (kw "keys", vector [ variable "title" ]) ];
-                    ];
-                  list
-                    [
-                      Edn_util.symbol "d/entity";
-                      variable "$";
-                      vector [ kw "block/name"; variable "title" ];
-                    ];
-                ];
-              variable "result";
-            ];
-        ];
-      kw "view";
-      selector;
-    ]
+let query_value query =
+  Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:
-      [
-        vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ];
-      ]
-    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
+      (Vec.of_array
+         [|
+           vector_vec
+             (Vec.of_array
+                [|
+                  list_vec
+                    (Vec.of_array
+                       [| variable "pull"; variable "?e"; selector |]);
+                  variable "...";
+                |]);
+         |])
+    ~in_:
+      (Vec.of_array
+         [|
+           Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name";
+         |])
     ~where:
-      [
-        Cli_primitive.V
-          (Edn_util.vector_t
-             [ variable "?e"; kw "block/name"; variable "?name" ]);
-        Cli_primitive.V
-          (Edn_util.vector_t [ variable "?e"; kw "block/tags"; variable "?t" ]);
-        Cli_primitive.V
-          (Edn_util.vector_t [ variable "?t"; kw "db/ident"; kw class_ident ]);
-      ]
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| variable "?e"; kw "block/name"; variable "?name" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| variable "?e"; kw "block/tags"; variable "?t" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| variable "?t"; kw "db/ident"; kw class_ident |]));
+         |])
     ()
 
+let tag_query selector = query_value (class_query selector "logseq.class/Tag")
 let property_query selector = class_query selector "logseq.class/Property"
 
 let first_entity value =
   match
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
   with
-  | Some (item :: _), _, _ | _, Some (item :: _), _ -> Some item
+  | Some values, _, _ when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
+  | _, Some values, _ when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
   | _, _, Some _ -> Some value
   | _ -> None
 
 let pull_tag_by_name invoke_config repo name =
   Transport.thread_api_q invoke_config ~repo
     ~query:
-      (Edn_util.vector_t
-         [ tag_query tag_selector; Edn_util.string (normalized_page_name name) ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              tag_query tag_selector;
+              Edn_util.string (normalized_page_name name);
+            |]))
+
+let list_tags invoke_config repo =
+  Transport.thread_api_cli_list_tags invoke_config ~repo
+    ~options:(Edn_util.map_t_vec Vec.empty)
+
+let tag_name_matches name entity =
+  let expected = normalized_page_name name in
+  let matches value = String.equal (normalized_page_name value) expected in
+  match
+    ( Edn_util.get_string entity "block/title",
+      Edn_util.get_string entity "block/name" )
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name invoke_config repo name =
+  let open Cli_effect in
+  bind (list_tags invoke_config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (Vec.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
 
 let pull_property_by_name invoke_config repo name =
   Transport.thread_api_q invoke_config ~repo
     ~query:
-      (Edn_util.vector_t
-         [
-           query_value (property_query property_selector);
-           Edn_util.string (normalized_page_name name);
-         ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              query_value (property_query property_selector);
+              Edn_util.string (normalized_page_name name);
+            |]))
 
 let source_not_found () =
-  Error.make (Error.Source_not_found) "source block not found"
+  Error.make Error.Source_not_found "source block not found"
 
 let target_not_found () =
-  Error.make (Error.Target_not_found) "target block not found"
+  Error.make Error.Target_not_found "target block not found"
 
 let ensure_non_page entity message code =
   if page_entity entity then Error (Error.make code message) else Ok entity
@@ -444,7 +455,7 @@ let resolve_source invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "source must be a non-page block"
-                   (Error.Invalid_source)))
+                   Error.Invalid_source))
   | None, Some uuid ->
       bind (pull_by_uuid invoke_config repo block_selector uuid) (fun entity ->
           match id_of_entity entity with
@@ -452,13 +463,9 @@ let resolve_source invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "source must be a non-page block"
-                   (Error.Invalid_source)))
+                   Error.Invalid_source))
   | None, None ->
-      pure
-        (Error
-           (Error.make
-              (Error.Missing_source)
-              "source is required"))
+      pure (Error (Error.make Error.Missing_source "source is required"))
 
 let resolve_target invoke_config repo action =
   let open Cli_effect in
@@ -470,7 +477,7 @@ let resolve_target invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "target must be a block"
-                   (Error.Invalid_target)))
+                   Error.Invalid_target))
   | None, Some uuid, _ ->
       bind (pull_by_uuid invoke_config repo block_selector uuid) (fun entity ->
           match id_of_entity entity with
@@ -478,36 +485,36 @@ let resolve_target invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "target must be a block"
-                   (Error.Invalid_target)))
+                   Error.Invalid_target))
   | None, None, Some page ->
       bind
         (pull invoke_config repo page_selector
-           (vector
-              [ kw "block/name"; Edn_util.string (normalized_page_name page) ]))
+           (vector_vec
+              (Vec.of_array
+                 [|
+                   kw "block/name"; Edn_util.string (normalized_page_name page);
+                 |])))
         (fun entity ->
           match id_of_entity entity with
-          | None ->
-              pure (Error (page_not_found ()))
+          | None -> pure (Error (page_not_found ()))
           | Some _ when recycled_entity entity ->
               pure (Error (recycled_page_error ()))
           | Some _ -> pure (Ok entity))
   | None, None, None ->
-      pure
-        (Error
-           (Error.make
-              (Error.Missing_target)
-              "target is required"))
+      pure (Error (Error.make Error.Missing_target "target is required"))
 
 let pos_opts = function
   | Some Block.Last_child ->
-      Edn_util.map
-        [
-          (kw "sibling?", Edn_util.bool false);
-          (kw "bottom?", Edn_util.bool true);
-        ]
-  | Some Sibling -> Edn_util.map [ (kw "sibling?", Edn_util.bool true) ]
+      Edn_util.map_vec
+        (Vec.of_array
+           [|
+             (kw "sibling?", Edn_util.bool false);
+             (kw "bottom?", Edn_util.bool true);
+           |])
+  | Some Sibling ->
+      Edn_util.map_vec (Vec.of_array [| (kw "sibling?", Edn_util.bool true) |])
   | Some First_child | None ->
-      Edn_util.map [ (kw "sibling?", Edn_util.bool false) ]
+      Edn_util.map_vec (Vec.of_array [| (kw "sibling?", Edn_util.bool false) |])
 
 let lookup_of_tag = function
   | Selector.Tag_id id -> Edn_util.int64 id
@@ -519,15 +526,11 @@ let resolve_tag_id invoke_config repo = function
   | Selector.Tag_id id -> Cli_effect.pure (Ok id)
   | Tag_name name ->
       let open Cli_effect in
-      bind (pull_tag_by_name invoke_config repo name) (fun result ->
-          match Option.bind (first_entity result) id_of_entity with
+      bind (find_tag_by_name invoke_config repo name) (fun result ->
+          match Option.bind result id_of_entity with
           | Some id -> pure (Ok id)
           | None ->
-              pure
-                (Error
-                   (Error.make
-                      (Error.Tag_not_found)
-                      "tag not found")))
+              pure (Error (Error.make Error.Tag_not_found "tag not found")))
   | (Tag_ident _ | Tag_uuid _) as tag ->
       let open Cli_effect in
       bind
@@ -536,27 +539,23 @@ let resolve_tag_id invoke_config repo = function
           match id_of_entity result with
           | Some id -> pure (Ok id)
           | None ->
-              pure
-                (Error
-                   (Error.make
-                      (Error.Tag_not_found)
-                      "tag not found")))
+              pure (Error (Error.make Error.Tag_not_found "tag not found")))
 
 let resolve_property_ident invoke_config repo = function
   | Property.Key_ident ident -> Cli_effect.pure (Ok ident)
   | Key_id id ->
       let open Cli_effect in
       bind
-        (pull invoke_config repo (vector [ kw "db/ident" ]) (Edn_util.int64 id))
+        (pull invoke_config repo
+           (vector_vec (Vec.of_array [| kw "db/ident" |]))
+           (Edn_util.int64 id))
         (fun result ->
           match ident_of_entity result with
           | Some ident -> pure (Ok ident)
           | None ->
               pure
                 (Error
-                   (Error.make
-                      (Error.Property_not_found)
-                      "property not found")))
+                   (Error.make Error.Property_not_found "property not found")))
   | Key_name name ->
       let open Cli_effect in
       bind (pull_property_by_name invoke_config repo name) (fun result ->
@@ -566,107 +565,123 @@ let resolve_property_ident invoke_config repo = function
               let ident = Edn_util.keyword_t name in
               bind
                 (pull invoke_config repo
-                   (vector [ kw "db/id" ])
-                   (vector [ kw "db/ident"; Edn_util.any ident ]))
+                   (vector_vec (Vec.of_array [| kw "db/id" |]))
+                   (vector_vec
+                      (Vec.of_array [| kw "db/ident"; Edn_util.any ident |])))
                 (fun result ->
                   if Option.is_some (id_of_entity result) then pure (Ok ident)
                   else
                     pure
                       (Error
-                         (Error.make
-                            (Error.Property_not_found)
+                         (Error.make Error.Property_not_found
                             "property not found"))))
 
-let rec resolve_tag_ids invoke_config repo = function
-  | [] -> Cli_effect.pure (Ok [])
-  | tag :: rest ->
-      let open Cli_effect in
-      bind (resolve_tag_id invoke_config repo tag) (function
-        | Error err -> pure (Error err)
-        | Ok id ->
-            bind (resolve_tag_ids invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok ids -> pure (Ok (id :: ids))))
+let resolve_tag_ids invoke_config repo tags =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (tag, rest) ->
+        bind (resolve_tag_id invoke_config repo tag) (function
+          | Error err -> pure (Error err)
+          | Ok id -> loop (Vec.push_back acc id) rest)
+  in
+  loop Vec.empty tags
 
-let rec resolve_property_keys invoke_config repo = function
-  | [] -> Cli_effect.pure (Ok [])
-  | key :: rest ->
-      let open Cli_effect in
-      bind (resolve_property_ident invoke_config repo key) (function
-        | Error err -> pure (Error err)
-        | Ok ident ->
-            bind (resolve_property_keys invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok idents -> pure (Ok (ident :: idents))))
+let resolve_property_keys invoke_config repo keys =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (key, rest) ->
+        bind (resolve_property_ident invoke_config repo key) (function
+          | Error err -> pure (Error err)
+          | Ok ident -> loop (Vec.push_back acc ident) rest)
+  in
+  loop Vec.empty keys
 
-let rec resolve_property_assignments invoke_config repo = function
-  | [] -> Cli_effect.pure (Ok [])
-  | assignment :: rest ->
-      let open Cli_effect in
-      bind (resolve_property_ident invoke_config repo assignment.Property.key)
-        (function
-        | Error err -> pure (Error err)
-        | Ok ident ->
-            bind (resolve_property_assignments invoke_config repo rest)
-              (function
-              | Error err -> pure (Error err)
-              | Ok assignments ->
-                  pure (Ok ((ident, assignment.value) :: assignments))))
+let resolve_property_assignments invoke_config repo assignments =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (assignment, rest) ->
+        bind (resolve_property_ident invoke_config repo assignment.Property.key)
+          (function
+          | Error err -> pure (Error err)
+          | Ok ident -> loop (Vec.push_back acc (ident, assignment.value)) rest)
+  in
+  loop Vec.empty assignments
 
 let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
     ~remove_properties =
   let uuid_values =
-    Edn_util.vector (List.map (fun uuid -> Edn_util.uuid uuid) block_uuids)
+    Edn_util.vector_vec (block_uuids |> Vec.map (fun uuid -> Edn_util.uuid uuid))
   in
   let remove_tag_ops =
-    List.map
+    Vec.map
       (fun tag_id ->
-        Edn_util.vector
-          [
-            kw "batch-delete-property-value";
-            Edn_util.vector
-              [ uuid_values; kw "block/tags"; Edn_util.int64 tag_id ];
-          ])
+        Edn_util.vector_vec
+          (Vec.of_array
+             [|
+               kw "batch-delete-property-value";
+               Edn_util.vector_vec
+                 (Vec.of_array
+                    [| uuid_values; kw "block/tags"; Edn_util.int64 tag_id |]);
+             |]))
       remove_tag_ids
   in
   let remove_property_ops =
-    List.map
+    Vec.map
       (fun ident ->
-        Edn_util.vector
-          [
-            kw "batch-remove-property";
-            Edn_util.vector [ uuid_values; Edn_util.any ident ];
-          ])
+        Edn_util.vector_vec
+          (Vec.of_array
+             [|
+               kw "batch-remove-property";
+               Edn_util.vector_vec
+                 (Vec.of_array [| uuid_values; Edn_util.any ident |]);
+             |]))
       remove_properties
   in
   let update_tag_ops =
-    List.map
+    Vec.map
       (fun tag_id ->
-        Edn_util.vector
-          [
-            kw "batch-set-property";
-            Edn_util.vector
-              [
-                uuid_values;
-                kw "block/tags";
-                Edn_util.int64 tag_id;
-                Edn_util.map [];
-              ];
-          ])
+        Edn_util.vector_vec
+          (Vec.of_array
+             [|
+               kw "batch-set-property";
+               Edn_util.vector_vec
+                 (Vec.of_array
+                    [|
+                      uuid_values;
+                      kw "block/tags";
+                      Edn_util.int64 tag_id;
+                      Edn_util.map_vec Vec.empty;
+                    |]);
+             |]))
       update_tag_ids
   in
   let update_property_ops =
-    List.map
+    Vec.map
       (fun (ident, value) ->
-        Edn_util.vector
-          [
-            kw "batch-set-property";
-            Edn_util.vector
-              [ uuid_values; Edn_util.any ident; value; Edn_util.map [] ];
-          ])
+        Edn_util.vector_vec
+          (Vec.of_array
+             [|
+               kw "batch-set-property";
+               Edn_util.vector_vec
+                 (Vec.of_array
+                    [|
+                      uuid_values;
+                      Edn_util.any ident;
+                      value;
+                      Edn_util.map_vec Vec.empty;
+                    |]);
+             |]))
       update_properties
   in
-  remove_tag_ops @ remove_property_ops @ update_tag_ops @ update_property_ops
+  Vec.append remove_tag_ops
+    (Vec.append remove_property_ops
+       (Vec.append update_tag_ops update_property_ops))
 
 let resolve_update_ops invoke_config repo action block_uuids =
   let open Cli_effect in
@@ -694,64 +709,78 @@ let resolve_update_ops invoke_config repo action block_uuids =
 
 let apply_outliner_ops invoke_config repo ops =
   Transport.thread_api_apply_outliner_ops invoke_config ~repo
-    ~ops:(Edn_util.vector_t ops) ~options:(Edn_util.map_t [])
+    ~ops:(Edn_util.vector_t_vec ops)
+    ~options:(Edn_util.map_t_vec Vec.empty)
 
 let save_ops source_uuid = function
   | Some content ->
-      [
-        Edn_util.vector
-          [
-            kw "save-block";
-            Edn_util.vector
-              [
-                Edn_util.map
-                  [
-                    (kw "block/uuid", Edn_util.uuid source_uuid);
-                    (kw "block/title", Edn_util.string content);
-                  ];
-                Edn_util.map [];
-              ];
-          ];
-      ]
-  | None -> []
+      Vec.singleton
+        (Edn_util.vector_vec
+           (Vec.of_array
+              [|
+                kw "save-block";
+                Edn_util.vector_vec
+                  (Vec.of_array
+                     [|
+                       Edn_util.map_vec
+                         (Vec.of_array
+                            [|
+                              (kw "block/uuid", Edn_util.uuid source_uuid);
+                              (kw "block/title", Edn_util.string content);
+                            |]);
+                       Edn_util.map_vec Vec.empty;
+                     |]);
+              |]))
+  | None -> Vec.empty
 
 let move_ops source_uuid pos = function
   | Some target_uuid ->
-      [
-        Edn_util.vector
-          [
-            kw "move-blocks";
-            Edn_util.vector
-              [
-                Edn_util.vector [ Edn_util.uuid source_uuid ];
-                Edn_util.uuid target_uuid;
-                pos_opts pos;
-              ];
-          ];
-      ]
-  | None -> []
+      Vec.singleton
+        (Edn_util.vector_vec
+           (Vec.of_array
+              [|
+                kw "move-blocks";
+                Edn_util.vector_vec
+                  (Vec.of_array
+                     [|
+                       Edn_util.vector_vec
+                         (Vec.of_array [| Edn_util.uuid source_uuid |]);
+                       Edn_util.uuid target_uuid;
+                       pos_opts pos;
+                     |]);
+              |]))
+  | None -> Vec.empty
 
 let execute_ops mode invoke_config action source_uuid target_uuid =
   let open Cli_effect in
-  bind (resolve_update_ops invoke_config action.repo action [ source_uuid ])
+  bind
+    (resolve_update_ops invoke_config action.repo action
+       (Vec.singleton source_uuid))
     (function
-    | Error err ->
-        pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
-    | Ok property_ops ->
-        let ops =
-          save_ops source_uuid action.content
-          @ move_ops source_uuid action.pos target_uuid
-          @ property_ops
-        in
-        if ops = [] then
-          pure
-            (Cli_result.ok ~command:Command_id.Upsert_block mode
-               (Raw (Edn_util.map [ (kw "result", Edn_util.nil) ])))
-        else
-          bind (apply_outliner_ops invoke_config action.repo ops) (fun result ->
-              pure
-                (Cli_result.ok ~command:Command_id.Upsert_block mode
-                   (Raw (Edn_util.map [ (kw "result", result) ])))))
+      | Error err ->
+          pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
+      | Ok property_ops ->
+          let ops =
+            Vec.append
+              (save_ops source_uuid action.content)
+              (Vec.append
+                 (move_ops source_uuid action.pos target_uuid)
+                 property_ops)
+          in
+          if Vec.is_empty ops then
+            pure
+              (Cli_result.ok ~command:Command_id.Upsert_block mode
+                 (Raw
+                    (Edn_util.map_vec
+                       (Vec.of_array [| (kw "result", Edn_util.nil) |]))))
+          else
+            bind (apply_outliner_ops invoke_config action.repo ops)
+              (fun result ->
+                pure
+                  (Cli_result.ok ~command:Command_id.Upsert_block mode
+                     (Raw
+                        (Edn_util.map_vec
+                           (Vec.of_array [| (kw "result", result) |]))))))
 
 let resolve_optional_target_uuid invoke_config action =
   let open Cli_effect in
@@ -764,8 +793,7 @@ let resolve_optional_target_uuid invoke_config action =
           | None ->
               pure
                 (Error
-                   (Error.make
-                      (Error.Target_not_found)
+                   (Error.make Error.Target_not_found
                       "target block uuid not found"))))
   else pure (Ok None)
 
@@ -784,8 +812,7 @@ let execute action config mode =
               | None ->
                   pure
                     (Cli_result.error ~command:Command_id.Upsert_block mode
-                       (Error.make
-                          (Error.Source_not_found)
+                       (Error.make Error.Source_not_found
                           "source block uuid not found"))
               | Some source_uuid ->
                   bind (resolve_optional_target_uuid invoke_config action)
@@ -799,26 +826,26 @@ let execute action config mode =
                           target_uuid))))
 
 let metadata () =
-  [
+  Vec.singleton
     {
       Command_registry.id = Command_id.Upsert_block;
       path = Command_id.to_path Command_id.Upsert_block;
       doc = "Upsert block";
       long_doc = None;
       examples =
-        [
-          "logseq upsert block --graph my-graph --id 123 --content \"Updated \
-           content\"";
-          "logseq upsert block --graph my-graph --id 123 --target-page Home \
-           --pos last-child";
-          "logseq upsert block --graph my-graph --uuid \
-           11111111-1111-1111-1111-111111111111 --status done";
-        ];
-      options = [];
+        Vec.of_array
+          [|
+            "logseq upsert block --graph my-graph --id 123 --content \"Updated \
+             content\"";
+            "logseq upsert block --graph my-graph --id 123 --target-page Home \
+             --pos last-child";
+            "logseq upsert block --graph my-graph --uuid \
+             11111111-1111-1111-1111-111111111111 --status done";
+          |];
+      options = Vec.empty;
       category = Command_registry.Graph_inspect_and_edit;
       requires_graph = Command_id.requires_graph Command_id.Upsert_block;
       requires_auth = Command_id.requires_auth Command_id.Upsert_block;
       write_command = Command_id.is_write Command_id.Upsert_block;
-      human_table_headers_order = [];
-    };
-  ]
+      human_table_headers_order = Vec.empty;
+    }

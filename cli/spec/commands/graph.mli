@@ -13,7 +13,7 @@ type export_opts = {
   pretty_print : bool;
   include_timestamps : bool;
   exclude_built_in_pages : bool;
-  exclude_namespaces : string list;
+  exclude_namespaces : string Rrbvec.t;
 }
 
 type import_opts = { import_type : import_type; input : Cli_primitive.path }
