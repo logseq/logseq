@@ -164,7 +164,7 @@
 (def ^:private asset-upload-parameters
   [{:name "file-name" :in "query" :required true :schema {:type "string"}}
    {:name "size" :in "query" :required true
-    :description "Exact file size in bytes; uploads larger than 100MB are rejected before reading the body."
+    :description "Exact decoded file size in bytes. The trusted MCP host recalculates it for encoding=base64; direct API uploads must supply it. Uploads larger than 100MB are rejected before R2."
     :schema {:type "integer" :minimum 0 :maximum 104857600}}
    {:name "title" :in "query" :schema {:type "string"}}
    {:name "page-id" :in "query"

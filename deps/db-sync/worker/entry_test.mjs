@@ -2,6 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import { semanticRequestUrl } from "./semantic_request.mjs";
+
+test("Code Mode derives decoded asset size instead of trusting the agent", () => {
+  const url = semanticRequestUrl({
+    method: "POST",
+    path: "/api/v1/graphs/graph-1/assets",
+    query: { encoding: "base64", size: 3, checksum: "a".repeat(64) },
+    body: "AQIDBA==",
+    rawBody: true,
+  }, "https://staging.example/mcp");
+
+  assert.equal(url.searchParams.get("size"), "4");
+});
+
+test("Code Mode rejects invalid base64 before forwarding", () => {
+  assert.throws(() => semanticRequestUrl({
+    path: "/api/v1/graphs/graph-1/assets",
+    query: { encoding: "base64", size: 1 },
+    body: "not base64!",
+  }, "https://staging.example/mcp"), /invalid base64/);
+
+});
 
 test("ChatGPT tool descriptors declare titles, impact, and per-tool auth", () => {
   const descriptors = chatGptToolDescriptors();
@@ -57,5 +79,6 @@ test("ChatGPT tools describe streaming asset uploads", () => {
     assert.match(tool.description, /100MB/);
     assert.match(tool.description, /encoding=base64/);
     assert.match(tool.description, /decoded/);
+    assert.match(tool.description, /recalculates the decoded size/);
   }
 });

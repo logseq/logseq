@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
+import { semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
 
@@ -37,10 +38,7 @@ async function handleMcp(request, env, ctx) {
       if (!options.path.startsWith("/api/v1/")) {
         throw new Error("Only Logseq semantic API paths are allowed");
       }
-      const url = new URL(options.path, request.url);
-      for (const [key, value] of Object.entries(options.query ?? {})) {
-        if (value !== undefined) url.searchParams.set(key, String(value));
-      }
+      const url = semanticRequestUrl(options, request.url);
       const headers = {};
       if (authorization) headers.authorization = authorization;
       if (options.contentType) headers["content-type"] = options.contentType;
