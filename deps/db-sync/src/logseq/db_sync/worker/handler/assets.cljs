@@ -19,11 +19,9 @@
    "pdf" "application/pdf"})
 
 (defn- response-content-type [stored-content-type asset-type]
-  (if (contains? #{nil "application/octet-stream" "text/plain"} stored-content-type)
-    (or (get asset-type->content-type (string/lower-case asset-type))
-        stored-content-type
-        "application/octet-stream")
-    stored-content-type))
+  (or (get asset-type->content-type (string/lower-case asset-type))
+      stored-content-type
+      "application/octet-stream"))
 
 (defn- parse-size
   [size]

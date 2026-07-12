@@ -69,8 +69,8 @@
                                     (p/resolved
                                      #js {:body payload
                                           :size 4
-                                          ;; Existing base64 uploads stored the transfer MIME type.
-                                          :httpMetadata #js {:contentType "text/plain"}}))}}]
+                                          ;; Existing Code Mode uploads stored the transfer MIME type.
+                                          :httpMetadata #js {:contentType "application/json"}}))}}]
            (-> (p/let [resp (assets/handle request env)]
                  (is (= 200 (.-status resp)))
                  (is (= "image/png" (.get (.-headers resp) "content-type")))
