@@ -215,7 +215,7 @@ let chmod path perm = run_unit "chmod" path (fun () -> Fs.chmod_sync path perm)
 
 let access path permissions =
   let flag =
-    List.fold_left
+    Rrbvec.fold_left
       (fun acc -> function R_OK -> acc lor 4 | W_OK -> acc lor 2)
       0 permissions
   in
@@ -239,10 +239,16 @@ let openfile _path _flags _perm = 0
 let close _fd = ()
 
 let command_args argv =
-  match Array.to_list argv with
-  | "env" :: command :: args -> (command, args)
-  | command :: args -> (command, args)
-  | [] ->
+  let argv = Rrbvec.of_array argv in
+  match Rrbvec.pop_front argv with
+  | Some ("env", rest) -> (
+      match Rrbvec.pop_front rest with
+      | Some (command, args) -> (command, args)
+      | None ->
+          raise
+            (Cli_unix_error (EPERM, "create_process_env", "missing command")))
+  | Some (command, args) -> (command, args)
+  | None ->
       raise (Cli_unix_error (EPERM, "create_process_env", "missing command"))
 
 let copy_env env =
@@ -266,7 +272,7 @@ let stdio_ignore =
 
 let spawn_detached command args env =
   let child =
-    Child_process.spawn command (Array.of_list args)
+    Child_process.spawn command (Rrbvec.to_array args)
       (Child_process.spawn_options ~detached:true ~stdio:stdio_ignore
          ~env:(copy_env env) ~shell:false ())
   in
@@ -274,7 +280,8 @@ let spawn_detached command args env =
   Child_process.pid child |> Js.Nullable.toOption |> Option.value ~default:0
 
 let windows_verbatim_spawn_options env : Child_process.spawn_options =
-  let make : string Js.Dict.t -> Js.Json.t array -> Child_process.spawn_options =
+  let make : string Js.Dict.t -> Js.Json.t array -> Child_process.spawn_options
+      =
     [%mel.raw
       {|
 function (env, stdio) {
@@ -292,7 +299,7 @@ function (env, stdio) {
 
 let spawn_detached_windows_verbatim command args env =
   let child =
-    Child_process.spawn command (Array.of_list args)
+    Child_process.spawn command (Rrbvec.to_array args)
       (windows_verbatim_spawn_options env)
   in
   Child_process.unref child;
@@ -308,7 +315,7 @@ let nullable_string_default value =
 
 let run_process_capture command args env =
   let result =
-    Child_process.spawn_sync command (Array.of_list args)
+    Child_process.spawn_sync command (Rrbvec.to_array args)
       (Child_process.spawn_sync_options ~encoding:"utf8" ~env:(copy_env env)
          ~shell:false ())
   in
@@ -343,9 +350,21 @@ let contains_substring ~needle haystack =
   in
   loop 0
 
+let split_lines text =
+  let len = String.length text in
+  let rec loop start index acc =
+    if index = len then
+      Rrbvec.push_back acc (String.sub text start (index - start))
+    else if text.[index] = '\n' then
+      let acc = Rrbvec.push_back acc (String.sub text start (index - start)) in
+      loop (index + 1) (index + 1) acc
+    else loop start (index + 1) acc
+  in
+  loop 0 0 Rrbvec.empty
+
 let find_session_line text =
-  text |> String.split_on_char '\n'
-  |> List.find_opt (fun line ->
+  text |> split_lines
+  |> Rrbvec.find_opt (fun line ->
       let lower = String.lowercase_ascii line in
       contains_substring ~needle:"session" lower
       || contains_substring ~needle:"thread" lower)
@@ -360,7 +379,7 @@ let start_process_capture_session_line command args env =
   let stderr_fd = Fs.open_sync stderr_path "a" in
   let child =
     try
-      Child_process.spawn command (Array.of_list args)
+      Child_process.spawn command (Rrbvec.to_array args)
         (Child_process.spawn_options ~detached:true
            ~stdio:
              [|
@@ -426,9 +445,11 @@ let open_url url =
     let platform = Node.Process.process##platform in
     let command, args =
       match platform with
-      | "darwin" -> ("open", [ url ])
-      | "linux" -> ("xdg-open", [ url ])
-      | "win32" -> ("cmd.exe", [ "/d"; "/c"; windows_start_url_command url ])
+      | "darwin" -> ("open", Rrbvec.of_array [| url |])
+      | "linux" -> ("xdg-open", Rrbvec.of_array [| url |])
+      | "win32" ->
+          ( "cmd.exe",
+            Rrbvec.of_array [| "/d"; "/c"; windows_start_url_command url |] )
       | _ -> raise (Cli_unix_error (EPERM, "open", url))
     in
     ignore

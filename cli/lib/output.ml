@@ -26,8 +26,8 @@ end
 
 module Human_output = struct
   type t = {
-    headers : string list option;
-    rows : string list list;
+    headers : string Rrbvec.t option;
+    rows : string Rrbvec.t Rrbvec.t;
     footer : string option;
   }
 
@@ -58,18 +58,18 @@ module Human_output = struct
 
   let display_rows t =
     let now_time = Time.now () in
-    let headers = Option.value t.headers ~default:[] in
-    List.map
+    let headers = Option.value t.headers ~default:Vec.empty in
+    Vec.map
       (fun row ->
-        List.mapi
+        Vec.mapi
           (fun index value ->
             let header =
-              match List.nth_opt headers index with
+              match Vec.nth_opt headers index with
               | Some header when is_datetime_header header -> Some header
               | Some header
                 when String.lowercase_ascii header = "value"
-                     && List.length row >= 2 ->
-                  List.nth_opt row 0
+                     && Vec.length row >= 2 ->
+                  Vec.nth_opt row 0
               | header -> header
             in
             display_cell ~now_time ?header value)
@@ -78,27 +78,27 @@ module Human_output = struct
 
   let column_widths rows =
     rows
-    |> List.fold_left
+    |> Vec.fold_left
          (fun widths row ->
-           let width = max (List.length widths) (List.length row) in
-           List.init width (fun index ->
+           let width = max (Vec.length widths) (Vec.length row) in
+           Vec.init width (fun index ->
                max
-                 (Option.value (List.nth_opt widths index) ~default:0)
+                 (Option.value (Vec.nth_opt widths index) ~default:0)
                  (Display_width.width
-                    (Option.value (List.nth_opt row index) ~default:""))))
-         []
+                    (Option.value (Vec.nth_opt row index) ~default:""))))
+         Vec.empty
 
   let pad_right width value =
     let padding = width - Display_width.width value in
     if padding <= 0 then value else value ^ String.make padding ' '
 
   let render_row widths row =
-    let last_index = List.length widths - 1 in
+    let last_index = Vec.length widths - 1 in
     widths
-    |> List.mapi (fun index width ->
-        let value = Option.value (List.nth_opt row index) ~default:"" in
+    |> Vec.mapi (fun index width ->
+        let value = Option.value (Vec.nth_opt row index) ~default:"" in
         if index = last_index then value else pad_right width value)
-    |> String.concat "  "
+    |> Vec.string_concat "  "
 
   let strip_leading_colon value =
     if String.length value > 0 && value.[0] = ':' then
@@ -114,23 +114,28 @@ module Human_output = struct
 
   let display_header header =
     let header = strip_leading_colon header in
-    match String.split_on_char '/' header with
-    | [ namespace; name ] when is_keyword_namespace namespace && name <> "" ->
-        name
-    | _ -> header
+    let parts = Vec.split_on_char '/' header in
+    if Vec.length parts = 2 then
+      let namespace = Vec.nth parts 0 in
+      let name = Vec.nth parts 1 in
+      if is_keyword_namespace namespace && name <> "" then name else header
+    else header
 
   let lines t =
     let rows = display_rows t in
     let table_rows =
       match t.headers with
-      | None | Some [] -> rows
-      | Some headers -> List.map display_header headers :: rows
+      | None -> rows
+      | Some headers when Vec.is_empty headers -> rows
+      | Some headers -> Vec.push_front rows (Vec.map display_header headers)
     in
     let widths = column_widths table_rows in
-    let lines = List.map (render_row widths) table_rows in
-    match t.footer with Some footer -> lines @ [ footer ] | None -> lines
+    let lines = Vec.map (render_row widths) table_rows in
+    match t.footer with
+    | Some footer -> Vec.push_back lines footer
+    | None -> lines
 
-  let to_string t = String.concat "\n" (lines t)
+  let to_string t = Vec.string_concat "\n" (lines t)
 end
 
 type _ t =
