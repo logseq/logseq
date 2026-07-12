@@ -11,6 +11,7 @@ import {
   assetImageResult,
 } from "./asset_image.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
+import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
@@ -70,6 +71,7 @@ async function handleMcp(request, env, ctx) {
       return result;
     },
   });
+  setLogseqMcpServerInfoIcons(server, request);
 
   server.registerResource("asset-image", ASSET_IMAGE_RESOURCE_URI, {
     title: "Logseq image asset",
@@ -134,6 +136,7 @@ export default {
         path === "/.well-known/oauth-protected-resource/mcp") {
       return protectedResourceMetadata(request, env);
     }
+    if (path === "/mcp/icon.png") return logseqIconResponse();
     if (path === "/mcp") return handleMcp(request, env, ctx);
     return worker.fetch(request, env, ctx);
   },

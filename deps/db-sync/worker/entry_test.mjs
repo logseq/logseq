@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import {
+  logseqIconResponse,
+  setLogseqMcpServerInfoIcons,
+} from "./logseq_icon.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 
 test("Code Mode derives decoded asset size instead of trusting the agent", () => {
@@ -115,4 +119,25 @@ test("ChatGPT image asset tool declares a UI resource for ordinary chat renderin
   assert.equal(tool._meta["openai/outputTemplate"], "ui://widget/logseq-asset-image.html");
   assert.equal(tool.outputSchema.type, "object");
   assert.deepEqual(tool.outputSchema.required, ["uuid", "title", "mimeType", "size"]);
+});
+
+test("MCP serverInfo advertises the Logseq icon from the worker origin", () => {
+  const server = { server: { _serverInfo: { name: "logseq", version: "1.0.0" } } };
+
+  setLogseqMcpServerInfoIcons(server, new Request("https://staging.example/mcp"));
+
+  assert.deepEqual(server.server._serverInfo.icons, [{
+    src: "https://staging.example/mcp/icon.png",
+    mimeType: "image/png",
+    sizes: ["192x192"],
+  }]);
+});
+
+test("MCP icon response serves a PNG logo", async () => {
+  const response = logseqIconResponse();
+  const payload = new Uint8Array(await response.arrayBuffer());
+
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.match(response.headers.get("cache-control"), /public/);
+  assert.deepEqual([...payload.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 });
