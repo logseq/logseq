@@ -24,6 +24,14 @@ const ASSET_IMAGE_COMPONENT_HTML = `
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       figure { margin: 0; }
+      #image-button {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: zoom-in;
+      }
       img {
         display: block;
         width: 100%;
@@ -46,7 +54,9 @@ const ASSET_IMAGE_COMPONENT_HTML = `
   </head>
   <body>
     <figure>
-      <img id="image" alt="">
+      <button id="image-button" type="button" aria-label="Open image fullscreen">
+        <img id="image" alt="">
+      </button>
       <figcaption id="caption"></figcaption>
     </figure>
     <p id="error" class="error" hidden>Image data was not provided by the tool result.</p>
@@ -83,16 +93,44 @@ const ASSET_IMAGE_COMPONENT_HTML = `
         return payload;
       }
 
+      function notifyHeight() {
+        const notify = window.openai?.notifyIntrinsicHeight;
+        if (!notify) return;
+
+        const height = Math.ceil(document.documentElement.scrollHeight);
+        try {
+          notify({ height });
+        } catch (_) {
+          try {
+            notify(height);
+          } catch (_) {
+            notify();
+          }
+        }
+      }
+
+      function scheduleHeightNotification() {
+        requestAnimationFrame(() => notifyHeight());
+      }
+
+      async function requestFullscreen() {
+        await window.openai?.requestDisplayMode?.({ mode: "fullscreen" });
+        scheduleHeightNotification();
+      }
+
       function render(result) {
         const image = imageFromResult(result);
+        const buttonElement = document.getElementById("image-button");
         const imageElement = document.getElementById("image");
         const captionElement = document.getElementById("caption");
         const errorElement = document.getElementById("error");
 
         if (!image) {
+          buttonElement.hidden = true;
           imageElement.hidden = true;
           captionElement.textContent = "";
           errorElement.hidden = false;
+          scheduleHeightNotification();
           return;
         }
 
@@ -100,12 +138,19 @@ const ASSET_IMAGE_COMPONENT_HTML = `
         objectUrl = URL.createObjectURL(new Blob([bytesFromBase64(image.data)], { type: image.mimeType }));
         imageElement.src = objectUrl;
         imageElement.alt = image.title || "Logseq image asset";
+        buttonElement.hidden = false;
         imageElement.hidden = false;
         errorElement.hidden = true;
         captionElement.textContent = image.title
           ? image.uuid ? image.title + " (" + image.uuid + ")" : image.title
           : image.uuid || "";
+        scheduleHeightNotification();
       }
+
+      document.getElementById("image").addEventListener("load", notifyHeight);
+      document.getElementById("image-button").addEventListener("click", () => {
+        requestFullscreen().catch(() => {});
+      });
 
       render(currentToolResult());
 

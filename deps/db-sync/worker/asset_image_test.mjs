@@ -57,5 +57,9 @@ test("asset image resource is an MCP app component that renders tool results", a
   assert.match(content.text, /ui\/notifications\/tool-result/);
   assert.match(content.text, /toolResponseMetadata/);
   assert.match(content.text, /createObjectURL/);
+  assert.match(content.text, /notifyIntrinsicHeight/);
+  assert.match(content.text, /requestDisplayMode/);
+  assert.match(content.text, /image-button/);
+  assert.match(content.text, /zoom-in/);
   assert.doesNotMatch(content.text, /https?:\/\//);
 });
