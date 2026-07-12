@@ -2,21 +2,39 @@ type status = { ident : Cli_primitive.keyword; value : string }
 
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
-let vector values = Edn_util.vector values
-let vector_t values = Edn_util.vector_t values
+let vector_vec values = Edn_util.vector_vec values
+let vector_t_vec values = Edn_util.vector_t_vec values
 
 let status_closed_values_query =
   Cli_primitive.(
     make_datascript_query
-      ~find:[ vector [ sym "?status-ident"; sym "..." ] ]
+      ~find:
+        (Vec.singleton
+           (vector_vec (Vec.of_array [| sym "?status-ident"; sym "..." |])))
       ~where:
-        [
-          V (vector_t [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ]);
-          V
-            (vector_t
-               [ sym "?value"; kw "block/closed-value-property"; sym "?property" ]);
-          V (vector_t [ sym "?value"; kw "db/ident"; sym "?status-ident" ]);
-        ]
+        (Vec.of_array
+           [|
+             V
+               (vector_t_vec
+                  (Vec.of_array
+                     [|
+                       sym "?property";
+                       kw "db/ident";
+                       kw "logseq.property/status";
+                     |]));
+             V
+               (vector_t_vec
+                  (Vec.of_array
+                     [|
+                       sym "?value";
+                       kw "block/closed-value-property";
+                       sym "?property";
+                     |]));
+             V
+               (vector_t_vec
+                  (Vec.of_array
+                     [| sym "?value"; kw "db/ident"; sym "?status-ident" |]));
+           |])
       ()
     |> datascript_query_to_edn)
 
@@ -54,7 +72,7 @@ let status_of_value value =
       | None -> None
       | Some fields -> (
           let value_of_key key =
-            List.find_map
+            Vec.find_map
               (fun (k, v) ->
                 match Edn_util.as_string_like k with
                 | Some k when k = key -> Some v
@@ -85,8 +103,8 @@ let status_of_value value =
 
 let normalize_available_statuses values =
   values
-  |> List.filter_map status_of_value
-  |> List.sort (fun a b -> compare (a.value, a.ident) (b.value, b.ident))
+  |> Vec.filter_map status_of_value
+  |> Vec.sort (fun a b -> compare (a.value, a.ident) (b.value, b.ident))
 
 let resolve_status_ident value statuses =
   let token = normalize_token value in
@@ -94,7 +112,7 @@ let resolve_status_ident value statuses =
     keyword_of_string ("logseq.property/status." ^ token)
   in
   statuses
-  |> List.find_map (fun s ->
+  |> Vec.find_map (fun s ->
       if
         s.value = token
         || s.ident = keyword_of_string value
@@ -104,7 +122,7 @@ let resolve_status_ident value statuses =
 
 let invalid_status_message value statuses =
   let available =
-    statuses |> List.map (fun s -> s.value) |> String.concat ", "
+    statuses |> Vec.map (fun s -> s.value) |> Vec.string_concat ", "
   in
   let available = if available = "" then "(none)" else available in
   "Invalid value for option :status: " ^ value ^ ". Available values: "

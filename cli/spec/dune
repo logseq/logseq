@@ -4,7 +4,7 @@
  (name logseq_cli_platform_spec)
  (wrapped false)
  (modes melange)
- (libraries melange-fetch)
+ (libraries melange-fetch rrbvec)
  (modules Cli_effect Cli_platform Cli_unix)
  (virtual_modules Cli_effect Cli_platform Cli_unix))
 
@@ -16,6 +16,7 @@
   melange.js
   melange-fetch
   melange-edn-melange
+  rrbvec
   logseq_cli_platform_spec)
  (modules
   (:standard \ Cli_effect Cli_platform Cli_unix))

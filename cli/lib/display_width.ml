@@ -24,7 +24,8 @@ let char_width code =
 
 external chars_of_string : string -> string array = "from" [@@mel.scope "Array"]
 
-let unicode_chars text = Ustring.(of_string text |> to_string) |> chars_of_string
+let unicode_chars text =
+  Ustring.(of_string text |> to_string) |> chars_of_string
 
 let code_point ch =
   match Js.String.codePointAt ~index:0 ch with Some code -> code | None -> 0
@@ -35,14 +36,14 @@ let width text =
 
 let take text max_width =
   let rec loop chars index acc_width acc =
-    if index >= Array.length chars then String.concat "" (List.rev acc)
+    if index >= Array.length chars then Vec.string_concat "" acc
     else
       let ch = chars.(index) in
       let next_width = acc_width + char_width (code_point ch) in
-      if next_width > max_width then String.concat "" (List.rev acc)
-      else loop chars (index + 1) next_width (ch :: acc)
+      if next_width > max_width then Vec.string_concat "" acc
+      else loop chars (index + 1) next_width (Vec.push_back acc ch)
   in
-  if max_width <= 0 then "" else loop (unicode_chars text) 0 0 []
+  if max_width <= 0 then "" else loop (unicode_chars text) 0 0 Vec.empty
 
 let ellipsis = Cli_platform.Symbols.ellipsis
 
