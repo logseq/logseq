@@ -26,6 +26,39 @@
       {:body (.-readable fixed)
        :pipe-promise (.pipeTo body (.-writable fixed))})))
 
+(defn- decoded-base64-chunk
+  [value]
+  (when-not (re-matches #"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?" value)
+    (throw (js/Error. "invalid base64 asset body")))
+  (let [decoded (js/atob value)
+        result (js/Uint8Array. (.-length decoded))]
+    (dotimes [index (.-length decoded)]
+      (aset result index (.charCodeAt decoded index)))
+    result))
+
+(defn- base64-decoded-body
+  [body]
+  (let [remainder (atom "")
+        decoder (js/TextDecoder.)
+        transform (js/TransformStream.
+                   #js {:transform
+                        (fn [chunk controller]
+                          (let [text (string/replace
+                                      (str @remainder (.decode decoder chunk #js {:stream true}))
+                                      #"\s" "")
+                                complete-length (* 4 (max 0 (dec (quot (count text) 4))))
+                                complete (subs text 0 complete-length)]
+                            (reset! remainder (subs text complete-length))
+                            (when (seq complete)
+                              (.enqueue controller (decoded-base64-chunk complete)))))
+                        :flush
+                        (fn [controller]
+                          (let [tail (string/replace (str @remainder (.decode decoder)) #"\s" "")]
+                            (when (seq tail)
+                              (.enqueue controller (decoded-base64-chunk tail)))))})]
+    {:body (.-readable transform)
+     :pipe-promise (.pipeTo body (.-writable transform))}))
+
 (defn- response-fixed-length-body
   [body size]
   (let [{stream-body :body pipe-promise :pipe-promise} (fixed-length-body body size)]
@@ -44,8 +77,9 @@
   | `:size`         | Exact payload size in bytes |
   | `:content-type` | HTTP content type stored in R2 metadata |
   | `:checksum`     | Client-computed SHA-256 checksum |
-  | `:asset-type`   | File extension stored in custom metadata |"
-  [^js bucket key body {:keys [size content-type checksum asset-type]}]
+  | `:asset-type`   | File extension stored in custom metadata |
+  | `:encoding`     | Optional `base64` streaming transfer encoding |"
+  [^js bucket key body {:keys [size content-type checksum asset-type encoding]}]
   (cond
     (or (not (number? size)) (neg? size))
     (p/resolved (http/error-response "invalid asset size" 400))
@@ -57,15 +91,22 @@
     (p/resolved (http/error-response "missing asset body" 400))
 
     :else
-    (let [{stream-body :body pipe-promise :pipe-promise} (fixed-length-body body size)
-          put-promise (.put bucket key (or stream-body body)
+    (let [{decoded-body :body decode-promise :pipe-promise}
+          (when (= "base64" encoding) (base64-decoded-body body))
+          source-body (or decoded-body body)
+          {stream-body :body fixed-length-promise :pipe-promise} (fixed-length-body source-body size)
+          put-promise (.put bucket key (or stream-body source-body)
                             #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}
                                  :customMetadata #js {:checksum checksum :type asset-type}})]
-      (-> (if pipe-promise
-            (p/all [put-promise pipe-promise])
-            put-promise)
+      (-> (p/all (cond-> [put-promise]
+                   decode-promise (conj decode-promise)
+                   fixed-length-promise (conj fixed-length-promise)))
           (p/then (fn [_]
-                    (http/json-response :assets/put {:ok true} 200)))))))
+                    (http/json-response :assets/put {:ok true} 200)))
+          (p/catch (fn [error]
+                     (if (= "invalid base64 asset body" (.-message error))
+                       (http/error-response (.-message error) 400)
+                       (throw error))))))))
 
 (defn- <body-with-known-length
   [body size]

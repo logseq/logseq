@@ -175,11 +175,11 @@
                (is (= "binary"
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :post
                                     :requestBody :content :application/octet-stream :schema :format])))
-               (is (= #{"file-name" "size" "title" "page-id" "checksum"}
+               (is (= #{"file-name" "size" "title" "page-id" "checksum" "encoding"}
                       (->> (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets")
                                          :post :parameters])
                            (map :name)
-                           (filter #{"file-name" "size" "title" "page-id" "checksum"})
+                           (filter #{"file-name" "size" "title" "page-id" "checksum" "encoding"})
                            set)))
                (is (= "#/components/schemas/AssetResponse"
                       (get-in body [:paths (keyword "/api/v1/graphs/{graph-id}/assets") :get

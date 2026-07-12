@@ -11,7 +11,7 @@ export function chatGptToolDescriptors() {
     {
       name: "search",
       title: "Discover Logseq operations",
-      description: "Search the Logseq DB graph OpenAPI document before making requests. For tasks, discover the dedicated /tasks operations: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. For /assets uploads, stream a body of at most 100MB and provide its exact size and SHA-256 checksum. This API uses DB-version typed properties; never use legacy file-graph key:: value syntax. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
+      description: "Search the Logseq DB graph OpenAPI document before making requests. For tasks, discover the dedicated /tasks operations: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. For /assets uploads from Code Mode, pass the base64 payload as the raw body with encoding=base64; the 100MB size and SHA-256 checksum describe the decoded file. This API uses DB-version typed properties; never use legacy file-graph key:: value syntax. Pass JavaScript as an async arrow function; codemode.spec() returns the OpenAPI document with references resolved inline.",
       inputSchema: {
         type: "object",
         properties: {
@@ -36,7 +36,7 @@ export function chatGptToolDescriptors() {
     {
       name: "execute",
       title: "Use Logseq",
-      description: "Read or change the user's non-encrypted Logseq DB graph through the semantic API. Use the dedicated /tasks operations for DB tasks: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. For /assets uploads, stream a body of at most 100MB and provide its exact size and SHA-256 checksum. Use DB-version typed properties and property UUIDs or idents; never write legacy file-graph key:: value syntax into block titles. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
+      description: "Read or change the user's non-encrypted Logseq DB graph through the semantic API. Use the dedicated /tasks operations for DB tasks: never use Markdown TODO syntax to create tasks and never use graph search to list tasks. For /assets uploads from Code Mode, pass the base64 payload as the raw body with encoding=base64; the 100MB size and SHA-256 checksum describe the decoded file. Use DB-version typed properties and property UUIDs or idents; never write legacy file-graph key:: value syntax into block titles. First use search to discover endpoints. Pass JavaScript as an async arrow function; codemode.request(options) calls only documented Logseq endpoints.",
       inputSchema: {
         type: "object",
         properties: {

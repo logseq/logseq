@@ -172,7 +172,10 @@
     :schema {:type "string"}}
    {:name "checksum" :in "query" :required true
     :description "Lowercase or uppercase SHA-256 hex digest of the file."
-    :schema {:type "string" :pattern "^[0-9a-fA-F]{64}$"}}])
+    :schema {:type "string" :pattern "^[0-9a-fA-F]{64}$"}}
+   {:name "encoding" :in "query"
+    :description "Use base64 when the caller cannot transfer raw binary, including ChatGPT Code Mode. The server decodes it as a stream before writing to R2; size and checksum describe the decoded file."
+    :schema {:type "string" :enum ["base64"]}}])
 
 (defn- request-schema [operation-id]
   (case operation-id

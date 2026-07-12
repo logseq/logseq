@@ -55,5 +55,7 @@ test("ChatGPT tools describe streaming asset uploads", () => {
     assert.match(tool.description, /\/assets/);
     assert.match(tool.description, /SHA-256/);
     assert.match(tool.description, /100MB/);
+    assert.match(tool.description, /encoding=base64/);
+    assert.match(tool.description, /decoded/);
   }
 });

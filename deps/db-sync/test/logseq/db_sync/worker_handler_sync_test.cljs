@@ -922,6 +922,49 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-base64-asset-upload-decodes-before-r2-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   uploaded (atom [])
+                   bucket #js {:put (fn [_key payload _options]
+                                      (p/let [buffer (.arrayBuffer (js/Response. payload))]
+                                        (swap! uploaded conj (js/Uint8Array. buffer))
+                                        #js {}))
+                              :delete (fn [_] (p/resolved nil))}
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page}])
+                   self #js {:sql sql :conn conn :schema-ready true
+                             :env #js {"LOGSEQ_SYNC_ASSETS" bucket}}
+                   request (fn [body checksum]
+                             (js/Request.
+                              (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                   "&file-name=image.png&page-id=" page-id
+                                   "&size=4&checksum=" checksum "&encoding=base64")
+                              #js {:method "POST"
+                                   :headers #js {"content-type" "text/plain"}
+                                   :body body}))]
+               (-> (p/let [response (sync-handler/handle-http
+                                     self (request "AQIDBA==" (apply str (repeat 64 "d"))))
+                            invalid-response (sync-handler/handle-http
+                                              self (request "not base64!" (apply str (repeat 64 "e"))))]
+                     (is (= 201 (.-status response)))
+                     (let [^js payload (first @uploaded)]
+                       (is (= 4 (.-byteLength payload)))
+                       (is (= 1 (aget payload 0)))
+                       (is (= 2 (aget payload 1)))
+                       (is (= 3 (aget payload 2)))
+                       (is (= 4 (aget payload 3))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= 1 (count @uploaded))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (defn- seeded-rng
   [seed0]
   (let [state (atom (bit-or (long seed0) 0))]

@@ -755,6 +755,7 @@
           size (when (and raw-size (re-matches #"\d+" raw-size))
                  (js/parseInt raw-size 10))
           checksum (some-> (.get (.-searchParams url) "checksum") string/lower-case)
+          encoding (.get (.-searchParams url) "encoding")
           asset-type (when (string? file-name) (db-asset/asset-path->type file-name))
           page-id (.get (.-searchParams url) "page-id")
           target (when page-id (find-entity db page-id))
@@ -765,6 +766,7 @@
         (> size assets-handler/max-asset-size) (http/error-response "asset too large" 413)
         (not (and (string? checksum) (re-matches #"[0-9a-f]{64}" checksum)))
         (http/bad-request "invalid asset checksum")
+        (and encoding (not= "base64" encoding)) (http/bad-request "invalid asset encoding")
         (and page-id (not (page? target))) (http/bad-request "invalid asset page-id")
         (nil? bucket) (http/error-response "missing assets bucket" 500)
         (seq (d/datoms db :avet :logseq.property.asset/checksum checksum))
@@ -779,7 +781,8 @@
                                        {:size size
                                         :content-type (.get (.-headers request) "content-type")
                                         :checksum checksum
-                                        :asset-type asset-type})]
+                                        :asset-type asset-type
+                                        :encoding encoding})]
                 (if-not (.-ok upload-response)
                   upload-response
                   (-> (p/let [target (or target (ensure-today-page! conn))
