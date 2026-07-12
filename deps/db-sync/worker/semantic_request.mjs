@@ -39,3 +39,10 @@ export function semanticRequestUrl(options, baseUrl) {
   }
   return url;
 }
+
+export function semanticRequestBody(options, url) {
+  if (options.body === undefined) return undefined;
+  return options.rawBody || url.searchParams.get("encoding") === "base64"
+    ? options.body
+    : JSON.stringify(options.body);
+}

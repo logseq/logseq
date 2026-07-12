@@ -4,7 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
-import { semanticRequestUrl } from "./semantic_request.mjs";
+import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
 
@@ -48,11 +48,7 @@ async function handleMcp(request, env, ctx) {
         new Request(url, {
           method: options.method,
           headers,
-          body: options.body === undefined
-            ? undefined
-            : options.rawBody
-              ? options.body
-              : JSON.stringify(options.body),
+          body: semanticRequestBody(options, url),
         }),
         env,
         ctx,

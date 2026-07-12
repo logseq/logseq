@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
-import { semanticRequestUrl } from "./semantic_request.mjs";
+import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 
 test("Code Mode derives decoded asset size instead of trusting the agent", () => {
   const url = semanticRequestUrl({
@@ -23,6 +23,17 @@ test("Code Mode rejects invalid base64 before forwarding", () => {
     body: "not base64!",
   }, "https://staging.example/mcp"), /invalid base64/);
 
+});
+
+test("Code Mode always forwards base64 assets as a raw body", () => {
+  const options = {
+    path: "/api/v1/graphs/graph-1/assets",
+    query: { encoding: "base64", size: 3 },
+    body: "AQIDBA==",
+  };
+  const url = semanticRequestUrl(options, "https://staging.example/mcp");
+
+  assert.equal(semanticRequestBody(options, url), "AQIDBA==");
 });
 
 test("ChatGPT tool descriptors declare titles, impact, and per-tool auth", () => {
