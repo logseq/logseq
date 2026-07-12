@@ -2076,6 +2076,28 @@
          (is (= "Page block" (:block/raw-title row)))
          (is (contains? tag-idents :logseq.class/Page)))))))
 
+(deftest get-page-blocks-window-resolves-uuid-string
+  (restoring-worker-state
+   (fn []
+     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Child"
+                           :block/uuid block-id
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-window! test-repo (str page-id) {:anchor :top :limit 10})]
+         (is (= page-id (get-in result [:root :block/uuid])))
+         (is (= [block-id] (mapv :block/uuid (:rows result)))))))))
+
 (deftest get-page-blocks-window-returns-flat-paginated-render-rows
   (restoring-worker-state
    (fn []
@@ -2128,6 +2150,46 @@
          (is (= [block-3 block-4] (mapv :block/uuid (:rows bottom-window))))
          (is (= "Scheduled" (:block/title scheduled-property)))
          (is (contains? (first (:rows top-window)) :block.temp/positioned-properties)))))))
+
+(deftest get-page-blocks-window-paginates-visible-flat-rows-for-collapsed-blocks
+  (restoring-worker-state
+   (fn []
+     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-1 #uuid "11111111-1111-1111-1111-111111111111"
+           block-2 #uuid "22222222-2222-2222-2222-222222222222"
+           block-3 #uuid "33333333-3333-3333-3333-333333333333"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Collapsed parent"
+                           :block/uuid block-1
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"
+                           :block/collapsed? true}
+                          {:block/title "Hidden child"
+                           :block/uuid block-2
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid block-1]
+                           :block/order "a0"}
+                          {:block/title "Visible sibling"
+                           :block/uuid block-3
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a1"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [window (get-window! test-repo page-id {:anchor :top :limit 10})
+             bottom-window (get-window! test-repo page-id {:anchor :bottom :limit 1})]
+         (is (= 2 (:total-count window)))
+         (is (= [block-1 block-3] (mapv :block/uuid (:rows window))))
+         (is (= [1 1] (mapv :block/level (:rows window))))
+         (is (not (contains? (first (:rows window)) :block/children)))
+         (is (= 1 (:offset bottom-window)))
+         (is (= [block-3] (mapv :block/uuid (:rows bottom-window)))))))))
 
 (deftest route-title-returns-page-and-block-data
   (restoring-worker-state

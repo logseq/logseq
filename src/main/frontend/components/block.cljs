@@ -4811,9 +4811,10 @@
         temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
                                                              (:container-id config))
         ignore-block-collapsed? (:ignore-block-collapsed? config)
-        load-children? (editor-handler/load-children? block
-                                                      temporary-collapsed-state
-                                                      ignore-block-collapsed?)
+        load-children? (and (not (:hide-children? config))
+                            (editor-handler/load-children? block
+                                                           temporary-collapsed-state
+                                                           ignore-block-collapsed?))
         refresh-block! (fn []
                          (when-not (or (:page-title? config)
                                        (:view? config))
