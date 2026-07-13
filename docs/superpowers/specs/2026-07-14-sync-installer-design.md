@@ -35,16 +35,16 @@ data.
    - `http`: bind a public HTTP endpoint only after the operator types an
      explicit risk acknowledgement.
 4. Ask for an authentication mode:
-   - verified JWT through the current Cognito-compatible environment variables;
-   - shared access token, requiring a future client settings field and matching
-     server validation;
-   - anonymous mode only for private-network testing. It must reject public
-     endpoint selection.
+   - `logseq-client` verified JWT, using the issuer and client ID embedded in
+     the current Logseq client;
+   - `custom-client` verified JWT, which requires a separately built client
+     that issues tokens for the entered issuer and client ID.
 5. Print the full plan, including paths, URL, exposed ports, and authentication
    choice. Require a final confirmation before creating configuration files or
    running Compose.
-6. Start the service with `docker compose up -d`, poll `/health`, and print the
-   Sync Server URL for Logseq settings.
+6. Start the service with `docker compose up -d`, poll the adapter `/health`.
+   For HTTPS, also require Caddy health and a successful public HTTPS
+   `/health` request before printing the Sync Server URL for Logseq settings.
 
 ## Management commands
 
@@ -64,8 +64,8 @@ After `setup`, the manager checks both `docker compose ps` and the unauthenticat
 `/health` endpoint. It reports success only when the containers are running and
 the endpoint returns `{"ok":true}`.
 
-`status` reports container state, the health result, the configured Sync Server
-URL, and a short recent-error summary. `logs` prints the most recent 200 lines;
+`status` reports container state, the health result, and the configured Sync
+Server URL. `logs` prints the most recent 200 lines;
 `--follow` streams new lines. `sync` selects the Node adapter logs, while `proxy`
 selects Caddy logs and reports that the service is unavailable in HTTP mode.
 
@@ -78,8 +78,7 @@ data intact, shows the failed check, and directs the operator to `logs --follow`
 - If a generated file already exists, offer only `cancel` or write a new
   timestamped backup beside it; no overwrite occurs without explicit
   confirmation.
-- Warn that public HTTP exposes bearer credentials and shared tokens in transit.
-- Do not allow anonymous mode with a public HTTP or HTTPS endpoint.
+- Warn that public HTTP exposes bearer credentials in transit.
 
 ## Architecture
 
@@ -102,7 +101,10 @@ discard graphs or assets.
 ## Client compatibility
 
 The existing client accepts a custom HTTP(S) Sync Server URL and derives the
-matching WebSocket URL. It already supports the verified-JWT path.
+matching WebSocket URL. It signs in through its embedded Logseq Cognito
+configuration, so `logseq-client` is the only mode directly usable by an
+unmodified client. `custom-client` is for operators who also build a client
+configured for their own issuer.
 
 Shared-token and anonymous choices require additional implementation before the
 installer exposes them as working choices:
