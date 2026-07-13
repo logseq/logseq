@@ -5,9 +5,11 @@
             [logseq.db-sync.index :as index]
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.auth :as auth]
+            [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.http :as http]
+            [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [promesa.core :as p]))
 
 (defn- admin-token-valid?
@@ -29,6 +31,85 @@
         (.set (.-searchParams new-url) "graph-id" graph-id)
         (let [rewritten (platform/request (.toString new-url) request)]
           (.fetch stub rewritten))))))
+
+(defn- scopes [claims]
+  (-> (or (some-> claims (aget "scope")) "")
+      (string/split #"\s+")
+      set))
+
+(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url]
+  (let [graph-id (:graph-id path-params)
+        path (reduce-kv (fn [result k value]
+                          (string/replace result (str ":" (name k)) value))
+                        internal-path
+                        path-params)
+        target (js/URL. (str (.-origin url) path (.-search url)))]
+    (.set (.-searchParams target) "graph-id" graph-id)
+    (forward-sync-request request env graph-id target)))
+
+(defn- rate-limit-response []
+  (js/Response. (js/JSON.stringify #js {:error "rate limit exceeded"})
+                #js {:status 429
+                     :headers #js {"content-type" "application/json"
+                                   "retry-after" "60"}}))
+
+(defn- semantic-limit [^js url]
+  (let [raw (.get (.-searchParams url) "limit")
+        parsed (when raw (js/parseInt raw 10))]
+    (cond
+      (nil? raw) 50
+      (or (js/isNaN parsed) (not (pos? parsed))) nil
+      :else (min parsed 200))))
+
+(defn- handle-semantic-graphs-list [^js env ^js url claims operation]
+  (let [limit (semantic-limit url)
+        cursor (.get (.-searchParams url) "cursor")
+        name (.get (.-searchParams url) "name")]
+    (cond
+      (nil? limit) (http/bad-request "invalid limit")
+      (and cursor (nil? (index/decode-semantic-graph-cursor cursor))) (http/bad-request "invalid cursor")
+      :else
+      (let [^js limiter (aget env "SEMANTIC_READ_RATE_LIMITER")]
+        (if-not limiter
+          (http/error-response "rate limiter unavailable" 503)
+          (p/let [result (.limit limiter #js {:key (str (aget claims "sub") ":"
+                                                       (:operation-id operation))})]
+            (if (false? (aget result "success"))
+              (rate-limit-response)
+              (p/let [result (index/<semantic-graphs-list
+                               (aget env "DB")
+                               (aget claims "sub")
+                               {:name name :limit limit :cursor cursor})]
+                (http/json-response nil result)))))))))
+
+(defn- handle-semantic-request [request ^js env ^js url operation]
+  (p/let [claims (auth/auth-claims request env)]
+    (cond
+      (nil? claims) (http/unauthorized)
+      (not (contains? (scopes claims) (:scope operation))) (http/error-response "insufficient scope" 403)
+      (= :semantic/graphs-list (:handler operation))
+      (handle-semantic-graphs-list env url claims operation)
+      :else
+      (let [graph-id (get-in operation [:path-params :graph-id])]
+        (p/let [access (index-handler/graph-access-response request env graph-id)]
+          (if-not (.-ok access)
+            access
+            (p/let [e2ee? (index/<graph-e2ee? (aget env "DB") graph-id)]
+              (cond
+                (nil? e2ee?) (http/not-found)
+                e2ee? (http/error-response "semantic-api-unavailable-for-e2ee" 409)
+                :else
+                (let [binding-name (if (= :read (:rate-class operation))
+                                     "SEMANTIC_READ_RATE_LIMITER"
+                                     "SEMANTIC_WRITE_RATE_LIMITER")
+                      ^js limiter (aget env binding-name)]
+                  (if-not limiter
+                    (http/error-response "rate limiter unavailable" 503)
+                    (p/let [result (.limit limiter #js {:key (str (aget claims "sub") ":"
+                                                               (:operation-id operation) ":" graph-id)})]
+                      (if (false? (aget result "success"))
+                        (rate-limit-response)
+                        (forward-semantic-request request env operation url)))))))))))))
 
 (defn- request-user-id
   [request]
@@ -73,6 +154,12 @@
          (= path "/health")
          (http/json-response :worker/health {:ok true})
 
+         (= path "/openapi.json")
+         (http/json-response nil (semantic-routes/openapi-document (or (aget env "COGNITO_ISSUER") "")))
+
+         (semantic-routes/match-public method path)
+         (handle-semantic-request request env url (semantic-routes/match-public method path))
+
          (or (= path "/graphs")
              (string/starts-with? path "/graphs/"))
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
@@ -89,10 +176,13 @@
            (if-let [{:keys [graph-id]} (assets-handler/parse-asset-path path)]
              (if (admin-token-valid? request env)
                (assets-handler/handle request env)
-               (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                 (if (.-ok access-resp)
+               (p/let [signed? (if (= method "GET") (asset-link/<valid-request? request env) false)]
+                 (if signed?
                    (assets-handler/handle request env)
-                   access-resp)))
+                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                     (if (.-ok access-resp)
+                       (assets-handler/handle request env)
+                       access-resp)))))
              (http/bad-request "invalid asset path")))
 
          (= method "OPTIONS")
@@ -110,19 +200,26 @@
                       "/"
                       (subs rest-path slash-idx))
                new-url (js/URL. (str (.-origin url) tail (.-search url)))]
-           (if (seq graph-id)
-               (if (= method "OPTIONS")
-                 (common/options-response)
-                 (if (admin-token-valid? request env)
-                   (forward-sync-request request env graph-id new-url)
-                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                     (if (.-ok access-resp)
-                       (p/let [response (forward-sync-request request env graph-id new-url)
-                               _ (when (< (.-status response) 400)
-                                   (<safe-touch-activity! request env graph-id))]
-                         response)
-                       access-resp))))
-             (http/bad-request "missing graph id")))
+           (cond
+             (not (seq graph-id))
+             (http/bad-request "missing graph id")
+
+             (or (= tail "/semantic")
+                 (string/starts-with? tail "/semantic/"))
+             (http/not-found)
+
+             :else
+             (if (= method "OPTIONS")
+               (common/options-response)
+               (if (admin-token-valid? request env)
+                 (forward-sync-request request env graph-id new-url)
+                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                   (if (.-ok access-resp)
+                     (p/let [response (forward-sync-request request env graph-id new-url)
+                             _ (when (< (.-status response) 400)
+                                 (<safe-touch-activity! request env graph-id))]
+                       response)
+                     access-resp))))))
 
          :else
          (http/not-found))))

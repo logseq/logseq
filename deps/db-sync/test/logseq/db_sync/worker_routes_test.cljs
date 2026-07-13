@@ -1,6 +1,8 @@
 (ns logseq.db-sync.worker-routes-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db-sync.worker.routes.index :as routes]))
+            [clojure.string :as string]
+            [logseq.db-sync.worker.routes.index :as routes]
+            [logseq.db-sync.worker.routes.semantic :as semantic-routes]))
 
 (deftest match-route-graphs-test
   (testing "graphs routes"
@@ -46,3 +48,53 @@
   (testing "method mismatch returns nil"
     (is (nil? (routes/match-route "GET" "/graphs/graph-1/members/user-9")))
     (is (nil? (routes/match-route "PUT" "/e2ee/user-keys")))))
+
+(deftest semantic-internal-routes-ignore-public-only-operations-test
+  (is (nil? (semantic-routes/match-internal "GET" "/api/v1/graphs")))
+  (is (= :semantic/pages-list
+         (:handler (semantic-routes/match-internal "GET" "/semantic/pages")))))
+
+(deftest semantic-move-blocks-route-test
+  (is (= :semantic/blocks-move
+         (:handler (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/block-moves"))))
+  (is (= :semantic/blocks-move
+         (:handler (semantic-routes/match-internal "POST" "/semantic/block-moves"))))
+  (is (nil? (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/blocks/block-1/move"))))
+
+(deftest semantic-reverse-reference-routes-test
+  (is (= :semantic/tags-objects
+         (:handler (semantic-routes/match-public
+                    "GET" "/api/v1/graphs/graph-1/tags/tag-1/objects"))))
+  (is (= :semantic/tags-objects
+         (:handler (semantic-routes/match-internal "GET" "/semantic/tags/tag-1/objects"))))
+  (is (= :semantic/pages-references
+         (:handler (semantic-routes/match-public
+                    "GET" "/api/v1/graphs/graph-1/pages/page-1/references"))))
+  (is (= :semantic/pages-references
+         (:handler (semantic-routes/match-internal "GET" "/semantic/pages/page-1/references")))))
+
+(deftest semantic-task-routes-test
+  (doseq [[method handler] [["GET" :semantic/tasks-list]
+                            ["POST" :semantic/tasks-create]]]
+    (is (= handler
+           (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/tasks"))))
+    (is (= handler
+           (:handler (semantic-routes/match-internal method "/semantic/tasks"))))))
+
+(deftest semantic-asset-collection-routes-test
+  (doseq [[method handler] [["GET" :semantic/assets-list]
+                            ["POST" :semantic/assets-create]]]
+    (is (= handler
+           (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/assets"))))
+    (is (= handler
+           (:handler (semantic-routes/match-internal method "/semantic/assets"))))))
+
+(deftest every-semantic-operation-has-a-working-route-test
+  (doseq [{:keys [method path internal-path handler]} semantic-routes/operations]
+    (let [concrete-path (string/replace path #":([^/]+)" "$1")]
+      (is (= handler (:handler (semantic-routes/match-public method concrete-path)))
+          (str method " " path)))
+    (when internal-path
+      (let [concrete-path (string/replace internal-path #":([^/]+)" "$1")]
+        (is (= handler (:handler (semantic-routes/match-internal method concrete-path)))
+            (str method " " internal-path))))))
