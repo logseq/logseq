@@ -39,6 +39,13 @@
      :logseq.property.node/display-type :code
      :logseq.property.code/lang "sql"}))
 
+(deftest wrap-parse-block-standalone-display-math-test
+  (is (= {:block/title "E = mc^2"
+          :logseq.property.node/display-type :math}
+         (select-keys
+          (db-editor-handler/wrap-parse-block {:block/title "$$\nE = mc^2\n$$"})
+          [:block/title :logseq.property.node/display-type]))))
+
 (deftest wrap-parse-block-markdown-hashtag-link-test
   (testing "markdown link targets that resolve to existing hashtag pages are saved as refs"
     (let [tag-uuid #uuid "5c6cd067-c602-4955-96b8-74b62e08113c"

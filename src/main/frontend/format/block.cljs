@@ -16,24 +16,33 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
-(defn- standalone-fenced-code-block
+(defn- standalone-display-block
   [block]
   (let [title (:block/title block)
-        fenced-title? (and (string? title)
-                           (re-find #"(?s)^\s*```.*```\s*$" title))
-        ast-body (when fenced-title?
+        display-markup? (and (string? title)
+                             (or (re-find #"(?s)^\s*```.*```\s*$" title)
+                                 (re-find #"(?s)^\s*\$\$.*\$\$\s*$" title)))
+        ast-body (when display-markup?
                    (or (:block.temp/ast-body block)
                        (map first (mldoc/->edn title :markdown))))
         [ast-node] ast-body
-        [node-type {:keys [language lines]}] ast-node]
-    (if (and (= 1 (count ast-body))
-             (= "Src" node-type)
-             fenced-title?)
-      (cond-> (assoc block
-                     :block/title (string/replace (apply str lines) #"\r?\n$" "")
-                     :logseq.property.node/display-type :code)
-        (not-empty language)
-        (assoc :logseq.property.code/lang language))
+        [node-type node-data] ast-node]
+    (if (= 1 (count ast-body))
+      (case node-type
+        "Src"
+        (let [{:keys [language lines]} node-data]
+          (cond-> (assoc block
+                         :block/title (string/replace (apply str lines) #"\r?\n$" "")
+                         :logseq.property.node/display-type :code)
+            (not-empty language)
+            (assoc :logseq.property.code/lang language)))
+
+        "Displayed_Math"
+        (assoc block
+               :block/title (string/replace node-data #"^\r?\n|\r?\n$" "")
+               :logseq.property.node/display-type :math)
+
+        block)
       block)))
 
 (defn extract-blocks
@@ -50,7 +59,7 @@ and handles unexpected failure."
                                              :page-name page-name
                                              :db-graph-mode? true})]
         (map (fn [block]
-               (let [block (standalone-fenced-code-block block)]
+               (let [block (standalone-display-block block)]
                  (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
                    (:block/properties block)
                    (merge (update-keys (:block/properties block)

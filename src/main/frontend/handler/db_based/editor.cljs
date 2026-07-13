@@ -118,11 +118,12 @@
                       content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
                       hashtag-link-refs (existing-markdown-hashtag-link-refs ast)
                       parsed-block (block/parse-block (assoc block :block/title content'))
-                      new-code-block? (and (nil? (:logseq.property.node/display-type block))
-                                           (= :code (:logseq.property.node/display-type parsed-block)))
+                      new-display-block? (and (nil? (:logseq.property.node/display-type block))
+                                              (contains? #{:code :math}
+                                                         (:logseq.property.node/display-type parsed-block)))
                       block' (-> (merge block
                                         parsed-block
-                                        {:block/title (if new-code-block?
+                                        {:block/title (if new-display-block?
                                                         (:block/title parsed-block)
                                                         title)}
                                         (when heading-level
