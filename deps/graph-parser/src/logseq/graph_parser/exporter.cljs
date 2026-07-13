@@ -2663,8 +2663,8 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:birthtime stat) (some-> stat .-birthtime))
-              modified-at (or (:mtime stat) (some-> stat .-mtime) (:last-modified-at file))
+              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
+              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
                                created-at (assoc :file-created-at (.getTime created-at))
