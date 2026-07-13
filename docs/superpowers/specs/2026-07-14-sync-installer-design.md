@@ -98,6 +98,9 @@ connections are held in process memory, while the adapter uses local SQLite.
 The data directory is mounted from the host so container recreation does not
 discard graphs or assets.
 
+The adapter is published on the host only in HTTP mode. HTTPS mode keeps it on
+the internal Compose network and lets Caddy provide the public ports 80 and 443.
+
 ## Client compatibility
 
 The existing client accepts a custom HTTP(S) Sync Server URL and derives the
