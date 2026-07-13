@@ -983,7 +983,9 @@
                      (when (string? (:uuid create-body))
                        (let [asset (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
                          (is (= page-id (:block/uuid (:block/page asset))))
-                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))))
+                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))
+                         (is (= {:checksum checksum :type "png"}
+                                (:logseq.property.asset/remote-metadata asset)))))
                      (is (= 200 (.-status list-response)))
                      (is (= [(:uuid create-body)] (mapv :uuid (:assets list-body))))
                      (is (= 409 (.-status duplicate-response)))
