@@ -4,4 +4,4 @@
  (modes melange)
  (preprocess
   (pps melange.ppx))
- (libraries melange-fetch melange.js melange.node))
+ (libraries melange-fetch melange.js melange.node rrbvec))

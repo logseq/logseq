@@ -16,15 +16,15 @@ type template_kind = Task | Comment
 type prompt_template = {
   kind : template_kind;
   body : string;
-  required_vars : string list;
-  allowed_vars : string list;
+  required_vars : string Rrbvec.t;
+  allowed_vars : string Rrbvec.t;
 }
 
 type bridge_result = {
   mode : Cli_primitive.keyword;
   graph : Cli_primitive.graph;
   agent_name : string;
-  routed : Melange_edn_melange.any list;
+  routed : Melange_edn_melange.any Rrbvec.t;
 }
 
 include Command_spec.S with type parsed := parsed and type action := action

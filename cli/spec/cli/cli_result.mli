@@ -2,7 +2,7 @@ type status = Ok | Error
 
 type ok_data =
   | Message of string
-  | Items of Melange_edn_melange.any list
+  | Items of Melange_edn_melange.any Rrbvec.t
   | Entity of Melange_edn_melange.any
   | Query_result of Melange_edn_melange.any
   | Raw of Melange_edn_melange.any
@@ -18,7 +18,7 @@ type t = private {
   context : Melange_edn_melange.any option;
   output : 'o. 'o Output.Mode.t -> 'o Output.t;
   exit_code : int option;
-  human_table_headers_order : string list;
+  human_table_headers_order : string Rrbvec.t;
 }
 
 val ok :
@@ -39,4 +39,4 @@ val is_error : t -> bool
 val exit_code : t -> int
 val data_value : t -> Melange_edn_melange.any option
 val with_command : Command_id.t -> t -> t
-val with_human_table_headers_order : string list -> t -> t
+val with_human_table_headers_order : string Rrbvec.t -> t -> t

@@ -36,23 +36,26 @@ let parse_ident_option value =
 let resolve_selector opts =
   let uuid = Option.bind opts.uuid Cli_primitive.non_empty in
   let selectors =
-    []
+    Vec.empty
     |> (fun acc ->
-    match opts.id with Some id -> By_id id :: acc | None -> acc)
+    match opts.id with Some id -> Vec.push_back acc (By_id id) | None -> acc)
     |> (fun acc ->
-    match uuid with Some uuid -> By_uuid uuid :: acc | None -> acc)
+    match uuid with
+    | Some uuid -> Vec.push_back acc (By_uuid uuid)
+    | None -> acc)
     |> (fun acc ->
-    match opts.ident with Some ident -> By_ident ident :: acc | None -> acc)
-    |> List.rev
+    match opts.ident with
+    | Some ident -> Vec.push_back acc (By_ident ident)
+    | None -> acc)
   in
-  match selectors with
-  | [] ->
+  match (Vec.length selectors, Vec.nth_opt selectors 0) with
+  | 0, _ ->
       Error
         (Error.invalid_options
            "exactly one of --id, --uuid, or --ident is required")
-  | [ By_uuid uuid ] when not (Cli_primitive.is_uuid_string uuid) ->
+  | 1, Some (By_uuid uuid) when not (Cli_primitive.is_uuid_string uuid) ->
       Error (Error.invalid_options "Option uuid must be a valid UUID string")
-  | [ selector ] -> Ok selector
+  | 1, Some selector -> Ok selector
   | _ ->
       Error
         (Error.invalid_options "only one of --id, --uuid, or --ident is allowed")
@@ -65,11 +68,14 @@ let validate_parsed (Parsed_pull opts) =
 let selector_value = function
   | By_id id -> Edn_util.int64 id
   | By_uuid uuid ->
-      Edn_util.vector [ Edn_util.keyword "block/uuid"; Edn_util.uuid uuid ]
+      Edn_util.vector_vec
+        (Vec.of_array [| Edn_util.keyword "block/uuid"; Edn_util.uuid uuid |])
   | By_ident ident ->
-      Edn_util.vector [ Edn_util.keyword "db/ident"; Edn_util.any ident ]
+      Edn_util.vector_vec
+        (Vec.of_array [| Edn_util.keyword "db/ident"; Edn_util.any ident |])
 
-let default_selector = Edn_util.vector [ Edn_util.symbol "*" ]
+let default_selector =
+  Edn_util.vector_vec (Vec.of_array [| Edn_util.symbol "*" |])
 
 let build ?registry:_ config _globals (Parsed_pull opts) =
   Error.bind (resolve_selector opts) (fun lookup ->
@@ -101,37 +107,37 @@ let execute_with_mode (Debug_pull action) config mode =
             if Edn_util.is_null entity then
               pure
                 (Output_mode.error ~command:Command_id.Debug_pull mode
-                   (Error.make
-                      (Error.Entity_not_found)
-                      "entity not found"))
+                   (Error.make Error.Entity_not_found "entity not found"))
             else
               pure
                 (Cli_result.ok ~command:Command_id.Debug_pull mode
                    (Raw
-                      (Edn_util.map
-                         [
-                           (Edn_util.keyword "entity", entity);
-                           ( Edn_util.keyword "lookup",
-                             selector_value action.lookup );
-                           (Edn_util.keyword "selector", action.selector);
-                         ])))))
+                      (Edn_util.map_vec
+                         (Vec.of_array
+                            [|
+                              (Edn_util.keyword "entity", entity);
+                              ( Edn_util.keyword "lookup",
+                                selector_value action.lookup );
+                              (Edn_util.keyword "selector", action.selector);
+                            |]))))))
 
 let metadata () =
-  [
-    {
-      Command_registry.id = Command_id.Debug_pull;
-      path = Command_id.to_path Command_id.Debug_pull;
-      doc = "Pull raw entity data for debugging";
-      long_doc = None;
-      examples = [];
-      options = [];
-      category = Command_registry.Hidden;
-      requires_graph = Command_id.requires_graph Command_id.Debug_pull;
-      requires_auth = Command_id.requires_auth Command_id.Debug_pull;
-      write_command = Command_id.is_write Command_id.Debug_pull;
-      human_table_headers_order = [];
-    };
-  ]
+  Vec.of_array
+    [|
+      {
+        Command_registry.id = Command_id.Debug_pull;
+        path = Command_id.to_path Command_id.Debug_pull;
+        doc = "Pull raw entity data for debugging";
+        long_doc = None;
+        examples = Vec.empty;
+        options = Vec.empty;
+        category = Command_registry.Hidden;
+        requires_graph = Command_id.requires_graph Command_id.Debug_pull;
+        requires_auth = Command_id.requires_auth Command_id.Debug_pull;
+        write_command = Command_id.is_write Command_id.Debug_pull;
+        human_table_headers_order = Vec.empty;
+      };
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in

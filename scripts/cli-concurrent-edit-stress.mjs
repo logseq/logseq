@@ -1729,6 +1729,18 @@ function reactionEmojiId(context) {
   return emojiIds[seq % emojiIds.length];
 }
 
+export function stressReferenceViewOrder(context = {}, offset = 0) {
+  const base62Digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const seq = Number.isInteger(context.seq) ? context.seq : 0;
+  const index = Math.abs(seq * 2 + offset);
+  const digit = base62Digits[index % base62Digits.length];
+  if (index < base62Digits.length) {
+    return `a${digit}`;
+  }
+  const bucket = base62Digits[Math.floor((index - base62Digits.length) / base62Digits.length)];
+  return `b${bucket}${digit}`;
+}
+
 async function findViewsPageUuid(opts, context = {}) {
   return findPageUuid(opts, "$$$views", context);
 }
@@ -1747,7 +1759,7 @@ async function createReferenceView(opts, state, context, featureType, title) {
   await transactRaw(
     opts,
     state,
-    [referenceViewBlock(viewUuid, viewsPageUuid, target, featureType, title, `a${context.seq ?? 0}`, now)],
+    [referenceViewBlock(viewUuid, viewsPageUuid, target, featureType, title, stressReferenceViewOrder(context), now)],
     localTxMeta([kw("outliner-op"), kw("create-view")]),
     { ...context, id: target.id, uuid: target.uuid, viewUuid, featureType },
   );
@@ -1815,8 +1827,24 @@ async function applyRawDeleteViewTargetWithRelatedEntities(opts, state, context)
     opts,
     state,
     [
-      referenceViewBlock(linkedViewUuid, viewsPageUuid, target, "linked-references", "Linked references", `a${context.seq ?? 0}0`, now),
-      referenceViewBlock(unlinkedViewUuid, viewsPageUuid, target, "unlinked-references", "Unlinked references", `a${context.seq ?? 0}1`, now),
+      referenceViewBlock(
+        linkedViewUuid,
+        viewsPageUuid,
+        target,
+        "linked-references",
+        "Linked references",
+        stressReferenceViewOrder(context),
+        now,
+      ),
+      referenceViewBlock(
+        unlinkedViewUuid,
+        viewsPageUuid,
+        target,
+        "unlinked-references",
+        "Unlinked references",
+        stressReferenceViewOrder(context, 1),
+        now,
+      ),
       propertyHistoryBlock(targetHistoryUuid, blockUuidRef(target.uuid), statusHistoryValue(context), now),
       propertyHistoryBlock(linkedViewHistoryUuid, blockUuidRef(linkedViewUuid), statusHistoryValue(context, 1), now),
       propertyHistoryBlock(unlinkedViewHistoryUuid, blockUuidRef(unlinkedViewUuid), statusHistoryValue(context, 2), now),

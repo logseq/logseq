@@ -1,6 +1,6 @@
 type target =
   | By_id of Cli_primitive.db_id
-  | By_ids of Cli_primitive.db_id list
+  | By_ids of Cli_primitive.db_id Rrbvec.t
   | By_uuid of Cli_primitive.uuid
   | By_page of string
 
@@ -28,13 +28,13 @@ type action = {
   level : int option;
 }
 
-type linked_references = { count : int; blocks : Block.t list }
+type linked_references = { count : int; blocks : Block.t Rrbvec.t }
 
 type tree_data = {
   root : Block.t;
   linked_references : linked_references option;
-  referenced_uuids : Cli_primitive.uuid list;
-  uuid_to_entity : (Cli_primitive.uuid * Entity.t) list;
+  referenced_uuids : Cli_primitive.uuid Rrbvec.t;
+  uuid_to_entity : (Cli_primitive.uuid * Entity.t) Rrbvec.t;
   breadcrumb_line : string option;
 }
 

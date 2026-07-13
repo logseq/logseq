@@ -74,15 +74,22 @@
 (defn set-t! [sql t]
   (set-meta! sql :t t))
 
-(defn- with-sql-transaction!
+(def ^:dynamic *in-sql-transaction?* false)
+
+(defn with-sql-transaction!
   [sql f]
-  (if-let [db (aget sql "_db")]
-    (let [transaction (.-transaction db)]
-      (if (fn? transaction)
-        (let [tx-fn (.call transaction db f)]
-          (tx-fn))
-        (f)))
-    (f)))
+  (if *in-sql-transaction?*
+    (f)
+    (let [f' (fn []
+               (binding [*in-sql-transaction?* true]
+                 (f)))]
+      (if-let [db (aget sql "_db")]
+        (let [transaction (.-transaction db)]
+          (if (fn? transaction)
+            (let [tx-fn (.call transaction db f')]
+              (tx-fn))
+            (f')))
+        (f')))))
 
 (defn set-initial-checksum! [sql checksum]
   (with-sql-transaction!
@@ -175,7 +182,8 @@
 
 (defn- append-tx-for-tx-report
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
-  (when-not (empty? tx-data)
+  (when-not (or (:db-sync/skip-tx-log? tx-meta)
+                (empty? tx-data))
     (let [created-at (common/now-ms)
           normalized-data (->> tx-data
                                (db-normalize/normalize-tx-data db-after db-before)
@@ -184,14 +192,15 @@
       (with-sql-transaction!
         sql
         (fn []
-          (let [prev-checksum (get-checksum sql)
-                checksum (sync-checksum/update-checksum
-                          prev-checksum
-                          (assoc tx-report :tx-data normalized-data))
-                new-t (inc (get-t sql))]
+          (let [new-t (inc (get-t sql))]
             (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))
             (set-t! sql new-t)
-            (set-checksum! sql checksum)))))))
+            (when-not (:db-sync/skip-checksum-update? tx-meta)
+              (let [prev-checksum (get-checksum sql)
+                    checksum (sync-checksum/update-checksum
+                              prev-checksum
+                              (assoc tx-report :tx-data normalized-data))]
+                (set-checksum! sql checksum)))))))))
 
 (defn- listen-db-updates!
   [sql conn]

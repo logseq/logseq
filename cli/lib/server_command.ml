@@ -52,62 +52,74 @@ let owner_source_value source =
   Edn_util.string (Cli_primitive.string_of_owner_source source)
 
 let optional_string key = function
-  | Some value -> [ (Edn_util.keyword key, Edn_util.string value) ]
-  | None -> []
+  | Some value -> Vec.singleton (Edn_util.keyword key, Edn_util.string value)
+  | None -> Vec.empty
 
 let server_value (server : Server_runtime.server) =
-  Edn_util.map
-    ([
-       ( Edn_util.keyword "repo",
-         Edn_util.string (Cli_primitive.string_of_repo server.repo) );
-       ( Edn_util.keyword "graph",
-         match server.graph with
-         | Some graph -> Edn_util.string (Cli_primitive.string_of_graph graph)
-         | None -> Edn_util.nil );
-       (Edn_util.keyword "pid", Edn_util.int server.pid);
-       (Edn_util.keyword "host", Edn_util.string server.host);
-       (Edn_util.keyword "port", Edn_util.int server.port);
-       (Edn_util.keyword "base-url", Edn_util.string server.base_url);
-       (Edn_util.keyword "status", status_value server.status);
-       (Edn_util.keyword "owner-source", owner_source_value server.owner_source);
-       (Edn_util.keyword "owned", Edn_util.bool server.owned);
-     ]
-    @ optional_string "revision" server.revision
-    @ optional_string "root-dir" server.root_dir)
+  Edn_util.map_vec
+    ( Vec.of_array
+        [|
+          ( Edn_util.keyword "repo",
+            Edn_util.string (Cli_primitive.string_of_repo server.repo) );
+          ( Edn_util.keyword "graph",
+            match server.graph with
+            | Some graph ->
+                Edn_util.string (Cli_primitive.string_of_graph graph)
+            | None -> Edn_util.nil );
+          (Edn_util.keyword "pid", Edn_util.int server.pid);
+          (Edn_util.keyword "host", Edn_util.string server.host);
+          (Edn_util.keyword "port", Edn_util.int server.port);
+          (Edn_util.keyword "base-url", Edn_util.string server.base_url);
+          (Edn_util.keyword "status", status_value server.status);
+          ( Edn_util.keyword "owner-source",
+            owner_source_value server.owner_source );
+          (Edn_util.keyword "owned", Edn_util.bool server.owned);
+        |]
+    |> fun fields ->
+      Vec.append fields (optional_string "revision" server.revision)
+      |> fun fields ->
+      Vec.append fields (optional_string "root-dir" server.root_dir) )
 
 let start_result_value (result : Server_runtime.start_result) =
-  Edn_util.map
-    [
-      ( Edn_util.keyword "repo",
-        Edn_util.string (Cli_primitive.string_of_repo result.repo) );
-      (Edn_util.keyword "owner-source", owner_source_value result.owner_source);
-      (Edn_util.keyword "owned", Edn_util.bool result.owned);
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         ( Edn_util.keyword "repo",
+           Edn_util.string (Cli_primitive.string_of_repo result.repo) );
+         ( Edn_util.keyword "owner-source",
+           owner_source_value result.owner_source );
+         (Edn_util.keyword "owned", Edn_util.bool result.owned);
+       |])
 
 let stop_result_value (result : Server_runtime.stop_result) =
-  Edn_util.map
-    [
-      ( Edn_util.keyword "repo",
-        Edn_util.string (Cli_primitive.string_of_repo result.repo) );
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         ( Edn_util.keyword "repo",
+           Edn_util.string (Cli_primitive.string_of_repo result.repo) );
+       |])
 
 let error_value (err : Error.t) =
-  Edn_util.map
-    [
-      (Edn_util.keyword "code", Edn_util.string (Error.code_to_string err.code));
-      (Edn_util.keyword "message", Edn_util.string err.message);
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         ( Edn_util.keyword "code",
+           Edn_util.string (Error.code_to_string err.code) );
+         (Edn_util.keyword "message", Edn_util.string err.message);
+       |])
 
 let failed_cleanup_value (server, err) =
   match Edn_util.as_map (server_value server) with
   | Some fields ->
-      Edn_util.map (fields @ [ (Edn_util.keyword "error", error_value err) ])
+      Edn_util.map_vec
+        (Vec.push_back fields (Edn_util.keyword "error", error_value err))
   | None ->
-      Edn_util.map
-        [
-          (Edn_util.keyword "server", server_value server);
-          (Edn_util.keyword "error", error_value err);
-        ]
+      Edn_util.map_vec
+        (Vec.of_array
+           [|
+             (Edn_util.keyword "server", server_value server);
+             (Edn_util.keyword "error", error_value err);
+           |])
 
 let execute_with_mode action config mode =
   let open Cli_effect in
@@ -117,11 +129,13 @@ let execute_with_mode action config mode =
           pure
             (Cli_result.ok ~command:Command_id.Server_list mode
                (Raw
-                  (Edn_util.map
-                     [
-                       ( Edn_util.keyword "servers",
-                         Edn_util.vector (List.map server_value servers) );
-                     ]))))
+                  (Edn_util.map_vec
+                     (Vec.of_array
+                        [|
+                          ( Edn_util.keyword "servers",
+                            Edn_util.vector_vec (servers |> Vec.map server_value)
+                          );
+                        |])))))
   | Server_cleanup ->
       bind
         (Server_runtime.cleanup_revision_mismatched_servers config
@@ -130,25 +144,27 @@ let execute_with_mode action config mode =
             pure
               (Cli_result.ok ~command:Command_id.Server_cleanup mode
                  (Raw
-                    (Edn_util.map
-                       [
-                         ( Edn_util.keyword "cli-revision",
-                           Edn_util.string result.cli_revision );
-                         ( Edn_util.keyword "checked",
-                           Edn_util.int result.checked );
-                         ( Edn_util.keyword "mismatched",
-                           Edn_util.int result.mismatched );
-                         ( Edn_util.keyword "eligible",
-                           Edn_util.int result.eligible );
-                         ( Edn_util.keyword "skipped-owner",
-                           Edn_util.int result.skipped_owner );
-                         ( Edn_util.keyword "killed",
-                           Edn_util.vector (List.map server_value result.killed)
-                         );
-                         ( Edn_util.keyword "failed",
-                           Edn_util.vector
-                             (List.map failed_cleanup_value result.failed) );
-                       ])))
+                    (Edn_util.map_vec
+                       (Vec.of_array
+                          [|
+                            ( Edn_util.keyword "cli-revision",
+                              Edn_util.string result.cli_revision );
+                            ( Edn_util.keyword "checked",
+                              Edn_util.int result.checked );
+                            ( Edn_util.keyword "mismatched",
+                              Edn_util.int result.mismatched );
+                            ( Edn_util.keyword "eligible",
+                              Edn_util.int result.eligible );
+                            ( Edn_util.keyword "skipped-owner",
+                              Edn_util.int result.skipped_owner );
+                            ( Edn_util.keyword "killed",
+                              Edn_util.vector_vec
+                                (result.killed |> Vec.map server_value) );
+                            ( Edn_util.keyword "failed",
+                              Edn_util.vector_vec
+                                (result.failed |> Vec.map failed_cleanup_value)
+                            );
+                          |]))))
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Server_cleanup mode err))
   | Server_start { repo; _ } ->
@@ -177,39 +193,41 @@ let execute_with_mode action config mode =
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Server_restart mode err))
 
-let meta ?(examples = []) id doc =
+let meta ?(examples = Vec.empty) id doc =
   {
     Command_registry.id;
     path = Command_id.to_path id;
     doc;
     long_doc = None;
     examples;
-    options = [];
+    options = Vec.empty;
     category = Command_registry.Graph_management;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta ~examples:[ "logseq server list" ] Command_id.Server_list
-      "List db-worker-node servers";
-    meta
-      ~examples:[ "logseq server cleanup" ]
-      Server_cleanup
-      "Clean up revision-mismatched CLI-owned db-worker-node servers";
-    meta
-      ~examples:[ "logseq server start --graph my-graph" ]
-      Server_start "Start db-worker-node for a graph";
-    meta
-      ~examples:[ "logseq server stop --graph my-graph" ]
-      Server_stop "Stop db-worker-node for a graph";
-    meta
-      ~examples:[ "logseq server restart --graph my-graph" ]
-      Server_restart "Restart db-worker-node for a graph";
-  ]
+  Vec.of_array
+    [|
+      meta
+        ~examples:(Vec.singleton "logseq server list")
+        Command_id.Server_list "List db-worker-node servers";
+      meta
+        ~examples:(Vec.singleton "logseq server cleanup")
+        Server_cleanup
+        "Clean up revision-mismatched CLI-owned db-worker-node servers";
+      meta
+        ~examples:(Vec.singleton "logseq server start --graph my-graph")
+        Server_start "Start db-worker-node for a graph";
+      meta
+        ~examples:(Vec.singleton "logseq server stop --graph my-graph")
+        Server_stop "Stop db-worker-node for a graph";
+      meta
+        ~examples:(Vec.singleton "logseq server restart --graph my-graph")
+        Server_restart "Restart db-worker-node for a graph";
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in
