@@ -1,6 +1,7 @@
 name: logseq/db-sync CI
 
 on:
+  workflow_dispatch:
   # Path filters ensure jobs only kick off if a change is made to db-sync or
   # its local dependencies
   push:
