@@ -174,6 +174,45 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
+(deftest-async editor-on-paste-parses-standalone-fenced-code-block
+  (let [actual-blocks (atom nil)
+        clipboard "```sql\nSELECT value\nFROM records\n```"
+        parsed-blocks [{:block/title "SELECT value\nFROM records"
+                        :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :logseq.property.node/display-type :code
+                        :logseq.property.code/lang "sql"
+                        :block/level 1}]]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      util/get-selected-text (constantly "")
+      commands/delete-selection! (constantly nil)
+      commands/simple-insert! (fn [_input text] (p/resolved text))
+      state/get-current-repo (constantly "test")
+      state/get-current-page (constantly nil)
+      state/get-edit-block (constantly {:block/page {:db/id 1}})
+      db/entity (fn [id]
+                  (when (= id 1)
+                    {:block/name "paste target"}))
+      paste-handler/get-copied-blocks (constantly (p/resolved nil))
+      html-parser/convert (constantly nil)
+      block/extract-blocks (fn [& _] parsed-blocks)
+      gp-block/with-parent-and-order (fn [_ blocks] blocks)
+      editor-handler/paste-blocks (fn [blocks _opts]
+                                    (reset! actual-blocks blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:files #js []
+                                          :getData (fn [kind]
+                                                     (if (= kind "text")
+                                                       clipboard
+                                                       ""))}})]
+       (is (= [{:block/title "SELECT value\nFROM records"
+                :logseq.property.node/display-type :code
+                :logseq.property.code/lang "sql"}]
+              (mapv #(select-keys % [:block/title
+                                     :logseq.property.node/display-type
+                                     :logseq.property.code/lang])
+                     @actual-blocks)))))))
+
 (deftest paste-text-parseable-preserves-og-copied-heading-page-refs
   (let [actual-blocks (atom nil)
         date-page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
