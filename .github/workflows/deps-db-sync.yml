@@ -146,5 +146,5 @@ jobs:
             y \
             | bash deploy/logseq-sync setup
           curl --fail --silent http://127.0.0.1:18080/health
-          docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" config -q
+          docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" -f "$install_dir/compose.http.yaml" config -q
           docker compose --profile https --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" config -q

@@ -16,8 +16,6 @@ services:
     user: "${LOGSEQ_SYNC_UID:?Set by logseq-sync}:${LOGSEQ_SYNC_GID:?Set by logseq-sync}"
     volumes:
       - ${LOGSEQ_SYNC_DATA_DIR:?Set by logseq-sync}:/var/lib/logseq-sync
-    ports:
-      - "${DB_SYNC_BIND_ADDRESS:-127.0.0.1}:${DB_SYNC_PUBLIC_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
       interval: 10s

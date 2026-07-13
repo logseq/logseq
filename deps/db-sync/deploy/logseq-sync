@@ -48,8 +48,16 @@ confirm() {
 
 compose() {
   local install_dir="$1"
+  local endpoint_mode
+  local -a files=(-f "$install_dir/compose.yaml")
   shift
-  docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" "$@"
+  endpoint_mode="$(sed -n 's/^LOGSEQ_SYNC_ENDPOINT_MODE=//p' "$install_dir/.env")"
+  case "$endpoint_mode" in
+    http) files+=(-f "$install_dir/compose.http.yaml") ;;
+    https) ;;
+    *) die "Deployment configuration has an invalid endpoint mode." ;;
+  esac
+  docker compose --env-file "$install_dir/.env" "${files[@]}" "$@"
 }
 
 write_file() {
@@ -185,6 +193,7 @@ setup() {
   confirm 'Write deployment configuration and start Sync?' || die "Cancelled before writing configuration."
 
   confirm_existing "$install_dir/compose.yaml"
+  confirm_existing "$install_dir/compose.http.yaml"
   confirm_existing "$install_dir/.env"
   if [[ "$endpoint_mode" == "https" ]]; then
     confirm_existing "$install_dir/Caddyfile"
@@ -192,12 +201,14 @@ setup() {
 
   mkdir -p -- "$install_dir" "$data_dir"
   backup_existing "$install_dir/compose.yaml"
+  backup_existing "$install_dir/compose.http.yaml"
   backup_existing "$install_dir/.env"
   if [[ "$endpoint_mode" == "https" ]]; then
     backup_existing "$install_dir/Caddyfile"
   fi
 
   cp -- "$script_dir/compose.yaml" "$install_dir/compose.yaml"
+  cp -- "$script_dir/compose.http.yaml" "$install_dir/compose.http.yaml"
   write_file "$install_dir/.env" "LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
 LOGSEQ_SYNC_INSTALL_DIR=${install_dir}
 LOGSEQ_SYNC_DATA_DIR=${data_dir}
