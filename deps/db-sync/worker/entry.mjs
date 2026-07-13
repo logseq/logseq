@@ -12,6 +12,8 @@ import {
 } from "./asset_image.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
 import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.mjs";
+import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
+import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
@@ -130,6 +132,8 @@ async function handleMcp(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    const challengeResponse = openAiAppsChallengeResponse(request, env);
+    if (challengeResponse) return challengeResponse;
     const docsResponse = apiDocsResponse(path, apiDocsHtml);
     if (docsResponse) return docsResponse;
     if (path === "/.well-known/oauth-protected-resource" ||
@@ -137,7 +141,7 @@ export default {
       return protectedResourceMetadata(request, env);
     }
     if (path === "/mcp/icon.png") return logseqIconResponse();
-    if (path === "/mcp") return handleMcp(request, env, ctx);
+    if (path === "/mcp") return handleMcp(ensureMcpAcceptHeader(request), env, ctx);
     return worker.fetch(request, env, ctx);
   },
 };
