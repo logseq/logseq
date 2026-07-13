@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import { uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
 import {
   ASSET_IMAGE_RESOURCE_URI,
   assertDisplayableImageMetadata,
@@ -80,6 +81,47 @@ async function handleMcp(request, env, ctx) {
     description: "Renders a Logseq image asset returned by the image asset tool.",
     mimeType: "text/html;profile=mcp-app",
   }, assetImageResource);
+
+  server.registerTool("upload_asset", {
+    title: "Upload Logseq asset",
+    description: "Upload an original ChatGPT attachment to a Logseq DB graph.",
+    inputSchema: {
+      graphId: z.string(),
+      file: z.object({
+        download_url: z.string(),
+        file_id: z.string(),
+        mime_type: z.string().optional(),
+        file_name: z.string().optional(),
+      }),
+      pageId: z.string().optional(),
+      title: z.string().optional(),
+    },
+    outputSchema: {
+      uuid: z.string(),
+      title: z.string(),
+      type: z.string(),
+      size: z.number().int().nonnegative(),
+      checksum: z.string(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    _meta: {
+      "openai/fileParams": ["file"],
+    },
+  }, (input) => uploadChatGptAsset(input, {
+    origin: new URL(request.url).origin,
+    authorization,
+    env,
+    ctx,
+    workerFetch: worker.fetch.bind(worker),
+  }).then((result) => ({
+    structuredContent: result,
+    content: [{ type: "text", text: `Uploaded Logseq asset ${result.title} (${result.uuid}).` }],
+  })));
 
   server.registerTool("get_asset_image", {
     title: "Display Logseq image asset",
