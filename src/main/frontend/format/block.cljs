@@ -18,10 +18,11 @@
 
 (defn- standalone-display-block
   [block]
-  (let [title (:block/title block)
-        display-markup? (and (string? title)
-                             (or (re-find #"(?s)^\s*```.*```\s*$" title)
-                                 (re-find #"(?s)^\s*\$\$.*\$\$\s*$" title)))
+  (let [raw-title (:block/title block)
+        title (when (string? raw-title) (string/trim raw-title))
+        display-markup? (and title
+                             (or (re-find #"(?s)^```.*```$" title)
+                                 (re-find #"(?s)^\$\$.*\$\$$" title)))
         ast-body (when display-markup?
                    (or (:block.temp/ast-body block)
                        (map first (mldoc/->edn title :markdown))))
@@ -39,7 +40,7 @@
 
         "Displayed_Math"
         (assoc block
-               :block/title (string/replace node-data #"^\r?\n|\r?\n$" "")
+               :block/title (string/trim node-data)
                :logseq.property.node/display-type :math)
 
         block)
