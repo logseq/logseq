@@ -85,7 +85,7 @@ confirm_existing() {
 backup_existing() {
   local path="$1"
   local timestamp backup suffix=0
-  [[ -e "$path" ]] || return
+  [[ -e "$path" ]] || return 0
   timestamp="$(date +%Y%m%d%H%M%S)"
   backup="${path}.backup-${timestamp}"
   while [[ -e "$backup" ]]; do
