@@ -1,10 +1,10 @@
-# Interactive self-hosted Sync installer
+# Interactive self-hosted Sync manager
 
 ## Goal
 
 Provide a Linux-server deployment path for the experimental DB Sync Node adapter.
-The operator runs one interactive script, makes explicit choices, and receives a
-running Docker Compose deployment plus the URL to enter in Logseq.
+The operator runs one interactive manager, makes explicit choices, and receives
+a running Docker Compose deployment plus the URL to enter in Logseq.
 
 The installer does not install Docker. When Docker Compose is unavailable, it
 stops before writing deployment files and links to the official Docker Engine
@@ -14,7 +14,7 @@ installation guide: <https://docs.docker.com/engine/install/>.
 
 The deployment assets will live under `deps/db-sync/deploy/` and include:
 
-- an interactive `install-sync.sh` entrypoint;
+- an interactive `logseq-sync` entrypoint;
 - a Dockerfile that builds the Node adapter and runs it;
 - a Compose definition with a durable data volume;
 - optional Caddy reverse proxy configuration for TLS;
@@ -26,7 +26,8 @@ data.
 
 ## Operator flow
 
-1. Check Linux, Docker Engine, and `docker compose` availability. If missing,
+1. Run `logseq-sync setup`, which checks Linux, Docker Engine, and `docker
+   compose` availability. If missing,
    print the official Docker documentation URL and exit without changes.
 2. Ask for a deployment directory and a persistent data directory.
 3. Ask for an endpoint mode:
@@ -44,6 +45,32 @@ data.
    running Compose.
 6. Start the service with `docker compose up -d`, poll `/health`, and print the
    Sync Server URL for Logseq settings.
+
+## Management commands
+
+`logseq-sync` is a deployment manager, not an install-only script. It exposes:
+
+```bash
+logseq-sync setup
+logseq-sync status
+logseq-sync logs
+logseq-sync logs --follow
+logseq-sync logs sync
+logseq-sync logs proxy
+logseq-sync help
+```
+
+After `setup`, the manager checks both `docker compose ps` and the unauthenticated
+`/health` endpoint. It reports success only when the containers are running and
+the endpoint returns `{"ok":true}`.
+
+`status` reports container state, the health result, the configured Sync Server
+URL, and a short recent-error summary. `logs` prints the most recent 200 lines;
+`--follow` streams new lines. `sync` selects the Node adapter logs, while `proxy`
+selects Caddy logs and reports that the service is unavailable in HTTP mode.
+
+On startup or health-check failure, the manager leaves containers and persistent
+data intact, shows the failed check, and directs the operator to `logs --follow`.
 
 ## Safety behavior
 
