@@ -12,6 +12,8 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db-sync.worker.http :as http]
+            [logseq.db-sync.worker.handler.semantic :as semantic-handler]
+            [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
@@ -904,11 +906,14 @@
             (common/options-response)
 
             :else
-            (if-let [route (sync-routes/match-route method path)]
+            (if-let [route (or (sync-routes/match-route method path)
+                               (semantic-routes/match-internal method path))]
+              (if (string/starts-with? path "/semantic/")
+                (semantic-handler/handle {:self self :request request :url url :route route})
               (handle {:self self
                        :request request
                        :url url
-                       :route route})
+                       :route route}))
               (http/not-found)))))
       (catch :default e
         (log/error :db-sync/http-error {:error e})

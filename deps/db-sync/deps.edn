@@ -13,7 +13,8 @@
   metosin/reitit                        {:mvn/version "0.10.1"
                                          :exclusions [metosin/malli]}
   logseq/common                         {:local/root "../common"}
-  logseq/db                             {:local/root "../db"}}
+  logseq/db                             {:local/root "../db"}
+  logseq/outliner                       {:local/root "../outliner"}}
  :aliases
  {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "1.5.0"}
                       cider/cider-nrepl                {:mvn/version "0.59.0"}

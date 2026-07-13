@@ -268,6 +268,61 @@
             rows))
     []))
 
+(defn decode-semantic-graph-cursor [cursor]
+  (when (string? cursor)
+    (try
+      (let [value (js->clj (js/JSON.parse (js/atob cursor)))]
+        (when (and (vector? value)
+                   (= 2 (count value))
+                   (number? (first value))
+                   (string? (second value)))
+          value))
+      (catch :default _
+        nil))))
+
+(defn- encode-semantic-graph-cursor [updated-at graph-id]
+  (js/btoa (js/JSON.stringify (clj->js [updated-at graph-id]))))
+
+(defn <semantic-graphs-list
+  [db user-id {:keys [name limit cursor]}]
+  (let [cursor-key (when cursor (decode-semantic-graph-cursor cursor))
+        [cursor-updated-at cursor-graph-id] cursor-key
+        conditions (cond-> [(str "(g.user_id = ? or m.user_id = ?) ")
+                            "g.graph_e2ee = 0"
+                            "g.graph_ready_for_use = 1"]
+                     (string? name) (conj "lower(g.graph_name) = lower(?)")
+                     cursor-key (conj "(g.updated_at < ? or (g.updated_at = ? and g.graph_id > ?))"))
+        args (cond-> [user-id user-id user-id]
+               (string? name) (conj name)
+               cursor-key (conj cursor-updated-at cursor-updated-at cursor-graph-id)
+               true (conj (inc limit)))
+        sql (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_ready_for_use, "
+                 "g.created_at, g.updated_at, m.role, m.invited_by "
+                 "from graphs g "
+                 "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
+                 "where " (string/join " and " conditions) " "
+                 "order by g.updated_at desc, g.graph_id asc limit ?")]
+    (p/let [result (apply common/<d1-all db sql args)
+            rows (vec (common/get-sql-rows result))
+            more? (> (count rows) limit)
+            selected (take limit rows)
+            graphs (mapv (fn [row]
+                           {:graph-id (aget row "graph_id")
+                            :graph-name (aget row "graph_name")
+                            :schema-version (aget row "schema_version")
+                            :graph-e2ee? false
+                            :graph-ready-for-use? (graph-ready-for-use-sql->bool (aget row "graph_ready_for_use"))
+                            :role (aget row "role")
+                            :invited-by (aget row "invited_by")
+                            :created-at (aget row "created_at")
+                            :updated-at (aget row "updated_at")})
+                         selected)]
+      (cond-> {:graphs graphs}
+        more? (assoc :next-cursor
+                     (let [row (nth rows (dec limit))]
+                       (encode-semantic-graph-cursor (aget row "updated_at")
+                                                     (aget row "graph_id"))))))))
+
 (defn <index-upsert!
   ([db graph-id graph-name user-id schema-version graph-e2ee?]
    (<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? true))
@@ -304,6 +359,15 @@
             rows (common/get-sql-rows result)
             row (first rows)]
       (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
+
+(defn <graph-e2ee?
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select graph_e2ee from graphs where graph_id = ?"
+                                   graph-id)
+            row (first (common/get-sql-rows result))]
+      (graph-e2ee-sql->bool (some-> row (aget "graph_e2ee"))))))
 
 (defn <graph-ready-for-use-set!
   [db graph-id graph-ready-for-use?]
