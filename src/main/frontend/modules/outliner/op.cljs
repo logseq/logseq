@@ -78,6 +78,16 @@
    (let [ids (map ->block-id blocks)]
      [:indent-outdent-blocks [ids indent? opts]])))
 
+(defn collapse-expand-blocks!
+  [blocks collapsed?]
+  (op-transact!
+   [:collapse-expand-blocks
+    [(mapv (fn [block]
+             {:block/uuid (->block-id block)
+              :block/collapsed? collapsed?})
+           blocks)
+     {}]]))
+
 (defn upsert-property!
   [property-id schema property-opts]
   (op-transact!

@@ -222,7 +222,9 @@
                                             :pos 2
                                             :opts {:custom-content "b2"
                                                    :tail-len 0
-                                                   :container-id nil}}
+                                                   :container-id nil
+                                                   :save-code-editor? false
+                                                   :skip-load? true}}
                                            (some-> (last @edit-calls)
                                                    (update :block :block/title)))
                                         "Deleting an empty block should focus the previous block")))})))
@@ -255,6 +257,44 @@
                                                             (map first))]
                                      (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
                                      (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
+
+(deftest-async backspace-between-empty-blocks-focuses-surviving-previous-block
+  (load-test-files
+   [{:page {:block/title "empty-delete-page"}
+     :blocks
+     [{:block/title "before"}
+      {:block/title ""}
+      {:block/title ""}]}])
+  (p/let [conn (conn/get-db test-helper/test-db false)
+          blocks (->> (d/q '[:find (pull ?b [*])
+                             :where
+                             [?p :block/name "empty-delete-page"]
+                             [?b :block/page ?p]
+                             [(missing? $ ?b :logseq.property/deleted-at)]]
+                           @conn)
+                      (map first)
+                      ldb/sort-by-order)
+          previous-block (nth blocks (- (count blocks) 2))
+          current-block (last blocks)
+          edit-calls (atom [])]
+    (delete-block @conn current-block
+                  {:on-edit (fn [block pos opts]
+                              (swap! edit-calls conj {:block block
+                                                      :pos pos
+                                                      :opts opts}))
+                   :on-delete
+                   (fn []
+                     (let [visible-blocks (->> (d/q '[:find (pull ?b [*])
+                                                        :where
+                                                        [?p :block/name "empty-delete-page"]
+                                                        [?b :block/page ?p]
+                                                        [(missing? $ ?b :logseq.property/deleted-at)]]
+                                                      @conn)
+                                               (map first))]
+                       (is (= 2 (count visible-blocks)))
+                       (is (= (:block/uuid previous-block)
+                              (some-> @edit-calls last :block :block/uuid))
+                           "The surviving previous block must keep the editor.")))})))
 
 (deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
   (let [previous-block {:db/id 1
@@ -561,7 +601,13 @@
     (set! (.-document js/globalThis)
           #js {:activeElement input
                :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block first-new-block])
+    (-> (p/with-redefs [state/<invoke-db-worker (fn [api & args]
+                                                 (when (= :thread-api/get-block-sibling api)
+                                                   (throw (js/Error. "Non-blank Enter must not wait for a sibling query")))
+                                                 (apply <test-db-worker-with-blocks
+                                                        [current-block first-new-block]
+                                                        api
+                                                        args))
                         state/get-edit-input-id (constantly "edit-block-current")
                         gdom/getElement (constantly input)
                         util/get-selection-start (constantly 5)
@@ -603,6 +649,40 @@
                             :custom-content ""}}]
                    @edit-calls)
                 "The pending block should enter edit mode once the insert transaction completes")))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil)
+                     (state/set-state! :editor/pending-new-block nil)
+                     (set! (.-document js/globalThis) previous-document))))))
+
+(deftest-async insert-above-awaits-async-insert
+  (let [current-block {:db/id 1
+                       :block/uuid (random-uuid)
+                       :block/title "first"}
+        next-block {:db/id 2
+                    :block/uuid (random-uuid)
+                    :block/title ""}
+        input #js {:value "first"}
+        cleared? (atom false)
+        previous-document (.-document js/globalThis)]
+    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
+    (set! (.-document js/globalThis)
+          #js {:activeElement input
+               :getElementById (fn [_id] input)})
+    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+                        gdom/getElement (constantly input)
+                        util/get-selection-start (constantly 0)
+                        util/get-selection-end (constantly 0)
+                        editor/get-state (constantly {:block current-block
+                                                      :value "first"
+                                                      :config {}
+                                                      :node input
+                                                      :block-container #js {}})
+                        editor/insert-new-block-before-block-aux!
+                        (fn [_config _block _value]
+                          (p/resolved [true true next-block]))
+                        editor/clear-when-saved! #(reset! cleared? true)]
+          (p/let [_ (editor/insert-new-block! nil nil)]
+            (is @cleared? "Insert above should await the async insert helper")))
         (p/finally (fn []
                      (state/set-state! :editor/edit-block-fn nil)
                      (state/set-state! :editor/pending-new-block nil)

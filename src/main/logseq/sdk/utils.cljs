@@ -60,6 +60,32 @@
 
             :else a)) input)))))
 
+(defn- ref-value->ids
+  [value]
+  (cond
+    (and (map? value) (:db/id value)) (:db/id value)
+    (map? value) (update-vals value ref-value->ids)
+    (vector? value) (mapv ref-value->ids value)
+    (set? value) (set (map ref-value->ids value))
+    (sequential? value) (mapv ref-value->ids value)
+    :else value))
+
+(defn- property-refs->ids
+  [result]
+  (walk/postwalk
+   (fn [value]
+     (if (map? value)
+      (reduce-kv (fn [m k v]
+                    (assoc m k (if (and (keyword? k)
+                                        (or (= :block/tags k)
+                                            (keep-json-keyword? k)))
+                                 (ref-value->ids v)
+                                 v)))
+                  (empty value)
+                  value)
+       value))
+   result))
+
 (defn uuid-or-throw-error
   [s]
   (cond
@@ -87,6 +113,7 @@
 (defn result->js
   [result]
   (-> result
+      property-refs->ids
       normalize-keyword-for-json
       bean/->js))
 

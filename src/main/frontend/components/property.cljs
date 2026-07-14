@@ -758,23 +758,32 @@
   [block opts enabled? show-empty-and-hidden?]
   (let [repo (state/get-current-repo)
         request-opts (display-properties-request-opts opts)
-        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
-        transaction-id (let [updated-ids (:updated-ids latest-transacted-entity-uuids)]
-                         (when (or (contains? updated-ids (:db/id block))
-                                   (contains? updated-ids (:block/uuid block)))
-                           (:tx-id latest-transacted-entity-uuids)))
-        [display-properties set-display-properties!] (hooks/use-state empty-display-properties)]
+        display-properties-payload? (and (contains? block :block.temp/display-properties)
+                                         (not show-empty-and-hidden?)
+                                         (not-any? identity (vals request-opts)))
+        transaction-id (rfx/use-entity-tx-id block)
+        [loaded-display-properties set-loaded-display-properties!] (hooks/use-state empty-display-properties)]
     (hooks/use-effect!
      (fn []
        (let [cancelled? (atom false)]
-         (if (and enabled? repo (:db/id block))
+         (cond
+           (not enabled?)
+           (set-loaded-display-properties! empty-display-properties)
+
+           display-properties-payload?
+           nil
+
+           (and repo (:db/id block))
            (p/let [result (db-async/<get-display-properties repo block request-opts show-empty-and-hidden?)]
              (when-not @cancelled?
-               (set-display-properties! (or result empty-display-properties))))
-           (set-display-properties! empty-display-properties))
+               (set-loaded-display-properties! (or result empty-display-properties))))
+
+           :else
+           (set-loaded-display-properties! empty-display-properties))
          (fn []
            (reset! cancelled? true))))
      [enabled?
+      display-properties-payload?
       repo
       (:db/id block)
       (:block/properties block)
@@ -786,7 +795,10 @@
       (:tag-dialog? request-opts)
       (:publishing? request-opts)
       (:state-hide-empty-properties? request-opts)])
-    display-properties))
+    (cond
+      (not enabled?) empty-display-properties
+      display-properties-payload? (:block.temp/display-properties block)
+      :else loaded-display-properties)))
 
 (defn use-has-hidden-properties
   [block opts enabled?]

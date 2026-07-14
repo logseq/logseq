@@ -87,6 +87,30 @@
                              affected))))
       (is (< elapsed-ms 1000)))))
 
+(deftest affected-keys-large-plain-sibling-group-skips-order-list-scan
+  (testing "moving a block in a large plain list ignores ordered lists on other pages"
+    (let [block-count 5000
+          conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Large plain page"}
+                  :blocks (mapv (fn [idx]
+                                  {:block/title (str "Plain " idx)})
+                                (range block-count))}
+                 {:page {:block/title "Ordered page"}
+                  :blocks [{:block/title "Ordered"
+                            :build/properties {:logseq.property/order-list-type "number"}}]}])
+          moved-block (db-test/find-block-by-content @conn "Plain 2500")
+          previous-block (db-test/find-block-by-content @conn "Plain 2499")
+          tx-report (d/transact! conn
+                                 [{:db/id (:db/id moved-block)
+                                   :block/order (db-order/gen-key nil
+                                                                  (:block/order previous-block))}])
+          started-at (system-time)
+          affected (worker-react/get-affected-queries-keys tx-report)
+          elapsed-ms (- (system-time) started-at)]
+      (println "affected-keys-large-plain-sibling-group elapsed:" elapsed-ms "ms")
+      (is (some #{[:frontend.worker.react/block (:db/id moved-block)]} affected))
+      (is (< elapsed-ms 50)))))
+
 (deftest affected-keys-order-list-descendants
   (testing "changing ordered-list parent type affects nested ordered-list descendants"
     (let [conn (db-test/create-conn-with-blocks

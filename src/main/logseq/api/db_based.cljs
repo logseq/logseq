@@ -53,7 +53,9 @@
                      f))
                  blocks)
         {:keys [sibling before schema]} opts
-        uuid->properties (let [blocks (outliner-core/tree-vec-flatten blocks' :children)]
+        flat-blocks (outliner-core/tree-vec-flatten blocks' :children)
+        block-uuids (mapv :uuid flat-blocks)
+        uuid->properties (let [blocks flat-blocks]
                            (when (some (fn [b] (seq (:properties b))) blocks)
                              (zipmap (map :uuid blocks)
                                      (map :properties blocks))))]
@@ -61,20 +63,21 @@
                     (db-async/<get-block-sibling (state/get-current-repo) (:db/id target) :left)
                     target)
             sibling? (if (entity/page? block) false sibling)
-            result (editor-handler/insert-block-tree-after-target
-                    (:db/id block) sibling? blocks' :markdown true)
-            blocks (:blocks result)]
-      (when (seq blocks)
-        (p/doseq [block blocks]
-          (let [id (:block/uuid block)
-                properties (when uuid->properties (uuid->properties id))]
-            (when (seq properties)
-              (api-block/db-based-save-block-properties! block properties {:plugin this
-                                                                          :schema schema})))))
-      (p/let [blocks' (db-async/<get-blocks (state/get-current-repo)
-                                            (map :block/uuid blocks))]
-        (let [blocks' (keep :block blocks')]
-          (sdk-utils/result->js blocks'))))))
+            page-id (if (or (entity/page? block) (:block/name block))
+                      (:db/id block)
+                      (let [page (:block/page block)]
+                        (if (map? page) (:db/id page) page)))
+            _ (editor-handler/insert-block-tree-after-target
+               (:db/id block) sibling? blocks' :markdown true)
+            _ (when (seq uuid->properties)
+                (p/doseq [id block-uuids]
+                  (when-let [properties (seq (uuid->properties id))]
+                    (api-block/db-based-save-block-properties! {:block/uuid id} properties
+                                                               {:plugin this
+                                                                :page-id page-id
+                                                                :schema schema}))))
+            blocks' (db-async/<get-blocks (state/get-current-repo) block-uuids)]
+      (sdk-utils/result->js (keep :block blocks')))))
 
 (defn insert-block
   [this content properties schema opts]
@@ -295,8 +298,7 @@
                 (if (text/namespace-page? title-or-ident)
                   (keyword title-or-ident)
                   (if (util/uuid-string? title-or-ident)
-                    (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                      [:block/uuid id])
+                    (sdk-utils/uuid-or-throw-error title-or-ident)
                     (keyword (prefix-resolver plugin) title-or-ident)))))]
     eid))
 
