@@ -2077,15 +2077,22 @@
     (letfn [(done? []
               (and known-total-count?
                    (= limit (count @!entries))))
-            (visit! [entry]
+            (visit! [block-id parent-id level]
               (let [idx @!idx]
                 (vswap! !idx inc)
                 (if known-total-count?
                   (when (and (>= idx skip-count)
                              (< (count @!entries) limit))
-                    (vswap! !entries conj entry))
+                    (vswap! !entries conj {:block-id block-id
+                                           :level level
+                                           :parent-id parent-id
+                                           :has-children? (contains? children-by-parent block-id)}))
                   (do
-                    (let [tail-count @!tail-count
+                    (let [entry {:block-id block-id
+                                 :level level
+                                 :parent-id parent-id
+                                 :has-children? (contains? children-by-parent block-id)}
+                          tail-count @!tail-count
                           tail-start @!tail-start
                           tail-idx (if (< tail-count limit)
                                      tail-count
@@ -2093,11 +2100,11 @@
                       (aset tail-entries tail-idx entry)
                       (if (< tail-count limit)
                         (vswap! !tail-count inc)
-                        (vreset! !tail-start (mod (inc tail-start) limit))))
-                    (when (and requested-offset
-                               (>= idx requested-offset)
-                               (< idx requested-end))
-                      (vswap! !entries conj entry))))))
+                        (vreset! !tail-start (mod (inc tail-start) limit)))
+                      (when (and requested-offset
+                                 (>= idx requested-offset)
+                                 (< idx requested-end))
+                        (vswap! !entries conj entry)))))))
             (push-children! [stack parent-id level]
               (when-let [children (.get children-by-parent parent-id)]
                 (loop [idx (dec (alength children))]
@@ -2117,11 +2124,7 @@
                   parent-id (aget current 1)
                   collapsed? (aget current 2)
                   level (aget current 3)
-                  entry {:block-id block-id
-                         :level level
-                         :parent-id parent-id
-                         :has-children? (contains? children-by-parent block-id)}
-                  _ (visit! entry)]
+                  _ (visit! block-id parent-id level)]
               (when-not collapsed?
                 (push-children! stack block-id (inc level)))
               (recur)))))
