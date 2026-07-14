@@ -2239,6 +2239,10 @@
          (is (= 0 (:offset top-window)))
          (is (= [block-1 block-2 block-3] (mapv :block/uuid (:rows top-window))))
          (is (= [1 2 1] (mapv :block/level (:rows top-window))))
+         (is (= page-id (get-in (first (:rows top-window)) [:block/page :block/uuid])))
+         (is (= "page" (get-in (first (:rows top-window)) [:block/page :block/name])))
+         (is (= (:db/id (:root top-window))
+                (:block/parent-id (first (:rows top-window)))))
          (is (every? #(= :self (:block.temp/load-status %)) (:rows top-window)))
          (is (= {:full-properties []
                  :hidden-properties []
