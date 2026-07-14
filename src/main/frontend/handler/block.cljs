@@ -240,11 +240,6 @@
         (p/do!
          (let [blocks' (filter #(indent-target-allowed? % indent?) blocks')]
            (when (seq blocks')
-             (when (and save-current-block
-                        (= (:block/uuid (first blocks'))
-                           (:block/uuid (state/get-edit-block))))
-               (state/set-editing-block-id! [:unknown-container
-                                             (:block/uuid (first blocks'))]))
              (ui-outliner-tx/transact!
               (merge {:outliner-op :move-blocks
                       :source-outliner-op :indent-outdent}

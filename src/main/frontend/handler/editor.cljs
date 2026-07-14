@@ -535,7 +535,7 @@
 (defn- get-node-prev-sibling
   [node]
   (let [parent (gobj/get node "parentNode")]
-    (if (dom/attr parent "data-index")
+    (if-not (dom/has-class? parent "blocks-list-wrap")
       (some-> (.-previousSibling parent)
               (dom/sel1 ".ls-block"))
       (.-previousSibling node))))
@@ -543,7 +543,7 @@
 (defn- get-node-next-sibling
   [node]
   (let [parent (gobj/get node "parentNode")]
-    (if (dom/attr parent "data-index")
+    (if-not (dom/has-class? parent "blocks-list-wrap")
       (some-> (.-nextSibling parent)
               (dom/sel1 ".ls-block"))
       (.-nextSibling node))))
@@ -3065,11 +3065,15 @@
 
 (defn indent-outdent
   [indent?]
-  (let [{:keys [block]} (get-state)]
+  (let [{:keys [block]} (get-state)
+        container-id (get-new-container-id (if indent? :indent :outdent) {})]
     (when block
       (p/let [root-block (get-focused-root-block)]
         (when (block-eligible-for-indent-outdent? block indent? root-block)
-          (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))))
+          (p/do!
+           (when container-id
+             (state/set-editing-block-id! [container-id (:block/uuid block)]))
+           (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)))))))
 
 (defn keydown-tab-handler
   [direction]

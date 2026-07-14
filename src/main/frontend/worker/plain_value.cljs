@@ -129,16 +129,18 @@
           :else (number->roman idx))))))
 
 (defn entity-forward-map
-  [db entity {:keys [properties]}]
+  [db entity {:keys [properties exclude-attrs]}]
   (when entity
     (let [property-set (some-> properties set)
+          excluded-attrs (set exclude-attrs)
           raw-title (or (:block/raw-title entity)
                         (:block/title entity)
                         (:block/name entity))
           list-type (order-list-type entity)
           datoms (cond->> (d/datoms db :eavt (:db/id entity))
                    true
-                   (remove #(contains? unsafe-plain-attrs (:a %)))
+                   (remove #(or (contains? unsafe-plain-attrs (:a %))
+                                (contains? excluded-attrs (:a %))))
 
                    (seq property-set)
                    (filter #(contains? property-set (:a %))))
