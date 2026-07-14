@@ -2098,35 +2098,33 @@
                                (>= idx requested-offset)
                                (< idx requested-end))
                       (vswap! !entries conj entry))))))
-            (push-children [stack parent-id level]
-              (if-let [children (.get children-by-parent parent-id)]
-                (loop [result stack
-                       idx (dec (alength children))]
-                  (if (neg? idx)
-                    result
+            (push-children! [stack parent-id level]
+              (when-let [children (.get children-by-parent parent-id)]
+                (loop [idx (dec (alength children))]
+                  (when-not (neg? idx)
                     (let [child (aget children idx)]
-                      (recur (conj result #js [(aget child 0)
-                                               (aget child 1)
-                                               (aget child 2)
-                                               level])
-                             (dec idx)))))
-                stack))]
-      (loop [stack (push-children [] (:db/id root) 1)]
-        (when (and (seq stack) (not (done?)))
-          (let [current (peek stack)
-                block-id (aget current 0)
-                parent-id (aget current 1)
-                collapsed? (aget current 2)
-                level (aget current 3)
-                entry {:block-id block-id
-                       :level level
-                       :parent-id parent-id
-                       :has-children? (contains? children-by-parent block-id)}
-                stack' (pop stack)]
-            (visit! entry)
-            (recur (if collapsed?
-                     stack'
-                     (push-children stack' block-id (inc level)))))))
+                      (.push stack #js [(aget child 0)
+                                        (aget child 1)
+                                        (aget child 2)
+                                        level])
+                      (recur (dec idx)))))))]
+      (let [stack (array)]
+        (push-children! stack (:db/id root) 1)
+        (loop []
+          (when (and (pos? (alength stack)) (not (done?)))
+            (let [current (.pop stack)
+                  block-id (aget current 0)
+                  parent-id (aget current 1)
+                  collapsed? (aget current 2)
+                  level (aget current 3)
+                  entry {:block-id block-id
+                         :level level
+                         :parent-id parent-id
+                         :has-children? (contains? children-by-parent block-id)}
+                  _ (visit! entry)]
+              (when-not collapsed?
+                (push-children! stack block-id (inc level)))
+              (recur)))))
       (let [total-count (or known-total-count @!idx)
             offset (or known-offset
                        (page-block-window-offset total-count (assoc opts :limit limit)))
@@ -2152,13 +2150,12 @@
          :total-count total-count}))))
 
 (defn- flat-child-block-row
-  [db {:keys [block level parent-id has-children?]}]
-  (let [block-map (assoc-render-property-data db
-                                              block
-                                              (worker-plain/entity-forward-map db block {})
-                                              true)]
+  [db page-summary {:keys [block level parent-id has-children?]}]
+  (let [forward-map (worker-plain/entity-forward-map db block {:exclude-attrs #{:block/page :block/parent}})
+        block-map (assoc-render-property-data db block forward-map true)]
     (-> block-map
         (assoc :block/level level
+               :block/page page-summary
                :block/parent {:db/id parent-id}
                :block.temp/load-status :self
                :block.temp/has-children? has-children?)
@@ -2182,10 +2179,11 @@
    (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
      (when-let [root (resolve-block-entity db id-or-page-name)]
        (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
+             page-summary (worker-plain/attribute-value->plain db :block/page (:db/id root))
              rows (mapv (fn [{:keys [block] :as entry}]
                           (if (or (nil? render-block-uuids)
                                   (contains? render-block-uuids (:block/uuid block)))
-                            (flat-child-block-row db entry)
+                            (flat-child-block-row db page-summary entry)
                             (flat-child-block-layout-row db entry)))
                         entries)
              commented-block-uuids (->> (mapv :block/uuid rows)

@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [logseq.outliner.core :as outliner-core]
             [logseq.db.test.helper :as db-test]
@@ -159,3 +160,24 @@
                :pos 0}]
              @editing)
           "Loaded block data should enter editor state before edit-block! returns."))))
+
+(deftest indent-outdent-does-not-use-global-editor-state-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          block {:db/id 42
+                 :block/uuid block-id
+                 :block/title "block"}
+          calls (atom [])]
+      (p/with-redefs [block-handler/get-top-level-blocks (fn [_] [block])
+                      state/get-selection-blocks (constantly nil)
+                      state/get-edit-block (constantly block)
+                      state/set-editing-block-id! (fn [value]
+                                                    (swap! calls conj [:set-editing value]))
+                      block-handler/page-window-tx-meta (constantly nil)
+                      outliner-op/indent-outdent-blocks! (fn [& _] nil)]
+        (-> (block-handler/indent-outdent-blocks! [block] true (constantly nil))
+            (p/then (fn []
+                      (is (empty? @calls))))
+            (p/catch (fn [error]
+                       (is false (str error))))
+            (p/finally done))))))
