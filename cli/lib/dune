@@ -10,5 +10,6 @@
   melange-fetch
   melange-transit-melange
   melange-edn-melange
+  rrbvec
   melange.js
   melange.node))

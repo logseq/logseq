@@ -24,7 +24,7 @@ type start_result = {
 }
 
 type stop_result = { repo : Cli_primitive.repo }
-type revision_mismatch = { cli_revision : string; servers : server list }
+type revision_mismatch = { cli_revision : string; servers : server Rrbvec.t }
 
 type cleanup_result = {
   cli_revision : string;
@@ -32,8 +32,8 @@ type cleanup_result = {
   mismatched : int;
   eligible : int;
   skipped_owner : int;
-  killed : server list;
-  failed : (server * Error.t) list;
+  killed : server Rrbvec.t;
+  failed : (server * Error.t) Rrbvec.t;
 }
 
 let resolve_root_dir config = config.Cli_config.root_dir
@@ -63,18 +63,19 @@ let cli_dir_db_worker_script_paths () =
   match cli_entrypoint_path () with
   | Some entrypoint ->
       let dir = Filename.dirname entrypoint in
-      [
-        Filename.concat dir "db-worker-node.js";
-        Filename.concat (Filename.concat dir "js") "db-worker-node.js";
-      ]
-  | _ -> []
+      Vec.of_array
+        [|
+          Filename.concat dir "db-worker-node.js";
+          Filename.concat (Filename.concat dir "js") "db-worker-node.js";
+        |]
+  | _ -> Vec.empty
 
 let db_worker_runtime_script_path () =
   match env_db_worker_script_path () with
   | Some path -> path
   | None -> (
       match
-        List.find_opt Cli_unix.file_exists (cli_dir_db_worker_script_paths ())
+        Vec.find_opt Cli_unix.file_exists (cli_dir_db_worker_script_paths ())
       with
       | Some path -> path
       | None -> "db-worker-node.js")
@@ -114,21 +115,21 @@ let server_publish_timeout_span = Time.span_of_ms 30_000L
 let server_ready_timeout_span = Time.span_of_ms 30_000L
 
 let parse_server_list_line line =
-  match
-    String.split_on_char ' ' (String.trim line) |> List.filter (( <> ) "")
-  with
-  | [ pid; port ] -> (
+  match Vec.split_on_char ' ' (String.trim line) |> Vec.filter (( <> ) "") with
+  | values when Vec.length values = 2 -> (
+      let pid = Vec.nth values 0 in
+      let port = Vec.nth values 1 in
       match (int_of_string_opt pid, int_of_string_opt port) with
       | Some pid, Some port when pid > 0 && port > 0 -> Some (pid, port)
       | _ -> None)
   | _ -> None
 
 let read_server_list path =
-  if not (Cli_unix.file_exists path) then []
+  if not (Cli_unix.file_exists path) then Vec.empty
   else
     Cli_unix.read_text_file path
-    |> String.split_on_char '\n'
-    |> List.filter_map parse_server_list_line
+    |> Vec.split_on_char '\n'
+    |> Vec.filter_map parse_server_list_line
 
 let status_of_string = function
   | "ready" -> Ready
@@ -188,7 +189,7 @@ let discover_server (_pid, port) =
          else None)
        (http_request ~method_:Fetch.Get
           ~url:("http://127.0.0.1:" ^ string_of_int port ^ "/healthz")
-          ~headers:[ ("Accept", "application/json") ]
+          ~headers:(Vec.singleton ("Accept", "application/json"))
           ~body:""
           ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure None)
@@ -196,10 +197,10 @@ let discover_server (_pid, port) =
 let list_servers config =
   let entries =
     read_server_list (server_list_path config)
-    |> List.filter (fun (pid, _) -> process_alive pid)
+    |> Vec.filter (fun (pid, _) -> process_alive pid)
   in
-  Cli_effect.map (List.filter_map Fun.id)
-    (Cli_effect.all (List.map discover_server entries))
+  Cli_effect.map (Vec.filter_map Fun.id)
+    (Cli_effect.all (Vec.map discover_server entries))
 
 let rec mkdir_p path =
   if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
@@ -216,14 +217,12 @@ let ensure_repo_dir config repo =
     mkdir_p path;
     if not (Cli_unix.is_directory path) then
       Stdlib.Error
-        (Error.make
-           (Error.Root_dir_permission)
+        (Error.make Error.Root_dir_permission
            ("graph-dir is not a directory: " ^ path))
     else Stdlib.Ok path
   with exn ->
     Stdlib.Error
-      (Error.make
-         (Error.Root_dir_permission)
+      (Error.make Error.Root_dir_permission
          ("graph-dir is not readable/writable: " ^ path ^ " ("
         ^ Printexc.to_string exn ^ ")"))
 
@@ -231,58 +230,64 @@ let script_candidates config =
   let project_dir = config.Cli_config.project_dir in
   let project_candidates =
     match project_dir with
-    | None -> []
+    | None -> Vec.empty
     | Some dir ->
-        [
-          Filename.concat (Filename.concat dir "static") "db-worker-node.js";
-          Filename.concat (Filename.concat dir "dist") "db-worker-node.js";
-          Filename.concat
-            (Filename.concat (Filename.concat dir "static") "js")
-            "db-worker-node.js";
-        ]
+        Vec.of_array
+          [|
+            Filename.concat (Filename.concat dir "static") "db-worker-node.js";
+            Filename.concat (Filename.concat dir "dist") "db-worker-node.js";
+            Filename.concat
+              (Filename.concat (Filename.concat dir "static") "js")
+              "db-worker-node.js";
+          |]
   in
-  List.filter_map Fun.id [ env_db_worker_script_path () ]
-  @ cli_dir_db_worker_script_paths ()
-  @ [ "db-worker-node.js" ]
-  @ project_candidates
+  Vec.filter_map Fun.id (Vec.singleton (env_db_worker_script_path ()))
+  |> fun candidates ->
+  Vec.append candidates (cli_dir_db_worker_script_paths ()) |> fun candidates ->
+  Vec.push_back candidates "db-worker-node.js" |> fun candidates ->
+  Vec.append candidates project_candidates
 
 let resolve_script_path config =
   let candidates = script_candidates config in
-  match List.find_opt Cli_unix.file_exists candidates with
+  match Vec.find_opt Cli_unix.file_exists candidates with
   | Some path -> Stdlib.Ok path
   | None ->
       Stdlib.Error
         (Error.make
            ~context:
-             (Edn_util.vector
-                (List.map (fun path -> Edn_util.string path) candidates))
-           (Error.Server_script_missing)
+             (Edn_util.vector_vec
+                (candidates |> Vec.map (fun path -> Edn_util.string path)))
+           Error.Server_script_missing
            ("db-worker script is missing. Checked paths: "
-           ^ String.concat ", " candidates))
+           ^ Vec.string_concat ", " candidates))
 
 let env_with_node_runtime () =
   let without_key key =
-    Cli_unix.environment () |> Array.to_list
-    |> List.filter (fun entry ->
+    Cli_unix.environment () |> Vec.of_array
+    |> Vec.filter (fun entry ->
         let prefix = key ^ "=" in
         not (starts_with ~prefix entry))
   in
-  Array.of_list ("ELECTRON_RUN_AS_NODE=1" :: without_key "ELECTRON_RUN_AS_NODE")
+  Vec.push_front (without_key "ELECTRON_RUN_AS_NODE") "ELECTRON_RUN_AS_NODE=1"
+  |> Vec.to_array
 
 let db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
     ~create_empty_db =
   let repo = Cli_primitive.string_of_repo repo in
-  [
-    executable;
-    script;
-    "--repo";
-    repo;
-    "--root-dir";
-    root_dir;
-    "--owner-source";
-    owner_source;
-  ]
-  @ if create_empty_db then [ "--create-empty-db" ] else []
+  let args =
+    Vec.of_array
+      [|
+        executable;
+        script;
+        "--repo";
+        repo;
+        "--root-dir";
+        root_dir;
+        "--owner-source";
+        owner_source;
+      |]
+  in
+  if create_empty_db then Vec.push_back args "--create-empty-db" else args
 
 let shell_quote value =
   let rec needs_quote i =
@@ -293,27 +298,30 @@ let shell_quote value =
     | _ -> needs_quote (i + 1)
   in
   if value <> "" && not (needs_quote 0) then value
-  else "'" ^ String.concat "'\\''" (String.split_on_char '\'' value) ^ "'"
+  else "'" ^ Vec.string_concat "'\\''" (Vec.split_on_char '\'' value) ^ "'"
 
 let db_worker_command_line ~script ~root_dir ~repo ~owner_source
     ~create_empty_db =
   let executable = parent_executable_path () in
-  "ELECTRON_RUN_AS_NODE=1"
-  :: db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
-       ~create_empty_db
-  |> List.map shell_quote |> String.concat " "
+  Vec.push_front
+    (db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+       ~create_empty_db)
+    "ELECTRON_RUN_AS_NODE=1"
+  |> Vec.map shell_quote |> Vec.string_concat " "
 
 let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
     =
-  let devnull = Cli_unix.openfile "/dev/null" [ Cli_unix.O_RDWR ] 0 in
+  let devnull =
+    Cli_unix.openfile "/dev/null" (Vec.singleton Cli_unix.O_RDWR) 0
+  in
   Fun.protect
     ~finally:(fun () -> Cli_unix.close devnull)
     (fun () ->
       let executable = parent_executable_path () in
       let argv =
-        Array.of_list
-          (db_worker_spawn_args ~executable ~script ~root_dir ~repo
-             ~owner_source ~create_empty_db)
+        db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+          ~create_empty_db
+        |> Vec.to_array
       in
       ignore
         (Cli_unix.create_process_env executable argv (env_with_node_runtime ())
@@ -321,7 +329,7 @@ let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
 
 let find_repo_server config repo =
   Cli_effect.map
-    (List.find_opt (fun (server : server) -> same_repo server.repo repo))
+    (Vec.find_opt (fun (server : server) -> same_repo server.repo repo))
     (list_servers config)
 
 let invoke_config_of_server config server =
@@ -387,19 +395,18 @@ let wait_for_published_ready time config repo =
       | None ->
           pure
             (Stdlib.Error
-               (Error.make
-                  (Error.Server_start_failed)
+               (Error.make Error.Server_start_failed
                   "db-worker-node failed to publish health"))
       | Some _ ->
           bind
             (time "server.wait-ready" (fun () -> wait_for_ready config repo))
             (function
-              | Some server -> pure (Stdlib.Ok (start_result_of_server repo server))
+              | Some server ->
+                  pure (Stdlib.Ok (start_result_of_server repo server))
               | None ->
                   pure
                     (Stdlib.Error
-                       (Error.make
-                          (Error.Server_start_failed)
+                       (Error.make Error.Server_start_failed
                           "db-worker-node failed to start"))))
 
 let start_server_unprofiled config repo ~create_empty_db =
@@ -440,7 +447,7 @@ let start_server_unprofiled config repo ~create_empty_db =
                                 pure
                                   (Stdlib.Error
                                      (Error.make
-                                        (Error.Server_start_timeout_orphan)
+                                        Error.Server_start_timeout_orphan
                                         ("db-worker-node failed to start. \
                                           Command: "
                                         ^ db_worker_command_line ~script
@@ -452,8 +459,7 @@ let start_server_unprofiled config repo ~create_empty_db =
                   with exn ->
                     pure
                       (Stdlib.Error
-                         (Error.make
-                            (Error.Server_start_failed)
+                         (Error.make Error.Server_start_failed
                             ("failed to spawn db-worker-node: "
                            ^ Printexc.to_string exn)))))))
 
@@ -482,8 +488,7 @@ let ensure_server config repo ~create_empty_db =
               | None ->
                   pure
                     (Stdlib.Error
-                       (Error.make
-                          (Error.Server_start_failed)
+                       (Error.make Error.Server_start_failed
                           "db-worker-node failed to start")))
         | None ->
             bind (start_server config repo ~create_empty_db) (function
@@ -495,8 +500,7 @@ let ensure_server config repo ~create_empty_db =
                     | None ->
                         pure
                           (Stdlib.Error
-                             (Error.make
-                                (Error.Server_start_failed)
+                             (Error.make Error.Server_start_failed
                                 "db-worker-node failed to publish health")))))
 
 let shutdown_server server =
@@ -505,7 +509,7 @@ let shutdown_server server =
        (fun (response, _body) -> http_success response)
        (http_request ~method_:Fetch.Post
           ~url:(server.base_url ^ "/v1/shutdown")
-          ~headers:[ ("Content-Type", "application/json") ]
+          ~headers:(Vec.singleton ("Content-Type", "application/json"))
           ~body:"{}"
           ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure false)
@@ -518,15 +522,12 @@ let stop_server config repo =
     | None ->
         pure
           (Stdlib.Error
-             (Error.make
-                (Error.Server_not_found)
-                "server is not running"))
+             (Error.make Error.Server_not_found "server is not running"))
     | Some server ->
         if not (owner_manageable server.owner_source) then
           pure
             (Stdlib.Error
-               (Error.make
-                  (Error.Server_owned_by_other)
+               (Error.make Error.Server_owned_by_other
                   "server is owned by another process"))
         else
           let shutdown_timeout_span = Time.span_of_ms 5_000L in
@@ -558,8 +559,7 @@ let stop_server config repo =
                           | None ->
                               pure
                                 (Stdlib.Error
-                                   (Error.make
-                                      (Error.Server_stop_timeout)
+                                   (Error.make Error.Server_stop_timeout
                                       "timed out stopping server"))))))
 
 let restart_server config repo =
@@ -653,16 +653,15 @@ let classify_graph_dir graphs_root dir_name =
 let list_graph_items config =
   let dir = graphs_dir config in
   if Cli_unix.file_exists dir then
-    Cli_unix.readdir dir |> Array.to_list
-    |> List.filter (fun name ->
-        Cli_unix.is_directory (Filename.concat dir name))
-    |> List.sort_uniq String.compare
-    |> List.filter_map (classify_graph_dir dir)
-  else []
+    Cli_unix.readdir dir |> Vec.of_array
+    |> Vec.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
+    |> Vec.sort_uniq String.compare
+    |> Vec.filter_map (classify_graph_dir dir)
+  else Vec.empty
 
 let list_graphs config =
   list_graph_items config
-  |> List.filter_map (function
+  |> Vec.filter_map (function
     | { Graph_types.kind = Graph_types.Canonical; graph_name = Some graph; _ }
       ->
         Some graph
@@ -677,40 +676,39 @@ let cleanup_revision_mismatched_servers config ~cli_revision =
   let open Cli_effect in
   bind (list_servers config) (fun servers ->
       let mismatched =
-        List.filter
+        Vec.filter
           (fun server -> not (revision_matches cli_revision server))
           servers
       in
       let eligible, skipped =
-        List.partition
+        Vec.partition
           (fun (server : server) -> server.owner_source = Cli_primitive.Cli)
           mismatched
       in
-      let rec stop_loop (killed : server list)
-          (failed : (server * Error.t) list) (targets : server list) =
-        match targets with
-        | [] ->
+      let rec stop_loop killed failed targets =
+        match Vec.pop_front targets with
+        | None ->
             pure
               (Ok
                  {
                    cli_revision;
-                   checked = List.length servers;
-                   mismatched = List.length mismatched;
-                   eligible = List.length eligible;
-                   skipped_owner = List.length skipped;
-                   killed = List.rev killed;
-                   failed = List.rev failed;
+                   checked = Vec.length servers;
+                   mismatched = Vec.length mismatched;
+                   eligible = Vec.length eligible;
+                   skipped_owner = Vec.length skipped;
+                   killed;
+                   failed;
                  })
-        | server :: rest ->
+        | Some (server, rest) ->
             bind (shutdown_server server) (fun stopped ->
-                if stopped then stop_loop (server :: killed) failed rest
+                if stopped then
+                  stop_loop (Vec.push_back killed server) failed rest
                 else
                   stop_loop killed
-                    (( server,
-                       Error.make
-                         (Error.Server_cleanup_failed)
-                         "failed to stop revision-mismatched server" )
-                    :: failed)
+                    (Vec.push_back failed
+                       ( server,
+                         Error.make Error.Server_cleanup_failed
+                           "failed to stop revision-mismatched server" ))
                     rest)
       in
-      stop_loop [] [] eligible)
+      stop_loop Vec.empty Vec.empty eligible)

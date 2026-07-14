@@ -102,15 +102,22 @@ val thread_api_db_sync_request_asset_download :
   Melange_edn_melange.any Cli_effect.t
 
 val thread_api_db_sync_start :
-  invoke_config -> repo:Cli_primitive.repo -> Melange_edn_melange.any Cli_effect.t
+  invoke_config ->
+  repo:Cli_primitive.repo ->
+  Melange_edn_melange.any Cli_effect.t
 
 val thread_api_db_sync_status :
-  invoke_config -> repo:Cli_primitive.repo -> Melange_edn_melange.any Cli_effect.t
+  invoke_config ->
+  repo:Cli_primitive.repo ->
+  Melange_edn_melange.any Cli_effect.t
 
-val thread_api_db_sync_stop : invoke_config -> Melange_edn_melange.any Cli_effect.t
+val thread_api_db_sync_stop :
+  invoke_config -> Melange_edn_melange.any Cli_effect.t
 
 val thread_api_db_sync_upload_graph :
-  invoke_config -> repo:Cli_primitive.repo -> Melange_edn_melange.any Cli_effect.t
+  invoke_config ->
+  repo:Cli_primitive.repo ->
+  Melange_edn_melange.any Cli_effect.t
 
 val thread_api_export_edn :
   invoke_config ->

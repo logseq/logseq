@@ -43,7 +43,20 @@
                                                       :warnings {:fn-deprecated false
                                                                  :redef false}}
                                    :devtools {:enabled false}}
+  :db-sync-api-docs {:target :node-script
+                     :output-to "worker/dist/api-docs-spec.js"
+                     :main logseq.db-sync.node.api-docs/main
+                     :compiler-options {:warnings {:fn-deprecated false
+                                                  :redef false}}
+                     :devtools {:enabled false}}
   :db-sync-test {:target :node-test
                  :output-to "worker/dist/worker-test.js"
                  :devtools {:enabled false}
-                 :main logseq.db-sync.test-runner/main}}}
+                 :main logseq.db-sync.test-runner/main}
+  :db-sync-large-op-memory-test {:target :node-script
+                                 :output-to "worker/dist/large-op-memory-test.js"
+                                 :main logseq.db-sync.worker-large-op-memory-test/main
+                                 :compiler-options {:source-map true
+                                                    :warnings {:fn-deprecated false
+                                                               :redef false}}
+                                 :devtools {:enabled false}}}}

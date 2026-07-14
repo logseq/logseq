@@ -76,7 +76,7 @@
         ws-state @(:ws-state client)
         online-users @(:online-users client)
         {:keys [pending-local pending-asset missing-asset-upload-files pending-server
-                local-tx remote-tx local-checksum remote-checksum graph-uuid]}
+                local-tx remote-tx local-checksum remote-checksum graph-id]}
         (sync-counts-f repo)]
     {:rtc-state {:ws-state ws-state}
      :rtc-lock (= :open ws-state)
@@ -90,7 +90,7 @@
      :remote-tx remote-tx
      :local-checksum local-checksum
      :remote-checksum remote-checksum
-     :graph-uuid graph-uuid}))
+     :graph-uuid graph-id}))
 
 (defn set-ws-state!
   [broadcast-f client ws-state]

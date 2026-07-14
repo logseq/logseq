@@ -30,7 +30,7 @@ module HTTP : sig
     ?timeout_span:float ->
     Fetch.requestMethod ->
     string ->
-    headers:(string * string) list ->
+    headers:(string * string) Rrbvec.t ->
     body:string ->
     (Fetch.Response.t * string) Cli_effect.t
 end

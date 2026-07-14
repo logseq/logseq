@@ -140,7 +140,7 @@ type t = {
   code : code;
   message : string;
   hint : string option;
-  candidates : candidate list;
+  candidates : candidate Rrbvec.t;
   context : Melange_edn_melange.any option;
 }
 
@@ -160,7 +160,7 @@ type source =
 
 val make :
   ?hint:string ->
-  ?candidates:candidate list ->
+  ?candidates:candidate Rrbvec.t ->
   ?context:Melange_edn_melange.any ->
   code ->
   string ->

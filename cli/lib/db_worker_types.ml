@@ -11,17 +11,17 @@ type page_filter = {
 }
 
 type node_filter = {
-  tag_ids : Cli_primitive.db_id list;
-  property_idents : Cli_primitive.keyword list;
+  tag_ids : Cli_primitive.db_id Rrbvec.t;
+  property_idents : Cli_primitive.keyword Rrbvec.t;
 }
 
 let add_raw_field key raw fields =
   match Edn_util.get raw key with
   | None -> fields
-  | Some value -> (Edn_util.keyword key, value) :: fields
+  | Some value -> Vec.push_front fields (Edn_util.keyword key, value)
 
 let minimal_list_item e =
-  []
+  Vec.empty
   |> add_raw_field "logseq.property/type" e.Entity.raw
   |> add_raw_field "db/cardinality" e.Entity.raw
   |> add_raw_field "db/ident" e.Entity.raw
@@ -29,4 +29,4 @@ let minimal_list_item e =
   |> add_raw_field "block/created-at" e.Entity.raw
   |> add_raw_field "block/title" e.Entity.raw
   |> add_raw_field "db/id" e.Entity.raw
-  |> fun fields -> Edn_util.map_t fields
+  |> fun fields -> Edn_util.map_t_vec fields

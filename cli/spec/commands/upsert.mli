@@ -95,9 +95,9 @@ type block_create = {
   target : block_target;
   pos : Block.position;
   status : Cli_primitive.keyword option;
-  tags : Selector.tag list;
-  properties : Property.assignment list;
-  blocks : Block.t list;
+  tags : Selector.tag Rrbvec.t;
+  properties : Property.assignment Rrbvec.t;
+  blocks : Block.t Rrbvec.t;
   update_plan : Property.update_plan;
 }
 
@@ -107,10 +107,10 @@ type block_update = {
   source : block_source;
   target : block_target option;
   pos : Block.position option;
-  update_tags : Selector.tag list;
-  update_properties : Property.assignment list;
-  remove_tags : Selector.tag list;
-  remove_properties : Property.key list;
+  update_tags : Selector.tag Rrbvec.t;
+  update_properties : Property.assignment Rrbvec.t;
+  remove_tags : Selector.tag Rrbvec.t;
+  remove_properties : Property.key Rrbvec.t;
   content : string option;
   source_label : string option;
   target_label : string option;
@@ -139,8 +139,8 @@ type action =
       uuid : Cli_primitive.uuid option;
       page : string option;
       content : string option;
-      update_properties : Property.assignment list;
-      clear_properties : Property.key list;
+      update_properties : Property.assignment Rrbvec.t;
+      clear_properties : Property.key Rrbvec.t;
       status_input : string option;
     }
   | Upsert_asset of {
@@ -159,8 +159,8 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       name : string option;
-      add_properties : Property.key list;
-      remove_properties : Property.key list;
+      add_properties : Property.key Rrbvec.t;
+      remove_properties : Property.key Rrbvec.t;
     }
   | Upsert_property of {
       repo : Cli_primitive.repo;

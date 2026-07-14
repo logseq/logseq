@@ -1208,6 +1208,7 @@
                     (let [new-value (.-value (.-target e))
                           composing? (util/native-event-is-composing? e)]
                       (handle-input-change state e new-value false)
+                      (reset! (::results state) default-results)
                       (when-not composing?
                         (debounced-refresh-results))
                       (when-let [on-change (:on-input-change opts)]

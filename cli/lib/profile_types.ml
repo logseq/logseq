@@ -16,7 +16,7 @@ type stage_summary = {
 type session = {
   enabled : bool;
   start_time : Js.Date.t;
-  mutable spans : span list;
+  mutable spans : span Rrbvec.t;
   mutable next_span_id : int;
 }
 
@@ -24,20 +24,21 @@ type report = {
   command : string;
   status : Cli_primitive.keyword;
   total_span : float;
-  spans : span list;
-  stages : stage_summary list;
+  spans : span Rrbvec.t;
+  stages : stage_summary Rrbvec.t;
 }
 
 let create_session enabled =
   if enabled then
-    Some { enabled; start_time = Time.now (); spans = []; next_span_id = 0 }
+    Some
+      { enabled; start_time = Time.now (); spans = Vec.empty; next_span_id = 0 }
   else None
 
 let next_span_id session =
   session.next_span_id <- session.next_span_id + 1;
   session.next_span_id
 
-let record_span (s : session) span = s.spans <- span :: s.spans
+let record_span (s : session) span = s.spans <- Vec.push_back s.spans span
 
 let record_timed_span session stage span_id start_time end_time =
   let elapsed_span = Time.non_negative_diff ~start_time ~end_time in
@@ -60,10 +61,11 @@ let time session stage f =
 
 let summarize_stages spans =
   let table = Hashtbl.create 16 in
-  let order = ref [] in
-  List.iter
+  let order = ref Vec.empty in
+  Vec.iter
     (fun (span : span) ->
-      if not (Hashtbl.mem table span.stage) then order := span.stage :: !order;
+      if not (Hashtbl.mem table span.stage) then
+        order := Vec.push_back !order span.stage;
       let count, total_span =
         Option.value
           (Hashtbl.find_opt table span.stage)
@@ -72,29 +74,28 @@ let summarize_stages spans =
       Hashtbl.replace table span.stage
         (count + 1, Time.add_span_value total_span span.elapsed_span))
     spans;
-  List.rev !order
-  |> List.map (fun stage ->
+  Vec.map
+    (fun stage ->
       let count, total_span = Hashtbl.find table stage in
       { stage; count; total_span; avg_span = Time.avg_span total_span count })
+    !order
 
 let report (s : session) ~command ~status =
   let end_time = Time.now () in
   let total_span = Time.non_negative_diff ~start_time:s.start_time ~end_time in
-  let spans : span list = List.rev s.spans in
+  let spans : span Rrbvec.t = s.spans in
   let spans =
-    if List.exists (fun (span : span) -> span.stage = "cli.total") spans then
+    if Vec.exists (fun (span : span) -> span.stage = "cli.total") spans then
       spans
     else
-      spans
-      @ [
-          {
-            stage = "cli.total";
-            span_id = 0;
-            start_time = s.start_time;
-            end_time;
-            elapsed_span = total_span;
-          };
-        ]
+      Vec.push_back spans
+        {
+          stage = "cli.total";
+          span_id = 0;
+          start_time = s.start_time;
+          end_time;
+          elapsed_span = total_span;
+        }
   in
   { command; status; total_span; spans; stages = summarize_stages spans }
 
@@ -103,7 +104,7 @@ type stage_node = {
   elapsed_span : float;
   start_time : Js.Date.t;
   end_time : Js.Date.t;
-  mutable children : stage_node list;
+  mutable children : stage_node Rrbvec.t;
 }
 
 let span_contains outer inner =
@@ -116,11 +117,11 @@ let node_of_span (span : span) =
     elapsed_span = span.elapsed_span;
     start_time = span.start_time;
     end_time = span.end_time;
-    children = [];
+    children = Vec.empty;
   }
 
 let sort_spans spans =
-  List.sort
+  Vec.sort
     (fun (left : span) (right : span) ->
       let duration_left = left.elapsed_span in
       let duration_right = right.elapsed_span in
@@ -133,21 +134,22 @@ let sort_spans spans =
     spans
 
 let build_stage_tree spans =
-  let roots = ref [] in
-  let stack = ref [] in
-  let rec trim_stack span = function
-    | parent :: rest when not (span_contains parent span) ->
+  let roots = ref Vec.empty in
+  let stack = ref Vec.empty in
+  let rec trim_stack span items =
+    match Vec.pop_front items with
+    | Some (parent, rest) when not (span_contains parent span) ->
         trim_stack span rest
-    | items -> items
+    | _ -> items
   in
-  List.iter
+  Vec.iter
     (fun span ->
       let node = node_of_span span in
       let current_stack = trim_stack node !stack in
-      (match current_stack with
-      | parent :: _ -> parent.children <- parent.children @ [ node ]
-      | [] -> roots := !roots @ [ node ]);
-      stack := node :: current_stack)
+      (match Vec.peek_front_opt current_stack with
+      | Some parent -> parent.children <- Vec.push_back parent.children node
+      | None -> roots := Vec.push_back !roots node);
+      stack := Vec.push_front current_stack node)
     (sort_spans spans);
   !roots
 
@@ -158,11 +160,11 @@ let status_text status =
   else status
 
 let rec collect_rows prefix rows = function
-  | [] -> rows
+  | nodes when Vec.is_empty nodes -> rows
   | nodes ->
-      let total = List.length nodes in
-      List.mapi (fun idx node -> (idx, node)) nodes
-      |> List.fold_left
+      let total = Vec.length nodes in
+      Vec.mapi (fun idx node -> (idx, node)) nodes
+      |> Vec.fold_left
            (fun rows (idx, node) ->
              let last = idx = total - 1 in
              let branch =
@@ -173,7 +175,8 @@ let rec collect_rows prefix rows = function
                prefix ^ if last then "    " else Cli_platform.Symbols.tree_pipe
              in
              let rows =
-               rows @ [ (Some node.elapsed_span, prefix ^ branch ^ node.label) ]
+               Vec.push_back rows
+                 (Some node.elapsed_span, prefix ^ branch ^ node.label)
              in
              collect_rows next_prefix rows node.children)
            rows
@@ -184,25 +187,27 @@ let pad_right value width =
 
 let render_lines report =
   let rows =
-    [
-      ( Some report.total_span,
-        "command=" ^ report.command ^ " status=" ^ status_text report.status );
-      (None, "stages");
-    ]
-    @ collect_rows "" [] (build_stage_tree report.spans)
+    Vec.of_array
+      [|
+        ( Some report.total_span,
+          "command=" ^ report.command ^ " status=" ^ status_text report.status
+        );
+        (None, "stages");
+      |]
+    |> fun rows -> collect_rows "" rows (build_stage_tree report.spans)
   in
   let duration_text =
-    List.map
+    Vec.map
       (function
         | Some span, _ -> Int64.to_string (Time.span_to_ms span) ^ "ms"
         | None, _ -> "")
       rows
   in
   let width =
-    List.fold_left
+    Vec.fold_left
       (fun width text -> max width (String.length text))
       0 duration_text
   in
-  List.map2
+  Vec.map2
     (fun duration (_, text) -> pad_right duration width ^ " " ^ text)
     duration_text rows
