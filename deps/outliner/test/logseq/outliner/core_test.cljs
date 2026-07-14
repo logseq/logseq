@@ -6,6 +6,68 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.common.config :as common-config]))
 
+(deftest insert-blocks-reuses-known-right-order
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target"}
+                         {:block/title "right"}]}])
+        target (db-test/find-block-by-content @conn "target")
+        right (db-test/find-block-by-content @conn "right")]
+    (with-redefs [ldb/get-right-sibling
+                  (fn [_]
+                    (throw (js/Error. "Known right order should skip sibling lookup")))]
+      (let [{:keys [blocks]} (outliner-core/insert-blocks
+                              @conn
+                              [{:block/uuid (random-uuid)
+                                :block/title "inserted"}]
+                              target
+                              {:sibling? true
+                               :keep-uuid? true
+                               :end-order-state [:known (:block/order right)]})]
+        (is (= 1 (count blocks)))
+        (is (neg? (compare (:block/order target)
+                           (:block/order (first blocks)))))
+        (is (neg? (compare (:block/order (first blocks))
+                           (:block/order right))))))))
+
+(deftest blocks-with-level-handles-10k-deep-tree
+  (let [blocks (mapv (fn [id]
+                       {:db/id id
+                        :block/uuid (str id)
+                        :block/parent {:db/id (dec id)}})
+                     (range 1 10001))
+        started-at (.now js/performance)
+        result (outliner-core/blocks-with-level blocks)
+        elapsed-ms (- (.now js/performance) started-at)]
+    (is (= 1 (:block/level (first result))))
+    (is (= 10000 (:block/level (last result))))
+    (is (< elapsed-ms 250) (str "10k level calculation took " elapsed-ms "ms"))))
+
+(deftest existing-inline-class-uses-its-canonical-uuid
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks []}])
+        class-uuid (random-uuid)
+        parsed-uuid (random-uuid)
+        ref {:block/type "page"
+             :block/name "existing"
+             :block/title "Existing"
+             :block/uuid parsed-uuid}
+        _ (d/transact! conn [{:db/ident :user.class/existing
+                              :block/name "existing"
+                              :block/title "Existing"
+                              :block/uuid class-uuid
+                              :block/tags :logseq.class/Tag}])
+        {:keys [block page-txs]}
+        (#'outliner-core/resolve-page-refs
+         @conn
+         {:block/title (str "#[[" parsed-uuid "]]")
+          :block/refs [ref]
+          :block/tags [ref]})]
+    (is (empty? page-txs))
+    (is (= (str "#[[" class-uuid "]]") (:block/title block)))
+    (is (= class-uuid (-> block :block/refs first :block/uuid)))
+    (is (= class-uuid (-> block :block/tags first :block/uuid)))))
+
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
     (let [conn (db-test/create-conn-with-blocks

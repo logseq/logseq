@@ -3,12 +3,12 @@
   (:require [frontend.components.filepicker :as filepicker]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -122,7 +122,15 @@
   [class config]
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
-        properties (outliner-property/get-class-properties class)]
+        [properties set-properties!] (hooks/use-state [])
+        _ (hooks/use-effect!
+           (fn []
+             (p/let [result (db-async/<get-class-properties
+                              (state/get-current-repo)
+                              (:db/id class))]
+               (set-properties! (or result [])))
+             nil)
+           [(:db/id class)])]
     [:div.ml-1
      (class-objects-inner config class properties)]))
 

@@ -7,6 +7,25 @@
             [frontend.util :as util]
             [logseq.db :as ldb]))
 
+(def ^:private structural-outliner-ops
+  #{:insert-blocks
+    :delete-blocks
+    :move-blocks
+    :move-blocks-up-down
+    :indent-outdent-blocks
+    :apply-template
+    :collapse-expand-blocks})
+
+(defn structural-outliner-op?
+  [op]
+  (contains? structural-outliner-ops op))
+
+(defn refresh-state-paths
+  [affected-ids]
+  (into [[:db/latest-transacted-entity-uuids :tx-id]]
+        (map #(vector :db/latest-transacted-entity-uuids :entity-tx-ids %))
+        affected-ids))
+
 (defn- update-editing-block-title-if-changed!
   [tx-data]
   (when-let [editing-block (state/get-edit-block)]
@@ -51,9 +70,19 @@
 
         :else
         (do
-          (state/set-state! :db/latest-transacted-entity-uuids
-                            {:updated-ids (set (map :block/uuid blocks))
-                             :deleted-ids (set deleted-block-uuids)})
+          (let [updated-ids (set (map :block/uuid blocks))
+                deleted-ids (set deleted-block-uuids)
+                tx-id (:db-sync/tx-id tx-meta)]
+            (state/set-state! :db/latest-transacted-entity-uuids
+                              {:updated-ids updated-ids
+                               :deleted-ids deleted-ids
+                               :entity-tx-ids (zipmap (into updated-ids deleted-ids)
+                                                      (repeat tx-id))
+                               :page-window-refresh? (structural-outliner-op?
+                                                      (:outliner-op tx-meta))
+                               :tx-id tx-id}
+                              :changed-paths (refresh-state-paths
+                                              (into updated-ids deleted-ids))))
 
           (when (and current-block-id
                      (some (fn [block]

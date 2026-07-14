@@ -19,7 +19,7 @@
    [frontend.worker.db.validate :as worker-db-validate]
    [frontend.worker.export :as worker-export]
    [frontend.worker.graph-view :as graph-view]
-   [frontend.worker.handler.comments]
+   [frontend.worker.handler.comments :as comments]
    [frontend.worker.handler.property]
    [frontend.worker.handler.view]
    [frontend.worker.markdown-mirror :as markdown-mirror]
@@ -478,20 +478,14 @@
   (.exec db "PRAGMA journal_mode=WAL"))
 
 (defn- gc-sqlite-dbs!
-  "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db datascript-conn {:keys [full-gc?]}]
-  (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
-    (when (or full-gc?
-              (nil? last-gc-at)
-              (not (number? last-gc-at))
-              (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
-      (log/info :gc-sqlite-dbs "gc current graph")
-      (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? full-gc?})
-      (.exec sqlite-db "VACUUM")
-      (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                       :kv/value (common-util/time-ms)}]
-                     {:skip-validate-db? true
-                      :persist-op? false}))))
+  [sqlite-db datascript-conn]
+  (log/info :gc-sqlite-dbs "gc current graph")
+  (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? true})
+  (.exec sqlite-db "VACUUM")
+  (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
+                                   :kv/value (common-util/time-ms)}]
+                 {:skip-validate-db? true
+                  :persist-op? false}))
 
 (defn- run-client-ops-cleanup!
   [repo]
@@ -688,7 +682,6 @@
                 (if migrate-result
                   (handle-migrate-result-local-txs! repo migrate-result)
                   (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
-              (gc-sqlite-dbs! db conn {})
               (maybe-run-recycle-gc! conn))
 
             (when initial-tx-report
@@ -1277,6 +1270,14 @@
                           default-value)])))
              (into {}))))))
 
+(def-thread-api :thread-api/get-class-properties
+  [repo class-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [class (d/entity db class-id)]
+        (mapv #(worker-plain/entity-forward-map db % {})
+              (outliner-property/get-class-properties class))))))
+
 (defn- route-title-info
   [db route-name]
   (let [page (ldb/get-page db route-name)]
@@ -1376,15 +1377,12 @@
    :logseq.property/icon
    :logseq.property/deleted-at])
 
-(def ^:private class-page-metadata-properties
-  [:logseq.property.class/extends
-   :logseq.property.class/enable-bidirectional?])
-
 (defn- entity-direct-values
   [db entity-or-id attr]
-  (let [eid (if (number? entity-or-id)
-              entity-or-id
-              (:db/id entity-or-id))]
+  (let [eid (cond
+              (number? entity-or-id) entity-or-id
+              (map? entity-or-id) (:db/id entity-or-id)
+              :else (:db/id (d/entity db entity-or-id)))]
     (map :v (d/datoms db :eavt eid attr))))
 
 (defn- entity-direct-value
@@ -1393,22 +1391,7 @@
 
 (defn- entity-direct-map
   [db entity keys]
-  (reduce
-   (fn [result attr]
-     (if (= :db/id attr)
-       (assoc result :db/id (:db/id entity))
-       (let [values (seq (entity-direct-values db entity attr))]
-         (cond
-           (nil? values)
-           result
-
-           (next values)
-           (assoc result attr (set values))
-
-           :else
-           (assoc result attr (first values))))))
-   {}
-   keys))
+  (select-keys (worker-plain/entity-forward-map db entity {}) keys))
 
 (defn- display-property-description
   [db property]
@@ -1438,17 +1421,40 @@
         (seq closed-values)
         (assoc :property/closed-values closed-values)))))
 
+(defn- display-property-value
+  [db property-id value]
+  (let [value-type (or (get-in (d/schema db) [property-id :db/valueType])
+                       (entity-direct-value db property-id :db/valueType))]
+    (if (= :db.type/ref value-type)
+      (when-let [entity (d/entity db value)]
+        (entity-direct-map db entity display-property-value-keys))
+      value)))
+
+(defn- entity-tagged-with?
+  [db entity tag-ident]
+  (some (fn [datom]
+          (= tag-ident (:db/ident (d/entity db (:v datom)))))
+        (d/datoms db :eavt (:db/id entity) :block/tags)))
+
 (defn- display-properties-for-block
-  [block]
-  (cond-> (if (de/entity? block)
-            (entity-plus/lookup-kv-then-entity block :block/properties)
-            (:block/properties block))
-    (and (ldb/class? block)
-         (not (ldb/built-in? block)))
-    (merge (zipmap class-page-metadata-properties
-                   (map #(get block %) class-page-metadata-properties))
-           (when (nil? (:logseq.property.class/enable-bidirectional? block))
-             {:logseq.property.class/enable-bidirectional? false}))))
+  [db block]
+  (let [properties (if (de/entity? block)
+                     (->> (d/datoms db :eavt (:db/id block))
+                          (keep (fn [{:keys [a v]}]
+                                  (when (db-property/property? a)
+                                    [a (display-property-value db a v)])))
+                          (reduce (fn [result [property-id value]]
+                                    (if (= :db.cardinality/many
+                                           (or (get-in (d/schema db) [property-id :db/cardinality])
+                                               (entity-direct-value db property-id :db/cardinality)))
+                                      (update result property-id (fnil conj #{}) value)
+                                      (assoc result property-id value)))
+                                  {}))
+                     (:block/properties block))]
+    (cond-> properties
+      (and (entity-tagged-with? db block :logseq.class/Tag)
+           (not (ldb/built-in? block)))
+      (update :logseq.property.class/enable-bidirectional? #(if (nil? %) false %)))))
 
 (defn- entity-ref-value?
   [value]
@@ -1533,11 +1539,14 @@
   [db block {:keys [gallery-view? page-title? sidebar-properties? tag-dialog?
                     publishing? state-hide-empty-properties?]} show-empty-and-hidden-properties?]
   (let [block-entity (or (some->> (:db/id block) (d/entity db)) block)
-        page-properties-area? (and (entity-util/page? block-entity)
-                                   (or page-title?
+        page-properties-area? (and (or page-title?
                                        sidebar-properties?
-                                       tag-dialog?))
-        properties* (display-properties-for-block block-entity)
+                                       tag-dialog?)
+                                   (or (entity-tagged-with? db block-entity :logseq.class/Page)
+                                       (entity-tagged-with? db block-entity :logseq.class/Tag)
+                                       (entity-tagged-with? db block-entity :logseq.class/Property)
+                                       (entity-tagged-with? db block-entity :logseq.class/Journal)))
+        properties* (display-properties-for-block db block-entity)
         {:keys [properties recycled-only-property-ids]}
         (sanitize-property-values-for-display properties*)
         remove-built-in-or-other-position-properties
@@ -1842,19 +1851,42 @@
   (some? (first (d/datoms db :avet :block/parent block-id))))
 
 (defn- direct-child-blocks
-  [db block-id]
-  (->> (d/datoms db :avet :block/parent block-id)
-       (keep #(d/entity db (:e %)))
-       (remove :block/closed-value-property)
-       ldb/sort-by-order))
+  ([db block-id]
+   (direct-child-blocks db block-id false))
+  ([db block-id reverse?]
+   (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
+                        (map :e)
+                        set)
+         blocks (if (>= (count child-ids) 100)
+                  (->> ((if reverse? d/rseek-datoms d/datoms) db :avet :block/order)
+                       (keep (fn [datom]
+                               (when (contains? child-ids (:e datom))
+                                 (d/entity db (:e datom))))))
+                  (cond->> child-ids
+                    true (keep #(d/entity db %))
+                    true ldb/sort-by-order
+                    reverse? reverse))]
+     (remove :block/closed-value-property blocks))))
 
 (defn- get-block-children
   [db block {:keys [include-collapsed-children?]}]
-  (let [children-blocks (->> (common-initial-data/get-block-children
-                              db
-                              (:db/id block)
-                              {:include-collapsed-children? include-collapsed-children?})
-                             (remove ldb/recycled?))
+  (let [children-blocks (loop [pending [block]
+                               seen #{(:db/id block)}
+                               result []]
+                          (if-let [parent (peek pending)]
+                            (let [pending (pop pending)
+                                  expand? (or include-collapsed-children?
+                                              (not (true? (entity-direct-value db parent :block/collapsed?)))
+                                              (some? (entity-direct-value db parent :block/name)))
+                                  children (if expand?
+                                             (remove #(contains? seen (:db/id %))
+                                                     (direct-child-blocks db (:db/id parent)))
+                                             [])]
+                              (recur (into pending children)
+                                     (into seen (map :db/id) children)
+                                     (into result children)))
+                            result))
+        children-blocks (remove ldb/recycled? children-blocks)
         large-page? (>= (count children-blocks) 100)
         children (if large-page?
                    (remove ldb/recycled? (direct-child-blocks db (:db/id block)))
@@ -1863,20 +1895,53 @@
      :children (->> children
                     (remove :block/closed-value-property))}))
 
+(defn- plain-render-block?
+  [db block]
+  (empty? (remove #{:block/tags}
+                  (direct-block-property-ids db (:db/id block)))))
+
 (defn- block-positioned-properties-map
-  [db block-id]
+  [db block]
   (->> render-property-positions
        (keep (fn [position]
-               (let [properties (block-positioned-properties db block-id position)]
+               (let [properties (block-positioned-properties db (:db/id block) position)]
                  (when (seq properties)
                    [position properties]))))
        (into {})))
 
+(defn- block-reactions
+  [db block-id]
+  (mapv #(d/pull db
+                 '[:db/id :block/uuid :logseq.property.reaction/emoji-id
+                   {:logseq.property/created-by-ref [:db/id :block/title]}]
+                 (:e %))
+        (d/datoms db :avet :logseq.property.reaction/target block-id)))
+
+(def ^:private empty-render-display-properties
+  {:full-properties []
+   :hidden-properties []
+   :description-property nil
+   :class-properties-property nil})
+
 (defn- assoc-render-property-data
-  [db block block-map]
-  (assoc block-map
-         :block.temp/positioned-properties
-         (block-positioned-properties-map db (:db/id block))))
+  ([db block block-map]
+   (assoc-render-property-data db block block-map false))
+  ([db block block-map refs-count?]
+   (let [plain? (plain-render-block? db block)]
+     (cond-> (assoc block-map
+                    :block.temp/positioned-properties
+                    (if plain?
+                      {}
+                      (block-positioned-properties-map db block))
+                    :block.temp/display-properties
+                    (if plain?
+                      empty-render-display-properties
+                      (display-properties db block {} false))
+                    :block.temp/reactions
+                    (block-reactions db (:db/id block)))
+       refs-count?
+       (assoc :block.temp/refs-count
+              (common-initial-data/get-block-refs-count db (:db/id block)))))))
 
 (defn- get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]
@@ -1899,10 +1964,15 @@
                                                                     :full
                                                                     :self)))))
                            children))
-          block-map (assoc-render-property-data db
-                                                block
-                                                (worker-plain/entity-forward-map db block {:properties properties}))
-          block' (cond-> block-map
+          block-map (assoc-render-property-data
+                     db
+                     block
+                     (merge {:block/properties (display-properties-for-block db block)}
+                            (entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
+                            (worker-plain/entity-forward-map db block {:properties properties})))
+          block' (cond-> (assoc block-map
+                                :block/tags (or (:block/tags block-map) [])
+                                :block/collapsed? (boolean (:block/collapsed? block-map)))
 
                    block-refs-count?
                    (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:db/id block)))
@@ -1939,9 +2009,66 @@
         (max 0)
         (min (max 0 (- total-count limit))))))
 
+(defn- page-block-layout
+  [db root]
+  (let [page-id (or (entity-direct-value db root :block/page) (:db/id root))
+        block-ids (js/Set.)
+        pending (array)
+        parent-by-block (js/Map.)
+        collapsed-blocks (js/Set.)
+        property-derived-blocks (js/Set.)
+        !block-count (volatile! 0)
+        !collapsed? (volatile! false)
+        children-by-parent (js/Map.)]
+    (doseq [{:keys [e]} (d/datoms db :avet :block/page page-id)]
+      (.add block-ids e))
+    (doseq [{:keys [e]} (d/datoms db :avet :block/parent (:db/id root))
+            :when (not (.has block-ids e))]
+      (.push pending e))
+    (loop []
+      (when-let [block-id (.pop pending)]
+        (when-not (.has block-ids block-id)
+          (.add block-ids block-id)
+          (doseq [{:keys [e]} (d/datoms db :avet :block/parent block-id)]
+            (.push pending e)))
+        (recur)))
+    (doseq [{:keys [e v]} (d/datoms db :aevt :block/parent)
+            :when (.has block-ids e)]
+      (.set parent-by-block e v))
+    (doseq [{:keys [e v]} (d/datoms db :aevt :block/collapsed?)
+            :when (and v (.has block-ids e))]
+      (.add collapsed-blocks e))
+    (doseq [attr [:block/closed-value-property :logseq.property/created-from-property]
+            {:keys [e]} (d/datoms db :aevt attr)
+            :when (.has block-ids e)]
+      (.add property-derived-blocks e))
+    (doseq [{:keys [e]} (d/datoms db :avet :block/order)
+            :when (and (.has block-ids e)
+                       (not (.has property-derived-blocks e)))]
+      (let [parent-id (.get parent-by-block e)
+            collapsed? (.has collapsed-blocks e)
+            children (or (.get children-by-parent parent-id)
+                         (let [result (array)]
+                           (.set children-by-parent parent-id result)
+                           result))]
+        (vswap! !block-count inc)
+        (when collapsed?
+          (vreset! !collapsed? true))
+        (.push children #js [e parent-id collapsed?])))
+    {:block-count @!block-count
+     :collapsed? @!collapsed?
+     :children-by-parent children-by-parent}))
+
 (defn- flat-child-block-window
   [db root opts]
   (let [limit (clamp-page-block-window-limit (:limit opts))
+        {:keys [block-count collapsed? children-by-parent]} (page-block-layout db root)
+        known-total-count (or (:total-count opts)
+                              (when-not collapsed? block-count))
+        known-total-count? (nat-int? known-total-count)
+        known-offset (when known-total-count?
+                       (page-block-window-offset known-total-count (assoc opts :limit limit)))
+        skip-count (or known-offset 0)
         requested-offset (case (:anchor opts)
                            :bottom nil
                            :top 0
@@ -1952,15 +2079,17 @@
         !tail-count (volatile! 0)
         !idx (volatile! 0)
         !entries (volatile! [])]
-    (letfn [(walk [parent level]
-              (loop [children (seq (direct-child-blocks db (:db/id parent)))]
-                (when (seq children)
-                  (let [child (first children)
-                        idx @!idx
-                        entry {:block child
-                               :level level
-                               :parent-id (:db/id parent)}]
-                    (vswap! !idx inc)
+    (letfn [(done? []
+              (and known-total-count?
+                   (= limit (count @!entries))))
+            (visit! [entry]
+              (let [idx @!idx]
+                (vswap! !idx inc)
+                (if known-total-count?
+                  (when (and (>= idx skip-count)
+                             (< (count @!entries) limit))
+                    (vswap! !entries conj entry))
+                  (do
                     (let [tail-count @!tail-count
                           tail-start @!tail-start
                           tail-idx (if (< tail-count limit)
@@ -1973,51 +2102,120 @@
                     (when (and requested-offset
                                (>= idx requested-offset)
                                (< idx requested-end))
-                      (vswap! !entries conj entry))
-                    (when-not (:block/collapsed? child)
-                      (walk child (inc level)))
-                    (recur (next children))))))]
-      (walk root 1)
-      (let [total-count @!idx
-            offset (page-block-window-offset total-count (assoc opts :limit limit))
-            entries (if (= requested-offset offset)
+                      (vswap! !entries conj entry))))))
+            (push-children [stack parent-id level]
+              (if-let [children (.get children-by-parent parent-id)]
+                (loop [result stack
+                       idx (dec (alength children))]
+                  (if (neg? idx)
+                    result
+                    (let [child (aget children idx)]
+                      (recur (conj result #js [(aget child 0)
+                                               (aget child 1)
+                                               (aget child 2)
+                                               level])
+                             (dec idx)))))
+                stack))]
+      (loop [stack (push-children [] (:db/id root) 1)]
+        (when (and (seq stack) (not (done?)))
+          (let [current (peek stack)
+                block-id (aget current 0)
+                parent-id (aget current 1)
+                collapsed? (aget current 2)
+                level (aget current 3)
+                entry {:block-id block-id
+                       :level level
+                       :parent-id parent-id
+                       :has-children? (contains? children-by-parent block-id)}
+                stack' (pop stack)]
+            (visit! entry)
+            (recur (if collapsed?
+                     stack'
+                     (push-children stack' block-id (inc level)))))))
+      (let [total-count (or known-total-count @!idx)
+            offset (or known-offset
+                       (page-block-window-offset total-count (assoc opts :limit limit)))
+            entries (cond
+                      known-total-count?
                       @!entries
+
+                      (= requested-offset offset)
+                      @!entries
+
+                      :else
                       (mapv (fn [idx]
                               (aget tail-entries (mod (+ @!tail-start idx) limit)))
-                            (range @!tail-count)))]
+                            (range @!tail-count)))
+            entries (mapv (fn [{:keys [block-id] :as entry}]
+                            (-> entry
+                                (dissoc :block-id)
+                                (assoc :block (d/entity db block-id))))
+                          entries)]
         {:entries entries
          :offset offset
          :limit limit
          :total-count total-count}))))
 
 (defn- flat-child-block-row
-  [db {:keys [block level parent-id]}]
+  [db {:keys [block level parent-id has-children?]}]
   (let [block-map (assoc-render-property-data db
                                               block
-                                              (worker-plain/entity-forward-map db block {}))]
+                                              (worker-plain/entity-forward-map db block {})
+                                              true)]
     (-> block-map
         (assoc :block/level level
                :block/parent {:db/id parent-id}
-               :block.temp/has-children? (block-has-children? db (:db/id block)))
+               :block.temp/load-status :self
+               :block.temp/has-children? has-children?)
         (dissoc :block/children))))
 
+(defn- flat-child-block-layout-row
+  [_db {:keys [block level parent-id has-children?]}]
+  {:db/id (:db/id block)
+   :block/uuid (:block/uuid block)
+   :block/order (:block/order block)
+   :block/collapsed? (:block/collapsed? block)
+   :block/level level
+   :block/parent {:db/id parent-id}
+   :block.temp/load-status :self
+   :block.temp/has-children? has-children?})
+
 (defn- get-page-blocks-window-response
-  [repo id-or-page-name opts]
-  (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
-    (when-let [root (resolve-block-entity db id-or-page-name)]
-      (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
-            rows (->> entries
-                      (mapv #(flat-child-block-row db %))
-                      worker-plain/with-explicit-ref-fields-recursive)
-            root-row (->> (assoc-render-property-data db
-                                                      root
-                                                      (worker-plain/entity-forward-map db root {}))
-                          worker-plain/with-explicit-ref-fields-recursive)]
-        {:root root-row
-         :rows rows
-         :offset offset
-         :limit limit
-         :total-count total-count}))))
+  ([repo id-or-page-name opts]
+   (get-page-blocks-window-response repo id-or-page-name opts nil))
+  ([repo id-or-page-name opts render-block-uuids]
+   (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
+     (when-let [root (resolve-block-entity db id-or-page-name)]
+       (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
+             rows (mapv (fn [{:keys [block] :as entry}]
+                          (if (or (nil? render-block-uuids)
+                                  (contains? render-block-uuids (:block/uuid block)))
+                            (flat-child-block-row db entry)
+                            (flat-child-block-layout-row db entry)))
+                        entries)
+             commented-block-uuids (->> (mapv :block/uuid rows)
+                                        (comments/get-comment-thread-block-uuids db)
+                                        set)
+             rows (->> rows
+                       (mapv (fn [row]
+                               (cond-> row
+                                 (or (nil? render-block-uuids)
+                                     (contains? render-block-uuids (:block/uuid row)))
+                                 (assoc :block.temp/sync-conflicts
+                                        (or (client-op/get-sync-conflicts repo (:block/uuid row)) [])
+                                        :block.temp/comment-thread-present?
+                                        (contains? commented-block-uuids (str (:block/uuid row)))))))
+                       worker-plain/with-explicit-ref-fields-recursive)
+             root-row (->> (assoc-render-property-data db
+                                                       root
+                                                       (worker-plain/entity-forward-map db root {})
+                                                       true)
+                           worker-plain/with-explicit-ref-fields-recursive)]
+         {:root root-row
+          :rows rows
+          :offset offset
+          :limit limit
+          :total-count total-count})))))
 
 (defn- get-blocks-response
   [repo requests]
@@ -2622,23 +2820,61 @@
   [repo ops opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [opts (or opts {})
-            started-at (perf-time-ms)
+      (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
-            opts (dissoc opts :ui/page-id :ui/include-page-tree?)
+            editor-info (:ui/editor-info opts)
+            page-id (:ui/page-id opts)
+            page-window-offset (:virtual/offset opts)
+            render-block-uuids (:ui/render-block-uuids opts)
+            row-data-block-ids (:ui/row-data-block-ids opts)
+            opts (dissoc opts :ui/page-id :ui/include-page-tree? :ui/editor-info
+                         :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
+            _ (worker-undo-redo/set-pending-editor-info! repo editor-info)
             apply-started-at (perf-time-ms)
             result (worker-util/profile
                     "apply outliner ops"
                     (outliner-op/apply-ops! conn ops opts))
             applied-at (perf-time-ms)
-            response (worker-plain/worker-plain-value @conn {:result result})
+            listener-perf (db-listener/take-outliner-op-perf! perf-id)
+            affected-page-uuids (into #{}
+                                      (keep (fn [block-uuid]
+                                              (some-> (d/entity @conn [:block/uuid block-uuid])
+                                                      :block/page
+                                                      :block/uuid)))
+                                      render-block-uuids)
+            updated-blocks (when (seq row-data-block-ids)
+                             (into []
+                                   (keep (fn [block-id]
+                                           (:block (get-block-and-children @conn block-id {:children? false}))))
+                                   row-data-block-ids))
+            page-window (when page-id
+                          (get-page-blocks-window-response repo page-id
+                                                           {:offset page-window-offset
+                                                            :limit (inc page-block-window-default-limit)}
+                                                           (not-empty render-block-uuids)))
+            page-window-at (perf-time-ms)
+            response (worker-plain/worker-plain-value @conn
+                                                     (cond-> {:result result}
+                                                       page-window
+                                                       (assoc :page-window page-window)
+
+                                                       (seq updated-blocks)
+                                                       (assoc :updated-blocks updated-blocks)
+
+                                                       (seq affected-page-uuids)
+                                                       (assoc :affected-page-uuids affected-page-uuids)
+
+                                                       goog.DEBUG
+                                                       (assoc :perf {:apply-ms (- applied-at apply-started-at)
+                                                                     :page-window-ms (- page-window-at applied-at)
+                                                                     :listener listener-perf})))
             plain-at (perf-time-ms)]
         (log-outliner-op-perf!
          {:perf-id perf-id
           :op-names (mapv first ops)
           :op-count (count ops)
           :apply-ms (- applied-at apply-started-at)
-          :plain-ms (- plain-at applied-at)
+          :plain-ms (- plain-at page-window-at)
           :total-ms (- plain-at started-at)})
         response)
       (catch :default e
@@ -2968,7 +3204,7 @@
   (let [{:keys [db]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db conn {:full-gc? true})
+      (gc-sqlite-dbs! db conn)
       nil)))
 
 (def-thread-api :thread-api/mobile-logs

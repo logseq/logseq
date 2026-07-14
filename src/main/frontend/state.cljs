@@ -208,7 +208,6 @@
       :editor/container-id                   nil
       :editor/next-edit-block                nil
       :editor/raw-mode-block                 nil
-      :editor/indent-preview                 nil
       :editor/virtualized-scroll-fn          nil
       :editor/edit-block-fn                  nil
 
@@ -788,12 +787,14 @@ should be done through this fn in order to get global config and config defaults
       (update db path f))))
 
 (defn set-state!
-  [path value & {:keys [nested-path]}]
+  [path value & {:keys [nested-path changed-paths]}]
   (vswap! *profile-state update path inc)
   (let [old-v (read-state-value (rfx/snapshot) path nested-path)]
     (when (not= old-v value)
       (let [db' (assoc-state-db (rfx/snapshot) path value nested-path)]
-        (rfx/replace-state! db' (full-state-path path nested-path))
+        (if (seq changed-paths)
+          (rfx/replace-state-paths! db' changed-paths)
+          (rfx/replace-state! db' (full-state-path path nested-path)))
         (reset! state db'))))
   nil)
 
