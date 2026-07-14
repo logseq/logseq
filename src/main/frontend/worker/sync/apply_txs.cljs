@@ -2,6 +2,7 @@
   "Pending tx and remote tx application helpers for db sync."
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [datascript.core :as d]
    [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
@@ -41,6 +42,9 @@
 
 (def ^:private max-remote-apply-snapshot-retries 3)
 (def ^:private remote-apply-snapshot-retry-delay-ms 50)
+(def ^:private upload-response-timeout-ms (* 2 60 1000))
+(def ^:private max-upload-request-datoms 5000)
+(defonce ^:private *repo->large-upload-progress (atom {}))
 
 (defn set-upload-stopped!
   [repo stopped?]
@@ -53,6 +57,9 @@
 
 (declare enqueue-asset-task!
          apply-remote-txs!
+         cap-upload-request-tx-entries
+         commit-large-upload-progress!
+         ref-attr?
          resolve-temp-id
          tx-temp-id->uuid
          reverse-local-txs!
@@ -132,6 +139,87 @@
 
 (defn- ws-open? [ws]
   (sync-transport/ws-open? ws))
+
+(defn- ws-ready-state
+  [ws]
+  (when ws
+    (.-readyState ws)))
+
+(defn- outliner-op->string
+  [op]
+  (cond
+    (keyword? op) (name op)
+    (some? op) (str op)
+    :else nil))
+
+(defn- report-upload-response-timeout!
+  [client request]
+  (let [repo (:repo client)
+        ws (:ws client)
+        online? (worker-state/online?)
+        ws-open-state? (ws-open? ws)]
+    (when (and online? ws-open-state?)
+      (let [elapsed-ms (- (common-util/time-ms) (:sent-at request))
+            outliner-ops (mapv outliner-op->string (:outliner-ops request))
+            outliner-op-tag (when (seq outliner-ops)
+                              (string/join "," outliner-ops))
+            data (cond-> {:source "db-sync"
+                          :operation "upload-tx-batch"
+                          :repo repo
+                          :graph-id (:graph-id client)
+                          :timeout-ms upload-response-timeout-ms
+                          :elapsed-ms elapsed-ms
+                          :tx-count (count (:tx-ids request))
+                          :t-before (:t-before request)
+                          :latest-remote-tx (get @*repo->latest-remote-tx repo)
+                          :current-local-tx (client-op/get-local-tx repo)
+                          :online? online?
+                          :ws-open? ws-open-state?
+                          :ws-ready-state (ws-ready-state ws)}
+                   outliner-op-tag
+                   (assoc :outliner-op outliner-op-tag))]
+        (log/error :db-sync/upload-response-timeout
+                   (assoc data :tx-ids (:tx-ids request)))
+        (try
+          (platform/post-message!
+           (platform/current)
+           :capture-error
+           {:error (ex-info "Sync upload request did not get response" data)
+            :payload data
+            :extra (cond-> {:tx-ids (mapv str (:tx-ids request))}
+                     (seq outliner-ops)
+                     (assoc :outliner-ops outliner-ops))})
+          (catch :default report-error
+            (log/error :db-sync/report-upload-response-timeout-failed
+                       {:repo repo
+                        :error report-error})))))))
+
+(defn clear-upload-response-timeout!
+  [client]
+  (when-let [*upload-request (:upload-request client)]
+    (let [request @*upload-request]
+      (when-let [timer (:timer request)]
+        (js/clearTimeout timer))
+      (reset! *upload-request nil)
+      (some-> request (dissoc :timer)))))
+
+(defn- start-upload-response-timeout!
+  [client request]
+  (when-let [*upload-request (:upload-request client)]
+    (when-not (:timer @*upload-request)
+      (let [request' (assoc request :sent-at (common-util/time-ms))
+            timer (js/setTimeout
+                   (fn []
+                     (when (= request' (dissoc @*upload-request :timer))
+                       (reset! *upload-request nil)
+                       (report-upload-response-timeout! client request')))
+                   upload-response-timeout-ms)]
+        (reset! *upload-request (assoc request' :timer timer))))))
+
+(defn ack-upload-response!
+  [repo client]
+  (when-let [request (clear-upload-response-timeout! client)]
+    (commit-large-upload-progress! repo (:large-upload-progress request))))
 
 (defn upload-large-title! [repo graph-id title aes-key]
   (sync-large-title/upload-large-title!
@@ -318,18 +406,32 @@
     (keep block-uuid-lookup-ref-value
           [(second item) (nth item 3 nil)])))
 
+(defn- tx-data-has-block-uuid-ref?
+  [tx-data]
+  (boolean
+   (some (fn [item]
+           (seq (tx-item-ref-block-uuids item)))
+         tx-data)))
+
 (defn- tx-item-retract-entity-block-uuid
   [item]
   (when (and (vector? item)
              (contains? #{:db/retractEntity :db.fn/retractEntity} (first item)))
     (block-uuid-lookup-ref-value (second item))))
 
-(defn- remote-txs-retract-entity-block-uuids
+(defn- remote-txs-retract-entity-block-uuid-suffixes
   [remote-txs]
-  (->> remote-txs
-       (mapcat :tx-data)
-       (keep tx-item-retract-entity-block-uuid)
-       set))
+  (-> (reduce (fn [{:keys [deleted-block-uuids suffixes]} remote-tx]
+                (let [deleted-block-uuids' (into deleted-block-uuids
+                                                  (keep tx-item-retract-entity-block-uuid)
+                                                  (:tx-data remote-tx))]
+                  {:deleted-block-uuids deleted-block-uuids'
+                   :suffixes (conj suffixes deleted-block-uuids')}))
+              {:deleted-block-uuids #{}
+               :suffixes '()}
+              (reverse remote-txs))
+      :suffixes
+      vec))
 
 (defn- tx-item-missing-deleted-block-ref?
   [db deleted-block-uuids item]
@@ -420,26 +522,197 @@
   [remote-txs]
   (some #(= :db-migrate (:outliner-op %)) remote-txs))
 
+(defn- upload-tempid?
+  [value]
+  (or (and (integer? value) (neg? value))
+      (string? value)))
+
+(defn- upload-tx-item-tempids
+  [db item]
+  (cond
+    (and (map? item) (upload-tempid? (:db/id item)))
+    #{(:db/id item)}
+
+    (and (vector? item)
+         (contains? #{:db/add :db/retract :db/cas :db.fn/cas} (first item))
+         (<= 4 (count item)))
+    (let [[_op entity attr value] item]
+      (cond-> #{}
+        (upload-tempid? entity)
+        (conj entity)
+        (and db
+             (ref-attr? db attr)
+             (upload-tempid? value))
+        (conj value)))
+
+    (and (vector? item)
+         (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))
+         (= 2 (count item))
+         (upload-tempid? (second item)))
+    #{(second item)}
+
+    :else
+    #{}))
+
+(defn- merge-upload-tx-ranges
+  [ranges]
+  (loop [remaining (sort-by first ranges)
+         merged []]
+    (if-let [[start end] (first remaining)]
+      (if-let [[prev-start prev-end] (peek merged)]
+        (if (<= start prev-end)
+          (recur (next remaining)
+                 (conj (pop merged) [prev-start (max prev-end end)]))
+          (recur (next remaining)
+                 (conj merged [start end])))
+        (recur (next remaining) [[start end]]))
+      merged)))
+
+(defn- upload-tempid-range-by-start
+  [db tx-data]
+  (let [ranges-by-tempid
+        (reduce-kv
+         (fn [acc idx item]
+           (reduce (fn [acc* tempid]
+                     (update acc* tempid
+                             (fn [[start end]]
+                               [(if (some? start) (min start idx) idx)
+                                (if (some? end) (max end idx) idx)])))
+                   acc
+                   (upload-tx-item-tempids db item)))
+         {}
+         tx-data)]
+    (into {} (map (fn [[start end]] [start end])
+                  (merge-upload-tx-ranges (vals ranges-by-tempid))))))
+
+(defn- next-upload-tx-group
+  [tx-data range-by-start idx]
+  (if-let [end (get range-by-start idx)]
+    [(inc end) (subvec tx-data idx (inc end))]
+    [(inc idx) [(nth tx-data idx)]]))
+
+(defn- next-large-upload-request-chunk
+  [db tx-data start]
+  (let [range-by-start (upload-tempid-range-by-start db tx-data)
+        total (count tx-data)]
+    (loop [idx start
+           chunk []]
+      (if (< idx total)
+        (let [[next-idx group] (next-upload-tx-group tx-data range-by-start idx)
+              next-count (+ (count chunk) (count group))]
+          (if (and (seq chunk)
+                   (> next-count max-upload-request-datoms))
+            {:chunk chunk
+             :next-index idx}
+            (recur next-idx (into chunk group))))
+        {:chunk chunk
+         :next-index total}))))
+
 (defn prepare-upload-tx-entries
-  [_conn pending]
-  (let [entries (mapv (fn [{:keys [tx-id tx outliner-op]}]
-                        {:tx-id tx-id
-                         :outliner-op outliner-op
-                         :tx-data (vec tx)})
-                      pending)
-        empty-tx-ids (->> entries
-                          (filter (comp empty? :tx-data))
-                          (mapv :tx-id))
-        drop-txs (->> entries
-                      (filter (comp empty? :tx-data))
-                      (mapv (fn [{:keys [tx-id outliner-op]}]
-                              {:tx-id tx-id
-                               :outliner-op outliner-op
-                               :reason :empty-tx-data})))
-        tx-entries (filterv (comp seq :tx-data) entries)]
-    {:tx-entries tx-entries
-     :drop-tx-ids empty-tx-ids
-     :drop-txs drop-txs}))
+  ([conn pending]
+   (prepare-upload-tx-entries nil conn pending))
+  ([repo conn pending]
+   (let [entries (mapv (fn [{:keys [tx-id tx outliner-op]}]
+                         {:tx-id tx-id
+                          :outliner-op outliner-op
+                          :tx-data (vec tx)})
+                       pending)
+         empty-tx-ids (->> entries
+                           (filter (comp empty? :tx-data))
+                           (mapv :tx-id))
+         drop-txs (->> entries
+                       (filter (comp empty? :tx-data))
+                       (mapv (fn [{:keys [tx-id outliner-op]}]
+                               {:tx-id tx-id
+                                :outliner-op outliner-op
+                                :reason :empty-tx-data})))
+         tx-entries (filterv (comp seq :tx-data) entries)]
+     {:tx-entries (if repo
+                    (cap-upload-request-tx-entries repo (some-> conn deref) tx-entries)
+                    tx-entries)
+      :drop-tx-ids empty-tx-ids
+      :drop-txs drop-txs})))
+
+(defn- large-upload-progress-key
+  [repo tx-id]
+  [repo tx-id])
+
+(defn- clear-large-upload-progress!
+  [repo tx-ids]
+  (let [progress-keys (->> tx-ids
+                           (filter some?)
+                           (map #(large-upload-progress-key repo %))
+                           seq)]
+    (when progress-keys
+      (swap! *repo->large-upload-progress
+             (fn [progress]
+               (apply dissoc progress progress-keys))))))
+
+(defn- large-upload-request-entry
+  [repo db {:keys [tx-id tx-data] :as entry}]
+  (let [total (count tx-data)
+        progress-key (large-upload-progress-key repo tx-id)
+        progress-start (get @*repo->large-upload-progress progress-key 0)
+        start (if (< progress-start total) progress-start 0)
+        {:keys [chunk next-index]} (next-large-upload-request-chunk db tx-data start)
+        final? (>= next-index total)]
+    (log/info :db-sync/large-upload-request-chunk
+              {:repo repo
+               :tx-id tx-id
+               :start start
+               :end next-index
+               :total total
+               :final? final?})
+    (cond-> (assoc entry
+                   :tx-data chunk
+                   :large-upload-original-tx-id tx-id
+                   :large-upload-next-index next-index
+                   :large-upload-final? final?)
+      (not final?) (dissoc :tx-id))))
+
+(defn- cap-upload-request-tx-entries
+  [repo db tx-entries]
+  (loop [remaining tx-entries
+         result []
+         datom-count 0]
+    (if-let [{:keys [tx-data] :as entry} (first remaining)]
+      (let [entry-datom-count (count tx-data)
+            next-datom-count (+ datom-count entry-datom-count)]
+        (cond
+          (and (empty? result) (> entry-datom-count max-upload-request-datoms))
+          [(large-upload-request-entry repo db entry)]
+
+          (> next-datom-count max-upload-request-datoms)
+          result
+
+          :else
+          (recur (next remaining)
+                 (conj result entry)
+                 next-datom-count)))
+      result)))
+
+(defn- commit-large-upload-progress!
+  [repo tx-entries]
+  (doseq [{:keys [large-upload-original-tx-id
+                  large-upload-next-index
+                  large-upload-final?]} tx-entries]
+    (when large-upload-original-tx-id
+      (let [progress-key (large-upload-progress-key repo large-upload-original-tx-id)]
+        (if large-upload-final?
+          (swap! *repo->large-upload-progress dissoc progress-key)
+          (swap! *repo->large-upload-progress assoc progress-key large-upload-next-index))))))
+
+(defn- large-upload-progress
+  [tx-entries]
+  (->> tx-entries
+       (keep (fn [{:keys [large-upload-original-tx-id
+                          large-upload-next-index
+                          large-upload-final?]}]
+               (when large-upload-original-tx-id
+                 {:large-upload-original-tx-id large-upload-original-tx-id
+                  :large-upload-next-index large-upload-next-index
+                  :large-upload-final? large-upload-final?})))
+       vec))
 
 (defn pending-txs
   [repo & {:keys [limit]}]
@@ -452,6 +725,7 @@
 (defn mark-pending-txs-false!
   [repo tx-ids]
   (when (seq tx-ids)
+    (clear-large-upload-progress! repo tx-ids)
     (when-let [pending-to-remove (client-op/mark-pending-txs-false! repo tx-ids)]
       (when (pos? pending-to-remove)
         (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
@@ -461,6 +735,7 @@
 (defn mark-failed-txs!
   [repo tx-ids]
   (when (seq tx-ids)
+    (clear-large-upload-progress! repo tx-ids)
     (when-let [pending-to-remove (client-op/mark-failed-txs! repo tx-ids)]
       (when (pos? pending-to-remove)
         (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
@@ -634,7 +909,7 @@
         (when (and (ws-open? ws) (worker-state/online?) (not (upload-stopped? repo)))
           (let [batch (pending-txs repo {:limit 50})]
             (when (seq batch)
-              (let [{:keys [tx-entries drop-tx-ids drop-txs]} (prepare-upload-tx-entries conn batch)]
+              (let [{:keys [tx-entries drop-tx-ids drop-txs]} (prepare-upload-tx-entries repo conn batch)]
                 (when (seq drop-tx-ids)
                   (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids
                                                   :drops drop-txs})
@@ -662,13 +937,23 @@
                                               outliner-op
                                               (assoc :outliner-op outliner-op)))
                                           tx-entries*)
-                            tx-ids (mapv :tx-id tx-entries)]
+                            tx-ids (into [] (keep :tx-id) tx-entries)]
                       (when (seq tx-entries)
                         (reset! (:inflight client) tx-ids)
-                        (send! ws {:type "tx/batch"
-                                   :client-revision (build-version/revision)
-                                   :t-before local-tx
-                                   :txs payload})))
+                        (p/do!
+                         (send! ws {:type "tx/batch"
+                                    :client-revision (build-version/revision)
+                                    :t-before local-tx
+                                    :txs payload})
+                         (start-upload-response-timeout!
+                          client
+                          {:tx-ids tx-ids
+                           :outliner-ops (->> tx-entries
+                                              (keep :outliner-op)
+                                              distinct
+                                              vec)
+                           :large-upload-progress (large-upload-progress tx-entries*)
+                           :t-before local-tx}))))
                     (p/catch (fn [error]
                                (sync-util/set-last-sync-error! client error)
                                (log/error :db-sync/flush-pending-failed
@@ -884,30 +1169,37 @@
 
 (defn- transact-remote-txs!
   [conn remote-txs & {:keys [db-before-local-reversal]}]
-  (loop [remaining remote-txs
-         results []]
-    (let [db @conn]
-      (if-let [remote-tx (first remaining)]
-        (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
-              tx-data (some->> (:tx-data remote-tx)
-                               (map (partial resolve-temp-id db))
-                               (tx-sanitize/sanitize-tx db)
-                               drop-stale-adds-after-remote-entity-delete
-                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                               (drop-missing-block-ref-ops db))
-              tx-data (cond->> tx-data
-                        db-before-local-reversal
-                        (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-              tx-data (seq tx-data)
-              tx-meta (apply-tx-meta remote-tx)
-              report (ldb/transact! conn tx-data tx-meta)
-              results' (cond-> results
-                         tx-data
-                         (conj {:tx-data tx-data
-                                :report report}))]
-          (recur (next remaining)
-                 results'))
-        results))))
+  (let [deleted-block-uuid-suffixes (remote-txs-retract-entity-block-uuid-suffixes remote-txs)]
+    (loop [remaining remote-txs
+           deleted-block-uuid-suffixes deleted-block-uuid-suffixes
+           results []]
+      (let [db @conn]
+        (if-let [remote-tx (first remaining)]
+          (let [deleted-block-uuids (first deleted-block-uuid-suffixes)
+                tx-data (some->> (:tx-data remote-tx)
+                                 (map (partial resolve-temp-id db))
+                                 (tx-sanitize/sanitize-tx db)
+                                 drop-stale-adds-after-remote-entity-delete)
+                tx-data (cond->> tx-data
+                          (seq deleted-block-uuids)
+                          (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
+
+                          (tx-data-has-block-uuid-ref? tx-data)
+                          (drop-missing-block-ref-ops db))
+                tx-data (cond->> tx-data
+                          db-before-local-reversal
+                          (drop-local-reversal-stale-target-ops db-before-local-reversal db))
+                tx-data (seq tx-data)
+                tx-meta (apply-tx-meta remote-tx)
+                report (ldb/transact! conn tx-data tx-meta)
+                results' (cond-> results
+                           tx-data
+                           (conj {:tx-data tx-data
+                                  :report report}))]
+            (recur (next remaining)
+                   (next deleted-block-uuid-suffixes)
+                   results'))
+          results)))))
 
 (defn reverse-local-txs!
   [conn local-txs]

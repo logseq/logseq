@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker-handler-sync-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require ["better-sqlite3" :as sqlite3]
+            [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
@@ -9,9 +11,1036 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
+
+(def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
+
+(defn- select-sql?
+  [sql]
+  (string/starts-with? (-> sql string/trim string/lower-case) "select"))
+
+(defn- run-sql
+  [^js stmt args]
+  (.apply (.-run stmt) stmt (to-array args)))
+
+(defn- all-sql
+  [^js stmt args]
+  (.apply (.-all stmt) stmt (to-array args)))
+
+(defn- with-memory-sql
+  [f]
+  (let [db (new sqlite ":memory:" nil)
+        sql #js {:_db db
+                 :exec (fn [sql-str & args]
+                         (let [stmt (.prepare db sql-str)]
+                           (if (select-sql? sql-str)
+                             (all-sql stmt args)
+                             (do
+                               (run-sql stmt args)
+                               nil))))
+                 :close (fn []
+                          (.close db))}]
+    (try
+      (f sql)
+      (finally
+        (.close sql)))))
+
+(defn- with-memory-sql-async [f]
+  (let [db (new sqlite ":memory:" nil)
+        sql #js {:_db db
+                 :exec (fn [sql-str & args]
+                         (let [stmt (.prepare db sql-str)]
+                           (if (select-sql? sql-str)
+                             (all-sql stmt args)
+                             (do (run-sql stmt args) nil))))
+                 :close (fn [] (.close db))}]
+    (-> (f sql)
+        (p/finally #(.close sql)))))
+
+(defn- semantic-json-request [path method body]
+  (js/Request. (str "http://localhost" path)
+               (clj->js (cond-> {:method method
+                                 :headers {"content-type" "application/json"}}
+                          body (assoc :body (js/JSON.stringify (clj->js body)))))))
+
+(defn- json-body [response]
+  (p/let [text (.text response)]
+    (js->clj (js/JSON.parse text) :keywordize-keys true)))
+
+(deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   calls (atom [])
+                   broadcasts (atom [])
+                   page-id (random-uuid)
+                   request (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Inbox"})]
+               (-> (p/with-redefs [outliner-page/create! (fn [conn title opts]
+                                                           (swap! calls conj [conn title opts])
+                                                           [title page-id])
+                                   ws/broadcast! (fn [_ sender message]
+                                                   (swap! broadcasts conj [sender message]))]
+                     (p/let [response (sync-handler/handle-http self request)
+                             body (json-body response)]
+                       (is (= 201 (.-status response)))
+                       (is (= "Inbox" (:title body)))
+                       (is (= (str page-id) (:uuid body)))
+                       (is (= 1 (count @calls)))
+                       (is (= "Inbox" (second (first @calls))))
+                       (is (= 1 (count @broadcasts)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-delete-page-delegates-to-outliner-and-broadcasts-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
+                                                  {:block/uuid page-id :block/name "inbox" :block/title "Inbox"
+                                                   :block/tags :logseq.class/Page}])
+                   calls (atom [])
+                   broadcasts (atom [])
+                   request (semantic-json-request (str "/semantic/pages/" page-id "?graph-id=graph-1") "DELETE" nil)]
+               (-> (p/with-redefs [outliner-page/delete! (fn [conn id]
+                                                           (swap! calls conj [conn id]))
+                                   ws/broadcast! (fn [_ sender message]
+                                                   (swap! broadcasts conj [sender message]))]
+                     (p/let [response (sync-handler/handle-http self request)]
+                       (is (= 204 (.-status response)))
+                       (is (= [[(.-conn self) page-id]] @calls))
+                       (is (= 1 (count @broadcasts)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-block-write-routes-delegate-to-outliner-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   reference-id (random-uuid)
+                   created-reference-id (random-uuid)
+                   _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
+                                                  {:block/uuid page-id :block/name "page" :block/title "Page"
+                                                   :block/tags :logseq.class/Page}
+                                                  {:block/uuid reference-id :block/name "reference" :block/title "Reference"
+                                                   :block/tags :logseq.class/Page}
+                                                  {:block/uuid block-id :block/title "Existing"
+                                                   :block/page [:block/uuid page-id]
+                                                   :block/parent [:block/uuid page-id]
+                                                   :block/order "a0"}])
+                   calls (atom [])
+                   requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
+                                                    {:position "append"
+                                                     :blocks [{:title (str "New block links to [[Reference]], [[New Reference]], and [["
+                                                                           block-id "]]")
+                                                               :children [{:title "Nested block links to [[Reference]]"}]}]})
+                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
+                                                    {:title "Edited block links to [[Reference]]"})
+                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
+               (-> (p/with-redefs [outliner-core/insert-blocks! (fn [_ blocks target opts]
+                                                                  (swap! calls conj [:insert blocks target opts])
+                                                                  {:tx-data []})
+                                   outliner-core/save-block! (fn [_ block & opts]
+                                                               (swap! calls conj [:save block opts])
+                                                               {:tx-data []})
+                                   outliner-core/delete-blocks! (fn [_ blocks opts]
+                                                                 (swap! calls conj [:delete blocks opts])
+                                                                 {:tx-data []})
+                                   outliner-page/create! (fn [conn title _]
+                                                           (d/transact! conn [{:block/uuid created-reference-id
+                                                                              :block/name "new reference"
+                                                                              :block/title title
+                                                                              :block/tags :logseq.class/Page}])
+                                                           [title created-reference-id])
+                                   ws/broadcast! (fn [& _] nil)]
+                     (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                              insert-body (json-body (first responses))]
+                       (is (= [201 200 204] (mapv #(.-status %) responses)))
+                       (is (uuid? (some-> (get-in insert-body [:blocks 0 :children 0 :uuid]) uuid)))
+                       (let [[[_ inserted-blocks _ _] [_ nested-blocks _ _]] (filter #(= :insert (first %)) @calls)
+                             [_ saved-block _] (first (filter #(= :save (first %)) @calls))
+                             expected-refs #{reference-id created-reference-id block-id}]
+                         (is (= (str "New block links to [[" reference-id "]], [[" created-reference-id
+                                     "]], and [[" block-id "]]")
+                                (:block/title (first inserted-blocks))))
+                         (is (= (set (map #(vector :block/uuid %) expected-refs))
+                                (set (:block/refs (first inserted-blocks)))))
+                         (is (= (str "Nested block links to [[" reference-id "]]")
+                                (:block/title (first nested-blocks))))
+                         (is (= #{[:block/uuid reference-id]} (set (:block/refs (first nested-blocks)))))
+                         (is (= (str "Edited block links to [[" reference-id "]]")
+                                (:block/title saved-block)))
+                         (is (= #{[:block/uuid reference-id]} (set (:block/refs saved-block)))))
+                       (is (= #{:insert :save :delete} (set (map first @calls))))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-read-routes-return-pages-page-tree-and-search-results-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   child-id (random-uuid)
+                   hidden-id (random-uuid)
+                   second-root-id (random-uuid)
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:block/uuid page-id
+                                         :block/name "inbox"
+                                         :block/title "Inbox"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid block-id
+                                         :block/title "Review roadmap"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "a0"}
+                                        {:block/uuid child-id
+                                         :block/title "Child block"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid block-id]
+                                         :block/order "a0"}
+                                        {:block/uuid hidden-id
+                                         :block/title "Hidden roadmap"
+                                         :logseq.property/hide? true
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "00"}
+                                        {:block/uuid second-root-id
+                                         :block/title "Second root"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "a1"}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" page-id "/blocks?graph-id=graph-1&limit=1") "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=blocks" "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap" "GET" nil)
+                             (semantic-json-request "/semantic/search?graph-id=graph-1&q=roadmap&types=" "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            bodies (p/all (map json-body responses))]
+                     (is (= [200 200 200 200 200] (mapv #(.-status %) responses)) (pr-str bodies))
+                     (is (= "Inbox" (get-in bodies [0 :blocks 0 :title])))
+                     (is (= "Review roadmap" (get-in bodies [1 :blocks 0 :title])))
+                     (is (= "Child block" (get-in bodies [1 :blocks 0 :children 0 :title])))
+                     (is (string? (get-in bodies [1 :next-cursor])))
+                     (doseq [index [2 3 4]]
+                       (is (= (str block-id) (get-in bodies [index :results 0 :uuid])))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-move-blocks-moves-all-addressed-blocks-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   block-ids [(random-uuid) (random-uuid)]
+                   target-id (random-uuid)
+                   _ (d/transact! conn
+                                  (into [{:db/ident :logseq.class/Page}
+                                         {:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id
+                                            :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)})
+                                         (conj block-ids target-id))))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   calls (atom [])
+                   valid-request (semantic-json-request "/semantic/block-moves?graph-id=graph-1" "POST"
+                                                        {:block-ids (mapv str block-ids)
+                                                         :target-id (str target-id)
+                                                         :position "last-child"})
+                   missing-request (semantic-json-request "/semantic/block-moves?graph-id=graph-1" "POST"
+                                                          {:block-ids [(str (random-uuid))]
+                                                           :target-id (str target-id)
+                                                           :position "last-child"})]
+               (-> (p/with-redefs [outliner-core/move-blocks! (fn [_ blocks target opts]
+                                                                (swap! calls conj [blocks target opts]))
+                                   ws/broadcast! (fn [& _] nil)]
+                     (p/let [valid-response (sync-handler/handle-http self valid-request)
+                              valid-body (json-body valid-response)
+                              missing-response (sync-handler/handle-http self missing-request)]
+                       (is (= 200 (.-status valid-response)))
+                       (is (= (mapv str block-ids) (:uuids valid-body)))
+                       (is (= 400 (.-status missing-response)))
+                       (is (= 1 (count @calls)))
+                       (let [[blocks target opts] (first @calls)]
+                         (is (= block-ids (mapv :block/uuid blocks)))
+                         (is (= target-id (:block/uuid target)))
+                         (is (= {:sibling? false :bottom? true} opts)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-routes-use-cursor-pagination-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   pages (mapv (fn [title]
+                                 {:block/uuid (random-uuid)
+                                  :block/name (string/lower-case title)
+                                  :block/title title
+                                  :block/tags :logseq.class/Page})
+                               ["Alpha" "中文页面" "日本語ページ"])
+                   _ (d/transact! conn (into [{:db/ident :logseq.class/Page}] pages))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   first-request (semantic-json-request "/semantic/pages?graph-id=graph-1&limit=2" "GET" nil)]
+               (-> (p/let [first-response (sync-handler/handle-http self first-request)
+                            first-body (json-body first-response)
+                            cursor (:next-cursor first-body)
+                            second-response (sync-handler/handle-http
+                                             self
+                                             (semantic-json-request
+                                              (str "/semantic/pages?graph-id=graph-1&limit=2&cursor="
+                                                   (js/encodeURIComponent cursor))
+                                              "GET" nil))
+                            second-body (json-body second-response)]
+                     (is (= 2 (count (:blocks first-body))))
+                     (is (string? cursor))
+                     (is (= 1 (count (:blocks second-body))))
+                     (is (= #{"Alpha" "中文页面" "日本語ページ"}
+                            (set (map :title (concat (:blocks first-body) (:blocks second-body))))))
+                     (is (nil? (:next-cursor second-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-list-routes-filter-by-created-and-updated-time-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   old-page-id (random-uuid)
+                   new-page-id (random-uuid)
+                   target-tag-id (random-uuid)
+                   old-tag-id (random-uuid)
+                   new-tag-id (random-uuid)
+                   old-property-id (random-uuid)
+                   new-property-id (random-uuid)
+                   old-object-id (random-uuid)
+                   new-object-id (random-uuid)
+                   old-task-id (random-uuid)
+                   new-task-id (random-uuid)
+                   _ (d/transact!
+                      conn
+                      [{:block/uuid old-page-id :block/name "old timed page" :block/title "Old timed page"
+                        :block/tags :logseq.class/Page :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-page-id :block/name "new timed page" :block/title "New timed page"
+                        :block/tags :logseq.class/Page :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.class/TimeTarget :block/uuid target-tag-id
+                        :block/name "time target" :block/title "Time target"
+                        :block/tags :logseq.class/Tag :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.class/OldTimed :block/uuid old-tag-id
+                        :block/name "old timed tag" :block/title "Old timed tag"
+                        :block/tags :logseq.class/Tag :block/created-at 1000 :block/updated-at 1000}
+                       {:db/ident :user.class/NewTimed :block/uuid new-tag-id
+                        :block/name "new timed tag" :block/title "New timed tag"
+                        :block/tags :logseq.class/Tag :block/created-at 3000 :block/updated-at 3000}
+                       {:db/ident :user.property/old-timed :block/uuid old-property-id
+                        :block/name "old timed property" :block/title "Old timed property"
+                        :block/tags :logseq.class/Property :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one :block/created-at 1000 :block/updated-at 1000}
+                       {:db/ident :user.property/new-timed :block/uuid new-property-id
+                        :block/name "new timed property" :block/title "New timed property"
+                        :block/tags :logseq.class/Property :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one :block/created-at 3000 :block/updated-at 3000}
+                       {:block/uuid old-object-id :block/title "Old timed object"
+                        :block/page [:block/uuid old-page-id] :block/parent [:block/uuid old-page-id]
+                        :block/order "a0" :block/tags :user.class/TimeTarget
+                        :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-object-id :block/title "New timed object"
+                        :block/page [:block/uuid new-page-id] :block/parent [:block/uuid new-page-id]
+                        :block/order "a0" :block/tags :user.class/TimeTarget
+                        :block/created-at 3000 :block/updated-at 3000}
+                       {:block/uuid old-task-id :block/title "Old timed task"
+                        :block/page [:block/uuid old-page-id] :block/parent [:block/uuid old-page-id]
+                        :block/order "a1" :block/tags :logseq.class/Task
+                        :logseq.property/status :logseq.property/status.todo
+                        :block/created-at 1000 :block/updated-at 1000}
+                       {:block/uuid new-task-id :block/title "New timed task"
+                        :block/page [:block/uuid new-page-id] :block/parent [:block/uuid new-page-id]
+                        :block/order "a1" :block/tags :logseq.class/Task
+                        :logseq.property/status :logseq.property/status.todo
+                        :block/created-at 3000 :block/updated-at 3000}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   paths [(str "/semantic/pages?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/tasks?graph-id=graph-1&updated-after=2000")
+                          (str "/semantic/tags?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/tags/" target-tag-id "/objects?graph-id=graph-1&updated-after=2000")
+                          (str "/semantic/properties?graph-id=graph-1&created-after=2000")
+                          (str "/semantic/search?graph-id=graph-1&q=timed&types=blocks&updated-after=2000")]
+                   keys [:blocks :tasks :tags :objects :properties :results]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http
+                                                   self (semantic-json-request % "GET" nil)) paths))
+                            bodies (p/all (map json-body responses))
+                            invalid-response (sync-handler/handle-http
+                                              self (semantic-json-request
+                                                    "/semantic/pages?graph-id=graph-1&created-after=week"
+                                                    "GET" nil))]
+                     (is (= [200 200 200 200 200 200] (mapv #(.-status %) responses)))
+                     (doseq [[body response-key] (map vector bodies keys)]
+                       (let [titles (set (map :title (get body response-key)))]
+                         (is (some #(string/starts-with? % "New timed") titles)
+                             (str response-key " " titles))
+                         (is (not-any? #(string/starts-with? % "Old timed") titles)
+                             (str response-key " " titles))))
+                     (is (= 400 (.-status invalid-response))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-route-rejects-invalid-cursor-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   request (semantic-json-request "/semantic/pages?graph-id=graph-1&cursor=not-a-cursor" "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-reverse-reference-routes-use-indexed-pagination-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   tag-id (random-uuid)
+                   hidden-id (random-uuid)
+                   block-ids [(random-uuid) (random-uuid)]
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:db/ident :logseq.class/Tag}
+                                        {:block/uuid page-id :block/name "target" :block/title "Target"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid tag-id :block/name "project" :block/title "Project"
+                                         :block/tags :logseq.class/Tag}
+                                        {:block/uuid hidden-id :block/title "Hidden"
+                                         :logseq.property/hide? true
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}
+                                        {:block/uuid (first block-ids) :block/title "Alpha"
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}
+                                        {:block/uuid (second block-ids) :block/title "Beta"
+                                         :block/tags [:block/uuid tag-id]
+                                         :block/refs [:block/uuid page-id]}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request
+                              (str "/semantic/tags/" tag-id "/objects?graph-id=graph-1&limit=1") "GET" nil)
+                             (semantic-json-request
+                              (str "/semantic/pages/" page-id "/references?graph-id=graph-1&limit=1") "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            bodies (p/all (map json-body responses))]
+                     (is (= [200 200] (mapv #(.-status %) responses)))
+                     (is (= ["Alpha"] (mapv :title (:objects (first bodies)))))
+                     (is (= ["Alpha"] (mapv :title (:references (second bodies)))))
+                     (is (every? string? (map :next-cursor bodies))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-collection-route-rejects-invalid-cursor-element-types-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   cursor (js/btoa (js/JSON.stringify #js ["a" #js {}]))
+                   request (semantic-json-request
+                            (str "/semantic/pages?graph-id=graph-1&cursor=" (js/encodeURIComponent cursor))
+                            "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid cursor" (:error body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-page-routes-exclude-tags-and-properties-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   tag-id (random-uuid)
+                   property-id (random-uuid)
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:db/ident :logseq.class/Tag}
+                                        {:db/ident :logseq.class/Property}
+                                        {:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid tag-id :block/name "tag" :block/title "Tag"
+                                         :block/tags :logseq.class/Tag}
+                                        {:block/uuid property-id :block/name "property" :block/title "Property"
+                                         :block/tags :logseq.class/Property}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   requests [(semantic-json-request "/semantic/pages?graph-id=graph-1" "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" tag-id "?graph-id=graph-1") "GET" nil)
+                             (semantic-json-request (str "/semantic/pages/" property-id "?graph-id=graph-1") "GET" nil)]]
+               (-> (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
+                            list-body (json-body (first responses))]
+                     (is (= [200 404 404] (mapv #(.-status %) responses)))
+                     (is (= ["Page"] (mapv :title (:blocks list-body)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-set-block-property-resolves-class-values-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-ids (repeatedly 4 random-uuid)
+                   task (d/entity @conn :logseq.class/Task)
+                   tags-property (d/entity @conn :block/tags)
+                   _ (d/transact! conn
+                                  (into [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page
+                                          :block/created-at 1 :block/updated-at 1}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)
+                                            :block/created-at 1 :block/updated-at 1})
+                                         block-ids)))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   property-id (:block/uuid tags-property)
+                   values [(str (:block/uuid task)) "logseq.class/Task" "Task" [(str (:block/uuid task))]]
+                   request-for (fn [block-id value]
+                                 (semantic-json-request
+                                  (str "/semantic/blocks/" block-id "/properties/" property-id
+                                       "?graph-id=graph-1")
+                                  "PUT" {:value value}))]
+               (-> (p/let [response-1 (sync-handler/handle-http self (request-for (nth block-ids 0) (nth values 0)))
+                            response-2 (sync-handler/handle-http self (request-for (nth block-ids 1) (nth values 1)))
+                            response-3 (sync-handler/handle-http self (request-for (nth block-ids 2) (nth values 2)))
+                            response-4 (sync-handler/handle-http self (request-for (nth block-ids 3) (nth values 3)))
+                            invalid-response (sync-handler/handle-http
+                                              self (request-for (first block-ids) "Missing Class"))
+                            invalid-body (json-body invalid-response)]
+                     (is (= [200 200 200 200]
+                            (mapv #(.-status %) [response-1 response-2 response-3 response-4])))
+                     (doseq [block-id block-ids]
+                       (is (= #{:logseq.class/Task}
+                              (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid block-id])))))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= "property value must resolve to an existing class by UUID, ident, or title"
+                            (:error invalid-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-batch-set-many-property-can-append-or-reset-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   project-id (random-uuid)
+                   task (d/entity @conn :logseq.class/Task)
+                   tags-property (d/entity @conn :block/tags)
+                   _ (d/transact! conn
+                                  [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                    :block/tags :logseq.class/Page
+                                    :block/created-at 1 :block/updated-at 1}
+                                   {:db/ident :user.class/Project
+                                    :block/uuid project-id :block/name "project" :block/title "Project"
+                                    :block/tags :logseq.class/Tag}
+                                   {:block/uuid block-id :block/title "Block"
+                                    :block/page [:block/uuid page-id]
+                                    :block/parent [:block/uuid page-id]
+                                    :block/order "a0" :block/tags :user.class/Project
+                                    :block/created-at 1 :block/updated-at 1}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request-for (fn [body]
+                                 (semantic-json-request
+                                  "/semantic/block-properties/batch-set?graph-id=graph-1"
+                                  "POST" body))
+                   entry {:block-id (str block-id)
+                          :property-id (str (:block/uuid tags-property))
+                          :value [(str (:block/uuid task))]}]
+               (-> (p/let [append-response (sync-handler/handle-http
+                                            self (request-for {:entries [entry]}))
+                            _ (is (= 200 (.-status append-response)))
+                            _ (is (= #{:user.class/Project :logseq.class/Task}
+                                     (set (map :db/ident
+                                               (:block/tags (d/entity @conn [:block/uuid block-id]))))))
+                            reset-response (sync-handler/handle-http
+                                            self (request-for {:entries [entry]
+                                                               :isResetExistingValues true}))]
+                     (is (= 200 (.-status reset-response)))
+                     (is (= #{:logseq.class/Task}
+                            (set (map :db/ident
+                                      (:block/tags (d/entity @conn [:block/uuid block-id])))))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-status-property-accepts-built-in-aliases-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-ids (repeatedly 3 random-uuid)
+                   status-property (d/entity @conn :logseq.property/status)
+                   _ (d/transact! conn
+                                  (into [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                          :block/tags :logseq.class/Page
+                                          :block/created-at 1 :block/updated-at 1}]
+                                        (map-indexed
+                                         (fn [index block-id]
+                                           {:block/uuid block-id :block/title (str "Block " index)
+                                            :block/page [:block/uuid page-id]
+                                            :block/parent [:block/uuid page-id]
+                                            :block/order (str "a" index)
+                                            :block/created-at 1 :block/updated-at 1})
+                                         block-ids)))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   property-id (:block/uuid status-property)
+                   single-request (semantic-json-request
+                                   (str "/semantic/blocks/" (first block-ids) "/properties/"
+                                        property-id "?graph-id=graph-1")
+                                   "PUT" {:value "TODO"})
+                   batch-request (semantic-json-request
+                                  "/semantic/block-properties/batch-set?graph-id=graph-1"
+                                  "POST" {:entries [{:block-id (str (second block-ids))
+                                                     :property-id (str property-id)
+                                                     :value "DONE"}]})
+                   priority-request (semantic-json-request
+                                     (str "/semantic/blocks/" (nth block-ids 2)
+                                          "/properties/Priority?graph-id=graph-1")
+                                     "PUT" {:value "urgent"})
+                   invalid-property-request (semantic-json-request
+                                             (str "/semantic/blocks/" (nth block-ids 2)
+                                                  "/properties/Missing%20Property?graph-id=graph-1")
+                                             "PUT" {:value "urgent"})]
+               (-> (p/let [single-response (sync-handler/handle-http self single-request)
+                            batch-response (sync-handler/handle-http self batch-request)
+                            priority-response (sync-handler/handle-http self priority-request)
+                            invalid-property-response (sync-handler/handle-http self invalid-property-request)
+                            invalid-property-body (json-body invalid-property-response)]
+                     (is (= [200 200 200]
+                            (mapv #(.-status %) [single-response batch-response priority-response])))
+                     (is (= [:logseq.property/status.todo :logseq.property/status.done]
+                            (mapv #(-> (d/entity @conn [:block/uuid %])
+                                       :logseq.property/status :db/ident)
+                                  (take 2 block-ids))))
+                     (is (= :logseq.property/priority.urgent
+                            (-> (d/entity @conn [:block/uuid (nth block-ids 2)])
+                                :logseq.property/priority :db/ident)))
+                     (is (= 400 (.-status invalid-property-response)))
+                     (is (= "property not found" (:error invalid-property-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-property-routes-accept-ident-and-title-selectors-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   property (outliner-property/upsert-property!
+                             conn nil {:logseq.property/type :default
+                                       :db/cardinality :db.cardinality/one}
+                             {:property-name "API estimate"})
+                   property-ident (:db/ident property)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   get-request (fn [selector]
+                                 (semantic-json-request
+                                  (str "/semantic/properties/"
+                                       (js/encodeURIComponent selector)
+                                       "?graph-id=graph-1") "GET" nil))]
+               (-> (p/let [ident-selector (str (namespace property-ident) "/" (name property-ident))
+                            ident-response (sync-handler/handle-http self (get-request ident-selector))
+                            ident-body (json-body ident-response)
+                            title-response (sync-handler/handle-http self (get-request "API estimate"))
+                            title-body (json-body title-response)]
+                     (is (= 200 (.-status ident-response)))
+                     (is (= ident-selector (:ident ident-body)))
+                     (is (= 200 (.-status title-response)))
+                     (is (= (:uuid ident-body) (:uuid title-body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-property-routes-reject-invalid-schema-and-built-in-delete-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   status-id (:block/uuid (d/entity @conn :logseq.property/status))
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   invalid-create (semantic-json-request
+                                   "/semantic/properties?graph-id=graph-1" "POST"
+                                   {:title "Broken" :type "not-a-property-type"})
+                   invalid-update (semantic-json-request
+                                   (str "/semantic/properties/" status-id "?graph-id=graph-1") "PATCH"
+                                   {:cardinality "not-a-cardinality"})
+                   delete-built-in (semantic-json-request
+                                    (str "/semantic/properties/" status-id "?graph-id=graph-1") "DELETE" nil)]
+               (-> (p/let [create-response (sync-handler/handle-http self invalid-create)
+                            update-response (sync-handler/handle-http self invalid-update)
+                            delete-response (sync-handler/handle-http self delete-built-in)]
+                     (is (= 400 (.-status create-response)))
+                     (is (= 400 (.-status update-response)))
+                     (is (= 400 (.-status delete-response)))
+                     (is (some? (d/entity @conn :logseq.property/status))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-task-routes-create-and-list-db-tasks-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   todo-id (random-uuid)
+                   second-todo-id (random-uuid)
+                   done-id (random-uuid)
+                   hidden-id (random-uuid)
+                   custom-status-id (random-uuid)
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid todo-id :block/title "Alpha todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid second-todo-id :block/title "Beta todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid done-id :block/title "Completed"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.done
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid hidden-id :block/title "Hidden todo"
+                                         :block/tags :logseq.class/Task
+                                         :logseq.property/status :logseq.property/status.todo
+                                         :logseq.property/hide? true
+                                         :block/created-at 1 :block/updated-at 1}])
+                   _ (outliner-property/upsert-closed-value!
+                      conn :logseq.property/status {:id custom-status-id :value "Blocked"})
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   list-request (semantic-json-request
+                                 "/semantic/tasks?graph-id=graph-1&status=todo&limit=1" "GET" nil)
+                   create-request (semantic-json-request
+                                   "/semantic/tasks?graph-id=graph-1" "POST"
+                                   {:title "Ship task API" :page-id (str page-id)
+                                    :status (str custom-status-id) :priority "high"})
+                   invalid-request (semantic-json-request
+                                    "/semantic/tasks?graph-id=graph-1" "POST"
+                                    {:title "Invalid task" :page-id (str page-id)
+                                     :status "not-a-status"})
+                   status-property-id (:block/uuid (d/entity @conn :logseq.property/status))
+                   property-request (semantic-json-request
+                                     (str "/semantic/properties/" status-property-id "?graph-id=graph-1")
+                                     "GET" nil)]
+               (-> (p/let [list-response (sync-handler/handle-http self list-request)
+                            list-body (json-body list-response)
+                            create-response (sync-handler/handle-http self create-request)
+                            create-body (json-body create-response)
+                            invalid-response (sync-handler/handle-http self invalid-request)
+                            invalid-body (json-body invalid-response)
+                            property-response (sync-handler/handle-http self property-request)
+                            property-body (json-body property-response)]
+                     (is (= 200 (.-status list-response)))
+                     (is (= ["Alpha todo"] (mapv :title (:tasks list-body))))
+                     (is (= ["logseq.property/status.todo"]
+                            (mapv #(get-in % [:status :ident]) (:tasks list-body))))
+                     (is (string? (:next-cursor list-body)))
+                     (is (= 201 (.-status create-response)))
+                     (is (= "Ship task API" (:title create-body)))
+                     (is (= (str custom-status-id) (get-in create-body [:status :uuid])))
+                     (is (= "logseq.property/priority.high" (get-in create-body [:priority :ident])))
+                     (let [created (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
+                       (is (= #{:logseq.class/Task} (set (map :db/ident (:block/tags created)))))
+                       (is (= custom-status-id
+                              (:block/uuid (:logseq.property/status created))))
+                       (is (= :logseq.property/priority.high
+                              (:db/ident (:logseq.property/priority created)))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= "invalid task status" (:error invalid-body)))
+                     (is (= 200 (.-status property-response)))
+                     (is (contains? (set (map :uuid (:choices property-body)))
+                                    (str custom-status-id))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-create-task-uses-one-transaction-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   tx-reports (atom [])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/tasks?graph-id=graph-1" "POST"
+                            {:title "Atomic task" :status "TODO" :priority "HIGH"
+                             :scheduled 20260713 :deadline 20260714})]
+               (d/listen! conn ::semantic-create-task-tx
+                          #(swap! tx-reports conj %))
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (d/unlisten! conn ::semantic-create-task-tx)
+                     (is (= 201 (.-status response)))
+                     (is (= 1 (count @tx-reports)))
+                     (is (= 1 (count (d/datoms @conn :avet :block/journal-day))))
+                     (is (= "logseq.property/status.todo" (get-in body [:status :ident])))
+                     (is (= "logseq.property/priority.high" (get-in body [:priority :ident])))
+                     (is (= 20260713 (:scheduled body)))
+                     (is (= 20260714 (:deadline body))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (d/unlisten! conn ::semantic-create-task-tx)
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-invalid-task-does-not-create-today-journal-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/tasks?graph-id=graph-1" "POST"
+                            {:title "Invalid task" :status "not-a-status"})]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)]
+                     (is (= 400 (.-status response)))
+                     (is (= "invalid task status" (:error body)))
+                     (is (empty? (d/datoms @conn :avet :block/journal-day))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-asset-get-returns-valid-temporary-link-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   asset-id (random-uuid)
+                   env #js {"ASSET_LINK_SECRET" "test-asset-link-secret"}
+                   _ (d/transact! conn [{:block/uuid asset-id
+                                         :block/title "diagram.png"
+                                         :logseq.property.asset/type "png"
+                                         :logseq.property.asset/size 42}])
+                   self #js {:sql sql :conn conn :schema-ready true :env env}
+                   request (semantic-json-request
+                            (str "/semantic/assets/" asset-id "?graph-id=graph-1") "GET" nil)]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            body (json-body response)
+                            link-request (js/Request. (:url body))
+                            valid? (asset-link/<valid-request? link-request env)]
+                     (is (= 200 (.-status response)))
+                     (is (= (str asset-id) (:uuid body)))
+                     (is (true? valid?)))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-asset-list-and-upload-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   old-asset-id (random-uuid)
+                   puts (atom [])
+                   deletes (atom [])
+                   bucket #js {:put (fn [key payload options]
+                                      (swap! puts conj [key payload options])
+                                      (p/resolved #js {}))
+                              :delete (fn [key]
+                                        (swap! deletes conj key)
+                                        (p/resolved nil))}
+                   env #js {"LOGSEQ_SYNC_ASSETS" bucket}
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page
+                                         :block/created-at 1 :block/updated-at 1}
+                                        {:block/uuid old-asset-id :block/title "Old asset"
+                                         :logseq.property.asset/type "png"
+                                         :logseq.property.asset/size 1
+                                         :logseq.property.asset/checksum "old"
+                                         :block/tags :logseq.class/Asset
+                                         :block/created-at 1000 :block/updated-at 1000}])
+                   self #js {:sql sql :conn conn :schema-ready true :env env}
+                   checksum (apply str (repeat 64 "a"))
+                   upload-request (fn [filename title size file-checksum]
+                                    (js/Request.
+                                     (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                          "&file-name=" (js/encodeURIComponent filename)
+                                          "&title=" (js/encodeURIComponent title)
+                                          "&page-id=" page-id
+                                          "&size=" size
+                                          "&checksum=" file-checksum)
+                                     #js {:method "POST"
+                                          :headers #js {"content-type" "application/octet-stream"}
+                                          :body (js/Blob. #js [(js/Uint8Array. #js [1 2 3 4])])}))]
+               (-> (p/let [create-response (sync-handler/handle-http
+                                            self (upload-request "photo.png" "Photo" 4 checksum))
+                            create-body (json-body create-response)
+                            list-response (sync-handler/handle-http
+                                           self (semantic-json-request
+                                                 "/semantic/assets?graph-id=graph-1&created-after=2000"
+                                                 "GET" nil))
+                            list-body (json-body list-response)
+                            duplicate-response (sync-handler/handle-http
+                                                self (upload-request "copy.png" "Copy" 4 checksum))
+                            failed-response (p/with-redefs
+                                              [outliner-core/insert-blocks!
+                                               (fn [& _] (throw (js/Error. "insert failed")))]
+                                              (sync-handler/handle-http
+                                               self (upload-request "broken.pdf" "Broken" 4
+                                                                    (apply str (repeat 64 "b")))))
+                            oversized-response (sync-handler/handle-http
+                                                self (upload-request "huge.zip" "Huge" 104857601
+                                                                     (apply str (repeat 64 "c"))))]
+                     (is (= 201 (.-status create-response)))
+                     (is (= "Photo" (:title create-body)))
+                     (is (= "png" (:type create-body)))
+                     (is (= 4 (:size create-body)))
+                     (is (= 64 (count (:checksum create-body))))
+                     (is (= 2 (count @puts)))
+                     (when-let [[key payload options] (first @puts)]
+                       (is (= (str "graph-1/" (:uuid create-body) ".png") key))
+                       (is (fn? (.-getReader payload)))
+                       (is (= "application/octet-stream" (aget (aget options "httpMetadata") "contentType")))
+                       (is (= (:checksum create-body) (aget (aget options "customMetadata") "checksum"))))
+                     (when (string? (:uuid create-body))
+                       (let [asset (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
+                         (is (= page-id (:block/uuid (:block/page asset))))
+                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))
+                         (is (= {:checksum checksum :type "png"}
+                                (:logseq.property.asset/remote-metadata asset)))))
+                     (is (= 200 (.-status list-response)))
+                     (is (= [(:uuid create-body)] (mapv :uuid (:assets list-body))))
+                     (is (= 409 (.-status duplicate-response)))
+                     (is (= 500 (.-status failed-response)))
+                     (is (= 1 (count @deletes)))
+                     (is (some-> (first @deletes) (string/ends-with? ".pdf") true?))
+                     (is (= 413 (.-status oversized-response)))
+                     (is (= 2 (count @puts))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-base64-asset-upload-decodes-before-r2-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   uploaded (atom [])
+                   bucket #js {:put (fn [_key payload _options]
+                                      (p/let [buffer (.arrayBuffer (js/Response. payload))]
+                                        (swap! uploaded conj (js/Uint8Array. buffer))
+                                        #js {}))
+                              :delete (fn [_] (p/resolved nil))}
+                   _ (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"
+                                         :block/tags :logseq.class/Page}])
+                   self #js {:sql sql :conn conn :schema-ready true
+                             :env #js {"LOGSEQ_SYNC_ASSETS" bucket}}
+                   request (fn [body checksum]
+                             (js/Request.
+                              (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                   "&file-name=image.png&page-id=" page-id
+                                   "&size=4&checksum=" checksum "&encoding=base64")
+                              #js {:method "POST"
+                                   :headers #js {"content-type" "text/plain"}
+                                   :body body}))]
+               (-> (p/let [response (sync-handler/handle-http
+                                     self (request "AQIDBA==" (apply str (repeat 64 "d"))))
+                            invalid-response (sync-handler/handle-http
+                                              self (request "not base64!" (apply str (repeat 64 "e"))))]
+                     (is (= 201 (.-status response)))
+                     (let [^js payload (first @uploaded)]
+                       (is (= 4 (.-byteLength payload)))
+                       (is (= 1 (aget payload 0)))
+                       (is (= 2 (aget payload 1)))
+                       (is (= 3 (aget payload 2)))
+                       (is (= 4 (aget payload 3))))
+                     (is (= 400 (.-status invalid-response)))
+                     (is (= 1 (count @uploaded))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
 
 (defn- seeded-rng
   [seed0]
@@ -76,8 +1105,8 @@
       ;; update title
       2 (if-let [target-id (pick-rand rng all-ids)]
           {:tx (protocol/tx->transit [[:db/add [:block/uuid (uuid target-id)]
-                                      :block/title
-                                      (str "server-fuzz-title-" step)]])
+                                       :block/title
+                                       (str "server-fuzz-title-" step)]])
            :outliner-op :save-block}
           {:tx (protocol/tx->transit [])
            :outliner-op :rebase})
@@ -89,8 +1118,8 @@
                            child)
                 page (pick-rand rng page-ids)]
             {:tx (protocol/tx->transit [[:db/add [:block/uuid (uuid child)]
-                                        :block/parent
-                                        [:block/uuid (uuid parent)]]
+                                         :block/parent
+                                         [:block/uuid (uuid parent)]]
                                        [:db/add [:block/uuid (uuid child)]
                                         :block/page
                                         [:block/uuid (uuid page)]]])
@@ -238,12 +1267,12 @@
           old-title (or (:block/title (d/pull db [:block/title] [:block/uuid target-uuid])) "")
           new-title (str "rand-title-" step)]
       {:forward [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/title
-                                             new-title]])
+                                              :block/title
+                                              new-title]])
                   :outliner-op :save-block}]
        :inverse [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/title
-                                             old-title]])
+                                              :block/title
+                                              old-title]])
                   :outliner-op :save-block}]
        :undoable? true})
     {:forward [(no-op-rebase-entry)]
@@ -255,8 +1284,8 @@
         placement (block-placement db target-uuid)]
     (if (and (:parent-uuid placement) (:page-uuid placement))
       {:forward [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/parent
-                                             [:block/uuid (uuid new-parent-id)]]
+                                              :block/parent
+                                              [:block/uuid (uuid new-parent-id)]]
                                             [:db/add [:block/uuid target-uuid]
                                              :block/page
                                              [:block/uuid (uuid new-page-id)]]
@@ -265,8 +1294,8 @@
                                              new-order]])
                   :outliner-op outliner-op}]
        :inverse [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/parent
-                                             [:block/uuid (:parent-uuid placement)]]
+                                              :block/parent
+                                              [:block/uuid (:parent-uuid placement)]]
                                             [:db/add [:block/uuid target-uuid]
                                              :block/page
                                              [:block/uuid (:page-uuid placement)]]
@@ -442,12 +1471,12 @@
                                                                       (if (neg? last-addr) rows []))
                                sync-handler/snapshot-row-count (fn [_sql] (count rows))]
                  (p/let [resp (sync-handler/handle-http self request)
-                       encoding (.get (.-headers resp) "content-encoding")
-                       content-type (.get (.-headers resp) "content-type")
-                       buf (.arrayBuffer resp)
-                       payload (js/Uint8Array. buf)
-                       rows (snapshot/finalize-framed-buffer payload)
-                       addrs (mapv first rows)]
+                         encoding (.get (.-headers resp) "content-encoding")
+                         content-type (.get (.-headers resp) "content-type")
+                         buf (.arrayBuffer resp)
+                         payload (js/Uint8Array. buf)
+                         rows (snapshot/finalize-framed-buffer payload)
+                         addrs (mapv first rows)]
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" encoding))
                  (is (= "application/transit+json" content-type))
@@ -456,10 +1485,10 @@
                  (is (every? (fn [[addr content _addresses]]
                                (and (int? addr)
                                     (string? content)))
-                             rows))
+                             rows)))
                  (is (= [[1 "row-1" nil]
                          [2 "row-2" nil]]
-                        rows))))
+                        rows)))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -804,8 +1833,355 @@
                 @tx-metas))
       (is (= "migration-only"
              (:block/title (first (d/q '[:find [(pull ?e [:block/title]) ...]
-                                      :where [?e :block/title "migration-only"]]
-                                    @conn))))))))
+                                    :where [?e :block/title "migration-only"]]
+                                  @conn))))))))
+
+(defn- large-block-insert-tx
+  [page-uuid block-count]
+  (vec
+   (mapcat (fn [idx]
+             (let [block-uuid (random-uuid)
+                   eid (str block-uuid)]
+               [[:db/add eid :block/uuid block-uuid idx]
+                [:db/add eid :block/title (str "large-op-block-" idx) idx]
+                [:db/add eid :block/page [:block/uuid page-uuid] idx]
+                [:db/add eid :block/parent [:block/uuid page-uuid] idx]
+                [:db/add eid :block/order "a0" idx]
+                [:db/add eid :block/created-at idx idx]
+                [:db/add eid :block/updated-at idx idx]]))
+           (range block-count))))
+
+(defn- block-title-prefix-count
+  [db prefix]
+  (->> (d/datoms db :avet :block/title)
+       (filter (fn [datom]
+                 (string/starts-with? (:v datom) prefix)))
+       count))
+
+(deftest tx-batch-applies-large-entry-in-ordered-chunks-test
+  (testing "large tx entries are executed as ordered chunks while preserving final state"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-op-page"
+                                    :block/title "large-op-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-entry-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [sync-checksum/recompute-checksum
+                                       (fn [_db]
+                                         (throw (ex-info "large tx should update checksum incrementally"
+                                                         {:type :test/full-checksum-recompute})))
+                                       ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-entry-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
+          (is (= block-count
+                  (block-title-prefix-count @conn "large-op-block-"))))))))
+
+(deftest tx-batch-applies-large-entry-with-negative-tempids-in-ordered-chunks-test
+  (testing "large tx entries with tempids are still accepted and chunked safely"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-tempid-page"
+                                    :block/title "large-tempid-page"}])
+              t-before (storage/get-t sql)
+              tx-data (vec
+                       (mapcat (fn [idx]
+                                 (let [eid (- -1 idx)]
+                                   [[:db/add eid :block/uuid (random-uuid)]
+                                    [:db/add eid :block/title (str "large-tempid-block-" idx)]
+                                    [:db/add eid :block/page [:block/uuid page-uuid]]
+                                    [:db/add eid :block/parent [:block/uuid page-uuid]]
+                                    [:db/add eid :block/order "a0"]
+                                    [:db/add eid :block/created-at idx]
+                                    [:db/add eid :block/updated-at idx]]))
+                               (range 300)))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-tempid-entry-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-tempid-entry-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
+          (is (= 300 (block-title-prefix-count @conn "large-tempid-block-"))))))))
+
+(deftest tx-batch-applies-large-entry-with-dependent-blocks-across-chunks-test
+  (testing "large tx chunking preserves ordered parent-before-child dependencies"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-dependency-page"
+                                    :block/title "large-dependency-page"}])
+              t-before (storage/get-t sql)
+              parent-uuid (random-uuid)
+              child-uuid (random-uuid)
+              parent-eid "large-dependency-parent"
+              child-eid "large-dependency-child"
+              filler-tx (large-block-insert-tx page-uuid 70)
+              parent-tx [[:db/add parent-eid :block/uuid parent-uuid]
+                         [:db/add parent-eid :block/title "large-dependency-parent"]
+                         [:db/add parent-eid :block/page [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/parent [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/order "z0"]
+                         [:db/add parent-eid :block/created-at 1]
+                         [:db/add parent-eid :block/updated-at 1]]
+              child-tx [[:db/add child-eid :block/uuid child-uuid]
+                        [:db/add child-eid :block/title "large-dependency-child"]
+                        [:db/add child-eid :block/page [:block/uuid page-uuid]]
+                        [:db/add child-eid :block/parent [:block/uuid parent-uuid]]
+                        [:db/add child-eid :block/order "z1"]
+                        [:db/add child-eid :block/created-at 2]
+                        [:db/add child-eid :block/updated-at 2]]
+              tx-data (vec (concat filler-tx parent-tx child-tx))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-dependent-block-chunks
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-dependent-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= [497 7] @tx-data-counts))
+          (is (= @tx-data-counts
+                 (mapv (comp count protocol/transit->tx :tx)
+                       (storage/fetch-tx-since sql t-before))))
+          (is (= parent-uuid
+                 (get-in (d/pull @conn [{:block/parent [:block/uuid]}]
+                                 [:block/uuid child-uuid])
+                         [:block/parent :block/uuid])))
+          (is (= 70 (block-title-prefix-count @conn "large-op-block-")))
+          (is (= 3 (block-title-prefix-count @conn "large-dependency-"))))))))
+
+(deftest tx-batch-applies-large-delete-entry-with-descendants-across-chunks-test
+  (testing "delete-blocks descendant expansion is still applied in ordered chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              parent-uuid (random-uuid)
+              child-count 520
+              child-uuids (repeatedly child-count random-uuid)
+              _ (d/transact! conn
+                             (vec
+                              (concat
+                               [{:block/uuid page-uuid
+                                 :block/name "large-delete-page"
+                                 :block/title "large-delete-page"}
+                                {:block/uuid parent-uuid
+                                 :block/title "large-delete-parent"
+                                 :block/page [:block/uuid page-uuid]
+                                 :block/parent [:block/uuid page-uuid]
+                                 :block/order "d0"
+                                 :block/created-at 1
+                                 :block/updated-at 1}]
+                               (map-indexed
+                                (fn [idx child-uuid]
+                                  {:block/uuid child-uuid
+                                   :block/title (str "large-delete-child-" idx)
+                                   :block/page [:block/uuid page-uuid]
+                                   :block/parent [:block/uuid parent-uuid]
+                                   :block/order (str "d" (inc idx))
+                                   :block/created-at idx
+                                   :block/updated-at idx})
+                                child-uuids))))
+              t-before (storage/get-t sql)
+              tx-entry {:tx (protocol/tx->transit [[:db/retractEntity [:block/uuid parent-uuid]]])
+                        :tx-id (random-uuid)
+                        :outliner-op :delete-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-delete-block-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-delete-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (> (:t response) t-before))
+          (is (pos? (count (storage/fetch-tx-since sql t-before))))
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (every? nil? (map #(d/entity @conn [:block/uuid %]) child-uuids)))
+          (is (zero? (block-title-prefix-count @conn "large-delete-child-"))))))))
+
+(deftest tx-batch-rolls-back-large-entry-when-live-chunk-fails-test
+  (testing "large tx live chunk failure leaves no persisted partial chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-rollback-page"
+                                    :block/title "large-rollback-page"}])
+              t-before (storage/get-t sql)
+              checksum-before (storage/get-checksum sql)
+              missing-parent-uuid (random-uuid)
+              tx-data* (large-block-insert-tx page-uuid 1200)
+              [_op entity _attr _value tx] (nth tx-data* 150)
+              tx-data (assoc tx-data*
+                             150 [:db/add entity :block/page [:block/uuid missing-parent-uuid] tx])
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/reject" (:type response)))
+          (is (= "db transact failed" (:reason response)))
+          (is (= t-before (storage/get-t sql)))
+          (is (= checksum-before (storage/get-checksum sql)))
+          (is (empty? (storage/fetch-tx-since sql t-before)))
+          (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
+
+(deftest tx-batch-rolls-back-large-entry-when-later-live-chunk-fails-test
+  (testing "large tx later chunk failure leaves no persisted partial chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-later-rollback-page"
+                                    :block/title "large-later-rollback-page"}])
+              t-before (storage/get-t sql)
+              checksum-before (storage/get-checksum sql)
+              missing-parent-uuid (random-uuid)
+              tx-data* (large-block-insert-tx page-uuid 1200)
+              [_op entity _attr _value tx] (nth tx-data* 700)
+              tx-data (assoc tx-data*
+                             700 [:db/add entity :block/page [:block/uuid missing-parent-uuid] tx])
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/reject" (:type response)))
+          (is (= "db transact failed" (:reason response)))
+          (is (= t-before (storage/get-t sql)))
+          (is (= checksum-before (storage/get-checksum sql)))
+          (is (empty? (storage/fetch-tx-since sql t-before)))
+          (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
+
+(deftest tx-batch-large-entry-uses-bounded-visible-tx-reports-test
+  (testing "large tx chunks are visible and each tx report stays bounded"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-validation-page"
+                                    :block/title "large-validation-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-visible-tx-report-size
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-visible-tx-report-size)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= (count tx-data) (reduce + @tx-data-counts)))
+          (is (every? #(<= % 500) @tx-data-counts)))))))
+
+(deftest tx-batch-large-entry-updates-checksum-once-for-logical-tx-test
+  (testing "large tx chunks append visible tx-log rows but update stored checksum once for the full logical tx"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-checksum-page"
+                                    :block/title "large-checksum-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              original-set-checksum! storage/set-checksum!
+              checksum-updates (atom [])
+              response (with-redefs [storage/set-checksum! (fn [sql* checksum]
+                                                             (swap! checksum-updates conj checksum)
+                                                             (original-set-checksum! sql* checksum))
+                                     ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> (:t response) (inc t-before)))
+          (is (= 1 (count @checksum-updates)))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (storage/get-checksum sql))))))))
 
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
@@ -909,12 +2285,17 @@
           tx-entry-2 {:tx (protocol/tx->transit [[:db/add -2 :block/title "bad"]])
                       :outliner-op :save-block}
           apply-calls (atom 0)
+          apply-tx-entry (fn [_conn tx-entry]
+                           (swap! apply-calls inc)
+                           (when (= 2 @apply-calls)
+                             (throw (ex-info "DB write failed with invalid data"
+                                             {:tx-entry tx-entry}))))
           response (with-redefs [ws/broadcast! (fn [& _] nil)
-                                 sync-handler/apply-tx-entry! (fn [_conn tx-entry]
-                                                                (swap! apply-calls inc)
-                                                                (when (= 2 @apply-calls)
-                                                                  (throw (ex-info "DB write failed with invalid data"
-                                                                                  {:tx-entry tx-entry}))))]
+                                 sync-handler/apply-tx-entry! (fn
+                                                                ([conn tx-entry]
+                                                                 (apply-tx-entry conn tx-entry))
+                                                                ([_self conn tx-entry _request-context]
+                                                                 (apply-tx-entry conn tx-entry)))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry-1 tx-entry-2] 0))]
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
@@ -953,6 +2334,37 @@
       (is (= [{:type "changed" :t 1}] @changed-messages))
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
+
+(deftest tx-batch-rejects-stale-delete-before-later-failure-test
+  (testing "stale delete-blocks entries are not reported as successfully applied"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          stale-delete-tx-id (random-uuid)
+          later-failed-tx-id (random-uuid)
+          missing-delete-uuid (random-uuid)
+          missing-update-uuid (random-uuid)
+          t-before (storage/get-t sql)
+          stale-delete-entry {:tx-id stale-delete-tx-id
+                              :tx (protocol/tx->transit
+                                   [[:db/retractEntity [:block/uuid missing-delete-uuid]]])
+                              :outliner-op :delete-blocks}
+          later-failed-entry {:tx-id later-failed-tx-id
+                              :tx (protocol/tx->transit
+                                   [[:db/add [:block/uuid missing-update-uuid] :block/title "stale" 1]])
+                              :outliner-op :save-block}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [stale-delete-entry later-failed-entry] t-before))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= t-before (:t response)))
+      (is (= stale-delete-tx-id (:failed-tx-id response)))
+      (is (nil? (:success-tx-ids response)))
+      (is (empty? @changed-messages)))))
 
 (deftest tx-batch-ignores-empty-rebase-entry-test
   (testing "empty rebase entry is a no-op: no t increment, no tx-log append, no changed broadcast"

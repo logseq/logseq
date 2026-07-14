@@ -593,7 +593,7 @@
            (get-in export-edn [:classes :user.class/MyClass :build/class-properties])))
     (is (not (contains? (:properties export-edn) legacy-property)))))
 
-(deftest graph-export-omits-legacy-plugin-property-schema-attrs
+(deftest graph-datom-import-drops-legacy-plugin-property-schema-attrs
   (let [plugin-property :plugin.property.degrande-colors/mugpet_degrande_colors_controls
         conn (db-test/create-conn-with-import-map
               {:properties {plugin-property {:logseq.property/type :json}}
@@ -604,10 +604,17 @@
                               :hide? true
                               :public? false}])
         export-edn (sqlite-export/build-export @conn {:export-type :graph})
-        validation (sqlite-export/validate-export export-edn)]
+        import-conn (sqlite-export/create-conn)
+        validation (sqlite-export/validate-import-txs
+                    (sqlite-export/build-import export-edn @import-conn {})
+                    @import-conn
+                    {:edn-label "exported EDN"})
+        tx-data (:tx-data validation)]
     (is (nil? (:error validation)))
     (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :hide? true))
-    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))))
+    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))
+    (is (not (some #{[:db/add (:db/id plugin-property-ent) :hide? true]} tx-data)))
+    (is (not (some #{[:db/add (:db/id plugin-property-ent) :public? false]} tx-data)))))
 
 (deftest graph-export-keeps-referenced-recycled-closed-value-config
   (let [property-id :plugin.property.degrande-colors/tldraw
@@ -727,7 +734,9 @@
 
 (deftest graph-datom-import-replaces-seeded-data
   (let [source-conn (d/create-conn db-schema/schema)
-        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+        _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+        _ (d/transact! source-conn [[:db/retractEntity 1]])
         _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
         export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
         valid-result (sqlite-export/validate-export export-edn)
@@ -767,6 +776,25 @@
     (is (has-datom? (mapv (juxt :e :a :v) (d/datoms @conn :eavt))
                     1 :block/refs 2)
         "Datom import should apply lookup-ref targets before values that use them")))
+
+(deftest validate-export-rejects-invalid-graph-datoms
+  (let [validation (sqlite-export/validate-export
+                    {::sqlite-export/export-type :graph
+                     ::sqlite-export/graph-format :datoms
+                     :datoms [[1 :block/title "Orphan Page"]
+                              [1 :block/name "orphan page"]
+                              [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+                              [1 :block/tags 2]
+                              [2 :block/title "Page"]
+                              [2 :block/name "page"]
+                              [2 :db/ident :logseq.class/Page]
+                              [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]})]
+    (is (string? (:error validation))
+        "Datom import validation should reject invalid graph datoms")
+    (is (re-find #"exported EDN" (:error validation))
+        "Export validation error should describe exported EDN")
+    (is (not (contains? validation :db))
+        "Invalid export validation should not return a transient DB snapshot")))
 
 (deftest graph-datom-export-resolves-lookup-ref-values
   (let [conn (d/create-conn db-schema/schema)

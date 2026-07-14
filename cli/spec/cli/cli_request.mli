@@ -19,16 +19,16 @@ type parsed_command =
 
 type t = {
   globals : Global_opts.t;
-  path : string list;
+  path : string Rrbvec.t;
   command : parsed_command;
-  raw_args : string list;
+  raw_args : string Rrbvec.t;
 }
 
 val make :
   globals:Global_opts.t ->
-  path:string list ->
+  path:string Rrbvec.t ->
   command:parsed_command ->
-  raw_args:string list ->
+  raw_args:string Rrbvec.t ->
   t
 
 val command_id : t -> Command_id.t

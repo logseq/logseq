@@ -166,6 +166,7 @@
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
+  (sync-apply/clear-upload-response-timeout! client)
   (let [reason (:reason message)
         remote-tx (:t message)
         success-tx-ids (:success-tx-ids message)
@@ -264,6 +265,7 @@
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
+  (sync-apply/ack-upload-response! repo client)
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)

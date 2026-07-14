@@ -10,7 +10,7 @@ type query_entry = {
   name : string;
   source : source;
   doc : string option;
-  inputs : input_spec list;
+  inputs : input_spec Rrbvec.t;
   query : Melange_edn_melange.any;
 }
 
@@ -27,7 +27,7 @@ type action =
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
       query : Melange_edn_melange.any;
-      inputs : Melange_edn_melange.any list;
+      inputs : Melange_edn_melange.any Rrbvec.t;
       name : string option;
     }
   | List
@@ -52,287 +52,454 @@ let parsed_edn text =
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
 let in_sym value = Melange_edn_melange.symbol value
-let vector values = Edn_util.vector values
-let vector_t values = Edn_util.vector_t values
-let list values = Edn_util.list values
-let list_t values = Edn_util.list_t values
+let vector_vec values = Edn_util.vector_vec values
+let vector_t_vec values = Edn_util.vector_t_vec values
+let vector_t values = vector_t_vec values
+let list_vec values = Edn_util.list_vec values
+let list_t_vec values = Edn_util.list_t_vec values
+let list_t values = list_t_vec values
 let where_v values = Cli_primitive.V (vector_t values)
 let where_l values = Cli_primitive.L (list_t values)
-let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+
+let query_value query =
+  Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let input ?default name =
   { name; optional = String.length name > 0 && name.[0] = '?'; default }
 
 let built_in_queries =
-  [
-    {
-      name = "list-priority";
-      source = Built_in;
-      doc = Some "List closed values for the Priority property.";
-      inputs = [];
-      query =
-        query_value
-          (Cli_primitive.make_datascript_query
-             ~find:
-               [
-                 vector
-                   [
-                     list
-                       [
-                         sym "pull";
-                         sym "?value";
-                         vector [ kw "db/id"; kw "db/ident"; kw "block/order" ];
-                       ];
-                     sym "...";
-                   ];
-               ]
-             ~where:
-               [
-                 where_v
-                   [
-                     sym "?property";
-                     kw "db/ident";
-                     kw "logseq.property/priority";
-                   ];
-                 where_v
-                   [
-                     sym "?value";
-                     kw "block/closed-value-property";
-                     sym "?property";
-                   ];
-               ]
-             ());
-    };
-    {
-      name = "list-status";
-      source = Built_in;
-      doc = Some "List closed values for the Status property.";
-      inputs = [];
-      query =
-        query_value
-          (Cli_primitive.make_datascript_query
-             ~find:
-               [
-                 vector
-                   [
-                     list
-                       [
-                         sym "pull";
-                         sym "?value";
-                         vector [ kw "db/id"; kw "db/ident"; kw "block/order" ];
-                       ];
-                     sym "...";
-                   ];
-               ]
-             ~where:
-               [
-                 where_v
-                   [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ];
-                 where_v
-                   [
-                     sym "?value";
-                     kw "block/closed-value-property";
-                     sym "?property";
-                   ];
-               ]
-             ());
-    };
-    {
-      name = "recent-updated";
-      source = Built_in;
-      doc = Some "Find entities updated within recent-days.";
-      inputs = [ input "recent-days"; input "?now-ms" ];
-      query =
-        query_value
-          (Cli_primitive.make_datascript_query
-             ~find:
-               [
-                 vector
-                   [
-                     list
-                       [
-                         sym "pull";
-                         sym "?e";
-                         vector
-                           [ kw "db/id"; kw "block/title"; kw "block/updated-at" ];
-                       ];
-                     sym "...";
-                   ];
-               ]
-             ~in_:[ in_sym "$"; in_sym "?recent-days"; in_sym "?now-ms" ]
-             ~where:
-               [
-                 where_v [ sym "?e"; kw "block/updated-at"; sym "?updated-at" ];
-                 where_v
-                   [
-                     list
-                       [
-                         sym "missing?";
-                         sym "$";
-                         sym "?e";
-                         kw "logseq.property/built-in?";
-                       ];
-                   ];
-                 where_v
-                   [
-                     list [ sym "*"; sym "?recent-days"; Edn_util.int 86400000 ];
-                     sym "?recent-days-ms";
-                   ];
-                 where_v
-                   [
-                     list [ sym "-"; sym "?now-ms"; sym "?recent-days-ms" ];
-                     sym "?days-ago";
-                   ];
-                 where_v [ list [ sym ">="; sym "?updated-at"; sym "?days-ago" ] ];
-               ]
-             ());
-    };
-    {
-      name = "task-search";
-      source = Built_in;
-      doc =
-        Some
-          "Find tasks by status, optional title substring, optional \
-           recent-days.";
-      inputs =
-        [
-          input "search-status";
-          input ~default:(Edn_util.string "") "?search-title";
-          input ~default:(Edn_util.int 0) "?recent-days";
-          input "?now-ms";
-        ];
-      query =
-        query_value
-          (Cli_primitive.make_datascript_query
-             ~find:
-               [
-                 vector
-                   [
-                     list
-                       [
-                         sym "pull";
-                         sym "?e";
-                         vector
-                           [ kw "db/id"; kw "block/title"; kw "block/updated-at" ];
-                       ];
-                     sym "...";
-                   ];
-               ]
-             ~in_:
-               [
-                 in_sym "$";
-                 in_sym "?search-status";
-                 in_sym "?search-title";
-                 in_sym "?recent-days";
-                 in_sym "?now-ms";
-               ]
-             ~where:
-               [
-                 where_v [ sym "?e"; kw "block/title"; sym "?title" ];
-                 where_v
-                   [ sym "?e"; kw "logseq.property/status"; sym "?status" ];
-                 where_v [ sym "?status"; kw "db/ident"; sym "?status-ident" ];
-                 where_v
-                   [ list [ sym "="; sym "?status-ident"; sym "?search-status" ] ];
-                 where_v
-                   [
-                     list [ sym "clojure.string/lower-case"; sym "?title" ];
-                     sym "?title-lower-case";
-                   ];
-                 where_v
-                   [
-                     list [ sym "str"; sym "?search-title" ];
-                     sym "?search-title-string";
-                   ];
-                 where_v
-                   [
-                     list
-                       [
-                         sym "clojure.string/lower-case";
-                         sym "?search-title-string";
-                       ];
-                     sym "?search-title-lower-case";
-                   ];
-                 where_v
-                   [
-                     list
-                       [
-                         sym "clojure.string/includes?";
-                         sym "?title-lower-case";
-                         sym "?search-title-lower-case";
-                       ];
-                   ];
-                 where_v
-                   [
-                     list
-                       [
-                         sym "get-else";
-                         sym "$";
-                         sym "?e";
-                         kw "block/updated-at";
-                         Edn_util.int 0;
-                       ];
-                     sym "?updated-at";
-                   ];
-                 where_l
-                   [
-                     sym "or-join";
-                     vector
-                       [
-                         sym "?recent-days";
-                         sym "?updated-at";
-                         sym "?now-ms";
-                         sym "?days-ago";
-                       ];
-                     list
-                       [
-                         sym "and";
-                         vector [ list [ sym "nil?"; sym "?recent-days" ] ];
-                         vector
-                           [
-                             list [ sym "identity"; Edn_util.int 0 ];
-                             sym "?days-ago";
-                           ];
-                       ];
-                     list
-                       [
-                         sym "and";
-                         vector
-                           [
-                             list [ sym "<="; sym "?recent-days"; Edn_util.int 0 ];
-                           ];
-                         vector
-                           [
-                             list [ sym "identity"; Edn_util.int 0 ];
-                             sym "?days-ago";
-                           ];
-                       ];
-                     list
-                       [
-                         sym "and";
-                         vector
-                           [
-                             list
-                               [ sym "*"; sym "?recent-days"; Edn_util.int 86400000 ];
+  Vec.of_array
+    [|
+      {
+        name = "list-priority";
+        source = Built_in;
+        doc = Some "List closed values for the Priority property.";
+        inputs = Vec.empty;
+        query =
+          query_value
+            (Cli_primitive.make_datascript_query
+               ~find:
+                 (Vec.of_array
+                    [|
+                      vector_vec
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "pull";
+                                    sym "?value";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           kw "db/id";
+                                           kw "db/ident";
+                                           kw "block/order";
+                                         |]);
+                                  |]);
+                             sym "...";
+                           |]);
+                    |])
+               ~where:
+                 (Vec.of_array
+                    [|
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?property";
+                             kw "db/ident";
+                             kw "logseq.property/priority";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?value";
+                             kw "block/closed-value-property";
+                             sym "?property";
+                           |]);
+                    |])
+               ());
+      };
+      {
+        name = "list-status";
+        source = Built_in;
+        doc = Some "List closed values for the Status property.";
+        inputs = Vec.empty;
+        query =
+          query_value
+            (Cli_primitive.make_datascript_query
+               ~find:
+                 (Vec.of_array
+                    [|
+                      vector_vec
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "pull";
+                                    sym "?value";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           kw "db/id";
+                                           kw "db/ident";
+                                           kw "block/order";
+                                         |]);
+                                  |]);
+                             sym "...";
+                           |]);
+                    |])
+               ~where:
+                 (Vec.of_array
+                    [|
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?property";
+                             kw "db/ident";
+                             kw "logseq.property/status";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?value";
+                             kw "block/closed-value-property";
+                             sym "?property";
+                           |]);
+                    |])
+               ());
+      };
+      {
+        name = "recent-updated";
+        source = Built_in;
+        doc = Some "Find entities updated within recent-days.";
+        inputs = Vec.of_array [| input "recent-days"; input "?now-ms" |];
+        query =
+          query_value
+            (Cli_primitive.make_datascript_query
+               ~find:
+                 (Vec.of_array
+                    [|
+                      vector_vec
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "pull";
+                                    sym "?e";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           kw "db/id";
+                                           kw "block/title";
+                                           kw "block/updated-at";
+                                         |]);
+                                  |]);
+                             sym "...";
+                           |]);
+                    |])
+               ~in_:
+                 (Vec.of_array
+                    [| in_sym "$"; in_sym "?recent-days"; in_sym "?now-ms" |])
+               ~where:
+                 (Vec.of_array
+                    [|
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?e"; kw "block/updated-at"; sym "?updated-at";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "missing?";
+                                    sym "$";
+                                    sym "?e";
+                                    kw "logseq.property/built-in?";
+                                  |]);
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "*";
+                                    sym "?recent-days";
+                                    Edn_util.int 86400000;
+                                  |]);
                              sym "?recent-days-ms";
-                           ];
-                         vector
-                           [
-                             list [ sym "-"; sym "?now-ms"; sym "?recent-days-ms" ];
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "-";
+                                    sym "?now-ms";
+                                    sym "?recent-days-ms";
+                                  |]);
                              sym "?days-ago";
-                           ];
-                         vector
-                           [
-                             list
-                               [ sym ">="; sym "?updated-at"; sym "?days-ago" ];
-                           ];
-                       ];
-                   ];
-               ]
-             ());
-    };
-  ]
-  |> List.sort (fun (a : query_entry) (b : query_entry) ->
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym ">="; sym "?updated-at"; sym "?days-ago";
+                                  |]);
+                           |]);
+                    |])
+               ());
+      };
+      {
+        name = "task-search";
+        source = Built_in;
+        doc =
+          Some
+            "Find tasks by status, optional title substring, optional \
+             recent-days.";
+        inputs =
+          Vec.of_array
+            [|
+              input "search-status";
+              input ~default:(Edn_util.string "") "?search-title";
+              input ~default:(Edn_util.int 0) "?recent-days";
+              input "?now-ms";
+            |];
+        query =
+          query_value
+            (Cli_primitive.make_datascript_query
+               ~find:
+                 (Vec.of_array
+                    [|
+                      vector_vec
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "pull";
+                                    sym "?e";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           kw "db/id";
+                                           kw "block/title";
+                                           kw "block/updated-at";
+                                         |]);
+                                  |]);
+                             sym "...";
+                           |]);
+                    |])
+               ~in_:
+                 (Vec.of_array
+                    [|
+                      in_sym "$";
+                      in_sym "?search-status";
+                      in_sym "?search-title";
+                      in_sym "?recent-days";
+                      in_sym "?now-ms";
+                    |])
+               ~where:
+                 (Vec.of_array
+                    [|
+                      where_v
+                        (Vec.of_array
+                           [| sym "?e"; kw "block/title"; sym "?title" |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?e";
+                             kw "logseq.property/status";
+                             sym "?status";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             sym "?status"; kw "db/ident"; sym "?status-ident";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "=";
+                                    sym "?status-ident";
+                                    sym "?search-status";
+                                  |]);
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "clojure.string/lower-case";
+                                    sym "?title";
+                                  |]);
+                             sym "?title-lower-case";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [| sym "str"; sym "?search-title" |]);
+                             sym "?search-title-string";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "clojure.string/lower-case";
+                                    sym "?search-title-string";
+                                  |]);
+                             sym "?search-title-lower-case";
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "clojure.string/includes?";
+                                    sym "?title-lower-case";
+                                    sym "?search-title-lower-case";
+                                  |]);
+                           |]);
+                      where_v
+                        (Vec.of_array
+                           [|
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "get-else";
+                                    sym "$";
+                                    sym "?e";
+                                    kw "block/updated-at";
+                                    Edn_util.int 0;
+                                  |]);
+                             sym "?updated-at";
+                           |]);
+                      where_l
+                        (Vec.of_array
+                           [|
+                             sym "or-join";
+                             vector_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "?recent-days";
+                                    sym "?updated-at";
+                                    sym "?now-ms";
+                                    sym "?days-ago";
+                                  |]);
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "and";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "nil?"; sym "?recent-days";
+                                                |]);
+                                         |]);
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "identity"; Edn_util.int 0;
+                                                |]);
+                                           sym "?days-ago";
+                                         |]);
+                                  |]);
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "and";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "<=";
+                                                  sym "?recent-days";
+                                                  Edn_util.int 0;
+                                                |]);
+                                         |]);
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "identity"; Edn_util.int 0;
+                                                |]);
+                                           sym "?days-ago";
+                                         |]);
+                                  |]);
+                             list_vec
+                               (Vec.of_array
+                                  [|
+                                    sym "and";
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "*";
+                                                  sym "?recent-days";
+                                                  Edn_util.int 86400000;
+                                                |]);
+                                           sym "?recent-days-ms";
+                                         |]);
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym "-";
+                                                  sym "?now-ms";
+                                                  sym "?recent-days-ms";
+                                                |]);
+                                           sym "?days-ago";
+                                         |]);
+                                    vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           list_vec
+                                             (Vec.of_array
+                                                [|
+                                                  sym ">=";
+                                                  sym "?updated-at";
+                                                  sym "?days-ago";
+                                                |]);
+                                         |]);
+                                  |]);
+                           |]);
+                    |])
+               ());
+      };
+    |]
+  |> Vec.sort (fun (a : query_entry) (b : query_entry) ->
       String.compare a.name b.name)
 
 let db_query_dsl_rules =
@@ -394,7 +561,9 @@ let strip_leading_colon value =
 let query_name_of_value value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
   | Some value, _ | _, Some value -> trim_non_empty (strip_leading_colon value)
-  | _ -> trim_non_empty (Melange_edn_melange.to_edn_string value |> strip_leading_colon)
+  | _ ->
+      trim_non_empty
+        (Melange_edn_melange.to_edn_string value |> strip_leading_colon)
 
 let custom_query_input value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
@@ -419,21 +588,21 @@ let custom_query_input value =
 let custom_query_inputs = function
   | Some value -> (
       match Edn_util.as_seq value with
-      | Some values -> List.filter_map custom_query_input values
-      | _ -> [])
-  | _ -> []
+      | Some values -> Vec.filter_map custom_query_input values
+      | _ -> Vec.empty)
+  | _ -> Vec.empty
 
 let custom_query_entry name source spec =
   let query, doc, inputs =
     match spec with
     | spec -> (
         match (Edn_util.as_vector spec, Edn_util.as_map spec) with
-        | Some _, _ -> (Some spec, None, [])
+        | Some _, _ -> (Some spec, None, Vec.empty)
         | _, Some _ ->
             ( Edn_util.get spec "query",
               Edn_util.get_string spec "doc",
               custom_query_inputs (Edn_util.get spec "inputs") )
-        | _ -> (None, None, []))
+        | _ -> (None, None, Vec.empty))
   in
   match (query_name_of_value name, query) with
   | Some name, Some query -> Some { name; source; doc; inputs; query }
@@ -447,53 +616,55 @@ let custom_queries config =
   | Some value -> (
       match Edn_util.as_map value with
       | Some fields ->
-          List.filter_map
+          Vec.filter_map
             (fun (name, spec) -> custom_query_entry name Custom spec)
             fields
-      | _ -> [])
-  | _ -> []
+      | _ -> Vec.empty)
+  | _ -> Vec.empty
 
-let merge_queries (entries : query_entry list) =
-  let rec upsert (entry : query_entry) = function
-    | [] -> [ entry ]
-    | (existing : query_entry) :: rest when existing.name = entry.name ->
-        entry :: rest
-    | existing :: rest -> existing :: upsert entry rest
+let merge_queries entries =
+  let upsert acc (entry : query_entry) =
+    acc
+    |> Vec.filter (fun (existing : query_entry) -> existing.name <> entry.name)
+    |> fun acc -> Vec.push_back acc entry
   in
   entries
-  |> List.fold_left (fun acc entry -> upsert entry acc) []
-  |> List.sort (fun (a : query_entry) (b : query_entry) ->
+  |> Vec.fold_left upsert Vec.empty
+  |> Vec.sort (fun (a : query_entry) (b : query_entry) ->
       String.compare a.name b.name)
 
-let list_queries config : query_entry list =
-  merge_queries (built_in_queries @ custom_queries config)
+let list_queries config : query_entry Rrbvec.t =
+  merge_queries (Vec.append built_in_queries (custom_queries config))
 
 let find_query config name =
-  List.find_opt
+  Vec.find_opt
     (fun (entry : query_entry) -> entry.name = name)
     (list_queries config)
 
 let rec contains_db_id_datom_clause value =
   match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some (_ :: db_id :: _), _ when Edn_util.as_keyword db_id = Some "db/id" ->
+  | Some values, _
+    when Vec.length values >= 2
+         && Edn_util.as_keyword (Vec.nth values 1) = Some "db/id" ->
       true
   | Some values, _ | _, Some values ->
-      List.exists contains_db_id_datom_clause values
+      Vec.exists contains_db_id_datom_clause values
   | _ -> false
 
 let validate_query query =
   match Edn_util.as_vector query with
   | Some values ->
-      let rec after_where = function
-        | [] -> []
-        | keyword :: clauses when Edn_util.as_keyword keyword = Some "where" ->
+      let rec after_where values =
+        match Vec.pop_front values with
+        | None -> Vec.empty
+        | Some (keyword, clauses)
+          when Edn_util.as_keyword keyword = Some "where" ->
             clauses
-        | _ :: rest -> after_where rest
+        | Some (_, rest) -> after_where rest
       in
-      if List.exists contains_db_id_datom_clause (after_where values) then
+      if Vec.exists contains_db_id_datom_clause (after_where values) then
         Error
-          (Error.make
-             (Error.Invalid_query)
+          (Error.make Error.Invalid_query
              "invalid query: :db/id cannot be used as a datom attribute in \
               :where clauses. Bind entity ids through :in and --inputs.")
       else Ok query
@@ -504,22 +675,24 @@ let current_epoch_ms () = Time.time_to_epoch_ms (Time.now ())
 let normalize_task_search_inputs (entry : query_entry option) inputs =
   match entry with
   | Some { name = "task-search"; _ } -> (
-      match inputs with
-      | status_value :: rest
+      match Vec.pop_front inputs with
+      | Some (status_value, rest)
         when Option.is_some (Edn_util.as_string status_value) ->
           let status =
             Option.value (Edn_util.as_string status_value) ~default:""
           in
           let status = String.trim status |> String.lowercase_ascii in
           if status = "" then inputs
-          else Edn_util.keyword ("logseq.property/status." ^ status) :: rest
+          else
+            Vec.push_front rest
+              (Edn_util.keyword ("logseq.property/status." ^ status))
       | _ -> inputs)
   | _ -> inputs
 
 let validate_recent_updated_inputs (entry : query_entry option) inputs =
-  match (entry, inputs) with
+  match (entry, Vec.peek_front_opt inputs) with
   | ( Some { name = "recent-updated"; source = Built_in; _ },
-      recent_days_value :: _ )
+      Some recent_days_value )
     when Option.value (Edn_util.as_int recent_days_value) ~default:0 > 0 ->
       Ok inputs
   | Some { name = "recent-updated"; source = Built_in; _ }, _ ->
@@ -531,17 +704,22 @@ let normalize_inputs entry inputs =
   | None -> Ok inputs
   | Some entry ->
       let required =
-        List.length (List.filter (fun spec -> not spec.optional) entry.inputs)
+        Vec.length (Vec.filter (fun spec -> not spec.optional) entry.inputs)
       in
-      if List.length inputs < required then
+      if Vec.length inputs < required then
         Error (Error.invalid_options "inputs missing required values")
       else
         let rec fill acc specs values =
-          match (specs, values) with
-          | _spec :: rest_specs, value :: rest_values ->
-              fill (value :: acc) rest_specs rest_values
-          | [], rest_values -> List.rev_append acc rest_values
-          | spec :: rest, [] ->
+          match Vec.pop_front specs with
+          | Some (_spec, rest_specs) when not (Vec.is_empty values) ->
+              let value, rest_values =
+                match Vec.pop_front values with
+                | Some pair -> pair
+                | None -> failwith "non-empty vector must have a front value"
+              in
+              fill (Vec.push_back acc value) rest_specs rest_values
+          | None -> Vec.append acc values
+          | Some (spec, rest) ->
               let default =
                 match spec.default with
                 | Some value when Edn_util.as_keyword value = Some "now-ms" ->
@@ -551,9 +729,9 @@ let normalize_inputs entry inputs =
                     Edn_util.int64 (current_epoch_ms ())
                 | None -> Edn_util.nil
               in
-              fill (default :: acc) rest []
+              fill (Vec.push_back acc default) rest Vec.empty
         in
-        fill [] entry.inputs inputs
+        fill Vec.empty entry.inputs inputs
         |> normalize_task_search_inputs (Some entry)
         |> validate_recent_updated_inputs (Some entry)
 
@@ -570,25 +748,28 @@ let symbol_is name = function
 let query_in_ends_with_percent query =
   match Edn_util.as_vector query with
   | Some values -> (
-      let rec find_in = function
-        | [] -> []
-        | keyword :: rest when Edn_util.as_keyword keyword = Some "in" ->
-            collect_in [] rest
-        | _ :: rest -> find_in rest
-      and collect_in acc = function
-        | [] -> List.rev acc
-        | keyword :: _ when Option.is_some (Edn_util.as_keyword keyword) ->
-            List.rev acc
-        | value :: rest -> collect_in (value :: acc) rest
+      let rec find_in values =
+        match Vec.pop_front values with
+        | None -> Vec.empty
+        | Some (keyword, rest) when Edn_util.as_keyword keyword = Some "in" ->
+            collect_in Vec.empty rest
+        | Some (_, rest) -> find_in rest
+      and collect_in acc values =
+        match Vec.pop_front values with
+        | None -> acc
+        | Some (keyword, _) when Option.is_some (Edn_util.as_keyword keyword) ->
+            acc
+        | Some (value, rest) -> collect_in (Vec.push_back acc value) rest
       in
-      match List.rev (find_in values) with
-      | value :: _ -> symbol_is "%" value
-      | [] -> false)
+      match find_in values with
+      | values when not (Vec.is_empty values) ->
+          symbol_is "%" (Vec.nth values (Vec.length values - 1))
+      | _ -> false)
   | _ -> false
 
 let query_args query inputs =
-  let args = query :: inputs in
-  if query_in_ends_with_percent query then args @ [ db_query_dsl_rules ]
+  let args = Vec.push_front inputs query in
+  if query_in_ends_with_percent query then Vec.push_back args db_query_dsl_rules
   else args
 
 let build ?registry:_ config _globals parsed =
@@ -604,10 +785,7 @@ let build ?registry:_ config _globals parsed =
             Error
               (Error.invalid_options "use either --query or --name, not both")
           else if Option.is_none query_text && Option.is_none query_name then
-            Error
-              (Error.make
-                 (Error.Missing_query)
-                 "query is required")
+            Error (Error.make Error.Missing_query "query is required")
           else
             let query_result, entry =
               match (query_text, query_name) with
@@ -617,15 +795,11 @@ let build ?registry:_ config _globals parsed =
                   | Some entry -> (Ok entry.query, Some entry)
                   | None ->
                       ( Error
-                          (Error.make
-                             (Error.Unknown_query)
+                          (Error.make Error.Unknown_query
                              ("unknown query: " ^ name)),
                         None ))
               | _ ->
-                  ( Error
-                      (Error.make
-                         (Error.Missing_query)
-                         "query is required"),
+                  ( Error (Error.make Error.Missing_query "query is required"),
                     None )
             in
             Error.bind query_result (fun query ->
@@ -634,7 +808,7 @@ let build ?registry:_ config _globals parsed =
                       match
                         Option.bind opts.inputs_edn Cli_primitive.non_empty
                       with
-                      | None -> Ok []
+                      | None -> Ok Vec.empty
                       | Some text -> (
                           match edn_value_of_string ~label:"inputs" text with
                           | Ok value -> (
@@ -665,40 +839,42 @@ let source_value = function
 
 let input_value (input : input_spec) =
   let fields =
-    [
-      (Edn_util.keyword "name", Edn_util.string input.name);
-      (Edn_util.keyword "optional", Edn_util.bool input.optional);
-    ]
-    @
+    Vec.of_array
+      [|
+        (Edn_util.keyword "name", Edn_util.string input.name);
+        (Edn_util.keyword "optional", Edn_util.bool input.optional);
+      |]
+    |> fun fields ->
     match input.default with
-    | Some value -> [ (Edn_util.keyword "default", value) ]
-    | None -> []
+    | Some value -> Vec.push_back fields (Edn_util.keyword "default", value)
+    | None -> fields
   in
-  Edn_util.map fields
+  Edn_util.map_vec fields
 
 let hide_internal_inputs (entry : query_entry) : query_entry =
   {
     entry with
     inputs =
-      List.filter
+      Vec.filter
         (fun (input : input_spec) -> input.name <> "?now-ms")
         entry.inputs;
   }
 
 let query_entry_value (entry : query_entry) =
   let entry = hide_internal_inputs entry in
-  Edn_util.map
-    [
-      (Edn_util.keyword "name", Edn_util.string entry.name);
-      (Edn_util.keyword "source", source_value entry.source);
-      ( Edn_util.keyword "doc",
-        match entry.doc with
-        | Some doc -> Edn_util.string doc
-        | None -> Edn_util.nil );
-      ( Edn_util.keyword "inputs",
-        Edn_util.vector (List.map input_value entry.inputs) );
-      (Edn_util.keyword "query", entry.query);
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         (Edn_util.keyword "name", Edn_util.string entry.name);
+         (Edn_util.keyword "source", source_value entry.source);
+         ( Edn_util.keyword "doc",
+           match entry.doc with
+           | Some doc -> Edn_util.string doc
+           | None -> Edn_util.nil );
+         ( Edn_util.keyword "inputs",
+           Edn_util.vector_vec (entry.inputs |> Vec.map input_value) );
+         (Edn_util.keyword "query", entry.query);
+       |])
 
 let execute_with_mode action config mode =
   let open Cli_effect in
@@ -707,12 +883,13 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.ok ~command:Command_id.Query_list mode
            (Raw
-              (Edn_util.map
-                 [
-                   ( Edn_util.keyword "queries",
-                     Edn_util.vector
-                       (List.map query_entry_value (list_queries config)) );
-                 ])))
+              (Edn_util.map_vec
+                 (Vec.of_array
+                    [|
+                      ( Edn_util.keyword "queries",
+                        Edn_util.vector_vec
+                          (list_queries config |> Vec.map query_entry_value) );
+                    |]))))
   | Run { repo; query; inputs; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
@@ -721,48 +898,54 @@ let execute_with_mode action config mode =
         | Ok invoke_config ->
             bind
               (Transport.thread_api_q invoke_config ~repo
-                 ~query:(Edn_util.vector_t (query_args query inputs)))
+                 ~query:(Edn_util.vector_t_vec (query_args query inputs)))
               (fun value ->
                 pure
                   (Cli_result.ok ~command:Command_id.Query mode
                      (Query_result
-                        (Edn_util.map [ (Edn_util.keyword "result", value) ])))))
+                        (Edn_util.map_vec
+                           (Vec.of_array
+                              [| (Edn_util.keyword "result", value) |]))))))
 
-let meta ?(examples = []) id doc =
+let meta ?(examples = Vec.empty) id doc =
   {
     Command_registry.id;
     path = Command_id.to_path id;
     doc;
     long_doc = None;
     examples;
-    options = [];
+    options = Vec.empty;
     category = Command_registry.Graph_inspect_and_edit;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta
-      ~examples:
-        [
-          "logseq query --graph my-graph --name recent-updated --inputs '[30]'";
-          "logseq query --graph my-graph --name task-search --inputs \
-           '[:logseq.property/status.done \"daily\"]'";
-          "logseq query --graph my-graph --query '[:find [?e ...] :where [?e \
-           :block/name]]'";
-        ]
-      Command_id.Query "Run a Datascript query";
-    meta
-      ~examples:
-        [
-          "logseq query list --graph my-graph";
-          "logseq query list --graph my-graph --output edn";
-        ]
-      Query_list "List available queries";
-  ]
+  Vec.of_array
+    [|
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq query --graph my-graph --name recent-updated --inputs \
+                '[30]'";
+               "logseq query --graph my-graph --name task-search --inputs \
+                '[:logseq.property/status.done \"daily\"]'";
+               "logseq query --graph my-graph --query '[:find [?e ...] :where \
+                [?e :block/name]]'";
+             |])
+        Command_id.Query "Run a Datascript query";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq query list --graph my-graph";
+               "logseq query list --graph my-graph --output edn";
+             |])
+        Query_list "List available queries";
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in
