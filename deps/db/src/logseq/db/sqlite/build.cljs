@@ -400,11 +400,14 @@
                        {:db/ident ident :block/order order}))))]
     (into new-properties-tx existing-property-orders-tx)))
 
-(defn- build-class-extends [{:build/keys [class-parent class-extends]} class-db-ids]
-  (when-let [class-extends' (if class-parent
-                              (do (println "Warning: :build/class-parent is deprecated and will be removed soon.")
-                                  [class-parent])
-                              class-extends)]
+(defn- effective-class-extends
+  [{:build/keys [class-parent class-extends]}]
+  (if class-parent [class-parent] class-extends))
+
+(defn- build-class-extends [class-config class-db-ids]
+  (when (:build/class-parent class-config)
+    (println "Warning: :build/class-parent is deprecated and will be removed soon."))
+  (when-let [class-extends' (effective-class-extends class-config)]
     (mapv (fn [c]
             (or (class-db-ids c)
                 (if (db-malli-schema/class? c)
@@ -415,7 +418,7 @@
 (defn- validate-class-extends-acyclic!
   [classes all-idents]
   (when (some (fn [[_ class-config]]
-                (seq (:build/class-extends class-config)))
+                (seq (effective-class-extends class-config)))
               classes)
     (let [class-idents (set (map #(get-ident all-idents %) (keys classes)))
           edges (->> classes
@@ -425,7 +428,7 @@
                                          (let [parent-ident (get-ident all-idents parent)]
                                            (when (contains? class-idents parent-ident)
                                              [class-ident parent-ident])))
-                                       (:build/class-extends class-config))))))
+                                       (effective-class-extends class-config))))))
           [outgoing incoming-counts]
           (reduce (fn [[outgoing counts] [class-ident parent-ident]]
                     [(update outgoing class-ident (fnil conj []) parent-ident)
