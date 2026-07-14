@@ -11,8 +11,9 @@ type page_filter = {
 }
 
 type node_filter = {
-  tag_ids : Cli_primitive.db_id list;
-  property_idents : Cli_primitive.keyword list;
+  tag_ids : Cli_primitive.db_id Rrbvec.t;
+  property_idents : Cli_primitive.keyword Rrbvec.t;
 }
 
-val minimal_list_item : Entity.t -> Melange_edn_melange.map Melange_edn_melange.t
+val minimal_list_item :
+  Entity.t -> Melange_edn_melange.map Melange_edn_melange.t

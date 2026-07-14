@@ -90,9 +90,10 @@ let request ?timeout_span method_ uri ~headers ~body =
 let method_name method_ = Edn_util.keyword_to_string method_ |> String.trim
 
 let invoke_body method_ args =
-  let args_transit = transit_json_of_value (Edn_util.vector args) in
+  let args_transit = transit_json_of_value (Edn_util.vector_vec args) in
   Json_util.string_of_string_fields
-    [ ("method", method_name method_); ("argsTransit", args_transit) ]
+    (Vec.of_array
+       [| ("method", method_name method_); ("argsTransit", args_transit) |])
 
 let invoke config method_ args =
   let base_url = normalize_base_url config.base_url in
@@ -109,10 +110,11 @@ let invoke config method_ args =
         (request ~timeout_span:config.timeout_span Fetch.Post
            (base_url ^ "/v1/invoke")
            ~headers:
-             [
-               ("Content-Type", "application/json");
-               ("Accept", "application/json");
-             ]
+             (Vec.of_array
+                [|
+                  ("Content-Type", "application/json");
+                  ("Accept", "application/json");
+                |])
            ~body:(invoke_body method_ args)))
 
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
@@ -122,58 +124,61 @@ let thread_api_apply_outliner_ops config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "apply-outliner-ops")
-    [ repo_value repo; Edn_util.any ops; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any ops; Edn_util.any options |])
 
 let thread_api_backup_db_sqlite config ~(repo : Cli_primitive.repo) ~path =
   invoke config
     (thread_api_method "backup-db-sqlite")
-    [ repo_value repo; Edn_util.string path ]
+    (Vec.of_array [| repo_value repo; Edn_util.string path |])
 
 let thread_api_cli_list_nodes config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-nodes")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_cli_list_pages config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-pages")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_cli_list_properties config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-properties")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_cli_list_tags config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-tags")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_cli_list_tasks config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-tasks")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_create_or_open_db config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "create-or-open-db")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_db_sync_download_graph_by_id config ~(repo : Cli_primitive.repo)
     ~graph_id ~graph_e2ee =
   invoke config
     (thread_api_method "db-sync-download-graph-by-id")
-    [ repo_value repo; Edn_util.string graph_id; Edn_util.bool graph_e2ee ]
+    (Vec.of_array
+       [| repo_value repo; Edn_util.string graph_id; Edn_util.bool graph_e2ee |])
 
 let thread_api_db_sync_ensure_user_rsa_keys ?options config =
   let args =
-    match options with None -> [] | Some options -> [ Edn_util.any options ]
+    match options with
+    | None -> Vec.empty
+    | Some options -> Vec.singleton (Edn_util.any options)
   in
   invoke config (thread_api_method "db-sync-ensure-user-rsa-keys") args
 
@@ -181,89 +186,103 @@ let thread_api_db_sync_grant_graph_access config ~(repo : Cli_primitive.repo)
     ~graph_id ~email =
   invoke config
     (thread_api_method "db-sync-grant-graph-access")
-    [ repo_value repo; Edn_util.string graph_id; Edn_util.string email ]
+    (Vec.of_array
+       [| repo_value repo; Edn_util.string graph_id; Edn_util.string email |])
 
 let thread_api_db_sync_list_remote_graphs config =
-  invoke config (thread_api_method "db-sync-list-remote-graphs") []
+  invoke config (thread_api_method "db-sync-list-remote-graphs") Vec.empty
 
 let thread_api_db_sync_request_asset_download config
     ~(repo : Cli_primitive.repo) ~asset_uuid =
   invoke config
     (thread_api_method "db-sync-request-asset-download")
-    [ repo_value repo; Edn_util.uuid asset_uuid ]
+    (Vec.of_array [| repo_value repo; Edn_util.uuid asset_uuid |])
 
 let thread_api_db_sync_start config ~(repo : Cli_primitive.repo) =
-  invoke config (thread_api_method "db-sync-start") [ repo_value repo ]
+  invoke config
+    (thread_api_method "db-sync-start")
+    (Vec.singleton (repo_value repo))
 
 let thread_api_db_sync_status config ~(repo : Cli_primitive.repo) =
-  invoke config (thread_api_method "db-sync-status") [ repo_value repo ]
+  invoke config
+    (thread_api_method "db-sync-status")
+    (Vec.singleton (repo_value repo))
 
 let thread_api_db_sync_stop config =
-  invoke config (thread_api_method "db-sync-stop") []
+  invoke config (thread_api_method "db-sync-stop") Vec.empty
 
 let thread_api_db_sync_upload_graph config ~(repo : Cli_primitive.repo) =
-  invoke config (thread_api_method "db-sync-upload-graph") [ repo_value repo ]
+  invoke config
+    (thread_api_method "db-sync-upload-graph")
+    (Vec.singleton (repo_value repo))
 
 let thread_api_export_edn config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "export-edn")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_get_block_parents config ~(repo : Cli_primitive.repo) ~block_id =
   invoke config
     (thread_api_method "get-block-parents")
-    [ repo_value repo; Edn_util.int64 block_id ]
+    (Vec.of_array [| repo_value repo; Edn_util.int64 block_id |])
 
 let thread_api_get_block_refs config ~(repo : Cli_primitive.repo) ~block_id =
   invoke config
     (thread_api_method "get-block-refs")
-    [ repo_value repo; Edn_util.int64 block_id ]
+    (Vec.of_array [| repo_value repo; Edn_util.int64 block_id |])
 
 let thread_api_get_e2ee_password config ~refresh_token =
   invoke config
     (thread_api_method "get-e2ee-password")
-    [ Edn_util.string refresh_token ]
+    (Vec.singleton (Edn_util.string refresh_token))
 
 let thread_api_import_db_binary config ~(repo : Cli_primitive.repo) ~data =
-  invoke config (thread_api_method "import-db-binary") [ repo_value repo; data ]
+  invoke config
+    (thread_api_method "import-db-binary")
+    (Vec.of_array [| repo_value repo; data |])
 
 let thread_api_import_edn config ~(repo : Cli_primitive.repo) ~data =
-  invoke config (thread_api_method "import-edn") [ repo_value repo; data ]
+  invoke config
+    (thread_api_method "import-edn")
+    (Vec.of_array [| repo_value repo; data |])
 
 let thread_api_pull config ~(repo : Cli_primitive.repo)
     ~(selector : Melange_edn_melange.vector Melange_edn_melange.t) ~lookup =
   invoke config (thread_api_method "pull")
-    [ repo_value repo; Edn_util.any selector; lookup ]
+    (Vec.of_array [| repo_value repo; Edn_util.any selector; lookup |])
 
 let thread_api_q config ~(repo : Cli_primitive.repo)
     ~(query : Melange_edn_melange.vector Melange_edn_melange.t) =
-  invoke config (thread_api_method "q") [ repo_value repo; Edn_util.any query ]
+  invoke config (thread_api_method "q")
+    (Vec.of_array [| repo_value repo; Edn_util.any query |])
 
 let thread_api_set_db_sync_config config ~config:sync_config =
   invoke config
     (thread_api_method "set-db-sync-config")
-    [ Edn_util.any sync_config ]
+    (Vec.singleton (Edn_util.any sync_config))
 
 let thread_api_sync_app_state config
     ~(auth_state : Melange_edn_melange.map Melange_edn_melange.t) =
-  invoke config (thread_api_method "sync-app-state") [ Edn_util.any auth_state ]
+  invoke config
+    (thread_api_method "sync-app-state")
+    (Vec.singleton (Edn_util.any auth_state))
 
 let thread_api_validate_db config ~(repo : Cli_primitive.repo)
     ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "validate-db")
-    [ repo_value repo; Edn_util.any options ]
+    (Vec.of_array [| repo_value repo; Edn_util.any options |])
 
 let thread_api_verify_and_save_e2ee_password config ~refresh_token ~password =
   invoke config
     (thread_api_method "verify-and-save-e2ee-password")
-    [ Edn_util.string refresh_token; Edn_util.string password ]
+    (Vec.of_array [| Edn_util.string refresh_token; Edn_util.string password |])
 
 let value_get_string_key key value =
   match Edn_util.as_map value with
   | Some fields ->
-      List.find_map
+      Vec.find_map
         (fun (field_key, value) ->
           match
             (Edn_util.as_string_like field_key, Edn_util.as_string value)
@@ -282,8 +301,8 @@ let max_non_progress_event_decode_bytes = 256 * 1024
 
 let decode_event event_text =
   let data_line =
-    event_text |> String.split_on_char '\n'
-    |> List.find_map (fun line ->
+    Vec.split_on_char '\n' event_text
+    |> Vec.find_map (fun line ->
         if starts_with ~prefix:"data: " line then
           Some (String.sub line 6 (String.length line - 6))
         else None)
@@ -310,7 +329,9 @@ let decode_event event_text =
               | None -> Edn_util.nil
             in
             match Edn_util.as_vector decoded_payload with
-            | Some [ event_type_value; payload ] -> (
+            | Some values when Vec.length values = 2 -> (
+                let event_type_value = Vec.nth values 0 in
+                let payload = Vec.nth values 1 in
                 match Edn_util.as_keyword_t event_type_value with
                 | Some event_type -> Some (event_type, payload)
                 | None -> None)
@@ -325,12 +346,12 @@ let split_sse_events buffer =
   let rec loop start acc =
     match find_substring_from ~needle:"\n\n" buffer start with
     | None ->
-        (List.rev acc, String.sub buffer start (String.length buffer - start))
+        (acc, String.sub buffer start (String.length buffer - start))
     | Some idx ->
         let event_text = String.sub buffer start (idx - start) in
-        loop (idx + 2) (event_text :: acc)
+        loop (idx + 2) (Vec.push_back acc event_text)
   in
-  loop 0 []
+  loop 0 Vec.empty
 
 let dispatch_event on_event event_type payload =
   Cli_effect.async (fun () ->
@@ -340,7 +361,7 @@ let dispatch_event on_event event_type payload =
 let consume_sse_chunk on_event buffer chunk =
   let events, rest = split_sse_events (!buffer ^ chunk) in
   buffer := rest;
-  List.iter
+  Vec.iter
     (fun event_text ->
       match decode_event event_text with
       | Some (event_type, payload) -> dispatch_event on_event event_type payload
@@ -372,13 +393,11 @@ let bytes_of_output_data value =
   | _ -> Melange_edn_melange.to_edn_string value
 
 let unsupported_output_format format =
-  Error.make
-    (Error.Unsupported_output_format)
+  Error.make Error.Unsupported_output_format
     ("unsupported output format: " ^ format)
 
 let unsupported_input_format format =
-  Error.make
-    (Error.Unsupported_input_format)
+  Error.make Error.Unsupported_input_format
     ("unsupported input format: " ^ format)
 
 let write_output ~format ~path ~data =

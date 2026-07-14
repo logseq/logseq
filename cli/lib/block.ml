@@ -8,9 +8,9 @@ type t = {
   order : int option;
   parent : Selector.block option;
   page : Selector.page option;
-  tags : Selector.tag list;
-  properties : Property.assignment list;
-  children : t list;
+  tags : Selector.tag Rrbvec.t;
+  properties : Property.assignment Rrbvec.t;
+  children : t Rrbvec.t;
   raw : Melange_edn_melange.any;
 }
 
@@ -22,7 +22,7 @@ let position_of_string = function
   | "sibling" -> Some Sibling
   | _ -> None
 
-let make ?uuid ?title ?(children = []) () =
+let make ?uuid ?title ?(children = Vec.empty) () =
   {
     id = None;
     uuid;
@@ -31,8 +31,8 @@ let make ?uuid ?title ?(children = []) () =
     order = None;
     parent = None;
     page = None;
-    tags = [];
-    properties = [];
+    tags = Vec.empty;
+    properties = Vec.empty;
     children;
     raw = Edn_util.nil;
   }
@@ -60,55 +60,60 @@ let property_key_to_value = function
 let parent_to_value = function
   | Selector.Block_id id -> Edn_util.int64 id
   | Block_uuid uuid ->
-      Edn_util.vector [ Edn_util.keyword "block/uuid"; Edn_util.uuid uuid ]
+      Edn_util.vector_vec
+        (Vec.of_array [| Edn_util.keyword "block/uuid"; Edn_util.uuid uuid |])
 
 let rec to_value t =
   let fields =
-    [
+    Vec.singleton
       ( Edn_util.keyword "block/title",
-        Edn_util.string (Option.value t.title ~default:"") );
-    ]
+        Edn_util.string (Option.value t.title ~default:"") )
   in
   let fields =
-    if t.children = [] then fields
+    if Vec.is_empty t.children then fields
     else
-      ( Edn_util.keyword "block/children",
-        Edn_util.vector
-          (List.map (fun child -> Edn_util.any (to_value child)) t.children) )
-      :: fields
+      Vec.push_back fields
+        ( Edn_util.keyword "block/children",
+          Edn_util.vector_vec
+            (t.children |> Vec.map (fun child -> Edn_util.any (to_value child)))
+        )
   in
   let fields =
     match t.uuid with
-    | Some uuid -> (Edn_util.keyword "block/uuid", Edn_util.uuid uuid) :: fields
+    | Some uuid ->
+        Vec.push_back fields (Edn_util.keyword "block/uuid", Edn_util.uuid uuid)
     | None -> fields
   in
   let fields =
     match t.id with
-    | Some id -> (Edn_util.keyword "db/id", Edn_util.int64 id) :: fields
+    | Some id ->
+        Vec.push_back fields (Edn_util.keyword "db/id", Edn_util.int64 id)
     | None -> fields
   in
   let fields =
     match t.parent with
     | Some parent ->
-        (Edn_util.keyword "block/parent", parent_to_value parent) :: fields
+        Vec.push_back fields
+          (Edn_util.keyword "block/parent", parent_to_value parent)
     | None -> fields
   in
   let fields =
-    match t.tags with
-    | [] -> fields
-    | tags ->
+    if Vec.is_empty t.tags then fields
+    else
+      Vec.push_back fields
         ( Edn_util.keyword "block/tags",
-          Edn_util.set (List.map tag_to_value tags) )
-        :: fields
+          Edn_util.set_vec (t.tags |> Vec.map tag_to_value) )
   in
   let fields =
-    List.fold_left
+    Vec.fold_left
       (fun fields assignment ->
-        (property_key_to_value assignment.Property.key, assignment.value)
-        :: fields)
+        Vec.push_back fields
+          (property_key_to_value assignment.Property.key, assignment.value))
       fields t.properties
   in
-  Edn_util.map_t (List.rev fields)
+  Edn_util.map_t_vec fields
 
-let rec flatten xs = xs @ List.concat_map (fun t -> flatten t.children) xs
+let rec flatten xs =
+  Vec.append xs (Vec.concat_map (fun t -> flatten t.children) xs)
+
 let label t = match t.title with Some _ as x -> x | None -> t.name

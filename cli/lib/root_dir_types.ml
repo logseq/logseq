@@ -27,9 +27,10 @@ let rec mkdir_p path =
 
 let root_dir_error path message =
   Error.make
-    ~context:(Edn_util.map [ (Edn_util.keyword "path", Edn_util.string path) ])
-    (Error.Root_dir_permission)
-    message
+    ~context:
+      (Edn_util.map_vec
+         (Vec.of_array [| (Edn_util.keyword "path", Edn_util.string path) |]))
+    Error.Root_dir_permission message
 
 let ensure_root_dir root =
   let path = normalize_root_dir root in
@@ -38,7 +39,7 @@ let ensure_root_dir root =
     if not (Cli_unix.is_directory path) then
       Error (root_dir_error path ("root-dir is not a directory: " ^ path))
     else (
-      Cli_unix.access path [ Cli_unix.R_OK; Cli_unix.W_OK ];
+      Cli_unix.access path (Vec.of_array [| Cli_unix.R_OK; Cli_unix.W_OK |]);
       Ok path)
   with exn ->
     Error

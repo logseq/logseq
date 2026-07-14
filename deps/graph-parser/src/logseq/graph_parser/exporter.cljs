@@ -42,14 +42,17 @@
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
-  [block]
-  (let [updated-at (common-util/time-ms)
-        block (cond-> block
-                (nil? (:block/updated-at block))
-                (assoc :block/updated-at updated-at)
-                (nil? (:block/created-at block))
-                (assoc :block/created-at updated-at))]
-    block))
+  ([block]
+   (add-missing-timestamps block nil))
+  ([block {:keys [file-created-at file-updated-at]}]
+   (let [updated-at (or file-updated-at (common-util/time-ms))
+         created-at (or file-created-at updated-at)
+         block (cond-> block
+                 (nil? (:block/updated-at block))
+                 (assoc :block/updated-at updated-at)
+                 (nil? (:block/created-at block))
+                 (assoc :block/created-at created-at))]
+     block)))
 
 (defn- build-new-namespace-page [block]
   (let [new-title (ns-util/get-last-part (:block/title block))]
@@ -1993,7 +1996,7 @@
                      (handle-math)
                      (update-block-marker db options)
                      (update-block-priority options)
-                     add-missing-timestamps
+                     (add-missing-timestamps options)
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
@@ -2008,7 +2011,7 @@
                                 aliases))))
 
 (defn- build-new-page-or-class
-  [m db per-file-state all-idents {:keys [user-options journal-created-ats]}]
+  [m db per-file-state all-idents {:keys [user-options journal-created-ats] :as options}]
   (-> (cond-> m
         ;; Fix pages missing :block/title. Shouldn't happen
         (not (:block/title m))
@@ -2017,7 +2020,7 @@
         (update-page-alias (:page-names-to-uuids per-file-state))
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
-      add-missing-timestamps
+      (add-missing-timestamps options)
       (update-page-tags db user-options per-file-state all-idents)))
 
 (defn- get-page-parents
@@ -2476,8 +2479,12 @@
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
-  [db file content {:keys [extract-options import-state]}]
+  [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
   (let [format (common-util/get-format file)
+        with-file-timestamps (fn [node]
+                               (cond-> node
+                                 file-created-at (assoc :block/created-at file-created-at)
+                                 file-updated-at (assoc :block/updated-at file-updated-at)))
         extract-options' (merge {:block-pattern (get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
@@ -2490,8 +2497,13 @@
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
                   (update :pages (fn [pages]
-                                   (map #(dissoc % :block.temp/original-page-name) pages)))
-                  (update :blocks fix-extracted-block-tags-and-refs))
+                                   (map #(-> %
+                                             (dissoc :block.temp/original-page-name)
+                                             with-file-timestamps)
+                                        pages)))
+                  (update :blocks (fn [blocks]
+                                    (fix-extracted-block-tags-and-refs
+                                     (map with-file-timestamps blocks)))))
 
               :else
               (when-not (re-find #"whiteboards/.*\.edn$" (str file))
@@ -2640,7 +2652,7 @@
 
 (defn- export-doc-file
   [{:keys [path idx] :as file} conn <read-file
-   {:keys [notify-user set-ui-state <export-file]
+   {:keys [notify-user set-ui-state <export-file <get-file-stat]
     :or {set-ui-state (constantly nil)
          <export-file (fn <export-file [conn m opts]
                         (<add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
@@ -2649,8 +2661,15 @@
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
+              stat (when (fn? <get-file-stat)
+                     (<get-file-stat (or (:fs-path file) path)))
+              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
+              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
               m {:file/path path :file/content content}
-              _ (<export-file conn m (dissoc options :set-ui-state :<export-file))]
+              export-options (cond-> (dissoc options :set-ui-state :<export-file)
+                               created-at (assoc :file-created-at (.getTime created-at))
+                               modified-at (assoc :file-updated-at (.getTime modified-at)))
+              _ (<export-file conn m export-options)]
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]

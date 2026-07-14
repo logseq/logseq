@@ -8,13 +8,14 @@ let uuid_ref_max_depth = 10
 let lower_uuid uuid = String.lowercase_ascii uuid
 
 let unique_preserve_order values =
-  let rec loop seen acc = function
-    | [] -> List.rev acc
-    | value :: rest ->
-        if List.mem value seen then loop seen acc rest
-        else loop (value :: seen) (value :: acc) rest
+  let rec loop seen acc values =
+    match Vec.pop_front values with
+    | None -> acc
+    | Some (value, rest) ->
+        if Vec.mem value seen then loop seen acc rest
+        else loop (Vec.push_front seen value) (Vec.push_back acc value) rest
   in
-  loop [] [] values
+  loop Vec.empty Vec.empty values
 
 let find_substring_from ~needle haystack start =
   let needle_len = String.length needle in
@@ -29,27 +30,27 @@ let find_substring_from ~needle haystack start =
 let extract_wiki_refs value =
   let rec loop start acc =
     match find_substring_from ~needle:"[[" value start with
-    | None -> List.rev acc |> unique_preserve_order
+    | None -> unique_preserve_order acc
     | Some open_index -> (
         let content_start = open_index + 2 in
         match find_substring_from ~needle:"]]" value content_start with
-        | None -> List.rev acc |> unique_preserve_order
+        | None -> unique_preserve_order acc
         | Some close_index ->
-          let candidate =
-            String.sub value content_start (close_index - content_start)
-          in
-          loop (close_index + 2) (candidate :: acc))
+            let candidate =
+              String.sub value content_start (close_index - content_start)
+            in
+            loop (close_index + 2) (Vec.push_back acc candidate))
   in
-  loop 0 []
+  loop 0 Vec.empty
 
 let extract_uuid_refs value =
   value |> extract_wiki_refs
-  |> List.filter Cli_primitive.is_uuid_string
-  |> List.map lower_uuid |> unique_preserve_order
+  |> Vec.filter Cli_primitive.is_uuid_string
+  |> Vec.map lower_uuid |> unique_preserve_order
 
 let label_lookup labels uuid =
   let uuid = lower_uuid uuid in
-  List.find_map
+  Vec.find_map
     (fun (candidate, label) ->
       if lower_uuid candidate = uuid then Some label else None)
     labels
@@ -86,7 +87,7 @@ let replace_uuid_refs_once value labels =
 
 let replace_uuid_refs text labels =
   let rec loop remaining current =
-    if remaining <= 0 || labels = [] then current
+    if remaining <= 0 || Vec.is_empty labels then current
     else
       let next, changed = replace_uuid_refs_once current labels in
       if changed then loop (remaining - 1) next else current
@@ -94,7 +95,7 @@ let replace_uuid_refs text labels =
   loop uuid_ref_max_depth text
 
 let collect_uuid_refs_from_strings values =
-  values |> List.concat_map extract_uuid_refs |> unique_preserve_order
+  values |> Vec.concat_map extract_uuid_refs |> unique_preserve_order
 
 let field_text field = Edn_util.keyword_to_string field
 
@@ -103,7 +104,7 @@ let string_field item field =
 
 let collect_uuid_refs_from_items items fields =
   items
-  |> List.concat_map (fun item -> List.filter_map (string_field item) fields)
+  |> Vec.concat_map (fun item -> Vec.filter_map (string_field item) fields)
   |> collect_uuid_refs_from_strings
 
 let normalize_entity_field item field labels =
@@ -120,20 +121,23 @@ let normalize_entity_field item field labels =
       else item
 
 let normalize_item_string_fields items fields labels =
-  List.map
+  Vec.map
     (fun item ->
-      List.fold_left
+      Vec.fold_left
         (fun item field -> normalize_entity_field item field labels)
         item fields)
     items
 
 let kw value = Edn_util.keyword value
-let vector values = Edn_util.vector values
+let vector_vec values = Edn_util.vector_vec values
 
 let uuid_lookup_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/title"; kw "block/name" ]
+  vector_vec
+    (Vec.of_array
+       [| kw "db/id"; kw "block/uuid"; kw "block/title"; kw "block/name" |])
 
-let uuid_lookup uuid = vector [ kw "block/uuid"; Edn_util.uuid uuid ]
+let uuid_lookup uuid =
+  vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])
 
 let value_uuid value =
   match
@@ -153,17 +157,18 @@ let label_of_value value =
 let fetch_uuid_entities config repo uuids =
   let uuids =
     uuids
-    |> List.filter Cli_primitive.is_uuid_string
-    |> List.map lower_uuid |> unique_preserve_order
+    |> Vec.filter Cli_primitive.is_uuid_string
+    |> Vec.map lower_uuid |> unique_preserve_order
   in
   let open Cli_effect in
   bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
     (function
-    | Error _ -> pure []
+    | Error _ -> pure Vec.empty
     | Ok invoke_config ->
-        let rec pull acc = function
-          | [] -> pure (List.rev acc)
-          | uuid :: rest ->
+        let rec pull acc uuids =
+          match Vec.pop_front uuids with
+          | None -> pure acc
+          | Some (uuid, rest) ->
               bind
                 (Transport.thread_api_pull invoke_config ~repo
                    ~selector:
@@ -175,19 +180,19 @@ let fetch_uuid_entities config repo uuids =
                     match value_uuid value with
                     | None -> acc
                     | Some uuid ->
-                        {
-                          uuid;
-                          id = Edn_util.get_int64 value "db/id";
-                          label = label_of_value value;
-                        }
-                        :: acc
+                        Vec.push_back acc
+                          {
+                            uuid;
+                            id = Edn_util.get_int64 value "db/id";
+                            label = label_of_value value;
+                          }
                   in
                   pull acc rest)
         in
-        pull [] uuids)
+        pull Vec.empty uuids)
 
 let fetch_uuid_labels config repo uuids =
   Cli_effect.map
-    (List.filter_map (fun entry ->
+    (Vec.filter_map (fun entry ->
          Option.map (fun label -> (entry.uuid, label)) entry.label))
     (fetch_uuid_entities config repo uuids)

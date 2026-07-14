@@ -1248,11 +1248,16 @@
                               str-id))
                           uuid-or-title*))
         [block set-block!] (hooks/use-state nil)
+        referenced-block (some (fn [ref]
+                                 (when (= uuid-or-title (:block/uuid ref))
+                                   ref))
+                               (:block/refs (:block config*)))
+        block (or block referenced-block)
         self-reference? (when (set? (:ref-set config*))
                           (contains? (:ref-set config*) uuid-or-title))]
     (hooks/use-effect!
      (fn []
-       (when uuid-or-title
+       (when (and uuid-or-title (nil? referenced-block))
          (p/let [block (db-async/<get-block (state/get-current-repo)
                                             uuid-or-title
                                             {:children? false
@@ -1303,9 +1308,10 @@
                                         (util/stop e))}
                     (when (render-block-positioned-properties? block :block-left)
                       (block-positioned-properties config block :block-left))])
-                 (page-cp config' (if (uuid? uuid-or-title)
-                                    {:block/uuid uuid-or-title}
-                                    {:block/name uuid-or-title}))
+                 (page-cp config' (or block
+                                      (if (uuid? uuid-or-title)
+                                        {:block/uuid uuid-or-title}
+                                        {:block/name uuid-or-title})))
                  (when (and brackets? (not blank-title?))
                    [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
 

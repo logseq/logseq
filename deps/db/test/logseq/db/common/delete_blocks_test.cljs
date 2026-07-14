@@ -26,6 +26,27 @@
       (d/transact! conn (concat retracts extra))
       (is (nil? (d/entity @conn (:db/id reaction-entity)))))))
 
+(deftest delete-blocks-expands-property-value-children
+  (testing "delete-blocks retracts generated property value children"
+    (let [property-value-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/cli-http-prop {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Parent"
+                             :build/properties
+                             {:user.property/cli-http-prop
+                              {:build/property-value :block
+                               :block/title "Property value"
+                               :block/uuid property-value-uuid
+                               :build/keep-uuid? true}}}]}]})
+          parent (db-test/find-block-by-content @conn "Parent")
+          property-value (d/entity @conn [:block/uuid property-value-uuid])
+          txs [[:db/retractEntity (:db/id parent)]]
+          expanded (delete-blocks/expand-delete-blocks-tx @conn txs {:outliner-op :delete-blocks})]
+      (is (= (:db/id parent) (:db/id (:block/parent property-value))))
+      (is (some #(= [:db/retractEntity (:db/id property-value)] %) expanded)))))
+
 (deftest delete-blocks-removes-history-with-ref-value
   (testing "property history entries referencing a deleted block are retracted"
     (let [conn (db-test/create-conn-with-blocks
@@ -233,3 +254,59 @@
       (is (nil? (d/entity @conn [:block/uuid view-uuid])))
       (is (nil? (d/entity @conn [:block/uuid target-history-uuid])))
       (is (nil? (d/entity @conn [:block/uuid view-history-uuid]))))))
+
+(deftest delete-blocks-does-not-rewrite-title-for-deleted-view
+  (testing "reference title rewrite should skip generated views deleted by the same cleanup"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Asset target"}]}]})
+          target-block (db-test/find-block-by-content @conn "Asset target")
+          page (:block/page target-block)
+          view-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid view-uuid
+                                :block/title "Unlinked references"
+                                :block/raw-title "Unlinked references"
+                                :block/created-at now
+                                :block/updated-at now
+                                :block/page (:db/id page)
+                                :block/parent (:db/id page)
+                                :block/order "cD66"
+                                :block/refs (:db/id target-block)
+                                :logseq.property/view-for (:db/id target-block)
+                                :logseq.property.view/type :logseq.property.view/type.list
+                                :logseq.property.view/feature-type :unlinked-references}])
+          view (d/entity @conn [:block/uuid view-uuid])
+          retracts [[:db/retractEntity (:db/id target-block)]]
+          extra (delete-blocks/update-refs-history @conn retracts {})]
+      (is (some #(= [:db/retractEntity (:db/id view)] %) extra))
+      (is (not-any? #(= [:db/add (:db/id view) :block/title "Unlinked references"] %) extra)))))
+
+(deftest delete-blocks-does-not-rewrite-title-for-deleted-history
+  (testing "reference title rewrite should skip history entities deleted by the same cleanup"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          page (:block/page target-block)
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/title "History entry"
+                                :block/raw-title "History entry"
+                                :block/created-at now
+                                :block/updated-at now
+                                :block/page (:db/id page)
+                                :block/parent (:db/id page)
+                                :block/order "a0"
+                                :block/refs (:db/id target-block)
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/scalar-value "Todo"}])
+          history (d/entity @conn [:block/uuid history-uuid])
+          retracts [[:db/retractEntity (:db/id target-block)]]
+          extra (delete-blocks/update-refs-history @conn retracts {})]
+      (is (some #(= [:db/retractEntity (:db/id history)] %) extra))
+      (is (not-any? #(= [:db/add (:db/id history) :block/title "History entry"] %) extra)))))
