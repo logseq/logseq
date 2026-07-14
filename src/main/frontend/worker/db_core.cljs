@@ -2087,24 +2087,23 @@
                                            :level level
                                            :parent-id parent-id
                                            :has-children? (contains? children-by-parent block-id)}))
-                  (do
-                    (let [entry {:block-id block-id
-                                 :level level
-                                 :parent-id parent-id
-                                 :has-children? (contains? children-by-parent block-id)}
-                          tail-count @!tail-count
-                          tail-start @!tail-start
-                          tail-idx (if (< tail-count limit)
-                                     tail-count
-                                     tail-start)]
-                      (aset tail-entries tail-idx entry)
-                      (if (< tail-count limit)
-                        (vswap! !tail-count inc)
-                        (vreset! !tail-start (mod (inc tail-start) limit)))
-                      (when (and requested-offset
-                                 (>= idx requested-offset)
-                                 (< idx requested-end))
-                        (vswap! !entries conj entry)))))))
+                  (let [entry {:block-id block-id
+                               :level level
+                               :parent-id parent-id
+                               :has-children? (contains? children-by-parent block-id)}
+                        tail-count @!tail-count
+                        tail-start @!tail-start
+                        tail-idx (if (< tail-count limit)
+                                   tail-count
+                                   tail-start)]
+                    (aset tail-entries tail-idx entry)
+                    (if (< tail-count limit)
+                      (vswap! !tail-count inc)
+                      (vreset! !tail-start (mod (inc tail-start) limit)))
+                    (when (and requested-offset
+                               (>= idx requested-offset)
+                               (< idx requested-end))
+                      (vswap! !entries conj entry))))))
             (push-children! [stack parent-id level]
               (when-let [children (.get children-by-parent parent-id)]
                 (loop [idx (dec (alength children))]
