@@ -572,21 +572,13 @@
                                                             selected-component-page-entity-predicate-pattern))
       "The page component must use plain worker-payload predicates instead of ldb entity predicates."))
 
-(deftest page-queued-edit-block-does-not-require-page-tree-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))
-        queued-edit-index (string/index-of use-page-block-state-source "state/take-edit-block-fn!")
-        queued-edit-source (when queued-edit-index
-                             (subs use-page-block-state-source
-                                   (max 0 (- queued-edit-index 80))
-                                   (min (count use-page-block-state-source)
-                                        (+ queued-edit-index 180))))]
-    (is (some? queued-edit-index)
-        "Page rendering should consume queued edit-block functions after persisted outliner ops.")
-    (is (not (string/includes? queued-edit-source "when latest-page-tree"))
-        "Queued edit-block functions must run after persisted tx refresh without requiring a page-tree payload.")))
+(deftest worker-response-owns-queued-edit-block-test
+  (let [transact-source (source-for "src/main/frontend/db/transact.cljs")
+        page-source (source-for "src/main/frontend/components/page.cljs")]
+    (is (string/includes? transact-source "state/take-edit-block-fn!")
+        "Each worker response must consume its own queued editor callback.")
+    (is (not (string/includes? page-source "state/take-edit-block-fn!"))
+        "A later render must not consume a callback owned by another response.")))
 
 (deftest page-window-refresh-does-not-require-existing-window-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
@@ -598,25 +590,43 @@
                          (subs use-page-block-state-source
                                (max 0 (- refresh-index 120))
                                (min (count use-page-block-state-source)
-                                    (+ refresh-index 220))))]
+                                    (+ refresh-index 500))))]
     (is (some? refresh-index)
         "Page rendering must observe structural page-window refresh markers.")
     (is (not (string/includes? refresh-source "(and page-window"))
         "Structural page-window refresh must not be dropped while the initial page window is still loading.")
+    (is (string/includes? use-page-block-state-source "(hooks/use-effect!")
+        "Page-window reconciliation should not block browser paint.")
     (is (string/includes? refresh-source "(or (:offset page-window) 0)")
         "Structural page-window refresh should use offset 0 before the first page window is available.")))
 
 (deftest page-window-load-ignores-stale-responses-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
+        row-refresh-source source
+        loaded-refresh-source (subs source
+                                    (string/index-of source "(defn- refresh-loaded-child-overrides!")
+                                    (string/index-of source "(defn- refresh-loaded-children!"))
+        window-refresh-source (subs source
+                                    (string/index-of source "(defn- refresh-page-window-row-overrides!")
+                                    (string/index-of source "(defn- page-window-loader"))
+        page-window-loader-source (subs source
+                                        (string/index-of source "(defn- page-window-loader")
+                                        (string/index-of source "(defn- latest-page-tree-for"))
         use-page-block-state-source (subs source
                                           (string/index-of source "(defn- use-page-block-state")
                                           (string/index-of source "(hsx/defc page-blocks-cp"))]
     (is (string/includes? use-page-block-state-source "*page-window-request-id")
         "Page window loading must track request order.")
-    (is (string/includes? use-page-block-state-source "swap! *page-window-request-id inc")
+    (is (string/includes? page-window-loader-source "swap! *request-id inc")
         "Each page window request should get a monotonically increasing id.")
-    (is (string/includes? use-page-block-state-source "(= request-id @*page-window-request-id)")
-        "Only the latest page window response should update state.")))
+    (is (string/includes? page-window-loader-source "(= request-id @*request-id)")
+        "Only the latest page window response should update state.")
+    (is (and (string/includes? row-refresh-source "request-id (swap! *request-id inc)")
+             (string/includes? row-refresh-source "(= request-id @*request-id)"))
+        "Only the latest row refresh response should update state.")
+    (is (and (string/includes? loaded-refresh-source "refresh-row-overrides!")
+             (string/includes? window-refresh-source "refresh-row-overrides!"))
+        "Short and windowed pages should share one ordered row refresh path.")))
 
 (deftest page-window-rows-update-from-latest-block-tx-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
@@ -1550,8 +1560,8 @@
   (let [source (source-for "src/main/frontend/handler/editor.cljs")]
     (is (not (string/includes? source "(db/entity (:db/id sibling-entity))"))
         "move-to-prev-block must not rehydrate the loaded sibling through renderer DB entities.")
-    (is (string/includes? source "sibling-entity (db-async/<get-block repo")
-        "move-to-prev-block should load the sibling through the worker-backed block loader.")))
+    (is (string/includes? source "block (db-async/<get-block repo")
+        "move-to-prev-block should load an unloaded sibling through the worker-backed block loader.")))
 
 (deftest editor-move-selected-blocks-loads-through-worker-test
   (let [source (source-for "src/main/frontend/handler/editor.cljs")

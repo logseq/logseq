@@ -198,31 +198,28 @@
 
 (defn get-comment-thread-block-uuids
   [db block-uuids]
-  (let [block-uuids (->> block-uuids
-                         (keep (fn [block-uuid]
-                                 (cond
-                                   (uuid? block-uuid)
-                                   block-uuid
-
-                                   (and (string? block-uuid) (common-util/uuid-string? block-uuid))
-                                   (uuid block-uuid)
-
-                                   :else
-                                   nil)))
-                         vec)]
-    (when (seq block-uuids)
-      (->> (d/q '[:find [?block-uuid ...]
-                  :in $ [?block-uuid ...]
-                  :where
-                  [?block :block/uuid ?block-uuid]
-                  [?comments-area :logseq.property.comments/blocks ?block]
-                  [?comments-area :block/tags :logseq.class/Comments]
-                  [?comments-area :block/parent ?comments-area-parent]
-                  [(not= ?comments-area-parent ?block)]
-                  [(missing? $ ?comments-area :logseq.property/deleted-at)]]
-                db
-                block-uuids)
-           (mapv str)))))
+  (let [id->uuid (into {}
+                       (keep (fn [block-uuid]
+                               (let [block-uuid (cond
+                                                  (uuid? block-uuid) block-uuid
+                                                  (and (string? block-uuid)
+                                                       (common-util/uuid-string? block-uuid))
+                                                  (uuid block-uuid))]
+                                 (when-let [block-id (when block-uuid
+                                                      (d/entid db [:block/uuid block-uuid]))]
+                                   [block-id block-uuid]))))
+                       block-uuids)]
+    (when (seq id->uuid)
+      (->> (d/datoms db :aevt :logseq.property.comments/blocks)
+           (keep (fn [{comments-area-id :e block-id :v}]
+                   (when-let [block-uuid (get id->uuid block-id)]
+                     (let [comments-area (d/entity db comments-area-id)]
+                       (when (and (some #(= :logseq.class/Comments (:db/ident %))
+                                        (:block/tags comments-area))
+                                  (not= block-id (:db/id (:block/parent comments-area)))
+                                  (nil? (:logseq.property/deleted-at comments-area)))
+                         (str block-uuid))))))
+           vec))))
 
 (def-thread-api :thread-api/get-comments-area-block
   [repo block-ref]

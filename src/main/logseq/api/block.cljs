@@ -122,9 +122,10 @@
     :else :default))
 
 (defn- set-block-properties!
-  [plugin block-id properties {:keys [reset-property-values]}]
+  [plugin block-id properties {:keys [page-id reset-property-values]}]
   (ui-outliner-tx/transact!
-   {:outliner-op :set-block-properties}
+   {:outliner-op :set-block-properties
+    :ui/page-id page-id}
    (doseq [[property-id property-ident value schema property] properties]
      (when-not (qualified-keyword? property-ident)
        (js/console.error (str "Invalid property id: " property-id))
@@ -180,8 +181,8 @@
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  [block properties & {:keys [plugin schema reset-property-values]}]
-  (when-let [block-id (and (seq properties) (:db/id block))]
+  [block properties & {:keys [page-id plugin schema reset-property-values]}]
+  (when-let [block-id (and (seq properties) (:block/uuid block))]
     (let [properties (mapv (fn [[k v]]
                              (let [ident (get-db-ident-from-property-name k plugin)
                                    property-schema (get schema k)]
@@ -198,7 +199,8 @@
               properties (mapv (fn [[property-id ident value property-schema]]
                                  [property-id ident value property-schema (get property-by-ident ident)])
                                properties)]
-        (set-block-properties! plugin block-id properties {:reset-property-values reset-property-values})))))
+        (set-block-properties! plugin block-id properties {:page-id page-id
+                                                           :reset-property-values reset-property-values})))))
 
 (defn <sync-children-blocks!
   [block]

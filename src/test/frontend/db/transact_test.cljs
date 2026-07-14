@@ -5,6 +5,14 @@
             [frontend.util :as util]
             [promesa.core :as p]))
 
+(deftest worker-call-preserves-result-test
+  (async done
+    (let [result {:blocks [{:block/uuid (random-uuid)}]}]
+      (-> (db-transact/worker-call #(p/resolved result))
+          (p/then (fn [value]
+                    (is (= result value))))
+          (p/finally done)))))
+
 (deftest op-block-uuids-includes-move-ops-test
   (let [block-a (random-uuid)
         block-b (random-uuid)
@@ -61,9 +69,12 @@
                                    :block/collapsed? true}]
                                 {}]]]
      {:db-sync/tx-id tx-id}
+     nil
+     nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
+      (is (= tx-id (get-in latest [:entity-tx-ids block-id])))
       (is (true? (:page-window-refresh? latest)))
       (is (= tx-id (:tx-id latest))))))
 
@@ -76,7 +87,9 @@
     (#'db-transact/refresh-worker-op-blocks!
      [[:save-block [{:block/uuid block-id} {}]]]
      {:db-sync/tx-id tx-id}
-     page-tree)
+     page-tree
+     nil
+     nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
       (is (= #{} (:deleted-ids latest)))
@@ -90,31 +103,86 @@
         target-id (random-uuid)
         tx-id (random-uuid)
         page-tree {:block {:block/uuid target-id}
-                   :children [{:block/uuid block-id}]}]
+                   :children [{:block/uuid block-id}]}
+        page-window {:root {:block/uuid target-id}
+                     :rows [{:db/id 1 :block/uuid block-id}]}]
     (state/set-state! :db/latest-transacted-entity-uuids {})
     (#'db-transact/refresh-worker-op-blocks!
      [[:insert-blocks [[{:block/uuid block-id}] target-id {}]]]
      {:db-sync/tx-id tx-id}
-     page-tree)
+     page-tree
+     page-window
+     nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id target-id} (:updated-ids latest)))
       (is (= #{} (:deleted-ids latest)))
+      (is (= {block-id tx-id target-id tx-id}
+             (:entity-tx-ids latest)))
       (is (true? (:page-window-refresh? latest)))
       (is (= tx-id (:tx-id latest)))
+      (is (= page-window (:page-window latest)))
       (is (not (:page-children-stale? latest)))
       (is (not (contains? latest :page-tree))))))
+
+(deftest refresh-worker-op-blocks-keeps-cross-page-refresh-separate-test
+  (let [block-id (random-uuid)
+        current-page-id (random-uuid)
+        target-page-id (random-uuid)
+        tx-id (random-uuid)]
+    (state/set-state! :db/latest-transacted-entity-uuids {})
+    (#'db-transact/refresh-worker-op-blocks!
+     [[:indent-outdent-blocks [[block-id] true {}]]]
+     {:db-sync/tx-id tx-id}
+     nil
+     {:root {:block/uuid current-page-id}}
+     #{current-page-id target-page-id})
+    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
+      (is (= #{block-id} (:updated-ids latest)))
+      (is (= #{target-page-id} (:affected-page-uuids latest)))
+      (is (= tx-id (get-in latest [:entity-tx-ids target-page-id]))))))
+
+(deftest row-data-block-ids-use-worker-rows-for-content-only-test
+  (let [current-id (random-uuid)
+        inserted-id (random-uuid)]
+    (is (= #{current-id}
+           (#'db-transact/row-data-block-ids
+            [[:save-block [{:block/uuid current-id} {}]]])))
+    (is (nil?
+         (#'db-transact/row-data-block-ids
+          [[:save-block [{:block/uuid current-id} {}]]
+           [:insert-blocks [[{:block/uuid inserted-id}]
+                            current-id
+                            {:sibling? true}]]]))
+        "Structural operations refresh from their page window.")))
+
+(deftest editor-callback-runs-from-its-worker-response-test
+  (let [callback-id (random-uuid)
+        rows [{:block/uuid (random-uuid)}]
+        calls (atom [])]
+    (state/queue-edit-block-fn! callback-id #(reset! calls %))
+    (#'db-transact/run-edit-block-fn!
+     {:editor/edit-block-fn-id callback-id}
+     {:rows rows})
+    (is (= rows @calls))
+    (is (nil? (state/take-edit-block-fn! callback-id))
+        "The callback runs exactly once.")))
 
 (deftest apply-outliner-ops-refreshes-after-worker-persistence-test
   (async done
     (let [block-id (random-uuid)
           tx-id (random-uuid)
+          editor-info {:block-id block-id}
+          calls (atom [])
+          page-window {:root {:block/uuid (random-uuid)} :rows []}
           worker-result (p/deferred)]
       (state/set-state! :db/latest-transacted-entity-uuids {})
+      (state/set-state! :editor/pending-new-block {:typed-text "abc"})
       (p/with-redefs [util/node-test? false
                       state/get-current-repo (constantly "test-repo")
-                      state/get-editor-info (constantly {})
+                      state/get-editor-info (constantly editor-info)
                       state/<invoke-db-worker
-                      (fn [api & _args]
+                      (fn [api & args]
+                        (swap! calls conj [api (vec args)])
                         (case api
                           :thread-api/undo-redo-set-pending-editor-info
                           (p/resolved nil)
@@ -128,12 +196,23 @@
                       [[:save-block [{:block/uuid block-id} {}]]]
                       {:db-sync/tx-id tx-id})]
           (-> (p/let [_ (p/delay 0)
+                      _ (is (= [:thread-api/apply-outliner-ops]
+                               (mapv first @calls)))
+                      _ (is (= editor-info
+                               (get-in @calls [0 1 2 :ui/editor-info])))
                       _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
                             "UI refresh state must not change until the worker transaction resolves.")
-                      _ (p/resolve! worker-result {:result ::persisted})
+                      _ (p/resolve! worker-result {:result ::persisted
+                                                  :page-window page-window})
                       value result
                       latest (state/get-state :db/latest-transacted-entity-uuids)]
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
-                (is (= tx-id (:tx-id latest))))
-              (p/finally done)))))))
+                (is (= page-window (:page-window latest)))
+                (is (= tx-id (:tx-id latest)))
+                (is (= {:typed-text "abc"}
+                       (state/get-state :editor/pending-new-block))
+                    "Worker completion must not discard input queued before the editor renders."))
+              (p/finally (fn []
+                           (state/set-state! :editor/pending-new-block nil)
+                           (done)))))))))

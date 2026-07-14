@@ -199,6 +199,11 @@
                               :opts opts
                               :show-empty-and-hidden-properties? show-empty-and-hidden-properties?})))
 
+(defn <get-class-properties
+  [repo class-id]
+  (when (and repo class-id)
+    (state/<invoke-db-worker :thread-api/get-class-properties repo class-id)))
+
 (defn <reorder-display-property!
   [repo block active-id over-id direction property-idents]
   (when (and repo (:db/id block) active-id over-id direction)

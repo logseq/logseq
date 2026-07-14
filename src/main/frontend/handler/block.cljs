@@ -108,41 +108,55 @@
      title]
     (or title (:block/title block))))
 
+(defn- edit-loaded-block!
+  [repo block pos {:keys [custom-content tail-len save-code-editor?] :as opts}]
+  (if (ldb/recycled? block)
+    (notification/show! (t :storage.recycle/readonly) :warning)
+    (do
+      (when save-code-editor?
+        (state/pub-event! [:editor/save-code-editor]))
+      (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+        (state/clear-edit! {:clear-editing-block? false}))
+      (let [content (or custom-content (:block/title block) "")
+            content-length (count content)
+            text-range (cond
+                         (vector? pos)
+                         (text-range-by-lst-fst-line content pos)
+
+                         (and (> tail-len 0) (>= content-length tail-len))
+                         (subs content 0 (- content-length tail-len))
+
+                         (or (= :max pos) (<= content-length pos))
+                         content
+
+                         :else
+                         (subs content 0 pos))]
+        (state/clear-selection!)
+        (edit-block-aux repo block content text-range (assoc opts :pos pos))))))
+
 (defn edit-block!
-  [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
+  [block pos & {:keys [_container-id tail-len save-code-editor? skip-load?]
                 :or {tail-len 0
                      save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
-    (let [repo (state/get-current-repo)]
-      (when-let [block-id (:block/uuid block)]
-        (p/let [block (or (db-async/<get-block repo block-id {:children? false}) block)]
-          (if (ldb/recycled? block)
-            (notification/show! (t :storage.recycle/readonly) :warning)
-            (p/do!
-             (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
-             (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-               (state/clear-edit! {:clear-editing-block? false}))
-             (let [content (or custom-content (:block/title block) "")
-                   content-length (count content)
-                   text-range (cond
-                                (vector? pos)
-                                (text-range-by-lst-fst-line content pos)
-
-                                (and (> tail-len 0) (>= (count content) tail-len))
-                                (subs content 0 (- (count content) tail-len))
-
-                                (or (= :max pos) (<= content-length pos))
-                                content
-
-                                :else
-                                (subs content 0 pos))]
-               (state/clear-selection!)
-               (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))))
+    (let [repo (state/get-current-repo)
+          opts (assoc opts
+                      :tail-len tail-len
+                      :save-code-editor? save-code-editor?)]
+      (if skip-load?
+        (edit-loaded-block! repo block pos opts)
+        (p/let [loaded-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
+          (edit-loaded-block! repo (or loaded-block block) pos opts))))))
 
 (defn- get-original-block-by-dom
-  [_node]
-  nil)
+  [node]
+  (when-let [id (some-> node
+                        (.-parentNode)
+                        (util/rec-get-node "ls-block")
+                        (dom/attr "originalblockid")
+                        uuid)]
+    {:block/uuid id}))
 
 (defn- get-original-block
   "Get the original block from the current editing block or selected blocks"
@@ -204,6 +218,15 @@
                    (ldb/get-left-sibling block))]
         (not (comments-model/comments-area? left)))))
 
+(defn page-window-tx-meta
+  [block]
+  (let [[_ _ editor-config] (state/get-editor-args)
+        page (:block/page block)
+        page-id (or (state/get-current-page) (:db/id page) page)]
+    (when page-id
+      {:ui/page-id page-id
+       :virtual/offset (or (:virtual/offset editor-config) 0)})))
+
 (let [*timeout (atom nil)]
   (defn indent-outdent-blocks!
     [blocks indent? save-current-block]
@@ -217,9 +240,15 @@
         (p/do!
          (let [blocks' (filter #(indent-target-allowed? % indent?) blocks')]
            (when (seq blocks')
+             (when (and save-current-block
+                        (= (:block/uuid (first blocks'))
+                           (:block/uuid (state/get-edit-block))))
+               (state/set-editing-block-id! [:unknown-container
+                                             (:block/uuid (first blocks'))]))
              (ui-outliner-tx/transact!
-              {:outliner-op :move-blocks
-               :source-outliner-op :indent-outdent}
+              (merge {:outliner-op :move-blocks
+                      :source-outliner-op :indent-outdent}
+                     (page-window-tx-meta (first blocks')))
               (when save-current-block (save-current-block))
               (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
                                                   indent?

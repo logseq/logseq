@@ -496,12 +496,14 @@
               property-value (cond-> property-value
                                      (map? property-value)
                                      (assoc
-                                       :value (or (:logseq.property/value property-value)
-                                                  (:block/title property-value))
-                                       :ident ident))
-              parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
-          (or parsed-value
-              (sdk-utils/result->js property-value)))))))
+                                       :block/value (or (:logseq.property/value property-value)
+                                                        (:block/title property-value))
+                                       :db/ident ident))]
+          (if (map? property-value)
+            (sdk-utils/result->js property-value)
+            (p/let [parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+              (or parsed-value
+                  (sdk-utils/result->js property-value)))))))))
 
 (def get_block_properties
   (fn [id]

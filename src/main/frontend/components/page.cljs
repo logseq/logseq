@@ -9,6 +9,7 @@
             [frontend.components.graph-actions :as graph-actions]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
+            [frontend.components.page-window :as page-window]
             [frontend.components.plugins :as plugins]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
@@ -57,7 +58,9 @@
              (not (contains? #{:home :all-journals} (state/get-current-route))))
          (not sidebar?))
     (when (and (string/blank? (:block/title block))
-               (not preview?))
+               (not preview?)
+               (not= (:block/uuid block)
+                     (:block/uuid (state/get-edit-block))))
       (editor-handler/edit-block! block :max))))
 
 (hsx/defc page-blocks-inner
@@ -149,6 +152,7 @@
 
 (def ^:private page-block-window-limit 150)
 (def ^:private page-block-window-prefetch 30)
+(def ^:private page-block-window-step page-block-window-prefetch)
 
 (defn- range-index
   [range key]
@@ -162,21 +166,41 @@
   [page-window range]
   (let [start-index (range-index range :start-index)
         end-index (range-index range :end-index)
+        center-index (when (and (integer? start-index) (integer? end-index))
+                       (quot (+ start-index end-index) 2))
         offset (:offset page-window)
         loaded-count (count (:rows page-window))
         loaded-end (+ offset loaded-count)
         total-count (:total-count page-window)]
-    (and (integer? start-index)
-         (integer? end-index)
+    (and center-index
          (or (and (pos? offset)
-                  (< start-index (+ offset page-block-window-prefetch)))
+                  (< center-index (+ offset page-block-window-prefetch)))
              (and (< loaded-end total-count)
-                  (> end-index (- loaded-end page-block-window-prefetch)))))))
+                  (> center-index (- loaded-end page-block-window-prefetch)))))))
 
 (defn- range->page-block-window-offset
-  [range]
-  (max 0 (- (or (range-index range :start-index) 0)
-            (quot page-block-window-limit 3))))
+  [page-window range]
+  (let [start-index (or (range-index range :start-index) 0)
+        end-index (or (range-index range :end-index) start-index)
+        center-index (quot (+ start-index end-index) 2)
+        offset (:offset page-window)
+        loaded-end (+ offset (count (:rows page-window)))
+        max-offset (max 0 (- (:total-count page-window) page-block-window-limit))]
+    (cond
+      (or (< center-index offset)
+          (> center-index loaded-end))
+      (-> (- center-index (quot page-block-window-limit 2))
+          (max 0)
+          (min max-offset))
+
+      (< center-index (+ offset page-block-window-prefetch))
+      (max 0 (- offset page-block-window-step))
+
+      (> center-index (- loaded-end page-block-window-prefetch))
+      (min max-offset (+ offset page-block-window-step))
+
+      :else
+      offset)))
 
 (defn- page-window-row-updated?
   [updated-ids row]
@@ -207,7 +231,7 @@
   (if-let [block (or (get blocks-by-uuid (:block/uuid row))
                      (get blocks-by-id (:db/id row)))]
     (if (incoming-row-newer? block row)
-      (merge row block)
+      (merge (select-keys row [:block/level]) block)
       row)
     row))
 
@@ -219,7 +243,7 @@
              (fn [current-override]
                (if (or (nil? current-override)
                        (incoming-row-newer? override current-override))
-                 (merge current-override override)
+                 override
                  current-override))))
    current
    overrides))
@@ -235,6 +259,17 @@
                     (:db/id block)
                     (conj [(:db/id block) block])))
                 blocks)))
+
+(defn- refresh-row-overrides!
+  [row-ids *request-id apply-overrides!]
+  (when (seq row-ids)
+    (let [request-id (swap! *request-id inc)]
+      (p/let [results (db-async/<get-blocks (state/get-current-repo)
+                                            row-ids
+                                            {:children? false})
+              overrides (block-row-overrides (keep :block results))]
+        (when (= request-id @*request-id)
+          (apply-overrides! overrides))))))
 
 (defn- loaded-children-affected-row-ids
   [children updated-ids]
@@ -254,22 +289,23 @@
                                       %)))))
 
 (defn- refresh-loaded-child-overrides!
-  [loaded-children latest-transacted-entity-uuids set-loaded-children!]
+  [loaded-children latest-transacted-entity-uuids *request-id set-loaded-children!]
   (let [affected-row-ids (loaded-children-affected-row-ids loaded-children
                                                           (:updated-ids latest-transacted-entity-uuids))]
-    (when (seq affected-row-ids)
-      (p/let [results (db-async/<get-blocks (state/get-current-repo)
-                                            affected-row-ids
-                                            {:children? false})
-              overrides (block-row-overrides (keep :block results))]
-        (when (seq overrides)
-          (set-loaded-children! #(mapv (fn [child]
-                                          (merge-updated-loaded-child overrides overrides child))
-                                        %)))))))
+    (refresh-row-overrides!
+     affected-row-ids
+     *request-id
+     (fn [overrides]
+       (when (seq overrides)
+         (set-loaded-children! #(mapv (fn [child]
+                                        (merge-updated-loaded-child overrides overrides child))
+                                      %)))))))
 
 (defn- refresh-loaded-children!
-  [block* loaded-children latest-page-children latest-transacted-entity-uuids set-loaded-children!]
-  (let [deleted-ids (:deleted-ids latest-transacted-entity-uuids)]
+  [block* loaded-children latest-page-children latest-transacted-entity-uuids
+   *request-id set-loaded-children!]
+  (let [deleted-ids (:deleted-ids latest-transacted-entity-uuids)
+        updated-ids (:updated-ids latest-transacted-entity-uuids)]
     (cond
       latest-page-children
       (set-loaded-children! latest-page-children)
@@ -277,75 +313,84 @@
       (seq deleted-ids)
       (set-loaded-children! #(vec (remove (comp deleted-ids :block/uuid) %)))
 
-      (seq (:updated-ids latest-transacted-entity-uuids))
-      (refresh-loaded-child-overrides! loaded-children latest-transacted-entity-uuids set-loaded-children!)
+      (or (contains? (:affected-page-uuids latest-transacted-entity-uuids)
+                     (:block/uuid block*))
+          (page-children-refresh-needed? latest-transacted-entity-uuids))
+      (when-let [block-uuid (:block/uuid block*)]
+        (p/let [result (db-async/<get-block-with-children (state/get-current-repo)
+                                                           block-uuid
+                                                           {:children? true
+                                                            :include-collapsed-children? true})]
+          (set-loaded-children! (vec (:children result)))))
+
+      (seq updated-ids)
+      (refresh-loaded-child-overrides! loaded-children latest-transacted-entity-uuids
+                                       *request-id set-loaded-children!)
 
       :else
-      (when (page-children-refresh-needed? latest-transacted-entity-uuids)
-        (when-let [block-uuid (:block/uuid block*)]
-          (p/let [result (db-async/<get-block-with-children (state/get-current-repo)
-                                                             block-uuid
-                                                             {:children? true
-                                                              :include-collapsed-children? true})]
-            (set-loaded-children! (vec (:children result)))))))))
+      nil)))
 
 (defn- page-window-affected-row-ids
   [page-window updated-ids]
-  (let [editing-block-uuid (some-> (state/get-edit-block) :block/uuid)]
-    (->> (:rows page-window)
-         (remove #(= editing-block-uuid (:block/uuid %)))
-         (filter #(page-window-row-updated? updated-ids %))
-         (map page-window-row-id)
-         (remove nil?)
-         vec)))
+  (->> (:rows page-window)
+       (filter #(page-window-row-updated? updated-ids %))
+       (map page-window-row-id)
+       (remove nil?)
+       vec))
 
 (defn- refresh-page-window-row-overrides!
   [page-window latest-transacted-entity-uuids *page-window-request-id set-page-window-row-overrides!]
-  (let [affected-row-ids (page-window-affected-row-ids page-window
-                                                       (:updated-ids latest-transacted-entity-uuids))]
-    (when (seq affected-row-ids)
-      ;; Row-level tx data is newer than any in-flight full window response.
-      (swap! *page-window-request-id inc)
-      (p/let [results (db-async/<get-blocks (state/get-current-repo)
-                                            affected-row-ids
-                                            {:children? false})
-              overrides (block-row-overrides (keep :block results))]
-        (set-page-window-row-overrides! #(merge-row-overrides % overrides))))))
+  (let [row-ids (page-window-affected-row-ids page-window (:updated-ids latest-transacted-entity-uuids))]
+    (refresh-row-overrides!
+     row-ids
+     *page-window-request-id
+     #(set-page-window-row-overrides! (fn [current]
+                                        (merge-row-overrides current %))))))
+
+(defn- page-window-loader
+  [block-uuid quick-add-page? *request-id set-page-window!]
+  (fn [opts]
+    (when (and block-uuid (not quick-add-page?))
+      (let [request-id (swap! *request-id inc)]
+        (p/let [window (db-async/<get-page-blocks-window
+                       (state/get-current-repo)
+                       block-uuid
+                       (merge {:limit page-block-window-limit} opts))]
+          (when (and window (= request-id @*request-id))
+            (set-page-window! window))
+          window)))))
+
+(defn- latest-page-tree-for
+  [block latest-tx]
+  (when (= (:block/uuid block) (get-in latest-tx [:page-tree :block :block/uuid]))
+    (:page-tree latest-tx)))
 
 (defn- use-page-block-state
   [block* initial-page-window]
   (let [[quick-add-children set-quick-add-children!] (hooks/use-state nil)
         [loaded-children set-loaded-children!] (hooks/use-state (:block/children block*))
-        [page-window set-page-window!] (hooks/use-state initial-page-window)
+        [stored-page-window set-page-window!] (hooks/use-state initial-page-window)
         [page-window-row-overrides set-page-window-row-overrides!] (hooks/use-state {})
         *page-window-request-id (hooks/use-memo #(atom 0) [(:block/uuid block*)])
         _doc-mode? (rfx/use-sub [:document/mode?])
         latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
-        latest-page-tree (when (= (:block/uuid block*)
-                                  (get-in (:page-tree latest-transacted-entity-uuids)
-                                          [:block :block/uuid]))
-                           (:page-tree latest-transacted-entity-uuids))
+        latest-page-tree (latest-page-tree-for block* latest-transacted-entity-uuids)
         latest-page-children (:children latest-page-tree)
         id (:db/id block*)
         block (or (:block latest-page-tree) block*)
         block-uuid (:block/uuid block*)
         quick-add-page? (= (:block/title block) common-config/quick-add-page-name)
-        schedule-pending-edit-block! (fn []
-                                       (when-let [edit-block-f (state/take-edit-block-fn!
-                                                                 (:editor/edit-block-fn-id latest-transacted-entity-uuids))]
-                                         (util/schedule edit-block-f)))
-        load-page-window! (fn [opts]
-                            (when (and block-uuid
-                                       (not quick-add-page?))
-                              (let [request-id (swap! *page-window-request-id inc)]
-                                (p/let [window (db-async/<get-page-blocks-window
-                                               (state/get-current-repo)
-                                               block-uuid
-                                               (merge {:limit page-block-window-limit}
-                                                      opts))]
-                                  (when (and window
-                                             (= request-id @*page-window-request-id))
-                                    (set-page-window! window))))))]
+        latest-page-window (when (= block-uuid
+                                    (get-in latest-transacted-entity-uuids
+                                            [:page-window :root :block/uuid]))
+                             (:page-window latest-transacted-entity-uuids))
+        refreshed-page-window (when latest-page-window
+                                (page-window/merge-layout stored-page-window latest-page-window))
+        page-window (or refreshed-page-window stored-page-window)
+        latest-row-overrides (block-row-overrides (:updated-blocks latest-transacted-entity-uuids))
+        page-window-row-overrides (merge-row-overrides page-window-row-overrides latest-row-overrides)
+        load-page-window! (page-window-loader block-uuid quick-add-page?
+                                                *page-window-request-id set-page-window!)]
     (hooks/use-effect!
      (fn []
        (set-loaded-children! (:block/children block*))
@@ -365,21 +410,18 @@
                                  loaded-children
                                  latest-page-children
                                  latest-transacted-entity-uuids
+                                 *page-window-request-id
                                  set-loaded-children!)
        nil)
      [(:block/uuid block*) latest-transacted-entity-uuids])
     (hooks/use-effect!
      (fn []
-       (when-not page-window
-         (schedule-pending-edit-block!))
-       nil)
-     [(:tx-id latest-transacted-entity-uuids)
-      (:editor/edit-block-fn-id latest-transacted-entity-uuids)])
-    (hooks/use-effect!
-     (fn []
+       (when (seq latest-row-overrides)
+         (set-page-window-row-overrides! #(merge-row-overrides % latest-row-overrides)))
        (when (:page-window-refresh? latest-transacted-entity-uuids)
-         (p/let [_ (load-page-window! {:offset (or (:offset page-window) 0)})]
-           (schedule-pending-edit-block!)))
+         (if refreshed-page-window
+           (set-page-window! refreshed-page-window)
+           (load-page-window! {:offset (or (:offset page-window) 0)})))
        nil)
      [(:tx-id latest-transacted-entity-uuids)])
     (hooks/use-effect!
@@ -463,9 +505,10 @@
                           :virtual/on-range-changed
                           (fn [range]
                             (when (range-needs-page-block-window? page-window range)
-                              (let [offset (range->page-block-window-offset range)]
+                              (let [offset (range->page-block-window-offset page-window range)]
                                 (when (not= offset (:offset page-window))
-                                  (load-page-window! {:offset offset})))))))
+                                  (load-page-window! {:offset offset
+                                                      :total-count (:total-count page-window)})))))))
           document-mode? (rfx/use-sub [:document/mode?])]
       (cond
         (and

@@ -30,6 +30,7 @@
 (def ^:private fast-state-sub-ids
   #{:db/query-results
     :db/async-queries
+    :db/latest-transacted-entity-uuids
     :sync/block-conflicts
     :ui/container-id
     :ui/cached-key->container-id
@@ -237,31 +238,28 @@
                            :notified-listeners @notified-listeners})
     next-db))
 
-(defn- sync-wrapper-state!
-  [prev-db next-db changed-path started-at store-ms]
-  (sync-wrapper-state-paths! prev-db
-                             next-db
-                             (when changed-path [changed-path])
-                             started-at
-                             store-ms))
-
 (defn- fast-state-path?
   [path]
   (contains? fast-state-sub-ids (first path)))
+
+(defn replace-state-paths!
+  [db changed-paths]
+  (let [started-at (now-ms)
+        prev-db (snapshot)
+        store-started-at (now-ms)
+        fast-state? (and (seq changed-paths)
+                         (every? fast-state-path? changed-paths))
+        next-db (if fast-state?
+                  db
+                  (store/next-state! (:store (context)) db))
+        store-ms (- (now-ms) store-started-at)]
+    (sync-wrapper-state-paths! prev-db next-db changed-paths started-at store-ms)))
 
 (defn replace-state!
   ([db]
    (replace-state! db nil))
   ([db changed-path]
-   (let [started-at (now-ms)
-         prev-db (snapshot)
-         store-started-at (now-ms)
-         next-db (if (fast-state-path? changed-path)
-                   db
-                   (let [next-db (store/next-state! (:store (context)) db)]
-                     next-db))
-         store-ms (- (now-ms) store-started-at)]
-     (sync-wrapper-state! prev-db next-db changed-path started-at store-ms))))
+   (replace-state-paths! db (when changed-path [changed-path]))))
 
 (defn listen!
   [listener-id f]
@@ -279,7 +277,12 @@
   (let [ctx (context)
         prev-db (snapshot)
         result (rfx/dispatch-sync ctx event)
-        next-db (store/snapshot (:store ctx))]
+        next-db (reduce (fn [db k]
+                          (if (contains? prev-db k)
+                            (assoc db k (get prev-db k))
+                            db))
+                        (store/snapshot (:store ctx))
+                        fast-state-sub-ids)]
     (when-not (= prev-db next-db)
       (sync-wrapper-state-paths! prev-db
                                  next-db
@@ -318,6 +321,13 @@
 
     :else
     (rfx/use-sub sub)))
+
+(defn use-entity-tx-id
+  [entity]
+  (let [tx-ids-path [:db/latest-transacted-entity-uuids :entity-tx-ids]
+        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
+        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
+    (or uuid-tx-id db-tx-id)))
 
 (defn register-state-sub-id!
   [sub-id]

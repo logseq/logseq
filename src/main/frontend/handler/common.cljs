@@ -35,11 +35,13 @@
                     (when @*scroll-timer
                       (js/clearTimeout @*scroll-timer))
                     (state/set-state! :ui/scrolling? true)
-                    (state/save-scroll-position! (util/scroll-top))
-                    (state/save-main-container-position!
-                     (-> (util/app-scroll-container-node)
-                         (gobj/get "scrollTop")))
                     (reset! *scroll-timer (js/setTimeout
-                                           (fn [] (state/set-state! :ui/scrolling? false)) 150)))
+                                           (fn []
+                                             (state/set-state! :ui/scrolling? false)
+                                             (state/save-scroll-position! (util/scroll-top))
+                                             (state/save-main-container-position!
+                                              (-> (util/app-scroll-container-node)
+                                                  (gobj/get "scrollTop"))))
+                                           150)))
         debounced-on-scroll (debounce on-scroll 100)]
     (.addEventListener element "scroll" debounced-on-scroll false)))

@@ -96,11 +96,36 @@
     :else
     nil))
 
+(defn- sibling-group-has-order-list?
+  [db [group-type group-id]]
+  (boolean
+   (case group-type
+     :parent
+     (d/q '[:find ?block .
+            :in $ ?parent
+            :where
+            [?block :block/parent ?parent]
+            [?block :logseq.property/order-list-type]]
+          db group-id)
+
+     :page
+     (d/q '[:find ?block .
+            :in $ ?page
+            :where
+            [?block :block/page ?page]
+            [?block :logseq.property/order-list-type]]
+          db group-id)
+
+     false)))
+
 (defn- affected-right-order-list-sibling-keys-for
   [db block-ids]
   (when db
     (let [blocks (keep #(d/entity db %) block-ids)
-          groups (group-by sibling-group-key blocks)
+          groups (->> blocks
+                      (group-by sibling-group-key)
+                      (filter (fn [[group-key]]
+                                (sibling-group-has-order-list? db group-key))))
           siblings-by-group (->> groups
                                  (map (fn [[group-key blocks']]
                                         [group-key

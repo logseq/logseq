@@ -3,6 +3,7 @@
             [cljs-time.core :as t]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.impl.entity :as de]
             [dommy.core :as d]
             [frontend.components.icon :as icon-component]
             [frontend.components.select :as select]
@@ -48,6 +49,12 @@
        (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
 (def ^:private editor-navigation-trigger-class "jtrigger")
+
+(defn- class-extends
+  [class]
+  (if (de/entity? class)
+    (ldb/get-class-extends class)
+    [class]))
 
 (defn- property-value-block-container-class
   []
@@ -733,7 +740,7 @@
                                        (= :logseq.class/Tag (:db/ident class))
                                        (some (fn [e]
                                                (= :logseq.class/Tag (:db/ident e)))
-                                             (ldb/get-class-extends class))))
+                                             (class-extends class))))
                                     classes))))
           ;; Note: property and other types shouldn't be converted to class
           page? (entity/internal-page? page-entity)]
@@ -921,7 +928,7 @@
         property-type (:logseq.property/type property)
         nodes (cond
                 extends-property?
-                (let [extends (->> (mapcat (fn [e] (ldb/get-class-extends e)) (:logseq.property.class/extends block))
+                (let [extends (->> (mapcat class-extends (:logseq.property.class/extends block))
                                    distinct)
                       ;; Disallows cyclic hierarchies
                       exclude-ids (-> (set children-pages)

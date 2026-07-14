@@ -130,7 +130,7 @@
               :block-container :container}
              (editor/get-state))))))
 
-(deftest edit-pending-new-block-loads-inserted-block-through-worker-test
+(deftest edit-pending-new-block-uses-persisted-block-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
           pending-block {:block/uuid block-id
@@ -159,9 +159,8 @@
       (set! editor/get-state (constantly nil))
       (set! state/get-current-repo (constantly "test"))
       (set! db-async/<get-block
-            (fn [repo block-id' opts]
-              (swap! calls conj [:get-block repo block-id' opts])
-              (p/resolved inserted-block)))
+            (fn [& _]
+              (throw (js/Error. "Persisted pending block must not be loaded again"))))
       (set! block-handler/indent-outdent-blocks!
             (fn [blocks indent? _opts]
               (swap! calls conj [:indent blocks indent?])))
@@ -172,17 +171,18 @@
             (fn [k value]
               (swap! calls conj [:set-state k value])))
       (-> (try
-            (#'editor/edit-pending-new-block! pending-block true)
+            (#'editor/edit-pending-new-block! inserted-block true)
             (catch :default error
               (p/rejected error)))
           (p/then
            (fn []
-             (is (= [[:get-block "test" block-id {:children? false}]
-                     [:indent [inserted-block] true]
+             (is (= [[:indent [inserted-block] true]
                      [:edit inserted-block
                       3
                       {:container-id nil
-                       :custom-content "abccreated"}]
+                       :custom-content "abccreated"
+                       :save-code-editor? false
+                       :skip-load? true}]
                      [:set-state :editor/pending-new-block nil]]
                     @calls))))
           (p/catch
@@ -531,7 +531,9 @@
           block-b {:db/id 2
                    :block/uuid block-id-b
                    :block/title "B"}
-          top-level-blocks [block-a]
+          target {:db/id 3
+                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}
+          selection-active? (atom true)
           event #js {}
           calls (atom [])]
       (-> (p/with-redefs [util/stop (fn [e]
@@ -546,12 +548,17 @@
                           (fn [blocks]
                             (let [blocks (vec blocks)]
                               (swap! calls conj [:top-level blocks])
-                              top-level-blocks))
+                              (map #(when @selection-active? %) blocks)))
+                          state/clear-selection!
+                          (fn []
+                            (reset! selection-active? false))
+                          editor/move-blocks!
+                          (fn [blocks move-target opts]
+                            (swap! calls conj [:move (mapv :block/uuid blocks) move-target opts]))
                           route-handler/go-to-search!
                           (fn [route opts]
-                            (swap! calls conj [:go-to-search route (update (select-keys opts [:action :blocks])
-                                                                            :blocks
-                                                                            vec)]))]
+                            (swap! calls conj [:go-to-search route (:action opts)])
+                            ((:trigger opts) {:source-block target}))]
             (-> (try
                   (editor/move-selected-blocks event)
                   (catch :default error
@@ -561,8 +568,8 @@
                    (is (= [[:stop event]
                            [:get-blocks "test" [block-id-a block-id-b] {:children? false}]
                            [:top-level [block-a block-b]]
-                           [:go-to-search :nodes {:action :move-blocks
-                                                  :blocks top-level-blocks}]]
+                           [:go-to-search :nodes :move-blocks]
+                           [:move [block-id-a block-id-b] target {:bottom? true}]]
                           @calls))))
                 (p/catch
                  (fn [error]
@@ -1096,7 +1103,7 @@
         input #js {:value ""}
         originals [state/get-input cursor/pos util/stop state/get-current-repo
                    state/get-edit-block db-async/<get-block-sibling
-                   editor/get-state editor/delete-block!]
+                   editor/get-state editor/delete-block-inner!]
         restore! (fn []
                    (set! state/get-input (nth originals 0))
                    (set! cursor/pos (nth originals 1))
@@ -1105,7 +1112,7 @@
                    (set! state/get-edit-block (nth originals 4))
                    (set! db-async/<get-block-sibling (nth originals 5))
                    (set! editor/get-state (nth originals 6))
-                   (set! editor/delete-block! (nth originals 7)))]
+                   (set! editor/delete-block-inner! (nth originals 7)))]
     (set! state/get-input (constantly input))
     (set! cursor/pos (constantly 0))
     (set! util/stop (fn [_] (reset! stopped? true)))
@@ -1113,7 +1120,7 @@
     (set! state/get-edit-block (constantly block))
     (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
     (set! editor/get-state (constantly {:config {}}))
-    (set! editor/delete-block! (fn [_] (reset! deleted? true)))
+    (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
     (-> (#'editor/delete-block-when-zero-pos! nil)
         (p/then (fn []
                   {:deleted? @deleted?
@@ -1152,6 +1159,127 @@
           (is (= {:deleted? true :stopped? true} result)))
         (p/finally done))))
 
+(deftest delete-block-when-zero-pos-keeps-the-keydown-editor-state-test
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title ""
+                 :block/page {:db/id 10}}
+          next-block {:db/id 2
+                      :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                      :block/title ""
+                      :block/page {:db/id 10}}
+          editor-state {:block-id (:block/uuid block)
+                        :current-block block
+                        :config {}}
+          next-editor-state {:block-id (:block/uuid next-block)
+                             :current-block next-block
+                             :config {}}
+          *block (atom block)
+          *editor-state (atom editor-state)
+          *resolve-sibling (atom nil)
+          sibling-promise (js/Promise. #(reset! *resolve-sibling %))
+          *deleted-editor-state (atom nil)]
+      (-> (p/with-redefs [state/get-input (constantly #js {:value ""})
+                          cursor/pos (constantly 0)
+                          util/stop (constantly nil)
+                          state/get-current-repo (constantly test-helper/test-db)
+                          state/get-edit-block #(deref *block)
+                          editor/get-state #(deref *editor-state)
+                          db-async/<get-block-sibling
+                          (fn [& _] sibling-promise)
+                          editor/delete-block-inner!
+                          (fn [_repo state]
+                            (reset! *deleted-editor-state state))]
+            (let [result (#'editor/delete-block-when-zero-pos! nil)]
+              (reset! *block next-block)
+              (reset! *editor-state next-editor-state)
+              (@*resolve-sibling nil)
+              result))
+          (p/then (fn []
+                    (is (= editor-state @*deleted-editor-state)
+                        "Delete must use the editor state captured by its keydown.")))
+          (p/finally done)))))
+
+(deftest insert-block-saves-current-block-before-switching-editor-test
+  (let [tx-id (random-uuid)
+        current-id #uuid "11111111-1111-1111-1111-111111111111"
+        next-id #uuid "22222222-2222-2222-2222-222222222222"
+        editing-block (atom {:db/id 1
+                             :block/uuid current-id
+                             :block/title "Performance row 2"})
+        current-block {:db/id 1
+                       :block/uuid current-id
+                       :block/title "Performance"
+                       :block/raw-title "Performance"
+                       :block/page {:db/id 10}}
+        next-block {:block/uuid next-id
+                    :block/title "row 2"}
+        calls (atom [])]
+    (state/queue-edit-block-fn! tx-id
+                                (fn [_rows]
+                                  (reset! editing-block next-block)))
+    (try
+      (with-redefs [state/editor-in-composition? (constantly false)
+                    state/get-editor-action (constantly nil)
+                    state/get-current-repo (constantly "test")
+                    state/get-edit-block #(deref editing-block)
+                    state/get-edit-input-id (constantly "edit-block-test")
+                    gdom/getElement (constantly #js {:value "row 2"})
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (fn [& _]
+                                                       (swap! calls conj :save-block))
+                    frontend-outliner-op/insert-blocks! (fn [& _]
+                                                          (swap! calls conj :insert-blocks))
+                    db-transact/apply-outliner-ops (fn [_ ops opts]
+                                                     (swap! calls conj [:apply ops opts])
+                                                     :tx)]
+        (editor/outliner-insert-block!
+         {:editor/edit-block-fn-id tx-id}
+         current-block
+         next-block
+         {:sibling? true :keep-uuid? true :outliner-op :create-view})
+        (is (= [:save-block
+                :insert-blocks
+                [:apply
+                 []
+                 {:outliner-op :insert-blocks
+                  :source-outliner-op :create-view
+                  :ui/page-id 10
+                  :virtual/offset 0
+                  :editor/edit-block-fn-id tx-id}]]
+               @calls)
+            "Insert metadata and operations must use one transaction."))
+      (finally
+        (state/remove-edit-block-fn! tx-id)
+        (state/set-state! :db/latest-transacted-entity-uuids {})))))
+
+(deftest split-current-block-keeps-rendered-title-in-sync-test
+  (let [block {:block/title "Performance row 2"
+               :block/raw-title "Performance row 2"}]
+    (is (= {:block/title "Performance"
+            :block/raw-title "Performance"}
+           (#'editor/current-block-with-title block "Performance")))))
+
+(deftest loaded-block-focuses-without-a-worker-read
+  (let [previous {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title "before"}
+        calls (atom [])]
+    (with-redefs [state/get-edit-block (constantly nil)
+                  editor/edit-block! (fn [block pos opts]
+                                       (swap! calls conj [block pos opts]))]
+      (is (= {:prev-block previous
+             :new-content "before"
+              :pos 6}
+             (#'editor/focus-loaded-block! previous "" 7 true)))
+      (is (= [[previous 6 {:custom-content "before"
+                           :tail-len 0
+                           :container-id 7
+                           :save-code-editor? false
+                           :skip-load? true}]]
+             @calls)))))
+
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
     (let [asset-block {:db/id 1
@@ -1183,7 +1311,9 @@
                      :pos 0
                      :opts {:custom-content "after"
                             :tail-len 5
-                            :container-id nil}}]
+                            :container-id nil
+                            :save-code-editor? false
+                            :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
                      (is false (str error))))
@@ -1228,7 +1358,9 @@
                      :pos 6
                      :opts {:custom-content "beforeafter"
                             :tail-len 5
-                            :container-id nil}}]
+                            :container-id nil
+                            :save-code-editor? false
+                            :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
                      (is false (str error))))
@@ -1339,6 +1471,21 @@
       ((editor/keyup-handler nil input) #js {:key ">"} nil)
       (is (empty? @events)
           "Comment editor > should stay plain text instead of converting the draft to a quote block"))))
+
+(deftest current-edit-block-matches-by-uuid
+  (let [block-uuid (random-uuid)]
+    (with-redefs [state/get-edit-block (constantly {:block/uuid block-uuid})]
+      (is (#'editor/current-edit-block?
+           {:db/id 196
+            :block/uuid block-uuid})))))
+
+(deftest indent-outdent-keeps-current-page-window-in-transaction
+  (with-redefs [state/get-editor-args (constantly [nil nil {:virtual/offset 200}])
+                state/get-current-page (constantly 20)]
+    (is (= {:ui/page-id 20
+            :virtual/offset 200}
+           (#'block-handler/page-window-tx-meta
+            {:block/page {:db/id 10}})))))
 
 (deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks
   (let [draft-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"

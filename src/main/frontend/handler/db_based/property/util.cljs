@@ -27,10 +27,10 @@
                     (set (map db-property/property-value-content v))
 
                     (sequential? v)
-                    (map #(get-property-value (or (:db/id %) %)) v)
+                    (map get-property-value v)
 
-                    (:db/id v)
-                    (get-property-value (or (:db/id v) v))
+                    (map? v)
+                    (get-property-value v)
 
                     :else
                     v)])))

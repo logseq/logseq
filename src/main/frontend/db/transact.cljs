@@ -1,9 +1,7 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
-  (:require [clojure.core.async :as async]
-            [clojure.core.async.interop :refer [p->c]]
-            [frontend.common.async-util :include-macros true :refer [<?]]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
+            [frontend.modules.outliner.pipeline :as outliner-pipeline]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.outliner.op :as outliner-op]
@@ -11,15 +9,16 @@
 
 (defn worker-call
   [request-f]
-  (let [response (p/deferred)]
-    (async/go
-      (let [result (<? (p->c (request-f)))]
-        (if (:ex-data result)
-          (do
-            (log/error :worker-request-failed result)
-            (p/reject! response result))
-          (p/resolve! response result))))
-    response))
+  (js/Promise.
+   (fn [resolve reject]
+     (-> (request-f)
+         (.then (fn [result]
+                  (if (:ex-data result)
+                    (do
+                      (log/error :worker-request-failed result)
+                      (reject (ex-info "Worker request failed" result)))
+                    (resolve result))))
+         (.catch reject)))))
 
 (defn- ensure-local-op-tx-id
   [tx-meta]
@@ -40,9 +39,23 @@
 
 (defn- on-next-frame!
   [f]
-  (if (exists? js/requestAnimationFrame)
-    (js/requestAnimationFrame f)
-    (js/setTimeout f 0)))
+  (p/create
+   (fn [resolve reject]
+     (let [run (fn []
+                 (try
+                   (resolve (f))
+                   (catch :default e
+                     (reject e))))]
+       (if (exists? js/requestAnimationFrame)
+         (js/requestAnimationFrame run)
+         (js/setTimeout run 0))))))
+
+(defn- run-edit-block-fn!
+  [tx-meta page-window]
+  (when-let [edit-block-f (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta))]
+    (if-let [rows (seq (:rows page-window))]
+      (edit-block-f rows)
+      (edit-block-f))))
 
 (defn- outliner-ops-need-page-tree?
   [_ops]
@@ -50,16 +63,19 @@
 
 (defn- outliner-ops-need-page-window-refresh?
   [ops]
-  (boolean
-   (some (comp #{:insert-blocks
-                 :delete-blocks
-                 :move-blocks
-                 :move-blocks-up-down
-                 :indent-outdent-blocks
-                 :apply-template
-                 :collapse-expand-blocks}
-               first)
-         ops)))
+  (boolean (some (comp outliner-pipeline/structural-outliner-op? first) ops)))
+
+(def ^:private row-data-op-names
+  #{:save-block
+    :set-block-property
+    :set-block-properties
+    :remove-block-property
+    :delete-property-value
+    :batch-set-property
+    :batch-remove-property
+    :batch-delete-property-value
+    :class-add-property
+    :class-remove-property})
 
 (defn- op-block-uuids
   [ops]
@@ -113,23 +129,54 @@
        (remove nil?)
        set))
 
+(defn- row-data-block-ids
+  [ops]
+  (when (and (not (outliner-ops-need-page-window-refresh? ops))
+             (some (comp row-data-op-names first) ops))
+    (op-block-uuids ops)))
+
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta page-tree]
-  (let [affected-ids (op-block-uuids ops)
+  [ops tx-meta page-tree page-window affected-page-uuids]
+  (let [started-at (now-ms)
+        current-page-uuid (get-in page-window [:root :block/uuid])
+        affected-page-uuids (disj (set affected-page-uuids) current-page-uuid)
+        affected-ids (cond-> (op-block-uuids ops)
+                       (:ui/page-id tx-meta) (conj (:ui/page-id tx-meta)))
+        changed-ids (into affected-ids affected-page-uuids)
         deleted-ids (->> ops
                          (filter #(= :delete-blocks (first %)))
                          (mapcat (comp first second))
                          set)
         updated-ids (apply disj affected-ids deleted-ids)]
-    (when (seq affected-ids)
-      (state/set-state! :db/latest-transacted-entity-uuids
-                        (cond-> {:updated-ids updated-ids
-                                 :deleted-ids deleted-ids
-                                 :page-window-refresh? (outliner-ops-need-page-window-refresh? ops)
-                                 :editor/edit-block-fn-id (:editor/edit-block-fn-id tx-meta)
-                                 :tx-id (:db-sync/tx-id tx-meta)}
-                          (and page-tree (outliner-ops-need-page-tree? ops))
-                          (assoc :page-tree page-tree))))))
+    (if (seq affected-ids)
+      (let [tx-id (:db-sync/tx-id tx-meta)
+            value (cond-> {:updated-ids updated-ids
+                           :deleted-ids deleted-ids
+                           :entity-tx-ids (zipmap changed-ids (repeat tx-id))
+                           :page-window-refresh? (boolean
+                                                  (or page-window
+                                                      (outliner-ops-need-page-window-refresh? ops)))
+                           :tx-id tx-id}
+                    (seq affected-page-uuids)
+                    (assoc :affected-page-uuids affected-page-uuids)
+
+                    page-window
+                    (assoc :page-window page-window)
+
+                    (:ui/updated-blocks tx-meta)
+                    (assoc :updated-blocks (:ui/updated-blocks tx-meta))
+
+                    (and page-tree (outliner-ops-need-page-tree? ops))
+                    (assoc :page-tree page-tree))
+            changed-paths (outliner-pipeline/refresh-state-paths changed-ids)
+            prepared-at (now-ms)]
+        (state/set-state! :db/latest-transacted-entity-uuids
+                          value
+                          :changed-paths changed-paths)
+        {:prepare-ms (- prepared-at started-at)
+         :publish-ms (- (now-ms) prepared-at)})
+      {:prepare-ms (- (now-ms) started-at)
+       :publish-ms 0})))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
@@ -157,31 +204,47 @@
                       (assoc
                        :client-id (:client-id @state/state)
                        :ui/perf-id perf-id
+                       :ui/handled-by-response? true
+                       :ui/editor-info (state/get-editor-info)
                        :local-tx? true))
+            render-block-uuids (op-block-uuids ops)
+            requested-row-data-block-ids (row-data-block-ids ops)
+            opts' (cond-> opts'
+                    (seq render-block-uuids)
+                    (assoc :ui/render-block-uuids render-block-uuids)
+
+                    (seq requested-row-data-block-ids)
+                    (assoc :ui/row-data-block-ids requested-row-data-block-ids))
             request #(state/<invoke-db-worker
                       :thread-api/apply-outliner-ops
                       (state/get-current-repo)
                       ops
                       opts')]
-        (frontend.db.transact/worker-call
-         (fn []
-           (p/do!
-            (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
-                                     (state/get-current-repo)
-                                     (state/get-editor-info))
-            (p/let [{:keys [result page-tree]} (request)
-                    worker-returned-at (now-ms)]
-              (refresh-worker-op-blocks! ops opts' page-tree)
-              (let [state-updated-at (now-ms)]
-                (on-next-frame!
-                 (fn []
-                   (log-outliner-op-perf!
-                    {:stage :ui-updated
-                     :perf-id perf-id
-                     :op-names (mapv first ops)
-                     :op-count (count ops)
-                     :page-tree-requested? page-tree-requested?
-                     :worker-roundtrip-ms (- worker-returned-at started-at)
-                     :state-update-ms (- state-updated-at worker-returned-at)
-                     :total-to-next-frame-ms (- (now-ms) started-at)}))))
-              result))))))))
+        (p/let [response (request)
+                {:keys [result page-tree page-window updated-blocks affected-page-uuids perf]} response
+                worker-returned-at (now-ms)]
+          (let [ui-refresh-perf (refresh-worker-op-blocks!
+                                 ops
+                                 (cond-> opts'
+                                   updated-blocks (assoc :ui/updated-blocks updated-blocks))
+                                 page-tree page-window affected-page-uuids)
+                state-updated-at (now-ms)]
+            (p/let [_ (on-next-frame!
+                       (fn []
+                         (run-edit-block-fn! opts' page-window)
+                         (log-outliner-op-perf!
+                          {:stage :ui-updated
+                           :perf-id perf-id
+                           :op-names (mapv first ops)
+                           :op-count (count ops)
+                           :page-tree-requested? page-tree-requested?
+                           :page-window-returned? (boolean page-window)
+                           :page-window-row-count (count (:rows page-window))
+                           :worker-apply-ms (:apply-ms perf)
+                           :worker-page-window-ms (:page-window-ms perf)
+                           :worker-listener (:listener perf)
+                           :worker-roundtrip-ms (- worker-returned-at started-at)
+                           :ui-refresh ui-refresh-perf
+                           :state-update-ms (- state-updated-at worker-returned-at)
+                           :total-to-next-frame-ms (- (now-ms) started-at)})))]
+              result)))))))

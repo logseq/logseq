@@ -485,13 +485,13 @@
 
 ;; db-worker -> UI
 (defevent! :db/sync-changes [[_ data]]
-  (when-let [tx-data (seq (:tx-data data))]
-    (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) tx-data)
-          retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
-          tx-data (concat tx-data retracted-tx-data)]
-      (pipeline/invoke-hooks (assoc data :tx-data tx-data)))
-
-    nil))
+  (let [tx-meta (:tx-meta data)
+        local-outliner-op? (and (:ui/handled-by-response? tx-meta)
+                                (= (:client-id tx-meta)
+                                   (:client-id @state/state)))]
+    (when-not local-outliner-op?
+      (pipeline/invoke-hooks data)))
+  nil)
 
 (defevent! :db/export-sqlite [_]
   (export/export-repo-as-sqlite-db! (state/get-current-repo))

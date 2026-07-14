@@ -45,6 +45,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::block-ids :boolean ::option]]]]
+   [:collapse-expand-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::blocks ::option]]]]
 
    ;; properties
    [:upsert-property
@@ -266,6 +270,12 @@
                                                           :outliner-op :insert-template-blocks))]
           (reset! *result result))))))
 
+(defn- resolve-indent-outdent-opts
+  [db opts]
+  (if-let [parent-original-uuid (get-in opts [:parent-original :block/uuid])]
+    (assoc opts :parent-original (d/entity db [:block/uuid parent-original-uuid]))
+    opts))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -299,9 +309,14 @@
 
     :indent-outdent-blocks
     (let [[block-ids indent? opts] args
-          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)
+          opts (resolve-indent-outdent-opts @conn opts)]
       (when (seq blocks)
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
+
+    :collapse-expand-blocks
+    (let [[blocks opts] args]
+      (ldb/transact! conn blocks opts))
 
     ;; properties
     :upsert-property
@@ -415,8 +430,8 @@
         *result (atom nil)]
 
     (outliner-tx/transact!
-      opts'
-      (doseq [op-entry ops]
-        (apply-op! conn opts' *result op-entry)))
+     opts'
+     (doseq [op-entry ops]
+       (apply-op! conn opts' *result op-entry)))
 
     @*result))

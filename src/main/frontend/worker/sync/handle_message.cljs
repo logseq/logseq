@@ -273,9 +273,9 @@
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
     (sync-util/clear-last-sync-error! client)
-    (broadcast-rtc-state! client)
     (sync-apply/mark-pending-txs-false! repo @(:inflight client))
     (reset! (:inflight client) [])
+    (broadcast-rtc-state! client)
     (verify-sync-checksum! repo client next-local-tx remote-tx remote-checksum {:type "tx/batch/ok"})
     (sync-apply/enqueue-flush-pending! repo client)))
 

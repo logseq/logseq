@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
+            [io.factorhouse.rfx.store :as store]
             [promesa.core :as p]))
 
 (defn- timeout
@@ -25,6 +26,55 @@
 
     (is (= 3 (rfx/snapshot-sub [::counter])))
     (is (= {:counter 3} (rfx/snapshot)))))
+
+(deftest dispatch-sync-preserves-fast-state
+  (rfx/init! {:initial-value {:counter 0
+                              :db/query-results {["repo" :frontend.worker.react/other] [:stale]}}
+              :registry (atom {})})
+  (rfx/reg-event-db! ::increment
+    (fn [db _]
+      (update db :counter inc)))
+  (rfx/replace-state! (assoc (rfx/snapshot) :db/query-results
+                             {["repo" :frontend.worker.react/other] [:fresh]})
+                      [:db/query-results])
+
+  (rfx/dispatch-sync! [::increment])
+
+  (is (= 1 (:counter (rfx/snapshot))))
+  (is (= {["repo" :frontend.worker.react/other] [:fresh]}
+         (:db/query-results (rfx/snapshot)))))
+
+(deftest outliner-refresh-bypasses-the-general-rfx-store
+  (rfx/init! {:initial-value {:db/latest-transacted-entity-uuids {}}
+              :registry (atom {})})
+  (let [store-writes (atom 0)
+        refresh {:updated-ids #{(random-uuid)}}]
+    (with-redefs [store/next-state! (fn [_ db]
+                                      (swap! store-writes inc)
+                                      db)]
+      (rfx/replace-state! (assoc (rfx/snapshot)
+                                 :db/latest-transacted-entity-uuids refresh)
+                          [:db/latest-transacted-entity-uuids]))
+    (is (zero? @store-writes)
+        "The hot outliner refresh path should notify only precise state-path listeners.")
+    (is (= refresh (:db/latest-transacted-entity-uuids (rfx/snapshot))))))
+
+(deftest replace-state-paths-updates-fast-state-once
+  (rfx/init! {:initial-value {:db/latest-transacted-entity-uuids {}}
+              :registry (atom {})})
+  (let [refresh {:tx-id (random-uuid)
+                 :entity-tx-ids {(random-uuid) (random-uuid)}}
+        paths [[:db/latest-transacted-entity-uuids :tx-id]
+               [:db/latest-transacted-entity-uuids :entity-tx-ids]]
+        store-writes (atom 0)]
+    (with-redefs [store/next-state! (fn [_ db]
+                                      (swap! store-writes inc)
+                                      db)]
+      (rfx/replace-state-paths! (assoc (rfx/snapshot)
+                                       :db/latest-transacted-entity-uuids refresh)
+                                paths))
+    (is (zero? @store-writes))
+    (is (= refresh (:db/latest-transacted-entity-uuids (rfx/snapshot))))))
 
 (deftest pub-event-resolves-handler-result
   (async done
