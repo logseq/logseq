@@ -270,6 +270,10 @@
                       :class "overflow-y-auto"
                       :rows 10
                       :auto-focus true
+                      :ref (fn [element]
+                             (when element
+                               (js/requestAnimationFrame
+                                (fn [_] (.focus element)))))
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}
