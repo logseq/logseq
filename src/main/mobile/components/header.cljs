@@ -319,7 +319,7 @@
         page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
         [rtc-graph-uuid set-rtc-graph-uuid!] (hooks/use-state nil)
-        detail-info (hooks/use-atom-value rtc-indicator/*detail-info)
+        detail-info (rtc-indicator/use-detail-info)
         _ (rfx/use-sub [:auth/current-login-user])
         online? (rfx/use-sub [:network/online?])
         rtc-state (:rtc-state detail-info)

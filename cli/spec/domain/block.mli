@@ -8,9 +8,9 @@ type t = {
   order : int option;
   parent : Selector.block option;
   page : Selector.page option;
-  tags : Selector.tag list;
-  properties : Property.assignment list;
-  children : t list;
+  tags : Selector.tag Rrbvec.t;
+  properties : Property.assignment Rrbvec.t;
+  children : t Rrbvec.t;
   raw : Melange_edn_melange.any;
 }
 
@@ -19,9 +19,9 @@ type tree = { root : t }
 val position_of_string : string -> position option
 
 val make :
-  ?uuid:Cli_primitive.uuid -> ?title:string -> ?children:t list -> unit -> t
+  ?uuid:Cli_primitive.uuid -> ?title:string -> ?children:t Rrbvec.t -> unit -> t
 
 val of_value : Melange_edn_melange.any -> t
 val to_value : t -> Melange_edn_melange.map Melange_edn_melange.t
-val flatten : t list -> t list
+val flatten : t Rrbvec.t -> t Rrbvec.t
 val label : t -> string option

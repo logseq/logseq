@@ -170,3 +170,21 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest websocket-connection-uses-graph-id-from-sync-path-test
+  (async done
+         (let [seen-graph-id (atom ::unset)
+               self #js {}
+               request (js/Request. "http://localhost/sync/graph-from-path"
+                                    #js {:method "GET"})]
+           (-> (p/with-redefs [sync-handler/<ready-for-sync? (fn [_self graph-id]
+                                                               (reset! seen-graph-id graph-id)
+                                                               (p/resolved false))]
+                 (ws-handler/handle-ws self request))
+               (p/then (fn [response]
+                         (is (= "graph-from-path" @seen-graph-id))
+                         (is (= 409 (.-status response)))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

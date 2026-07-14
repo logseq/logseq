@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
@@ -181,6 +182,7 @@
                                               {:block/title "time block"
                                                :build/properties {:log-time "<%time%>"}}]}]}]
                  :properties {:log-time {:logseq.property/type :default}}})
+          target-page (ldb/get-page @conn "Target Page")
           template-root (db-test/find-block-by-content @conn "template root")
           target-block (db-test/find-block-by-content @conn "target block")
           template-blocks (->> (ldb/get-block-and-children @conn (:block/uuid template-root)
@@ -197,7 +199,9 @@
                                                        (:block/uuid target-block)
                                                        {:template-blocks blocks-to-insert}]]]
                                     {})
-          page-var-block (db-test/find-block-by-content @conn "page is [[Target Page]]")
+          page-var-block (db-test/find-block-by-content
+                          @conn
+                          (str "page is " (page-ref/->page-ref (:block/uuid target-page))))
           time-block (some->> (d/q '[:find [?b ...]
                                      :in $ ?title ?page-title
                                      :where

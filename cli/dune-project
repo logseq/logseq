@@ -28,6 +28,7 @@
   melange-transit-melange
   melange-edn-melange
   melange-fest
+  rrbvec
   humanize)
  (tags
   ("add topics" "to describe" your project)))

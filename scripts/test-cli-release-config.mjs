@@ -150,6 +150,18 @@ for (const [scriptName, command] of Object.entries(rootPackage.scripts ?? {})) {
   assertRootScriptDoesNotBuildShadowCli(scriptName, command);
 }
 
+const gulpfile = readText("gulpfile.js");
+assert.match(
+  gulpfile,
+  /pnpm cli:release/,
+  "Electron maker preparation should stage the CLI runtime",
+);
+assert.ok(
+  gulpfile.indexOf("pnpm cli:release") <
+    gulpfile.indexOf("pnpm desktop:prepare-runtime-js"),
+  "Electron maker preparation should stage the CLI before preparing desktop runtime scripts",
+);
+
 const stageScriptPath = path.join(repoRoot, "scripts", "stage-cli-runtime.mjs");
 assert.equal(
   fs.existsSync(stageScriptPath),
@@ -364,6 +376,11 @@ assert.match(
   prepareDesktopRuntimeScript,
   /cli[\\/]_build[\\/]default[\\/]dist[\\/]logseq-cli\.js/,
   "desktop runtime preparation should compare the staged CLI against the cli/ bundle",
+);
+assert.match(
+  prepareDesktopRuntimeScript,
+  /fs\.chmod\(to, stats\.mode \| 0o200\)/,
+  "desktop runtime preparation should overwrite read-only staged runtime files",
 );
 assertNotContains(
   prepareDesktopRuntimeScript,
