@@ -2064,6 +2064,7 @@
         known-offset (when known-total-count?
                        (page-block-window-offset known-total-count (assoc opts :limit limit)))
         skip-count (or known-offset 0)
+        skip-end (+ skip-count limit)
         requested-offset (case (:anchor opts)
                            :bottom nil
                            :top 0
@@ -2076,13 +2077,13 @@
         !entries (volatile! [])]
     (letfn [(done? []
               (and known-total-count?
-                   (= limit (count @!entries))))
+                   (>= @!idx skip-end)))
             (visit! [block-id parent-id level]
               (let [idx @!idx]
                 (vswap! !idx inc)
                 (if known-total-count?
                   (when (and (>= idx skip-count)
-                             (< (count @!entries) limit))
+                             (< idx skip-end))
                     (vswap! !entries conj {:block-id block-id
                                            :level level
                                            :parent-id parent-id
@@ -2104,28 +2105,26 @@
                                (>= idx requested-offset)
                                (< idx requested-end))
                       (vswap! !entries conj entry))))))
-            (push-children! [stack parent-id level]
+            (push-children! [block-stack level-stack parent-id level]
               (when-let [children (.get children-by-parent parent-id)]
                 (loop [idx (dec (alength children))]
                   (when-not (neg? idx)
-                    (let [child (aget children idx)]
-                      (.push stack #js [(aget child 0)
-                                        (aget child 1)
-                                        (aget child 2)
-                                        level])
-                      (recur (dec idx)))))))]
-      (let [stack (array)]
-        (push-children! stack (:db/id root) 1)
+                    (.push block-stack (aget children idx))
+                    (.push level-stack level)
+                    (recur (dec idx))))))]
+      (let [block-stack (array)
+            level-stack (array)]
+        (push-children! block-stack level-stack (:db/id root) 1)
         (loop []
-          (when (and (pos? (alength stack)) (not (done?)))
-            (let [current (.pop stack)
+          (when (and (pos? (alength block-stack)) (not (done?)))
+            (let [current (.pop block-stack)
                   block-id (aget current 0)
                   parent-id (aget current 1)
                   collapsed? (aget current 2)
-                  level (aget current 3)
+                  level (.pop level-stack)
                   _ (visit! block-id parent-id level)]
               (when-not collapsed?
-                (push-children! stack block-id (inc level)))
+                (push-children! block-stack level-stack block-id (inc level)))
               (recur)))))
       (let [total-count (or known-total-count @!idx)
             offset (or known-offset
