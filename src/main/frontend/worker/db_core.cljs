@@ -1423,12 +1423,7 @@
 
 (defn- display-property-value
   [db property-id value]
-  (let [value-type (or (get-in (d/schema db) [property-id :db/valueType])
-                       (entity-direct-value db property-id :db/valueType))]
-    (if (= :db.type/ref value-type)
-      (when-let [entity (d/entity db value)]
-        (entity-direct-map db entity display-property-value-keys))
-      value)))
+  (worker-plain/attribute-value->plain db property-id value))
 
 (defn- entity-tagged-with?
   [db entity tag-ident]

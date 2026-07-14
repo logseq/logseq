@@ -10,6 +10,7 @@
   [db value]
   (if-let [entity (d/entity db value)]
     (let [raw-title (or (:block/raw-title entity) (:block/title entity))
+          property-value-datom (first (d/datoms db :eavt (:db/id entity) :logseq.property/value))
           tag-idents (into []
                            (keep (fn [datom]
                                    (:db/ident (d/entity db (:v datom)))))
@@ -30,6 +31,8 @@
         (assoc :logseq.property/icon (:logseq.property/icon entity))
         (:logseq.property/choice-checkbox-state entity)
         (assoc :logseq.property/choice-checkbox-state (:logseq.property/choice-checkbox-state entity))
+        property-value-datom
+        (assoc :logseq.property/value (:v property-value-datom))
         (:db/ident entity)
         (assoc :db/ident (:db/ident entity))))
     {:db/id value}))
@@ -46,10 +49,24 @@
      (or (get-in (d/schema db) [attr :db/cardinality])
          (:db/cardinality (d/entity db attr)))))
 
-(defn- datom-value->plain
+(defn- node-property-target-id
+  [db value-id]
+  (let [property-value (d/entity db value-id)]
+    (if (:logseq.property/created-from-property property-value)
+      (let [target-uuid (uuid (:block/title property-value))
+            target (d/entity db [:block/uuid target-uuid])]
+        (assert target (str "Missing node property target: " target-uuid))
+        (:db/id target))
+      value-id)))
+
+(defn attribute-value->plain
   [db attr value]
   (if (ref-attr? db attr)
-    (ref-value->summary db value)
+    (let [property (d/entity db attr)
+          ref-id (if (= :node (:logseq.property/type property))
+                   (node-property-target-id db value)
+                   value)]
+      (ref-value->summary db ref-id))
     value))
 
 (defn- number->letters
@@ -127,7 +144,7 @@
                    (filter #(contains? property-set (:a %))))
           result (reduce
                   (fn [m {:keys [a v]}]
-                    (let [v' (datom-value->plain db a v)]
+                    (let [v' (attribute-value->plain db a v)]
                       (if (many-attr? db a)
                         (update m a (fnil conj []) v')
                         (assoc m a v'))))

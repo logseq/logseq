@@ -2042,11 +2042,13 @@
 
 (hsx/defc lazy-item
   [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
-  (let [item (util/nth-safe data idx)
-        db-id (cond (map? item) (:db/id item)
-                    (number? item) item
+  (let [row (util/nth-safe data idx)
+        db-id (cond (map? row) (:db/id row)
+                    (number? row) row
                     :else nil)
-        [item set-item!] (hooks/use-state (when (map? item) item))
+        [item set-item!] (hooks/use-state (when (and (map? row)
+                                                     (contains? row :block/title))
+                                            row))
         list-or-gallery? (or list-view? gallery-view?)
         opts (if list-or-gallery?
                {:skip-refresh? true
@@ -2062,8 +2064,9 @@
             (set-item! block)))
         nil)
      [db-id scrolling?])
-    (let [item' (cond (map? item) item (number? item) {:db/id item})]
-      (item-render item'))))
+    (if item
+      (item-render item)
+      [:div {:style {:min-height 24}}])))
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
