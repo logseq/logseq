@@ -1,6 +1,27 @@
 (ns frontend.components.views-test
-  (:require [cljs.test :refer [deftest is]]
-            [frontend.components.views :as views]))
+  (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
+            [cljs.test :refer [deftest is testing]]
+            [frontend.components.views :as views]
+            [goog.object :as gobj]))
+
+(defn- render-lazy-item
+  [row]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup
+       react-dom-server
+       (views/lazy-item [row] 0 {}
+                        (fn [item]
+                          (.createElement react "span" nil
+                                          (if (contains? item :block/title)
+                                            (:block/title item)
+                                            "unloaded")))))
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
   "When with-object-name? is false, the user property 'Name' should be kept"
@@ -70,6 +91,20 @@
          (#'views/grouped-gallery-row-ids
           [[:group-a [1 2]]
            [:group-b [{:db/id 2} 3]]]))))
+
+(deftest lazy-item-does-not-render-unloaded-row-values
+  (testing "All Pages ids stay hidden until their row data is loaded"
+    (is (= "<div style=\"min-height:24px\"></div>" (render-lazy-item 42))))
+  (testing "Compact linked-reference rows stay hidden until they are hydrated"
+    (is (= "<div style=\"min-height:24px\"></div>"
+           (render-lazy-item {:db/id 42
+                              :block/parent #uuid "11111111-1111-1111-1111-111111111111"})))))
+
+(deftest lazy-item-renders-loaded-rows-including-empty-titles
+  (is (= "<span>Loaded</span>"
+         (render-lazy-item {:db/id 42 :block/title "Loaded"})))
+  (is (= "<span></span>"
+         (render-lazy-item {:db/id 43 :block/title ""}))))
 
 (deftest group-by-column-should-exclude-name-and-include-many-properties
   (is (views/group-by-column? {:id :block/page}))
