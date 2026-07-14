@@ -1655,3 +1655,31 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
+
+(deftest db-worker-node-opening-graph-does-not-run-maintenance
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-no-startup-maintenance")
+               repo (str "logseq_db_no_startup_maintenance_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{first-host :host first-port :port first-stop! :stop!}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (invoke first-host first-port
+                                 "thread-api/transact"
+                                 [repo
+                                  [{:db/ident :logseq.kv/graph-last-gc-at
+                                    :kv/value 0}]
+                                  {}
+                                  nil])
+                       _ (first-stop!)
+                       {host :host port :port second-stop! :stop!}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! second-stop!})
+                       last-gc-at (invoke host port "thread-api/get-key-value"
+                                          [repo :logseq.kv/graph-last-gc-at])]
+                 (is (= 0 last-gc-at)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))

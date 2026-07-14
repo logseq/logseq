@@ -70,7 +70,9 @@
         page {:db/id 42
               :block/title "Existing Page"
               :block/uuid page-uuid}
-        page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at {:block/parent ...}]
+        page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+                        {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+                        {:block/parent ...}]
         calls (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test")
                     state/<invoke-db-worker

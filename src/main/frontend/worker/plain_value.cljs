@@ -9,8 +9,14 @@
 (defn- ref-value->summary
   [db value]
   (if-let [entity (d/entity db value)]
-    (let [raw-title (or (:block/raw-title entity) (:block/title entity))]
+    (let [raw-title (or (:block/raw-title entity) (:block/title entity))
+          tag-idents (into []
+                           (keep (fn [datom]
+                                   (:db/ident (d/entity db (:v datom)))))
+                           (d/datoms db :eavt (:db/id entity) :block/tags))]
       (cond-> {:db/id (:db/id entity)}
+        (seq tag-idents)
+        (assoc :block/tags tag-idents)
         (:block/uuid entity)
         (assoc :block/uuid (:block/uuid entity))
         raw-title
@@ -30,11 +36,15 @@
 
 (defn- ref-attr?
   [db attr]
-  (= :db.type/ref (:db/valueType (d/entity db attr))))
+  (= :db.type/ref
+     (or (get-in (d/schema db) [attr :db/valueType])
+         (:db/valueType (d/entity db attr)))))
 
 (defn- many-attr?
   [db attr]
-  (= :db.cardinality/many (:db/cardinality (d/entity db attr))))
+  (= :db.cardinality/many
+     (or (get-in (d/schema db) [attr :db/cardinality])
+         (:db/cardinality (d/entity db attr)))))
 
 (defn- datom-value->plain
   [db attr value]

@@ -1002,7 +1002,7 @@
                          nil)
         *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
         [entity'] (hooks/use-atom *entity)
-        latest-tx-id (:tx-id (rfx/use-sub [:db/latest-transacted-entity-uuids]))]
+        latest-tx-id (rfx/use-entity-tx-id page)]
     (hooks/use-effect!
      (fn []
        (when page-entity
@@ -1235,7 +1235,7 @@
   [block]
   (block-tagged-with? block :logseq.class/Cards))
 
-(declare block-positioned-properties)
+(declare block-positioned-properties render-block-positioned-properties?)
 
 (hsx/defc page-reference
   "Component for page reference"
@@ -1301,7 +1301,8 @@
                              :vertical-align "middle"}
                     :on-pointer-down (fn [e]
                                         (util/stop e))}
-                    (block-positioned-properties config block :block-left)])
+                    (when (render-block-positioned-properties? block :block-left)
+                      (block-positioned-properties config block :block-left))])
                  (page-cp config' (if (uuid? uuid-or-title)
                                     {:block/uuid uuid-or-title}
                                     {:block/name uuid-or-title}))
@@ -2629,8 +2630,8 @@
                    (state/pub-event! [:editor/save-code-editor])
 
                    (p/let [block (if (:block.temp/load-status block)
-                                    block
-                                    (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+                                   block
+                                   (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
                            cursor-range (or point-cursor-range
                                             (if mobile? mobile-range (get-cursor-range)))
                            content (:block/title block)]
@@ -3030,30 +3031,41 @@
   [block position]
   (get-in block [:block.temp/positioned-properties position]))
 
+(defn- render-block-positioned-properties?
+  [block position]
+  (or (not (contains? block :block.temp/positioned-properties))
+      (seq (block-positioned-properties-from-payload block position))))
+
 (hsx/defc block-positioned-properties
   [config block position]
-  (let [payload-positioned-properties (block-positioned-properties-from-payload block position)
-        [positioned-properties set-positioned-properties!] (hooks/use-state payload-positioned-properties)
+  (let [positioned-properties-payload? (contains? block :block.temp/positioned-properties)
+        payload-positioned-properties (when positioned-properties-payload?
+                                        (or (block-positioned-properties-from-payload block position)
+                                            []))
+        [loaded-positioned-properties set-loaded-positioned-properties!] (hooks/use-state nil)
         [current-block set-current-block!] (hooks/use-state block)
-        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        entity-tx-id (rfx/use-entity-tx-id block)
         _ (hooks/use-effect!
            (fn []
-             (if (some? payload-positioned-properties)
-               (do
-                 (set-positioned-properties! payload-positioned-properties)
-                 (set-current-block! block))
+             (when-not positioned-properties-payload?
                (p/let [repo (state/get-current-repo)
                        properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
                                                               repo
                                                               {:block-id (:db/id block)
                                                                :position position})
                        current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
-                 (set-positioned-properties! properties)
+                 (set-loaded-positioned-properties! properties)
                  (when current-block
                    (set-current-block! current-block))))
 	             nil)
-           [(:db/id block) (:block/uuid block) payload-positioned-properties position latest-transacted-entity-uuids])
-        block (or current-block block)
+           [(:db/id block) (:block/uuid block) positioned-properties-payload?
+            position entity-tx-id])
+        positioned-properties (if positioned-properties-payload?
+                                payload-positioned-properties
+                                loaded-positioned-properties)
+        block (if positioned-properties-payload?
+                block
+                (or current-block block))
         properties (cond->> positioned-properties
 		                     (= position :block-below)
 		                     (remove (fn [property]
@@ -3103,21 +3115,29 @@
              ^{:key (str (:db/id block) "-" (:db/id property))}
              [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
 
+(defn- render-block-reactions?
+  [block]
+  (or (not (contains? block :block.temp/reactions))
+      (seq (:block.temp/reactions block))))
+
 (hsx/defc block-reactions
   [block]
   (let [repo (state/get-current-repo)
         target-id (:db/id block)
         [user-db-id set-user-db-id!] (hooks/use-state nil)
+        reactions-payload? (contains? block :block.temp/reactions)
         reactions-result (db-hooks/use-query
-                          (react/q repo [:frontend.worker.react/block-reactions target-id]
-                                   {}
-                                   '[:find (pull ?r [*])
-                                     :in $ ?target
-                                     :where
-                                     [?r :logseq.property.reaction/target ?target]]
-                                   target-id))
-        reactions (->> (or reactions-result [])
-                       (map first))
+                          (when-not reactions-payload?
+                            (react/q repo [:frontend.worker.react/block-reactions target-id]
+                                     {}
+                                     '[:find (pull ?r [*])
+                                       :in $ ?target
+                                       :where
+                                       [?r :logseq.property.reaction/target ?target]]
+                                     target-id)))
+        reactions (if reactions-payload?
+                    (:block.temp/reactions block)
+                    (map first (or reactions-result [])))
         summary (reaction/summarize reactions user-db-id)
         read-only? config/publishing?
         on-pick (fn [popup-id emoji]
@@ -3269,15 +3289,19 @@
   [block]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
-        conflicts (rfx/use-sub [:sync/block-conflicts repo (str block-id)])
+        sync-conflicts-payload? (contains? block :block.temp/sync-conflicts)
+        subscribed-conflicts (rfx/use-sub [:sync/block-conflicts repo (str block-id)])
+        conflicts (if (nil? subscribed-conflicts)
+                    (:block.temp/sync-conflicts block)
+                    subscribed-conflicts)
         visible-conflicts (visible-sync-conflicts block conflicts)]
     (hooks/use-effect!
      (fn []
-       (when (and repo block-id (nil? conflicts))
+       (when (and repo block-id (nil? subscribed-conflicts) (not sync-conflicts-payload?))
          (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
            (state/set-sync-block-conflicts! repo block-id result)))
        nil)
-     [repo block-id conflicts])
+     [repo block-id subscribed-conflicts sync-conflicts-payload?])
     (when (seq visible-conflicts)
       (ui/tooltip
        (shui/button
@@ -3448,8 +3472,6 @@
         named? (some? (:block/name block))
         table? (:table? config)
         raw-mode-block (rfx/use-sub [:editor/raw-mode-block])
-        indent-preview (rfx/use-sub [:editor/indent-preview])
-        indent-preview? (= (:block-uuid indent-preview) uuid)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3466,7 +3488,8 @@
                                        bg-color)
                    :color (when-not built-in-color? "white")}})))
 
-     (when-not table?
+     (when (and (not table?)
+                (render-block-positioned-properties? block :block-left))
        (block-positioned-properties config block :block-left))
 
      [:div.block-content-or-editor-inner
@@ -3503,12 +3526,7 @@
                                   (block-refs-count block refs-count *hide-block-refs?))])
              editor-cp [:div.editor-wrapper.flex.flex-1.w-full
                         {:id editor-id
-                         :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (entity/journal? block)))}])
-                         :style (when indent-preview?
-                                  {:transform (str "translateX("
-                                                   (if (:indent? indent-preview) "42px" "-42px")
-                                                   ")")
-                                   :transition "transform 80ms ease"})}
+                         :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (entity/journal? block)))}])}
                         (ui/catch-error
                          (ui/block-error (t :sync/something-wrong) {})
                          (editor-box {:block block
@@ -3543,7 +3561,8 @@
                         (:property? config))
             (sync-conflicts-warning-button block))
 
-          (when-not table?
+          (when (and (not table?)
+                     (render-block-positioned-properties? block :block-right))
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
 
@@ -3966,7 +3985,8 @@
 
 (defn- schedule-select-block-under-pointer!
   [selection-block-ids scroll-container]
-  (when (seq selection-block-ids)
+  (when (and (seq selection-block-ids)
+             (block-selection/pointer-down?))
     (let [scroll-top (some-> scroll-container .-scrollTop)
           last-scroll-top @*block-last-scroll-top
           scroll-direction (cond
@@ -4070,7 +4090,7 @@
   [config block query-block]
   (let [[current-query-block set-current-query-block!] (hooks/use-state query-block)
         query-block-uuid (:block/uuid query-block)
-        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        query-block-tx-id (rfx/use-entity-tx-id query-block)
         _ (hooks/use-effect!
            (fn []
              (set-current-query-block! query-block)
@@ -4078,13 +4098,13 @@
            [query-block-uuid (:block/title query-block) (:block/raw-title query-block)])
         _ (hooks/use-effect!
            (fn []
-             (when (contains? (:updated-ids latest-transacted-entity-uuids) query-block-uuid)
+             (when query-block-tx-id
                (p/let [current-query-block (db-async/<get-block (state/get-current-repo)
                                                                  query-block-uuid
                                                                  {:children? false})]
                  (set-current-query-block! current-query-block)))
              nil)
-           [query-block-uuid latest-transacted-entity-uuids])
+           [query-block-uuid query-block-tx-id])
         query (:block/title current-query-block)
         result (common-util/safe-read-string {:log-error? false} query)
         advanced-query? (map? result)]
@@ -4236,10 +4256,14 @@
             :hide-block-refs-count? hide-block-refs-count?
             :*show-query? *show-query?})))]]
 
-   (when (and (not collapsed?) (not (or table? property?)) (not (:page-title? config)))
+   (when (and (not collapsed?)
+              (not (or table? property?))
+              (not (:page-title? config))
+              (render-block-positioned-properties? block :block-below))
      (block-positioned-properties config block :block-below))
 
-   (when-not (or (:table? config) (:property? config))
+   (when (and (not (or (:table? config) (:property? config)))
+              (render-block-reactions? block))
      (block-reactions block))])
 
 (hsx/defc block-renderer-error-boundary
@@ -4264,8 +4288,10 @@
            *plugin-renderer-error? (hooks/use-memo #(atom false) [])
            *use-plugin-renderer? (hooks/use-memo #(atom true) [])
            *hydrated-comment-thread (hooks/use-memo #(atom nil) [])
-           *comment-thread-present? (hooks/use-memo #(atom nil) [])
-           *refs-count (hooks/use-memo #(atom nil) [(:db/id block)])
+           comment-thread-presence-payload? (contains? block :block.temp/comment-thread-present?)
+           *comment-thread-present? (hooks/use-memo #(atom (:block.temp/comment-thread-present? block)) [])
+           refs-count-payload? (contains? block :block.temp/refs-count)
+           *refs-count (hooks/use-memo #(atom (:block.temp/refs-count block)) [(:db/id block)])
            [show-query?] (hooks/use-atom *show-query?)
            [hydrated-comment-thread] (hooks/use-atom *hydrated-comment-thread)
            [comment-thread-present?] (hooks/use-atom *comment-thread-present?)
@@ -4275,13 +4301,14 @@
            [refs-count] (hooks/use-atom *refs-count)
            _ (hooks/use-effect!
               (fn []
-                (when-not (or (:view? config*) (entity/page? block))
+                (when-not (or refs-count-payload? (:view? config*) (entity/page? block))
                   (when-let [id (:db/id block)]
                     (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
                       (reset! *refs-count count)))))
               [(:db/id block)])
            _ (hooks/use-effect!
-              #(schedule-comment-thread-presence-check! *comment-thread-present? block))
+              #(when-not comment-thread-presence-payload?
+                 (schedule-comment-thread-presence-check! *comment-thread-present? block)))
            _ (hooks/use-effect!
               (fn []
                 ;; Mobile swipe handling calls preventDefault, so avoid registering
@@ -4330,7 +4357,7 @@
                      temp-collapsed?
 
                      :else
-                     db-collapsed?)
+                     (if (some? temp-collapsed?) temp-collapsed? db-collapsed?))
         config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         doc-mode? (:document/mode? config)
@@ -4682,19 +4709,23 @@
 
 (defn- block-changed?
   [old-block new-block]
-  (not= (block-render-state old-block)
-        (block-render-state new-block)))
+  (and (not (identical? old-block new-block))
+       (not= (block-render-state old-block)
+             (block-render-state new-block))))
 
 (defn- block-with-children-tree
   [block children]
   (when block
-    (first (tree/blocks->vec-tree (cons block children) (:block/uuid block)))))
+    (let [tree (tree/blocks->vec-tree (cons block children) (:block/uuid block))]
+      (if (entity/page? block)
+        (assoc block :block/children tree)
+        (first tree)))))
 
 (defn- same-block-render-input?
   [[old-config old-block] [new-config new-block]]
-  (not (or (block-changed? old-block new-block)
-           (not= (select-keys old-config block-render-config-keys)
-                 (select-keys new-config block-render-config-keys)))))
+  (and (not (block-changed? old-block new-block))
+       (every? #(= (get old-config %) (get new-config %))
+               block-render-config-keys)))
 
 (defn- memo-react-component
   [component same-args?]
@@ -4741,14 +4772,6 @@
   (if (and (:container-id config) (not linked-block?))
     (:container-id config)
     (state/get-container-id (generated-container-id-key config block))))
-
-(defn- block-in-latest-tx?
-  [latest-transacted-entity-uuids block]
-  (let [{:keys [updated-ids deleted-ids]} latest-transacted-entity-uuids]
-    (boolean (some (fn [id]
-                     (or (contains? updated-ids id)
-                         (contains? deleted-ids id)))
-                   [(:block/uuid block) (:db/id block)]))))
 
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
@@ -4804,17 +4827,21 @@
 
 (hsx/defc block-container
   [config block* & {:as opts}]
-  (let [[block set-block!] (hooks/use-state block*)
+  (let [[local-block set-block!] (hooks/use-state block*)
+        complete-flat-row? (and (:hide-children? config)
+                                (:block.temp/load-status block*))
+        block (if complete-flat-row? block* local-block)
         id (or (:db/id block*) (:block/uuid block*))
         block-uuid (:block/uuid block)
-        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        entity-tx-id (rfx/use-entity-tx-id block)
         temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
                                                              (:container-id config))
         ignore-block-collapsed? (:ignore-block-collapsed? config)
         load-children? (and (not (:hide-children? config))
-                            (editor-handler/load-children? block
-                                                           temporary-collapsed-state
-                                                           ignore-block-collapsed?))
+                            (or (:original-block config)
+                                (editor-handler/load-children? block
+                                                               temporary-collapsed-state
+                                                               ignore-block-collapsed?)))
         refresh-block! (fn []
                          (when-not (or (:page-title? config)
                                        (:view? config))
@@ -4829,20 +4856,22 @@
                              (set-block! (block-with-children-tree block children)))))]
     (hooks/use-effect!
      (fn []
-       (set-block! block*)
+       (when-not complete-flat-row?
+         (set-block! block*))
        nil)
-     [(:block/uuid block*) (block-render-state block*)])
+     [(:block/uuid block*) (block-render-state block*) complete-flat-row?])
     (hooks/use-effect!
      (fn []
-       (refresh-block!)
-       nil)
-    [id load-children? ignore-block-collapsed? temporary-collapsed-state])
-    (hooks/use-effect!
-     (fn []
-       (when (block-in-latest-tx? latest-transacted-entity-uuids block)
+       (when-not complete-flat-row?
          (refresh-block!))
        nil)
-     [block-uuid latest-transacted-entity-uuids])
+     [id load-children? ignore-block-collapsed? temporary-collapsed-state complete-flat-row?])
+    (hooks/use-effect!
+     (fn []
+       (when (and entity-tx-id (not complete-flat-row?))
+         (refresh-block!))
+       nil)
+     [block-uuid entity-tx-id complete-flat-row?])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -5241,6 +5270,11 @@
         loop-linked? (and linked-block (contains? (:links config) (:db/id linked-block)))
         config (if linked-block
                  (-> (assoc config :original-block original-block)
+                     (dissoc :hide-children?
+                             :virtual/flat-list?
+                             :virtual/offset
+                             :virtual/total-count
+                             :virtual/on-range-changed)
                      (update :links (fn [ids] (conj (or ids #{}) (:db/id linked-block)))))
                  config)
         item (or (if loop-linked? item linked-block) item)
@@ -5264,7 +5298,8 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
-  (let [blocks-count (count blocks)
+  (let [blocks (vec blocks)
+        blocks-count (count blocks)
         virtual-total-count (:virtual/total-count config)
         virtual-offset (or (:virtual/offset config) 0)
         virtual-window? (and (integer? virtual-total-count)
@@ -5283,19 +5318,59 @@
                          (if virtual-window?
                            (let [window-idx (- idx virtual-offset)]
                              (when (<= 0 window-idx (dec blocks-count))
-                               (nth blocks window-idx)))
-                           (nth blocks idx)))
+                           (nth blocks window-idx)))
+                          (nth blocks idx)))
+        loaded-window-complete? (or (not virtual-window?)
+                                    (>= (+ virtual-offset blocks-count) virtual-total-count))
+        order-states (fn [idx block]
+                       (if (:virtual/flat-list? config)
+                         (let [window-idx (- idx virtual-offset)
+                               level (:block/level block)
+                               previous (when (pos? window-idx)
+                                          (nth blocks (dec window-idx)))
+                               following (subvec blocks (min blocks-count (inc window-idx)))
+                               child (first following)
+                               child-state (cond
+                                             child
+                                             [:known (when (= (inc level) (:block/level child))
+                                                       (:block/order child))]
+
+                                             loaded-window-complete?
+                                             [:known nil])
+                               right (some #(when (<= (:block/level %) level) %) following)
+                               right-state (cond
+                                             right
+                                             [:known (when (= level (:block/level right))
+                                                       (:block/order right))]
+
+                                             loaded-window-complete?
+                                             [:known nil])]
+                           {:outliner/previous-block previous
+                            :outliner/child-order-state child-state
+                            :outliner/right-order-state right-state})
+                         {:outliner/child-order-state [:known (some-> block :block/children first :block/order)]
+                          :outliner/right-order-state [:known (some-> (nth blocks (inc idx) nil) :block/order)]}))
+        flat-list-item (fn [block item]
+                         (if (:virtual/flat-list? config)
+                           (react-core/createElement
+                            "div"
+                            #js {:style #js {:boxSizing "border-box"
+                                             :paddingLeft (* 29 (dec (or (:block/level block) 1)))}}
+                            item)
+                           item))
         render-item (fn [idx]
                       (when-let [block (block-at-index idx)]
                         (let [top? (zero? idx)
                               bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                              config' (cond-> (assoc config :top? top?)
+                              config' (cond-> (merge config (order-states idx block) {:top? top?})
                                         (:virtual/flat-list? config)
                                         (assoc :hide-children? true))]
-                          (block-item config'
-                                      block
-                                      {:top? top?
-                                       :bottom? bottom?}))))
+                          (flat-list-item
+                           block
+                           (block-item config'
+                                       block
+                                       {:top? top?
+                                        :bottom? bottom?})))))
         virtualized? (and virtualized? (seq blocks))
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
@@ -5325,16 +5400,19 @@
                                         (if-let [block (block-at-index idx)]
                                           (let [top? (zero? idx)
                                                 bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                                                config' (cond-> (assoc config
-                                                                       :top? top?
-                                                                       :selection/block-ids selection-block-ids)
+                                                config' (cond-> (merge config
+                                                                      (order-states idx block)
+                                                                      {:top? top?
+                                                                       :selection/block-ids selection-block-ids})
                                                           (:virtual/flat-list? config)
                                                           (assoc :hide-children? true))]
-                                            (block-item config'
-                                                        block
-                                                        {:top? top?
-                                                         :bottom? bottom?}))
-                                          [:div {:style {:height 29}}]))})]
+                                            (flat-list-item
+                                             block
+                                             (block-item config'
+                                                         block
+                                                         {:top? top?
+                                                          :bottom? bottom?})))
+                                          (react-core/createElement "div" #js {:style #js {:height 29}})))})]
     (hooks/use-effect!
      (fn []
        (when virtualized?

@@ -20,9 +20,18 @@
     (.now js/performance)
     (js/Date.now)))
 
+(defonce ^:private *outliner-op-perf (atom {}))
+
+(defn take-outliner-op-perf!
+  [perf-id]
+  (let [result (get @*outliner-op-perf perf-id)]
+    (swap! *outliner-op-perf dissoc perf-id)
+    result))
+
 (defn- log-outliner-op-perf!
   [data]
-  (when (and goog.DEBUG (:perf-id data))
+  (when-let [perf-id (and goog.DEBUG (:perf-id data))]
+    (swap! *outliner-op-perf update perf-id (fnil conj []) data)
     (log/info :db-worker/outliner-op-perf data)))
 
 (defn- transit-safe-tx-meta

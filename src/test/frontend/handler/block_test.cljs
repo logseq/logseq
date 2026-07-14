@@ -133,3 +133,29 @@
              (fn [error]
                (is false (str error))))
             (p/finally done))))))
+
+(deftest edit-block-with-loaded-data-updates-editor-synchronously-test
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        block {:db/id 42
+               :block/uuid block-id
+               :block/title "loaded title"}
+        editing (atom nil)]
+    (with-redefs [state/get-current-repo (constantly "test")
+                  state/get-edit-block (constantly block)
+                  state/clear-selection! (constantly nil)
+                  state/get-current-editor-container-id (constantly :test-container)
+                  state/set-editing! (fn [& args]
+                                       (reset! editing args))
+                  state/set-editor-last-input-time! (constantly nil)]
+      (block-handler/edit-block! block 0 {:save-code-editor? false
+                                          :skip-load? true})
+      (is (= [(str "edit-block-" block-id)
+              "loaded title"
+              block
+              ""
+              {:container-id :test-container
+               :direction nil
+               :event nil
+               :pos 0}]
+             @editing)
+          "Loaded block data should enter editor state before edit-block! returns."))))
