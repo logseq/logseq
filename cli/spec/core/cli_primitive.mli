@@ -18,9 +18,9 @@ type ds_where_clause =
   | L of Melange_edn_melange.list_ Melange_edn_melange.t
 
 type datascript_query = private {
-  find : Melange_edn_melange.any list;
-  in_ : Melange_edn_melange.symbol Melange_edn_melange.t list option;
-  where : ds_where_clause list;
+  find : Melange_edn_melange.any Rrbvec.t;
+  in_ : Melange_edn_melange.symbol Melange_edn_melange.t Rrbvec.t option;
+  where : ds_where_clause Rrbvec.t;
 }
 
 val create_graph : string -> graph
@@ -36,9 +36,9 @@ val shell_of_string : string -> shell option
 val string_of_owner_source : owner_source -> string
 
 val make_datascript_query :
-  find:Melange_edn_melange.any list ->
-  ?in_:Melange_edn_melange.symbol Melange_edn_melange.t list ->
-  where:ds_where_clause list ->
+  find:Melange_edn_melange.any Rrbvec.t ->
+  ?in_:Melange_edn_melange.symbol Melange_edn_melange.t Rrbvec.t ->
+  where:ds_where_clause Rrbvec.t ->
   unit ->
   datascript_query
 

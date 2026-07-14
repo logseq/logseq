@@ -36,7 +36,7 @@ type t = {
 }
 
 type source = Defaults | Env | File of Cli_primitive.path | Argv
-type resolved = { config : t; sources : source list }
+type resolved = { config : t; sources : source Rrbvec.t }
 
 val default_root_dir : unit -> Cli_primitive.path
 val default_config_path : Cli_primitive.path -> Cli_primitive.path

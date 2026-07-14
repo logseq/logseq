@@ -1,4 +1,4 @@
-type parsed = { ids : Cli_primitive.db_id list; multi : bool }
+type parsed = { ids : Cli_primitive.db_id Rrbvec.t; multi : bool }
 
 let valid_id id = Int64.compare id 0L > 0
 
@@ -12,19 +12,20 @@ let strip_vector_brackets value =
 let parse_id_string s =
   try
     let split_ids value =
-      value |> String.split_on_char ','
-      |> List.concat_map (fun part ->
-          part |> String.split_on_char ' '
-          |> List.concat_map (String.split_on_char '\t'))
+      Vec.split_on_char ',' value
+      |> Vec.concat_map (fun part ->
+          Vec.split_on_char ' ' part
+          |> Vec.concat_map (fun part -> Vec.split_on_char '\t' part))
     in
     let ids =
       strip_vector_brackets s |> split_ids
-      |> List.filter_map (fun p ->
+      |> Vec.filter_map (fun p ->
           let p = String.trim p in
           if p = "" then None else Some (Int64.of_string p))
     in
-    if List.for_all valid_id ids then Ok { ids; multi = List.length ids > 1 }
+    if Vec.for_all valid_id ids then Ok { ids; multi = Vec.length ids > 1 }
     else Error (Error.invalid_options "invalid id")
   with _ -> Error (Error.invalid_options "invalid id")
 
-let to_single parsed = match parsed.ids with [ id ] -> Some id | _ -> None
+let to_single parsed =
+  if Vec.length parsed.ids = 1 then Vec.nth_opt parsed.ids 0 else None

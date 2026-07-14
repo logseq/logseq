@@ -26,6 +26,27 @@
       (d/transact! conn (concat retracts extra))
       (is (nil? (d/entity @conn (:db/id reaction-entity)))))))
 
+(deftest delete-blocks-expands-property-value-children
+  (testing "delete-blocks retracts generated property value children"
+    (let [property-value-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/cli-http-prop {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Parent"
+                             :build/properties
+                             {:user.property/cli-http-prop
+                              {:build/property-value :block
+                               :block/title "Property value"
+                               :block/uuid property-value-uuid
+                               :build/keep-uuid? true}}}]}]})
+          parent (db-test/find-block-by-content @conn "Parent")
+          property-value (d/entity @conn [:block/uuid property-value-uuid])
+          txs [[:db/retractEntity (:db/id parent)]]
+          expanded (delete-blocks/expand-delete-blocks-tx @conn txs {:outliner-op :delete-blocks})]
+      (is (= (:db/id parent) (:db/id (:block/parent property-value))))
+      (is (some #(= [:db/retractEntity (:db/id property-value)] %) expanded)))))
+
 (deftest delete-blocks-removes-history-with-ref-value
   (testing "property history entries referencing a deleted block are retracted"
     (let [conn (db-test/create-conn-with-blocks

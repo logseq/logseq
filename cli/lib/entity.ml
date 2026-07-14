@@ -7,7 +7,7 @@ type t = {
   name : string option;
   title : string option;
   kind : kind;
-  tags : Cli_primitive.keyword list;
+  tags : Cli_primitive.keyword Rrbvec.t;
   created_at : Js.Date.t option;
   updated_at : Js.Date.t option;
   deleted_at : Js.Date.t option;
@@ -22,7 +22,7 @@ let of_value raw =
     name = Edn_util.get_string raw "name";
     title = Edn_util.get_string raw "block/title";
     kind = Unknown;
-    tags = [];
+    tags = Vec.empty;
     created_at = None;
     updated_at = None;
     deleted_at = None;

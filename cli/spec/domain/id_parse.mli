@@ -1,4 +1,4 @@
-type parsed = { ids : Cli_primitive.db_id list; multi : bool }
+type parsed = { ids : Cli_primitive.db_id Rrbvec.t; multi : bool }
 
 val valid_id : Cli_primitive.db_id -> bool
 val parse_id_string : string -> parsed Error.build_result

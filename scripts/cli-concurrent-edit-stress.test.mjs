@@ -23,6 +23,7 @@ import {
   parseArgs,
   stressPageNames,
   stressConfigText,
+  stressReferenceViewOrder,
   syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
@@ -522,6 +523,20 @@ test("bootstrap stress pages exclude auto-created journal pages", () => {
 test("today journal page name uses the local calendar date", () => {
   assert.equal(todayJournalPageName({}, new Date("2026-07-01T16:30:00+08:00")), "Jul 1st, 2026");
   assert.equal(todayJournalPageName({ todayDate: "2026-07-02" }), "Jul 2nd, 2026");
+});
+
+test("reference view stress orders stay in generated fractional-index form", () => {
+  assert.equal(stressReferenceViewOrder({ seq: 0 }, 0), "a0");
+  assert.equal(stressReferenceViewOrder({ seq: 30 }, 0), "ay");
+  assert.equal(stressReferenceViewOrder({ seq: 31 }, 0), "b00");
+  assert.equal(stressReferenceViewOrder({ seq: 61 }, 1), "b0z");
+  assert.equal(stressReferenceViewOrder({ seq: 62 }, 0), "b10");
+
+  for (let seq = 0; seq < 1000; seq += 1) {
+    assert.match(stressReferenceViewOrder({ seq }, 0), /^(a[0-9A-Za-z]|b[0-9A-Za-z][0-9A-Za-z])$/);
+    assert.match(stressReferenceViewOrder({ seq }, 1), /^(a[0-9A-Za-z]|b[0-9A-Za-z][0-9A-Za-z])$/);
+    assert.notEqual(stressReferenceViewOrder({ seq }, 0), stressReferenceViewOrder({ seq }, 1));
+  }
 });
 
 test("raw page delete/restore uses unique operation-owned page titles", () => {
