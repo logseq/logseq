@@ -412,6 +412,46 @@
                   (throw (ex-info (str "No :db/id for " c) {})))))
           class-extends')))
 
+(defn- validate-class-extends-acyclic!
+  [classes all-idents]
+  (when (some (fn [[_ class-config]]
+                (seq (:build/class-extends class-config)))
+              classes)
+    (let [class-idents (set (map #(get-ident all-idents %) (keys classes)))
+          edges (->> classes
+                     (mapcat (fn [[class-name class-config]]
+                               (let [class-ident (get-ident all-idents class-name)]
+                                 (keep (fn [parent]
+                                         (let [parent-ident (get-ident all-idents parent)]
+                                           (when (contains? class-idents parent-ident)
+                                             [class-ident parent-ident])))
+                                       (:build/class-extends class-config))))))
+          [outgoing incoming-counts]
+          (reduce (fn [[outgoing counts] [class-ident parent-ident]]
+                    [(update outgoing class-ident (fnil conj []) parent-ident)
+                     (update counts parent-ident inc)])
+                  [{} (zipmap class-idents (repeat 0))]
+                  edges)
+          initial-queue (into [] (filter #(zero? (incoming-counts %))) class-idents)]
+      (loop [queue initial-queue
+             queue-index 0
+             remaining-incoming incoming-counts]
+        (if (< queue-index (count queue))
+          (let [class-ident (nth queue queue-index)
+                [next-incoming unlocked]
+                (reduce (fn [[counts unlocked-idents] parent-ident]
+                          (let [next-count (dec (counts parent-ident))]
+                            [(assoc counts parent-ident next-count)
+                             (cond-> unlocked-idents
+                               (zero? next-count) (conj parent-ident))]))
+                        [remaining-incoming []]
+                        (get outgoing class-ident))]
+            (recur (into queue unlocked)
+                   (inc queue-index)
+                   next-incoming))
+          (when-not (= queue-index (count class-idents))
+            (throw (ex-info "Cycle detected in :build/class-extends" {}))))))))
+
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?] :as options}]
   (let [classes' (if build-existing-tx?
                    (->> classes
@@ -860,6 +900,7 @@
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes options)
+        _ (validate-class-extends-acyclic! classes all-idents)
         properties-tx (build-properties-tx properties classes page-uuids all-idents options)
         classes-tx (build-classes-tx classes properties page-uuids all-idents options)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
