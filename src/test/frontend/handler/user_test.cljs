@@ -1,5 +1,6 @@
 (ns frontend.handler.user-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.core.async :as a]
+            [cljs.test :refer [async deftest is testing]]
             [electron.ipc :as ipc]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -7,31 +8,39 @@
             [promesa.core :as p]))
 
 (defn- with-mocked-local-storage
-  [f]
-  (let [old-storage (.-localStorage js/globalThis)
-        had-local-storage?
-        (.call (.-hasOwnProperty (.-prototype js/Object))
-               js/globalThis
-               "localStorage")
-        mocked-storage #js {:clear (fn [] nil)
-                            :setItem (fn [& _] nil)
-                            :getItem (fn [& _] nil)
-                            :removeItem (fn [& _] nil)}]
-    (js/Object.defineProperty js/globalThis
-                              "localStorage"
-                              #js {:value mocked-storage
-                                   :configurable true
-                                   :writable true})
-    (try
-      (f)
-      (finally
-        (if had-local-storage?
-          (js/Object.defineProperty js/globalThis
-                                    "localStorage"
-                                    #js {:value old-storage
-                                         :configurable true
-                                         :writable true})
-          (js/Reflect.deleteProperty js/globalThis "localStorage"))))))
+  ([f]
+   (with-mocked-local-storage {} f))
+  ([items f]
+   (let [old-storage (.-localStorage js/globalThis)
+         had-local-storage?
+         (.call (.-hasOwnProperty (.-prototype js/Object))
+                js/globalThis
+                "localStorage")
+         mocked-storage #js {:clear (fn [] nil)
+                             :setItem (fn [& _] nil)
+                             :getItem (fn [k] (get items k))
+                             :removeItem (fn [& _] nil)}]
+     (js/Object.defineProperty js/globalThis
+                               "localStorage"
+                               #js {:value mocked-storage
+                                    :configurable true
+                                    :writable true})
+     (try
+       (f)
+       (finally
+         (if had-local-storage?
+           (js/Object.defineProperty js/globalThis
+                                     "localStorage"
+                                     #js {:value old-storage
+                                          :configurable true
+                                          :writable true})
+           (js/Reflect.deleteProperty js/globalThis "localStorage")))))))
+
+(defn- jwt
+  [payload]
+  (str "header."
+       (js/btoa (js/JSON.stringify (clj->js (merge {:cognito:username ""} payload))))
+       ".sig"))
 
 (deftest set-tokens-persists-auth-json-with-latest-token-values-test
   (let [writes* (atom [])
@@ -82,6 +91,45 @@
                                 [:id-token :access-token :refresh-token]))))))
       (finally
         (state/replace-state! old-state)))))
+
+(deftest restore-tokens-preserves-refresh-token-before-refreshing-expired-id-token-test
+  (async done
+    (let [old-state @state/state
+          old-refresh user-handler/<refresh-id-token&access-token
+          old-pub-event! state/pub-event!
+          refresh-called (a/chan)
+          expired-id-token (jwt {:exp 0})
+          refresh-token "refresh-token-from-local-storage"
+          restore! (fn []
+                     (reset! state/state old-state)
+                     (set! user-handler/<refresh-id-token&access-token old-refresh)
+                     (set! state/pub-event! old-pub-event!))]
+      (reset! state/state (assoc old-state
+                                 :auth/id-token nil
+                                 :auth/access-token nil
+                                 :auth/refresh-token nil))
+      (set! user-handler/<refresh-id-token&access-token
+            (fn []
+              (a/put! refresh-called :called)
+              (a/go nil)))
+      (set! state/pub-event! (fn [& _] nil))
+      (try
+        (with-mocked-local-storage
+          {"id-token" expired-id-token
+           "access-token" "access-token-from-local-storage"
+           "refresh-token" refresh-token}
+          (fn []
+            (user-handler/restore-tokens-from-localstorage)
+            (is (= refresh-token (state/get-auth-refresh-token)))))
+        (a/go
+          (let [[value] (a/alts! [refresh-called (a/timeout 1000)])]
+            (is (= :called value))
+            (restore!)
+            (done)))
+        (catch :default e
+          (is false (str "unexpected error: " e))
+          (restore!)
+          (done))))))
 
 (deftest logout-clears-e2ee-password-when-db-worker-ready-test
   (testing "logout should request db-worker to clear persisted e2ee password"

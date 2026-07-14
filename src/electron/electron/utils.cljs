@@ -353,5 +353,6 @@
   [path]
   (let [stat (fs/statSync path)]
     {:size (.-size stat)
+     :birthtime (.-birthtime stat)
      :mtime (.-mtime stat)
      :ctime (.-ctime stat)}))

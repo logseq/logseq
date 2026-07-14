@@ -19,8 +19,8 @@ type report = {
   command : string;
   status : Cli_primitive.keyword;
   total_span : Time.span;
-  spans : span list;
-  stages : stage_summary list;
+  spans : span Rrbvec.t;
+  stages : stage_summary Rrbvec.t;
 }
 
 val create_session : bool -> session option
@@ -30,4 +30,4 @@ val time :
 
 val record_span : session -> span -> unit
 val report : session -> command:string -> status:Cli_primitive.keyword -> report
-val render_lines : report -> string list
+val render_lines : report -> string Rrbvec.t

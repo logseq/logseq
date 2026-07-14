@@ -8,8 +8,7 @@
       (is (= :sync/health (:handler match))))
     (let [match (sync-routes/match-route "GET" "/pull")]
       (is (= :sync/pull (:handler match))))
-    (let [match (sync-routes/match-route "GET" "/repair/blocks")]
-      (is (= :sync/repair-blocks (:handler match))))
+    (is (nil? (sync-routes/match-route "GET" "/repair/blocks")))
     (let [match (sync-routes/match-route "GET" "/snapshot/download")]
       (is (= :sync/snapshot-download (:handler match))))
     (let [match (sync-routes/match-route "GET" "/snapshot/stream")]

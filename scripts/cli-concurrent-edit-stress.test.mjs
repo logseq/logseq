@@ -6,6 +6,8 @@ import test from "node:test";
 
 import {
   bootstrapStressPageNames,
+  blockByUuidQuery,
+  blockExistsFromQueryResult,
   classifyHttpResult,
   classifyCliResult,
   clientRuntimeOptions,
@@ -21,6 +23,7 @@ import {
   parseArgs,
   stressPageNames,
   stressConfigText,
+  stressReferenceViewOrder,
   syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
@@ -109,6 +112,39 @@ test("classifies stale raw outliner block property failures as race outcomes", (
     ).outcome,
     "race-conflict",
   );
+});
+
+test("classifies stale raw view targets as race outcomes", () => {
+  for (const message of [
+    'Nothing found for entity id (:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad")',
+    'Nothing found for entity id [:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad"]',
+  ]) {
+    assert.equal(
+      classifyHttpResult(
+        { ok: false, status: 500 },
+        {
+          error: {
+            code: "exception",
+            message,
+          },
+        },
+        { id: 231, op: "http-create-unlinked-references-view" },
+      ).outcome,
+      "race-conflict",
+    );
+  }
+});
+
+test("builds block uuid lookup queries for raw view target checks", () => {
+  assert.equal(
+    blockByUuidQuery("b5cf1ff2-1403-4eed-9449-d326b1e9efad"),
+    '[:find ?b . :where [?b :block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad"]]',
+  );
+});
+
+test("detects existing blocks from uuid lookup query results", () => {
+  assert.equal(blockExistsFromQueryResult({ parsed: { data: { result: 231 } } }), true);
+  assert.equal(blockExistsFromQueryResult({ parsed: { data: { result: null } } }), false);
 });
 
 test("classifies required outliner no-op results as failures", () => {
@@ -489,6 +525,20 @@ test("today journal page name uses the local calendar date", () => {
   assert.equal(todayJournalPageName({ todayDate: "2026-07-02" }), "Jul 2nd, 2026");
 });
 
+test("reference view stress orders stay in generated fractional-index form", () => {
+  assert.equal(stressReferenceViewOrder({ seq: 0 }, 0), "a0");
+  assert.equal(stressReferenceViewOrder({ seq: 30 }, 0), "ay");
+  assert.equal(stressReferenceViewOrder({ seq: 31 }, 0), "b00");
+  assert.equal(stressReferenceViewOrder({ seq: 61 }, 1), "b0z");
+  assert.equal(stressReferenceViewOrder({ seq: 62 }, 0), "b10");
+
+  for (let seq = 0; seq < 1000; seq += 1) {
+    assert.match(stressReferenceViewOrder({ seq }, 0), /^(a[0-9A-Za-z]|b[0-9A-Za-z][0-9A-Za-z])$/);
+    assert.match(stressReferenceViewOrder({ seq }, 1), /^(a[0-9A-Za-z]|b[0-9A-Za-z][0-9A-Za-z])$/);
+    assert.notEqual(stressReferenceViewOrder({ seq }, 0), stressReferenceViewOrder({ seq }, 1));
+  }
+});
+
 test("raw page delete/restore uses unique operation-owned page titles", () => {
   const state = { runId: "stress-1" };
   const first = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 3, seq: 305 });
@@ -542,7 +592,11 @@ test("operation set covers broad outliner and metadata mutations", () => {
     "http-batch-set-property",
     "http-batch-remove-property",
     "http-batch-delete-property-value",
+    "http-create-property-history",
+    "http-create-linked-references-view",
+    "http-create-unlinked-references-view",
     "http-toggle-reaction",
+    "http-delete-view-target-with-related-entities",
     "http-insert-undo-redo",
     "delete-single",
     "delete-batch",
@@ -580,6 +634,23 @@ test("multi-client offline operations require sync, offline mode, and more than 
   assert.equal(operationNames({ sync: false, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), false);
 });
 
+test("3k sync stress includes view-related history references and reactions", () => {
+  const maxOps = 3000;
+  const weights = new Map(operationWeights({ sync: true, offline: true, clients: 3 }));
+  const totalWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+
+  for (const name of [
+    "http-create-property-history",
+    "http-create-linked-references-view",
+    "http-create-unlinked-references-view",
+    "http-toggle-reaction",
+    "http-delete-view-target-with-related-entities",
+  ]) {
+    assert.ok(weights.has(name), `${name} should be in the sync stress operation set`);
+    assert.ok((weights.get(name) / totalWeight) * maxOps >= 10, `${name} should run often enough in a 3k-op stress run`);
+  }
+});
+
 test("critical outliner mutations dominate the stress distribution", () => {
   const weights = new Map(operationWeights({ sync: true, offline: true }));
   const criticalOps = [
@@ -595,6 +666,7 @@ test("critical outliner mutations dominate the stress distribution", () => {
     "http-move-up-down",
     "http-indent-outdent",
     "http-delete-restore-page",
+    "http-delete-view-target-with-related-entities",
     "http-insert-undo-redo",
     "delete-single",
     "delete-batch",

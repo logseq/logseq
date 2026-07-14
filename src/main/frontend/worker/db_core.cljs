@@ -2975,15 +2975,18 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (when-not conn
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
-    (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
-          tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta (cond-> {::sqlite-export/imported-data? true}
-                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
-                    ;; to keep pipeline from reverting their import
-                    (= :datoms (::sqlite-export/graph-format export-edn))
-                    (assoc :initial-db? true))]
-      (ldb/transact! conn tx-data tx-meta)
-      {:tx-count (count tx-data)})))
+    (let [txs (sqlite-export/build-import export-edn @conn {})
+          validation (sqlite-export/validate-import-txs txs @conn)]
+      (if-let [error (:error validation)]
+        {:error error}
+        (let [tx-data (:tx-data validation)
+              tx-meta (cond-> {::sqlite-export/imported-data? true}
+                        ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
+                        ;; to keep pipeline from reverting their import
+                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        (assoc :initial-db? true))]
+          (ldb/transact! conn tx-data tx-meta)
+          {:tx-count (count tx-data)})))))
 
 (defn- fsrs-due-card-block-ids
   [db cards-id]

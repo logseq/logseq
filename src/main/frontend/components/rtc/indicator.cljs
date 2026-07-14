@@ -20,18 +20,8 @@
   (def rtc-state-schema
     [:enum :open :close]))
 
-(defonce *detail-info
-  (atom {:pending-local-ops 0
-         :pending-asset-ops 0
-         :missing-asset-upload-files []
-         :pending-server-ops 0
-         :graph-uuid nil
-         :local-tx nil
-         :remote-tx nil
-         :local-checksum nil
-         :remote-checksum nil
-         :rtc-state :close
-         :download-logs nil
+(defonce ^:private *detail-logs
+  (atom {:download-logs nil
          :upload-logs nil
          :misc-logs nil}))
 
@@ -54,7 +44,7 @@
 (defn- update-detail-log!
   [k log]
   (when log
-    (swap! *detail-info update k (fn [logs] (take 5 (conj logs log))))))
+    (swap! *detail-logs update k (fn [logs] (take 5 (conj logs log))))))
 
 (add-watch rtc-flows/rtc-download-log ::update-detail-download-log
            (fn [_ _ _ log] (update-detail-log! :download-logs log)))
@@ -62,9 +52,11 @@
            (fn [_ _ _ log] (update-detail-log! :upload-logs log)))
 (add-watch rtc-flows/rtc-misc-log ::update-detail-misc-log
            (fn [_ _ _ log] (update-detail-log! :misc-logs log)))
-(add-watch rtc-flows/rtc-state ::update-detail-state
-           (fn [_ _ _ state]
-             (swap! *detail-info merge (rtc-state->detail-info state))))
+
+(defn use-detail-info
+  []
+  (merge (rtc-state->detail-info (rfx/use-sub [:rtc/state]))
+         (hooks/use-atom-value *detail-logs)))
 
 (defn asset-transfer-counts
   [progress]
@@ -203,10 +195,11 @@
         asset-progress (rfx/use-sub [:rtc/asset-upload-download-progress repo])
         [expand-debug? set-expand-debug!] (hooks/use-state false)
         show-checksums? (or config/dev? util/node-test?)
+        detail-info (use-detail-info)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-asset-ops
                 missing-asset-upload-files pending-server-ops]}
-        (hooks/use-atom-value *detail-info)
+        detail-info
         asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
                                        :missing-asset-upload-files missing-asset-upload-files
                                        :asset-transfer-counts (asset-transfer-counts asset-progress)})]
@@ -253,7 +246,7 @@
 
 (hsx/defc indicator
   []
-  (let [detail-info                 (hooks/use-atom-value *detail-info)
+  (let [detail-info                 (use-detail-info)
         _                           (rfx/use-sub [:auth/current-login-user])
         online?                     (rfx/use-sub [:network/online?])
         rtc-state                   (:rtc-state detail-info)
