@@ -1,5 +1,5 @@
 (ns frontend.handler.db-based.editor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [are deftest is testing]]
             [frontend.db :as db]
             [frontend.handler.db-based.editor :as db-editor-handler]))
 
@@ -22,6 +22,34 @@
                            :logseq.property/heading
                            :logseq.property.node/display-type]))
           (str "Preserves content for " display-type)))))
+
+(deftest wrap-parse-block-standalone-fenced-code-test
+  (are [title expected] (= expected
+                           (select-keys
+                            (db-editor-handler/wrap-parse-block {:block/title title})
+                            [:block/title
+                             :logseq.property.node/display-type
+                             :logseq.property.code/lang]))
+    "```\nSELECT value\nFROM records\n```"
+    {:block/title "SELECT value\nFROM records"
+     :logseq.property.node/display-type :code}
+
+    "```sql\nSELECT value\nFROM records\n```"
+    {:block/title "SELECT value\nFROM records"
+     :logseq.property.node/display-type :code
+     :logseq.property.code/lang "sql"}
+
+    " \n```text\nindented\n```\n "
+    {:block/title "indented"
+     :logseq.property.node/display-type :code
+     :logseq.property.code/lang "text"}))
+
+(deftest wrap-parse-block-standalone-display-math-test
+  (is (= {:block/title "E = mc^2"
+          :logseq.property.node/display-type :math}
+         (select-keys
+          (db-editor-handler/wrap-parse-block {:block/title " \n$$\n  E = mc^2  \n$$\n "})
+          [:block/title :logseq.property.node/display-type]))))
 
 (deftest wrap-parse-block-markdown-hashtag-link-test
   (testing "markdown link targets that resolve to existing hashtag pages are saved as refs"
