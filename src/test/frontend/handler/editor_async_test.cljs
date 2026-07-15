@@ -654,6 +654,37 @@
                      (state/set-state! :editor/pending-new-block nil)
                      (set! (.-document js/globalThis) previous-document))))))
 
+(deftest pending-new-block-keeps-rapid-editor-input-off-the-old-textarea
+  (let [input #js {:value "Performance row 1"
+                   :selectionStart 17
+                   :selectionEnd 17}
+        delete-calls (atom [])
+        previous-document (.-document js/globalThis)]
+    (set! (.-document js/globalThis) #js {:activeElement input})
+    (state/set-state! :editor/pending-new-block {:block-prefixes [""]})
+    (try
+      (let [{enter-event :event enter-stopped? :stopped?} (fake-key-event)
+            {type-event :event type-stopped? :stopped?} (fake-key-event)
+            {backspace-event :event backspace-stopped? :stopped?} (fake-key-event)]
+        (aset type-event "key" "x")
+        (with-redefs [state/get-input (constantly input)
+                      editor/inside-of-editor-block (constantly true)
+                      editor/delete-and-update (fn [_input start end]
+                                                 (swap! delete-calls conj [start end]))]
+          (editor/keydown-new-block-handler enter-event)
+          ((editor/keydown-not-matched-handler :markdown) type-event nil)
+          (editor/keydown-backspace-handler false backspace-event))
+        (is (every? true? [@enter-stopped? @type-stopped? @backspace-stopped?]))
+        (is (= ["" ""]
+               (:block-prefixes (state/get-state :editor/pending-new-block)))
+            "Enter, typed text, and Backspace should reduce against the pending blocks")
+        (is (empty? @delete-calls)
+            "Backspace must not delete text from the old textarea while Enter is pending")
+        (is (= "Performance row 1" (.-value input))))
+      (finally
+        (state/set-state! :editor/pending-new-block nil)
+        (set! (.-document js/globalThis) previous-document)))))
+
 (deftest-async insert-above-awaits-async-insert
   (let [current-block {:db/id 1
                        :block/uuid (random-uuid)

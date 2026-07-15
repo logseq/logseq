@@ -1,11 +1,39 @@
 (ns frontend.handler.db-based.editor-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require [cljs.test :refer [are async deftest is testing]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest wrap-parse-block-standalone-fenced-code-test
+  (are [title expected] (= expected
+                           (select-keys
+                            (db-editor-handler/wrap-parse-block {:block/title title})
+                            [:block/title
+                             :logseq.property.node/display-type
+                             :logseq.property.code/lang]))
+    "```\nSELECT value\nFROM records\n```"
+    {:block/title "SELECT value\nFROM records"
+     :logseq.property.node/display-type :code}
+
+    "```sql\nSELECT value\nFROM records\n```"
+    {:block/title "SELECT value\nFROM records"
+     :logseq.property.node/display-type :code
+     :logseq.property.code/lang "sql"}
+
+    " \n```text\nindented\n```\n "
+    {:block/title "indented"
+     :logseq.property.node/display-type :code
+     :logseq.property.code/lang "text"}))
+
+(deftest wrap-parse-block-standalone-display-math-test
+  (is (= {:block/title "E = mc^2"
+          :logseq.property.node/display-type :math}
+         (select-keys
+          (db-editor-handler/wrap-parse-block {:block/title " \n$$\n  E = mc^2  \n$$\n "})
+          [:block/title :logseq.property.node/display-type]))))
 
 (deftest wrap-parse-block-markdown-heading-test
   (testing "normal blocks save markdown heading syntax as heading property"
