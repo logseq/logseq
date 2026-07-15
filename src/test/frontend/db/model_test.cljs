@@ -129,8 +129,9 @@
           (is (= :logseq.property/empty-placeholder
                  (:db/ident (:logseq.property/status block))))
           (is (contains? (set (map :db/ident (:block/tags block)))
-                         :logseq.class/Task))))))
+                         :logseq.class/Task)))))))
 
+(deftest clear-status-handles-default-and-class-provided-status
   (testing "removes Task when clearing its implicit default status"
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
@@ -159,8 +160,9 @@
         (is (= :logseq.property/empty-placeholder
                (:db/ident (:logseq.property/status block))))
         (is (= [:user.class/Project]
-               (mapv :db/ident (:block/tags block)))))))
+               (mapv :db/ident (:block/tags block))))))))
 
+(deftest clear-status-public-remove-ops
   (testing "keeps Task when the public remove-property op clears status with another task property"
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
@@ -219,6 +221,23 @@
                (:db/ident (:logseq.property/status scheduled-task))))
         (is (contains? (set (map :db/ident (:block/tags scheduled-task)))
                        :logseq.class/Task))))))
+
+(deftest clear-status-retracts-direct-status-without-provider
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "plain block"}]}])
+        block-id (:block/uuid (db-test/find-block-by-content @conn "plain block"))]
+    (d/transact! conn [[:db/add [:block/uuid block-id]
+                        :logseq.property/status
+                        :logseq.property/status.doing]])
+    (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id]
+                                                           :logseq.property/status]]] {})
+    (let [block (d/entity @conn [:block/uuid block-id])]
+      (is (not (contains? (d/pull @conn [:logseq.property/status]
+                                  [:block/uuid block-id])
+                          :logseq.property/status)))
+      (is (not (contains? (set (map :db/ident (:block/tags block)))
+                          :logseq.class/Task))))))
 
 (deftest page-alias-invariants-reject-invalid-via-batch-set-property
   (testing "batch path: duplicate owner is rejected"

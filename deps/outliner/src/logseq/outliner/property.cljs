@@ -570,10 +570,9 @@
                                                     (:db/ident status)))
                          task? (some #(= :logseq.class/Task (:db/ident %))
                                      (:block/tags block))
-                         status-available? (or direct-status?
-                                               task?
-                                               (block-classes-provide-property?
-                                                @conn block :logseq.property/status))
+                         status-provided? (or task?
+                                              (block-classes-provide-property?
+                                               @conn block :logseq.property/status))
                          remove-task? (and task?
                                            (not empty-placeholder?)
                                            (not preserve-task-tag?)
@@ -586,9 +585,12 @@
                        [[:db/retract (:db/id block) :logseq.property/status]
                         [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
 
-                       status-available?
+                       status-provided?
                        [{:db/id (:db/id block)
                          :logseq.property/status :logseq.property/empty-placeholder}]
+
+                       direct-status?
+                       [[:db/retract (:db/id block) :logseq.property/status]]
 
                        :else
                        [])))
