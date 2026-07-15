@@ -2577,6 +2577,15 @@
         (p/recur (into tx-data block-tx-data) (rest blocks)))
       tx-data)))
 
+(defn- block-uuid-ref?
+  [ref]
+  (and (vector? ref)
+       (= :block/uuid (first ref))))
+
+(defn- block-uuid-index
+  [ref]
+  {:block/uuid (second ref)})
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2620,12 +2629,15 @@
                             (concat pages-tx'' classes-tx))
           block-ids (into [] (map (fn [block] {:block/uuid (:block/uuid block)})) blocks-tx)
           block-refs-ids (into [] (comp (mapcat :block/refs)
-                                        (filter (fn [ref] (and (vector? ref)
-                                                               (= :block/uuid (first ref)))))
-                                        (map (fn [ref] {:block/uuid (second ref)})))
+                                        (filter block-uuid-ref?)
+                                        (map block-uuid-index))
+                               blocks-tx)
+          block-link-ids (into [] (comp (map :block/link)
+                                        (filter block-uuid-ref?)
+                                        (map block-uuid-index))
                                blocks-tx)
           ;; To prevent "unique constraint" on datascript
-          blocks-index (set/union (set block-ids) (set block-refs-ids))
+          blocks-index (set/union (set block-ids) (set block-refs-ids) (set block-link-ids))
           ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
           ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
           tx' (into [] (comp cat (remove nil?))
@@ -2675,7 +2687,8 @@
       (p/catch (fn [error]
                  (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
                                :level :error
-                               :ex-data {:path path :error error}})))))
+                               :ex-data {:path path :error error}})
+                 (throw error)))))
 
 (defn- remove-block-ref-from-title
   [title block-uuid]
@@ -2701,6 +2714,14 @@
                          {:source-id (:e datom)
                           :ref-id (:v datom)
                           :ref-uuid (:block/uuid ref-entity)})))))
+        missing-link-datoms
+        (->> (d/datoms db :aevt :block/link)
+             (keep (fn [datom]
+                     (let [ref-entity (d/entity db (:v datom))]
+                       (when (placeholder-block-ref? ref-entity)
+                         {:source-id (:e datom)
+                          :ref-id (:v datom)
+                          :ref-uuid (:block/uuid ref-entity)})))))
         refs-by-source-id (group-by :source-id missing-ref-datoms)
         retract-ref-tx
         (mapcat (fn [[source-id refs]]
@@ -2708,6 +2729,10 @@
                          [:db/retract source-id :block/refs ref-id])
                        refs))
                 refs-by-source-id)
+        retract-link-tx
+        (map (fn [{:keys [source-id ref-id]}]
+               [:db/retract source-id :block/link ref-id])
+             missing-link-datoms)
         update-title-tx
         (keep (fn [[source-id refs]]
                 (let [source (d/entity db source-id)
@@ -2717,12 +2742,12 @@
                     [:db/add source-id :block/title title'])))
               refs-by-source-id)
         retract-placeholder-tx
-        (->> missing-ref-datoms
+        (->> (concat missing-ref-datoms missing-link-datoms)
              (map (juxt :ref-id :ref-uuid))
              distinct
              (map (fn [[ref-id ref-uuid]]
                     [:db/retract ref-id :block/uuid ref-uuid])))]
-    (concat retract-ref-tx update-title-tx retract-placeholder-tx)))
+    (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx)))
 
 (defn- cleanup-missing-block-refs!
   [conn]
@@ -2822,7 +2847,8 @@
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
-                                 :ex-data {:error e}}))))))
+                                 :ex-data {:error e}})
+                   (throw e))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
@@ -3092,4 +3118,5 @@
               ((:notify-user options)
                {:msg (str "Import has unexpected error:\n" (.-message e))
                 :level :error
-                :ex-data {:error e}})))))
+                :ex-data {:error e}})
+              (throw e)))))
