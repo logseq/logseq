@@ -902,6 +902,7 @@
                  (catch :default e
                    {:error (ex-message e)}))]
     (is (nil? (:error result)) (:error result))
+    (is (some? (:export result)) "Selected nodes export is present")
     (when-let [export (:export result)]
       (is (= ["b1"]
              (mapv :block/title (mapcat :blocks (:pages-and-blocks export)))))
