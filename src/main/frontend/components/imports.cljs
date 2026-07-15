@@ -395,9 +395,10 @@
                    :<export-file (fn <export-file [conn m opts]
                                    (p/let [tx-reports
                                            (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                     (doseq [tx-report tx-reports]
-                                       (when tx-report
-                                         (on-tx-report tx-report)))))}
+                                     (p/loop [remaining-tx-reports (vec (keep identity tx-reports))]
+                                       (when-let [tx-report (first remaining-tx-reports)]
+                                         (p/let [_ (on-tx-report tx-report)]
+                                           (p/recur (subvec remaining-tx-reports 1)))))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)

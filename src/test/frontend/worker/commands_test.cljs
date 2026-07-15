@@ -5,7 +5,8 @@
             [datascript.core :as d]
             [frontend.worker.commands :as commands]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]))
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- get-next-time
   "Test helper. Three-arg form uses the `:double-plus` default (preserves prior
@@ -25,6 +26,16 @@
 (def dotted-plus :logseq.property.repeat/repeat-type.dotted-plus)
 (def plus :logseq.property.repeat/repeat-type.plus)
 (def double-plus :logseq.property.repeat/repeat-type.double-plus)
+
+(defn- tx-add-value
+  [tx-data entity-id property-ident]
+  (some (fn [tx]
+          (when (and (vector? tx)
+                     (= :db/add (nth tx 0))
+                     (= entity-id (nth tx 1))
+                     (= property-ident (nth tx 2)))
+            (nth tx 3)))
+        tx-data))
 
 (deftest ^:large-vars/cleanup-todo get-next-time-test
   (let [now (t/now)
@@ -304,6 +315,35 @@
       (when-not (instance? js/Error result)
         (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
       (is (< @unit-calls 20)))))
+
+(deftest repeated-task-with-deadline-and-missing-temporal-property-test
+  (testing "falls back to the existing deadline instead of missing scheduled"
+    (let [now (t/date-time 2030 1 10 8 30)
+          deadline (tc/to-long (t/date-time 2030 1 10 9 0))
+          expected-next-deadline (tc/to-long (t/date-time 2030 1 10 10 0))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Regression Sandbox"}
+                   :blocks [{:block/title "Synthetic recurring item"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.hour
+                              :logseq.property/deadline deadline
+                              :logseq.property/status :logseq.property/status.todo}}]}]})
+          block (db-test/find-block-by-content @conn "Synthetic recurring item")
+          _ (d/transact! conn [[:db/add (:db/id block)
+                                :logseq.property.repeat/repeat-type
+                                :logseq.property.repeat/repeat-type.double-plus]])
+          report (d/transact! conn [[:db/add (:db/id block)
+                                     :logseq.property/status
+                                     :logseq.property/status.done]])]
+      (with-redefs [t/now (fn [] now)]
+        (let [commands-tx (doall (commands/run-commands report))]
+          (is (= expected-next-deadline
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
 
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]
