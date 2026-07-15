@@ -2061,19 +2061,28 @@
                                    (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
-(defn- journal-file-name-uuid-entry
-  [{:keys [path]}]
+(defn- journal-file-title
+  [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
-    (when-let [[_ journal-title] (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
-                                          normalized-path)]
-      (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
-        [journal-title (common-uuid/gen-uuid :journal-page-uuid journal-day)]))))
+    (second (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
+                     normalized-path))))
 
-(defn- index-journal-file-name-uuids!
+(defn- journal-page-name-uuid-entries
+  [{:keys [path]}]
+  (when-let [journal-title (journal-file-title path)]
+    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
+      (let [journal-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+            canonical-page-name (-> journal-day
+                                    (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                                    common-util/page-name-sanity-lc)]
+        [[journal-title journal-uuid]
+         [canonical-page-name journal-uuid]]))))
+
+(defn- index-journal-page-name-uuids!
   [doc-files import-state]
-  (swap! (:journal-file-name-uuids import-state)
+  (swap! (:journal-page-name-uuids import-state)
          merge
-         (into {} (keep journal-file-name-uuid-entry) doc-files)))
+         (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
@@ -2209,10 +2218,10 @@
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [journal-file-name-uuids @(:journal-file-name-uuids import-state)
+  (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
-                                          (contains? journal-file-name-uuids (:block/name %))))
+                                          (contains? journal-page-name-uuids (:block/name %))))
                             ;; remove unused property pages unless the page has content
                             (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
                                                      (keyword (:block/name %)))
@@ -2231,7 +2240,7 @@
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-file-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
@@ -2340,8 +2349,8 @@
    :property-schemas (atom {})
    ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
    :all-existing-page-uuids (atom {})
-   ;; Map of legacy journal file titles like "2026_04_01" to their standard journal page uuids.
-   :journal-file-name-uuids (atom {})
+   ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
+   :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
    :all-idents (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
@@ -2481,6 +2490,7 @@
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
   (let [format (common-util/get-format file)
+        journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
                                  file-created-at (assoc :block/created-at file-created-at)
@@ -2492,7 +2502,9 @@
                                  :export-to-db-graph? true
                                  :filename-format :legacy}
                                 extract-options
-                                {:db db})
+                                {:db db
+                                 ;; File graph journals have a fixed path and filename independent of their display format.
+                                 :skip-journal? (not journal-file?)})
         extracted
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
@@ -2832,7 +2844,7 @@
                                    [(not (string/starts-with? (node-path/basename path) "hls__")) path])
                                  *doc-files)
                         (range 0 (count *doc-files)))]
-    (index-journal-file-name-uuids! doc-files (:import-state options))
+    (index-journal-page-name-uuids! doc-files (:import-state options))
     (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))
