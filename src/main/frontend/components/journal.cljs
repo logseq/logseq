@@ -1,13 +1,11 @@
 (ns frontend.components.journal
   (:require [frontend.components.page :as page]
             [frontend.components.views :as views]
-            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
@@ -46,9 +44,8 @@
       (swap! journal-item-height-by-key* assoc cache-key height))))
 
 (hsx/defc journal-cp
-  [journal last? selection-block-ids]
-  (let [id (if (map? journal) (:db/id journal) journal)
-        cache-key (journal-item-cache-key id)
+  [id last? selection-block-ids]
+  (let [cache-key (journal-item-cache-key id)
         [reserve set-reserve!] (hooks/use-state {:cache-key cache-key
                                                  :height (get @journal-item-height-by-key* cache-key)})
         reserve-height (when (= cache-key (:cache-key reserve))
@@ -85,18 +82,8 @@
        reserve-height (assoc :on-focus clear-reserve!)
        reserve-height (assoc :on-input clear-reserve!))
      (page/page-cp {:db/id id
-                    :page (when (map? journal) journal)
                     :journals? true
                     :selection/block-ids selection-block-ids})]))
-
-(defn- journal-block-ids
-  [journals]
-  (->> journals
-       (mapcat (fn [journal]
-                 (some->> (:block/children journal)
-                          ldb/sort-by-order
-                          (map :block/uuid))))
-       vec))
 
 (defn- sub-journals
   []
@@ -104,24 +91,14 @@
     (some-> (react/q repo
                      [:frontend.worker.react/journals]
                      {:query-fn (fn [_]
-                                  (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
-                                    (remove nil? data)))}
+                                  (p/let [result (views/<load-view-data nil {:journals? true})]
+                                    (update result :data #(vec (remove nil? %)))))}
                      nil)
             db-hooks/use-query)))
 
 (hsx/defc all-journals
   []
-  (let [data (sub-journals)
-        [journals set-journals!] (hooks/use-state nil)
-        journals-by-id (into {} (map (juxt :db/id identity) journals))
-        selection-block-ids (journal-block-ids journals)]
-    (hooks/use-effect!
-     (fn []
-       (when (seq data)
-         (p/let [journals (p/all (map #(db-async/<get-block (state/get-current-repo) % {:children? true}) data))]
-           (set-journals! journals)))
-       nil)
-     [data])
+  (let [{:keys [data selection-block-ids]} (sub-journals)]
     (when (seq data)
       [:div#journals
        (ui/virtualized-list
@@ -134,6 +111,5 @@
          :total-count (count data)
          :item-content (fn [idx]
                          (let [id (util/nth-safe data idx)
-                               journal (get journals-by-id id id)
                                last? (= (inc idx) (count data))]
-                           (journal-cp journal last? selection-block-ids)))})])))
+                           (journal-cp id last? selection-block-ids)))})])))

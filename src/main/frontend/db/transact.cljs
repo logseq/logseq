@@ -239,6 +239,8 @@
                            :op-count (count ops)
                            :page-tree-requested? page-tree-requested?
                            :page-window-returned? (boolean page-window)
+                           :page-window-offset (:offset page-window)
+                           :page-window-total-count (:total-count page-window)
                            :page-window-row-count (count (:rows page-window))
                            :worker-apply-ms (:apply-ms perf)
                            :worker-page-window-ms (:page-window-ms perf)

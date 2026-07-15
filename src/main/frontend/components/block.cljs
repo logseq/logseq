@@ -5381,6 +5381,25 @@
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
                                 virtualized-block-ids)
+        render-virtual-item
+        (fn [idx]
+          (if-let [block (block-at-index idx)]
+            (let [top? (zero? idx)
+                  bottom? (= (dec (or virtual-total-count blocks-count)) idx)
+                  config' (cond-> (merge config
+                                         (order-states idx block)
+                                         {:top? top?
+                                          :selection/block-ids selection-block-ids})
+                            (:virtual/flat-list? config)
+                            (assoc :hide-children? true))]
+              (flat-list-item
+               block
+               (block-item config'
+                           block
+                           {:top? top?
+                            :bottom? bottom?})))
+            (react-core/createElement "div" #js {:style #js {:height 29}})))
+        virtual-context #js {:renderItem render-virtual-item}
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
                                (util/app-scroll-container-node node)
@@ -5392,9 +5411,10 @@
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent scroll-container
+                        :context virtual-context
                         :compute-item-key (fn [idx]
                                             (if-let [block (block-at-index idx)]
-                                              (str (:container-id config) "-" (:db/id block))
+                                              (str (:container-id config) "-" (:block/uuid block))
                                               (str (:container-id config) "-placeholder-" idx)))
                         ;; Leave some space for the new inserted block
                         :increase-viewport-by 254
@@ -5402,23 +5422,8 @@
                         :skipAnimationFrameInResizeObserver true
                         :total-count (or virtual-total-count blocks-count)
                         :rangeChanged (:virtual/on-range-changed config)
-                        :item-content (fn [idx]
-                                        (if-let [block (block-at-index idx)]
-                                          (let [top? (zero? idx)
-                                                bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                                                config' (cond-> (merge config
-                                                                      (order-states idx block)
-                                                                      {:top? top?
-                                                                       :selection/block-ids selection-block-ids})
-                                                          (:virtual/flat-list? config)
-                                                          (assoc :hide-children? true))]
-                                            (flat-list-item
-                                             block
-                                             (block-item config'
-                                                         block
-                                                         {:top? top?
-                                                          :bottom? bottom?})))
-                                          (react-core/createElement "div" #js {:style #js {:height 29}})))})]
+                        :item-content (fn [idx _ context]
+                                        ((gobj/get context "renderItem") idx))})]
     (hooks/use-effect!
      (fn []
        (when virtualized?
@@ -5447,7 +5452,7 @@
        (ui/virtualized-list virtual-opts)
        :else
        (map-indexed (fn [idx block]
-                      ^{:key (str (:container-id config) "-" (:db/id block))}
+                      ^{:key (str (:container-id config) "-" (:block/uuid block))}
                       [:<> (render-item idx)])
                     blocks))]))
 

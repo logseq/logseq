@@ -12,6 +12,13 @@
   [relative-file]
   (.toString (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
 
+(deftest block-batching-has-one-worker-call-path-test
+  (let [source (source-for "src/main/frontend/db/async.cljs")]
+    (is (not (string/includes? source "*get-blocks-batch-enabled?"))
+        "A worker error must not switch the runtime to a second fetch path.")
+    (is (not (string/includes? source "Safety fallback: retry once"))
+        "A failed batch must not repeat the same large request.")))
+
 (deftest block-loaders-return-worker-data-without-renderer-db-test
   (async done
          (let [repo "logseq_db_async_block_worker"

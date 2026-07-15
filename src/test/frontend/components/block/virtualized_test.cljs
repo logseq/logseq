@@ -35,6 +35,16 @@
     (testing "paginated flat windows are owned by Virtuoso indexes"
       (is (string/includes? block-list-source ":virtual/total-count"))
       (is (string/includes? block-list-source ":virtual/on-range-changed"))
+      (is (string/includes? block-list-source ":context virtual-context")
+          "Virtuoso should rerender visible items when a worker page window changes.")
+      (is (string/includes? block-list-source "(gobj/get context \"renderItem\")")
+          "Virtual items must render from the current Virtuoso context, not a stale callback closure.")
+      (is (not (string/includes? block-list-source "(gobj/get context \"itemKey\")"))
+          "Item keys must remain stable while rapid structural edits update the render context.")
+      (is (= 2
+             (count (re-seq #"\(str \(:container-id config\) \"-\" \(:block/uuid block\)\)"
+                            block-list-source)))
+          "Virtualized and regular rows must use graph-stable block UUID keys.")
       (is (string/includes? block-list-source ":hide-children? true"))
       (is (string/includes? block-list-source ":block/level"))
       (is (string/includes? block-list-source "-placeholder-")))
@@ -79,6 +89,29 @@
     (is (string/includes? source "page-block-window-step"))
     (is (string/includes? offset-source "page-window"))
     (is (string/includes? offset-source "loaded-end"))))
+
+(deftest page-window-loader-does-not-repeat-the-current-request
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        loader-source (form-source source "(defn- page-window-loader")]
+    (is (some? loader-source))
+    (is (string/includes? loader-source "(not= opts @*current-request)")
+        "Virtuoso can publish the same range before UI state commits; only one worker request should run.")
+    (is (string/includes? loader-source "p/finally")
+        "A completed or failed request must release the duplicate guard.")))
+
+(deftest page-window-row-overrides-use-block-uuids
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        overrides-start (string/index-of source "(defn- block-row-overrides")
+        overrides-end (string/index-of source "(defn- refresh-row-overrides!" overrides-start)
+        overrides-source (subs source overrides-start overrides-end)
+        merge-source (form-source source "(defn- merge-updated-page-window-row")]
+    (is (some? overrides-source))
+    (is (some? merge-source))
+    (is (string/includes? overrides-source ":block/uuid"))
+    (is (not (string/includes? overrides-source ":db/id"))
+        "Datascript entity ids repeat across graphs and cannot identify UI rows.")
+    (is (not (string/includes? merge-source "blocks-by-id"))
+        "Row overrides must have one identity path.")))
 
 (deftest virtualized-insert-reuses-loaded-sibling-order
   (let [block-source (source-for "src/main/frontend/components/block.cljs")

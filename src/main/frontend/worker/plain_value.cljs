@@ -53,10 +53,12 @@
   [db value-id]
   (let [property-value (d/entity db value-id)]
     (if (:logseq.property/created-from-property property-value)
-      (let [target-uuid (uuid (:block/title property-value))
-            target (d/entity db [:block/uuid target-uuid])]
-        (assert target (str "Missing node property target: " target-uuid))
-        (:db/id target))
+      (let [title (:block/title property-value)]
+        (if-let [target-uuid (parse-uuid title)]
+          (let [target (d/entity db [:block/uuid target-uuid])]
+            (assert target (str "Missing node property target: " title))
+            (:db/id target))
+          value-id))
       value-id)))
 
 (defn attribute-value->plain

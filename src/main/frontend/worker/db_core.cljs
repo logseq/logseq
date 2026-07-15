@@ -2105,8 +2105,7 @@
   [db root opts]
   (let [limit (clamp-page-block-window-limit (:limit opts))
         {:keys [block-count collapsed? children-by-parent]} (page-block-layout db root)
-        known-total-count (or (:total-count opts)
-                              (when-not collapsed? block-count))
+        known-total-count (when-not collapsed? block-count)
         known-total-count? (nat-int? known-total-count)
         known-offset (when known-total-count?
                        (page-block-window-offset known-total-count (assoc opts :limit limit)))
@@ -2134,11 +2133,11 @@
                     (vswap! !entries conj {:block-id block-id
                                            :level level
                                            :parent-id parent-id
-                                           :has-children? (contains? children-by-parent block-id)}))
+                                           :has-children? (.has children-by-parent block-id)}))
                   (let [entry {:block-id block-id
                                :level level
                                :parent-id parent-id
-                               :has-children? (contains? children-by-parent block-id)}
+                               :has-children? (.has children-by-parent block-id)}
                         tail-count @!tail-count
                         tail-start @!tail-start
                         tail-idx (if (< tail-count limit)
@@ -2220,13 +2219,32 @@
    :block.temp/load-status :self
    :block.temp/has-children? has-children?})
 
+(defn- include-expanded-descendants
+  [entries render-block-uuids expanded-block-uuids]
+  (when (or render-block-uuids (seq expanded-block-uuids))
+    (loop [result (or render-block-uuids #{})
+           expanded-levels []
+           [entry & more] entries]
+      (if entry
+        (let [level (:level entry)
+              expanded-levels (vec (take-while #(< % level) expanded-levels))
+              block-uuid (some-> entry :block :block/uuid)
+              result (cond-> result
+                       (seq expanded-levels) (conj block-uuid))
+              expanded-levels (cond-> expanded-levels
+                                (contains? expanded-block-uuids block-uuid) (conj level))]
+          (recur result expanded-levels more))
+        result))))
+
 (defn- get-page-blocks-window-response
   ([repo id-or-page-name opts]
-   (get-page-blocks-window-response repo id-or-page-name opts nil))
-  ([repo id-or-page-name opts render-block-uuids]
+   (get-page-blocks-window-response repo id-or-page-name opts nil nil))
+  ([repo id-or-page-name opts render-block-uuids expanded-block-uuids]
    (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
      (when-let [root (resolve-block-entity db id-or-page-name)]
        (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
+             render-block-uuids (include-expanded-descendants
+                                 entries render-block-uuids expanded-block-uuids)
              page-summary (worker-plain/attribute-value->plain db :block/page (:db/id root))
              rows (mapv (fn [{:keys [block] :as entry}]
                           (if (or (nil? render-block-uuids)
@@ -2877,6 +2895,14 @@
             page-id (:ui/page-id opts)
             page-window-offset (:virtual/offset opts)
             render-block-uuids (:ui/render-block-uuids opts)
+            expanded-block-uuids
+            (into #{}
+                  (mapcat (fn [[op [blocks]]]
+                            (when (= :collapse-expand-blocks op)
+                              (keep #(when (false? (:block/collapsed? %))
+                                       (:block/uuid %))
+                                    blocks))))
+                  ops)
             row-data-block-ids (:ui/row-data-block-ids opts)
             opts (dissoc opts :ui/page-id :ui/include-page-tree? :ui/editor-info
                          :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
@@ -2902,7 +2928,8 @@
                           (get-page-blocks-window-response repo page-id
                                                            {:offset page-window-offset
                                                             :limit (inc page-block-window-default-limit)}
-                                                           (not-empty render-block-uuids)))
+                                                           (not-empty render-block-uuids)
+                                                           expanded-block-uuids))
             page-window-at (perf-time-ms)
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}
