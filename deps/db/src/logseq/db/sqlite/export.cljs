@@ -673,7 +673,7 @@
 (defn- build-selected-nodes-export
   "Exports given nodes selected by a user. Nodes can be a mix of blocks and pages"
   [db eids]
-  (let [top-level-nodes (map #(d/entity db %) eids)
+  (let [top-level-nodes (keep #(d/entity db %) eids)
         children-nodes (->> top-level-nodes
                             ;; Remove pages b/c when selected their children are not highlighted
                             (remove entity-util/page?)
