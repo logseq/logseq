@@ -547,6 +547,39 @@
           (is (= "2" (:block/title (get-block (first replaced-children))))))
         (is (= "3" (:block/title (get-block (first new-top-level)))))))))
 
+(deftest paste-text-reuses-new-page-references-across-blocks
+  (transact-tree! [[22]])
+  (let [conn (conn/get-db test-db false)
+        _ (d/transact! conn [{:db/ident :logseq.class/Page}])
+        first-ref-uuid (random-uuid)
+        second-ref-uuid (random-uuid)
+        page-ref (fn [ref-uuid]
+                   {:block/type "page"
+                    :block/name "new-page"
+                    :block/title "New Page"
+                    :block/uuid ref-uuid})
+        block (fn [ref-uuid]
+                {:block/uuid (random-uuid)
+                 :block/title (str "[[" ref-uuid "]]")
+                 :block/refs [(page-ref ref-uuid)]})
+        result (outliner-core/insert-blocks
+                @conn
+                [(block first-ref-uuid) (block second-ref-uuid)]
+                (get-block 22)
+                {:sibling? true
+                 :keep-uuid? true
+                 :outliner-op :paste
+                 :outliner-real-op :paste-text})]
+    (d/transact! conn (:tx-data result))
+    (let [pages (d/q '[:find [(pull ?page [:block/uuid]) ...]
+                       :where
+                       [?page :block/name "new-page"]]
+                     @conn)
+          inserted-ref-uuids (mapv (comp :block/uuid first :block/refs)
+                                   (:blocks result))]
+      (is (= 1 (count pages)))
+      (is (apply = inserted-ref-uuids)))))
+
 (deftest test-cut-paste-parent-child-into-empty-block
   (testing "keep-uuid + replace-empty-target remaps child parent to replaced target uuid"
     (transact-tree! [[25]])
