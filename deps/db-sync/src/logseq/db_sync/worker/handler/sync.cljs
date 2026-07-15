@@ -527,14 +527,16 @@
 
 (defn- sanitize-tx-entry
   [db {:keys [tx outliner-op] :as tx-entry}]
-  (let [tx-data (tx-sanitize/sanitize-tx db
-                                         (protocol/transit->tx tx)
+  (let [input-tx-data (protocol/transit->tx tx)
+        tx-data (tx-sanitize/sanitize-tx db
+                                         input-tx-data
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
                                                                          (contains? delete-outliner-ops outliner-op))
                                           :drop-ops-targeting-retracted-entities? (contains? delete-outliner-ops
                                                                                              outliner-op)
                                           :retract-touched-descendants? (contains? delete-outliner-ops outliner-op)})]
-    {:tx-data tx-data
+    {:input-tx-data input-tx-data
+     :tx-data tx-data
      :tx-entry tx-entry}))
 
 (defn- apply-tx-entry!
@@ -542,6 +544,7 @@
    (apply-tx-entry! nil conn tx-entry nil))
   ([self conn {:keys [outliner-op] :as tx-entry} request-context]
    (let [sanitized (sanitize-tx-entry @conn tx-entry)
+         input-tx-data (:input-tx-data sanitized)
          tx-data (:tx-data sanitized)
          sanitized-entry (:tx-entry sanitized)]
      (if (seq tx-data)
@@ -565,8 +568,9 @@
                           :error (str e)})
                false)
              (throw e))))
-       (if (contains? delete-outliner-ops outliner-op)
-         (throw (ex-info "delete tx sanitized to empty"
+       (if (and (contains? delete-outliner-ops outliner-op)
+                (empty? input-tx-data))
+         (throw (ex-info "delete tx input is empty"
                          {:type :db-sync/empty-delete-tx
                           :outliner-op outliner-op}))
          false)))))
