@@ -888,6 +888,25 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
+(deftest export-selected-nodes-with-missing-node
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        block (db-test/find-block-by-content @conn "b1")
+        result (try
+                 {:export (sqlite-export/build-export
+                           @conn
+                           {:export-type :selected-nodes
+                            :node-ids [[:block/uuid (:block/uuid block)]
+                                       [:block/uuid (random-uuid)]]})}
+                 (catch :default e
+                   {:error (ex-message e)}))]
+    (is (nil? (:error result)) (:error result))
+    (when-let [export (:export result)]
+      (is (= ["b1"]
+             (mapv :block/title (mapcat :blocks (:pages-and-blocks export)))))
+      (is (nil? (:error (sqlite-export/validate-export export)))))))
+
 (defn- build-original-graph-data
   [& {:keys [exclude-namespaces? add-built-in-pages?]
       :or {add-built-in-pages? true}}]
