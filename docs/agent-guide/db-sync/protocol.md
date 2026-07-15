@@ -28,7 +28,8 @@
 - `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>","outliner-op":"<keyword?>"}...]}`
   - Pull response with txs and post-apply entity checksum.
 - `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}`
-  - Batch accepted; server advanced to t and returns the resulting entity checksum.
+  - Batch accepted; `t` and `checksum` describe the resulting server state.
+    `t` remains unchanged when every entry is an idempotent no-op.
 - `{"type":"changed","t":<t>}`
   - Broadcast once after a handled `tx/batch` that advanced server state (`t` increased); client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
