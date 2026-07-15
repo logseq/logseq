@@ -633,6 +633,7 @@
                                 (fn [_table row _column style]
                                   (pv/property-value row property {:view? true
                                                                    :table-view? true
+                                                                   :view-parent (:view-parent config)
                                                                    :table-text-property-render
                                                                    (fn [block opts]
                                                                      (block-title block (assoc opts
@@ -2159,8 +2160,14 @@
           ^{:key (str "partition-" idx)}
           [:<> (lazy-item-render rows idx)])))))
 
+(defn- gallery-property-value-opts
+  [config]
+  {:view? true
+   :gallery-view? true
+   :view-parent (:view-parent config)})
+
 (hsx/defc gallery-property-value
-  [block property-ident property]
+  [block property-ident property config]
   (if (= :block/title property-ident)
     [:div.ls-gallery-card-title
      (some->> (:block/title block)
@@ -2169,8 +2176,7 @@
               first)]
     (when property
       [:div.ls-gallery-card-property
-       (pv/property-value block property {:view? true
-                                          :gallery-view? true})])))
+       (pv/property-value block property (gallery-property-value-opts config))])))
 
 (defn gallery-card-asset-block
   [block asset-property-ident]
@@ -2219,7 +2225,7 @@
                                     (when (= (:id column) property-ident)
                                       (column-property column)))
                                   (:columns table))
-                   property-value (gallery-property-value block property-ident property)]
+                   property-value (gallery-property-value block property-ident property config)]
              :when property-value]
          ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}
          [:<> property-value])]]]))

@@ -154,7 +154,7 @@
                      (set! state/set-state! original-set-state!))]
       (set! state/get-state (fn [k]
                               (when (= :editor/pending-new-block k)
-                                {:typed-text "abc"
+                                {:block-prefixes ["abc"]
                                  :tab-indent? true})))
       (set! editor/get-state (constantly nil))
       (set! state/get-current-repo (constantly "test"))

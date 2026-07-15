@@ -131,7 +131,9 @@
 
 (defn- markdown-blocks?
   [text]
-  (boolean (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
+  (boolean (or (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)
+               (util/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
+               (util/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
 
 (defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
