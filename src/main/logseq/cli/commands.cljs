@@ -672,7 +672,7 @@
         (sync-command/build-action command options args repo)
 
         (:login :logout)
-        (auth-command/build-action command)
+        (auth-command/build-action command options)
 
         :completion
         {:ok? true

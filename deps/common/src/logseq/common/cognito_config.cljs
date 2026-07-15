@@ -11,3 +11,6 @@
   "logseq-prod.auth.us-east-1.amazoncognito.com")
 
 (def OAUTH-SCOPE "email openid phone")
+
+(def COGNITO-IDP-ENDPOINT
+  "https://cognito-idp.us-east-1.amazonaws.com/")

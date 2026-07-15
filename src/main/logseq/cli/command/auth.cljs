@@ -8,16 +8,34 @@
   [(core/command-entry ["login"]
                        :login
                        "Authenticate this machine with Logseq cloud"
-                       {})
+                       {:user {:desc "Email address (skips browser login)"
+                               :alias :u}
+                        :pass {:desc "Password (skips browser login)"
+                               :alias :p}})
    (core/command-entry ["logout"]
                        :logout
                        "Remove persisted CLI auth"
                        {})])
 
 (defn build-action
-  [command]
-  {:ok? true
-   :action {:type command}})
+  [command options]
+  (let [user (:user options)
+        pass (:pass options)]
+    (cond
+      (and (seq user) (not (seq pass)))
+      {:ok? false
+       :error {:code :invalid-options
+               :message "--pass is required when --user is provided"}}
+
+      (and (seq pass) (not (seq user)))
+      {:ok? false
+       :error {:code :invalid-options
+               :message "--user is required when --pass is provided"}}
+
+      :else
+      {:ok? true
+       :action (cond-> {:type command}
+                 (seq user) (assoc :user user :pass pass))})))
 
 (defn- exception->error
   [error]
@@ -32,7 +50,7 @@
   [action config]
   (case (:type action)
     :login
-    (-> (p/let [data (cli-auth/login! config)]
+    (-> (p/let [data (cli-auth/login! (merge config (select-keys action [:user :pass])))]
           {:status :ok
            :data data})
         (p/catch exception->error))
