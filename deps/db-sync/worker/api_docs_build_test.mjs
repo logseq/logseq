@@ -10,7 +10,7 @@ test("Redocly build produces standalone semantic API documentation", () => {
   assert.equal(existsSync(modulePath), true, "missing generated API docs module");
 
   const html = readFileSync(docsPath, "utf8");
-  assert.match(html, /Logseq Semantic API/);
+  assert.match(html, /Logseq Server API/);
   assert.match(html, /listPageReferences/);
   assert.match(html, /listTagObjects/);
   assert.match(html, /redoc\.standalone\.js/);
