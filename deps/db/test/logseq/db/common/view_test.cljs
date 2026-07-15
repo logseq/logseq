@@ -15,6 +15,27 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
+(deftest get-view-data-journals-keeps-selection-data-shallow-test
+  (let [top-level-id (random-uuid)
+        nested-id (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260716}
+                 :blocks [{:block/title "Top level"
+                           :block/uuid top-level-id
+                           :build/keep-uuid? true
+                           :build/children [{:block/title "Nested"
+                                             :block/uuid nested-id
+                                             :build/keep-uuid? true}]}]}
+                {:page {:build/journal 20260715}
+                 :blocks [{:block/title "Older"}]}]})
+        result (db-view/get-view-data @conn nil {:journals? true})]
+    (is (= 2 (:count result)))
+    (is (= 2 (count (:data result))))
+    (is (contains? (set (:selection-block-ids result)) top-level-id))
+    (is (not (contains? (set (:selection-block-ids result)) nested-id))
+        "Journal selection needs direct child ids, not hydrated block trees.")))
+
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

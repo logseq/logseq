@@ -239,6 +239,88 @@
                 (:db/id (#'db-core/resolve-block-entity @conn :user.property/test-property))))
          (is (= page-id (get-in response [:page-window :root :db/id]))))))))
 
+(deftest expand-block-returns-complete-newly-visible-rows-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           parent-id #uuid "11111111-1111-1111-1111-111111111111"
+           child-id #uuid "22222222-2222-2222-2222-222222222222"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Parent"
+                           :block/uuid parent-id
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1
+                           :block/collapsed? true}
+                          {:block/title "Child"
+                           :block/uuid child-id
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid parent-id]
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:collapse-expand-blocks
+                                    [[{:block/uuid parent-id
+                                       :block/collapsed? false}]
+                                     {}]]]
+                                  {:ui/page-id page-id
+                                   :ui/render-block-uuids #{parent-id}
+                                   :virtual/offset 0})
+             child-row (some #(when (= child-id (:block/uuid %)) %)
+                             (get-in response [:page-window :rows]))]
+         (is (= "Child" (:block/title child-row))
+             "A newly revealed row must contain render data, not only layout."))))))
+
+(deftest insert-block-returns-complete-new-row-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           existing-id #uuid "11111111-1111-1111-1111-111111111111"
+           inserted-id #uuid "22222222-2222-2222-2222-222222222222"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Existing"
+                           :block/uuid existing-id
+                           :block/page [:block/uuid page-id]
+                           :block/parent [:block/uuid page-id]
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:insert-blocks
+                                    [[{:block/uuid inserted-id
+                                       :block/title ""}]
+                                     existing-id
+                                     {:sibling? true
+                                      :keep-uuid? true}]]]
+                                  {:ui/page-id page-id
+                                   :ui/render-block-uuids #{inserted-id}
+                                   :virtual/offset 0})
+             inserted-row (some #(when (= inserted-id (:block/uuid %)) %)
+                                (get-in response [:page-window :rows]))
+             inserted (d/entity @conn [:block/uuid inserted-id])]
+         (is (some? inserted) "The insert op must persist the new block.")
+         (is (contains? inserted-row :block/title)
+             (str "The new virtual row must be renderable before the editor focuses it: "
+                  (pr-str (select-keys (into {} inserted)
+                                       [:block/uuid :block/page :block/parent :block/order])))))))))
+
 (defn- fake-db
   ([]
    (fake-db {}))
@@ -2305,6 +2387,8 @@
          (is (= 0 (:offset top-window)))
          (is (= [block-1 block-2 block-3] (mapv :block/uuid (:rows top-window))))
          (is (= [1 2 1] (mapv :block/level (:rows top-window))))
+         (is (= [true false false]
+                (mapv :block.temp/has-children? (:rows top-window))))
          (is (= page-id (get-in (first (:rows top-window)) [:block/page :block/uuid])))
          (is (= "page" (get-in (first (:rows top-window)) [:block/page :block/name])))
          (is (= (:db/id (:root top-window))
@@ -2358,6 +2442,7 @@
          (is (= 2 (:total-count window)))
          (is (= [block-1 block-3] (mapv :block/uuid (:rows window))))
          (is (= [1 1] (mapv :block/level (:rows window))))
+         (is (true? (:block.temp/has-children? (first (:rows window)))))
          (is (not (contains? (first (:rows window)) :block/children)))
          (is (= 1 (:offset bottom-window)))
          (is (= [block-3] (mapv :block/uuid (:rows bottom-window)))))))))
@@ -2399,6 +2484,35 @@
                 (mapv :block/uuid (:rows bottom-window))))
          (is (< elapsed-ms 250)
              (str "Large flat page edge window took " elapsed-ms "ms")))))))
+
+(deftest get-page-blocks-window-does-not-trust-stale-total-count
+  (restoring-worker-state
+   (fn []
+     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-ids [#uuid "11111111-1111-1111-1111-111111111111"
+                      #uuid "22222222-2222-2222-2222-222222222222"
+                      #uuid "33333333-3333-3333-3333-333333333333"]
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn
+                    (into [{:block/title "Page"
+                            :block/name "page"
+                            :block/uuid page-id
+                            :block/tags :logseq.class/Page}]
+                          (map-indexed (fn [idx block-id]
+                                         {:block/title (str "Block " idx)
+                                          :block/uuid block-id
+                                          :block/page [:block/uuid page-id]
+                                          :block/parent [:block/uuid page-id]
+                                          :block/order (str "a" idx)})
+                                       block-ids)))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [window (get-window! test-repo page-id {:anchor :bottom
+                                                    :limit 10
+                                                    :total-count 2})]
+         (is (= 3 (:total-count window)))
+         (is (= block-ids (mapv :block/uuid (:rows window)))))))))
 
 (deftest get-page-blocks-window-seeks-large-nested-page-edges
   (restoring-worker-state
