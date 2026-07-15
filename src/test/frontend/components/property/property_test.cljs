@@ -1,6 +1,37 @@
 (ns frontend.components.property.property-test
-  (:require [cljs.test :refer [deftest is]]
-            [frontend.components.property :as property-component]))
+  (:require [cljs.test :refer [async deftest is]]
+            [frontend.components.property :as property-component]
+            [frontend.components.property.value :as property-value]
+            [frontend.db.async :as db-async]
+            [frontend.handler.property :as property-handler]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
+
+(deftest removing-status-from-task-view-preserves-task-tag-test
+  (async done
+         (let [block-id (random-uuid)
+               calls* (atom [])
+               block {:block/uuid block-id}
+               status-property {:db/ident :logseq.property/status}
+               on-chosen (#'property-component/property-input-on-chosen
+                          block (atom nil) (atom nil) nil
+                          {:remove-property? true
+                           :view-parent {:db/ident :logseq.class/Task}})]
+           (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved status-property))
+                           property-value/batch-operation? (constantly false)
+                           property-value/get-operating-blocks (fn [_] [block])
+                           property-handler/batch-remove-block-property!
+                           (fn [& args] (swap! calls* conj args))
+                           shui/popup-hide! (constantly nil)]
+             (-> (on-chosen {:value :logseq.property/status})
+                 (p/then (fn []
+                           (is (= [[[block-id]
+                                   :logseq.property/status
+                                   {:preserve-task-tag? true}]]
+                                  @calls*))))
+                 (p/catch (fn [error]
+                            (is false (str error))))
+                 (p/finally done))))))
 
 (deftest toggle-hidden-properties-visibility-test
   (let [block-uuid (random-uuid)]

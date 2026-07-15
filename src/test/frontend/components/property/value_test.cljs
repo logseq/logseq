@@ -3,8 +3,24 @@
             [clojure.string :as string]
             [frontend.components.property.value :as property-value]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest deleting-status-from-task-view-preserves-task-tag-test
+  (let [calls* (atom [])
+        block {:db/id 1}
+        property {:db/ident :logseq.property/status}]
+    (with-redefs [editor-handler/move-cross-boundary-up-down (constantly nil)
+                  property-handler/remove-block-property!
+                  (fn [& args] (swap! calls* conj args))]
+      (#'property-value/delete-block-property!
+       block property {:view-parent {:db/ident :logseq.class/Task}})
+      (is (= [[1
+               :logseq.property/status
+               {:preserve-task-tag? true}]]
+             @calls*)))))
 
 (deftest resolve-journal-page-for-date-returns-existing-page-test
   (async done

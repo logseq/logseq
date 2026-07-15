@@ -2,8 +2,37 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [deftest is testing]]
+            [datascript.impl.entity :as de]
+            [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
             [goog.object :as gobj]))
+
+(deftest table-property-value-receives-view-parent
+  (let [view-parent {:db/ident :logseq.class/Task}
+        property {:db/ident :logseq.property/status
+                  :block/title "Status"
+                  :logseq.property/type :default}
+        row {:db/id 1}
+        calls* (atom [])]
+    (with-redefs [de/entity? map?
+                  property-value/property-value
+                  (fn [& args] (swap! calls* conj args))]
+      (let [columns (views/build-columns {:view-parent view-parent}
+                                         [property]
+                                         {:with-object-name? false
+                                          :add-tags-column? false})
+            column (some #(when (= :logseq.property/status (:id %)) %) columns)]
+        ((:cell column) nil row column {})
+        (is (= view-parent
+               (some #(get-in (vec %) [2 :view-parent]) @calls*))
+            (pr-str @calls*))))))
+
+(deftest gallery-property-value-receives-view-parent
+  (let [view-parent {:db/ident :logseq.class/Task}]
+    (is (= {:view? true
+            :gallery-view? true
+            :view-parent view-parent}
+           (#'views/gallery-property-value-opts {:view-parent view-parent})))))
 
 (defn- render-lazy-item
   [row]

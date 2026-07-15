@@ -604,10 +604,13 @@
         content))))
 
 (defn- delete-block-property!
-  [block property]
+  [block property opts]
   (editor-handler/move-cross-boundary-up-down :up {})
   (property-handler/remove-block-property! (:db/id block)
-                                           (:db/ident property)))
+                                           (:db/ident property)
+                                           {:preserve-task-tag?
+                                            (= :logseq.class/Task
+                                               (:db/ident (:view-parent opts)))}))
 
 (defn- prevent-bottom-property-edit-pointer-dismiss
   [^js e]
@@ -617,7 +620,8 @@
 
 (hsx/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?
-                 suppress-inline-edit-icon? property-position]}]
+                 suppress-inline-edit-icon? property-position]
+          :as opts}]
   (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
@@ -648,7 +652,7 @@
           :on-click open-popup!
           :on-key-down (fn [e]
                          (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                           (delete-block-property! block property)))}
+                           (delete-block-property! block property opts)))}
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
@@ -659,7 +663,7 @@
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
-                           (delete-block-property! block property)
+                           (delete-block-property! block property opts)
                            (" " "Enter")
                            (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
@@ -1566,7 +1570,7 @@
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
-                           (delete-block-property! block property)
+                           (delete-block-property! block property opts)
                            (" " "Enter")
                            (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
@@ -1591,7 +1595,7 @@
       :on-key-down (fn [e]
                      (when-not text-ref-type?
                        (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                         (delete-block-property! block property))))
+                         (delete-block-property! block property opts))))
       :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
@@ -2044,7 +2048,7 @@
 
                          ("Backspace" "Delete")
                          (when-not config/publishing?
-                           (delete-block-property! block property))
+                           (delete-block-property! block property opts))
                          (" " "Enter")
                          (do (show-grid! (or (.-currentTarget e) (hooks/deref *el)))
                              (util/stop e))
@@ -2130,7 +2134,7 @@
                                                  (when (= (util/ekey e) "Enter")
                                                    (add-property! (not value)))
                                                  (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                                                   (delete-block-property! block property)))})]])
+                                                   (delete-block-property! block property opts)))})]])
           ;; :others
           [:div.flex.flex-1
            ^{:key "property-value-inner"}
@@ -2198,7 +2202,7 @@
                            (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
                            ("Backspace" "Delete")
-                           (delete-block-property! block property)
+                           (delete-block-property! block property opts)
                            :dune))
           :class (multiple-values-trigger-class opts)}
                  (let [items' (vec items)
