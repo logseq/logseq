@@ -553,8 +553,9 @@
 (defn- remove-status!
   [conn block-ids {:keys [preserve-task-tag?]} tx-meta]
   (let [blocks (keep #(d/entity @conn (->eid %)) block-ids)
-        other-task-properties (disj (set (get-in db-class/built-in-classes
-                                                 [:logseq.class/Task :schema :properties]))
+        task-properties (:logseq.property.class/properties
+                         (d/entity @conn :logseq.class/Task))
+        other-task-properties (disj (set (map :db/ident task-properties))
                                     :logseq.property/status)]
     (validate-batch-deletion-of-property blocks :logseq.property/status)
     (when (seq blocks)

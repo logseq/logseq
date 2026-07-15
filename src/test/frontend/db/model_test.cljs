@@ -162,6 +162,25 @@
         (is (= [:user.class/Project]
                (mapv :db/ident (:block/tags block))))))))
 
+(deftest clear-status-uses-task-class-properties
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "task"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/status :logseq.property/status.todo
+                                             :logseq.property/description "details"}}]}])
+        block-id (:block/uuid (db-test/find-block-by-content @conn "task"))]
+    (d/transact! conn [[:db/add :logseq.class/Task
+                        :logseq.property.class/properties
+                        :logseq.property/description]])
+    (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id]
+                                                           :logseq.property/status]]] {})
+    (let [block (d/entity @conn [:block/uuid block-id])]
+      (is (= :logseq.property/empty-placeholder
+             (:db/ident (:logseq.property/status block))))
+      (is (contains? (set (map :db/ident (:block/tags block)))
+                     :logseq.class/Task)))))
+
 (deftest clear-status-public-remove-ops
   (testing "keeps Task when the public remove-property op clears status with another task property"
     (let [conn (db-test/create-conn-with-blocks
