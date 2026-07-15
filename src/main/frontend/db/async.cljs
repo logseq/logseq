@@ -229,8 +229,6 @@
                                    (ldb/write-transit-str requests))]
     (some-> result-transit-str ldb/read-transit-str)))
 
-(defonce ^:private *get-blocks-batch-enabled? (atom true))
-
 (defonce ^:private *get-blocks-batch-state
   (atom {:scheduled? false
          :queue []}))
@@ -274,12 +272,10 @@
       (let [requests (->> entries (map :request) worker-get-blocks-requests)]
         (->
          (p/let [result (<invoke-worker-get-blocks graph requests)
-                 result (if (= (count result) (count requests))
-                          result
-                          nil)
-                 result (or result
-                            ;; Safety fallback: retry once if response length is unexpected.
-                            (<invoke-worker-get-blocks graph requests))]
+                 _ (when-not (= (count result) (count requests))
+                     (throw (ex-info "Unexpected get-blocks response count"
+                                     {:request-count (count requests)
+                                      :response-count (count result)})))]
            (resolve-batched-get-blocks! entries result))
          (p/catch (fn [error]
                     (reject-batched-get-blocks! entries error))))))))
@@ -287,13 +283,7 @@
 (defn- <fetch-blocks-from-worker-batched
   [graph requests]
   (when (seq requests)
-    (if @*get-blocks-batch-enabled?
-      (-> (p/all (mapv #(enqueue-get-blocks-request! graph %) requests))
-          (p/catch (fn [_]
-                     ;; Fail-open: disable batching for this runtime and fall back to direct fetch.
-                     (reset! *get-blocks-batch-enabled? false)
-                     (<invoke-worker-get-blocks graph (worker-get-blocks-requests requests)))))
-      (<invoke-worker-get-blocks graph (worker-get-blocks-requests requests)))))
+    (p/all (mapv #(enqueue-get-blocks-request! graph %) requests))))
 
 (defn <get-block
   [graph id-uuid-or-name & {:keys [children?]

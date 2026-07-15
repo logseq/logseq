@@ -57,6 +57,17 @@
       (is (= target-uuid (:block/uuid value)))
       (is (= "Target" (:block/title value))))))
 
+(deftest legacy-node-property-values-keep-their-value-entity
+  (let [target-title "https://logseq.io/p/nx4mc_ggev"
+        [db host _target-uuid value-uuid]
+        (property-value-db :node {:block/title target-title
+                                  :block/name target-title
+                                  :block/tags :logseq.class/Page}
+                           {:block/title target-title})
+        value (:user.property/related (plain-value/entity-forward-map db host {}))]
+    (is (= value-uuid (:block/uuid value)))
+    (is (= target-title (:block/title value)))))
+
 (deftest direct-node-references-keep-their-target-entity
   (let [[db _host target-uuid _value-uuid] (property-value-db :node {})
         property-id (d/entid db :user.property/related)
