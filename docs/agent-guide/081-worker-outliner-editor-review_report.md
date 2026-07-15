@@ -8,13 +8,13 @@ Review range: `998207ffd5339386607328d3c71fd190dbf58cb7..fbaecc73f0`
 
 ## Executive summary
 
-The worker-owned DB direction is sound, but the current PR is not ready to merge in its present form. The review confirmed two blocking issues and several important correctness, failure-mode, and contract problems in the outliner/editor hot path.
+The worker-owned DB direction is sound, but the current PR is not ready to merge in its present form. The review originally confirmed two blocking issues and several important correctness, failure-mode, and contract problems in the outliner/editor hot path. Finding 1 has since been fixed and verified; finding 2 remains blocking.
 
 The highest-risk pattern is that the PR does not yet have one complete transaction-completion contract. A local operation is committed in the worker, the originating tab refreshes from the direct worker response, and the worker also broadcasts a lighter transaction summary. The direct response and broadcast each implement only part of the previous pipeline responsibilities. This split is the source of several stale-UI, missing-hook, and ambiguous-failure behaviors.
 
 The review also found UI-derived ordering data being sent back into the worker as a second structural authority, an unbounded `get-blocks` batching path, and multiple compatibility/dead-code layers that should be removed rather than extended.
 
-No product source or test file was changed during this review. This document is the only added file.
+The initial review changed only this document. The remediation log below records later source and unit-test changes one finding at a time.
 
 ## Scope
 
@@ -37,12 +37,15 @@ The Base UI migration, CSS-only changes, and unrelated CLI changes were outside 
 ### 1. A multi-block paste can create duplicate pages with the same name
 
 - **Severity:** Blocking
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Data contract
 - **Location:** `deps/outliner/src/logseq/outliner/core.cljs:197`, `deps/outliner/src/logseq/outliner/core.cljs:616`
 - **Issue:** Each block resolves its page references independently against the same pre-transaction DB. Two pasted blocks referencing the same previously nonexistent page can therefore each create a different page UUID with the same `:block/name`.
 - **Evidence:** `build-insert-blocks-tx` calls `resolve-page-refs` once per block and concatenates all returned `page-txs`. `:block/name` is indexed but not unique. An in-memory `:paste` + `:paste-text` reproduction inserted two blocks referencing `fresh-page-3`; the resulting DB contained two page entities with distinct UUIDs, and the two blocks referenced different UUIDs.
 - **Impact:** The graph can persist duplicate page entities for one logical page name. Page lookup becomes ambiguous and the pasted blocks no longer reference the same page.
-- **Suggestion:** Resolve new page references once for the whole outliner transaction and reuse one canonical page UUID across all blocks in that transaction.
+- **Fix:** `build-insert-blocks-tx` now advances an in-memory DataScript value only when a block produces new page transactions. Later blocks in the same insert resolve against those pending pages and reuse the canonical UUID. Inserts without new page references do not perform the extra `d/with`. No cache, fallback, editor special case, or alternate page-reference rule was added.
+- **Regression test:** `frontend.modules.outliner.core-test/paste-text-reuses-new-page-references-across-blocks` exercises the real `:paste` + `:paste-text` transaction options. Before the fix it failed with two same-name page entities and two distinct referenced UUIDs. After the fix it passes with one page entity and one shared UUID.
+- **Verification:** The focused test passed with 2 assertions. The complete `frontend.modules.outliner.core-test` namespace passed with 31 tests and 229 assertions. `clojure -M:clj-kondo` reported 0 errors and 0 warnings for both changed CLJS files, and `git diff --check` passed. The repository wrapper `bb lint:kondo-git-changes` could not start because `clj-kondo` was absent from `PATH`; the equivalent repo aliases were run directly instead.
 
 ---
 
@@ -275,6 +278,11 @@ The reports were deduplicated and each retained finding was checked again agains
 - Targeted tests run by the performance pass:
   - `bb dev:test -v frontend.worker.db-core-test/get-page-blocks-window-handles-10k-deep-page` — 1 test, 5 assertions, passed
   - `bb dev:test -v frontend.db.async-test/block-loaders-return-worker-data-without-renderer-db-test` — 1 test, 10 assertions, passed
+- Finding 1 remediation:
+  - RED: `frontend.modules.outliner.core-test/paste-text-reuses-new-page-references-across-blocks` — 1 test, 2 assertions, both failed because two pages and two UUIDs were produced
+  - GREEN: the same focused test — 1 test, 2 assertions, passed
+  - regression: `frontend.modules.outliner.core-test` — 31 tests, 229 assertions, passed
+  - lint: changed production and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
