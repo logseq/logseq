@@ -39,8 +39,10 @@
 (defn build-class-object-columns
   [config class properties]
   (let [properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? true
-                                                          :add-page-column? true})
+        columns* (views/build-columns (assoc config :view-parent class)
+                                      properties'
+                                      {:add-tags-column? true
+                                       :add-page-column? true})
         columns (cond
                   (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
@@ -86,7 +88,8 @@
   (let [*ref (hooks/use-ref nil)
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
-        columns (build-class-object-columns config class properties)
+        config' (assoc config :view-parent class)
+        columns (build-class-object-columns config' class properties)
         add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
                           (fn [view table {:keys [properties]}]
                             (if (= :logseq.class/Asset (:db/ident class))
@@ -106,7 +109,7 @@
                                   (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
 
     [:div {:ref *ref}
-     (views/view {:config config
+     (views/view {:config config'
                   :view-parent class
                   :view-feature-type :class-objects
                   :columns columns

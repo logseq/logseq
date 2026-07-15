@@ -36,3 +36,22 @@
             ids (subvec block-ids from-idx to-idx)]
         {:direction direction
          :block-ids (if (= direction :up) (vec (reverse ids)) ids)}))))
+
+(defn mounted-nodes?
+  [start-node end-node]
+  (boolean (and (some-> start-node .-isConnected)
+                (some-> end-node .-isConnected))))
+
+(defn mounted-node-range
+  [nodes start-node end-node]
+  (let [nodes (vec nodes)
+        start-idx (.indexOf nodes start-node)
+        end-idx (.indexOf nodes end-node)]
+    (when (and (<= 0 start-idx)
+               (<= 0 end-idx))
+      (let [direction (if (> start-idx end-idx) :up :down)
+            from-idx (min start-idx end-idx)
+            to-idx (inc (max start-idx end-idx))
+            nodes (subvec nodes from-idx to-idx)]
+        {:direction direction
+         :nodes (if (= direction :up) (vec (reverse nodes)) nodes)}))))

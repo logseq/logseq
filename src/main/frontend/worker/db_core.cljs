@@ -2009,11 +2009,9 @@
   (let [page-id (or (entity-direct-value db root :block/page) (:db/id root))
         block-ids (js/Set.)
         pending (array)
-        parent-by-block (js/Map.)
-        collapsed-blocks (js/Set.)
-        property-derived-blocks (js/Set.)
         !block-count (volatile! 0)
         !collapsed? (volatile! false)
+        !sort-children? (volatile! false)
         children-by-parent (js/Map.)]
     (doseq [{:keys [e]} (d/datoms db :avet :block/page page-id)]
       (.add block-ids e))
@@ -2027,29 +2025,78 @@
           (doseq [{:keys [e]} (d/datoms db :avet :block/parent block-id)]
             (.push pending e)))
         (recur)))
-    (doseq [{:keys [e v]} (d/datoms db :aevt :block/parent)
-            :when (.has block-ids e)]
-      (.set parent-by-block e v))
-    (doseq [{:keys [e v]} (d/datoms db :aevt :block/collapsed?)
-            :when (and v (.has block-ids e))]
-      (.add collapsed-blocks e))
-    (doseq [attr [:block/closed-value-property :logseq.property/created-from-property]
-            {:keys [e]} (d/datoms db :aevt attr)
-            :when (.has block-ids e)]
-      (.add property-derived-blocks e))
-    (doseq [{:keys [e]} (d/datoms db :avet :block/order)
-            :when (and (.has block-ids e)
-                       (not (.has property-derived-blocks e)))]
-      (let [parent-id (.get parent-by-block e)
-            collapsed? (.has collapsed-blocks e)
-            children (or (.get children-by-parent parent-id)
-                         (let [result (array)]
-                           (.set children-by-parent parent-id result)
-                           result))]
-        (vswap! !block-count inc)
-        (when collapsed?
-          (vreset! !collapsed? true))
-        (.push children #js [e parent-id collapsed?])))
+    (letfn [(add-block! [block-id parent-id collapsed? order]
+              (let [children (or (.get children-by-parent parent-id)
+                                 (let [result (array)]
+                                   (.set children-by-parent parent-id result)
+                                   result))]
+                (vswap! !block-count inc)
+                (when collapsed?
+                  (vreset! !collapsed? true))
+                (.push children #js [block-id parent-id collapsed? order])))]
+      (let [order-datoms (d/datoms db :avet :block/order)]
+        (if (<= (* 2 (.-size block-ids)) (count order-datoms))
+          (do
+            (vreset! !sort-children? true)
+            (doseq [block (d/pull-many db
+                                       [:db/id :block/parent :block/order :block/collapsed?
+                                        :block/closed-value-property :logseq.property/created-from-property]
+                                       (js/Array.from block-ids))
+                    :when (and (:block/order block)
+                               (not (contains? block :block/closed-value-property))
+                               (not (contains? block :logseq.property/created-from-property)))]
+              (add-block! (:db/id block)
+                          (get-in block [:block/parent :db/id])
+                          (boolean (:block/collapsed? block))
+                          (:block/order block))))
+          (let [entry-by-block (js/Map.)
+                needs-order (js/Set.)
+                collapsed-blocks (js/Set.)
+                property-derived-blocks (js/Set.)]
+            (doseq [{:keys [e v]} (d/datoms db :aevt :block/parent)
+                    :when (.has block-ids e)]
+              (let [children (or (.get children-by-parent v)
+                                 (let [result (array)]
+                                   (.set children-by-parent v result)
+                                   result))
+                    entry #js [e v false nil]]
+                (when (pos? (.-length children))
+                  (.add needs-order (aget (aget children 0) 0))
+                  (.add needs-order e))
+                (.push children entry)
+                (.set entry-by-block e entry)
+                (vswap! !block-count inc)))
+            (doseq [{:keys [e v]} (d/datoms db :aevt :block/collapsed?)
+                    :when (and v (.has block-ids e))]
+              (when-let [entry (.get entry-by-block e)]
+                (aset entry 2 true)
+                (.add collapsed-blocks e)))
+            (doseq [attr [:block/closed-value-property :logseq.property/created-from-property]
+                    {:keys [e]} (d/datoms db :aevt attr)
+                    :when (.has block-ids e)]
+              (.add property-derived-blocks e))
+            (doseq [block-id (js/Array.from property-derived-blocks)]
+              (when-let [entry (.get entry-by-block block-id)]
+                (let [children (.get children-by-parent (aget entry 1))
+                      idx (.indexOf children entry)]
+                  (when (nat-int? idx)
+                    (.splice children idx 1)
+                    (vswap! !block-count dec)))))
+            (when (some #(not (.has property-derived-blocks %))
+                        (js/Array.from collapsed-blocks))
+              (vreset! !collapsed? true))
+            (when (pos? (.-size needs-order))
+              (doseq [{:keys [e v]} order-datoms
+                      :when (.has needs-order e)]
+                (aset (.get entry-by-block e) 3 v))
+              (doseq [children (js/Array.from (.values children-by-parent))
+                      :when (> (.-length children) 1)]
+                (.sort children (fn [left right]
+                                  (compare (aget left 3) (aget right 3))))))))))
+    (when @!sort-children?
+      (doseq [children (js/Array.from (.values children-by-parent))]
+        (.sort children (fn [left right]
+                          (compare (aget left 3) (aget right 3))))))
     {:block-count @!block-count
      :collapsed? @!collapsed?
      :children-by-parent children-by-parent}))
@@ -2211,6 +2258,15 @@
           :limit limit
           :total-count total-count})))))
 
+(defn- sanitize-block-result
+  [result]
+  (cond-> result
+    (:block result)
+    (update :block common-util/remove-nils-non-nested)
+
+    (:children result)
+    (update :children common-util/fast-remove-nils)))
+
 (defn- get-blocks-response
   [repo requests]
   (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
@@ -2218,6 +2274,7 @@
          (mapv (fn [{:keys [id opts]}]
                  (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
                    (-> (get-block-and-children db id' opts)
+                       sanitize-block-result
                        worker-plain/with-explicit-ref-fields-recursive
                        (assoc :id id)))))
          ldb/write-transit-str)))

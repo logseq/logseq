@@ -20,6 +20,15 @@
    (and outliner?
         (seq comment-targets))))
 
+(defn- unset-property-event
+  [target selected-blocks view-parent]
+  [:editor/new-property {:target target
+                         :selected-blocks selected-blocks
+                         :view-parent view-parent
+                         :remove-property? true
+                         :select-opts {:show-new-when-not-exact-match? false}
+                         :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])
+
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
     :or {on-cut #(editor-handler/cut-selection-blocks true)
@@ -90,11 +99,9 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
-                                                                            :selected-blocks selected-blocks
-                                                                            :remove-property? true
-                                                                            :select-opts {:show-new-when-not-exact-match? false}
-                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+                                   (state/pub-event! (unset-property-event (.-target e)
+                                                                          selected-blocks
+                                                                          view-parent))))
          (t :property/unset-property))
         (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
           (shui/toolbar-button
