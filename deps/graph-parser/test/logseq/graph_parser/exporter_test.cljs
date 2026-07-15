@@ -1924,6 +1924,44 @@ abc
     (is (nil? (db-test/find-page-by-title @conn "2026_04_02"))
         "Legacy journal page ref does not create an ordinary page")))
 
+(deftest-async import-default-format-journal-refs-with-custom-title-format
+  (p/let [dir (write-temp-file-graph
+               {"pages/source.md"
+                "- existing journal [[May 18th, 2021]]\n- missing journal [[May 19th, 2021]]\n"
+                "journals/2021_05_18.md"
+                "- journal entry\n"
+                "pages/2021_05_19.md"
+                "- ordinary date-named page\n"})
+          source-file (-> (node-path/join dir "pages/source.md")
+                          (string/replace "\\" "/"))
+          journal-file (-> (node-path/join dir "journals/2021_05_18.md")
+                           (string/replace "\\" "/"))
+          ordinary-date-file (-> (node-path/join dir "pages/2021_05_19.md")
+                                 (string/replace "\\" "/"))
+          conn (db-test/create-conn)
+          _ (import-files-to-db [source-file journal-file ordinary-date-file] conn
+                                {:user-config {:journal/page-title-format "EEEE, dd-MM-yyyy"}})
+          existing-journal (db-test/find-journal-by-journal-day @conn 20210518)
+          missing-page (db-test/find-page-by-title @conn "May 19th, 2021")
+          existing-ref-block (db-test/find-block-by-content @conn #"existing journal")
+          missing-ref-block (db-test/find-block-by-content @conn #"missing journal")]
+    (is (= "Tuesday, 18-05-2021" (:block/title existing-journal))
+        "Default-format ref resolves the journal file using the configured title")
+    (is (= #{:logseq.class/Journal}
+           (set (map :db/ident (:block/tags existing-journal))))
+        "Existing journal does not retain the ordinary page tag")
+    (is (= #{(:block/uuid existing-journal)}
+           (set (map :block/uuid (:block/refs existing-ref-block))))
+        "Existing journal ref points at the journal page")
+    (is (= #{:logseq.class/Page}
+           (set (map :db/ident (:block/tags missing-page))))
+        "Default-format ref without a file under journals remains an ordinary page")
+    (is (nil? (db-test/find-journal-by-journal-day @conn 20210519))
+        "Date-named file outside journals does not create a journal")
+    (is (= #{(:block/uuid missing-page)}
+           (set (map :block/uuid (:block/refs missing-ref-block))))
+        "Missing journal ref points at the ordinary page")))
+
 (deftest-async import-creates-missing-ordinary-page-refs
   (p/let [file (write-temp-graph-file
                 "pages/source.md"
