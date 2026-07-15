@@ -203,3 +203,68 @@
                    (is false (str "unexpected error: " e))))
         (p/finally (fn []
                      (done))))))
+
+(deftest test-login-with-password-persists-auth-and-returns-user-info
+  (async done
+    (let [dir (node-helper/create-tmp-dir "cli-auth")
+          auth-path (node-path/join dir "auth.json")
+          id-token (jwt-with-claims {:sub "user-456"
+                                     :email "user@example.com"
+                                     :exp (+ (quot (js/Date.now) 1000) 3600)})
+          initiate-calls (atom [])]
+      (-> (p/with-redefs [auth/cognito-initiate-auth! (fn [creds]
+                                                        (swap! initiate-calls conj creds)
+                                                        (p/resolved {:id_token      id-token
+                                                                     :access_token  "access-token-pw"
+                                                                     :refresh_token "refresh-token-pw"}))]
+            (p/let [result (auth/login-with-password! {:auth-path auth-path
+                                                       :user "user@example.com"
+                                                       :pass "secret"})]
+              (is (= 1 (count @initiate-calls)))
+              (is (= {:user "user@example.com" :pass "secret"} (first @initiate-calls)))
+              (is (= auth-path (:auth-path result)))
+              (is (= "user@example.com" (:email result)))
+              (is (= "user-456" (:sub result)))
+              (is (fs/existsSync auth-path))
+              (let [stored (auth/read-auth-file {:auth-path auth-path})]
+                (is (= id-token (:id-token stored)))
+                (is (= "access-token-pw" (:access-token stored)))
+                (is (= "refresh-token-pw" (:refresh-token stored))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest test-login-with-password-rejects-on-bad-credentials
+  (async done
+    (-> (p/with-redefs [auth/cognito-initiate-auth! (fn [_creds]
+                                                      (p/rejected (ex-info "password login failed"
+                                                                           {:code    :password-login-failed
+                                                                            :message "Incorrect username or password."
+                                                                            :status  400})))]
+          (-> (auth/login-with-password! {:user "user@example.com" :pass "wrong"})
+              (p/then (fn [_]
+                        (is false "expected password login to reject")))
+              (p/catch (fn [e]
+                         (is (= :password-login-failed (-> e ex-data :code)))))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))))
+        (p/finally (fn [] (done))))))
+
+(deftest test-login-routes-to-password-flow-when-user-and-pass-provided
+  (async done
+    (let [password-calls (atom [])
+          browser-calls (atom [])]
+      (-> (p/with-redefs [auth/login-with-password! (fn [opts]
+                                                      (swap! password-calls conj opts)
+                                                      (p/resolved {:auth-path "/tmp/auth.json"
+                                                                   :email "user@example.com"
+                                                                   :sub "user-123"}))
+                          auth/open-browser! (fn [url]
+                                               (swap! browser-calls conj url)
+                                               (p/resolved {:opened? true}))]
+            (p/let [_result (auth/login! {:user "user@example.com" :pass "secret"})]
+              (is (= 1 (count @password-calls)))
+              (is (= 0 (count @browser-calls)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
