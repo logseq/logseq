@@ -47,7 +47,7 @@ async function handleMcp(request, env, ctx) {
     version: "1.0.0",
     request: async (options) => {
       if (!options.path.startsWith("/api/v1/")) {
-        throw new Error("Only Logseq semantic API paths are allowed");
+        throw new Error("Only Logseq server API paths are allowed");
       }
       const url = semanticRequestUrl(options, request.url);
       const headers = {};
