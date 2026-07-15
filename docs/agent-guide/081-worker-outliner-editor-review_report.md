@@ -52,11 +52,16 @@ The Base UI migration, CSS-only changes, and unrelated CLI changes were outside 
 ### 2. Render mounts can produce one unbounded descendant-loading worker request
 
 - **Severity:** Blocking
+- **Status:** Partially fixed and verified; individual worker payloads are bounded, descendant request scope remains open
 - **Category:** Performance
 - **Location:** `src/main/frontend/components/block.cljs:4834`, `src/main/frontend/db/async.cljs:232`, `src/main/frontend/worker/db_core.cljs:2288`
 - **Issue:** Every non-flat `block-container` can call `<get-block-with-children`, all calls scheduled in the same turn are merged into one unbounded batch, and the worker serially expands every requested root with `children? true`.
 - **Evidence:** The supplied `test lambda` log contains one 23,001-byte `:thread-api/get-blocks` payload with 469 unique IDs. The first request declares `children? true`; the remaining 468 requests reuse the same Transit key/value aliases, so all 469 request descendants. `flush-get-blocks-batch!` has no batch-size or visible-region bound, and `get-blocks-response` maps every request synchronously.
 - **Impact:** Task/query/reference pages can monopolize the DB worker, repeat overlapping subtree traversal, overflow recursive entity access, and remain blank before first paint.
+- **Fix:** The existing single batched worker path now partitions each graph queue into payloads of at most 50 requests. Deferred results are still resolved by their corresponding response index. There is no retry, fallback, renderer DB path, or change to collapse/expand semantics.
+- **Regression test:** `frontend.db.async-test/block-batching-bounds-worker-request-size-test` issues 151 public `<get-block` calls in one scheduling turn. Before the fix the worker received one payload of 151 requests. After the fix all 151 results resolve and every payload contains at most 50 requests.
+- **Verification:** The focused test passed with 2 assertions and the complete `frontend.db.async-test` namespace passed with 7 tests and 32 assertions. Existing worker tests for render-critical block data, page titles, cleared render state, and the 10k-deep page window passed with 21 assertions total. `clojure -M:clj-kondo` reported 0 errors and 0 warnings for both changed CLJS files.
+- **Remaining risk:** This bounds message size and allows chunks to resolve independently, but it does not yet prove that requesting descendants for up to 50 roots is cheap or limited to visible/expanded rows. The captured Task-page stall therefore remains open until descendant work is reproduced and bounded without changing visible outliner behavior.
 - **Suggestion:** Keep one worker-owned data path, but make result views request bounded render-complete visible rows. Load descendants only for an expanded block. Do not restore a renderer DB cache or add retry/fallback logic.
 
 Current runtime note: a read-only Chrome navigation to the current `test lambda` Task page rendered `Children (5)` within three seconds and did not reproduce the stall. That does not invalidate the captured 469-request failure, but it means the current Task page is not unconditionally broken.
@@ -282,6 +287,12 @@ The reports were deduplicated and each retained finding was checked again agains
   - RED: `frontend.modules.outliner.core-test/paste-text-reuses-new-page-references-across-blocks` — 1 test, 2 assertions, both failed because two pages and two UUIDs were produced
   - GREEN: the same focused test — 1 test, 2 assertions, passed
   - regression: `frontend.modules.outliner.core-test` — 31 tests, 229 assertions, passed
+  - lint: changed production and test files — 0 errors, 0 warnings
+- Finding 2 payload-bound remediation:
+  - RED: `frontend.db.async-test/block-batching-bounds-worker-request-size-test` — one worker payload contained all 151 queued requests
+  - GREEN: the same focused test — all 151 requests resolved and each payload contained at most 50 requests
+  - regression: `frontend.db.async-test` — 7 tests, 32 assertions, passed
+  - related worker coverage — 4 tests, 21 assertions, passed
   - lint: changed production and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed

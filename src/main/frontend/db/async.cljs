@@ -233,6 +233,8 @@
   (atom {:scheduled? false
          :queue []}))
 
+(def ^:private get-blocks-batch-limit 50)
+
 (declare flush-get-blocks-batch!)
 
 (defn- schedule-get-blocks-batch-flush!
@@ -268,7 +270,8 @@
   (let [queue (:queue @*get-blocks-batch-state)]
     (swap! *get-blocks-batch-state
            (fn [state] (assoc state :scheduled? false :queue [])))
-    (doseq [[graph entries] (group-by :graph queue)]
+    (doseq [[graph graph-entries] (group-by :graph queue)
+            entries (partition-all get-blocks-batch-limit graph-entries)]
       (let [requests (->> entries (map :request) worker-get-blocks-requests)]
         (->
          (p/let [result (<invoke-worker-get-blocks graph requests)

@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.state :as state]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn- source-for
@@ -18,6 +19,30 @@
         "A worker error must not switch the runtime to a second fetch path.")
     (is (not (string/includes? source "Safety fallback: retry once"))
         "A failed batch must not repeat the same large request.")))
+
+(deftest block-batching-bounds-worker-request-size-test
+  (async done
+         (let [repo "logseq_db_async_bounded_batch"
+               worker-request-counts (atom [])]
+           (p/with-redefs [state/<invoke-db-worker
+                           (fn [_api _repo requests-transit]
+                             (let [requests (ldb/read-transit-str requests-transit)]
+                               (swap! worker-request-counts conj (count requests))
+                               (p/resolved
+                                (ldb/write-transit-str
+                                 (mapv (fn [{:keys [id]}]
+                                         {:id id
+                                          :block {:db/id id}})
+                                       requests)))))]
+             (-> (p/let [_ (p/all (mapv #(db-async/<get-block repo % {:children? true})
+                                        (range 151)))]
+                   (is (= 151 (reduce + @worker-request-counts)))
+                   (is (every? #(<= % 50) @worker-request-counts)
+                       (str "Unbounded get-blocks batches: " @worker-request-counts)))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
 
 (deftest block-loaders-return-worker-data-without-renderer-db-test
   (async done
