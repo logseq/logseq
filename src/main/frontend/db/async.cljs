@@ -7,6 +7,7 @@
             [frontend.db.async.util :as db-async-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -288,6 +289,13 @@
   (when (seq requests)
     (p/all (mapv #(enqueue-get-blocks-request! graph %) requests))))
 
+(defn- block-fetch-error
+  [operation block error]
+  (log/error :db/block-fetch-failed {:operation operation
+                                     :block block
+                                     :error error})
+  (ex-info (str (name operation) " error") {:block block} error))
+
 (defn <get-block
   [graph id-uuid-or-name & {:keys [children?]
                             :or {children? true}
@@ -302,8 +310,7 @@
      (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
        (:block (first result)))
      (p/catch (fn [error]
-                (js/console.error error)
-                (throw (ex-info "get-block error" {:block id-uuid-or-name})))))))
+                (throw (block-fetch-error :get-block id-uuid-or-name error)))))))
 
 (defn <get-block-with-children
   [graph id-uuid-or-name & {:keys [children?]
@@ -316,8 +323,7 @@
      (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
        (first result))
      (p/catch (fn [error]
-                (js/console.error error)
-                (throw (ex-info "get-block-with-children error" {:block id-uuid-or-name})))))))
+                (throw (block-fetch-error :get-block-with-children id-uuid-or-name error)))))))
 
 (defn <get-blocks
   [graph ids* & {:as opts}]

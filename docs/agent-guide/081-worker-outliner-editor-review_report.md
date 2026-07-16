@@ -234,10 +234,14 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 14. Worker fetch errors use raw console logging and discard their cause
 
 - **Severity:** Minor
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Repository convention
-- **Location:** `src/main/frontend/db/async.cljs:288`
+- **Location:** `src/main/frontend/db/async.cljs:294`
 - **Issue:** `<get-block` and `<get-block-with-children` log with `js/console.error` and throw a fresh `ex-info` without the original cause or `ex-data`.
 - **Impact:** The now-central worker fetch path loses structured diagnostic context and violates the repository logging convention.
+- **Reproduction:** Both real loader catch paths were fed the same rejected worker Promise. Their wrapper `ex-data` retained the requested block, but both `ex-cause` values were nil; the raw console also printed two unstructured stacks.
+- **Fix:** One `block-fetch-error` helper emits `:db/block-fetch-failed` with operation, block and original error, then constructs the existing wrapper message/data with the worker exception as its cause. No retry, fallback, or alternate fetch path was added.
+- **Verification:** The focused RED failed both cause assertions and the GREEN passed all 4 assertions. The complete `frontend.db.async-test` passed 8 tests and 36 assertions. CLJS lint passed with 0 errors and 0 warnings.
 - **Suggestion:** Preserve the original cause and use structured `glogi`, or remove duplicate logging and let the original worker error propagate.
 
 ## Important test coverage gaps
@@ -391,6 +395,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - regression: state 8/22 and remove-UI-DB 168/358, all passed
   - compile: test build input decreased from 1,197 to 1,189 files
   - lint: changed tests — 0 errors, 0 warnings
+- Finding 14 worker-fetch diagnostics remediation:
+  - RED: both block loaders wrapped the error with a nil cause
+  - GREEN: one structured helper preserves operation context, block context, and the original cause
+  - regression: async 8/36, all passed
+  - lint: changed async and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
