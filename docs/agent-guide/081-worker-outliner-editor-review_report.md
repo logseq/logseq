@@ -176,12 +176,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 10. Insert order has both a renderer authority and a worker-DB authority
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Repository convention
-- **Location:** `src/main/frontend/components/block.cljs:5331`, `src/main/frontend/handler/editor.cljs:353`, `deps/outliner/src/logseq/outliner/core.cljs:571`
+- **Location:** `src/main/frontend/components/block.cljs:5305`, `src/main/frontend/handler/editor.cljs:324`, `deps/outliner/src/logseq/outliner/core.cljs:571`
 - **Issue:** The renderer computes `:end-order-state` from its current visible window. Outliner core trusts `[:known ...]` and skips the worker DB's `get-right-sibling`/`get-down` lookup. Other callers continue to use the DB path.
-- **Evidence:** `order-states` always supplies a known order for ordinary lists and supplies one for loaded virtual neighbors. `get-block-orders` uses that value before querying the transaction snapshot.
+- **Evidence:** A real outliner test captured the renderer's original right order, inserted a concurrent right sibling into the DB, and then inserted with the stale boundary. Before the fix, the new block and current right sibling received the same fractional order (`compare = 0`).
 - **Impact:** A stale renderer window can calculate an insertion order against old neighbors, while non-renderer callers use the authoritative DB. This violates the intended single worker-owned mutation path.
-- **Suggestion:** Remove UI-derived order authority. Resolve the insertion boundary from the worker transaction DB. If virtual-window context is genuinely required, make it an explicit validated precondition rather than a silent override.
+- **Fix:** The renderer no longer derives child/right order state, the editor no longer sends `:end-order-state`, and outliner core always resolves the insertion boundary from its transaction DB. The flat renderer still supplies the previous visible block used by editor navigation. This removes the second authority rather than validating or retrying it.
+- **Regression tests:** `logseq.outliner.core-test/insert-blocks-does-not-trust-stale-right-order` preserves the concurrent stale-boundary reproduction. `insert-blocks-finds-right-order-on-1k-sibling-page` enforces a 100ms upper bound for the authoritative lookup. The virtualized source-contract test requires all renderer order-state plumbing to remain absent.
+- **Verification:** The focused RED failed because the two orders compared equal. The selective outliner core suite passed 13 tests and 40 assertions after the fix. Virtualized block tests passed 19/66, editor async passed 27/76, and editor tests passed 61/168. CLJS lint passed with 0 errors and 0 warnings. The all-namespace outliner NBB runner could not start because of the pre-existing unresolved `sqlite-export/validate-import-txs`; the core namespace was loaded and run directly in the same NBB environment.
 
 ## Confirmed maintainability and hack findings
 
@@ -356,6 +359,12 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: the current user entity is awaited before filtering the Quick Add children
   - regression: editor async 27 tests/76 assertions, all passed
   - lint: changed handler and test files — 0 errors, 0 warnings
+- Finding 10 insert-order authority remediation:
+  - RED: a stale UI right boundary generated the same order as a newly inserted current right sibling
+  - GREEN: all insert boundaries come from the outliner transaction DB; renderer order-state plumbing was removed
+  - performance: authoritative insertion on 1k siblings passed the 100ms unit-test gate
+  - regression: outliner core 13/40, virtualized block 19/66, editor async 27/76, and editor 61/168, all passed
+  - lint: changed outliner, renderer, editor, and unit-test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
