@@ -2903,7 +2903,7 @@
               (page-window-block-uuids @conn page-id
                                        {:offset page-window-offset
                                         :limit page-block-window-default-limit}))
-            opts (dissoc opts :ui/page-id :ui/include-page-tree? :ui/editor-info
+            opts (dissoc opts :ui/page-id :ui/editor-info
                          :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
             _ (worker-undo-redo/set-pending-editor-info! repo editor-info)
             apply-started-at (perf-time-ms)
