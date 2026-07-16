@@ -120,6 +120,22 @@ COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
 node worker/dist/node-adapter.js
 ```
 
+Run the adapter fully local (no login, no Cognito). All devices authenticate
+with the same shared-secret token, which each client configures in
+Settings → Sync server together with the custom server URL:
+
+```bash
+DB_SYNC_PORT=8787 \
+DB_SYNC_DATA_DIR=~/logseq-sync-data \
+DB_SYNC_LOCAL_TOKEN=$(openssl rand -hex 32) \
+node worker/dist/node-adapter.js
+```
+
+When `DB_SYNC_LOCAL_TOKEN` is set it is the only accepted credential — JWT
+verification is disabled and every request maps to a single local user
+(`DB_SYNC_LOCAL_USER_ID`, default `local-user`). Only use this on a trusted
+network (LAN/VPN) or behind TLS.
+
 ### Tests
 
 Run db-sync tests (includes Node adapter tests):
@@ -146,6 +162,8 @@ pnpm test:node-adapter
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
+| DB_SYNC_LOCAL_TOKEN | Shared-secret token for fully local, no-login self-hosting. When set, it is the only accepted credential and JWT verification is disabled |
+| DB_SYNC_LOCAL_USER_ID | User id used for all requests in local-token mode (default `local-user`) |
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

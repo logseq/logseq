@@ -33,8 +33,17 @@
       (ws->http-base (config/db-sync-ws-url))))
 
 (defn- auth-headers []
-  (when-let [token (state/get-auth-id-token)]
+  (when-let [token (or (config/local-sync-token)
+                       (state/get-auth-id-token))]
     {"authorization" (str "Bearer " token)}))
+
+(defn- <ensure-sync-token!
+  "Ensure a usable sync credential. With a self-hosted server token there is
+   nothing to refresh; otherwise ensure fresh Cognito id/access tokens."
+  []
+  (if (config/local-sync-token)
+    (p/resolved nil)
+    (js/Promise. user-handler/task--ensure-id&access-token)))
 
 (defn- with-auth-headers [opts]
   (if-let [auth (auth-headers)]
@@ -196,11 +205,16 @@
     (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
     (seq config/COGNITO-CLIENT-ID)
-    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)
+
+    ;; Always set (nil clears a previously pushed token) so the worker never
+    ;; keeps a stale self-hosted token after settings change.
+    true
+    (assoc :auth/static-sync-token (config/local-sync-token))))
 
 (defn- <sync-auth-state-to-db-worker!
   []
-  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+  (p/let [_ (<ensure-sync-token!)
           payload (sync-app-state-payload)]
     (state/<invoke-db-worker :thread-api/sync-app-state payload)))
 
@@ -240,7 +254,7 @@
          (p/resolved cached-users)
 
          base
-         (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+         (p/let [_ (<ensure-sync-token!)
                  resp (fetch-json (str base "/graphs/" graph-uuid "/members")
                                   {:method "GET"}
                                   {:response-schema :graph-members/list})
@@ -272,7 +286,7 @@
   [graph-uuid _schema-version]
   (let [base (http-base)]
     (if (and graph-uuid base)
-      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+      (p/let [_ (<ensure-sync-token!)]
         (fetch-json (str base "/graphs/" graph-uuid)
                     {:method "DELETE"}
                     {:response-schema :graphs/delete}))
@@ -297,7 +311,7 @@
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
              base (http-base)]
          (-> (if (and graph-uuid base)
-               (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               (p/let [_ (<ensure-sync-token!)
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
@@ -322,7 +336,7 @@
     (if-not base
       (p/resolved [])
       (-> (p/let [_ (state/set-state! :rtc/loading-graphs? true)
-                  _ (js/Promise. user-handler/task--ensure-id&access-token)
+                  _ (<ensure-sync-token!)
                   resp (fetch-json (str base "/graphs")
                                    {:method "GET"}
                                    {:response-schema :graphs/list})
@@ -359,7 +373,7 @@
         graph-uuid (str graph-uuid)]
     (if (and base (string? graph-uuid) (string? email))
       (->
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+       (p/let [_ (<ensure-sync-token!)
                body (coerce-http-request :graph-members/create
                                          {:email email
                                           :role "member"})
@@ -400,7 +414,7 @@
         graph-uuid (some-> graph-uuid str)
         member-id (some-> member-id str)]
     (if (and base (string? graph-uuid) (string? member-id))
-      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+      (p/let [_ (<ensure-sync-token!)]
         (fetch-json (str base "/graphs/" graph-uuid "/members/" member-id)
                     {:method "DELETE"}
                     {:response-schema :graph-members/delete}))

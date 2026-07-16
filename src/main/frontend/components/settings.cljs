@@ -626,13 +626,21 @@
 (hsx/defc sync-server-url-settings-container
   []
   (let [current-url (config/get-custom-sync-server-url)
+        current-token (config/get-custom-sync-server-token)
         [url set-url!] (hooks/use-state (or current-url ""))
+        [token set-token!] (hooks/use-state (or current-token ""))
+        push-worker-config! (fn [success-message]
+                              ;; the token travels via app state, the urls via sync config
+                              (state/pub-event! [:rtc/sync-app-state])
+                              (-> (push-sync-config-to-worker!)
+                                  (p/then #(notification/show! success-message :success))
+                                  (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))
         reset-url! (fn []
                      (config/set-custom-sync-server-url! nil)
+                     (config/set-custom-sync-server-token! nil)
                      (set-url! "")
-                     (-> (push-sync-config-to-worker!)
-                         (p/then #(notification/show! (t :settings.sync-server/clear-success) :success))
-                         (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))]
+                     (set-token! "")
+                     (push-worker-config! (t :settings.sync-server/clear-success)))]
     [:div.cp__settings-sync-server-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings.sync-server/url)]
      [:div.p-2
@@ -645,20 +653,37 @@
           :placeholder config/default-db-sync-http-base
           :style {:width "100%"}
           :on-change #(set-url! (util/evalue %))}]]]
+      [:p.text-sm.opacity-70.my-4 (t :settings.sync-server/token-desc)]
+      [:p
+       [:label
+        [:strong (t :settings.sync-server/token)]
+        [:input.form-input.is-small
+         {:value token
+          :type "password"
+          :auto-complete "off"
+          :style {:width "100%"}
+          :on-change #(set-token! (util/evalue %))}]]]
       [:p.pt-2.flex.gap-2
        (shui/button
         {:size :sm
          :on-click (fn []
-                     (let [trimmed (string/trim url)]
-                       (if (string/blank? trimmed)
-                         (reset-url!)
-                         (if-not (config/valid-sync-server-url? trimmed)
-                           (notification/show! (t :settings.sync-server/url-invalid-error) :error)
-                           (do
-                             (config/set-custom-sync-server-url! trimmed)
-                             (-> (push-sync-config-to-worker!)
-                                 (p/then #(notification/show! (t :settings.sync-server/save-success) :success))
-                                 (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))))))}
+                     (let [trimmed (string/trim url)
+                           trimmed-token (string/trim token)]
+                       (cond
+                         (string/blank? trimmed)
+                         (if (string/blank? trimmed-token)
+                           (reset-url!)
+                           (notification/show! (t :settings.sync-server/token-requires-url-error) :error))
+
+                         (not (config/valid-sync-server-url? trimmed))
+                         (notification/show! (t :settings.sync-server/url-invalid-error) :error)
+
+                         :else
+                         (do
+                           (config/set-custom-sync-server-url! trimmed)
+                           (config/set-custom-sync-server-token!
+                            (when-not (string/blank? trimmed-token) trimmed-token))
+                           (push-worker-config! (t :settings.sync-server/save-success))))))}
         (t :ui/save))
        (when (seq url)
          (shui/button
