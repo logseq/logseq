@@ -131,12 +131,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 7. Operation completion is incorrectly coupled to next-frame editor callbacks
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Failure mode
 - **Location:** `src/main/frontend/db/transact.cljs:40`, `src/main/frontend/db/transact.cljs:232`
 - **Issue:** After the worker has committed and state has been published, every operation waits for `requestAnimationFrame` (or `setTimeout(0)`) to run the editor callback. A callback exception then rejects the outliner operation promise even though the DB change already committed. Conversely, a worker rejection before this point does not centrally remove the queued callback.
 - **Evidence:** A runtime probe of `on-next-frame!` with a throwing callback rejected with `"editor callback boom"`. The call occurs after `refresh-worker-op-blocks!`. Several call sites register callbacks without a shared `finally` cleanup path.
 - **Impact:** Enter/delete/indent/move gain an unconditional extra-frame boundary, callers can receive failure for an already-committed edit, and rejected worker calls can retain stale cursor/focus callbacks.
-- **Suggestion:** Resolve DB operation completion after the single state publication. Treat focus/cursor work as a separately contained UI step with centralized callback cleanup. Keep paint telemetry independent from correctness sequencing.
+- **Fix:** `on-next-frame!` is now a contained scheduler rather than a Promise. After the worker response and one state publication, `apply-outliner-ops` schedules cursor/focus work and paint telemetry, then immediately returns the DB result. Frame-callback exceptions are logged without changing the committed operation outcome. A real worker rejection removes the callback for that transaction ID before rethrowing the worker error. No polling or transition path was added.
+- **Regression tests:** The completion test holds the animation frame, verifies the DB result resolves first, then throws inside the queued editor callback and verifies the result remains resolved. The failure test rejects the worker request and verifies the tagged callback is removed. Before the fix the first result remained pending and then rejected; the second callback remained queued.
+- **Verification:** `frontend.db.transact-test` passed 14 tests and 48 assertions. Targeted Enter/insert and Enter/Delete callback tests passed 2 tests and 2 assertions. CLJS lint passed for the transaction and test files with 0 errors and 0 warnings.
 
 ---
 
@@ -331,6 +334,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: the worker API fails before any operation side effect with typed repo context
   - regression: worker DB core 160 tests/427 assertions, passed
   - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3069` outside the changed code
+- Finding 7 operation-completion remediation:
+  - RED: a committed operation waited for the frame and inherited its exception; worker rejection left its callback queued
+  - GREEN: DB completion follows state publication, while frame work is contained and request failures clean up by tx-id
+  - regression: transact 14 tests/48 assertions and editor callback coverage 2/2, all passed
+  - lint: changed transaction and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range

@@ -39,16 +39,15 @@
 
 (defn- on-next-frame!
   [f]
-  (p/create
-   (fn [resolve reject]
-     (let [run (fn []
-                 (try
-                   (resolve (f))
-                   (catch :default e
-                     (reject e))))]
-       (if (exists? js/requestAnimationFrame)
-         (js/requestAnimationFrame run)
-         (js/setTimeout run 0))))))
+  (let [run (fn []
+              (try
+                (f)
+                (catch :default error
+                  (log/error :db/editor-frame-callback-failed {:error error}))))]
+    (if (exists? js/requestAnimationFrame)
+      (js/requestAnimationFrame run)
+      (js/setTimeout run 0)))
+  nil)
 
 (defn- run-edit-block-fn!
   [tx-meta page-window]
@@ -215,11 +214,15 @@
 
                     (seq requested-row-data-block-ids)
                     (assoc :ui/row-data-block-ids requested-row-data-block-ids))
-            request #(state/<invoke-db-worker
-                      :thread-api/apply-outliner-ops
-                      (state/get-current-repo)
-                      ops
-                      opts')]
+            request #(-> (state/<invoke-db-worker
+                          :thread-api/apply-outliner-ops
+                          (state/get-current-repo)
+                          ops
+                          opts')
+                         (p/catch
+                          (fn [error]
+                            (state/remove-edit-block-fn! (:editor/edit-block-fn-id opts'))
+                            (throw error))))]
         (p/let [response (request)
                 {:keys [result page-tree page-window updated-blocks affected-page-uuids perf]} response
                 worker-returned-at (now-ms)]
@@ -229,24 +232,24 @@
                                    updated-blocks (assoc :ui/updated-blocks updated-blocks))
                                  page-tree page-window affected-page-uuids)
                 state-updated-at (now-ms)]
-            (p/let [_ (on-next-frame!
-                       (fn []
-                         (run-edit-block-fn! opts' page-window)
-                         (log-outliner-op-perf!
-                          {:stage :ui-updated
-                           :perf-id perf-id
-                           :op-names (mapv first ops)
-                           :op-count (count ops)
-                           :page-tree-requested? page-tree-requested?
-                           :page-window-returned? (boolean page-window)
-                           :page-window-offset (:offset page-window)
-                           :page-window-total-count (:total-count page-window)
-                           :page-window-row-count (count (:rows page-window))
-                           :worker-apply-ms (:apply-ms perf)
-                           :worker-page-window-ms (:page-window-ms perf)
-                           :worker-listener (:listener perf)
-                           :worker-roundtrip-ms (- worker-returned-at started-at)
-                           :ui-refresh ui-refresh-perf
-                           :state-update-ms (- state-updated-at worker-returned-at)
-                           :total-to-next-frame-ms (- (now-ms) started-at)})))]
-              result)))))))
+            (on-next-frame!
+             (fn []
+               (run-edit-block-fn! opts' page-window)
+               (log-outliner-op-perf!
+                {:stage :ui-updated
+                 :perf-id perf-id
+                 :op-names (mapv first ops)
+                 :op-count (count ops)
+                 :page-tree-requested? page-tree-requested?
+                 :page-window-returned? (boolean page-window)
+                 :page-window-offset (:offset page-window)
+                 :page-window-total-count (:total-count page-window)
+                 :page-window-row-count (count (:rows page-window))
+                 :worker-apply-ms (:apply-ms perf)
+                 :worker-page-window-ms (:page-window-ms perf)
+                 :worker-listener (:listener perf)
+                 :worker-roundtrip-ms (- worker-returned-at started-at)
+                 :ui-refresh ui-refresh-perf
+                 :state-update-ms (- state-updated-at worker-returned-at)
+                 :total-to-next-frame-ms (- (now-ms) started-at)})))
+            result))))))

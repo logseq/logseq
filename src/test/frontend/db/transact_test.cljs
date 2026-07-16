@@ -177,25 +177,25 @@
           worker-result (p/deferred)]
       (state/set-state! :db/latest-transacted-entity-uuids {})
       (state/set-state! :editor/pending-new-block {:typed-text "abc"})
-      (p/with-redefs [util/node-test? false
-                      state/get-current-repo (constantly "test-repo")
-                      state/get-editor-info (constantly editor-info)
-                      state/<invoke-db-worker
-                      (fn [api & args]
-                        (swap! calls conj [api (vec args)])
-                        (case api
-                          :thread-api/undo-redo-set-pending-editor-info
-                          (p/resolved nil)
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-editor-info (constantly editor-info)
+                          state/<invoke-db-worker
+                          (fn [api & args]
+                            (swap! calls conj [api (vec args)])
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
 
-                          :thread-api/apply-outliner-ops
-                          worker-result
+                              :thread-api/apply-outliner-ops
+                              worker-result
 
-                          (p/resolved nil)))]
-        (let [result (db-transact/apply-outliner-ops
-                      nil
-                      [[:save-block [{:block/uuid block-id} {}]]]
-                      {:db-sync/tx-id tx-id})]
-          (-> (p/let [_ (p/delay 0)
+                              (p/resolved nil)))]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:save-block [{:block/uuid block-id} {}]]]
+                          {:db-sync/tx-id tx-id})]
+              (p/let [_ (p/delay 0)
                       _ (is (= [:thread-api/apply-outliner-ops]
                                (mapv first @calls)))
                       _ (is (= editor-info
@@ -205,6 +205,7 @@
                       _ (p/resolve! worker-result {:result ::persisted
                                                   :page-window page-window})
                       value result
+                      _ (p/delay 0)
                       latest (state/get-state :db/latest-transacted-entity-uuids)]
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
@@ -212,7 +213,70 @@
                 (is (= tx-id (:tx-id latest)))
                 (is (= {:typed-text "abc"}
                        (state/get-state :editor/pending-new-block))
-                    "Worker completion must not discard input queued before the editor renders."))
-              (p/finally (fn []
-                           (state/set-state! :editor/pending-new-block nil)
-                           (done)))))))))
+                    "Worker completion must not discard input queued before the editor renders."))))
+          (p/finally (fn []
+                       (state/set-state! :editor/pending-new-block nil)
+                       (done)))))))
+
+(deftest apply-outliner-ops-completes-before-next-frame-callback-test
+  (async done
+    (let [callback-id (random-uuid)
+          block-id (random-uuid)
+          original-raf (.-requestAnimationFrame js/globalThis)
+          frame-callback (atom nil)
+          settlement (atom nil)]
+      (set! (.-requestAnimationFrame js/globalThis)
+            #(reset! frame-callback %))
+      (state/queue-edit-block-fn!
+       callback-id
+       (fn [& _]
+         (throw (js/Error. "editor callback failed"))))
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [_api & _args]
+                            (p/resolved {:result ::persisted
+                                         :page-window {:rows []}}))]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:save-block [{:block/uuid block-id} {}]]]
+                          {:editor/edit-block-fn-id callback-id})]
+              (-> result
+                  (p/then #(reset! settlement [:resolved %]))
+                  (p/catch #(reset! settlement [:rejected (ex-message %)])))
+              (p/let [_ (p/delay 0)
+                      _ (is (= [:resolved ::persisted] @settlement)
+                            "DB completion must not wait for cursor work.")
+                      _ (when-let [f @frame-callback] (f))
+                      _ (p/delay 0)]
+                (is (= [:resolved ::persisted] @settlement)
+                    "Cursor callback failure must not reject committed DB work."))))
+          (p/finally
+           (fn []
+             (state/remove-edit-block-fn! callback-id)
+             (set! (.-requestAnimationFrame js/globalThis) original-raf)
+             (done)))))))
+
+(deftest apply-outliner-ops-removes-editor-callback-on-worker-failure-test
+  (async done
+    (let [callback-id (random-uuid)]
+      (state/queue-edit-block-fn! callback-id (fn [] nil))
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [_api & _args]
+                            (p/rejected (js/Error. "worker failed")))]
+            (-> (db-transact/apply-outliner-ops
+                 nil
+                 [[:save-block [{:block/uuid (random-uuid)} {}]]]
+                 {:editor/edit-block-fn-id callback-id})
+                (p/then (fn [_]
+                          (is false "Worker failure should reject.")))
+                (p/catch (fn [_]
+                           (is (nil? (state/take-edit-block-fn! callback-id)))))))
+          (p/finally
+           (fn []
+             (state/remove-edit-block-fn! callback-id)
+             (done)))))))
