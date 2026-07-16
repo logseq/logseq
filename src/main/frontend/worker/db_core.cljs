@@ -1845,6 +1845,8 @@
   [db block-id]
   (some? (first (d/datoms db :avet :block/parent block-id))))
 
+(def ^:private block-children-limit 100)
+
 (defn- direct-child-blocks
   ([db block-id]
    (direct-child-blocks db block-id false))
@@ -1852,7 +1854,7 @@
    (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
                         (map :e)
                         set)
-         blocks (if (>= (count child-ids) 100)
+         blocks (if (>= (count child-ids) block-children-limit)
                   (->> ((if reverse? d/rseek-datoms d/datoms) db :avet :block/order)
                        (keep (fn [datom]
                                (when (contains? child-ids (:e datom))
@@ -1865,24 +1867,26 @@
 
 (defn- get-block-children
   [db block {:keys [include-collapsed-children?]}]
-  (let [children-blocks (loop [pending [block]
-                               seen #{(:db/id block)}
-                               result []]
-                          (if-let [parent (peek pending)]
-                            (let [pending (pop pending)
-                                  expand? (or include-collapsed-children?
-                                              (not (true? (entity-direct-value db parent :block/collapsed?)))
-                                              (some? (entity-direct-value db parent :block/name)))
-                                  children (if expand?
-                                             (remove #(contains? seen (:db/id %))
-                                                     (direct-child-blocks db (:db/id parent)))
-                                             [])]
-                              (recur (into pending children)
-                                     (into seen (map :db/id) children)
-                                     (into result children)))
-                            result))
+  (let [[large-page? children-blocks]
+        (loop [pending [block]
+               seen #{(:db/id block)}
+               result []]
+          (if (>= (count result) block-children-limit)
+            [true result]
+            (if-let [parent (peek pending)]
+              (let [pending (pop pending)
+                    expand? (or include-collapsed-children?
+                                (not (true? (entity-direct-value db parent :block/collapsed?)))
+                                (some? (entity-direct-value db parent :block/name)))
+                    children (if expand?
+                               (remove #(contains? seen (:db/id %))
+                                       (direct-child-blocks db (:db/id parent)))
+                               [])]
+                (recur (into pending children)
+                       (into seen (map :db/id) children)
+                       (into result children)))
+              [false result])))
         children-blocks (remove ldb/recycled? children-blocks)
-        large-page? (>= (count children-blocks) 100)
         children (if large-page?
                    (remove ldb/recycled? (direct-child-blocks db (:db/id block)))
                    children-blocks)]
