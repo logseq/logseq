@@ -350,16 +350,11 @@
                                     :block/name (util/page-name-sanity-lc (:block/title new-block)))
                              (dissoc :block/page)))
                      new-block)
-        end-order-state (if sibling?
-                          (:outliner/right-order-state config)
-                          (:outliner/child-order-state config))
-        insert-opts (cond-> {:sibling? sibling?
-                             :keep-uuid? keep-uuid?
-                             :ordered-list? ordered-list?
-                             :replace-empty-target? replace-empty-target?
-                             :outliner-op outliner-op}
-                      end-order-state
-                      (assoc :end-order-state end-order-state))]
+        insert-opts {:sibling? sibling?
+                     :keep-uuid? keep-uuid?
+                     :ordered-list? ordered-list?
+                     :replace-empty-target? replace-empty-target?
+                     :outliner-op outliner-op}]
     (ui-outliner-tx/transact!
      (cond-> {:outliner-op :insert-blocks
               :ui/page-id (or (block-page-id current-block) (:db/id current-block))

@@ -5326,36 +5326,11 @@
                              (when (<= 0 window-idx (dec blocks-count))
                            (nth blocks window-idx)))
                           (nth blocks idx)))
-        loaded-window-complete? (or (not virtual-window?)
-                                    (>= (+ virtual-offset blocks-count) virtual-total-count))
-        order-states (fn [idx block]
-                       (if (:virtual/flat-list? config)
-                         (let [window-idx (- idx virtual-offset)
-                               level (:block/level block)
-                               previous (when (pos? window-idx)
-                                          (nth blocks (dec window-idx)))
-                               following (subvec blocks (min blocks-count (inc window-idx)))
-                               child (first following)
-                               child-state (cond
-                                             child
-                                             [:known (when (= (inc level) (:block/level child))
-                                                       (:block/order child))]
-
-                                             loaded-window-complete?
-                                             [:known nil])
-                               right (some #(when (<= (:block/level %) level) %) following)
-                               right-state (cond
-                                             right
-                                             [:known (when (= level (:block/level right))
-                                                       (:block/order right))]
-
-                                             loaded-window-complete?
-                                             [:known nil])]
-                           {:outliner/previous-block previous
-                            :outliner/child-order-state child-state
-                            :outliner/right-order-state right-state})
-                         {:outliner/child-order-state [:known (some-> block :block/children first :block/order)]
-                          :outliner/right-order-state [:known (some-> (nth blocks (inc idx) nil) :block/order)]}))
+        previous-block (fn [idx]
+                         (when (:virtual/flat-list? config)
+                           (let [window-idx (- idx virtual-offset)]
+                             (when (pos? window-idx)
+                               (nth blocks (dec window-idx))))))
         flat-list-item (fn [block item]
                          (if (:virtual/flat-list? config)
                            (react-core/createElement
@@ -5368,7 +5343,11 @@
                       (when-let [block (block-at-index idx)]
                         (let [top? (zero? idx)
                               bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                              config' (cond-> (merge config (order-states idx block) {:top? top?})
+                              previous (previous-block idx)
+                              config' (cond-> (assoc config :top? top?)
+                                        previous
+                                        (assoc :outliner/previous-block previous)
+
                                         (:virtual/flat-list? config)
                                         (assoc :hide-children? true))]
                           (flat-list-item
@@ -5386,10 +5365,13 @@
           (if-let [block (block-at-index idx)]
             (let [top? (zero? idx)
                   bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                  config' (cond-> (merge config
-                                         (order-states idx block)
-                                         {:top? top?
-                                          :selection/block-ids selection-block-ids})
+                  previous (previous-block idx)
+                  config' (cond-> (assoc config
+                                         :top? top?
+                                         :selection/block-ids selection-block-ids)
+                            previous
+                            (assoc :outliner/previous-block previous)
+
                             (:virtual/flat-list? config)
                             (assoc :hide-children? true))]
               (flat-list-item

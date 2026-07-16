@@ -6,29 +6,57 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.common.config :as common-config]))
 
-(deftest insert-blocks-reuses-known-right-order
+(deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "target"}
-                         {:block/title "right"}]}])
+                         {:block/title "original right"}]}])
         target (db-test/find-block-by-content @conn "target")
-        right (db-test/find-block-by-content @conn "right")]
-    (with-redefs [ldb/get-right-sibling
-                  (fn [_]
-                    (throw (js/Error. "Known right order should skip sibling lookup")))]
-      (let [{:keys [blocks]} (outliner-core/insert-blocks
-                              @conn
-                              [{:block/uuid (random-uuid)
-                                :block/title "inserted"}]
-                              target
-                              {:sibling? true
-                               :keep-uuid? true
-                               :end-order-state [:known (:block/order right)]})]
-        (is (= 1 (count blocks)))
-        (is (neg? (compare (:block/order target)
-                           (:block/order (first blocks)))))
-        (is (neg? (compare (:block/order (first blocks))
-                           (:block/order right))))))))
+        stale-right-order (:block/order (db-test/find-block-by-content @conn "original right"))]
+    (outliner-core/insert-blocks!
+     conn
+     [{:block/uuid (random-uuid)
+       :block/title "concurrent right"}]
+     target
+     {:sibling? true
+      :keep-uuid? true})
+    (let [target (db-test/find-block-by-content @conn "target")
+          current-right (ldb/get-right-sibling target)
+          {:keys [blocks]} (outliner-core/insert-blocks
+                            @conn
+                            [{:block/uuid (random-uuid)
+                              :block/title "inserted"}]
+                            target
+                            {:sibling? true
+                             :keep-uuid? true
+                             :end-order-state [:known stale-right-order]})
+          inserted (first blocks)]
+      (is (= "concurrent right" (:block/title current-right)))
+      (is (neg? (compare (:block/order inserted) (:block/order current-right)))
+          "A stale renderer boundary must not place the new block after the current right sibling."))))
+
+(deftest insert-blocks-finds-right-order-on-1k-sibling-page
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks (mapv (fn [idx]
+                                {:block/title (str "block " idx)})
+                              (range 1000))}])
+        target (db-test/find-block-by-content @conn "block 0")
+        insert! #(outliner-core/insert-blocks
+                  @conn
+                  [{:block/uuid (random-uuid)
+                    :block/title "inserted"}]
+                  target
+                  {:sibling? true
+                   :keep-uuid? true})
+        _ (insert!)
+        started-at (.now js/performance)
+        {:keys [blocks]} (insert!)
+        elapsed-ms (- (.now js/performance) started-at)
+        right (ldb/get-right-sibling target)]
+    (is (neg? (compare (:block/order (first blocks)) (:block/order right))))
+    (is (< elapsed-ms 100)
+        (str "1k sibling insertion order lookup took " elapsed-ms "ms"))))
 
 (deftest blocks-with-level-handles-10k-deep-tree
   (let [blocks (mapv (fn [id]
