@@ -50,6 +50,9 @@
 (defn invoke-hooks
   [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   (let [{:keys [initial-pages? end?]} tx-meta
+        response-handled? (and (:ui/handled-by-response? tx-meta)
+                               (= (:client-id tx-meta)
+                                  (:client-id @state/state)))
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}
         current-block-id (state/get-current-page)]
@@ -70,19 +73,20 @@
 
         :else
         (do
-          (let [updated-ids (set (map :block/uuid blocks))
-                deleted-ids (set deleted-block-uuids)
-                tx-id (:db-sync/tx-id tx-meta)]
-            (state/set-state! :db/latest-transacted-entity-uuids
-                              {:updated-ids updated-ids
-                               :deleted-ids deleted-ids
-                               :entity-tx-ids (zipmap (into updated-ids deleted-ids)
-                                                      (repeat tx-id))
-                               :page-window-refresh? (structural-outliner-op?
-                                                      (:outliner-op tx-meta))
-                               :tx-id tx-id}
-                              :changed-paths (refresh-state-paths
-                                              (into updated-ids deleted-ids))))
+          (when-not response-handled?
+            (let [updated-ids (set (map :block/uuid blocks))
+                  deleted-ids (set deleted-block-uuids)
+                  tx-id (:db-sync/tx-id tx-meta)]
+              (state/set-state! :db/latest-transacted-entity-uuids
+                                {:updated-ids updated-ids
+                                 :deleted-ids deleted-ids
+                                 :entity-tx-ids (zipmap (into updated-ids deleted-ids)
+                                                        (repeat tx-id))
+                                 :page-window-refresh? (structural-outliner-op?
+                                                        (:outliner-op tx-meta))
+                                 :tx-id tx-id}
+                                :changed-paths (refresh-state-paths
+                                                (into updated-ids deleted-ids)))))
 
           (when (and current-block-id
                      (some (fn [block]
@@ -103,7 +107,8 @@
 
           (when-not (:graph/importing @state/state)
 
-            (let [edit-block-f (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta))]
+            (let [edit-block-f (when-not response-handled?
+                                 (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta)))]
               (when-not (:skip-refresh? tx-meta)
                 (react/refresh! repo affected-keys))
               (when edit-block-f

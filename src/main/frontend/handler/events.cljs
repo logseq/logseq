@@ -485,12 +485,7 @@
 
 ;; db-worker -> UI
 (defevent! :db/sync-changes [[_ data]]
-  (let [tx-meta (:tx-meta data)
-        local-outliner-op? (and (:ui/handled-by-response? tx-meta)
-                                (= (:client-id tx-meta)
-                                   (:client-id @state/state)))]
-    (when-not local-outliner-op?
-      (pipeline/invoke-hooks data)))
+  (pipeline/invoke-hooks data)
   nil)
 
 (defevent! :db/export-sqlite [_]
