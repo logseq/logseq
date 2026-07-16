@@ -56,10 +56,6 @@
       (edit-block-f rows)
       (edit-block-f))))
 
-(defn- outliner-ops-need-page-tree?
-  [_ops]
-  false)
-
 (defn- outliner-ops-need-page-window-refresh?
   [ops]
   (boolean (some (comp outliner-pipeline/structural-outliner-op? first) ops)))
@@ -135,7 +131,7 @@
     (op-block-uuids ops)))
 
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta page-tree page-window affected-page-uuids]
+  [ops tx-meta page-window affected-page-uuids]
   (let [started-at (now-ms)
         current-page-uuid (get-in page-window [:root :block/uuid])
         affected-page-uuids (disj (set affected-page-uuids) current-page-uuid)
@@ -163,10 +159,7 @@
                     (assoc :page-window page-window)
 
                     (:ui/updated-blocks tx-meta)
-                    (assoc :updated-blocks (:ui/updated-blocks tx-meta))
-
-                    (and page-tree (outliner-ops-need-page-tree? ops))
-                    (assoc :page-tree page-tree))
+                    (assoc :updated-blocks (:ui/updated-blocks tx-meta)))
             changed-paths (outliner-pipeline/refresh-state-paths changed-ids)
             prepared-at (now-ms)]
         (state/set-state! :db/latest-transacted-entity-uuids
@@ -197,7 +190,6 @@
       (outliner-op/apply-ops! conn ops opts)
       (let [started-at (now-ms)
             perf-id (random-uuid)
-            page-tree-requested? (outliner-ops-need-page-tree? ops)
             opts' (-> opts
                       ensure-local-op-tx-id
                       (assoc
@@ -224,13 +216,13 @@
                             (state/remove-edit-block-fn! (:editor/edit-block-fn-id opts'))
                             (throw error))))]
         (p/let [response (request)
-                {:keys [result page-tree page-window updated-blocks affected-page-uuids perf]} response
+                {:keys [result page-window updated-blocks affected-page-uuids perf]} response
                 worker-returned-at (now-ms)]
           (let [ui-refresh-perf (refresh-worker-op-blocks!
                                  ops
                                  (cond-> opts'
                                    updated-blocks (assoc :ui/updated-blocks updated-blocks))
-                                 page-tree page-window affected-page-uuids)
+                                 page-window affected-page-uuids)
                 state-updated-at (now-ms)]
             (on-next-frame!
              (fn []
@@ -240,7 +232,6 @@
                  :perf-id perf-id
                  :op-names (mapv first ops)
                  :op-count (count ops)
-                 :page-tree-requested? page-tree-requested?
                  :page-window-returned? (boolean page-window)
                  :page-window-offset (:offset page-window)
                  :page-window-total-count (:total-count page-window)

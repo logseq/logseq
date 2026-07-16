@@ -206,11 +206,14 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 12. Page-tree response plumbing is dead code
 
 - **Severity:** Minor
+- **Status:** Removed and verified in the commit containing this report update
 - **Category:** Repository convention
-- **Location:** `src/main/frontend/db/transact.cljs:60`
+- **Location:** `src/main/frontend/db/transact.cljs:133`
 - **Issue:** `outliner-ops-need-page-tree?` always returns `false`, but the transaction path still computes flags, destructures `page-tree`, passes it through refresh functions, and retains an impossible branch.
 - **Impact:** The core transaction path advertises two refresh modes although only page-window refresh is active.
-- **Suggestion:** Remove the predicate and all page-tree response plumbing until a real operation requires it.
+- **Reproduction:** Repository search found no worker producer for an outliner `page-tree` response and no sender for `:ui/include-page-tree?`. The existing unit tests explicitly proved every operation returned false and every supplied page tree was discarded. A source-contract RED then failed on all three dead-path markers.
+- **Fix:** Removed the constant predicate, response destructuring, refresh argument and impossible assoc, perf flag, and unused worker compatibility key. The content and structural tests now exercise the actual updated-block/page-window paths directly.
+- **Verification:** The source-contract GREEN passed 3 assertions. `frontend.db.transact-test` passed 13 tests and 42 assertions, remove-UI-DB passed 167/345, and worker DB core passed 161/429. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains outside this change.
 
 ---
 
@@ -374,6 +377,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: one deps/outliner pure helper owns the tree algorithm; caller-specific tx-id behavior is explicit
   - regression: deps tree 1/3, frontend outliner 32/232, and remove-UI-DB 166/342, all passed
   - lint: changed tree and test files — 0 errors, 0 warnings
+- Finding 12 dead page-tree remediation:
+  - RED: source contract found the constant predicate, impossible state assoc, and unused perf flag
+  - GREEN: outliner completion has one page-window/updated-block refresh shape
+  - regression: transact 13/42, remove-UI-DB 167/345, and worker DB core 161/429, all passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range

@@ -14,6 +14,12 @@
     (is (not (string/includes? source "(group-by"))
         "The frontend adapter should not duplicate outliner tree construction.")))
 
+(deftest outliner-transaction-has-no-dead-page-tree-path-test
+  (let [source (source-for "src/main/frontend/db/transact.cljs")]
+    (is (not (string/includes? source "outliner-ops-need-page-tree?")))
+    (is (not (string/includes? source "page-tree-requested?")))
+    (is (not (string/includes? source "(assoc :page-tree page-tree)")))))
+
 (defn- source-file-exists?
   [relative-file]
   (fs/existsSync (node-path/join (.cwd js/process) relative-file)))
