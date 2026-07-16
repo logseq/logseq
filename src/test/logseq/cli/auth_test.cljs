@@ -250,6 +250,26 @@
                    (is false (str "unexpected error: " e))))
         (p/finally (fn [] (done))))))
 
+(deftest test-login-with-password-surfaces-cognito-message-from-error-body
+  (async done
+    (-> (p/with-redefs [auth/cognito-initiate-auth! (fn [_creds]
+                                                      (p/rejected
+                                                       (ex-info "http request failed (400)"
+                                                                {:code   :http-error
+                                                                 :status 400
+                                                                 :body   (js/JSON.stringify
+                                                                          #js {"__type" "NotAuthorizedException"
+                                                                               "message" "Incorrect username or password."})})))]
+          (-> (auth/login-with-password! {:user "user@example.com" :pass "wrong"})
+              (p/then (fn [_]
+                        (is false "expected password login to reject")))
+              (p/catch (fn [e]
+                         (is (= :password-login-failed (-> e ex-data :code)))
+                         (is (= "Incorrect username or password." (ex-message e)))))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))))
+        (p/finally (fn [] (done))))))
+
 (deftest test-login-routes-to-password-flow-when-user-and-pass-provided
   (async done
     (let [password-calls (atom [])

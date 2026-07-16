@@ -484,9 +484,17 @@
                    :sub        (:sub auth-data)
                    :updated-at (:updated-at auth-data)}))
         (p/catch (fn [error]
-                   (let [data (ex-data error)]
+                   (let [data (ex-data error)
+                         body-parsed (try
+                                       (some-> (:body data) parse-json)
+                                       (catch :default _
+                                         nil))
+                         message (or (:message body-parsed)
+                                     (:Message body-parsed)
+                                     (ex-message error)
+                                     "password login failed")]
                      (p/rejected
-                      (ex-info (or (ex-message error) "password login failed")
+                      (ex-info message
                                (merge {:code :password-login-failed}
                                       (when data {:context data}))
                                error))))))))
