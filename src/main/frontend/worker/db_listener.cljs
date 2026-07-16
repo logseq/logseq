@@ -4,6 +4,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.platform :as platform]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -109,6 +110,32 @@
     (swap! handler-timings conj
            [k (- (perf-time-ms) handler-started-at)])))
 
+(defn- report-post-commit-error!
+  [repo tx-meta stage error]
+  (let [data {:repo repo
+              :stage stage
+              :outliner-op (:outliner-op tx-meta)
+              :error error}]
+    (log/error :db-worker/post-commit-handler-failed data)
+    (try
+      (platform/post-message!
+       (platform/current)
+       :capture-error
+       {:error error
+        :payload (dissoc data :error)})
+      (catch :default report-error
+        (log/error :db-worker/report-post-commit-handler-failed
+                   {:repo repo
+                    :stage stage
+                    :error report-error})))))
+
+(defn- run-post-commit!
+  [repo tx-meta stage f]
+  (try
+    (f)
+    (catch :default error
+      (report-post-commit-error! repo tx-meta stage error))))
+
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
   (let [handlers (if (seq handler-keys)
@@ -128,16 +155,20 @@
                                                (not (:batch-tx-report? tx-meta)))]
                      (when update-checksum?
                        (let [started-at (perf-time-ms)]
-                         (db-sync/update-local-sync-checksum! repo tx-report)
+                         (run-post-commit!
+                          repo tx-meta :update-checksum
+                          #(db-sync/update-local-sync-checksum! repo tx-report))
                          (let [checksum-at (perf-time-ms)
                                opt {:repo repo}
                                handler-timings (atom [])]
                            (when persist-local-tx-handler
-                             (invoke-listener-handler! handler-timings
-                                                       :db-sync
-                                                       persist-local-tx-handler
-                                                       opt
-                                                       tx-report))
+                             (run-post-commit!
+                              repo tx-meta :persist-local-tx
+                              #(invoke-listener-handler! handler-timings
+                                                        :db-sync
+                                                        persist-local-tx-handler
+                                                        opt
+                                                        tx-report)))
                            (let [persist-at (perf-time-ms)
                                  sync-result (when sync-db-to-main-thread?
                                                (main-thread-sync-result repo conn tx-report))
