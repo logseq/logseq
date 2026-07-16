@@ -2223,12 +2223,15 @@
    :block.temp/load-status :self
    :block.temp/has-children? has-children?})
 
-(defn- page-window-block-uuids
-  [db id-or-page-name opts]
+(defn- page-window-before-op
+  [db id-or-page-name opts response-limit]
   (when-let [root (resolve-block-entity db id-or-page-name)]
-    (into #{}
-          (map (comp :block/uuid :block))
-          (:entries (flat-child-block-window db root opts)))))
+    (let [{:keys [entries offset total-count]}
+          (flat-child-block-window db root opts)]
+      {:block-uuids (into #{}
+                          (map (comp :block/uuid :block))
+                          entries)
+       :bottom? (>= (+ offset response-limit) total-count)})))
 
 (defn- get-page-blocks-window-response
   ([repo id-or-page-name opts]
@@ -2884,6 +2887,23 @@
   (when (and goog.DEBUG (:perf-id data))
     (log/info :db-worker/outliner-op-perf data)))
 
+(defn- entity-page
+  [entity]
+  (if (ldb/page? entity)
+    entity
+    (:block/page entity)))
+
+(defn- collect-affected-page-uuids
+  [db block-uuids]
+  (let [blocks (keep #(d/entity db [:block/uuid %]) block-uuids)
+        pages (keep entity-page blocks)
+        link-targets (into #{} (concat blocks pages))]
+    (into (into #{} (map :block/uuid) pages)
+          (comp
+           (mapcat #(d/datoms db :avet :block/link (:db/id %)))
+           (keep #(some-> (d/entity db (:e %)) entity-page :block/uuid)))
+          link-targets)))
+
 (def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
   (let [conn (or (worker-state/get-datascript-conn repo)
@@ -2898,11 +2918,13 @@
             page-window-offset (:virtual/offset opts)
             render-block-uuids (:ui/render-block-uuids opts)
             row-data-block-ids (:ui/row-data-block-ids opts)
-            previous-window-block-uuids
+            previous-window
             (when page-id
-              (page-window-block-uuids @conn page-id
-                                       {:offset page-window-offset
-                                        :limit page-block-window-default-limit}))
+              (page-window-before-op @conn page-id
+                                     {:offset page-window-offset
+                                      :limit page-block-window-default-limit}
+                                     (inc page-block-window-default-limit)))
+            previous-window-block-uuids (:block-uuids previous-window)
             opts (dissoc opts :ui/page-id :ui/editor-info
                          :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
             _ (worker-undo-redo/set-pending-editor-info! repo editor-info)
@@ -2912,23 +2934,21 @@
                     (outliner-op/apply-ops! conn ops opts))
             applied-at (perf-time-ms)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
-            affected-page-uuids (into #{}
-                                      (keep (fn [block-uuid]
-                                              (some-> (d/entity @conn [:block/uuid block-uuid])
-                                                      :block/page
-                                                      :block/uuid)))
-                                      render-block-uuids)
+            affected-page-uuids (collect-affected-page-uuids @conn render-block-uuids)
             updated-blocks (when (seq row-data-block-ids)
                              (into []
                                    (keep (fn [block-id]
                                            (:block (get-block-and-children @conn block-id {:children? false}))))
                                    row-data-block-ids))
             page-window (when page-id
-                          (get-page-blocks-window-response repo page-id
-                                                           {:offset page-window-offset
-                                                            :limit (inc page-block-window-default-limit)}
-                                                           (not-empty render-block-uuids)
-                                                           previous-window-block-uuids))
+                          (get-page-blocks-window-response
+                           repo page-id
+                           (cond-> {:offset page-window-offset
+                                    :limit (inc page-block-window-default-limit)}
+                             (:bottom? previous-window)
+                             (assoc :anchor :bottom))
+                           (not-empty render-block-uuids)
+                           previous-window-block-uuids))
             page-window-at (perf-time-ms)
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}

@@ -1,7 +1,7 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
-  (:require [frontend.state :as state]
-            [frontend.modules.outliner.pipeline :as outliner-pipeline]
+  (:require [frontend.modules.outliner.pipeline :as outliner-pipeline]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.outliner.op :as outliner-op]
@@ -134,9 +134,10 @@
   [ops tx-meta page-window affected-page-uuids]
   (let [started-at (now-ms)
         current-page-uuid (get-in page-window [:root :block/uuid])
-        affected-page-uuids (disj (set affected-page-uuids) current-page-uuid)
+        all-affected-page-uuids (set affected-page-uuids)
+        affected-page-uuids (disj all-affected-page-uuids current-page-uuid)
         affected-ids (op-block-uuids ops)
-        changed-ids (into affected-ids affected-page-uuids)
+        changed-ids (into affected-ids all-affected-page-uuids)
         deleted-ids (->> ops
                          (filter #(= :delete-blocks (first %)))
                          (mapcat (comp first second))

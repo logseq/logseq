@@ -134,6 +134,7 @@
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
       (is (= #{target-page-id} (:affected-page-uuids latest)))
+      (is (= tx-id (get-in latest [:entity-tx-ids current-page-id])))
       (is (= tx-id (get-in latest [:entity-tx-ids target-page-id]))))))
 
 (deftest row-data-block-ids-use-worker-rows-for-content-only-test
