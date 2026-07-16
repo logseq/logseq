@@ -1728,13 +1728,29 @@ let route_comment_candidate invoke_config repo graph agent_name config
     pure (Some routed)
   else pure None
 
+let comment_candidate_ids payload =
+  value_list (Edn_util.get payload "tx-data")
+  |> Vec.filter_map (fun datom ->
+         match datom with
+         | Melange_edn_melange.Any
+             (Melange_edn_melange.Tagged ("datascript/Datom", fields)) -> (
+             match Edn_util.as_vector fields with
+             | Some fields -> (
+                 match
+                   ( Option.bind (Vec.nth_opt fields 0) Edn_util.as_int64,
+                     Option.bind (Vec.nth_opt fields 1) Edn_util.as_keyword,
+                     Option.bind (Vec.nth_opt fields 4) Edn_util.as_bool )
+                 with
+                 | Some block_id, Some attr, Some true
+                   when strip_keyword_prefix attr = "block/title" ->
+                     Some block_id
+                 | _ -> None)
+             | None -> None)
+         | _ -> None)
+
 let route_comment_candidates invoke_config repo graph agent_name config
-    master_session payload =
+    master_session candidate_ids =
   let open Cli_effect in
-  let candidate_ids =
-    value_list (Edn_util.get payload "comment-route-candidate-ids")
-    |> Vec.filter_map Edn_util.as_int64
-  in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure acc
@@ -2081,9 +2097,10 @@ let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
           let process_graph_changes event_type payload =
             if event_type = sync_db_changes_event_type then (
               emit_bridge_log mode "got graph changes: sync-db-changes";
+              let candidate_ids = comment_candidate_ids payload in
               let* _routed_comments =
                 route_comment_candidates invoke_config repo graph agent_name
-                  config master_session payload
+                  config master_session candidate_ids
               in
               let* _routed_tasks =
                 route_current_tasks invoke_config repo graph agent_name config
