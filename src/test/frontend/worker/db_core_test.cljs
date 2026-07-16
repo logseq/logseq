@@ -1,5 +1,6 @@
 (ns frontend.worker.db-core-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -334,6 +335,93 @@
              (str "The new virtual row must be renderable before the editor focuses it: "
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
+
+(deftest insert-blocks-at-bottom-keeps-new-rows-in-window-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-ids (vec (repeatedly 150 random-uuid))
+           inserted-ids [(random-uuid) (random-uuid)]
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn
+                    (into [{:block/title "Page"
+                            :block/name "page"
+                            :block/uuid page-id
+                            :block/tags :logseq.class/Page}]
+                          (map-indexed
+                           (fn [idx block-id]
+                             {:block/title (str "Block " idx)
+                              :block/uuid block-id
+                              :block/page [:block/uuid page-id]
+                              :block/parent [:block/uuid page-id]
+                              :block/order (let [value (str "000" idx)]
+                                             (str "a" (subs value (- (count value) 3))))})
+                           block-ids)))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:insert-blocks
+                                    [(mapv (fn [block-id]
+                                             {:block/uuid block-id
+                                              :block/title ""})
+                                           inserted-ids)
+                                     (peek block-ids)
+                                     {:sibling? true
+                                      :keep-uuid? true}]]]
+                                  {:ui/page-id page-id
+                                   :ui/render-block-uuids (set inserted-ids)
+                                   :virtual/offset 0})
+             page-window (:page-window response)
+             row-ids (set (map :block/uuid (:rows page-window)))]
+         (is (= 1 (:offset page-window))
+             "A window that was at the bottom must follow inserts that grow the page.")
+         (is (set/subset? (set inserted-ids) row-ids)
+             "Every inserted row must be renderable before its editor callback runs."))))))
+
+(deftest apply-outliner-ops-marks-link-container-pages-affected-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           source-page-id #uuid "00000000-0000-0000-0000-000000000001"
+           source-block-id #uuid "11111111-1111-1111-1111-111111111111"
+           container-page-id #uuid "22222222-2222-2222-2222-222222222222"
+           link-block-id #uuid "33333333-3333-3333-3333-333333333333"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Source"
+                           :block/name "source"
+                           :block/uuid source-page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title "Child"
+                           :block/uuid source-block-id
+                           :block/page [:block/uuid source-page-id]
+                           :block/parent [:block/uuid source-page-id]
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1}
+                          {:block/title "Container"
+                           :block/name "container"
+                           :block/uuid container-page-id
+                           :block/tags :logseq.class/Page}
+                          {:block/title ""
+                           :block/uuid link-block-id
+                           :block/page [:block/uuid container-page-id]
+                           :block/parent [:block/uuid container-page-id]
+                           :block/link [:block/uuid source-page-id]
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:save-block
+                                    [{:block/uuid source-block-id
+                                      :block/title "Updated"}
+                                     {}]]]
+                                  {:ui/page-id source-page-id
+                                   :ui/render-block-uuids #{source-block-id}})]
+         (is (= #{source-page-id container-page-id}
+                (:affected-page-uuids response))))))))
 
 (deftest apply-outliner-ops-rejects-missing-indent-parent-original-test
   (restoring-worker-state
