@@ -1,0 +1,50 @@
+(ns frontend.modules.outliner.pipeline-test
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
+            [frontend.db.react :as react]
+            [frontend.modules.outliner.pipeline :as pipeline]
+            [frontend.state :as state]))
+
+(deftest sync-change-event-does-not-skip-local-hooks
+  (let [source (.toString
+                (fs/readFileSync
+                 (node-path/join (.cwd js/process)
+                                 "src/main/frontend/handler/events.cljs")
+                 "utf8"))]
+    (is (not (string/includes? source "(when-not local-outliner-op?"))
+        "The direct worker response replaces UI publication, not transaction hooks.")
+    (is (string/includes? source "(pipeline/invoke-hooks data)"))))
+
+(deftest handled-local-response-skips-only-direct-response-work
+  (let [original-state @state/state
+        state-calls (atom [])
+        edit-callback-takes (atom [])
+        refresh-calls (atom [])
+        repo "test"
+        tx-meta {:client-id "client"
+                 :editor/edit-block-fn-id "edit"
+                 :ui/handled-by-response? true}]
+    (try
+      (reset! state/state {:client-id "client"})
+      (with-redefs [state/get-current-repo (constantly repo)
+                    state/get-current-page (constantly nil)
+                    state/set-state! (fn [& args]
+                                       (swap! state-calls conj args))
+                    state/take-edit-block-fn! (fn [id]
+                                                (swap! edit-callback-takes conj id)
+                                                nil)
+                    react/refresh! (fn [& args]
+                                     (swap! refresh-calls conj args))]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta tx-meta
+                                :affected-keys [:query]
+                                :blocks []})
+        (is (not-any? #(= :db/latest-transacted-entity-uuids (first %))
+                      @state-calls))
+        (is (some #(= :editor/start-pos (first %)) @state-calls))
+        (is (empty? @edit-callback-takes))
+        (is (= [[repo [:query]]] @refresh-calls)))
+      (finally
+        (reset! state/state original-state)))))
