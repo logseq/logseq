@@ -2,6 +2,7 @@
   "Transact outliner ops"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -14,6 +15,9 @@
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
             [logseq.outliner.op.construct :as op-construct]))
+
+(defkeywords
+  ::missing-parent-original {:doc "The linked-reference parent supplied to an outdent no longer exists."})
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -289,7 +293,11 @@
 (defn- resolve-indent-outdent-opts
   [db opts]
   (if-let [parent-original-uuid (get-in opts [:parent-original :block/uuid])]
-    (assoc opts :parent-original (d/entity db [:block/uuid parent-original-uuid]))
+    (let [parent-original (or (d/entity db [:block/uuid parent-original-uuid])
+                              (throw (ex-info "Missing outdent parent original"
+                                              {:type ::missing-parent-original
+                                               :block/uuid parent-original-uuid})))]
+      (assoc opts :parent-original parent-original))
     opts))
 
 (defn- ^:large-vars/cleanup-todo apply-op!
