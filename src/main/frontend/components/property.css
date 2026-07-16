@@ -406,6 +406,20 @@
   flex: 1 1 auto;
 }
 
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-truncate .multi-values.jtrigger > .select-item,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-truncate .multi-values.jtrigger > .select-item .page-ref,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-truncate .multi-values.jtrigger > .select-item .page-ref > span {
+  display: inline;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-truncate .multi-values.jtrigger > .select-item + span {
+  margin-right: 0.25rem;
+  margin-left: 0;
+}
+
 .positioned-properties.block-below .bottom-properties-row[data-expanded="true"] .property-value-inner[data-type=node] :is(.multi-values.jtrigger, .select-item, .page-ref, .block-title-wrap, .page-ref > span) {
   white-space: normal;
   overflow: visible;
