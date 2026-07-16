@@ -71,12 +71,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 3. The originating client skips the entire transaction pipeline
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Correctness
 - **Location:** `src/main/frontend/handler/events.cljs:487`, `src/main/frontend/db/transact.cljs:194`
 - **Issue:** `apply-outliner-ops` marks every local operation with `:ui/handled-by-response? true`. The matching client then skips all of `pipeline/invoke-hooks`, although the direct response path only publishes block/page-window state and runs the editor callback.
 - **Evidence:** A runtime event probe recorded zero `pipeline/invoke-hooks` calls for a handled response from the current client and one call for another client. The skipped pipeline still owns reactive-query refresh, deleted-sidebar cleanup, page rename/delete events, editor start-position reset, editing-title synchronization, and plugin DB transaction hooks. The direct response does not implement those responsibilities.
 - **Impact:** Local edits can leave linked references/custom queries, sidebar items, page lifecycle state, and plugin observers stale even though the block row itself refreshed.
-- **Suggestion:** Skip only the renderer publication already handled by the direct response. Preserve the remaining transaction-domain hooks through one explicit shared completion path.
+- **Fix:** `:db/sync-changes` now always enters `pipeline/invoke-hooks`. The pipeline recognizes a handled response from the originating client and skips only the two steps owned by the direct response: publishing `:db/latest-transacted-entity-uuids` and taking the queued editor callback. Reactive-query refresh, deleted-sidebar/page routing, editing-state reset, plugin hooks, and page lifecycle events continue through the one pipeline.
+- **Regression tests:** The event wiring contract rejects a local-client `when-not` guard. The pipeline behavior test verifies that a handled local response does not republish renderer state or take the editor callback, while it still resets editor start state and calls `react/refresh!`.
+- **Verification:** `frontend.modules.outliner.pipeline-test` passed 2 tests and 6 assertions; `frontend.db.transact-test` passed 12 tests and 45 assertions; `frontend.remove-ui-db-test` passed 165 tests and 340 assertions. CLJS lint passed for the event, pipeline, and test files with 0 errors and 0 warnings.
 
 ---
 
@@ -299,6 +302,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: the same focused test — at most 101 parent-index scans with the same returned shape
   - regression: `frontend.worker.db-core-test` — 159 tests, 425 assertions, passed
   - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3071` outside the changed code
+- Finding 3 transaction-pipeline remediation:
+  - RED: the event wiring test found the local-client pipeline guard; the behavior test found duplicate renderer publication and premature editor-callback consumption
+  - GREEN: all local broadcasts enter the pipeline, which skips only direct-response-owned work
+  - regression: pipeline 2 tests/6 assertions, transact 12/45, remove-UI-DB 165/340, all passed
+  - lint: changed event, pipeline, and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
