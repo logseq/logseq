@@ -5,7 +5,8 @@
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.shared-service :as shared-service]
-            [frontend.worker.sync :as db-sync]))
+            [frontend.worker.sync :as db-sync]
+            [logseq.db :as ldb]))
 
 (deftest transit-safe-tx-meta-keeps-outliner-ops-test
   (testing "worker tx-meta sanitization should preserve semantic outliner ops"
@@ -50,7 +51,7 @@
     (is (= [:persist-local-tx :build-ui-refresh :broadcast-ui-refresh] @calls)
         "UI refresh work must wait until the local tx has been persisted.")))
 
-(deftest db-listener-broadcasts-lightweight-change-summary-test
+(deftest db-listener-broadcasts-processed-transaction-data-test
   (let [conn (d/create-conn)
         payloads (atom [])]
     (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
@@ -62,8 +63,13 @@
                                                            (swap! payloads conj payload)))]
       (db-listener/listen-db-changes! "repo" conn :handler-keys [:sync-db-to-main-thread :db-sync])
       (d/transact! conn [{:db/id -1 :block/title "hello"}] {:local-tx? true}))
-    (let [payload (first @payloads)]
-      (is (not (contains? payload :tx-data))
-          "UI sync broadcasts should not send tx-report tx-data.")
-      (is (= [1] (:changed-entity-ids payload)))
-      (is (= [1] (:comment-route-candidate-ids payload))))))
+    (let [payload (first @payloads)
+          roundtripped (-> payload ldb/write-transit-str ldb/read-transit-str)]
+      (is (= [[:block/title "hello"]]
+             (mapv (juxt :a :v) (:tx-data payload))))
+      (is (= [[:block/title "hello"]]
+             (mapv (juxt :a :v) (:tx-data roundtripped))))
+      (is (not-any? #(contains? payload %)
+                    [:changed-entity-ids
+                     :task-route-candidate-ids
+                     :comment-route-candidate-ids])))))

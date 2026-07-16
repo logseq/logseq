@@ -86,12 +86,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 4. The lightweight worker broadcast no longer satisfies the main-thread pipeline contract
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Data contract
 - **Location:** `src/main/frontend/worker/db_listener.cljs:90`, `src/main/frontend/modules/outliner/pipeline.cljs:29`
 - **Issue:** The worker broadcast intentionally omits `:tx-data`, but the receiving pipeline still consumes `:tx-data` for deleted sidebar entity IDs, editing-title synchronization, and plugin hook payloads.
 - **Evidence:** `main-thread-sync-result` builds `:data` from `tx-meta`, summary IDs, and `(dissoc result :tx-report)`; it never includes `(:tx-data tx-report')`. The receiver still passes `tx-data` to `deleted-block-db-ids`, `update-editing-block-title-if-changed!`, and `:plugin/hook-db-tx`. The new `changed-entity-ids`, `task-route-candidate-ids`, and `comment-route-candidate-ids` are not consumed by this pipeline.
 - **Impact:** Remote and other-tab transactions can leave sidebar/editor state stale and publish empty transaction payloads to plugins.
-- **Suggestion:** Define one explicit broadcast contract and migrate every consumer to it, or keep the required transaction data. Do not publish summary fields that have no receiver while silently dropping fields that are still required.
+- **Fix:** The worker broadcast now includes `:tx-data` from the processed `tx-report`, which is the same report used to build blocks, deleted entities, and affected query keys. The unused `changed-entity-ids`, task-route, and comment-route summaries and their second datom scan were removed. This restores one transaction contract for sidebar/editor/plugin consumers without a DB re-query, fallback, or parallel summary format.
+- **Regression test:** `frontend.worker.db-listener-test/db-listener-broadcasts-processed-transaction-data-test` verifies the title datom before and after a real Transit roundtrip and rejects the three unused summary fields. Before the fix the transaction data was empty; after the first contract fix the obsolete summary assertion provided a second RED before that code was removed.
+- **Verification:** `frontend.worker.db-listener-test` passed 4 tests and 8 assertions; `frontend.worker.pipeline-test` passed 20 tests and 98 assertions; `frontend.modules.outliner.pipeline-test` passed 2 tests and 6 assertions. CLJS lint passed for the changed listener and test with 0 errors and 0 warnings.
 
 ---
 
@@ -307,6 +310,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: all local broadcasts enter the pipeline, which skips only direct-response-owned work
   - regression: pipeline 2 tests/6 assertions, transact 12/45, remove-UI-DB 165/340, all passed
   - lint: changed event, pipeline, and test files — 0 errors, 0 warnings
+- Finding 4 broadcast-contract remediation:
+  - RED: processed transaction datoms were absent from the main-thread payload; after restoring them, the payload still contained three unused summary contracts
+  - GREEN: the Transit-safe payload carries processed `tx-data` and no unused change-summary fields
+  - regression: listener 4 tests/8 assertions, worker pipeline 20/98, frontend pipeline 2/6, all passed
+  - lint: changed listener and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
