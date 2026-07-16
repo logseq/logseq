@@ -135,8 +135,7 @@
   (let [started-at (now-ms)
         current-page-uuid (get-in page-window [:root :block/uuid])
         affected-page-uuids (disj (set affected-page-uuids) current-page-uuid)
-        affected-ids (cond-> (op-block-uuids ops)
-                       (:ui/page-id tx-meta) (conj (:ui/page-id tx-meta)))
+        affected-ids (op-block-uuids ops)
         changed-ids (into affected-ids affected-page-uuids)
         deleted-ids (->> ops
                          (filter #(= :delete-blocks (first %)))
