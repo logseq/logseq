@@ -1729,6 +1729,13 @@ let route_comment_candidate invoke_config repo graph agent_name config
   else pure None
 
 let comment_candidate_ids payload =
+  let datom_added fields =
+    (* datascript.transit encodes added datoms as [e a v tx] and only
+       appends a fifth `false` element for retractions *)
+    match Option.bind (Vec.nth_opt fields 4) Edn_util.as_bool with
+    | Some false -> false
+    | _ -> true
+  in
   value_list (Edn_util.get payload "tx-data")
   |> Vec.filter_map (fun datom ->
          match datom with
@@ -1738,11 +1745,12 @@ let comment_candidate_ids payload =
              | Some fields -> (
                  match
                    ( Option.bind (Vec.nth_opt fields 0) Edn_util.as_int64,
-                     Option.bind (Vec.nth_opt fields 1) Edn_util.as_keyword,
-                     Option.bind (Vec.nth_opt fields 4) Edn_util.as_bool )
+                     Option.bind (Vec.nth_opt fields 1) Edn_util.as_keyword
+                   )
                  with
-                 | Some block_id, Some attr, Some true
-                   when strip_keyword_prefix attr = "block/title" ->
+                 | Some block_id, Some attr
+                   when strip_keyword_prefix attr = "block/title"
+                        && datom_added fields ->
                      Some block_id
                  | _ -> None)
              | None -> None)
