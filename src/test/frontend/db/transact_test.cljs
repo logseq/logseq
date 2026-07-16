@@ -37,16 +37,6 @@
              [:delete-closed-value [:logseq.property/status block-b]]
              [:batch-delete-property-value [[block-a block-b] :block/tags 4]]])))))
 
-(deftest outliner-ops-never-request-page-tree-test
-  (is (false? (#'db-transact/outliner-ops-need-page-tree?
-               [[:save-block [{:block/uuid (random-uuid)} {}]]])))
-  (is (false? (#'db-transact/outliner-ops-need-page-tree?
-               [[:insert-blocks [[{:block/uuid (random-uuid)}] (random-uuid) {}]]])))
-  (is (false? (#'db-transact/outliner-ops-need-page-tree?
-               [[:delete-blocks [[(random-uuid)] {}]]])))
-  (is (false? (#'db-transact/outliner-ops-need-page-tree?
-               [[:indent-outdent-blocks [[(random-uuid)] true {}]]]))))
-
 (deftest outliner-ops-refresh-page-window-only-for-structural-ops-test
   (is (false? (#'db-transact/outliner-ops-need-page-window-refresh?
                [[:save-block [{:block/uuid (random-uuid)} {}]]
@@ -70,7 +60,6 @@
                                 {}]]]
      {:db-sync/tx-id tx-id}
      nil
-     nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
@@ -78,16 +67,13 @@
       (is (true? (:page-window-refresh? latest)))
       (is (= tx-id (:tx-id latest))))))
 
-(deftest refresh-worker-op-blocks-skips-page-tree-for-content-ops-test
+(deftest refresh-worker-op-blocks-publishes-content-ops-test
   (let [block-id (random-uuid)
-        tx-id (random-uuid)
-        page-tree {:block {:block/uuid (random-uuid)}
-                   :children [{:block/uuid block-id}]}]
+        tx-id (random-uuid)]
     (state/set-state! :db/latest-transacted-entity-uuids {})
     (#'db-transact/refresh-worker-op-blocks!
      [[:save-block [{:block/uuid block-id} {}]]]
      {:db-sync/tx-id tx-id}
-     page-tree
      nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
@@ -95,22 +81,18 @@
       (is (= #{} (:deleted-ids latest)))
       (is (false? (:page-window-refresh? latest)))
       (is (= tx-id (:tx-id latest)))
-      (is (not (:page-children-stale? latest)))
-      (is (not (contains? latest :page-tree))))))
+      (is (not (:page-children-stale? latest))))))
 
-(deftest refresh-worker-op-blocks-skips-page-tree-for-structural-ops-test
+(deftest refresh-worker-op-blocks-publishes-structural-ops-test
   (let [block-id (random-uuid)
         target-id (random-uuid)
         tx-id (random-uuid)
-        page-tree {:block {:block/uuid target-id}
-                   :children [{:block/uuid block-id}]}
         page-window {:root {:block/uuid target-id}
                      :rows [{:db/id 1 :block/uuid block-id}]}]
     (state/set-state! :db/latest-transacted-entity-uuids {})
     (#'db-transact/refresh-worker-op-blocks!
      [[:insert-blocks [[{:block/uuid block-id}] target-id {}]]]
      {:db-sync/tx-id tx-id}
-     page-tree
      page-window
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
@@ -121,8 +103,7 @@
       (is (true? (:page-window-refresh? latest)))
       (is (= tx-id (:tx-id latest)))
       (is (= page-window (:page-window latest)))
-      (is (not (:page-children-stale? latest)))
-      (is (not (contains? latest :page-tree))))))
+      (is (not (:page-children-stale? latest))))))
 
 (deftest refresh-worker-op-blocks-keeps-cross-page-refresh-separate-test
   (let [block-id (random-uuid)
@@ -133,7 +114,6 @@
     (#'db-transact/refresh-worker-op-blocks!
      [[:indent-outdent-blocks [[block-id] true {}]]]
      {:db-sync/tx-id tx-id}
-     nil
      {:root {:block/uuid current-page-id}}
      #{current-page-id target-page-id})
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
