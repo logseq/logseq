@@ -448,10 +448,6 @@
                             :hint "Run `logseq login` first."
                             :auth-path (auth-path opts)})))))
 
-(defn- cognito-idp-endpoint
-  []
-  cognito-config/COGNITO-IDP-ENDPOINT)
-
 (defn- cognito-initiate-auth!
   [{:keys [user pass]}]
   (let [payload (js/JSON.stringify
@@ -460,28 +456,20 @@
                             "AuthParameters" {"USERNAME" user
                                               "PASSWORD" pass}}))]
     (-> (transport/request {:method  "POST"
-                             :url     (cognito-idp-endpoint)
+                             :url     cognito-config/COGNITO-IDP-ENDPOINT
                              :headers {"X-Amz-Target" "AWSCognitoIdentityProviderService.InitiateAuth"
                                        "Content-Type" "application/x-amz-json-1.1"
                                        "Accept"       "application/json"}
                              :body    payload
                              :timeout-ms 10000})
-        (p/then (fn [{:keys [status body]}]
-                  (let [parsed (parse-json body)]
-                    (if (= 200 status)
-                      (let [result (:AuthenticationResult parsed)]
-                        (when-not result
-                          (throw (ex-info "missing AuthenticationResult in response"
-                                          {:code :password-login-failed})))
-                        {:id_token      (:IdToken result)
-                         :access_token  (:AccessToken result)
-                         :refresh_token (:RefreshToken result)})
-                      (throw (ex-info "password login failed"
-                                      {:code    :password-login-failed
-                                       :message (or (:message parsed)
-                                                    (:Message parsed)
-                                                    "authentication failed")
-                                       :status  status})))))))))
+        (p/then (fn [{:keys [body]}]
+                  (let [result (:AuthenticationResult (parse-json body))]
+                    (when-not result
+                      (throw (ex-info "missing AuthenticationResult in response"
+                                      {:code :password-login-failed})))
+                    {:id_token      (:IdToken result)
+                     :access_token  (:AccessToken result)
+                     :refresh_token (:RefreshToken result)}))))))
 
 (defn login-with-password!
   [opts]
