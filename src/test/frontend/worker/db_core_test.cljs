@@ -33,6 +33,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
@@ -333,6 +334,40 @@
              (str "The new virtual row must be renderable before the editor focuses it: "
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
+
+(deftest apply-outliner-ops-rejects-missing-indent-parent-original-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           parent-id #uuid "11111111-1111-1111-1111-111111111111"
+           child-id #uuid "22222222-2222-2222-2222-222222222222"
+           missing-id #uuid "33333333-3333-3333-3333-333333333333"
+           conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "Page"
+                          :block/uuid page-id
+                          :build/keep-uuid? true}
+                   :blocks [{:block/title "Parent"
+                             :block/uuid parent-id
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "Child"
+                                               :block/uuid child-id
+                                               :build/keep-uuid? true}]}]}])]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [error (try
+                     (apply-ops! test-repo
+                                 [[:indent-outdent-blocks
+                                   [[child-id]
+                                    false
+                                    {:parent-original {:block/uuid missing-id}}]]]
+                                 {:ui/page-id page-id})
+                     nil
+                     (catch :default error
+                       error))]
+         (is (= :logseq.outliner.op/missing-parent-original (:type (ex-data error))))
+         (is (= parent-id
+                (get-in (d/entity @conn [:block/uuid child-id])
+                        [:block/parent :block/uuid]))))))))
 
 (deftest delete-block-returns-complete-new-window-row-test
   (restoring-worker-state
