@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.rtc-flows
   "Reactive RTC atoms."
-  (:require [frontend.flows :as flows]
+  (:require [frontend.config :as config]
+            [frontend.flows :as flows]
             [frontend.mobile.flows :as mobile-flows]
             [logseq.common.util :as common-util]))
 
@@ -57,7 +58,8 @@ conditions:
                         online? @flows/network-online?
                         now (common-util/time-ms)]
                     (when (and online?
-                               (some? (:email login-user))
+                               (or (some? (:email login-user))
+                                   (some? (config/local-sync-token)))
                                (some? graph-uuid)
                                (not rtc-lock)
                                (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data))
@@ -104,7 +106,8 @@ conditions:
   (let [state* (atom nil)
         timeout-id (atom nil)
         emit! (fn [event]
-                (when @flows/current-login-user
+                (when (or @flows/current-login-user
+                          (config/local-sync-token))
                   (when-let [id @timeout-id]
                     (js/clearTimeout id))
                   (reset! timeout-id (js/setTimeout #(reset! state* event) 50))))]
