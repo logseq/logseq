@@ -20,6 +20,31 @@
     (is (not (string/includes? source "Safety fallback: retry once"))
         "A failed batch must not repeat the same large request.")))
 
+(deftest block-loaders-preserve-worker-error-cause-test
+  (async done
+         (let [cause (js/Error. "worker failed")
+               block-id (random-uuid)
+               capture-error (fn [promise]
+                               (p/create
+                                (fn [resolve _reject]
+                                  (-> promise
+                                      (p/then resolve)
+                                      (p/catch resolve)))))]
+           (p/with-redefs [db-async/<fetch-blocks-from-worker-batched
+                           (fn [& _]
+                             (p/rejected cause))]
+             (-> (p/let [block-error (capture-error
+                                      (db-async/<get-block "test-repo" block-id))
+                         tree-error (capture-error
+                                     (db-async/<get-block-with-children "test-repo" block-id))]
+                   (is (= cause (ex-cause block-error)))
+                   (is (= cause (ex-cause tree-error)))
+                   (is (= {:block block-id} (ex-data block-error)))
+                   (is (= {:block block-id} (ex-data tree-error))))
+                 (p/catch (fn [error]
+                            (is false (str error))))
+                 (p/finally done))))))
+
 (deftest block-batching-bounds-worker-request-size-test
   (async done
          (let [repo "logseq_db_async_bounded_batch"
