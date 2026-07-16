@@ -22,6 +22,10 @@
         state-calls (atom [])
         edit-callback-takes (atom [])
         refresh-calls (atom [])
+        affected-keys [[:frontend.worker.react/block 1]
+                       [:frontend.worker.react/journals]
+                       [:frontend.worker.react/refs 2]
+                       [:custom :query]]
         repo "test"
         tx-meta {:client-id "client"
                  :editor/edit-block-fn-id "edit"
@@ -39,12 +43,14 @@
                                      (swap! refresh-calls conj args))]
         (pipeline/invoke-hooks {:repo repo
                                 :tx-meta tx-meta
-                                :affected-keys [:query]
+                                :affected-keys affected-keys
                                 :blocks []})
         (is (not-any? #(= :db/latest-transacted-entity-uuids (first %))
                       @state-calls))
         (is (some #(= :editor/start-pos (first %)) @state-calls))
         (is (empty? @edit-callback-takes))
-        (is (= [[repo [:query]]] @refresh-calls)))
+        (is (= [[repo [[:frontend.worker.react/refs 2]
+                       [:custom :query]]]]
+               @refresh-calls)))
       (finally
         (reset! state/state original-state)))))

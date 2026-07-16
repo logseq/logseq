@@ -47,6 +47,13 @@
               (:e d)))
           tx-data)))
 
+(defn- direct-response-affected-keys
+  [affected-keys]
+  (remove #(contains? #{:frontend.worker.react/block
+                        :frontend.worker.react/journals}
+                      (first %))
+          affected-keys))
+
 (defn invoke-hooks
   [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   (let [{:keys [initial-pages? end?]} tx-meta
@@ -110,7 +117,9 @@
             (let [edit-block-f (when-not response-handled?
                                  (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta)))]
               (when-not (:skip-refresh? tx-meta)
-                (react/refresh! repo affected-keys))
+                (react/refresh! repo (if response-handled?
+                                       (direct-response-affected-keys affected-keys)
+                                       affected-keys)))
               (when edit-block-f
                 (util/schedule edit-block-f)))
 
