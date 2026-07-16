@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { chatGptToolDescriptors } from "./chatgpt_app.mjs";
+import { uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
 import {
   ASSET_IMAGE_RESOURCE_URI,
   assertDisplayableImageMetadata,
@@ -12,6 +13,8 @@ import {
 } from "./asset_image.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
 import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.mjs";
+import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
+import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
@@ -44,7 +47,7 @@ async function handleMcp(request, env, ctx) {
     version: "1.0.0",
     request: async (options) => {
       if (!options.path.startsWith("/api/v1/")) {
-        throw new Error("Only Logseq semantic API paths are allowed");
+        throw new Error("Only Logseq server API paths are allowed");
       }
       const url = semanticRequestUrl(options, request.url);
       const headers = {};
@@ -78,6 +81,47 @@ async function handleMcp(request, env, ctx) {
     description: "Renders a Logseq image asset returned by the image asset tool.",
     mimeType: "text/html;profile=mcp-app",
   }, assetImageResource);
+
+  server.registerTool("upload_asset", {
+    title: "Upload Logseq asset",
+    description: "Upload an original ChatGPT attachment to a Logseq DB graph.",
+    inputSchema: {
+      graphId: z.string(),
+      file: z.object({
+        download_url: z.string(),
+        file_id: z.string(),
+        mime_type: z.string().optional(),
+        file_name: z.string().optional(),
+      }),
+      pageId: z.string().optional(),
+      title: z.string().optional(),
+    },
+    outputSchema: {
+      uuid: z.string(),
+      title: z.string(),
+      type: z.string(),
+      size: z.number().int().nonnegative(),
+      checksum: z.string(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    _meta: {
+      "openai/fileParams": ["file"],
+    },
+  }, (input) => uploadChatGptAsset(input, {
+    origin: new URL(request.url).origin,
+    authorization,
+    env,
+    ctx,
+    workerFetch: worker.fetch.bind(worker),
+  }).then((result) => ({
+    structuredContent: result,
+    content: [{ type: "text", text: `Uploaded Logseq asset ${result.title} (${result.uuid}).` }],
+  })));
 
   server.registerTool("get_asset_image", {
     title: "Display Logseq image asset",
@@ -130,6 +174,8 @@ async function handleMcp(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    const challengeResponse = openAiAppsChallengeResponse(request, env);
+    if (challengeResponse) return challengeResponse;
     const docsResponse = apiDocsResponse(path, apiDocsHtml);
     if (docsResponse) return docsResponse;
     if (path === "/.well-known/oauth-protected-resource" ||
@@ -137,7 +183,7 @@ export default {
       return protectedResourceMetadata(request, env);
     }
     if (path === "/mcp/icon.png") return logseqIconResponse();
-    if (path === "/mcp") return handleMcp(request, env, ctx);
+    if (path === "/mcp") return handleMcp(ensureMcpAcceptHeader(request), env, ctx);
     return worker.fetch(request, env, ctx);
   },
 };

@@ -2061,19 +2061,28 @@
                                    (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
-(defn- journal-file-name-uuid-entry
-  [{:keys [path]}]
+(defn- journal-file-title
+  [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
-    (when-let [[_ journal-title] (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
-                                          normalized-path)]
-      (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
-        [journal-title (common-uuid/gen-uuid :journal-page-uuid journal-day)]))))
+    (second (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
+                     normalized-path))))
 
-(defn- index-journal-file-name-uuids!
+(defn- journal-page-name-uuid-entries
+  [{:keys [path]}]
+  (when-let [journal-title (journal-file-title path)]
+    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
+      (let [journal-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+            canonical-page-name (-> journal-day
+                                    (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                                    common-util/page-name-sanity-lc)]
+        [[journal-title journal-uuid]
+         [canonical-page-name journal-uuid]]))))
+
+(defn- index-journal-page-name-uuids!
   [doc-files import-state]
-  (swap! (:journal-file-name-uuids import-state)
+  (swap! (:journal-page-name-uuids import-state)
          merge
-         (into {} (keep journal-file-name-uuid-entry) doc-files)))
+         (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
@@ -2209,10 +2218,10 @@
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [journal-file-name-uuids @(:journal-file-name-uuids import-state)
+  (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
-                                          (contains? journal-file-name-uuids (:block/name %))))
+                                          (contains? journal-page-name-uuids (:block/name %))))
                             ;; remove unused property pages unless the page has content
                             (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
                                                      (keyword (:block/name %)))
@@ -2231,7 +2240,7 @@
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-file-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
@@ -2340,8 +2349,8 @@
    :property-schemas (atom {})
    ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
    :all-existing-page-uuids (atom {})
-   ;; Map of legacy journal file titles like "2026_04_01" to their standard journal page uuids.
-   :journal-file-name-uuids (atom {})
+   ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
+   :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
    :all-idents (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
@@ -2481,6 +2490,7 @@
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
   (let [format (common-util/get-format file)
+        journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
                                  file-created-at (assoc :block/created-at file-created-at)
@@ -2492,7 +2502,9 @@
                                  :export-to-db-graph? true
                                  :filename-format :legacy}
                                 extract-options
-                                {:db db})
+                                {:db db
+                                 ;; File graph journals have a fixed path and filename independent of their display format.
+                                 :skip-journal? (not journal-file?)})
         extracted
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
@@ -2577,6 +2589,15 @@
         (p/recur (into tx-data block-tx-data) (rest blocks)))
       tx-data)))
 
+(defn- block-uuid-ref?
+  [ref]
+  (and (vector? ref)
+       (= :block/uuid (first ref))))
+
+(defn- block-uuid-index
+  [ref]
+  {:block/uuid (second ref)})
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2620,12 +2641,15 @@
                             (concat pages-tx'' classes-tx))
           block-ids (into [] (map (fn [block] {:block/uuid (:block/uuid block)})) blocks-tx)
           block-refs-ids (into [] (comp (mapcat :block/refs)
-                                        (filter (fn [ref] (and (vector? ref)
-                                                               (= :block/uuid (first ref)))))
-                                        (map (fn [ref] {:block/uuid (second ref)})))
+                                        (filter block-uuid-ref?)
+                                        (map block-uuid-index))
+                               blocks-tx)
+          block-link-ids (into [] (comp (map :block/link)
+                                        (filter block-uuid-ref?)
+                                        (map block-uuid-index))
                                blocks-tx)
           ;; To prevent "unique constraint" on datascript
-          blocks-index (set/union (set block-ids) (set block-refs-ids))
+          blocks-index (set/union (set block-ids) (set block-refs-ids) (set block-link-ids))
           ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
           ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
           tx' (into [] (comp cat (remove nil?))
@@ -2663,8 +2687,8 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:birthtime stat) (some-> stat .-birthtime))
-              modified-at (or (:mtime stat) (some-> stat .-mtime) (:last-modified-at file))
+              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
+              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
                                created-at (assoc :file-created-at (.getTime created-at))
@@ -2675,7 +2699,8 @@
       (p/catch (fn [error]
                  (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
                                :level :error
-                               :ex-data {:path path :error error}})))))
+                               :ex-data {:path path :error error}})
+                 (throw error)))))
 
 (defn- remove-block-ref-from-title
   [title block-uuid]
@@ -2701,6 +2726,14 @@
                          {:source-id (:e datom)
                           :ref-id (:v datom)
                           :ref-uuid (:block/uuid ref-entity)})))))
+        missing-link-datoms
+        (->> (d/datoms db :aevt :block/link)
+             (keep (fn [datom]
+                     (let [ref-entity (d/entity db (:v datom))]
+                       (when (placeholder-block-ref? ref-entity)
+                         {:source-id (:e datom)
+                          :ref-id (:v datom)
+                          :ref-uuid (:block/uuid ref-entity)})))))
         refs-by-source-id (group-by :source-id missing-ref-datoms)
         retract-ref-tx
         (mapcat (fn [[source-id refs]]
@@ -2708,6 +2741,10 @@
                          [:db/retract source-id :block/refs ref-id])
                        refs))
                 refs-by-source-id)
+        retract-link-tx
+        (map (fn [{:keys [source-id ref-id]}]
+               [:db/retract source-id :block/link ref-id])
+             missing-link-datoms)
         update-title-tx
         (keep (fn [[source-id refs]]
                 (let [source (d/entity db source-id)
@@ -2717,12 +2754,12 @@
                     [:db/add source-id :block/title title'])))
               refs-by-source-id)
         retract-placeholder-tx
-        (->> missing-ref-datoms
+        (->> (concat missing-ref-datoms missing-link-datoms)
              (map (juxt :ref-id :ref-uuid))
              distinct
              (map (fn [[ref-id ref-uuid]]
                     [:db/retract ref-id :block/uuid ref-uuid])))]
-    (concat retract-ref-tx update-title-tx retract-placeholder-tx)))
+    (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx)))
 
 (defn- cleanup-missing-block-refs!
   [conn]
@@ -2807,7 +2844,7 @@
                                    [(not (string/starts-with? (node-path/basename path) "hls__")) path])
                                  *doc-files)
                         (range 0 (count *doc-files)))]
-    (index-journal-file-name-uuids! doc-files (:import-state options))
+    (index-journal-page-name-uuids! doc-files (:import-state options))
     (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))
@@ -2822,7 +2859,8 @@
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
-                                 :ex-data {:error e}}))))))
+                                 :ex-data {:error e}})
+                   (throw e))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
@@ -3092,4 +3130,5 @@
               ((:notify-user options)
                {:msg (str "Import has unexpected error:\n" (.-message e))
                 :level :error
-                :ex-data {:error e}})))))
+                :ex-data {:error e}})
+              (throw e)))))

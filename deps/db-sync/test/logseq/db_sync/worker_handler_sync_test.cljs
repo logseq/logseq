@@ -983,7 +983,9 @@
                      (when (string? (:uuid create-body))
                        (let [asset (d/entity @conn [:block/uuid (uuid (:uuid create-body))])]
                          (is (= page-id (:block/uuid (:block/page asset))))
-                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))))
+                         (is (= #{:logseq.class/Asset} (set (map :db/ident (:block/tags asset)))))
+                         (is (= {:checksum checksum :type "png"}
+                                (:logseq.property.asset/remote-metadata asset)))))
                      (is (= 200 (.-status list-response)))
                      (is (= [(:uuid create-body)] (mapv :uuid (:assets list-body))))
                      (is (= 409 (.-status duplicate-response)))
@@ -2333,8 +2335,50 @@
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
 
-(deftest tx-batch-rejects-stale-delete-before-later-failure-test
-  (testing "stale delete-blocks entries are not reported as successfully applied"
+(deftest tx-batch-accepts-stale-delete-as-idempotent-test
+  (doseq [outliner-op [:delete-blocks :delete-page]]
+    (testing (str outliner-op " succeeds when the target is already absent")
+      (let [sql (test-sql/make-sql)
+            conn (storage/open-conn sql)
+            self #js {:sql sql
+                      :conn conn
+                      :schema-ready true}
+            stale-delete-tx-id (random-uuid)
+            missing-delete-uuid (random-uuid)
+            t-before (storage/get-t sql)
+            checksum-before (storage/get-checksum sql)
+            stale-delete-entry {:tx-id stale-delete-tx-id
+                                :tx (protocol/tx->transit
+                                     [[:db/retractEntity [:block/uuid missing-delete-uuid]]])
+                                :outliner-op outliner-op}
+            changed-messages (atom [])
+            response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                   (swap! changed-messages conj payload))]
+                       (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
+        (is (= "tx/batch/ok" (:type response)))
+        (is (= t-before (:t response)))
+        (is (= checksum-before (:checksum response)))
+        (is (empty? @changed-messages))))))
+
+(deftest tx-batch-rejects-empty-delete-input-test
+  (testing "an originally empty delete remains invalid"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          empty-delete-tx-id (random-uuid)
+          t-before (storage/get-t sql)
+          empty-delete-entry {:tx-id empty-delete-tx-id
+                              :tx (protocol/tx->transit [])
+                              :outliner-op :delete-blocks}
+          response (sync-handler/handle-tx-batch! self nil [empty-delete-entry] t-before)]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= empty-delete-tx-id (:failed-tx-id response))))))
+
+(deftest tx-batch-reports-stale-delete-success-before-later-failure-test
+  (testing "an idempotent delete is acknowledged before a later tx fails"
     (let [sql (test-sql/make-sql)
           conn (storage/open-conn sql)
           self #js {:sql sql
@@ -2360,8 +2404,8 @@
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
       (is (= t-before (:t response)))
-      (is (= stale-delete-tx-id (:failed-tx-id response)))
-      (is (nil? (:success-tx-ids response)))
+      (is (= later-failed-tx-id (:failed-tx-id response)))
+      (is (= [stale-delete-tx-id] (:success-tx-ids response)))
       (is (empty? @changed-messages)))))
 
 (deftest tx-batch-ignores-empty-rebase-entry-test

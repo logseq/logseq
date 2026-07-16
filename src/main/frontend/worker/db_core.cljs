@@ -872,6 +872,16 @@
                (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+
+(defn- sanitize-block-result
+  [result]
+  (cond-> result
+    (:block result)
+    (update :block common-util/remove-nils-non-nested)
+
+    (:children result)
+    (update :children common-util/fast-remove-nils)))
+
 (def ^:private get-blocks-with-cache
   (common.cache/cache-fn
    *get-blocks-cache
@@ -885,6 +895,7 @@
             (mapv (fn [{:keys [id opts]}]
                     (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
                       (-> (common-initial-data/get-block-and-children db id' opts)
+                          sanitize-block-result
                           (assoc :id id)))))
             ldb/write-transit-str)))))
 

@@ -813,7 +813,9 @@
                                      :block/tags #{:logseq.class/Asset}
                                      :logseq.property.asset/type asset-type
                                      :logseq.property.asset/size size
-                                     :logseq.property.asset/checksum checksum}
+                                     :logseq.property.asset/checksum checksum
+                                     :logseq.property.asset/remote-metadata {:checksum checksum
+                                                                            :type asset-type}}
                               _ (outliner-core/insert-blocks! conn [block] target
                                                               {:sibling? false :bottom? true
                                                                :keep-uuid? true})
