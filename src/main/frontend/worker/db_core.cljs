@@ -2223,32 +2223,27 @@
    :block.temp/load-status :self
    :block.temp/has-children? has-children?})
 
-(defn- include-expanded-descendants
-  [entries render-block-uuids expanded-block-uuids]
-  (when (or render-block-uuids (seq expanded-block-uuids))
-    (loop [result (or render-block-uuids #{})
-           expanded-levels []
-           [entry & more] entries]
-      (if entry
-        (let [level (:level entry)
-              expanded-levels (vec (take-while #(< % level) expanded-levels))
-              block-uuid (some-> entry :block :block/uuid)
-              result (cond-> result
-                       (seq expanded-levels) (conj block-uuid))
-              expanded-levels (cond-> expanded-levels
-                                (contains? expanded-block-uuids block-uuid) (conj level))]
-          (recur result expanded-levels more))
-        result))))
+(defn- page-window-block-uuids
+  [db id-or-page-name opts]
+  (when-let [root (resolve-block-entity db id-or-page-name)]
+    (into #{}
+          (map (comp :block/uuid :block))
+          (:entries (flat-child-block-window db root opts)))))
 
 (defn- get-page-blocks-window-response
   ([repo id-or-page-name opts]
    (get-page-blocks-window-response repo id-or-page-name opts nil nil))
-  ([repo id-or-page-name opts render-block-uuids expanded-block-uuids]
+  ([repo id-or-page-name opts render-block-uuids previous-window-block-uuids]
    (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
      (when-let [root (resolve-block-entity db id-or-page-name)]
        (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
-             render-block-uuids (include-expanded-descendants
-                                 entries render-block-uuids expanded-block-uuids)
+             render-block-uuids
+             (when (or render-block-uuids previous-window-block-uuids)
+               (into (or render-block-uuids #{})
+                     (keep (fn [{:keys [block]}]
+                             (when-not (contains? previous-window-block-uuids (:block/uuid block))
+                               (:block/uuid block))))
+                     entries))
              page-summary (worker-plain/attribute-value->plain db :block/page (:db/id root))
              rows (mapv (fn [{:keys [block] :as entry}]
                           (if (or (nil? render-block-uuids)
@@ -2902,15 +2897,12 @@
             page-id (:ui/page-id opts)
             page-window-offset (:virtual/offset opts)
             render-block-uuids (:ui/render-block-uuids opts)
-            expanded-block-uuids
-            (into #{}
-                  (mapcat (fn [[op [blocks]]]
-                            (when (= :collapse-expand-blocks op)
-                              (keep #(when (false? (:block/collapsed? %))
-                                       (:block/uuid %))
-                                    blocks))))
-                  ops)
             row-data-block-ids (:ui/row-data-block-ids opts)
+            previous-window-block-uuids
+            (when page-id
+              (page-window-block-uuids @conn page-id
+                                       {:offset page-window-offset
+                                        :limit page-block-window-default-limit}))
             opts (dissoc opts :ui/page-id :ui/include-page-tree? :ui/editor-info
                          :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
             _ (worker-undo-redo/set-pending-editor-info! repo editor-info)
@@ -2936,7 +2928,7 @@
                                                            {:offset page-window-offset
                                                             :limit (inc page-block-window-default-limit)}
                                                            (not-empty render-block-uuids)
-                                                           expanded-block-uuids))
+                                                           previous-window-block-uuids))
             page-window-at (perf-time-ms)
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}

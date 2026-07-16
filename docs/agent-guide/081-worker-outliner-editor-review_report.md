@@ -146,12 +146,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 8. Page-window rows have an implicit mixed shape that can publish blank blocks
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Data contract
-- **Location:** `src/main/frontend/worker/db_core.cljs:2199`, `src/main/frontend/components/page_window.cljs:7`
+- **Location:** `src/main/frontend/worker/db_core.cljs:2226`, `src/main/frontend/components/page_window.cljs:7`
 - **Issue:** `:rows` mixes render-complete rows and layout-only rows. The consumer guesses the shape from the presence of `:block/title`. If a structural refresh introduces a new layout-only row not present in the current window, there is no render data to merge into it.
-- **Evidence:** A runtime pure-function probe called `merge-layout` with current row A and a new layout-only row B. The published result contained B with UUID/order only and no `:block/title`.
+- **Evidence:** In addition to the original pure-function probe, a real worker transaction reproduced the contract failure: a page had 151 rows, the renderer window contained 150, and deleting one visible row pulled the final row into the response without `:block/title`.
 - **Impact:** Delete/move/indent around a long-page window edge can display a blank block until another full hydration request completes.
-- **Suggestion:** Use one explicit page-window row contract. Either always return render-complete visible rows or tag layout rows and require hydration before publishing them to the renderer.
+- **Fix:** The worker records the pre-transaction window membership and uses one rule for every structural operation: operation rows and rows newly entering the window receive complete render data; rows already present may remain layout-only and reuse their existing renderer data. This replaces the separate expand-descendant traversal and avoids hydrating or rerendering the whole 150-row window.
+- **Regression test:** `frontend.worker.db-core-test/delete-block-returns-complete-new-window-row-test` performs the real delete at the 150-row boundary and requires the newly visible row to carry `:block/title`. The existing insert and expand tests verify that their newly visible rows remain complete.
+- **Verification:** The focused RED failed on a layout-only row and the GREEN passed 2 assertions. Insert and expand coverage passed 3 assertions. The complete `frontend.worker.db-core-test` passed 161 tests and 429 assertions; `frontend.components.page-test` passed 3 tests and 3 assertions. The focused worker apply timing remained about 7ms. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains outside this change.
 
 ---
 
@@ -339,6 +342,12 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: DB completion follows state publication, while frame work is contained and request failures clean up by tx-id
   - regression: transact 14 tests/48 assertions and editor callback coverage 2/2, all passed
   - lint: changed transaction and test files — 0 errors, 0 warnings
+- Finding 8 page-window boundary remediation:
+  - RED: deleting one of 150 visible rows pulled a previously unseen row into the worker response without `:block/title`
+  - GREEN: transaction responses render operation rows and any row absent from the pre-transaction window
+  - regression: worker DB core 161 tests/429 assertions and page-window merge 3/3, all passed
+  - performance: the focused worker apply remained about 7ms; unchanged rows still reuse their renderer data
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range

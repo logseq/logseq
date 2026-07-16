@@ -334,6 +334,43 @@
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
 
+(deftest delete-block-returns-complete-new-window-row-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           get-window! (get-thread-api :thread-api/get-page-blocks-window)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-ids (vec (repeatedly 151 random-uuid))
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn
+                    (into [{:block/title "Page"
+                            :block/name "page"
+                            :block/uuid page-id
+                            :block/tags :logseq.class/Page}]
+                          (map-indexed
+                           (fn [idx block-id]
+                             {:block/title (str "Block " idx)
+                              :block/uuid block-id
+                              :block/page [:block/uuid page-id]
+                              :block/parent [:block/uuid page-id]
+                              :block/order (str idx)})
+                           block-ids)))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [current-window (get-window! test-repo page-id {:offset 0 :limit 150})
+             current-row-ids (set (map :block/uuid (:rows current-window)))
+             deleted-id (:block/uuid (first (:rows current-window)))
+             response (apply-ops! test-repo
+                                  [[:delete-blocks [[deleted-id] {}]]]
+                                  {:ui/page-id page-id
+                                   :ui/render-block-uuids #{deleted-id}
+                                   :virtual/offset 0})
+             new-row (some #(when-not (contains? current-row-ids (:block/uuid %)) %)
+                           (get-in response [:page-window :rows]))]
+         (is (some? new-row) "Deleting a visible row must pull the next row into the window.")
+         (is (contains? new-row :block/title)
+             "The newly visible row must be renderable without a second worker request."))))))
+
 (defn- fake-db
   ([]
    (fake-db {}))
