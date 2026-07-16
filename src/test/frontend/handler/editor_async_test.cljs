@@ -304,24 +304,37 @@
         deleted-block {:db/id 2
                        :block/uuid (random-uuid)
                        :block/title "deleted"}
+        tx-opts (atom nil)
         edit-call (atom nil)]
     (-> (p/with-redefs [db-async/<get-block-sibling
                         (fn [_repo block-id direction]
                           (is (= (:db/id deleted-block) block-id))
                           (is (= :left direction))
                           (p/resolved previous-block))
-                        db-transact/apply-outliner-ops (fn [& _] (p/resolved nil))
+                        db-transact/apply-outliner-ops (fn [_conn _ops opts]
+                                                        (reset! tx-opts opts)
+                                                        (p/resolved nil))
                         editor/edit-block! (fn [block pos]
                                              (reset! edit-call [block pos]))]
-          (editor/delete-blocks! "test-repo"
-                                 [(:block/uuid deleted-block)]
-                                 [deleted-block]
-                                 []
-                                 false))
-        (p/then
-         (fn [_]
-           (is (= [previous-block :max] @edit-call)
-               "Deletion should wait for the worker sibling lookup before restoring focus"))))))
+          (-> (editor/delete-blocks! "test-repo"
+                                     [(:block/uuid deleted-block)]
+                                     [deleted-block]
+                                     []
+                                     false)
+              (p/then
+               (fn [_]
+                 (is (nil? @edit-call)
+                     "Deletion should not focus before the renderer applies the response")
+                 (is (some? (:editor/edit-block-fn-id @tx-opts))
+                     "Deletion should tag its renderer callback with the transaction id")
+                 (let [edit-block-f (take-edit-block-fn! (:editor/edit-block-fn-id @tx-opts))]
+                   (is (fn? edit-block-f)
+                       "Deletion should queue a renderer callback")
+                   (when edit-block-f
+                     (edit-block-f)))
+                 (is (= [previous-block :max] @edit-call)
+                     "Deletion should restore focus from the renderer callback")))))
+        (p/finally #(state/set-state! :editor/edit-block-fn nil)))))
 
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files

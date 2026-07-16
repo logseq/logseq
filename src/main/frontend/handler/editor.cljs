@@ -1106,14 +1106,16 @@
     (let [block (first blocks)
           blocks' (block-handler/get-top-level-blocks blocks)
           mobile? (util/capacitor?)
-          transact-delete! (fn []
+          transact-delete! (fn [edit-block-fn-id]
                              (let [journals (and mobile? (filter entity/journal? blocks'))
                                    blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
                                (when (or (seq journals) (seq blocks))
                                  (ui-outliner-tx/transact!
-                                  (merge {:outliner-op :delete-blocks
-                                          :mobile-action-bar? mobile-action-bar?}
-                                         (block-handler/page-window-tx-meta (first blocks)))
+                                  (cond-> (merge {:outliner-op :delete-blocks
+                                                  :mobile-action-bar? mobile-action-bar?}
+                                                 (block-handler/page-window-tx-meta (first blocks)))
+                                    edit-block-fn-id
+                                    (assoc :editor/edit-block-fn-id edit-block-fn-id))
                                   (when (seq blocks)
                                     (outliner-op/delete-blocks! blocks nil))
                                   (when (seq journals)
@@ -1121,11 +1123,14 @@
                                       (outliner-op/delete-page! (:block/uuid journal))))))))]
       (if (not mobile?)
         (p/let [focus-block (<left-sibling-or-parent repo block)]
-          (p/do!
-           (transact-delete!)
-           (when focus-block
-             (edit-block! focus-block :max))))
-        (transact-delete!)))))
+          (let [edit-block-fn-id (when focus-block (random-uuid))]
+            (when edit-block-fn-id
+              (state/queue-edit-block-fn!
+               edit-block-fn-id
+               (fn [& _]
+                 (edit-block! focus-block :max))))
+            (transact-delete! edit-block-fn-id)))
+        (transact-delete! nil)))))
 
 (defn copy-block-ref!
   ([block-id]
