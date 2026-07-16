@@ -761,9 +761,10 @@ abc
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest update-asset-links-in-block-title
+  "Non-image and legacy fallback still convert markdown asset links to [[uuid]]."
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))
-    ;; Standard image link with metadata
+    ;; Standard image link with metadata (legacy path still supported)
     ["![greg-popovich-thumbs-up.png](../assets/greg-popovich-thumbs-up_1704749687791_0.png){:height 288, :width 100} says pop"
      "assets/greg-popovich-thumbs-up_1704749687791_0.png"]
     "[[UUID]] says pop"
@@ -777,6 +778,56 @@ abc
     ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
      "assets/subdir/partydino.gif"]
     "[[FIRST UUID]] and [[UUID]]"))
+
+(deftest strip-image-asset-links
+  (are [x expected]
+       (= expected (@#'gp-exporter/strip-image-asset-links (first x) [(second x)]))
+    ;; Image with metadata + trailing text
+    ["![greg-popovich-thumbs-up.png](../assets/greg-popovich-thumbs-up_1704749687791_0.png){:height 288, :width 100} says pop"
+     "assets/greg-popovich-thumbs-up_1704749687791_0.png"]
+    " says pop"
+
+    ;; Pure image link
+    ["![some-title](../assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png)"
+     "assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png"]
+    ""
+
+    ;; Strip only image links; keep existing page-ref text
+    ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
+     "assets/subdir/partydino.gif"]
+    "[[FIRST UUID]] and "))
+
+(deftest classify-image-assets
+  (let [img-uuid (random-uuid)
+        pdf-uuid (random-uuid)
+        gif-uuid (random-uuid)]
+    (is (= {:type :pure-single-image :uuid img-uuid}
+           (@#'gp-exporter/classify-image-assets
+            "![img](../assets/foo.png)"
+            {"assets/foo.png" img-uuid}
+            {img-uuid "png"}))
+        "Pure single image becomes pure-single-image")
+    (is (= {:type :images-present
+            :image-uuids [img-uuid]
+            :image-names ["assets/foo.png"]}
+           (@#'gp-exporter/classify-image-assets
+            "caption ![img](../assets/foo.png) more text"
+            {"assets/foo.png" img-uuid}
+            {img-uuid "png"}))
+        "Text + image becomes images-present")
+    (is (= {:type :images-present
+            :image-uuids [img-uuid gif-uuid]
+            :image-names ["assets/foo.png" "assets/bar.gif"]}
+           (@#'gp-exporter/classify-image-assets
+            "![a](../assets/foo.png) ![b](../assets/bar.gif)"
+            {"assets/foo.png" img-uuid "assets/bar.gif" gif-uuid}
+            {img-uuid "png" gif-uuid "gif"}))
+        "Multiple pure images become images-present")
+    (is (nil? (@#'gp-exporter/classify-image-assets
+               "[paper](../assets/paper.pdf)"
+               {"assets/paper.pdf" pdf-uuid}
+               {pdf-uuid "pdf"}))
+        "PDF-only blocks are not classified as image embeds")))
 
 (deftest-async import-missing-local-pdf-asset-link-is-ignored-quietly
   (let [graph-dir (write-temp-file-graph
@@ -1415,6 +1466,37 @@ abc
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Imported into Asset page")
+      (let [asset (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")
+            pure-image-embed (->> (d/q '[:find [(pull ?b [:block/title {:block/link [:block/uuid]}]) ...]
+                                         :in $ ?asset-uuid
+                                         :where
+                                         [?b :block/link ?l]
+                                         [?l :block/uuid ?asset-uuid]
+                                         [?b :block/page ?p]
+                                         [?p :block/journal-day 20240108]]
+                                       @conn
+                                       (:block/uuid asset))
+                                  first)]
+        (is (= {:block/title ""
+                :block/link {:block/uuid (:block/uuid asset)}}
+               pure-image-embed)
+            "Pure single-image block imports as a Node embed (:block/link)"))
+      (let [dino (db-test/find-block-by-content @conn "partydino")
+            mixed-parent (->> (d/q '[:find [(pull ?b [:block/title :block/uuid]) ...]
+                                     :in $ ?asset-uuid
+                                     :where
+                                     [?child :block/link ?l]
+                                     [?l :block/uuid ?asset-uuid]
+                                     [?child :block/parent ?b]]
+                                   @conn
+                                   (:block/uuid dino))
+                              first)]
+        (is (some? mixed-parent)
+            "Mixed text+image block creates a child Node embed for the image")
+        (is (string/includes? (:block/title mixed-parent) "tests an asset with a manual link")
+            "Mixed text+image parent keeps non-image text")
+        (is (not (string/includes? (:block/title mixed-parent) "partydino"))
+            "Mixed text+image parent no longer keeps image markdown"))
 
       ;; Annotations
       (is (= {:logseq.property.pdf/hl-color :logseq.property/color.blue
