@@ -1,5 +1,7 @@
 (ns logseq.db-sync.node.server
-  (:require ["http" :as http]
+  (:require ["crypto" :as node-crypto]
+            ["fs" :as fs]
+            ["http" :as http]
             ["path" :as node-path]
             ["ws" :as ws]
             [clojure.string :as string]
@@ -23,9 +25,40 @@
 
 (logging/install!)
 
+(defn resolve-local-token!
+  "Resolve the shared-secret token for local (no-Cognito) self-hosting.
+   Precedence: DB_SYNC_LOCAL_TOKEN env var; otherwise, when no Cognito issuer
+   is configured, a token persisted under the data dir, generated on first
+   run. Returns nil when Cognito auth is configured."
+  [cfg]
+  (let [env-token (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN") not-empty)]
+    (cond
+      (some? env-token)
+      env-token
+
+      (some? (:cognito-issuer cfg))
+      nil
+
+      :else
+      (let [token-file (node-path/join (:data-dir cfg) "local-token")
+            existing (when (fs/existsSync token-file)
+                       (some-> (fs/readFileSync token-file "utf8") string/trim not-empty))]
+        (or existing
+            (let [token (.toString (node-crypto/randomBytes 32) "hex")]
+              (fs/mkdirSync (:data-dir cfg) #js {:recursive true})
+              ;; 0600 — the token file is a credential
+              (fs/writeFileSync token-file token #js {:mode 384})
+              token))))))
+
+(defn- print-local-token! [cfg]
+  (let [token-file (node-path/join (:data-dir cfg) "local-token")]
+    (println "Local sync mode: no Cognito auth configured.")
+    (println (str "Access token: " (:local-token cfg)))
+    (println (str "(persisted at " token-file "; set DB_SYNC_LOCAL_TOKEN to override)"))))
+
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
-        local-token (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN"))
+        local-token (:local-token cfg)
         local-user-id (some-> js/process .-env (aget "DB_SYNC_LOCAL_USER_ID"))
         env (doto (js-obj)
               (aset "DB" index-db)
@@ -116,6 +149,10 @@
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        local-token (resolve-local-token! cfg)
+        cfg (cond-> cfg
+              local-token (assoc :local-token local-token))
+        _ (when local-token (print-local-token! cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))

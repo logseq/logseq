@@ -16,20 +16,29 @@ merge concurrent edits.
 
 ```bash
 cd deps/db-sync
-pnpm install
+pnpm install   # run at the repo root if you haven't already
 pnpm build:node-adapter
 
 DB_SYNC_PORT=8787 \
 DB_SYNC_DATA_DIR=~/logseq-sync-data \
-DB_SYNC_LOCAL_TOKEN=$(openssl rand -hex 32) \
 node worker/dist/node-adapter.js
 ```
 
-- `DB_SYNC_LOCAL_TOKEN` — the shared secret. When set, it is the **only**
-  accepted credential: Cognito/JWT verification is disabled and every
-  request maps to a single local user (`DB_SYNC_LOCAL_USER_ID`, default
-  `local-user`).
-- `DB_SYNC_DATA_DIR` — where graph databases and assets are stored.
+On startup without Cognito configuration the server enters **local mode**
+and prints its access token:
+
+```
+Local sync mode: no Cognito auth configured.
+Access token: 4f3c…9b21
+(persisted at ~/logseq-sync-data/local-token; set DB_SYNC_LOCAL_TOKEN to override)
+```
+
+- The token is generated on first run, persisted in the data dir, and
+  reused on every restart. Set `DB_SYNC_LOCAL_TOKEN` to choose your own.
+- In local mode the token is the **only** accepted credential: Cognito/JWT
+  verification is disabled and every request maps to a single local user
+  (`DB_SYNC_LOCAL_USER_ID`, default `local-user`).
+- `DB_SYNC_DATA_DIR` is the sync server's own private storage, not your graph folder. It holds the server's replica of each synced graph in its own layout (an index database, per-graph kvs SQLite files, uploaded assets). Your devices each keep their own local copy of the graph as usual; the server's data dir is just the hub they all reconcile against - it's like the server-side bucket, not a Logseq workspace.
 - Graph data lives only on this server and the devices; nothing is sent to
   Logseq's services.
 
@@ -42,7 +51,7 @@ On every device (desktop and mobile):
 
 1. Open **Settings → Sync Server URL**.
 2. Set the URL, e.g. `http://192.168.1.10:8787` (or your `https://` proxy).
-3. Set **Access token** to the same value as `DB_SYNC_LOCAL_TOKEN`.
+3. Set **Access token** to the token printed by the server.
 4. Save. No Logseq login is needed.
 
 Then on the device that has the graph, open the graph menu and choose

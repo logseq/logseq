@@ -127,14 +127,17 @@ Settings → Sync server together with the custom server URL:
 ```bash
 DB_SYNC_PORT=8787 \
 DB_SYNC_DATA_DIR=~/logseq-sync-data \
-DB_SYNC_LOCAL_TOKEN=$(openssl rand -hex 32) \
 node worker/dist/node-adapter.js
 ```
 
-When `DB_SYNC_LOCAL_TOKEN` is set it is the only accepted credential — JWT
-verification is disabled and every request maps to a single local user
-(`DB_SYNC_LOCAL_USER_ID`, default `local-user`). Only use this on a trusted
-network (LAN/VPN) or behind TLS.
+When no Cognito issuer is configured the adapter enters local mode: it
+generates an access token on first run, persists it at
+`<data-dir>/local-token`, and prints it at startup. Set
+`DB_SYNC_LOCAL_TOKEN` to use your own token instead. In local mode the
+token is the only accepted credential — JWT verification is disabled and
+every request maps to a single local user (`DB_SYNC_LOCAL_USER_ID`,
+default `local-user`). Only use this on a trusted network (LAN/VPN) or
+behind TLS.
 
 ### Tests
 
@@ -162,7 +165,7 @@ pnpm test:node-adapter
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
-| DB_SYNC_LOCAL_TOKEN | Shared-secret token for fully local, no-login self-hosting. When set, it is the only accepted credential and JWT verification is disabled |
+| DB_SYNC_LOCAL_TOKEN | Shared-secret token for fully local, no-login self-hosting. Auto-generated and persisted in the data dir when no Cognito issuer is configured. When active, it is the only accepted credential and JWT verification is disabled |
 | DB_SYNC_LOCAL_USER_ID | User id used for all requests in local-token mode (default `local-user`) |
 
 ## Notes

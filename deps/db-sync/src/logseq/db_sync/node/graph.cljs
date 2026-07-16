@@ -9,7 +9,8 @@
 
 (defn- env-object [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
-        local-token (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN"))
+        local-token (or (:local-token cfg)
+                        (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN")))
         local-user-id (some-> js/process .-env (aget "DB_SYNC_LOCAL_USER_ID"))
         env (doto (js-obj)
               (aset "DB" index-db)
