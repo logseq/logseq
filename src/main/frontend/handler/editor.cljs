@@ -4299,7 +4299,8 @@
      (p/let [add-page-result (db-async/<get-block-with-children graph common-config/quick-add-page-name)
              add-page (worker-block-with-children add-page-result)
              user-id (when-let [id-str (user-handler/user-uuid)] (uuid id-str))
-             user-db-id (when user-id (:db/id (db-async/<get-block graph user-id {:children? false})))
+             user (when user-id (db-async/<get-block graph user-id {:children? false}))
+             user-db-id (:db/id user)
              children (worker-children add-page)
              children' (if user-db-id
                          (filter (fn [block]

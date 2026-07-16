@@ -161,12 +161,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 9. Quick Add reads a Promise as though it were a block map
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Data contract
 - **Location:** `src/main/frontend/handler/editor.cljs:4294`
 - **Issue:** `quick-add-ensure-new-block-exists!` calls `(:db/id (db-async/<get-block ...))` inside a `p/let` binding instead of awaiting the returned block first.
-- **Evidence:** A runtime probe of `(:db/id (p/resolved {:db/id 42}))` returned `nil`, which is exactly the current expression shape.
+- **Evidence:** A multi-user handler test supplied one Quick Add block owned by another user and asynchronously resolved the current user entity. Before the fix, no current-user block was inserted because `user-db-id` was `nil` and the other user's block remained in the unfiltered child list.
 - **Impact:** In multi-user graphs, Quick Add does not filter blocks by the current user and can reuse or suppress the wrong user's Quick Add block.
-- **Suggestion:** Await the user block in one binding and derive `user-db-id` from the resolved map in the next binding.
+- **Fix:** The existing `p/let` now binds the resolved user block first and reads `:db/id` in the next binding. No fallback or alternate path was added.
+- **Regression test:** `frontend.handler.editor-async-test/quick-add-creates-block-for-current-user` requires another user's child not to suppress insertion for the current user.
+- **Verification:** The focused test failed before the fix and passed after it. The complete `frontend.handler.editor-async-test` passed 27 tests and 76 assertions. CLJS lint passed with 0 errors and 0 warnings.
 
 ---
 
@@ -348,6 +351,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - regression: worker DB core 161 tests/429 assertions and page-window merge 3/3, all passed
   - performance: the focused worker apply remained about 7ms; unchanged rows still reuse their renderer data
   - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
+- Finding 9 Quick Add remediation:
+  - RED: another user's Quick Add child suppressed insertion because the current-user Promise produced a nil DB ID
+  - GREEN: the current user entity is awaited before filtering the Quick Add children
+  - regression: editor async 27 tests/76 assertions, all passed
+  - lint: changed handler and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
