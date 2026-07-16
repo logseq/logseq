@@ -1,7 +1,7 @@
 type order = Asc | Desc
 
 type common_opts = {
-  fields : string list option;
+  fields : string Rrbvec.t option;
   limit : int option;
   offset : int option;
   sort : string option;
@@ -44,8 +44,8 @@ type task_opts = {
 
 type node_opts = {
   common : common_opts;
-  tags : string list;
-  properties : string list;
+  tags : string Rrbvec.t;
+  properties : string Rrbvec.t;
 }
 
 type asset_opts = { common : common_opts }
@@ -68,12 +68,12 @@ type action = {
   options : Melange_edn_melange.any;
 }
 
-type list_result = { items : Entity.t list }
+type list_result = { items : Entity.t Rrbvec.t }
 
 val order_of_string : string -> order option
 val string_of_order : order -> string
 val kind_of_parsed : parsed -> kind
 val normalize_options : parsed -> parsed Error.build_result
-val apply_offset_limit : common_opts -> Entity.t list -> Entity.t list
+val apply_offset_limit : common_opts -> Entity.t Rrbvec.t -> Entity.t Rrbvec.t
 
 include Command_spec.S with type parsed := parsed and type action := action

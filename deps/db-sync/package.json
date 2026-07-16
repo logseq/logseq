@@ -21,22 +21,31 @@
     "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
     "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
+    "test:chatgpt-app": "node --test worker/entry_test.mjs worker/asset_image_test.mjs",
+    "build:api-docs": "export COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 && clojure -M:cljs release db-sync-api-docs && node worker/dist/api-docs-spec.js && redocly build-docs worker/dist/openapi.json --output=worker/dist/api-docs.html --title=\"Logseq Server API\" --disableGoogleFont && node worker/scripts/embed_api_docs.mjs",
+    "test:api-docs": "pnpm build:api-docs && node --test worker/api_docs_test.mjs worker/api_docs_build_test.mjs",
     "test:large-op-128m": "clojure -M:cljs release db-sync-large-op-memory-test && node --max-old-space-size=128 worker/dist/large-op-memory-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
+    "test:mcp": "pnpm clean && pnpm release && pnpm build:api-docs && cd worker && pnpm exec wrangler deploy --dry-run --env=\"\"",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
-    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
-    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
+    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
+    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@cloudflare/codemode": "^0.4.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sentry/cloudflare": "^10.45.0",
     "@sentry/node": "^10.45.0",
     "better-sqlite3": "^12.8.0",
     "shadow-cljs": "^3.4.4",
     "transit-js": "^0.8.874",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.38.0",
     "@sentry/cli": "^3.3.3"
   },
   "pnpm": {

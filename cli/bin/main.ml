@@ -4,11 +4,11 @@ let cli_argv () =
   let process_argv = Cli_platform.argv () in
   let len = Array.length process_argv in
   let args = if len <= 2 then [||] else Array.sub process_argv 2 (len - 2) in
-  Array.to_list args
+  Vec.of_array args
 
 let cli_env () =
-  Cli_unix.environment () |> Array.to_list
-  |> List.filter_map (fun item ->
+  Cli_unix.environment () |> Vec.of_array
+  |> Vec.filter_map (fun item ->
       match String.index_opt item '=' with
       | None -> None
       | Some index ->

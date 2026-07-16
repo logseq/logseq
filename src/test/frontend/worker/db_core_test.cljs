@@ -1612,6 +1612,39 @@
          (is (map? result))
            (is (= "test page" (:block/title result)))))))))
 
+(deftest get-blocks-removes-nil-values-from-returned-blocks
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get @thread-api/*thread-apis :thread-api/get-blocks)
+           conn (d/create-conn db-schema/schema)
+           request [{:id 42 :opts {:children? true}}]]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [common-initial-data/get-block-and-children
+                     (fn [_db _id _opts]
+                       {:block {:db/id 42
+                                :block/title "parent"
+                                :block/parent nil}
+                        :children [{:db/id 43
+                                    :block/title "child"
+                                    :block/parent nil}
+                                   {:db/id 44
+                                    :block/title "loaded"
+                                    :block/parent 42
+                                    :block.temp/load-status nil}]})]
+         (let [result (-> (get-blocks! test-repo (ldb/write-transit-str request))
+                          ldb/read-transit-str
+                          first)]
+           (is (= 42 (:id result)))
+           (is (= {:db/id 42
+                   :block/title "parent"}
+                  (:block result)))
+           (is (= [{:db/id 43
+                    :block/title "child"}
+                   {:db/id 44
+                    :block/title "loaded"
+                    :block/parent 42}]
+                  (:children result)))))))))
+
 ;; ---- undo-redo thread-api tests ----
 
 (deftest undo-redo-clear-history-calls-worker-fn

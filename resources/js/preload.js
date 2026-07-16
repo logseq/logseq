@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('electron')
+const { ipcRenderer, contextBridge, shell, clipboard, webFrame, webUtils } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
@@ -34,6 +34,8 @@ function getClipboardData (format) {
 }
 
 contextBridge.exposeInMainWorld('apis', {
+  getFilePath: (file) => webUtils.getPathForFile(file),
+
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
   },

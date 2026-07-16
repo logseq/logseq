@@ -144,7 +144,10 @@ let entrypoint =
       ""
 
 let run_cli args =
-  let command = String.concat " " ("node" :: entrypoint :: args) in
+  let command =
+    Array.append [| "node"; entrypoint |] args
+    |> Vec.of_array |> Vec.string_concat " "
+  in
   Node.Child_process.execSync command
     (Node.Child_process.option ~encoding:"utf8" ())
 
@@ -155,12 +158,12 @@ let clone_env extra =
 
 let spawn_cli ?(env = [||]) args =
   spawn_sync Node.Process.argv.(0)
-    (Array.of_list (entrypoint :: args))
+    (Array.append [| entrypoint |] args)
     [%obj { encoding = "utf8"; env = clone_env env }]
 
 let spawn_cli_async ?(env = [||]) args =
   spawn_async Node.Process.argv.(0)
-    (Array.of_list (entrypoint :: args))
+    (Array.append [| entrypoint |] args)
     [%obj { env = clone_env env }]
 
 let result_status result =
@@ -266,14 +269,16 @@ let token_response ?(sub = "user-1") ?(email = "user@example.com") () =
   Js.Json.stringify (Js.Json.object_ object_)
 
 let query_param url key =
-  match String.split_on_char '?' url with
-  | [ _; query ] ->
-      query |> String.split_on_char '&'
-      |> List.find_map (fun part ->
-          match String.split_on_char '=' part with
-          | [ k; value ] when k = key -> Some value
-          | _ -> None)
-  | _ -> None
+  let parts = Vec.split_on_char '?' url in
+  if Vec.length parts = 2 then
+    let query = Vec.nth parts 1 in
+    query |> Vec.split_on_char '&'
+    |> Vec.find_map (fun part ->
+        let pair = Vec.split_on_char '=' part in
+        if Vec.length pair = 2 && Vec.nth pair 0 = key then
+          Some (Vec.nth pair 1)
+        else None)
+  else None
 
 let json_data_object stdout =
   match Js.Json.decodeObject (parse_json stdout) with
@@ -415,13 +420,14 @@ let assert_line_starts_with name text prefix =
     (Printf.sprintf "%s: expected a line starting with %S\n%s" name prefix text)
 
 let headers_from stdout =
-  match Array.to_list (string_split (String.trim stdout) "\n") with
-  | [] -> [||]
-  | first :: _ ->
-      string_split (String.trim first) " "
-      |> Array.to_list
-      |> List.filter (( <> ) "")
-      |> Array.of_list
+  let lines = string_split (String.trim stdout) "\n" in
+  if Array.length lines = 0 then [||]
+  else
+    let first = lines.(0) in
+    string_split (String.trim first) " "
+    |> Vec.of_array
+    |> Vec.filter (( <> ) "")
+    |> Vec.to_array
 
 let array_prefix array length = Array.sub array 0 length
 
@@ -465,9 +471,9 @@ let display_width text =
 
 let assert_created_at_column_aligned stdout =
   let lines = string_split (string_trim_end stdout) "\n" in
-  match Array.to_list lines with
-  | [] -> fail_test "missing list page output"
-  | header :: rows ->
+  match Vec.pop_front (Rrbvec.of_array lines) with
+  | None -> fail_test "missing list page output"
+  | Some (header, rows) ->
       let created_index =
         match Js.String.indexOf ~search:"created-at" header with
         | -1 ->
@@ -477,12 +483,12 @@ let assert_created_at_column_aligned stdout =
       in
       let expected = display_width (String.sub header 0 created_index) in
       let data_rows =
-        match List.rev rows with
-        | [] -> []
-        | _footer :: reversed_data_rows -> List.rev reversed_data_rows
+        match Vec.pop_back rows with
+        | Some (_footer, data_rows) -> data_rows
+        | None -> Vec.empty
       in
       data_rows
-      |> List.iter (fun line ->
+      |> Vec.iter (fun line ->
           match
             Js.Null.toOption
               (string_match line (Js.Re.fromString "\\d+ [A-Za-z]+ ago"))
@@ -521,9 +527,9 @@ let expect_graph_in_json_list output graph =
               fail_test ("json graph list: expected graphs array in " ^ output)
           | Some graphs ->
               let names =
-                graphs |> Array.to_list |> List.filter_map Js.Json.decodeString
+                graphs |> Vec.of_array |> Vec.filter_map Js.Json.decodeString
               in
-              if List.mem graph names then pass
+              if Vec.mem graph names then pass
               else fail_test ("json graph list: missing graph in " ^ output)))
 
 let expect_named_contains _name text needle = assert_includes _name text needle
