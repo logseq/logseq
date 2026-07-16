@@ -239,6 +239,19 @@
                 (:db/id (#'db-core/resolve-block-entity @conn :user.property/test-property))))
          (is (= page-id (get-in response [:page-window :root :db/id]))))))))
 
+(deftest apply-outliner-ops-rejects-missing-connection-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           repo "missing-graph"
+           error (try
+                   (apply-ops! repo [[:save-block []]] {})
+                   nil
+                   (catch :default error
+                     error))]
+       (is (= :db/missing-connection (:type (ex-data error))))
+       (is (= repo (:repo (ex-data error))))))))
+
 (deftest expand-block-returns-complete-newly-visible-rows-test
   (restoring-worker-state
    (fn []

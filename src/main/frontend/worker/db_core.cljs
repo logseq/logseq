@@ -2891,7 +2891,10 @@
 
 (def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (let [conn (or (worker-state/get-datascript-conn repo)
+                 (throw (ex-info "Missing worker graph connection"
+                                 {:type :db/missing-connection
+                                  :repo repo})))]
     (try
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)

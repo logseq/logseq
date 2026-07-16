@@ -116,12 +116,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 6. A missing graph connection is returned as a successful `nil` operation
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Failure mode
 - **Location:** `src/main/frontend/worker/db_core.cljs:2888`, `src/main/frontend/db/transact.cljs:223`
 - **Issue:** `:thread-api/apply-outliner-ops` is wrapped in `when-let`; an unknown or closed graph therefore resolves to `nil` instead of rejecting. The main thread destructures `nil`, publishes its inferred affected IDs, and can run an editor callback as though the operation committed.
 - **Evidence:** A runtime call to `:thread-api/apply-outliner-ops` for `__review_missing_graph__` resolved successfully with `nil`.
 - **Impact:** Graph-close/switch races can focus or display an unpersisted block and hide the real missing-connection error.
-- **Suggestion:** Fail fast when the requested graph has no worker connection, and validate the response before any UI publication or editor callback.
+- **Fix:** `:thread-api/apply-outliner-ops` now resolves the Datascript connection with an explicit fail-fast boundary. A missing graph throws `ex-info` with `:type :db/missing-connection` and the requested repo before undo metadata, DB work, UI publication, or editor callbacks run. No main-thread default or retry was added.
+- **Regression test:** `frontend.worker.db-core-test/apply-outliner-ops-rejects-missing-connection-test` invokes the real thread API with an absent repo. Before the fix it returned `nil`; after the fix it exposes the typed error and repo.
+- **Verification:** The focused test passed 2 assertions and the complete `frontend.worker.db-core-test` passed 160 tests and 427 assertions. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains at `db_core.cljs:3069` outside this change.
 
 ---
 
@@ -323,6 +326,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: each side effect reports independently while persistence stages and UI broadcast continue
   - regression: listener 5 tests/16 assertions and worker DB core 159/425, all passed
   - lint: changed listener and test files — 0 errors, 0 warnings
+- Finding 6 missing-connection remediation:
+  - RED: missing-repo `apply-outliner-ops` returned successful `nil` with no error data
+  - GREEN: the worker API fails before any operation side effect with typed repo context
+  - regression: worker DB core 160 tests/427 assertions, passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3069` outside the changed code
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
