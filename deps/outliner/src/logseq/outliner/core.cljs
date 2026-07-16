@@ -569,17 +569,15 @@
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
 (defn- get-block-orders
-  [blocks target-block sibling? keep-block-order? end-order-state]
+  [blocks target-block sibling? keep-block-order?]
   (if (and keep-block-order? (every? :block/order blocks))
     (map :block/order blocks)
     (let [target-order (:block/order target-block)
           start-order (when sibling? target-order)
-          end-order (if (= :known (first end-order-state))
-                      (second end-order-state)
-                      (if sibling?
-                        (:block/order (ldb/get-right-sibling target-block))
-                        (let [first-child (ldb/get-down target-block)]
-                          (:block/order first-child))))
+          end-order (if sibling?
+                      (:block/order (ldb/get-right-sibling target-block))
+                      (let [first-child (ldb/get-down target-block)]
+                        (:block/order first-child)))
           orders (db-order/gen-n-keys (count blocks) start-order end-order)]
       orders)))
 
@@ -614,10 +612,10 @@
    (:db/id target-block)))
 
 (defn- build-insert-blocks-tx
-  [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order? end-order-state]}]
+  [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
         target-page (get-target-block-page target-block sibling?)
-        orders (get-block-orders blocks target-block sibling? keep-block-order? end-order-state)]
+        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (loop [db db
            idx 0
            blocks blocks
@@ -848,7 +846,6 @@
                          true
                          (mapv block-with-timestamps)))
              insert-opts {:sibling? sibling?
-                          :end-order-state (:end-order-state opts)
                           :replace-empty-target? replace-empty-target?
                           :keep-uuid? keep-uuid?
                           :keep-block-order? keep-block-order?

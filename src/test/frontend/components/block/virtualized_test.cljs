@@ -113,15 +113,15 @@
     (is (not (string/includes? merge-source "blocks-by-id"))
         "Row overrides must have one identity path.")))
 
-(deftest virtualized-insert-reuses-loaded-sibling-order
+(deftest virtualized-insert-leaves-sibling-order-to-worker
   (let [block-source (source-for "src/main/frontend/components/block.cljs")
         editor-source (source-for "src/main/frontend/handler/editor.cljs")
         outliner-source (source-for "deps/outliner/src/logseq/outliner/core.cljs")]
-    (is (string/includes? block-source ":outliner/right-order-state"))
-    (is (string/includes? block-source ":outliner/child-order-state"))
-    (is (string/includes? editor-source ":end-order-state"))
-    (is (string/includes? outliner-source "(= :known (first end-order-state))")
-        "Insert should not query all siblings when the loaded window already contains the boundary order.")))
+    (is (not (string/includes? block-source ":outliner/right-order-state")))
+    (is (not (string/includes? block-source ":outliner/child-order-state")))
+    (is (not (string/includes? editor-source ":end-order-state")))
+    (is (not (string/includes? outliner-source "end-order-state"))
+        "Insert order must come from the worker transaction DB.")))
 
 (deftest scroll-position-persistence-runs-after-scrolling-stops
   (let [source (source-for "src/main/frontend/handler/common.cljs")
