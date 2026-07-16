@@ -6,6 +6,7 @@
             ["path" :as node-path]
             ["qrcode-terminal" :as qrcode]
             ["ws" :as ws]
+            [goog.object :as gobj]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.index :as index]
@@ -82,7 +83,8 @@
     (when pair-url
       (println)
       (println (str "Pair a device: open " pair-url))
-      (when (some-> js/process .-stdout .-isTTY)
+      ;; string-based access: survives Closure property renaming
+      (when (gobj/getValueByKeys js/process "stdout" "isTTY")
         (println "or scan:")
         (qrcode/generate pair-url #js {:small true})))))
 
