@@ -105,6 +105,21 @@
       (is (= page-window (:page-window latest)))
       (is (not (:page-children-stale? latest))))))
 
+(deftest refresh-worker-op-blocks-does-not-mark-page-lookup-as-updated-test
+  (let [block-id (random-uuid)
+        page-db-id 10
+        tx-id (random-uuid)]
+    (state/set-state! :db/latest-transacted-entity-uuids {})
+    (#'db-transact/refresh-worker-op-blocks!
+     [[:save-block [{:block/uuid block-id} {}]]]
+     {:db-sync/tx-id tx-id
+      :ui/page-id page-db-id}
+     nil
+     nil)
+    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
+      (is (= #{block-id} (:updated-ids latest)))
+      (is (nil? (get-in latest [:entity-tx-ids page-db-id]))))))
+
 (deftest refresh-worker-op-blocks-keeps-cross-page-refresh-separate-test
   (let [block-id (random-uuid)
         current-page-id (random-uuid)

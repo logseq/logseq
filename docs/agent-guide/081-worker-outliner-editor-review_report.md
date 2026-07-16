@@ -256,6 +256,19 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 - **Fix:** The request captures its repo and route snapshot. A response still returns its committed DB result to the caller, but publishes UI state and schedules editor work only while that snapshot remains current. A stale response removes its tagged callback. No retry, cancellation loop, or alternate mutation path was added.
 - **Verification:** The focused RED failed the state and callback assertions; the GREEN passed 4 assertions. The complete `frontend.db.transact-test` passed 14 tests and 46 assertions. CLJS lint passed with 0 errors and 0 warnings.
 
+---
+
+### 16. The page lookup reference is reported as an updated entity
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Performance
+- **Location:** `src/main/frontend/db/transact.cljs:138`
+- **Issue:** `:ui/page-id` is a polymorphic lookup reference used by the worker to resolve a page window, but the renderer also inserted it into `updated-ids` and `entity-tx-ids`. A block edit with a numeric page lookup therefore reported the unchanged page entity as updated and notified page/page-reference subscribers unnecessarily.
+- **Reproduction:** A focused renderer test published a `:save-block` operation with block UUID and numeric page lookup. Before the fix, both the block UUID and page DB id appeared in `updated-ids`, and the page DB id received the transaction id.
+- **Fix:** Renderer invalidation now comes only from outliner operation entity IDs and the worker's separate `affected-page-uuids`. `:ui/page-id` remains only a worker page-window lookup reference. The fix removes one identity-mixing branch and adds no replacement path.
+- **Verification:** The focused RED failed both identity assertions and the GREEN passed them. The complete `frontend.db.transact-test` passed 15 tests and 48 assertions, `frontend.components.page-test` passed 3/3, and `frontend.rfx-test` passed 9 tests and 14 assertions.
+
 ## Important test coverage gaps
 
 ### Batching and worker response contracts
@@ -280,8 +293,7 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 
 These are credible risks but were not retained as confirmed findings because the exact executable scenario was not completed during this read-only review.
 
-1. **Polymorphic `:ui/page-id`:** callers pass numeric DB IDs, UUID strings, and route names, while the same value is also added to UUID-oriented invalidation sets. Define whether this is a worker lookup reference or renderer identity; it should not be both.
-2. **Missing `:parent-original`:** `resolve-indent-outdent-opts` silently turns an unresolved supplied UUID into `nil`, selecting ordinary outdent semantics. Validate whether the intended contract is fail-fast.
+1. **Missing `:parent-original`:** `resolve-indent-outdent-opts` silently turns an unresolved supplied UUID into `nil`, selecting ordinary outdent semantics. Validate whether the intended contract is fail-fast.
 
 ## Migration validation
 
@@ -410,6 +422,10 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: response-owned UI/editor work is scoped to the request repo and route snapshot
   - regression: transact 14/46, all passed
   - lint: changed transaction and test files — 0 errors, 0 warnings
+- Finding 16 page-lookup invalidation remediation:
+  - RED: an unchanged numeric page lookup was published as an updated entity
+  - GREEN: renderer invalidation contains only operation entities and explicit affected pages
+  - regression: transact 15/48, page 3/3, rfx 9/14; all passed
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
@@ -420,4 +436,4 @@ The reports were deduplicated and each retained finding was checked again agains
 - No Desktop/Electron runtime was used; the reviewed hot paths are renderer/browser-worker paths, and the user had previously scoped this performance work to `pnpm app-watch` rather than Electron.
 - No user graph was mutated.
 - No broad lint, unit, or E2E suite was run for this review.
-- Polymorphic `:ui/page-id` and invalid `:parent-original` remain focused follow-up questions rather than confirmed findings.
+- Invalid `:parent-original` remains a focused follow-up question rather than a confirmed finding.
