@@ -11,6 +11,7 @@
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
@@ -986,6 +987,33 @@
                 "A range comments area should be inserted after the last selected top block with lookup-ref targets")
             (is (= [created-comments-area-uuid] @expanded)
                 "The range comments area should be expanded inline"))))))
+
+(deftest-async quick-add-creates-block-for-current-user
+  (let [user-id (random-uuid)
+        quick-add-page-id (random-uuid)
+        inserts (atom [])]
+    (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                    user-handler/user-uuid (constantly (str user-id))
+                    db-async/<get-block
+                    (fn [_repo block-id & _opts]
+                      (p/resolved (when (= user-id block-id)
+                                    {:db/id 42
+                                     :block/uuid user-id})))
+                    db-async/<get-block-with-children
+                    (fn [& _]
+                      (p/resolved {:block {:block/uuid quick-add-page-id}
+                                   :children [{:block/uuid (random-uuid)
+                                               :logseq.property/created-by-ref {:db/id 99}}]}))
+                    editor/api-insert-new-block!
+                    (fn [content opts]
+                      (swap! inserts conj [content opts])
+                      (p/resolved nil))]
+      (p/let [_ (editor/quick-add-ensure-new-block-exists!)]
+        (is (= [["" {:page quick-add-page-id
+                      :container-id :unknown-container
+                      :replace-empty-target? false}]]
+               @inserts)
+            "Another user's Quick Add block must not suppress the current user's block.")))))
 
 (deftest-async ensure-comments-area-for-single-selected-block
   (let [block-uuid (random-uuid)
