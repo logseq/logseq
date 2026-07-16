@@ -8,11 +8,11 @@ Review range: `998207ffd5339386607328d3c71fd190dbf58cb7..fbaecc73f0`
 
 ## Executive summary
 
-The worker-owned DB direction is sound, but the current PR is not ready to merge in its present form. The review originally confirmed two blocking issues and several important correctness, failure-mode, and contract problems in the outliner/editor hot path. Both blocking findings have since been fixed and verified; the important transaction-completion and failure-mode findings remain.
+The worker-owned DB direction is sound. The review confirmed two blocking issues and fifteen important or maintainability issues in the outliner/editor hot path. All seventeen findings have now been reproduced or reduced to an executable contract, fixed one at a time, and verified with focused regression coverage.
 
-The highest-risk pattern is that the PR does not yet have one complete transaction-completion contract. A local operation is committed in the worker, the originating tab refreshes from the direct worker response, and the worker also broadcasts a lighter transaction summary. The direct response and broadcast each implement only part of the previous pipeline responsibilities. This split is the source of several stale-UI, missing-hook, and ambiguous-failure behaviors.
+The highest-risk pattern was an incomplete transaction-completion contract between the direct worker response and the worker broadcast. The remediation keeps one worker-owned mutation path, restores the broadcast payload required by shared hooks, limits the direct response to renderer/editor work, and prevents stale responses from publishing into a new graph or route.
 
-The review also found UI-derived ordering data being sent back into the worker as a second structural authority, an unbounded `get-blocks` batching path, and multiple compatibility/dead-code layers that should be removed rather than extended.
+The review also removed UI-derived ordering as a second structural authority, bounded `get-blocks` requests and discarded descendant scans, fixed page-window hydration, and deleted compatibility/dead-code layers instead of extending them. The remaining items in this report are explicit runtime/E2E coverage gaps, not known unfixed findings.
 
 The initial review changed only this document. The remediation log below records later source and unit-test changes one finding at a time.
 
@@ -269,13 +269,26 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 - **Fix:** Renderer invalidation now comes only from outliner operation entity IDs and the worker's separate `affected-page-uuids`. `:ui/page-id` remains only a worker page-window lookup reference. The fix removes one identity-mixing branch and adds no replacement path.
 - **Verification:** The focused RED failed both identity assertions and the GREEN passed them. The complete `frontend.db.transact-test` passed 15 tests and 48 assertions, `frontend.components.page-test` passed 3/3, and `frontend.rfx-test` passed 9 tests and 14 assertions.
 
+---
+
+### 17. A missing linked-reference outdent parent silently changes semantics
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Correctness
+- **Location:** `deps/outliner/src/logseq/outliner/op.cljs:293`
+- **Issue:** The renderer sends a linked-reference `parent-original` as a UUID-only map. The worker resolves it to a DataScript entity, but an unresolved supplied UUID was silently replaced with `nil`. Outliner core then selected ordinary outdent semantics instead of the explicit linked-reference target semantics.
+- **Reproduction:** A real `:thread-api/apply-outliner-ops` test outdented a child with a missing `parent-original` UUID. Before the fix, the worker returned successfully and moved the child from its parent to the page root.
+- **Fix:** When `parent-original` is supplied, the worker must resolve it before starting the outliner transaction. A missing entity now throws `:logseq.outliner.op/missing-parent-original` with the requested UUID. An intentionally absent `parent-original` still uses ordinary outdent semantics. No fallback or retry was added.
+- **Verification:** The focused RED failed because no typed error was returned and the child's parent changed; the GREEN passed both assertions and left the DB unchanged. The complete `frontend.worker.db-core-test` passed 162 tests and 431 assertions on the confirming run, and the focused editor page-window test passed 1/1. The first full worker run hit only the existing strict 10k window timing gate at 80.056ms/80.268ms against `<80ms`; the focused 10k test and the complete rerun passed without changing the test. Lint reported 0 errors; the two unresolved-var warnings in `op.cljs` predate this change.
+
 ## Important test coverage gaps
 
 ### Batching and worker response contracts
 
-- `src/test/frontend/db/async_test.cljs` mocks `<fetch-blocks-from-worker-batched`; it does not execute the queue, graph grouping, response-count validation, or rejection fan-out.
-- `src/test/frontend/worker/db_core_test.cljs` covers basic insert/expand responses but not delete, multi-block move, indent, or outdent response windows and affected pages.
-- Add targeted behavior tests for per-graph batching, a deliberate response-count mismatch, bounded request size, and the structural-operation response contract.
+- `src/test/frontend/db/async_test.cljs` now exercises the public queue and bounded request size, but does not cover per-graph grouping, a deliberate response-count mismatch, or rejection fan-out.
+- `src/test/frontend/worker/db_core_test.cljs` covers insert, expand, delete-window hydration, and invalid outdent input, but not multi-block move/indent/outdent response windows and affected pages.
+- Add targeted behavior tests only for the remaining grouping, mismatch/rejection, and structural response cases.
 
 ### Editor and long-page behavior
 
@@ -288,12 +301,6 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 
 - The DB view test uses a table view, while the default linked-reference UI uses list + group-by-page.
 - Add a list-view contract test that asserts the nested page/parent group shape and one UI behavior test for immediate local refresh.
-
-## Questions requiring focused follow-up
-
-These are credible risks but were not retained as confirmed findings because the exact executable scenario was not completed during this read-only review.
-
-1. **Missing `:parent-original`:** `resolve-indent-outdent-opts` silently turns an unresolved supplied UUID into `nil`, selecting ordinary outdent semantics. Validate whether the intended contract is fail-fast.
 
 ## Migration validation
 
@@ -426,6 +433,12 @@ The reports were deduplicated and each retained finding was checked again agains
   - RED: an unchanged numeric page lookup was published as an updated entity
   - GREEN: renderer invalidation contains only operation entities and explicit affected pages
   - regression: transact 15/48, page 3/3, rfx 9/14; all passed
+- Finding 17 missing-parent remediation:
+  - RED: a missing linked-reference parent silently performed an ordinary outdent and changed the DB
+  - GREEN: an explicitly supplied missing parent fails before the outliner transaction
+  - regression: worker DB core 162/431 and focused editor 1/1; all passed on the confirming run
+  - performance rerun: focused 10k window and complete worker suite passed without changing the strict gate
+  - lint: 0 errors; two pre-existing unresolved-var warnings in `op.cljs`
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
@@ -436,4 +449,3 @@ The reports were deduplicated and each retained finding was checked again agains
 - No Desktop/Electron runtime was used; the reviewed hot paths are renderer/browser-worker paths, and the user had previously scoped this performance work to `pnpm app-watch` rather than Electron.
 - No user graph was mutated.
 - No broad lint, unit, or E2E suite was run for this review.
-- Invalid `:parent-original` remains a focused follow-up question rather than a confirmed finding.
