@@ -101,12 +101,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 5. A persistence-listener failure happens after commit but before UI reconciliation
 
 - **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
 - **Category:** Failure mode
 - **Location:** `src/main/frontend/worker/db_listener.cljs:151`
 - **Issue:** Checksum update and DB-sync persistence run inside the DataScript listener before main-thread sync and broadcast. If either throws, the DataScript connection is already committed, but the worker request rejects and the UI refresh is not broadcast.
 - **Evidence:** A runtime DataScript probe installed a throwing listener, called `d/transact!`, caught `"listener boom"`, and then queried the connection. The new datom was present despite the thrown transaction call. The Logseq listener ordering places persistence at lines 168–179 and broadcast at lines 181–191 with no failure boundary.
 - **Impact:** The editor can report failure and remain visually stale even though the DB mutation succeeded. A retry can duplicate or conflict with the already-committed structural operation.
-- **Suggestion:** Establish an explicit post-commit failure contract: always reconcile/broadcast the committed DB state, then report persistence failure separately. Do not describe the whole operation as rolled back when it was not.
+- **Fix:** Checksum update and local-tx persistence now have independent post-commit error boundaries. Each failure emits a structured worker log and `:capture-error`, then the listener continues to the other persistence stage and the normal UI pipeline/broadcast. The DataScript operation therefore completes as committed instead of rejecting as though it rolled back.
+- **Regression test:** `frontend.worker.db-listener-test/db-listener-reports-post-commit-failures-without-blocking-ui-sync-test` runs both failure stages. Before the fix each error escaped after the datom committed, no capture error was sent, and UI sync stopped; a checksum error also prevented local-tx persistence. After the fix the datom remains, both persistence stages run, one separate error is reported, and UI sync completes.
+- **Verification:** The focused test passed 8 assertions; `frontend.worker.db-listener-test` passed 5 tests and 16 assertions; the complete `frontend.worker.db-core-test` passed 159 tests and 425 assertions. CLJS lint passed for the changed listener and test with 0 errors and 0 warnings.
 
 ---
 
@@ -314,6 +317,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - RED: processed transaction datoms were absent from the main-thread payload; after restoring them, the payload still contained three unused summary contracts
   - GREEN: the Transit-safe payload carries processed `tx-data` and no unused change-summary fields
   - regression: listener 4 tests/8 assertions, worker pipeline 20/98, frontend pipeline 2/6, all passed
+  - lint: changed listener and test files — 0 errors, 0 warnings
+- Finding 5 post-commit failure remediation:
+  - RED: checksum and persistence exceptions escaped after commit, sent no separate error, and stopped UI sync
+  - GREEN: each side effect reports independently while persistence stages and UI broadcast continue
+  - regression: listener 5 tests/16 assertions and worker DB core 159/425, all passed
   - lint: changed listener and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed

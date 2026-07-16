@@ -4,6 +4,7 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.platform :as platform]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.sync :as db-sync]
             [logseq.db :as ldb]))
@@ -73,3 +74,47 @@
                     [:changed-entity-ids
                      :task-route-candidate-ids
                      :comment-route-candidate-ids])))))
+
+(deftest db-listener-reports-post-commit-failures-without-blocking-ui-sync-test
+  (doseq [failed-stage [:checksum :persist]]
+    (let [conn (d/create-conn)
+          calls (atom [])
+          captured-errors (atom [])]
+      (with-redefs [db-sync/update-local-sync-checksum!
+                    (fn [& _]
+                      (swap! calls conj :checksum)
+                      (when (= :checksum failed-stage)
+                        (throw (js/Error. "checksum failed"))))
+                    db-sync/handle-local-tx!
+                    (fn [& _]
+                      (swap! calls conj :persist)
+                      (when (= :persist failed-stage)
+                        (throw (js/Error. "persist failed"))))
+                    worker-pipeline/invoke-hooks
+                    (fn [_conn tx-report _context]
+                      (swap! calls conj :build-ui-refresh)
+                      {:tx-report tx-report})
+                    shared-service/broadcast-to-clients!
+                    (fn [event _payload]
+                      (when (= :sync-db-changes event)
+                        (swap! calls conj :broadcast-ui-refresh)))
+                    platform/post-message!
+                    (fn [_platform event payload]
+                      (when (= :capture-error event)
+                        (swap! captured-errors conj payload)))
+                    platform/current (constantly :test)]
+        (db-listener/listen-db-changes! "repo" conn
+                                        :handler-keys [:sync-db-to-main-thread :db-sync])
+        (let [error (try
+                      (d/transact! conn [{:db/id -1 :block/title "hello"}]
+                                   {:local-tx? true})
+                      nil
+                      (catch :default error
+                        error))]
+          (is (nil? error) (str "Post-commit failure escaped: " failed-stage))
+          (is (= 1 (d/q '[:find (count ?e) .
+                          :where [?e :block/title "hello"]]
+                        @conn)))
+          (is (= 1 (count @captured-errors)))
+          (is (= [:checksum :persist :build-ui-refresh :broadcast-ui-refresh]
+                 @calls)))))))
