@@ -1,15 +1,7 @@
 (ns frontend.state-test
   (:require [clojure.test :refer [deftest is]]
             [frontend.rfx :as rfx]
-            [frontend.state :as state]
-            [frontend.state.config :as state-config]
-            [frontend.state.core :as state-core]
-            [frontend.state.editor :as state-editor]
-            [frontend.state.graph :as state-graph]
-            [frontend.state.init :as state-init]
-            [frontend.state.search :as state-search]
-            [frontend.state.sidebar :as state-sidebar]
-            [frontend.state.sync :as state-sync]))
+            [frontend.state :as state]))
 
 (deftest merge-configs
   (let [global-config
@@ -128,53 +120,6 @@
                 state/get-selection-direction (constantly nil)]
     (is (nil? (state/get-editor-info)))))
 
-(deftest state-core-module-shares-the-existing-app-state
-  (let [original-state @state/state]
-    (try
-      (is (identical? state/state state-core/state))
-      (is (= @state/state (state-init/initial-state)))
-      (state-core/replace-state! {:module-value 1
-                                  :nested {:value 2}})
-
-      (is (= 1 (state/get-state :module-value)))
-      (is (= 2 (state-core/get-state [:nested :value])))
-
-      (state-core/set-state! :module-value 3)
-      (is (= 3 (state/get-state :module-value)))
-      (is (= 3 (:module-value (rfx/snapshot))))
-
-      (state-core/update-state! [:nested :value] inc)
-      (is (= 3 (state/get-state [:nested :value])))
-      (is (= 3 (get-in (rfx/snapshot) [:nested :value])))
-      (finally
-        (state/replace-state! original-state)))))
-
-(deftest state-domain-modules-preserve-config-and-graph-accessors
-  (let [original-state @state/state
-        repo "logseq-local-test-graph"]
-    (try
-      (state/replace-state! (assoc original-state
-                                   :git/current-repo repo
-                                   :config {repo {:ui/enable-tooltip? false}}))
-
-      (is (= (state/merge-configs {:shortcuts {:ui/toggle-theme "t z"}}
-                                  {:shortcuts {:ui/toggle-brackets "t b"}})
-             (state-config/merge-configs {:shortcuts {:ui/toggle-theme "t z"}}
-                                         {:shortcuts {:ui/toggle-brackets "t b"}})))
-      (is (= repo (state-graph/get-current-repo)))
-      (is (false? (:ui/enable-tooltip? (state-config/get-config repo))))
-      (finally
-        (state/replace-state! original-state)))))
-
-(deftest state-editor-module-preserves-editor-info
-  (let [selected-ids [(random-uuid) (random-uuid)]]
-    (with-redefs [state/get-edit-block (constantly nil)
-                  state/get-selection-block-ids (constantly selected-ids)
-                  state/get-selection-direction (constantly :up)]
-      (is (= {:selected-block-uuids selected-ids
-              :selection-direction :up}
-             (state-editor/get-editor-info))))))
-
 (deftest edit-block-fn-queue-uses-plain-state
   (let [original-state @state/state
         calls (atom [])
@@ -188,40 +133,5 @@
         (queued-f)
         (is (= [:edit-block] @calls))
         (is (= [] (state/get-state :editor/edit-block-fn))))
-      (finally
-        (state/replace-state! original-state)))))
-
-(deftest state-sidebar-and-search-modules-share-state-mutations
-  (let [original-state @state/state]
-    (try
-      (state/replace-state! (assoc original-state
-                                   :search/result nil
-                                   :search/mode nil
-                                   :ui/sidebar-open? false
-                                   :sidebar/blocks '()))
-
-      (state-search/set-search-result! {:items [1 2]})
-      (is (= {:items [1 2]} (state/get-state :search/result)))
-
-      (state-search/set-search-mode! :global {:action :search})
-      (is (= :global (state/get-state :search/mode)))
-      (is (= {:action :search} (state/get-state :search/args)))
-
-      (state-sidebar/hide-right-sidebar!)
-      (is (false? (state/get-state :ui/sidebar-open?)))
-      (finally
-        (state/replace-state! original-state)))))
-
-(deftest state-sync-module-preserves-nested-conflict-writes
-  (let [original-state @state/state
-        repo "logseq-local-test-graph"
-        block-id (random-uuid)
-        conflicts [{:id 1}]]
-    (try
-      (state/replace-state! (assoc original-state :sync/block-conflicts {}))
-      (state-sync/set-sync-block-conflicts! repo block-id conflicts)
-      (is (= conflicts
-             (get-in (state/get-state :sync/block-conflicts)
-                     [repo (str block-id)])))
       (finally
         (state/replace-state! original-state)))))

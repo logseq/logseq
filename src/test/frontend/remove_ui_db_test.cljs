@@ -8,6 +8,10 @@
   [relative-file]
   (.toString (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
 
+(defn- source-file-exists?
+  [relative-file]
+  (fs/existsSync (node-path/join (.cwd js/process) relative-file)))
+
 (deftest frontend-outliner-tree-reuses-shared-builder-test
   (let [source (source-for "src/main/frontend/modules/outliner/tree.cljs")]
     (is (string/includes? source "otree/blocks->vec-tree-data"))
@@ -20,9 +24,12 @@
     (is (not (string/includes? source "page-tree-requested?")))
     (is (not (string/includes? source "(assoc :page-tree page-tree)")))))
 
-(defn- source-file-exists?
-  [relative-file]
-  (fs/existsSync (node-path/join (.cwd js/process) relative-file)))
+(deftest unused-state-domain-scaffolding-is-absent-test
+  (doseq [file ["assets.cljs" "config.cljs" "core.cljs" "db_worker.cljs"
+                "editor.cljs" "graph.cljs" "init.cljs" "platform.cljs"
+                "plugin.cljs" "search.cljs" "sidebar.cljs" "sync.cljs" "ui.cljs"]]
+    (is (not (source-file-exists? (str "src/main/frontend/state/" file)))
+        (str file " must have a production owner before adding a state domain namespace."))))
 
 (defn- existing-source-files
   [relative-files]
