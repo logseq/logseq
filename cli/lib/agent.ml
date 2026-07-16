@@ -1865,17 +1865,10 @@ let process_task invoke_config repo graph agent_name config master_session block
 
 let process_tasks invoke_config repo graph agent_name config master_session
     tasks =
-  let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure acc
-    | Some (block, rest) ->
-        bind
-          (process_task invoke_config repo graph agent_name config
-             master_session block) (fun routed ->
-            loop (Vec.push_back acc routed) rest)
-  in
-  loop Vec.empty tasks
+  Cli_effect.all
+    (Vec.map
+       (process_task invoke_config repo graph agent_name config master_session)
+       tasks)
 
 let bridge_log_line message = Time.rfc3339_millis (Time.now ()) ^ " " ^ message
 
