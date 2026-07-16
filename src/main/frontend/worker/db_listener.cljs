@@ -43,45 +43,6 @@
                        (fn? v))))
          (into {}))))
 
-(defn- tx-datom-attr-ident
-  [db datom]
-  (let [attr (:a datom)]
-    (if (keyword? attr)
-      attr
-      (:db/ident (d/entity db attr)))))
-
-(defn- tx-datom-entity-id
-  [datom]
-  (when (int? (:e datom))
-    (:e datom)))
-
-(defn- tx-change-summary
-  [{:keys [db-after tx-data]}]
-  (let [changed-entity-ids (->> tx-data
-                                (keep tx-datom-entity-id)
-                                distinct
-                                vec)
-        route-candidate-ids
-        (fn [pred]
-          (->> tx-data
-               (keep (fn [datom]
-                       (let [attr-ident (tx-datom-attr-ident db-after datom)]
-                         (when (pred datom attr-ident)
-                           (tx-datom-entity-id datom)))))
-               distinct
-               vec))]
-    {:changed-entity-ids changed-entity-ids
-     :task-route-candidate-ids (route-candidate-ids
-                                (fn [_datom attr-ident]
-                                  (contains? #{:block/tags
-                                               :logseq.property/status
-                                               :logseq.property/assignee}
-                                             attr-ident)))
-     :comment-route-candidate-ids (route-candidate-ids
-                                   (fn [datom attr-ident]
-                                     (and (:added datom)
-                                          (= :block/title attr-ident))))}))
-
 (defn- main-thread-sync-result
   "Return the processed tx-report and deferred main-thread broadcast data."
   [repo conn {:keys [tx-meta] :as tx-report}]
@@ -97,8 +58,8 @@
          :pipeline-at pipeline-at
          :data (merge {:repo repo
                        :request-id (:request-id tx-meta)
-                       :tx-meta (transit-safe-tx-meta tx-meta)}
-                      (tx-change-summary tx-report')
+                       :tx-meta (transit-safe-tx-meta tx-meta)
+                       :tx-data (:tx-data tx-report')}
                       (dissoc result :tx-report))}))))
 
 (defn- broadcast-main-thread-sync!
