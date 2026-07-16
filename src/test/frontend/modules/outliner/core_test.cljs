@@ -1040,12 +1040,37 @@
              :block/parent #:db{:id 2315},
              :block/page #:db{:id 2313},
              :block/level 2,
-             :block/children
-             [{:db/id 2334,
+           :block/children
+           [{:db/id 2334,
                :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
+
+(deftest blocks->vec-tree-preserves-worker-fields-and-order
+  (let [page-id (random-uuid)
+        page {:db/id 1
+              :block/uuid page-id
+              :block/tx-id 10
+              :block/tags [{:db/ident :logseq.class/Page}]}
+        later {:db/id 2
+               :block/uuid (random-uuid)
+               :block/tx-id 11
+               :block/order "a1"
+               :block/parent {:db/id 1}
+               :block/page {:db/id 1}}
+        earlier {:db/id 3
+                 :block/uuid (random-uuid)
+                 :block/tx-id 12
+                 :block/order "a0"
+                 :block/parent {:db/id 1}
+                 :block/page {:db/id 1}}
+        result (tree/blocks->vec-tree [page later earlier] page-id)]
+    (is (= [(:block/uuid earlier) (:block/uuid later)]
+           (mapv :block/uuid result)))
+    (is (= [1 1] (mapv :block/level result)))
+    (is (= [12 11] (mapv :block/tx-id result))
+        "The renderer tree must preserve worker transaction identities.")))
 
 (deftest non-consecutive-blocks->vec-tree-preserves-worker-pulled-block-fields
   (let [page-ref #:db{:id 1}
