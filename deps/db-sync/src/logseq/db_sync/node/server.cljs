@@ -2,7 +2,9 @@
   (:require ["crypto" :as node-crypto]
             ["fs" :as fs]
             ["http" :as http]
+            ["os" :as node-os]
             ["path" :as node-path]
+            ["qrcode-terminal" :as qrcode]
             ["ws" :as ws]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
@@ -50,11 +52,39 @@
               (fs/writeFileSync token-file token #js {:mode 384})
               token))))))
 
-(defn- print-local-token! [cfg]
-  (let [token-file (node-path/join (:data-dir cfg) "local-token")]
+(defn- lan-ip
+  "First non-internal IPv4 address, or nil."
+  []
+  (let [interfaces (js->clj (node-os/networkInterfaces))]
+    (some (fn [[_name addrs]]
+            (some (fn [addr]
+                    (when (and (= "IPv4" (get addr "family"))
+                               (not (get addr "internal")))
+                      (get addr "address")))
+                  addrs))
+          interfaces)))
+
+(defn- print-local-mode-banner!
+  "Print the local-mode access token and a pairing QR code.
+   The QR encodes <base>/pair#<token> — the token travels in the URL fragment
+   so it is never sent to the server; the /pair page turns it into a
+   logseq://sync-setup deep link."
+  [cfg port]
+  (let [token (:local-token cfg)
+        token-file (node-path/join (:data-dir cfg) "local-token")
+        pair-base (or (:base-url cfg)
+                      (when-let [ip (lan-ip)]
+                        (str "http://" ip ":" port)))
+        pair-url (when pair-base (str pair-base "/pair#" token))]
     (println "Local sync mode: no Cognito auth configured.")
-    (println (str "Access token: " (:local-token cfg)))
-    (println (str "(persisted at " token-file "; set DB_SYNC_LOCAL_TOKEN to override)"))))
+    (println (str "Access token: " token))
+    (println (str "(persisted at " token-file "; set DB_SYNC_LOCAL_TOKEN to override)"))
+    (when pair-url
+      (println)
+      (println (str "Pair a device: open " pair-url))
+      (when (some-> js/process .-stdout .-isTTY)
+        (println "or scan:")
+        (qrcode/generate pair-url #js {:small true})))))
 
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
@@ -152,7 +182,6 @@
         local-token (resolve-local-token! cfg)
         cfg (cond-> cfg
               local-token (assoc :local-token local-token))
-        _ (when local-token (print-local-token! cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
@@ -209,6 +238,8 @@
               address (.address server)
               port (if (number? address) address (.-port address))
               base-url (or (:base-url cfg) (str "http://localhost:" port))]
+        (when (:local-token cfg)
+          (print-local-mode-banner! cfg port))
         {:server server
          :wss wss
          :env env
