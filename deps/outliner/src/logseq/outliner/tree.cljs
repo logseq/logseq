@@ -8,26 +8,32 @@
   (-save [this *txs-state conn opts])
   (-del [this *txs-state db]))
 
-(defn- blocks->vec-tree-aux
-  [blocks root]
-  (let [root-id (:db/id root)
-        parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks)
-        sort-fn (fn [parent]
-                  (when-let [children (get parent-blocks parent)]
-                    (ldb/sort-by-order children)))
-        block-children (fn block-children [parent level]
-                         (map (fn [m]
-                                (let [id (:db/id m)
-                                      children (-> (block-children id (inc level))
-                                                   (ldb/sort-by-order))]
-                                  (->
-                                   (assoc m
-                                          :block/level level
-                                          :block/children children
-                                          :block/parent {:db/id parent})
-                                   (dissoc :block/tx-id))))
-                              (sort-fn parent)))]
-    (block-children root-id 1)))
+(defn ^:api blocks->vec-tree-data
+  [blocks root {:keys [include-root? keep-block-tx-id?]}]
+  (if-not (:db/id root)
+    blocks
+    (let [root-id (:db/id root)
+          parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks)
+          sort-fn (fn [parent]
+                    (when-let [children (get parent-blocks parent)]
+                      (ldb/sort-by-order children)))
+          block-children (fn block-children [parent level]
+                           (map (fn [m]
+                                  (let [id (:db/id m)
+                                        children (block-children id (inc level))]
+                                    (cond-> (assoc m
+                                                   :block/level level
+                                                   :block/children children
+                                                   :block/parent {:db/id parent})
+                                      (not keep-block-tx-id?)
+                                      (dissoc :block/tx-id))))
+                                (sort-fn parent)))
+          children (block-children root-id 1)]
+      (if include-root?
+        [(cond-> (assoc root :block/children children)
+           (not keep-block-tx-id?)
+           (dissoc :block/tx-id))]
+        children))))
 
 (defn- get-root-and-page
   [db root-id]
@@ -58,14 +64,11 @@
         [page? root] (get-root-and-page db root-id)]
     (if-not root ; custom query
       blocks
-      (let [result (blocks->vec-tree-aux blocks root)]
-        (if (and page? (not (:link option)))
-          result
-          ;; include root block
-          (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
-                root-block (-> (assoc root-block :block/children result)
-                               (dissoc :block/tx-id))]
-            [root-block]))))))
+      (let [include-root? (or (not page?) (:link option))
+            root (if include-root?
+                   (some #(when (= (:db/id %) (:db/id root)) %) blocks)
+                   root)]
+        (blocks->vec-tree-data blocks root {:include-root? include-root?})))))
 
 (defn- tree [parent->children root default-level]
   (let [root-id (:db/id root)

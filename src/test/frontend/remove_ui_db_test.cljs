@@ -8,6 +8,12 @@
   [relative-file]
   (.toString (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
 
+(deftest frontend-outliner-tree-reuses-shared-builder-test
+  (let [source (source-for "src/main/frontend/modules/outliner/tree.cljs")]
+    (is (string/includes? source "otree/blocks->vec-tree-data"))
+    (is (not (string/includes? source "(group-by"))
+        "The frontend adapter should not duplicate outliner tree construction.")))
+
 (defn- source-file-exists?
   [relative-file]
   (fs/existsSync (node-path/join (.cwd js/process) relative-file)))

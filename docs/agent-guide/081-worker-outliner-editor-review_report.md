@@ -191,11 +191,15 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 11. The frontend duplicates outliner tree construction
 
 - **Severity:** Minor
+- **Status:** Simplified and verified in the commit containing this report update
 - **Category:** Repository convention
-- **Location:** `src/main/frontend/modules/outliner/tree.cljs:38`
+- **Location:** `deps/outliner/src/logseq/outliner/tree.cljs:11`, `src/main/frontend/modules/outliner/tree.cljs:37`
 - **Issue:** `blocks->vec-tree-data` duplicates grouping, order sorting, recursion, level assignment, and root handling from `deps/outliner/src/logseq/outliner/tree.cljs`. The copies already differ in transient attribute handling. The frontend API also retains an unused `_repo` compatibility arity.
 - **Impact:** Worker/plain-data and DB-backed tree semantics can drift.
-- **Suggestion:** Extract one pure root-plus-blocks helper in `logseq.outliner.tree` and remove the unused compatibility arity.
+- **Reproduction:** A source-contract test found both a local `(group-by ...)` builder and no call to a shared helper. No current tree-shape bug was reproduced. The only output difference was intentional: the renderer has preserved `:block/tx-id` since the UI-DB removal while the older deps path removes it.
+- **Fix:** `logseq.outliner.tree/blocks->vec-tree-data` is now the single grouping, sorting, level, parent, child, and root builder. The frontend is a plain-data root adapter that requests `:block/tx-id` preservation; the existing deps wrapper keeps its old removal behavior. The unused frontend `_repo` arity and one redundant child sort were removed.
+- **Regression tests:** The source-contract test requires the frontend adapter to call the shared helper and contain no `group-by`. The deps helper test verifies both transient-field policies. The frontend tree test verifies sorted levels and retained worker tx IDs.
+- **Verification:** The focused source RED failed 2 assertions and passed after the refactor. The deps tree test passed 1 test and 3 assertions, frontend outliner core passed 32/232, and remove-UI-DB passed 166/342. CLJS lint passed with 0 errors and 0 warnings.
 
 ---
 
@@ -365,6 +369,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - performance: authoritative insertion on 1k siblings passed the 100ms unit-test gate
   - regression: outliner core 13/40, virtualized block 19/66, editor async 27/76, and editor 61/168, all passed
   - lint: changed outliner, renderer, editor, and unit-test files — 0 errors, 0 warnings
+- Finding 11 tree-builder simplification:
+  - RED: frontend source duplicated grouping and recursion instead of using a shared builder
+  - GREEN: one deps/outliner pure helper owns the tree algorithm; caller-specific tx-id behavior is explicit
+  - regression: deps tree 1/3, frontend outliner 32/232, and remove-UI-DB 166/342, all passed
+  - lint: changed tree and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
