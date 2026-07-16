@@ -220,11 +220,14 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 ### 13. The new state modules are mostly compatibility scaffolding
 
 - **Severity:** Minor
+- **Status:** Removed and verified in the commit containing this report update
 - **Category:** Repository convention
-- **Location:** `src/main/frontend/state/init.cljs:1`, `src/main/frontend/state/core.cljs:1`
+- **Location:** Removed `src/main/frontend/state/*.cljs` façade directory
 - **Issue:** `state.core` re-exports `frontend.state`, `state.init` explicitly describes a compatibility phase, and several domain namespaces contain only an `ns` form. Production code does not consume the new domain modules; only the alias-oriented state test references them.
 - **Impact:** The PR adds namespaces and an advertised architecture without reducing ownership or dependencies. It also preserves the reverse dependency direction that the state-module plan intended to remove.
-- **Suggestion:** Either remove the unused scaffolding from this PR or complete one small domain extraction end-to-end before adding the façade namespaces.
+- **Reproduction:** Repository-wide require search found zero production consumers across all 13 namespaces. Five files contained only an `ns` form; the others re-exported `frontend.state` vars and were referenced only by tests proving the aliases pointed back to the monolith. The absence source-contract RED failed all 13 assertions.
+- **Fix:** Removed all 13 unowned namespaces and the alias-only tests. The actual `frontend.state` implementation and its state/RFX/editor-queue behavior tests remain unchanged. No replacement façade or partial domain migration was added.
+- **Verification:** The absence GREEN passed 13 assertions and the CLJS compile input dropped from 1,197 to 1,189 files. `frontend.state-test` retained 8 behavior tests and 22 assertions, all passing; remove-UI-DB passed 168/358. CLJS lint passed with 0 errors and 0 warnings.
 
 ---
 
@@ -382,6 +385,12 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: outliner completion has one page-window/updated-block refresh shape
   - regression: transact 13/42, remove-UI-DB 167/345, and worker DB core 161/429, all passed
   - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
+- Finding 13 state-scaffolding remediation:
+  - RED: all 13 domain namespaces existed without a production consumer
+  - GREEN: compatibility façades and alias-only tests were removed; real `frontend.state` behavior remains directly tested
+  - regression: state 8/22 and remove-UI-DB 168/358, all passed
+  - compile: test build input decreased from 1,197 to 1,189 files
+  - lint: changed tests — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
