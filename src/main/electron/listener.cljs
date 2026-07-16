@@ -46,6 +46,10 @@
                  (fn []
                    (state/pub-event! [:modal/set-git-username-and-email])))
 
+  (safe-api-call "syncServerPair"
+                 (fn [data]
+                   (state/pub-event! [:sync-server/pair-request (bean/->clj data)])))
+
   (safe-api-call "setCurrentGraph"
                  (fn []
                    (when-let [graph (state/get-current-repo)]

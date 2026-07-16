@@ -45,14 +45,31 @@ Access token: 4f3c…9b21
 Keep the token secret. Only expose the server on a trusted network (LAN,
 Tailscale/WireGuard) or behind TLS (`https://` reverse proxy).
 
-## 2. Point each device at it
+## 2. Pair each device
 
-On every device (desktop and mobile):
+The server also prints a pairing link and a QR code:
+
+```
+Pair a device: open http://server-local-ip:8787/pair#<token>
+or scan:
+█▀▀▀▀▀█ ▀▄█▄▀ █▀▀▀▀▀█ …
+```
+
+- **Phone**: scan the QR code with the camera → the pairing page opens in
+  the browser → tap **Open in Logseq** → confirm. Done — no typing.
+- **Another computer**: open the pairing link in a browser and click
+  **Open in Logseq**, or configure manually.
+
+Manual configuration (always available):
 
 1. Open **Settings → Sync Server URL**.
-2. Set the URL, e.g. `http://192.168.1.10:8787` (or your `https://` proxy).
+2. Set the URL, e.g. `http://server-local-api:8787` (or your `https://` proxy).
 3. Set **Access token** to the token printed by the server.
 4. Save. No Logseq login is needed.
+
+The pairing link carries the access token in the URL fragment, so it is
+never sent over the network to the server; treat the link and QR code as
+secrets like the token itself.
 
 Then on the device that has the graph, open the graph menu and choose
 **Use Logseq Sync** to upload it. Other devices will list the remote graph

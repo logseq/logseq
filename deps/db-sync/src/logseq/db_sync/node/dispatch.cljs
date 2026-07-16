@@ -18,6 +18,55 @@
          (seq expected)
          (= expected actual))))
 
+(def ^:private pair-page-html
+  "Device-pairing helper for local mode. Served without auth and contains no
+   secret: the access token arrives in the URL fragment (never sent to the
+   server) and is turned into a logseq://sync-setup deep link client-side."
+  "<!doctype html>
+<html>
+<head>
+<meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+<title>Pair Logseq</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 28rem;
+         margin: 3rem auto; padding: 0 1rem; color: #222; }
+  code { background: #f2f2f2; padding: 0.15rem 0.4rem; border-radius: 4px;
+         word-break: break-all; }
+  .btn { display: block; text-align: center; background: #0055d4; color: #fff;
+         padding: 0.9rem 1rem; border-radius: 8px; text-decoration: none;
+         font-weight: 600; margin: 1.5rem 0; }
+  .muted { color: #777; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h2>Connect Logseq to this sync server</h2>
+<p>Server: <code id=\"srv\"></code></p>
+<a id=\"open\" class=\"btn\" href=\"#\">Open in Logseq</a>
+<p class=\"muted\">If the button does nothing, configure it manually in
+Logseq &rarr; Settings &rarr; Sync Server URL:</p>
+<p class=\"muted\">URL: <code id=\"url\"></code><br>
+Access token: <code id=\"tok\"></code></p>
+<script>
+  var token = location.hash.slice(1);
+  var base = location.origin;
+  document.getElementById('srv').textContent = base;
+  document.getElementById('url').textContent = base;
+  document.getElementById('tok').textContent =
+    token || '(missing - rescan the QR code)';
+  document.getElementById('open').href =
+    'logseq://sync-setup?url=' + encodeURIComponent(base) +
+    '&token=' + encodeURIComponent(token);
+</script>
+</body>
+</html>")
+
+(defn- pair-page-response []
+  (js/Response. pair-page-html
+                #js {:status 200
+                     :headers #js {"content-type" "text/html; charset=utf-8"
+                                   "cache-control" "no-store"}}))
+
 (defn handle-node-fetch
   [{:keys [request env registry deps]}]
   (let [url (platform/request-url request)
@@ -27,6 +76,10 @@
     (cond
       (= path "/health")
       (http/json-response :worker/health {:ok true})
+
+      ;; only meaningful in local-token mode; harmless otherwise
+      (= path "/pair")
+      (pair-page-response)
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
