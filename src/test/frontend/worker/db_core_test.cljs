@@ -2088,6 +2088,37 @@
          (is (= "Scheduled" (:block/title scheduled-property)))
          (is (= :datetime (:logseq.property/type scheduled-property))))))))
 
+(deftest get-block-children-stops-scanning-large-subtrees
+  (let [conn (d/create-conn db-schema/schema)
+        root-uuid (random-uuid)
+        child-uuids (vec (repeatedly 1000 random-uuid))
+        blocks (map-indexed
+                (fn [idx block-uuid]
+                  {:block/title (str "Block " idx)
+                   :block/uuid block-uuid
+                   :block/parent [:block/uuid (if (zero? idx)
+                                                root-uuid
+                                                (nth child-uuids (dec idx)))]
+                   :block/order "a0"})
+                child-uuids)]
+    (d/transact! conn (cons {:block/title "Root"
+                             :block/uuid root-uuid}
+                            blocks))
+    (let [original-datoms d/datoms
+          parent-index-scans (atom 0)]
+      (with-redefs [d/datoms (fn [db index & components]
+                               (when (and (= :avet index)
+                                          (= :block/parent (first components)))
+                                 (swap! parent-index-scans inc))
+                               (apply original-datoms db index components))]
+        (let [root (d/entity @conn [:block/uuid root-uuid])
+              {:keys [large-page? children]} (#'db-core/get-block-children @conn root {})]
+          (is large-page?)
+          (is (= 1 (count children)))
+          (is (<= @parent-index-scans 101)
+              (str "Large subtree was scanned past the result limit: "
+                   @parent-index-scans)))))))
+
 (deftest get-blocks-includes-render-critical-property-data
   (restoring-worker-state
    (fn []
