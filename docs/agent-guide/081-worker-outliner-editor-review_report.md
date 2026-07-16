@@ -242,7 +242,19 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 - **Reproduction:** Both real loader catch paths were fed the same rejected worker Promise. Their wrapper `ex-data` retained the requested block, but both `ex-cause` values were nil; the raw console also printed two unstructured stacks.
 - **Fix:** One `block-fetch-error` helper emits `:db/block-fetch-failed` with operation, block and original error, then constructs the existing wrapper message/data with the worker exception as its cause. No retry, fallback, or alternate fetch path was added.
 - **Verification:** The focused RED failed both cause assertions and the GREEN passed all 4 assertions. The complete `frontend.db.async-test` passed 8 tests and 36 assertions. CLJS lint passed with 0 errors and 0 warnings.
-- **Suggestion:** Preserve the original cause and use structured `glogi`, or remove duplicate logging and let the original worker error propagate.
+
+---
+
+### 15. A stale worker response can publish into a new graph or route
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Failure mode
+- **Location:** `src/main/frontend/db/transact.cljs:190`
+- **Issue:** `apply-outliner-ops` captures the repo only when invoking the worker. When the response resolves it unconditionally publishes global UI state and schedules the editor callback, even if the user has switched graph or route.
+- **Reproduction:** A deferred worker test issued an edit in `old-repo/old-page`, switched to `new-repo/new-page`, installed new-context UI state, and then resolved the old response. Before the fix, the old page window replaced the new state and the old editor callback ran.
+- **Fix:** The request captures its repo and route snapshot. A response still returns its committed DB result to the caller, but publishes UI state and schedules editor work only while that snapshot remains current. A stale response removes its tagged callback. No retry, cancellation loop, or alternate mutation path was added.
+- **Verification:** The focused RED failed the state and callback assertions; the GREEN passed 4 assertions. The complete `frontend.db.transact-test` passed 14 tests and 46 assertions. CLJS lint passed with 0 errors and 0 warnings.
 
 ## Important test coverage gaps
 
@@ -251,12 +263,6 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 - `src/test/frontend/db/async_test.cljs` mocks `<fetch-blocks-from-worker-batched`; it does not execute the queue, graph grouping, response-count validation, or rejection fan-out.
 - `src/test/frontend/worker/db_core_test.cljs` covers basic insert/expand responses but not delete, multi-block move, indent, or outdent response windows and affected pages.
 - Add targeted behavior tests for per-graph batching, a deliberate response-count mismatch, bounded request size, and the structural-operation response contract.
-
-### Pipeline split and graph-switch races
-
-- There is no event test for the `:ui/handled-by-response?`/client-id split.
-- There is no deferred-worker test that switches graph/page before the response resolves.
-- Add focused tests proving that local response handling does not duplicate renderer publication while all non-render hooks still run exactly once, and that stale responses cannot change the new graph/page editor state.
 
 ### Editor and long-page behavior
 
@@ -274,9 +280,8 @@ Current runtime note: a read-only Chrome navigation to the current `test lambda`
 
 These are credible risks but were not retained as confirmed findings because the exact executable scenario was not completed during this read-only review.
 
-1. **Stale response after graph/page switch:** `apply-outliner-ops` captures the current repo only when creating the request and does not check it before publishing global UI/editor state. Validate with a deferred worker response and cloned graphs that share UUIDs.
-2. **Polymorphic `:ui/page-id`:** callers pass numeric DB IDs, UUID strings, and route names, while the same value is also added to UUID-oriented invalidation sets. Define whether this is a worker lookup reference or renderer identity; it should not be both.
-3. **Missing `:parent-original`:** `resolve-indent-outdent-opts` silently turns an unresolved supplied UUID into `nil`, selecting ordinary outdent semantics. Validate whether the intended contract is fail-fast.
+1. **Polymorphic `:ui/page-id`:** callers pass numeric DB IDs, UUID strings, and route names, while the same value is also added to UUID-oriented invalidation sets. Define whether this is a worker lookup reference or renderer identity; it should not be both.
+2. **Missing `:parent-original`:** `resolve-indent-outdent-opts` silently turns an unresolved supplied UUID into `nil`, selecting ordinary outdent semantics. Validate whether the intended contract is fail-fast.
 
 ## Migration validation
 
@@ -400,6 +405,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - GREEN: one structured helper preserves operation context, block context, and the original cause
   - regression: async 8/36, all passed
   - lint: changed async and test files — 0 errors, 0 warnings
+- Finding 15 stale-response remediation:
+  - RED: an old graph response overwrote new-context UI state and ran its editor callback
+  - GREEN: response-owned UI/editor work is scoped to the request repo and route snapshot
+  - regression: transact 14/46, all passed
+  - lint: changed transaction and test files — 0 errors, 0 warnings
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
@@ -410,4 +420,4 @@ The reports were deduplicated and each retained finding was checked again agains
 - No Desktop/Electron runtime was used; the reviewed hot paths are renderer/browser-worker paths, and the user had previously scoped this performance work to `pnpm app-watch` rather than Electron.
 - No user graph was mutated.
 - No broad lint, unit, or E2E suite was run for this review.
-- The graph-switch race, polymorphic `:ui/page-id`, and invalid `:parent-original` scenarios remain focused follow-up questions rather than confirmed findings.
+- Polymorphic `:ui/page-id` and invalid `:parent-original` remain focused follow-up questions rather than confirmed findings.

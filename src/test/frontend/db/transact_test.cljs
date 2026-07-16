@@ -238,6 +238,46 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
+(deftest apply-outliner-ops-ignores-response-after-graph-route-switch-test
+  (async done
+    (let [repo (atom "old-repo")
+          route (atom {:data {:name :page}
+                       :path-params {:name "old-page"}})
+          worker-result (p/deferred)
+          callback-id (random-uuid)
+          callback-calls (atom 0)
+          new-context-state {:tx-id ::new-context}]
+      (state/queue-edit-block-fn! callback-id #(swap! callback-calls inc))
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo #(deref repo)
+                          state/get-route-match #(deref route)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [_api & _args]
+                            worker-result)]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:save-block [{:block/uuid (random-uuid)} {}]]]
+                          {:editor/edit-block-fn-id callback-id})]
+              (reset! repo "new-repo")
+              (reset! route {:data {:name :page}
+                             :path-params {:name "new-page"}})
+              (state/set-state! :db/latest-transacted-entity-uuids new-context-state)
+              (p/resolve! worker-result {:result ::persisted
+                                         :page-window {:root {:block/uuid (random-uuid)}
+                                                       :rows []}})
+              (p/let [value result
+                      _ (p/delay 0)]
+                (is (= ::persisted value))
+                (is (= new-context-state
+                       (state/get-state :db/latest-transacted-entity-uuids)))
+                (is (zero? @callback-calls))
+                (is (nil? (state/take-edit-block-fn! callback-id))))))
+          (p/finally
+           (fn []
+             (state/remove-edit-block-fn! callback-id)
+             (done)))))))
+
 (deftest apply-outliner-ops-removes-editor-callback-on-worker-failure-test
   (async done
     (let [callback-id (random-uuid)]
