@@ -8,7 +8,7 @@ Review range: `998207ffd5339386607328d3c71fd190dbf58cb7..fbaecc73f0`
 
 ## Executive summary
 
-The worker-owned DB direction is sound, but the current PR is not ready to merge in its present form. The review originally confirmed two blocking issues and several important correctness, failure-mode, and contract problems in the outliner/editor hot path. Finding 1 has since been fixed and verified; finding 2 remains blocking.
+The worker-owned DB direction is sound, but the current PR is not ready to merge in its present form. The review originally confirmed two blocking issues and several important correctness, failure-mode, and contract problems in the outliner/editor hot path. Both blocking findings have since been fixed and verified; the important transaction-completion and failure-mode findings remain.
 
 The highest-risk pattern is that the PR does not yet have one complete transaction-completion contract. A local operation is committed in the worker, the originating tab refreshes from the direct worker response, and the worker also broadcasts a lighter transaction summary. The direct response and broadcast each implement only part of the previous pipeline responsibilities. This split is the source of several stale-UI, missing-hook, and ambiguous-failure behaviors.
 
@@ -52,16 +52,16 @@ The Base UI migration, CSS-only changes, and unrelated CLI changes were outside 
 ### 2. Render mounts can produce one unbounded descendant-loading worker request
 
 - **Severity:** Blocking
-- **Status:** Partially fixed and verified; individual worker payloads are bounded, descendant request scope remains open
+- **Status:** Fixed and verified across two focused commits
 - **Category:** Performance
 - **Location:** `src/main/frontend/components/block.cljs:4834`, `src/main/frontend/db/async.cljs:232`, `src/main/frontend/worker/db_core.cljs:2288`
 - **Issue:** Every non-flat `block-container` can call `<get-block-with-children`, all calls scheduled in the same turn are merged into one unbounded batch, and the worker serially expands every requested root with `children? true`.
 - **Evidence:** The supplied `test lambda` log contains one 23,001-byte `:thread-api/get-blocks` payload with 469 unique IDs. The first request declares `children? true`; the remaining 468 requests reuse the same Transit key/value aliases, so all 469 request descendants. `flush-get-blocks-batch!` has no batch-size or visible-region bound, and `get-blocks-response` maps every request synchronously.
 - **Impact:** Task/query/reference pages can monopolize the DB worker, repeat overlapping subtree traversal, overflow recursive entity access, and remain blank before first paint.
-- **Fix:** The existing single batched worker path now partitions each graph queue into payloads of at most 50 requests. Deferred results are still resolved by their corresponding response index. There is no retry, fallback, renderer DB path, or change to collapse/expand semantics.
-- **Regression test:** `frontend.db.async-test/block-batching-bounds-worker-request-size-test` issues 151 public `<get-block` calls in one scheduling turn. Before the fix the worker received one payload of 151 requests. After the fix all 151 results resolve and every payload contains at most 50 requests.
-- **Verification:** The focused test passed with 2 assertions and the complete `frontend.db.async-test` namespace passed with 7 tests and 32 assertions. Existing worker tests for render-critical block data, page titles, cleared render state, and the 10k-deep page window passed with 21 assertions total. `clojure -M:clj-kondo` reported 0 errors and 0 warnings for both changed CLJS files.
-- **Remaining risk:** This bounds message size and allows chunks to resolve independently, but it does not yet prove that requesting descendants for up to 50 roots is cheap or limited to visible/expanded rows. The captured Task-page stall therefore remains open until descendant work is reproduced and bounded without changing visible outliner behavior.
+- **Fix:** The existing single batched worker path now partitions each graph queue into payloads of at most 50 requests. In the worker, `get-block-children` stops its iterative descendant scan at the existing 100-row large-subtree threshold; because large subtrees return only direct children, continuing to traverse the rest of the subtree was discarded work. Deferred results and the returned block/children shape are unchanged. There is no retry, fallback, renderer DB path, recursive replacement, or change to collapse/expand semantics.
+- **Regression tests:** `frontend.db.async-test/block-batching-bounds-worker-request-size-test` issues 151 public `<get-block` calls in one scheduling turn. Before the fix the worker received one payload of 151 requests; after the fix every payload contains at most 50. `frontend.worker.db-core-test/get-block-children-stops-scanning-large-subtrees` builds a 1k-deep chain and counts `:block/parent` index scans. Before the fix it performed 1,002 scans and then returned one direct child; after the fix it performs at most 101 scans and returns the same `large-page?` flag and direct child.
+- **Verification:** The async focused test and full namespace passed with 7 tests and 32 assertions. The subtree focused test passed with 3 assertions. The complete `frontend.worker.db-core-test` namespace passed with 159 tests and 425 assertions. The 10k-deep page-window test remains green. CLJS lint reported 0 errors; `db_core.cljs:3071` still emits the pre-existing unresolved `sqlite-export/validate-import-txs` warning outside this change.
+- **Remaining scope:** Mounts can still generate multiple bounded chunks. Any further reduction to visible/expanded rows should be driven by a new runtime profile and must preserve the current list/reference expansion behavior; it is no longer required to prevent the captured unbounded payload and full-subtree discard.
 - **Suggestion:** Keep one worker-owned data path, but make result views request bounded render-complete visible rows. Load descendants only for an expanded block. Do not restore a renderer DB cache or add retry/fallback logic.
 
 Current runtime note: a read-only Chrome navigation to the current `test lambda` Task page rendered `Children (5)` within three seconds and did not reproduce the stall. That does not invalidate the captured 469-request failure, but it means the current Task page is not unconditionally broken.
@@ -294,6 +294,11 @@ The reports were deduplicated and each retained finding was checked again agains
   - regression: `frontend.db.async-test` — 7 tests, 32 assertions, passed
   - related worker coverage — 4 tests, 21 assertions, passed
   - lint: changed production and test files — 0 errors, 0 warnings
+- Finding 2 descendant-bound remediation:
+  - RED: `frontend.worker.db-core-test/get-block-children-stops-scanning-large-subtrees` — a 1k-deep chain caused 1,002 parent-index scans before returning one direct child
+  - GREEN: the same focused test — at most 101 parent-index scans with the same returned shape
+  - regression: `frontend.worker.db-core-test` — 159 tests, 425 assertions, passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3071` outside the changed code
 - Static checks:
   - `git diff --check` passed
   - no migration/schema object changed across the review range
