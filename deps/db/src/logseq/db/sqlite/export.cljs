@@ -1394,8 +1394,18 @@
        (let [result (validate-import-tx-data txs db edn-label)]
          (if-let [errors (seq (:errors result))]
            (do
-             (js/console.error (str (string/capitalize edn-label) " has validation errors:"))
-             (pprint/pprint errors)
+             (js/console.error (str (string/capitalize edn-label) " has " (count errors) " validation error(s)"))
+             (pprint/pprint
+              (mapv
+               (fn [{:keys [entity dispatch-key errors]}]
+                 {:entity (select-keys entity
+                                       [:db/id
+                                        :db/ident
+                                        :block/uuid
+                                        :block/title])
+                  :dispatch-key dispatch-key
+                  :errors errors})
+               errors))
              (dissoc result :errors))
            result))
        (catch :default e
