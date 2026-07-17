@@ -1,7 +1,7 @@
 (ns frontend.worker.plain-value-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.worker.db-core :as db-core]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.plain-value :as plain-value]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
@@ -104,7 +104,7 @@
   (let [[db host target-uuid _value-uuid]
         (property-value-db :node {:block/name "target"
                                   :block/tags :logseq.class/Page})
-        result (#'db-core/get-block-and-children db (:db/id host) {:children? false})
+        result (block-handler/get-block-and-children db (:db/id host) {:children? false})
         value (get-in result [:block :block/properties :user.property/related])]
     (is (= target-uuid (:block/uuid value)))
     (is (= "Target" (:block/title value)))))

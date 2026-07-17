@@ -1009,10 +1009,10 @@
 
 (deftest graph-view-db-reads-are-worker-owned-test
   (let [common-graph-view-path (node-path/join (.cwd js/process) "src/main/frontend/common/graph_view.cljs")
-        worker-db-core-source (source-for "src/main/frontend/worker/db_core.cljs")]
+        graph-handler-source (source-for "src/main/frontend/worker/handler/graph.cljs")]
     (is (not (fs/existsSync common-graph-view-path))
         "Graph-view DataScript reads should not live in frontend.common.")
-    (is (string/includes? worker-db-core-source "[frontend.worker.graph-view :as graph-view]")
+    (is (string/includes? graph-handler-source "[frontend.worker.graph-view :as graph-view]")
         "The db worker should own graph-view DB computation through a worker namespace.")))
 
 (deftest selected-ui-reverse-and-nested-read-count-batch-target-test
