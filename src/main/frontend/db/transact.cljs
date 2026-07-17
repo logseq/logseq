@@ -52,10 +52,11 @@
 
 (defn- run-edit-block-fn!
   [tx-meta current-window]
-  (when-let [edit-block-f (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta))]
-    (if-let [rows (seq (:rows current-window))]
-      (edit-block-f rows)
-      (edit-block-f))))
+  (when-let [edit-block-f (:editor/edit-block-fn tx-meta)]
+    (try
+      (edit-block-f (:rows current-window))
+      (catch :default error
+        (log/error :db/editor-callback-failed {:error error})))))
 
 (defn- outliner-ops-need-page-window-refresh?
   [ops]
@@ -184,22 +185,18 @@
                        :local-tx? true))
             affected-block-uuids (op-block-uuids ops)
             worker-opts (cond-> (dissoc opts' :ui/page-id :ui/page-window-opts
-                                       :editor/edit-block-fn-id)
+                                       :editor/edit-block-fn)
                           (seq affected-block-uuids)
                           (assoc :affected-block-uuids affected-block-uuids))
-            request #(-> (p/do!
-                          (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
-                                                   request-repo
-                                                   (state/get-editor-info))
-                          (state/<invoke-db-worker
-                           :thread-api/apply-outliner-ops
-                           request-repo
-                           ops
-                           worker-opts))
-                         (p/catch
-                          (fn [error]
-                            (state/remove-edit-block-fn! (:editor/edit-block-fn-id opts'))
-                            (throw error))))]
+            request #(p/do!
+                      (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
+                                               request-repo
+                                               (state/get-editor-info))
+                      (state/<invoke-db-worker
+                       :thread-api/apply-outliner-ops
+                       request-repo
+                       ops
+                       worker-opts))]
         (p/let [response (request)
                 {:keys [result affected-page-uuids perf]} response
                 mutation-returned-at (now-ms)
@@ -212,16 +209,13 @@
                 worker-returned-at (now-ms)]
           (if-not (and (= request-repo (state/get-current-repo))
                        (= request-route (state/get-route-match)))
-            (state/remove-edit-block-fn! (:editor/edit-block-fn-id opts'))
+            nil
             (let [ui-refresh-perf (refresh-worker-op-blocks!
-                                   ops
-                                   opts'
-                                   current-window
-                                   affected-page-uuids)
+                                   ops opts' current-window affected-page-uuids)
                   state-updated-at (now-ms)]
+              (run-edit-block-fn! opts' current-window)
               (on-next-frame!
                (fn []
-                 (run-edit-block-fn! opts' current-window)
                  (log-outliner-op-perf!
                   {:stage :ui-updated
                    :perf-id perf-id
