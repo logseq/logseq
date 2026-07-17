@@ -749,6 +749,16 @@
                                (some-> (dom/attr sibling-block "containerid")
                                        util/safe-parse-int)))))))
 
+(defn- edit-previous-window-block-fn
+  [sibling-block]
+  (when-let [block-id (some-> (dom/attr sibling-block "blockid") uuid)]
+    (let [container-id (some-> (dom/attr sibling-block "containerid")
+                               util/safe-parse-int)]
+      (fn [rows]
+        (when-let [block (some #(when (= block-id (:block/uuid %)) %) rows)]
+          (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id))]
+            (edit-block-f)))))))
+
 (defn- loaded-block-edit
   [block value container-id]
   (when block
@@ -925,7 +935,7 @@
   (delete-block-inner! repo (get-state)))
 
 (defn delete-blocks!
-  [repo block-uuids blocks dom-blocks mobile-action-bar?]
+  [_repo block-uuids blocks dom-blocks mobile-action-bar?]
   (when (seq block-uuids)
     (let [uuid->dom-block (zipmap block-uuids dom-blocks)
           block (first blocks)
@@ -933,24 +943,23 @@
           sibling-block (when block-parent
                           (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)
-          mobile? (util/capacitor?)]
-      (p/let [previous-edit (when (and sibling-block (not mobile?))
-                              (move-to-prev-block repo sibling-block ""))]
-        (let [edit-block-f (:edit-block-f previous-edit)
-              journals (and mobile? (filter entity/journal? blocks'))
-              blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
-          (when (or (seq journals) (seq blocks))
-            (ui-outliner-tx/transact!
-             (cond-> (merge {:outliner-op :delete-blocks
-                             :mobile-action-bar? mobile-action-bar?}
-                            (block-handler/page-window-tx-meta (first blocks)))
-               edit-block-f
-               (assoc :editor/edit-block-fn (fn [_rows] (edit-block-f))))
-             (when (seq blocks)
-               (outliner-op/delete-blocks! blocks nil))
-             (when (seq journals)
-               (doseq [journal journals]
-                 (outliner-op/delete-page! (:block/uuid journal)))))))))))
+          mobile? (util/capacitor?)
+          edit-block-fn (when (and sibling-block (not mobile?))
+                          (edit-previous-window-block-fn sibling-block))
+          journals (and mobile? (filter entity/journal? blocks'))
+          blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
+      (when (or (seq journals) (seq blocks))
+        (ui-outliner-tx/transact!
+         (cond-> (merge {:outliner-op :delete-blocks
+                         :mobile-action-bar? mobile-action-bar?}
+                        (block-handler/page-window-tx-meta (first blocks)))
+           edit-block-fn
+           (assoc :editor/edit-block-fn edit-block-fn))
+         (when (seq blocks)
+           (outliner-op/delete-blocks! blocks nil))
+         (when (seq journals)
+           (doseq [journal journals]
+             (outliner-op/delete-page! (:block/uuid journal)))))))))
 
 (defn copy-block-ref!
   ([block-id]

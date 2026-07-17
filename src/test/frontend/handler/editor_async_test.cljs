@@ -274,15 +274,16 @@
                                            "containerid" nil} %)}
         deleted-dom #js {}
         tx-opts (atom nil)
+        worker-lookups (atom 0)
         edit-call (atom nil)]
     (-> (p/with-redefs [util/get-prev-block-non-collapsed-non-embed
                         (fn [block]
                           (is (identical? deleted-dom block))
                           previous-dom)
                         db-async/<get-block
-                        (fn [_repo block-id _opts]
-                          (is (= (:block/uuid previous-block) block-id))
-                          (p/resolved previous-block))
+                        (fn [& _args]
+                          (swap! worker-lookups inc)
+                          (p/resolved nil))
                         db-transact/apply-outliner-ops (fn [_conn _ops opts]
                                                         (reset! tx-opts opts)
                                                         (p/resolved nil))
@@ -297,13 +298,15 @@
                (fn [_]
                  (is (nil? @edit-call)
                      "Deletion should not focus before the renderer applies the response")
+                 (is (zero? @worker-lookups)
+                     "Selection deletion should use the post-transaction window instead of a preflight worker lookup")
                  (is (fn? (:editor/edit-block-fn @tx-opts))
                      "Deletion should carry a response-local renderer callback")
                  (let [edit-block-f (:editor/edit-block-fn @tx-opts)]
                    (is (fn? edit-block-f)
                        "Deletion should run focus from the worker response")
                    (when edit-block-f
-                     (edit-block-f nil)))
+                     (edit-block-f [previous-block])))
                  (is (= [previous-block 8
                          {:custom-content "previous"
                           :tail-len 0

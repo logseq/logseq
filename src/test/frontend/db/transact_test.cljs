@@ -62,6 +62,7 @@
                                 {}]]]
      {:db-sync/tx-id tx-id}
      nil
+     nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
@@ -76,6 +77,7 @@
     (#'db-transact/refresh-worker-op-blocks!
      [[:save-block [{:block/uuid block-id} {}]]]
      {:db-sync/tx-id tx-id}
+     nil
      nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
@@ -96,6 +98,7 @@
      {:db-sync/tx-id tx-id
       :ui/page-id page-id}
      {:root {:block/uuid page-id} :rows []}
+     nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id target-id} (:updated-ids latest)))
@@ -118,6 +121,7 @@
      {:db-sync/tx-id tx-id
       :ui/page-id page-db-id}
      nil
+     nil
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
@@ -132,6 +136,7 @@
     (#'db-transact/refresh-worker-op-blocks!
      [[:indent-outdent-blocks [[block-id] true {}]]]
      {:db-sync/tx-id tx-id}
+     nil
      nil
      #{current-page-id target-page-id})
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
@@ -185,12 +190,16 @@
                             "The mutation worker must not receive renderer or editor state.")
                       _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
                             "UI refresh state must not change until the worker transaction resolves.")
-                      _ (p/resolve! worker-result {:result ::persisted})
+                      updated-block {:block/uuid block-id
+                                     :block/title "persisted"}
+                      _ (p/resolve! worker-result {:result ::persisted
+                                                   :updated-blocks [updated-block]})
                       value result
                       _ (p/delay 0)
                       latest (state/get-state :db/latest-transacted-entity-uuids)]
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
+                (is (= [updated-block] (:updated-blocks latest)))
                 (is (nil? (:page-window latest)))
                 (is (= tx-id (:tx-id latest))))))
           (p/finally (fn []

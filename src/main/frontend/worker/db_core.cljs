@@ -2889,7 +2889,8 @@
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
             affected-block-uuids (:affected-block-uuids opts)
-            opts (dissoc opts :affected-block-uuids)
+            return-updated-blocks? (:return-updated-blocks? opts)
+            opts (dissoc opts :affected-block-uuids :return-updated-blocks?)
             affected-page-uuids-before (collect-affected-page-uuids @conn affected-block-uuids)
             apply-started-at (perf-time-ms)
             result (worker-util/profile
@@ -2899,8 +2900,16 @@
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             affected-page-uuids (into affected-page-uuids-before
                                       (collect-affected-page-uuids @conn affected-block-uuids))
+            updated-blocks (when return-updated-blocks?
+                             (keep (fn [block-uuid]
+                                     (some-> (get-block-and-children @conn block-uuid {:children? false})
+                                             :block))
+                                   affected-block-uuids))
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}
+                                                       (seq updated-blocks)
+                                                       (assoc :updated-blocks updated-blocks)
+
                                                        (seq affected-page-uuids)
                                                        (assoc :affected-page-uuids affected-page-uuids)
 

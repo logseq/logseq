@@ -116,7 +116,7 @@
        set))
 
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta current-window affected-page-uuids]
+  [ops tx-meta current-window updated-blocks affected-page-uuids]
   (let [started-at (now-ms)
         affected-page-uuids (set affected-page-uuids)
         affected-ids (op-block-uuids ops)
@@ -140,6 +140,9 @@
                     current-window
                     (assoc :page-window current-window)
 
+                    (seq updated-blocks)
+                    (assoc :updated-blocks updated-blocks)
+
                     (seq affected-page-uuids)
                     (assoc :affected-page-uuids affected-page-uuids))
             changed-paths (outliner-pipeline/refresh-state-paths changed-ids)
@@ -153,12 +156,12 @@
        :publish-ms 0})))
 
 (defn- publish-worker-response!
-  [ops tx-meta current-window affected-page-uuids]
+  [ops tx-meta current-window updated-blocks affected-page-uuids]
   (let [ui-refresh-perf (volatile! nil)]
     (react-dom/flushSync
      (fn []
        (vreset! ui-refresh-perf
-                (refresh-worker-op-blocks! ops tx-meta current-window affected-page-uuids))
+                (refresh-worker-op-blocks! ops tx-meta current-window updated-blocks affected-page-uuids))
        (run-edit-block-fn! tx-meta current-window)))
     @ui-refresh-perf))
 
@@ -198,7 +201,10 @@
             worker-opts (cond-> (dissoc opts' :ui/page-id :ui/page-window-opts
                                        :editor/edit-block-fn)
                           (seq affected-block-uuids)
-                          (assoc :affected-block-uuids affected-block-uuids))
+                          (assoc :affected-block-uuids affected-block-uuids)
+
+                          (and (not structural?) (seq affected-block-uuids))
+                          (assoc :return-updated-blocks? true))
             request #(p/do!
                       (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                                request-repo
@@ -209,7 +215,7 @@
                        ops
                        worker-opts))]
         (p/let [response (request)
-                {:keys [result affected-page-uuids perf]} response
+                {:keys [result affected-page-uuids updated-blocks perf]} response
                 mutation-returned-at (now-ms)
                 current-window (when (and structural? request-page-id)
                                  (state/<invoke-db-worker
@@ -222,7 +228,7 @@
                        (= request-route (state/get-route-match)))
             nil
             (let [ui-refresh-perf (publish-worker-response!
-                                   ops opts' current-window affected-page-uuids)
+                                   ops opts' current-window updated-blocks affected-page-uuids)
                   state-updated-at (now-ms)]
               (on-next-frame!
                (fn []

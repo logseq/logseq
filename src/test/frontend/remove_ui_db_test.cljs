@@ -669,7 +669,7 @@
         refresh-index (string/index-of use-page-block-state-source "refresh-page-window-row-overrides!")
         refresh-source (when refresh-index
                          (subs use-page-block-state-source
-                               (max 0 (- refresh-index 160))
+                               (max 0 (- refresh-index 360))
                                (min (count use-page-block-state-source)
                                     (+ refresh-index 220))))]
     (is (some? refresh-index)

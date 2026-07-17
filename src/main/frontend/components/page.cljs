@@ -299,7 +299,8 @@
 (defn- refresh-loaded-children!
   [block* loaded-children latest-page-children latest-transacted-entity-uuids
    *request-id set-loaded-children!]
-  (let [deleted-ids (:deleted-ids latest-transacted-entity-uuids)
+  (let [updated-blocks (:updated-blocks latest-transacted-entity-uuids)
+        deleted-ids (:deleted-ids latest-transacted-entity-uuids)
         updated-ids (:updated-ids latest-transacted-entity-uuids)]
     (cond
       latest-page-children
@@ -307,6 +308,12 @@
 
       (seq deleted-ids)
       (set-loaded-children! #(vec (remove (comp deleted-ids :block/uuid) %)))
+
+      (seq updated-blocks)
+      (let [overrides (block-row-overrides updated-blocks)]
+        (set-loaded-children! #(mapv (fn [child]
+                                      (merge-updated-loaded-child overrides child))
+                                    %)))
 
       (or (contains? (:affected-page-uuids latest-transacted-entity-uuids)
                      (:block/uuid block*))
@@ -405,6 +412,14 @@
                                             [:page-window :root :block/uuid]))
                              (:page-window latest-transacted-entity-uuids))
         page-window (or latest-page-window stored-page-window)
+        latest-row-overrides (block-row-overrides
+                              (:updated-blocks latest-transacted-entity-uuids))
+        loaded-children (if (seq latest-row-overrides)
+                          (mapv #(merge-updated-loaded-child latest-row-overrides %)
+                                loaded-children)
+                          loaded-children)
+        page-window-row-overrides (merge-row-overrides page-window-row-overrides
+                                                       latest-row-overrides)
         load-page-window! (page-window-loader block-uuid quick-add-page?
                                                 *page-window-request-id
                                                 *current-page-window-request
@@ -444,10 +459,12 @@
     (hooks/use-effect!
      (fn []
        (when-not (:page-window-refresh? latest-transacted-entity-uuids)
-         (refresh-page-window-row-overrides! page-window
-                                             latest-transacted-entity-uuids
-                                             *page-window-request-id
-                                             set-page-window-row-overrides!))
+         (if (seq latest-row-overrides)
+           (set-page-window-row-overrides! #(merge-row-overrides % latest-row-overrides))
+           (refresh-page-window-row-overrides! page-window
+                                               latest-transacted-entity-uuids
+                                               *page-window-request-id
+                                               set-page-window-row-overrides!)))
        nil)
      [(:tx-id latest-transacted-entity-uuids)
       (:offset page-window)
