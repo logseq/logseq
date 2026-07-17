@@ -157,8 +157,10 @@
 #?(:cljs
    (defn set-change-value
      "compatible change event for React"
-     [node value]
-     (utils/triggerInputChange node value)))
+     ([node value]
+      (utils/triggerInputChange node value))
+     ([node value caret-pos]
+      (utils/triggerInputChange node value caret-pos))))
 
 #?(:cljs
    (defn p-handle
