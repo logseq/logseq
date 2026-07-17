@@ -616,8 +616,9 @@
         "Structural page-window refresh must not be dropped while the initial page window is still loading.")
     (is (string/includes? use-page-block-state-source "(hooks/use-effect!")
         "Page-window reconciliation should not block browser paint.")
-    (is (string/includes? refresh-source "(or (:offset page-window) 0)")
-        "Structural page-window refresh should use offset 0 before the first page window is available.")))
+    (is (and (string/includes? use-page-block-state-source "page-refresh?")
+             (string/includes? use-page-block-state-source "common-page-window/refresh-opts"))
+        "Structural refresh should preserve the current top or bottom window anchor.")))
 
 (deftest page-window-load-ignores-stale-responses-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
@@ -674,7 +675,7 @@
     (is (some? refresh-index)
         "Page window rows should still support row-level refreshes for content-only txs.")
     (is (string/includes? refresh-source "when-not (:page-window-refresh? latest-transacted-entity-uuids)")
-        "Structural page-window refreshes must not also invalidate their own full-window response via row overrides.")))
+        "Structural page-window refreshes must not also issue row-level refresh requests.")))
 
 (deftest page-window-flat-rows-keep-worker-order-test
   (let [source (source-for "src/main/frontend/components/page.cljs")

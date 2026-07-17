@@ -699,6 +699,38 @@
         (state/set-state! :editor/pending-new-block nil)
         (set! (.-document js/globalThis) previous-document)))))
 
+(deftest pending-rapid-enter-and-backspace-keep-page-refresh-target
+  (let [page-id (random-uuid)
+        block {:db/id 2
+               :block/uuid (random-uuid)
+               :block/title ""
+               :block/page {:db/id page-id}}
+        previous-block {:db/id 1
+                        :block/uuid (random-uuid)
+                        :block/title "previous"
+                        :block/page {:db/id page-id}}
+        tx-meta (atom [])]
+    (try
+      (with-redefs [block-handler/page-window-tx-meta
+                    (constantly {:ui/page-id page-id})
+                    db-transact/apply-outliner-ops (fn [_conn _ops opts]
+                                                    (swap! tx-meta conj opts))
+                    editor/save-block-aux! (fn [& _args] nil)
+                    editor/save-current-block! (fn [& _args] nil)
+                    editor/edit-block! (fn [& _args] nil)]
+        (#'editor/finish-pending-new-block-edit!
+         block nil {:block-prefixes ["" "" "rapid"]})
+        (#'editor/delete-pending-new-block!
+         block nil {:previous-block previous-block
+                    :previous-title "previous"
+                    :previous-pos 8}))
+      (is (= [[:insert-blocks page-id]
+              [:delete-blocks page-id]]
+             (mapv (juxt :outliner-op :ui/page-id) @tx-meta)))
+      (finally
+        (state/set-state! :editor/edit-block-fn nil)
+        (state/set-state! :editor/pending-new-block nil)))))
+
 (deftest-async insert-above-awaits-async-insert
   (let [current-block {:db/id 1
                        :block/uuid (random-uuid)
