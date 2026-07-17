@@ -48,3 +48,30 @@
                @refresh-calls)))
       (finally
         (reset! state/state original-state)))))
+
+(deftest structural-change-from-another-tab-publishes-affected-pages
+  (let [original-state @state/state
+        state-calls (atom [])
+        repo "test"
+        page-uuid (random-uuid)]
+    (try
+      (reset! state/state {:client-id "other-client"})
+      (with-redefs [state/get-current-repo (constantly repo)
+                    state/get-current-page (constantly nil)
+                    state/set-state! (fn [& args]
+                                       (swap! state-calls conj args))
+                    react/refresh! (fn [& _])]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta {:client-id "source-client"
+                                          :ui/handled-by-response? true
+                                          :outliner-op :insert-blocks
+                                          :db-sync/tx-id 1}
+                                :blocks [{:block/uuid (random-uuid)
+                                          :block/page {:block/uuid page-uuid}}]})
+        (let [[_ value] (some #(when (= :db/latest-transacted-entity-uuids
+                                        (first %))
+                                %)
+                              @state-calls)]
+          (is (= #{page-uuid} (:affected-page-uuids value)))))
+      (finally
+        (reset! state/state original-state)))))
