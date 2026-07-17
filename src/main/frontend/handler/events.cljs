@@ -495,14 +495,6 @@
 (defevent! :editor/run-query-command [_]
   (editor-handler/run-query-command!))
 
-(defevent! :editor/load-blocks [[_ ids]]
-  (when (seq ids)
-    ;; not using `<get-blocks` here becuase because we want to
-    ;; load all nested children here for copy/export
-    (p/all (map (fn [id]
-                  (db-async/<get-block (state/get-current-repo) id
-                                       {:skip-refresh? false})) ids))))
-
 (defn- register-rfx-handlers!
   []
   (doseq [[event-id handler] @event-definitions]

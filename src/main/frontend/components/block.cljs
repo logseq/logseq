@@ -2560,6 +2560,8 @@
           (.addRange selection range)
           (util/caret-range node))))))
 
+(defonce *block-last-scroll-top (atom nil))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not (state/get-state :ui/scrolling?)
@@ -2593,6 +2595,9 @@
                 mobile-range (when mobile? (get-cursor-range))]
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
               (when (= 1 button)
+                (reset! *block-last-scroll-top
+                        (some-> (util/app-scroll-container-node block-dom-element)
+                                .-scrollTop))
                 (block-selection/set-pointer-down!))
               (cond
                 (and meta? shift?)
@@ -3579,7 +3584,7 @@
 
 (defn non-dragging?
   [e]
-  (and (= (gobj/get e "buttons") 1)
+  (and (block-selection/pointer-down?)
        (not (dom/has-class? (gobj/get e "target") "bullet-container"))
        (not (dom/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
@@ -3950,8 +3955,6 @@
     (block-drag-end event *move-to')))
 
 (defonce *block-last-mouse-event (atom nil))
-(defonce *block-scroll-selection-raf (atom nil))
-(defonce *block-last-scroll-top (atom nil))
 
 (defn- remember-block-pointer!
   [^js e]
@@ -3989,27 +3992,18 @@
                                                     {:append? true
                                                      :block-ids selection-block-ids}))))))
 
-(defn- schedule-select-block-under-pointer!
+(defn- select-block-under-pointer-after-scroll!
   [selection-block-ids scroll-container]
   (when (and (seq selection-block-ids)
              (block-selection/pointer-down?))
     (let [scroll-top (some-> scroll-container .-scrollTop)
           last-scroll-top @*block-last-scroll-top
-          scroll-direction (cond
-                             (and scroll-top last-scroll-top (> scroll-top last-scroll-top)) :down
-                             (and scroll-top last-scroll-top (< scroll-top last-scroll-top)) :up
-                             :else nil)]
+          direction (cond
+                      (and scroll-top last-scroll-top (> scroll-top last-scroll-top)) :down
+                      (and scroll-top last-scroll-top (< scroll-top last-scroll-top)) :up
+                      :else (state/get-selection-direction))]
       (reset! *block-last-scroll-top scroll-top)
-      (when-let [raf-id @*block-scroll-selection-raf]
-        (js/cancelAnimationFrame raf-id))
-      (reset! *block-scroll-selection-raf
-              (js/requestAnimationFrame
-               (fn []
-                 (reset! *block-scroll-selection-raf
-                         (js/requestAnimationFrame
-                          (fn []
-                            (reset! *block-scroll-selection-raf nil)
-                            (select-block-under-pointer! selection-block-ids scroll-direction))))))))))
+      (select-block-under-pointer! selection-block-ids direction))))
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode? selection-block-ids]
   (let [last-client-y (:client-y @*block-last-mouse-event)
@@ -5391,6 +5385,12 @@
                            (scroll-container)
                            scroll-container)
         *virtualized-ref (hooks/use-ref nil)
+        on-range-changed (fn [range]
+                           (when-let [f (:virtual/on-range-changed config)]
+                             (f range))
+                           (when (block-selection/pointer-down?)
+                             (select-block-under-pointer! selection-block-ids
+                                                          (state/get-selection-direction))))
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent scroll-container
@@ -5404,7 +5404,7 @@
                         :overscan 254
                         :skipAnimationFrameInResizeObserver true
                         :total-count (or virtual-total-count blocks-count)
-                        :rangeChanged (:virtual/on-range-changed config)
+                        :rangeChanged on-range-changed
                         :item-content (fn [idx _ context]
                                         ((gobj/get context "renderItem") idx))})]
     (hooks/use-effect!
@@ -5420,7 +5420,7 @@
     (hooks/use-effect!
      (fn []
        (if (and scroll-container (seq selection-block-ids))
-         (let [handler #(schedule-select-block-under-pointer! selection-block-ids scroll-container)]
+         (let [handler #(select-block-under-pointer-after-scroll! selection-block-ids scroll-container)]
            (.addEventListener scroll-container "scroll" handler #js {:passive true})
            #(.removeEventListener scroll-container "scroll" handler))
          (fn [])))

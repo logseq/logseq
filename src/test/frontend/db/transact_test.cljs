@@ -140,15 +140,11 @@
       (is (= tx-id (get-in latest [:entity-tx-ids target-page-id]))))))
 
 (deftest editor-callback-runs-from-its-worker-response-test
-  (let [callback-id (random-uuid)
-        calls (atom [])]
-    (state/queue-edit-block-fn! callback-id #(reset! calls :called))
+  (let [calls (atom [])]
     (#'db-transact/run-edit-block-fn!
-     {:editor/edit-block-fn-id callback-id}
+     {:editor/edit-block-fn (fn [_rows] (reset! calls :called))}
      nil)
-    (is (= :called @calls))
-    (is (nil? (state/take-edit-block-fn! callback-id))
-        "The callback runs exactly once.")))
+    (is (= :called @calls))))
 
 (deftest apply-outliner-ops-refreshes-after-worker-persistence-test
   (async done
@@ -158,7 +154,6 @@
           calls (atom [])
           worker-result (p/deferred)]
       (state/set-state! :db/latest-transacted-entity-uuids {})
-      (state/set-state! :editor/pending-new-block {:typed-text "abc"})
       (-> (p/with-redefs [util/node-test? false
                           state/get-current-repo (constantly "test-repo")
                           state/get-editor-info (constantly editor-info)
@@ -185,7 +180,7 @@
                             "Editor history is sent through its dedicated worker API.")
                       _ (is (not-any? #(contains? (get-in @calls [1 1 2]) %)
                                       [:ui/page-id :ui/page-window-opts :ui/editor-info :virtual/offset
-                                       :editor/edit-block-fn-id])
+                                       :editor/edit-block-fn])
                             "The mutation worker must not receive renderer or editor state.")
                       _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
                             "UI refresh state must not change until the worker transaction resolves.")
@@ -196,12 +191,8 @@
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
                 (is (nil? (:page-window latest)))
-                (is (= tx-id (:tx-id latest)))
-                (is (= {:typed-text "abc"}
-                       (state/get-state :editor/pending-new-block))
-                    "Worker completion must not discard input queued before the editor renders."))))
+                (is (= tx-id (:tx-id latest))))))
           (p/finally (fn []
-                       (state/set-state! :editor/pending-new-block nil)
                        (done)))))))
 
 (deftest structural-op-loads-one-window-after-the-mutation-test
@@ -258,19 +249,15 @@
                 (is (= current-window (:page-window latest))))))
           (p/finally done)))))
 
-(deftest apply-outliner-ops-completes-before-next-frame-callback-test
+(deftest apply-outliner-ops-runs-editor-callback-synchronously-test
   (async done
-    (let [callback-id (random-uuid)
-          block-id (random-uuid)
+    (let [block-id (random-uuid)
           original-raf (.-requestAnimationFrame js/globalThis)
           frame-callback (atom nil)
+          callback-called? (atom false)
           settlement (atom nil)]
       (set! (.-requestAnimationFrame js/globalThis)
             #(reset! frame-callback %))
-      (state/queue-edit-block-fn!
-       callback-id
-       (fn [& _]
-         (throw (js/Error. "editor callback failed"))))
       (-> (p/with-redefs [util/node-test? false
                           state/get-current-repo (constantly "test-repo")
                           state/get-editor-info (constantly nil)
@@ -281,20 +268,24 @@
             (let [result (db-transact/apply-outliner-ops
                           nil
                           [[:save-block [{:block/uuid block-id} {}]]]
-                          {:editor/edit-block-fn-id callback-id})]
+                          {:editor/edit-block-fn
+                           (fn [_rows]
+                             (reset! callback-called? true)
+                             (throw (js/Error. "editor callback failed")))})]
               (-> result
                   (p/then #(reset! settlement [:resolved %]))
                   (p/catch #(reset! settlement [:rejected (ex-message %)])))
               (p/let [_ (p/delay 0)
                       _ (is (= [:resolved ::persisted] @settlement)
-                            "DB completion must not wait for cursor work.")
+                            "Committed DB work should resolve even when the editor callback fails.")
+                      _ (is @callback-called?
+                            "The editor callback should run in the same worker response cycle.")
                       _ (when-let [f @frame-callback] (f))
                       _ (p/delay 0)]
                 (is (= [:resolved ::persisted] @settlement)
                     "Cursor callback failure must not reject committed DB work."))))
           (p/finally
            (fn []
-             (state/remove-edit-block-fn! callback-id)
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
@@ -304,10 +295,8 @@
           route (atom {:data {:name :page}
                        :path-params {:name "old-page"}})
           worker-result (p/deferred)
-          callback-id (random-uuid)
           callback-calls (atom 0)
           new-context-state {:tx-id ::new-context}]
-      (state/queue-edit-block-fn! callback-id #(swap! callback-calls inc))
       (-> (p/with-redefs [util/node-test? false
                           state/get-current-repo #(deref repo)
                           state/get-route-match #(deref route)
@@ -318,7 +307,7 @@
             (let [result (db-transact/apply-outliner-ops
                           nil
                           [[:save-block [{:block/uuid (random-uuid)} {}]]]
-                          {:editor/edit-block-fn-id callback-id})]
+                          {:editor/edit-block-fn (fn [_rows] (swap! callback-calls inc))})]
               (reset! repo "new-repo")
               (reset! route {:data {:name :page}
                              :path-params {:name "new-page"}})
@@ -331,17 +320,13 @@
                 (is (= ::persisted value))
                 (is (= new-context-state
                        (state/get-state :db/latest-transacted-entity-uuids)))
-                (is (zero? @callback-calls))
-                (is (nil? (state/take-edit-block-fn! callback-id))))))
+                (is (zero? @callback-calls)))))
           (p/finally
-           (fn []
-             (state/remove-edit-block-fn! callback-id)
-             (done)))))))
+           done)))))
 
-(deftest apply-outliner-ops-removes-editor-callback-on-worker-failure-test
+(deftest apply-outliner-ops-does-not-run-editor-callback-on-worker-failure-test
   (async done
-    (let [callback-id (random-uuid)]
-      (state/queue-edit-block-fn! callback-id (fn [] nil))
+    (let [callback-called? (atom false)]
       (-> (p/with-redefs [util/node-test? false
                           state/get-current-repo (constantly "test-repo")
                           state/get-editor-info (constantly nil)
@@ -351,12 +336,10 @@
             (-> (db-transact/apply-outliner-ops
                  nil
                  [[:save-block [{:block/uuid (random-uuid)} {}]]]
-                 {:editor/edit-block-fn-id callback-id})
+                 {:editor/edit-block-fn (fn [_rows] (reset! callback-called? true))})
                 (p/then (fn [_]
                           (is false "Worker failure should reject.")))
                 (p/catch (fn [_]
-                           (is (nil? (state/take-edit-block-fn! callback-id)))))))
+                           (is (false? @callback-called?))))))
           (p/finally
-           (fn []
-             (state/remove-edit-block-fn! callback-id)
-             (done)))))))
+           done)))))
