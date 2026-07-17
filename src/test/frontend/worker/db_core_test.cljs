@@ -1,5 +1,7 @@
 (ns frontend.worker.db-core-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -12,6 +14,11 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
             [frontend.worker.graph-view :as graph-view]
+            [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.export :as worker-export-handler]
+            [frontend.worker.handler.graph :as worker-graph-handler]
+            [frontend.worker.handler.maintenance :as maintenance-handler]
+            [frontend.worker.handler.search :as search-handler]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
             [frontend.worker.query-dsl :as worker-query-dsl]
@@ -39,6 +46,196 @@
             [shadow.resource :as rc]))
 
 (def ^:private test-repo "db-core-test-repo")
+
+(defn- source-for
+  [relative-file]
+  (let [path (node-path/join (.cwd js/process) relative-file)]
+    (if (fs/existsSync path)
+      (.toString (fs/readFileSync path "utf8"))
+      "")))
+
+(defn- count-string-occurrences
+  [source needle]
+  (loop [offset 0
+         result 0]
+    (let [index (.indexOf source needle offset)]
+      (if (= -1 index)
+        result
+        (recur (+ index (count needle)) (inc result))))))
+
+(def ^:private infrastructure-handler-thread-apis
+  {"src/main/frontend/worker/handler/sync.cljs"
+   #{:thread-api/set-db-sync-config
+     :thread-api/get-db-sync-config
+     :thread-api/db-sync-status
+     :thread-api/db-sync-stop
+     :thread-api/db-sync-update-presence
+     :thread-api/db-sync-request-asset-download
+     :thread-api/db-sync-download-missing-assets
+     :thread-api/db-sync-retry-asset-upload
+     :thread-api/db-sync-grant-graph-access
+     :thread-api/db-sync-ensure-user-rsa-keys
+     :thread-api/db-sync-list-remote-graphs
+     :thread-api/db-sync-upload-graph
+     :thread-api/db-sync-create-remote-graph
+     :thread-api/db-sync-stop-upload
+     :thread-api/db-sync-resume-upload
+     :thread-api/db-sync-upload-stopped?
+     :thread-api/db-sync-get-block-conflicts
+     :thread-api/db-sync-clear-block-conflicts
+     :thread-api/db-sync-download-graph-by-id}
+
+   "src/main/frontend/worker/handler/undo_redo.cljs"
+   #{:thread-api/undo-redo-set-pending-editor-info
+     :thread-api/undo-redo-record-editor-info
+     :thread-api/undo-redo-record-ui-state
+     :thread-api/undo-redo-undo
+     :thread-api/undo-redo-redo
+     :thread-api/undo-redo-clear-history
+     :thread-api/undo-redo-get-debug-state}
+
+   "src/main/frontend/worker/handler/cli.cljs"
+   #{:thread-api/cli-list-properties
+     :thread-api/cli-list-tags
+     :thread-api/cli-list-pages
+     :thread-api/cli-list-tasks
+     :thread-api/cli-list-nodes
+     :thread-api/api-get-page-data
+     :thread-api/api-list-properties
+     :thread-api/api-list-tags
+     :thread-api/api-list-pages
+     :thread-api/api-build-upsert-nodes-edn}
+
+   "src/main/frontend/worker/handler/export.cljs"
+   #{:thread-api/export-get-debug-datoms
+     :thread-api/export-get-all-page->content
+     :thread-api/export-get-blocks-data
+     :thread-api/export-blocks-as-format
+     :thread-api/validate-db
+     :thread-api/recompute-checksum-diagnostics
+     :thread-api/export-edn
+     :thread-api/import-edn
+     :thread-api/build-publishing-html}
+
+   "src/main/frontend/worker/handler/maintenance.cljs"
+   #{:thread-api/get-db-schema
+     :thread-api/reset-db
+     :thread-api/gc-graph}
+
+   "src/main/frontend/worker/handler/markdown.cljs"
+   #{:thread-api/markdown-mirror-set-enabled
+     :thread-api/markdown-mirror-flush
+     :thread-api/markdown-mirror-regenerate}
+
+   "src/main/frontend/worker/handler/graph.cljs"
+   #{:thread-api/get-favorite-pages
+     :thread-api/favorited-page?
+     :thread-api/get-recent-pages
+     :thread-api/build-favorite-page-ops
+     :thread-api/build-unfavorite-page-ops
+     :thread-api/build-reorder-favorites-ops
+     :thread-api/build-graph
+     :thread-api/get-all-page-titles
+     :thread-api/mobile-logs
+     :thread-api/get-key-value
+     :thread-api/get-rtc-graph-uuid
+     :thread-api/get-graph-uuid
+     :thread-api/ensure-local-graph-uuid
+     :thread-api/get-rtc-graph-e2ee?
+     :thread-api/get-graph-schema-version}})
+
+(def ^:private domain-handler-thread-apis
+  {"src/main/frontend/worker/handler/property.cljs"
+   #{:thread-api/get-all-classes
+     :thread-api/get-structured-children
+     :thread-api/get-class-extends-children-tree
+     :thread-api/get-alias-source-page
+     :thread-api/get-property-closed-values
+     :thread-api/get-property-node-selector-data
+     :thread-api/get-class-objects
+     :thread-api/validate-block-tag
+     :thread-api/build-convert-tag-to-page-tx
+     :thread-api/build-convert-page-to-tag-tx
+     :thread-api/get-property-values
+     :thread-api/get-bidirectional-properties
+     :thread-api/get-all-properties
+     :thread-api/get-display-properties
+     :thread-api/get-block-positioned-properties
+     :thread-api/validate-property-value
+     :thread-api/reorder-display-property
+     :thread-api/get-date-scheduled-or-deadlines}
+
+   "src/main/frontend/worker/handler/block.cljs"
+   #{:thread-api/get-blocks
+     :thread-api/get-page-blocks-window
+     :thread-api/get-block-refs
+     :thread-api/get-block-refs-count
+     :thread-api/get-block-source
+     :thread-api/block-refs-check
+     :thread-api/get-block-parents}
+
+   "src/main/frontend/worker/handler/search.cljs"
+   #{:thread-api/search-blocks
+     :thread-api/search-upsert-blocks
+     :thread-api/search-delete-blocks
+     :thread-api/search-truncate-tables
+     :thread-api/search-build-blocks-indice
+     :thread-api/search-build-blocks-indice-in-worker
+     :thread-api/search-build-pages-indice}
+
+   "src/main/frontend/worker/handler/transaction.cljs"
+   #{:thread-api/set-context
+     :thread-api/transact
+     :thread-api/apply-outliner-ops
+     :thread-api/sync-app-state}
+
+   "src/main/frontend/worker/handler/flashcard.cljs"
+   #{:thread-api/get-fsrs-due-card-block-ids}
+
+   "src/main/frontend/worker/handler/query.cljs"
+   #{:thread-api/q
+     :thread-api/query-dsl-query
+     :thread-api/query-dsl-custom-query
+     :thread-api/datoms
+     :thread-api/pull
+     :thread-api/task-spent-time
+     :thread-api/resolve-query-inputs}
+
+   "src/main/frontend/worker/handler/page.cljs"
+   #{:thread-api/get-first-url-property-value
+     :thread-api/get-page-route-info
+     :thread-api/get-block-by-page-name-and-block-route-name
+     :thread-api/get-today-journal-title
+     :thread-api/get-date-formatter
+     :thread-api/get-journal-page-title
+     :thread-api/get-journal-page-by-day
+     :thread-api/get-latest-journals
+     :thread-api/page-exists?
+     :thread-api/get-case-page
+     :thread-api/get-tags-by-name
+     :thread-api/get-block-parent
+     :thread-api/get-block-page-info
+     :thread-api/get-block-immediate-children
+     :thread-api/get-block-sibling
+     :thread-api/get-page-blocks-tree
+     :thread-api/get-block-class-default-properties
+     :thread-api/get-class-properties
+     :thread-api/get-route-title
+     :thread-api/get-file-content}})
+
+(def ^:private extracted-handler-thread-apis
+  (merge infrastructure-handler-thread-apis domain-handler-thread-apis))
+
+(deftest self-contained-thread-apis-are-owned-by-domain-handlers-test
+  (let [db-core-source (source-for "src/main/frontend/worker/db_core.cljs")]
+    (doseq [[handler-file api-keys] extracted-handler-thread-apis
+            api-key api-keys]
+      (let [registration (str "(def-thread-api " api-key "\n")
+            handler-source (source-for handler-file)]
+        (is (not (string/includes? db-core-source registration))
+            (str api-key " must not be registered in db-core"))
+        (is (= 1 (count-string-occurrences handler-source registration))
+            (str api-key " must be registered exactly once in " handler-file))))))
 
 (def ^:private task-spent-time-schema
   (merge db-schema/schema
@@ -183,8 +380,8 @@
         opfs-prev @worker-state/*opfs-pools
         main-thread-prev @worker-state/*main-thread
         platform-prev @@#'platform/*platform
-        search-build-prev @(deref #'db-core/*search-index-build-ids)
-        vector-build-prev @(deref #'db-core/*vector-index-rebuild-ids)
+        search-build-prev @(deref #'search-handler/*search-index-build-ids)
+        vector-build-prev @(deref #'search-handler/*vector-index-rebuild-ids)
         cleanup (fn []
                   (reset! worker-state/*state state-prev)
                   (reset! worker-state/*db-sync-config config-prev)
@@ -195,8 +392,8 @@
                   (reset! worker-state/*client-ops-conns client-ops-prev)
                   (reset! worker-state/*opfs-pools opfs-prev)
                   (reset! worker-state/*main-thread main-thread-prev)
-                  (reset! (deref #'db-core/*search-index-build-ids) search-build-prev)
-                  (reset! (deref #'db-core/*vector-index-rebuild-ids) vector-build-prev)
+                  (reset! (deref #'search-handler/*search-index-build-ids) search-build-prev)
+                  (reset! (deref #'search-handler/*vector-index-rebuild-ids) vector-build-prev)
                   (reset! @#'platform/*platform platform-prev))]
     (platform/set-platform! (build-test-platform))
     (reset! worker-state/*sqlite #js {})
@@ -206,8 +403,8 @@
     (reset! worker-state/*client-ops-conns {})
     (reset! worker-state/*opfs-pools {})
     (reset! worker-state/*main-thread nil)
-    (reset! (deref #'db-core/*search-index-build-ids) {})
-    (reset! (deref #'db-core/*vector-index-rebuild-ids) {})
+    (reset! (deref #'search-handler/*search-index-build-ids) {})
+    (reset! (deref #'search-handler/*vector-index-rebuild-ids) {})
     (let [result (f)]
       (if (p/promise? result)
         (p/finally result cleanup)
@@ -238,7 +435,7 @@
          (is (= :default (:logseq.property/type result)))
          (is (= :db.cardinality/one (:db/cardinality result)))
          (is (= (:db/id result)
-                (:db/id (#'db-core/resolve-block-entity @conn :user.property/test-property))))
+                (:db/id (#'block-handler/resolve-block-entity @conn :user.property/test-property))))
          (is (nil? (:page-window response))
              "Outliner mutations must not synchronously calculate a page window."))))))
 
@@ -855,7 +1052,7 @@
      (restoring-worker-state
       (fn []
         (let [repo (str test-repo "-progress-" (random-uuid))
-              build-index! #'db-core/<build-blocks-index!
+              build-index! #'search-handler/<build-blocks-index!
               conn (d/create-conn db-schema/schema)
               progress-calls (atom [])
               progress-seen-before-rebuild-work? (atom nil)
@@ -879,7 +1076,7 @@
           (d/transact! conn [{:block/uuid (random-uuid)}])
           (reset! idle-status-atom {repo {:idle? true
                                           :ts (.now js/Date)}})
-          (p/with-redefs [db-core/report-search-index-progress! (fn [repo payload]
+          (p/with-redefs [search-handler/report-search-index-progress! (fn [repo payload]
                                                                   (record-progress! repo payload)
                                                                   (p/resolved nil))
                           search/truncate-table! (fn [db]
@@ -891,7 +1088,7 @@
                                                 {:id "block-1"
                                                  :page "page-1"
                                                  :title "Hello"})]
-            (let [build-id (#'db-core/start-search-index-build! repo)]
+            (let [build-id (#'search-handler/start-search-index-build! repo)]
               (-> (build-index! repo search-db conn build-id)
                 (p/then (fn [_]
                           (is @progress-seen-before-rebuild-work?
@@ -1018,8 +1215,8 @@
     (->
      (restoring-worker-state
       (fn []
-        (let [build-index! #'db-core/<build-blocks-index!
-              build-id (#'db-core/start-search-index-build! test-repo)
+        (let [build-index! #'search-handler/<build-blocks-index!
+              build-id (#'search-handler/start-search-index-build! test-repo)
               conn (d/create-conn db-schema/schema)
               page-id (random-uuid)
               sql-calls (atom [])
@@ -1071,7 +1268,7 @@
                                                  @progress-calls)]
                     (is (nil? result))
                     (is @embedding-started?)
-                    (is (some #(= (str "PRAGMA user_version = " db-core/search-db-version) %)
+                    (is (some #(= (str "PRAGMA user_version = " search-handler/search-db-version) %)
                               @sql-calls))
                     (is (= {:repo test-repo
                             :payload {:status :completed
@@ -1146,7 +1343,7 @@
           (p/with-redefs [worker-state/get-vector-index (fn [repo]
                                                           (when (= repo test-repo)
                                                             vector-index))]
-            (p/let [result (#'db-core/<embed-index-blocks
+            (p/let [result (#'search-handler/<embed-index-blocks
                             test-repo
                             [{:id "block-1"
                               :page "page-1"
@@ -1178,7 +1375,7 @@
                             (swap! batch-sizes conj (count texts))
                             (p/resolved (mapv (fn [_] [0]) texts)))}))
           (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
-          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+          (p/let [result (#'search-handler/<embed-index-blocks test-repo blocks)]
             (is (= (count blocks) (count result)))
             (is (= [32 32 1] @batch-sizes))))))
      (p/catch (fn [error]
@@ -1209,7 +1406,7 @@
                                 (swap! active-batches dec)
                                 (mapv (fn [_] [0]) texts))))}))
           (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
-          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+          (p/let [result (#'search-handler/<embed-index-blocks test-repo blocks)]
             (is (= (count blocks) (count result)))
             (is (= [32 32 32] (sort @batch-sizes)))
             (is (= 2 @max-active-batches))))))
@@ -1233,7 +1430,7 @@
                             (if (> (count texts) 2)
                               (p/rejected (js/Error. "batch too large"))
                               (p/resolved (mapv (fn [_] [0]) texts))))]
-          (p/let [result (#'db-core/<embed-index-batch-with-fallback embed-texts blocks)]
+          (p/let [result (#'search-handler/<embed-index-batch-with-fallback embed-texts blocks)]
             (is (= (count blocks) (count result)))
             (is (= [8 4 2 2 4 2 2] @batch-sizes))))))
      (p/catch (fn [error]
@@ -1247,7 +1444,7 @@
       (fn []
         (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
               conn (d/create-conn db-schema/schema)
-              search-db (fake-db {:user-version db-core/search-db-version})
+              search-db (fake-db {:user-version search-handler/search-db-version})
               truncate-calls (atom 0)
               metadata-writes (atom [])
               idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
@@ -1276,7 +1473,7 @@
                                                :title "Hello"})]
             (p/let [result (build-index! test-repo false)
                     _ (p/delay 10)]
-              (is (= db-core/search-db-version result))
+              (is (= search-handler/search-db-version result))
               (is (= 0 @truncate-calls))
               (is (empty? @metadata-writes)))))))
      (p/catch (fn [error]
@@ -1284,13 +1481,13 @@
      (p/finally done))))
 
 (deftest vector-embedding-title-truncates-long-text-test
-  (let [vector-embedding-title #'db-core/vector-embedding-title
+  (let [vector-embedding-title #'search-handler/vector-embedding-title
         long-title (apply str (repeat 6000 "x"))]
     (is (= 2048 (count (vector-embedding-title long-title))))
     (is (= "short title" (vector-embedding-title "short title")))))
 
 (deftest vector-embedding-title-prefers-vector-title-test
-  (let [vector-embedding-title #'db-core/vector-embedding-title]
+  (let [vector-embedding-title #'search-handler/vector-embedding-title]
     (is (= "Page context\nBlock: Alpha"
            (vector-embedding-title {:title "Alpha"
                                     :vector-title "Page context\nBlock: Alpha"})))
@@ -1538,12 +1735,12 @@
 ;; ---- search-index-version tests ----
 
 (deftest search-index-version-reads-user-version
-  (let [search-index-version #'db-core/search-index-version
+  (let [search-index-version #'search-handler/search-index-version
         db (fake-db {:user-version 5})]
     (is (= 5 (search-index-version db)))))
 
 (deftest search-index-version-reads-default-zero
-  (let [search-index-version #'db-core/search-index-version
+  (let [search-index-version #'search-handler/search-index-version
         db (fake-db {:user-version 0})]
     (is (= 0 (search-index-version db)))))
 
@@ -1552,31 +1749,31 @@
 (deftest start-search-index-build-creates-build-id
   (restoring-worker-state
    (fn []
-     (let [start-search-index-build! #'db-core/start-search-index-build!
+     (let [start-search-index-build! #'search-handler/start-search-index-build!
            build-id (start-search-index-build! test-repo)]
        (is (string? build-id))
-       (is (= build-id (get @(deref #'db-core/*search-index-build-ids) test-repo)))))))
+       (is (= build-id (get @(deref #'search-handler/*search-index-build-ids) test-repo)))))))
 
 (deftest clear-search-index-build-removes-only-matching-build
   (restoring-worker-state
    (fn []
-     (let [start-search-index-build! #'db-core/start-search-index-build!
-           clear-search-index-build! #'db-core/clear-search-index-build!
+     (let [start-search-index-build! #'search-handler/start-search-index-build!
+           clear-search-index-build! #'search-handler/clear-search-index-build!
            build-id (start-search-index-build! test-repo)]
        ;; Clear with matching build-id
        (clear-search-index-build! test-repo build-id)
-       (is (nil? (get @(deref #'db-core/*search-index-build-ids) test-repo)))
+       (is (nil? (get @(deref #'search-handler/*search-index-build-ids) test-repo)))
        ;; Start a new build
        (let [build-id-2 (start-search-index-build! test-repo)]
          ;; Clear with wrong build-id should not remove
          (clear-search-index-build! test-repo "wrong-id")
-         (is (= build-id-2 (get @(deref #'db-core/*search-index-build-ids) test-repo))))))))
+         (is (= build-id-2 (get @(deref #'search-handler/*search-index-build-ids) test-repo))))))))
 
 (deftest ensure-active-search-index-build-throws-for-stale-build
   (restoring-worker-state
    (fn []
-     (let [start-search-index-build! #'db-core/start-search-index-build!
-           ensure-active-search-index-build! #'db-core/ensure-active-search-index-build!
+     (let [start-search-index-build! #'search-handler/start-search-index-build!
+           ensure-active-search-index-build! #'search-handler/ensure-active-search-index-build!
            build-id (start-search-index-build! test-repo)]
        ;; Current build-id should not throw
        (is (nil? (ensure-active-search-index-build! test-repo build-id)))
@@ -1586,21 +1783,21 @@
 ;; ---- take-search-index-batch tests ----
 
 (deftest take-search-index-batch-returns-all-for-small-input
-  (let [take-search-index-batch #'db-core/take-search-index-batch
+  (let [take-search-index-batch #'search-handler/take-search-index-batch
         blocks [{:e 1} {:e 2} {:e 3}]
         [batch remaining] (take-search-index-batch blocks 10 1000)]
     (is (= 3 (count batch)))
     (is (nil? remaining))))
 
 (deftest take-search-index-batch-respects-batch-size
-  (let [take-search-index-batch #'db-core/take-search-index-batch
+  (let [take-search-index-batch #'search-handler/take-search-index-batch
         blocks (vec (for [i (range 100)] {:e i}))
         [batch remaining] (take-search-index-batch blocks 10 1000)]
     (is (= 10 (count batch)))
     (is (= 90 (count remaining)))))
 
 (deftest take-search-index-batch-returns-empty-for-empty-input
-  (let [take-search-index-batch #'db-core/take-search-index-batch
+  (let [take-search-index-batch #'search-handler/take-search-index-batch
         [batch remaining] (take-search-index-batch [] 10 1000)]
     (is (empty? batch))
     (is (nil? remaining))))
@@ -1610,14 +1807,14 @@
 (deftest search-index-input-idle-returns-true-for-node
   (restoring-worker-state
    (fn []
-     (let [search-index-input-idle? #'db-core/search-index-input-idle?]
+     (let [search-index-input-idle? #'search-handler/search-index-input-idle?]
        (platform/set-platform! (build-test-platform {:runtime :node}))
        (is (true? (search-index-input-idle? test-repo)))))))
 
 (deftest search-index-input-idle-reads-status-from-state
   (restoring-worker-state
    (fn []
-     (let [search-index-input-idle? #'db-core/search-index-input-idle?
+     (let [search-index-input-idle? #'search-handler/search-index-input-idle?
            idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
        (platform/set-platform! (build-test-platform {:runtime :browser}))
        ;; No status set - should default to true
@@ -1634,7 +1831,7 @@
 (deftest search-index-input-idle-falls-back-to-true-for-stale-status
   (restoring-worker-state
    (fn []
-     (let [search-index-input-idle? #'db-core/search-index-input-idle?
+     (let [search-index-input-idle? #'search-handler/search-index-input-idle?
            idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
        (platform/set-platform! (build-test-platform {:runtime :browser}))
        ;; Set stale status (older than ttl)
@@ -1682,7 +1879,7 @@
                                [{:db/ident :test/entity
                                  :kv/value "replaced"}])
              transit-str (ldb/write-transit-str new-db)]
-         (db-core/reset-db! test-repo transit-str)
+         (#'maintenance-handler/reset-db! test-repo transit-str)
          ;; Verify the conn now has the new data
         (is (= "replaced" (:kv/value (d/entity @conn :test/entity)))))))))
 
@@ -1715,7 +1912,7 @@
 (deftest checksum-diagnostics-returns-local-and-remote
   (restoring-worker-state
    (fn []
-     (let [checksum-diagnostics #'db-core/checksum-diagnostics]
+     (let [checksum-diagnostics #'worker-export-handler/checksum-diagnostics]
        (with-redefs [client-op/get-local-checksum (fn [_] "local-checksum-123")
                      db-sync/*repo->latest-remote-checksum (atom {test-repo "remote-checksum-456"})]
          (is (= {:local-checksum "local-checksum-123"
@@ -1725,7 +1922,7 @@
 (deftest checksum-diagnostics-handles-missing-remote
   (restoring-worker-state
    (fn []
-     (let [checksum-diagnostics #'db-core/checksum-diagnostics]
+     (let [checksum-diagnostics #'worker-export-handler/checksum-diagnostics]
        (with-redefs [client-op/get-local-checksum (fn [_] "local-checksum-123")
                      db-sync/*repo->latest-remote-checksum (atom {})]
          (is (= {:local-checksum "local-checksum-123"
@@ -1735,7 +1932,7 @@
 ;; ---- get-all-page-titles tests ----
 
 (deftest get-all-page-titles-returns-sorted-titles
-  (let [get-all-page-titles #'db-core/get-all-page-titles
+  (let [get-all-page-titles #'worker-graph-handler/get-all-page-titles
         conn (d/create-conn db-schema/schema)]
     ;; ldb/get-all-pages expects specific schema attributes, so we mock it
     (with-redefs [ldb/get-all-pages (fn [_db]
@@ -1746,7 +1943,7 @@
         (is (= ["Alpha" "Bravo" "Charlie"] titles))))))
 
 (deftest get-all-page-titles-returns-empty-for-no-pages
-  (let [get-all-page-titles #'db-core/get-all-page-titles
+  (let [get-all-page-titles #'worker-graph-handler/get-all-page-titles
         conn (d/create-conn db-schema/schema)]
     (is (empty? (get-all-page-titles @conn)))))
 
@@ -1913,7 +2110,7 @@
 (deftest report-search-index-progress-sends-to-main-thread
   (restoring-worker-state
    (fn []
-     (let [report-search-index-progress! #'db-core/report-search-index-progress!
+     (let [report-search-index-progress! #'search-handler/report-search-index-progress!
            progress-calls (atom [])]
        (reset! worker-state/*main-thread
                (fn [qkw & args]
@@ -1928,7 +2125,7 @@
 (deftest report-search-index-progress-catches-main-thread-errors
   (restoring-worker-state
    (fn []
-     (let [report-search-index-progress! #'db-core/report-search-index-progress!]
+     (let [report-search-index-progress! #'search-handler/report-search-index-progress!]
        (reset! worker-state/*main-thread
                (fn [& _]
                  (p/rejected (js/Error. "main thread error"))))
@@ -2371,7 +2568,7 @@
                                  (swap! parent-index-scans inc))
                                (apply original-datoms db index components))]
         (let [root (d/entity @conn [:block/uuid root-uuid])
-              {:keys [large-page? children]} (#'db-core/get-block-children @conn root {})]
+              {:keys [large-page? children]} (#'block-handler/get-block-children @conn root {})]
           (is large-page?)
           (is (= 1 (count children)))
           (is (<= @parent-index-scans 101)
@@ -2440,7 +2637,7 @@
                      {:db/id 44
                       :block/title "loaded"
                       :block/parent 42}]}
-         (#'db-core/sanitize-block-result
+         (#'block-handler/sanitize-block-result
           {:block {:db/id 42
                    :block/title "parent"
                    :block/parent nil}
@@ -2472,7 +2669,7 @@
                         :block/title "Alias ref"
                         :block/refs [[:block/uuid alias-id]]}])
     (let [db @conn
-          refs-count #'db-core/block-refs-count]
+          refs-count #'block-handler/block-refs-count]
       (is (zero? (refs-count db (:db/id (d/entity db [:block/uuid plain-id])))))
       (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid target-id])))))
       (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid alias-id]))))))))
@@ -2518,7 +2715,7 @@
                                 (apply original-datoms db index components))]
          (let [db @conn
                root (d/entity db [:block/uuid target-page-id])
-               layout (#'db-core/page-block-layout db root)]
+               layout (#'block-handler/page-block-layout db root)]
            (is (= 1 (:block-count layout)))
            (is (empty? @graph-wide-layout-scans)
                "A page window should inspect target-page entities, not every graph entity")))))))
@@ -3572,8 +3769,8 @@
                            :block/uuid (random-uuid)
                            :block/title "foo bar"}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [db-core/search-blocks (fn [_repo _q _opts]
-                                             [{:db/id candidate-id}])]
+       (with-redefs [search-handler/search-blocks (fn [_repo _q _opts]
+                                                    [{:db/id candidate-id}])]
          (is (true? (block-refs-check! test-repo source-id {:unlinked? true}))))))))
 
 (deftest block-refs-check-linked-branch-uses-common-get-block-refs

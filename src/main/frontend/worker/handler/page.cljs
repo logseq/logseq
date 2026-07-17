@@ -1,6 +1,18 @@
 (ns frontend.worker.handler.page
   "Page operations"
-  (:require [logseq.outliner.page :as outliner-page]))
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.plain-value :as worker-plain]
+            [frontend.worker.state :as worker-state]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
+            [logseq.outliner.tree :as otree]))
 
 (defn create!
   "Creates a page through the outliner page service.
@@ -36,3 +48,248 @@
    * :now-ms           - timestamp recorded in the delete op metadata."
   [conn page-uuid & {:as options}]
   (outliner-page/delete! conn page-uuid options))
+
+(defn- first-url-property-value
+  [db block-id]
+  (when-let [block (d/entity db block-id)]
+    (some (fn [datom]
+            (let [property-id (:a datom)]
+              (when (db-property/property? property-id)
+                (when-let [property (d/entity db property-id)]
+                  (when (= :url (:logseq.property/type property))
+                    (let [value (:v datom)
+                          value (if (number? value) (d/entity db value) value)]
+                      (or (:block/title value)
+                          (when (string? value) value))))))))
+          (d/datoms db :eavt (:db/id block)))))
+
+(def-thread-api :thread-api/get-first-url-property-value
+  [repo block-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (first-url-property-value @conn block-id)))
+
+(defn- page-route-info
+  [db page-id-name-or-uuid]
+  (when-let [page (ldb/get-page db page-id-name-or-uuid)]
+    (let [alias-source (ldb/get-alias-source-page db (:db/id page))]
+      (cond-> {:page-id (:db/id page)
+               :page-uuid (:block/uuid page)
+               :page-title (:block/title page)
+               :hidden? (boolean (ldb/hidden? page))
+               :property? (boolean (ldb/property? page))
+               :built-in? (boolean (ldb/built-in? page))
+               :private-built-in? (boolean (and (ldb/built-in? page)
+                                                (ldb/private-built-in-page? page)))}
+        (:logseq.property/heading page)
+        (assoc :block-page-name (get-in page [:block/page :block/name])
+               :block-route-name (some->> (:block/title page)
+                                           (re-find #"^#{0,}\s*(.*)(?:\n|$)")
+                                           second
+                                           string/lower-case))
+
+        (:block/uuid alias-source)
+        (assoc :alias-source-id (:db/id alias-source)
+               :alias-source-uuid (:block/uuid alias-source))))))
+
+(def-thread-api :thread-api/get-page-route-info
+  [repo page-id-name-or-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (page-route-info @conn page-id-name-or-uuid)))
+
+(defn- heading-content->route-name
+  [block-content]
+  (some->> block-content
+           (re-find #"^#{0,}\s*(.*)(?:\n|$)")
+           second
+           string/lower-case))
+
+(defn- block-by-page-name-and-block-route-name
+  [db page-id-name-or-uuid route-name]
+  (when-let [page (ldb/get-page db page-id-name-or-uuid)]
+    (->> (d/q '[:find (pull ?b [:block/uuid])
+                :in $ ?page-id ?route-name ?content-matches
+                :where
+                [?b :block/page ?page-id]
+                [?b :logseq.property/heading]
+                [?b :block/title ?content]
+                [(?content-matches ?content ?route-name ?b)]]
+              db
+              (:db/id page)
+              route-name
+              (fn content-matches? [block-content external-content block-id]
+                (let [block (d/entity db block-id)
+                      ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
+                  (= (-> (db-content/id-ref->title-ref block-content ref-tags)
+                         (db-content/content-id-ref->page ref-tags)
+                         heading-content->route-name)
+                     (string/lower-case external-content)))))
+         ffirst)))
+
+(def-thread-api :thread-api/get-block-by-page-name-and-block-route-name
+  [repo page-id-name-or-uuid route-name]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (block-by-page-name-and-block-route-name @conn page-id-name-or-uuid route-name)))
+
+(def-thread-api :thread-api/get-today-journal-title
+  [repo today-journal-day fallback-title]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (or (:block/title (ldb/get-journal-page-by-day @conn today-journal-day))
+        fallback-title)
+    fallback-title))
+
+(def-thread-api :thread-api/get-date-formatter
+  [repo fallback-formatter]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (or (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
+        fallback-formatter)
+    fallback-formatter))
+
+(def-thread-api :thread-api/get-journal-page-title
+  [repo journal-day fallback-title]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (or (:block/title (ldb/get-journal-page-by-day @conn journal-day))
+        fallback-title)
+    fallback-title))
+
+(defn- page-entity->summary
+  [page]
+  (when page
+    {:db/id (:db/id page)
+     :block/uuid (:block/uuid page)
+     :block/title (:block/title page)
+     :block/raw-title (:block/raw-title page)
+     :block/name (:block/name page)
+     :block/journal-day (:block/journal-day page)}))
+
+(def-thread-api :thread-api/get-journal-page-by-day
+  [repo journal-day]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (some-> (ldb/get-journal-page-by-day @conn journal-day)
+            page-entity->summary)))
+
+(def-thread-api :thread-api/get-latest-journals
+  [repo n]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (mapv page-entity->summary
+          (take n (ldb/get-latest-journals @conn)))))
+
+(def-thread-api :thread-api/page-exists?
+  [repo page-name tags]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (boolean (seq (ldb/page-exists? @conn page-name tags)))))
+
+(def-thread-api :thread-api/get-case-page
+  [repo page-name-or-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (some-> (ldb/get-case-page @conn page-name-or-uuid)
+            entity-util/entity->map)))
+
+(def-thread-api :thread-api/get-tags-by-name
+  [repo name]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (->> (entity-util/get-pages-by-name @conn name)
+         (keep (fn [datom]
+                 (some-> (d/entity @conn (:e datom))
+                         entity-util/entity->map)))
+         (filter ldb/class?)
+         vec)))
+
+(def-thread-api :thread-api/get-block-parent
+  [repo block-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (some-> (d/entity @conn [:block/uuid block-uuid])
+            :block/parent
+            entity-util/entity->map)))
+
+(defn- block-ref-entity
+  [db block-ref]
+  (cond
+    (uuid? block-ref)
+    (d/entity db [:block/uuid block-ref])
+
+    (and (string? block-ref) (common-util/uuid-string? block-ref))
+    (d/entity db [:block/uuid (uuid block-ref)])
+
+    :else
+    (d/entity db block-ref)))
+
+(defn- block-page-info
+  [db block-ref]
+  (when-let [block (block-ref-entity db block-ref)]
+    (when-let [page (:block/page block)]
+      {:db/id (:db/id page)
+       :block/uuid (:block/uuid page)
+       :block/title (:block/title page)
+       :block/name (:block/name page)})))
+
+(def-thread-api :thread-api/get-block-page-info
+  [repo block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (block-page-info @conn block-ref)))
+
+(def-thread-api :thread-api/get-block-immediate-children
+  [repo block-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (mapv entity-util/entity->map (ldb/get-children @conn block-uuid))))
+
+(def-thread-api :thread-api/get-block-sibling
+  [repo block-id direction]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [block (d/entity db block-id)]
+        (let [sibling (case direction
+                        :left (ldb/get-left-sibling block)
+                        :right (ldb/get-right-sibling block)
+                        nil)]
+          (some->> sibling
+                   (#(worker-plain/entity-forward-map db % {}))
+                   worker-plain/with-explicit-ref-fields-recursive))))))
+
+(def-thread-api :thread-api/get-page-blocks-tree
+  [repo page-id-name-or-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [page (ldb/get-page db page-id-name-or-uuid)]
+        (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))))
+
+(def-thread-api :thread-api/get-block-class-default-properties
+  [repo block-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [classes-properties (some-> (outliner-property/get-block-classes-properties db block-id)
+                                            :classes-properties)]
+        (->> classes-properties
+             (keep (fn [property]
+                     (when-let [default-value (:logseq.property/default-value property)]
+                       [(:db/ident property)
+                        (if (:db/id default-value)
+                          (entity-util/entity->map default-value)
+                          default-value)])))
+             (into {}))))))
+
+(def-thread-api :thread-api/get-class-properties
+  [repo class-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [class (d/entity db class-id)]
+        (mapv #(worker-plain/entity-forward-map db % {})
+              (outliner-property/get-class-properties class))))))
+
+(defn- route-title-info
+  [db route-name]
+  (let [page (ldb/get-page db route-name)]
+    (if (and page (ldb/page? page))
+      {:page-title (:block/title page)}
+      (when (common-util/uuid-string? route-name)
+        (when-let [block (d/entity db [:block/uuid (uuid route-name)])]
+          {:block-title (:block/title block)})))))
+
+(def-thread-api :thread-api/get-route-title
+  [repo route-name]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (route-title-info @conn route-name)))
+
+(def-thread-api :thread-api/get-file-content
+  [repo path]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (:file/content (d/entity @conn [:file/path path]))))
