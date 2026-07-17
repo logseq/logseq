@@ -439,6 +439,32 @@
          (is (= #{source-page-id container-page-id}
                 (:affected-page-uuids response))))))))
 
+(deftest apply-outliner-ops-can-return-updated-blocks-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "Page"
+                          :block/uuid page-id
+                          :build/keep-uuid? true}
+                   :blocks [{:block/title "Before"
+                             :block/uuid block-id
+                             :build/keep-uuid? true}]}])]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:save-block
+                                    [{:block/uuid block-id
+                                      :block/title "After"}
+                                     {}]]]
+                                  {:affected-block-uuids #{block-id}
+                                   :return-updated-blocks? true})
+             updated-block (first (:updated-blocks response))]
+         (is (= [block-id] (mapv :block/uuid (:updated-blocks response))))
+         (is (= "After" (:block/title updated-block)))
+         (is (not (de/entity? updated-block))))))))
+
 (deftest apply-outliner-ops-rejects-missing-indent-parent-original-test
   (restoring-worker-state
    (fn []
