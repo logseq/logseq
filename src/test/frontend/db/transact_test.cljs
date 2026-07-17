@@ -1,5 +1,6 @@
 (ns frontend.db.transact-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["react-dom" :as react-dom]
+            [cljs.test :refer [async deftest is]]
             [frontend.common.page-window :as page-window]
             [frontend.db.transact :as db-transact]
             [frontend.state :as state]
@@ -288,6 +289,58 @@
            (fn []
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
+
+(deftest structural-ops-publish-ui-and-editor-in-one-commit-test
+  (async done
+    (let [page-id (random-uuid)
+          block-id (random-uuid)
+          original-flush-sync (.-flushSync react-dom)
+          original-set-state state/set-state!
+          calls (atom [])]
+      (set! (.-flushSync react-dom)
+            (fn [f]
+              (swap! calls conj :commit-start)
+              (f)
+              (swap! calls conj :commit-end)))
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-current-page (constantly page-id)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/set-state!
+                          (fn [path & args]
+                            (when (= :db/latest-transacted-entity-uuids path)
+                              (swap! calls conj :publish))
+                            (apply original-set-state path args))
+                          state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/apply-outliner-ops
+                              (p/resolved {:result ::persisted})
+
+                              :thread-api/get-page-blocks-window
+                              (p/resolved {:root {:block/uuid page-id}
+                                           :rows [{:block/uuid block-id}]})
+
+                              (p/resolved nil)))]
+            (p/do!
+             (db-transact/apply-outliner-ops
+              nil
+              [[:insert-blocks [[{:block/uuid block-id}] page-id {}]]]
+              {:ui/page-id page-id
+               :editor/edit-block-fn #(swap! calls conj [:insert (:block/uuid (first %))])})
+             (db-transact/apply-outliner-ops
+              nil
+              [[:delete-blocks [[block-id] {}]]]
+              {:ui/page-id page-id
+               :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
+          (p/then (fn []
+                    (is (= [:commit-start :publish [:insert block-id] :commit-end
+                            :commit-start :publish [:delete block-id] :commit-end]
+                           @calls))))
+          (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
+                       (done)))))))
 
 (deftest apply-outliner-ops-ignores-response-after-graph-route-switch-test
   (async done
