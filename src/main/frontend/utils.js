@@ -189,7 +189,7 @@ const inputTypes = [
   window.HTMLTextAreaElement,
 ]
 
-export const triggerInputChange = (node, value = '', name = 'change') => {
+export const triggerInputChange = (node, value = '', caretPosition) => {
 
   // only process the change on elements we know have a value setter in their constructor
   if (inputTypes.indexOf(node.__proto__.constructor) > -1) {
@@ -200,6 +200,9 @@ export const triggerInputChange = (node, value = '', name = 'change') => {
     })
 
     setValue.call(node, value)
+    if (Number.isInteger(caretPosition)) {
+      node.setSelectionRange(caretPosition, caretPosition)
+    }
     node.dispatchEvent(event)
   }
 }
