@@ -12,7 +12,7 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]

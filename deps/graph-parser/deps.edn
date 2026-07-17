@@ -8,9 +8,8 @@
 
   ;; Any other deps should be added here and to nbb.edn
   borkdude/rewrite-edn        {:mvn/version "0.5.9"}
-  logseq/db                   {:local/root "../db"}
-  logseq/common               {:local/root "../common"}
-  ;; stubbed via logseq.common.log
+  logseq/melange-bridge       {:local/root "../melange/bridge"}
+  ;; Stubbed via logseq.melange.bridge.common.log for nbb.
   com.lambdaisland/glogi      {:git/url "https://github.com/lambdaisland/glogi"
                                :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
 
@@ -18,7 +17,7 @@
  ;; This runs tests with nodejs. Would be nice to run this with in a browser env
  ;; since this is how its normally run in the app but this requires more setup
  ;; with karma, shadow-cljs.edn and headless mode on CI
- {:test {:extra-paths ["test"]
+ {:test {:extra-paths ["test" "../melange/bridge/test-support"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.1"}
                        org.clojure/clojurescript {:mvn/version "1.12.134"}
                        logseq/outliner {:local/root "../outliner"}}

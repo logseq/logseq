@@ -1,11 +1,11 @@
 (ns logseq.cli.command.update
   "Update-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private update-positions
@@ -109,7 +109,7 @@
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-page)
-    (let [page-name (common-util/page-name-sanity-lc target-page)]
+    (let [page-name (melange-common/page-name-sanity-lower target-page)]
       (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo [:db/id :block/uuid :block/name :block/title]
                                         [:block/name page-name]])]

@@ -19,8 +19,8 @@ tasks](../docs/dev-practices.md#db-graph-tasks) as it only requires writing EDN.
 
 Creating graphs from the commandline using scripts and a concise EDN map is
 possible thanks to nbb-logseq and the namespaces
-[logseq.outliner.db-pipeline](deps/outliner/src/logseq/outliner/db_pipeline.cljs)
-and [logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs).  For
+[logseq.outliner.db-pipeline](../deps/outliner/src/logseq/outliner/db_pipeline.cljs)
+and [logseq.melange.bridge.db.sqlite.build](../deps/melange/bridge/src/logseq/melange/bridge/db/sqlite/build.cljs).  For
 example, the `create_graph_with_properties.cljs` script uses this ns to create a
 graph with a variety of properties:
 
@@ -35,7 +35,7 @@ Created graph woot!
 This script creates a DB graph with blocks containing several property types for
 both single and many cardinality. It also includes queries for most of these
 properties. Read the docs in
-[logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs)
+[logseq.melange.bridge.db.sqlite.build](../deps/melange/bridge/src/logseq/melange/bridge/db/sqlite/build.cljs)
 for specifics on the EDN map.
 
 To create large graphs with varying size:

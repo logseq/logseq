@@ -2,20 +2,19 @@
   "Common fns between CLI and electron"
   (:require ["fs-extra" :as fs]
             ["path" :as node-path]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]))
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.platform.node :as platform-node]))
 
 (defn unlink-graph!
   "Unlinks the given repo by moving it to the 'Unlinked graphs' dir.
    Returns path of unlinked dir if move is successful or nil if not"
   ([repo]
-   (unlink-graph! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
+   (unlink-graph! (platform-node/expand-home (platform-node/get-default-graphs-dir)) repo))
   ([graphs-dir repo]
-   (let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)
-         graphs-dir (common-graph/expand-home graphs-dir)
+   (let [graph-dir-name (melange-common/repo-to-encoded-graph-dir-name repo)
+         graphs-dir (platform-node/expand-home graphs-dir)
          path (node-path/join graphs-dir graph-dir-name)
-         unlinked (node-path/join graphs-dir common-config/unlinked-graphs-dir)
+         unlinked (node-path/join graphs-dir melange-common/unlinked-graphs-dir)
          new-path (node-path/join unlinked graph-dir-name)
          new-path-exists? (fs/existsSync new-path)
          new-path' (if new-path-exists?

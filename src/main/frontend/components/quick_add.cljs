@@ -8,8 +8,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [io.factorhouse.hsx.core :as hsx]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]))
 
@@ -35,7 +35,7 @@
      #(state/clear-selection!))
    [])
   (when (model/get-today-journal-page)
-    (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+    (when-let [add-page (ldb/get-built-in-page (db/get-db) melange-common/quick-add-page-name)]
       (let [mobile? (util/mobile?)
             add-button [:div
                         (shui/button

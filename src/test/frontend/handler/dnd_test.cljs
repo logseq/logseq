@@ -7,7 +7,7 @@
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (deftest move-blocks-checks-actual-top-drop-target
   (testing "top drops use the actual before-node target for comment move guards"

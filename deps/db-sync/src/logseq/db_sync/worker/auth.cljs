@@ -1,6 +1,6 @@
 (ns logseq.db-sync.worker.auth
   (:require [clojure.string :as string]
-            [logseq.common.authorization :as authorization]
+            [logseq.melange.bridge.common.authorization :as authorization]
             [promesa.core :as p]))
 
 (defn- bearer-token [auth-header]

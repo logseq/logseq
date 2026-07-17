@@ -3,7 +3,7 @@
             [frontend.worker.platform :as platform]
             [frontend.worker.platform.browser :as platform-browser]
             [goog.object :as gobj]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (def ^:private js-api-global-name "LogseqMelangeDbWorkerJsApi")
 

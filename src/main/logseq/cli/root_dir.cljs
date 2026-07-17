@@ -3,7 +3,7 @@
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
-            [logseq.common.graph :as common-graph]))
+            [logseq.melange.bridge.platform.node :as platform-node]))
 
 (defn default-root-dir
   []
@@ -11,7 +11,7 @@
 
 (defn normalize-root-dir
   [path]
-  (node-path/resolve (common-graph/expand-home (or path (default-root-dir)))))
+  (node-path/resolve (platform-node/expand-home (or path (default-root-dir)))))
 
 (defn graphs-dir
   [root-dir]

@@ -4,8 +4,8 @@
             [frontend.db :as db]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 

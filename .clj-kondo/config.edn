@@ -198,7 +198,7 @@
  :hooks {:analyze-call {io.factorhouse.hsx.core/defc hooks.hsx/defc
                         clojure.string/join hooks.path-invalid-construct/string-join
                         clojure.string/replace hooks.regex-checks/double-escaped-regex
-                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
+                        frontend.defkeywords/defkeywords hooks.defkeywords/defkeywords
                         frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
@@ -215,7 +215,7 @@
            logseq.publishing.test.helper/deftest-async clojure.test/deftest
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
-           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def
+           frontend.defkeywords/defkeyword cljs.spec.alpha/def
            frontend.common.thread-api/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true

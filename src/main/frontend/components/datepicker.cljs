@@ -7,7 +7,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.common.util.page-ref :as page-ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -38,7 +38,7 @@
                                    journal (date/js-date->journal-title gd)]
                                ;; similar to page reference
                                (editor-handler/insert-command! dom-id
-                                                               (page-ref/->page-ref journal)
+                                                               (melange-common/to-page-ref journal)
                                                                format
                                                                {:command :page-ref})
                                (state/clear-editor-action!)

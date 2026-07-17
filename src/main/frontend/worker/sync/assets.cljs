@@ -11,9 +11,8 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [lambdaisland.glogi :as log]
-   [logseq.common.config :as common-config]
-   [logseq.common.util :as common-util]
-   [logseq.db :as ldb]
+   [logseq.melange.bridge.common.api :as melange-common]
+   [logseq.melange.bridge.db.core :as ldb]
    [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
@@ -86,7 +85,7 @@
   [asset-id asset-type]
   {:asset-id asset-id
    :asset-type asset-type
-   :file (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))})
+   :file (str melange-common/local-assets-dir "/" (asset-file-name asset-id asset-type))})
 
 (defn- mark-missing-asset-upload-file!
   [repo asset-id asset-type]
@@ -125,7 +124,7 @@
    :asset-file-write-finish
    {:repo repo
     :asset-id asset-id
-    :ts (common-util/time-ms)}))
+    :ts (melange-common/now-ms)}))
 
 (defn- <read-asset-bytes
   [repo asset-id asset-type]

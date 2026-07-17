@@ -1,0 +1,11 @@
+(rule
+ (alias bundle)
+ (targets melange-js-api-common.js melange-js-api-db.js)
+ (deps
+  (:common ../melange-js-api-common.js)
+  (:db ../melange-js-api-db.js))
+ (action
+  (progn
+   (copy %{common} melange-js-api-common.js)
+   (copy %{db} melange-js-api-db.js)))
+ (mode promote))

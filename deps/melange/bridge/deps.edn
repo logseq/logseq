@@ -1,0 +1,10 @@
+{:paths ["src" "resources"]
+ :deps
+ {datascript/datascript
+  {:git/url "https://github.com/logseq/datascript"
+   :sha "3f141af97b70e1f14c65eaa119acd822ebece37e"}
+  org.flatland/ordered
+  {:mvn/version "1.15.12"}
+  metosin/malli
+  {:git/url "https://github.com/metosin/malli"
+   :sha "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}}}

@@ -16,8 +16,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.ref :as ref]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
+
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
@@ -36,8 +36,8 @@
 (defn inflate-asset
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
-        protocol-link? (common-config/protocol-path? href)
-        local-asset-link? (common-config/local-protocol-asset? href)
+        protocol-link? (melange-common/protocol-path? href)
+        local-asset-link? (melange-common/local-protocol-asset? href)
         filename (util/node-path.basename original-path)
         ext-name "pdf"
         url (cond
@@ -191,7 +191,7 @@
           repo-dir (config/get-repo-dir repo-cur)
           fstamp   (get-in hl [:content :image])
           fname    (str (:page hl) "_" (:id hl))
-          fdir     (str common-config/local-assets-dir "/" fkey)
+          fdir     (str melange-common/local-assets-dir "/" fkey)
           fpath    (util/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
 
       (fs/unlink! repo-cur fpath {}))))
@@ -206,7 +206,7 @@
   (p/let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight nil)]
     (when ref-block
       (util/copy-to-clipboard!
-       (ref/->block-ref (:block/uuid ref-block))
+       (melange-common/to-page-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
 (defn get-zotero-local-pdf-path
@@ -314,7 +314,7 @@
                  :on-pointer-down util/stop
                  :on-click (fn [e]
                              (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol src))
+                             (-> (util/copy-image-to-clipboard (melange-common/remove-asset-protocol src))
                                  (p/then #(notification/show! (t :notification/copied) :success))))}
                 (ui/icon "copy")])
 

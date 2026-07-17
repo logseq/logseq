@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [lambdaisland.glogi :as log]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]

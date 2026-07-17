@@ -8,7 +8,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")

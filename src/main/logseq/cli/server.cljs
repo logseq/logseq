@@ -7,17 +7,16 @@
             [lambdaisland.glogi :as log]
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
-            [logseq.common.config :as common-config]
-            [logseq.common.version :as version]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.version :as version]
+            [logseq.melange.bridge.platform.node :as platform-node]
             [logseq.db-worker.daemon :as daemon]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (defn resolve-root-dir
   [config]
-  (common-graph/expand-home (or (:root-dir config) "~/logseq")))
+  (platform-node/expand-home (or (:root-dir config) "~/logseq")))
 
 (defn graphs-dir
   [config]
@@ -203,7 +202,7 @@
 (defn- canonical-path
   [path]
   (when (seq path)
-    (let [path (common-graph/expand-home path)]
+    (let [path (platform-node/expand-home path)]
       (try
         (fs/realpathSync path)
         (catch :default _
@@ -228,7 +227,7 @@
 
 (defn- repo-server
   [config servers repo]
-  (first (filter #(graph-dir/same-repo? repo (:repo %))
+  (first (filter #(melange-common/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
 (def ^:private server-discovery-timeout-ms 30000)
@@ -559,9 +558,9 @@
 
 (defn- ignored-graph-dir?
   [graph-name]
-  (or (= graph-name common-config/unlinked-graphs-dir)
+  (or (= graph-name melange-common/unlinked-graphs-dir)
       (= graph-name backup-root-dir-name)
-      (string/starts-with? graph-name common-config/file-version-prefix)))
+      (string/starts-with? graph-name melange-common/file-version-prefix)))
 
 (defn- legacy-derivation-signal?
   [dir-name]
@@ -570,12 +569,12 @@
 
 (defn- decode-legacy-graph-name
   [legacy-dir]
-  (some-> (graph-dir/decode-legacy-graph-dir-name legacy-dir)
+  (some-> (melange-common/decode-legacy-graph-dir-name legacy-dir)
           (#(when-not (ignored-graph-dir? %) %))))
 
 (defn- canonical-dir-name?
   [dir-name graph-name]
-  (= dir-name (graph-dir/graph-dir-key->encoded-dir-name graph-name)))
+  (= dir-name (melange-common/graph-dir-key-to-encoded-dir-name graph-name)))
 
 (defn- classify-graph-dir
   [graphs-root dir-name]
@@ -595,7 +594,7 @@
          :graph-dir dir-name}
 
         (seq legacy-graph-name)
-        (let [target-graph-dir (graph-dir/graph-dir-key->encoded-dir-name legacy-graph-name)
+        (let [target-graph-dir (melange-common/graph-dir-key-to-encoded-dir-name legacy-graph-name)
               conflict? (and (seq target-graph-dir)
                              (not= target-graph-dir dir-name)
                              (fs/existsSync (node-path/join graphs-root target-graph-dir)))]

@@ -6,8 +6,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.api.db-based.tools :as api-tools]
-            [logseq.common.config :as common-config]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn list-tags
@@ -73,4 +73,4 @@
     (when (:export-edn-error result)
       (throw (ex-info (str "Export EDN Error: " (:export-edn-error result)) {})))
     {:export-body (sqlite-util/write-transit-str result)
-     :graph (string/replace-first (state/get-current-repo) common-config/db-version-prefix "")}))
+     :graph (string/replace-first (state/get-current-repo) melange-common/db-version-prefix "")}))

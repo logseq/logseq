@@ -3,8 +3,8 @@
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.schema :as schema-catalog]))
 
 (defn- entities-with
   [db attr]
@@ -41,13 +41,13 @@
           :else [refs]))))
 
 (def ^:private legacy-65-24-schema
-  (merge db-schema/schema
+  (merge schema-catalog/schema
          {:block/pre-block? {:db/index true}
           :logseq.property.embedding/hnsw-label {:db/index true}
           :logseq.property.embedding/hnsw-label-updated-at {:db/index true}}))
 
 (def ^:private delete-property-schema
-  (merge db-schema/schema
+  (merge schema-catalog/schema
          {:user.property/obsolete {:db/index true}
           :logseq.property/view-for {:db/valueType :db.type/ref}
           :logseq.property.view/type {:db/valueType :db.type/ref}
@@ -149,13 +149,13 @@
            (:block/title (d/entity @conn [:block/uuid legacy-block-uuid]))))))
 
 (deftest migrate-65-25-adds-repeat-type-property
-  (let [conn (d/create-conn db-schema/schema)]
+  (let [conn (d/create-conn schema-catalog/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 25}}])
 
     (db-migrate/migrate conn)
 
-    (is (= db-schema/version
+    (is (= schema-catalog/version
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (let [property (d/entity @conn :logseq.property.repeat/repeat-type)]
       (is (some? property))
@@ -167,7 +167,7 @@
              (set (map :db/ident (:property/closed-values property))))))))
 
 (deftest migrate-65-26-adds-comments-blocks-property
-  (let [conn (d/create-conn db-schema/schema)]
+  (let [conn (d/create-conn schema-catalog/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 26}}])
 
@@ -183,7 +183,7 @@
       (is (false? (:logseq.property/public? property))))))
 
 (deftest migrate-65-28-tags-existing-comment-blocks
-  (let [conn (d/create-conn db-schema/schema)
+  (let [conn (d/create-conn schema-catalog/schema)
         comments-area-uuid #uuid "11111111-1111-1111-1111-111111111111"
         first-comment-uuid #uuid "22222222-2222-2222-2222-222222222222"
         second-comment-uuid #uuid "33333333-3333-3333-3333-333333333333"
@@ -222,7 +222,7 @@
     (is (empty? (:block/tags (d/entity @conn [:block/uuid ordinary-child-uuid]))))))
 
 (deftest migrate-65-29-adds-single-block-comment-targets
-  (let [conn (d/create-conn db-schema/schema)
+  (let [conn (d/create-conn schema-catalog/schema)
         target-uuid #uuid "11111111-1111-1111-1111-111111111111"
         comments-area-uuid #uuid "22222222-2222-2222-2222-222222222222"
         range-comments-uuid #uuid "33333333-3333-3333-3333-333333333333"
@@ -264,7 +264,7 @@
         "Existing range comment targets should be preserved")))
 
 (deftest migrate-65-27-with-missing-comments-built-ins-does-not-crash
-  (let [conn (d/create-conn db-schema/schema)]
+  (let [conn (d/create-conn schema-catalog/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 27}}
                        {:db/ident :logseq.class/Root
@@ -282,7 +282,7 @@
     (is (some? (d/entity @conn :logseq.property.comments/blocks)))))
 
 (deftest migrate-65-30-adds-assignee-property
-  (let [conn (d/create-conn db-schema/schema)]
+  (let [conn (d/create-conn schema-catalog/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 29}}])
 
@@ -300,7 +300,7 @@
                 (:upgrade-result-coll result))))))
 
 (deftest migrate-65-31-adds-agent-session-id-property
-  (let [conn (d/create-conn db-schema/schema)]
+  (let [conn (d/create-conn schema-catalog/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 30}}])
 
@@ -320,7 +320,7 @@
                 (:upgrade-result-coll result))))))
 
 (deftest migrate-65-32-adds-root-extends-to-comment-classes
-  (let [conn (d/create-conn db-schema/schema)
+  (let [conn (d/create-conn schema-catalog/schema)
         target-uuid #uuid "11111111-1111-1111-1111-111111111111"
         comments-area-uuid #uuid "22222222-2222-2222-2222-222222222222"]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
@@ -357,7 +357,7 @@
                        (d/entity migration-db [:block/uuid comments-area-uuid]))))))))
 
 (deftest migrate-65-33-adds-gallery-view-properties
-  (let [conn (d/create-conn db-schema/schema)
+  (let [conn (d/create-conn schema-catalog/schema)
         property-idents [:logseq.property.view/gallery-asset-property
                          :logseq.property.view/gallery-display-properties
                          :logseq.property.view/gallery-card-size

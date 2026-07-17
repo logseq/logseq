@@ -1,9 +1,9 @@
 (ns logseq.outliner.recycle-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is]]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as recycle]))
 
@@ -55,7 +55,7 @@
         page1 (ldb/get-page @conn "page1")
         page2 (ldb/get-page @conn "page2")
         block-uuid (random-uuid)
-        now (common-util/time-ms)]
+        now (melange-common/now-ms)]
     (d/transact! conn [{:block/uuid block-uuid
                         :block/title "parented by page1"
                         :block/created-at now
@@ -123,7 +123,7 @@
         view-uuid (random-uuid)
         target-history-uuid (random-uuid)
         view-history-uuid (random-uuid)
-        now (common-util/time-ms)
+        now (melange-common/now-ms)
         _ (d/transact! conn [{:block/uuid view-uuid
                               :block/title "target view"
                               :block/created-at now

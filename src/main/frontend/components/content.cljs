@@ -23,13 +23,11 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.ref :as ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
@@ -265,7 +263,7 @@
          (shui/dropdown-menu-item
           {:key "Copy block ref"
            :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id ref/->block-ref))}
+                       (editor-handler/copy-block-ref! block-id melange-common/to-page-ref))}
           (t :block/copy-ref))
 
          ;; TODO Logseq protocol mobile support
@@ -286,7 +284,7 @@
              :on-click (fn [_e]
                          (let [assets-dir (config/get-current-repo-assets-root)
                                ext (name (:logseq.property.asset/type block))
-                               file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
+                               file-path (melange-common/path-join assets-dir (to-array [(str (:block/uuid block) "." ext)]))]
                            (ipc/ipc "openFileInFolder" file-path)))}
             (t :asset/show-file-in-folder)))
 
@@ -461,5 +459,10 @@
     [:div
      (hiccup-content id option)]
     ;; TODO: remove this
-    (let [format (common-util/normalize-format format)]
+    (let [format-name (when (some? format)
+                        (if (keyword? format)
+                          (subs (str format) 1)
+                          format))
+          format (some-> (melange-common/normalize-format-name format-name)
+                         keyword)]
       (non-hiccup-content id (:content option) on-click on-hide config format))))

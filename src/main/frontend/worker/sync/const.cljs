@@ -1,8 +1,8 @@
 (ns frontend.worker.sync.const
   "RTC constants"
-  (:require [logseq.common.defkeywords :as common-def :refer [defkeywords]]
-            [logseq.db.frontend.kv-entity :as kv-entity]
-            [logseq.db.frontend.property :as db-property]))
+  (:require-macros [frontend.defkeywords :refer [defkeywords]])
+  (:require [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.kv-entity :as kv-entity]))
 
 (defkeywords
   :rtc/ignore-attr-when-syncing
@@ -13,7 +13,7 @@
 (def ignore-attrs-when-syncing
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-syncing]) kw)))
-        db-property/built-in-properties))
+        property-catalog/built-in-properties))
 
 (def ignore-entities-when-init-upload
   (into #{}

@@ -1,9 +1,7 @@
-{:paths ["src"]
+{:paths ["src" "../melange/bridge/test-support"]
  :deps
- {logseq/common
-  {:local/root "../common"}
-  logseq/db
-  {:local/root "../db"}
+ {logseq/melange-bridge
+  {:local/root "../melange/bridge"}
   logseq/outliner
   {:local/root "../outliner"}
   io.github.nextjournal/nbb-test-runner

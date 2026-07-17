@@ -4,8 +4,8 @@
             [datascript.core :as d]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn- sql-placeholder-count
   [sql]

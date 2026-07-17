@@ -1,7 +1,8 @@
 (ns frontend.handler
   "Main ns that handles application startup. Closest ns that we have to a
   system. Contains a couple of small system components"
-  (:require [cljs-bean.core :as bean]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.block :as block]
@@ -41,6 +42,7 @@
             [frontend.util.url :as url-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
 (defn- set-global-error-notification!
@@ -147,7 +149,7 @@
 
 (defn start!
   [render]
-  (let [t1 (util/time-ms)
+  (let [t1 (melange-common/now-ms)
         ui-ready (p/do!
                   (idb/start)
                   (get-system-info)
@@ -175,16 +177,16 @@
       (-> ui-ready
           (p/then
            (fn []
-             (p/let [t2 (util/time-ms)
+             (p/let [t2 (melange-common/now-ms)
                      _ (persist-db/<start-runtime!)
-                     _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
+                     _ (log/info ::db-worker-spent-time (- (melange-common/now-ms) t2))
                      repos (repo-handler/get-repos)
                      _ (state/set-repos! repos)
                      _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                      url-target (current-url-target)
                      registry (graph-handler/<get-graph-registry)
                      target-repo (when (seq url-target)
-                                   (:repo (graph-handler/resolve-registry-target
+                                   (:repo (graph-registry/resolve-target
                                            (concat registry
                                                    (graph-handler/registry-from-repo-summaries repos))
                                            url-target)))
@@ -209,7 +211,7 @@
           (p/finally (fn []
                        (state/set-db-restoring! false)
                        (p/resolve! state/app-ready-promise true)
-                       (log/info ::app-init-spent-time (- (util/time-ms) t1)))))))
+                       (log/info ::app-init-spent-time (- (melange-common/now-ms) t1)))))))
 
 (defn quit-and-install-new-version!
   []

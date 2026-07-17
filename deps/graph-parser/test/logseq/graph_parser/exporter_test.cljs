@@ -6,22 +6,17 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.path :as path]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.platform.node :as platform-node]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.rules :as rules]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.validation :as db-validate]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
@@ -89,17 +84,17 @@
 
 (defn- status-content
   [db content]
-  (db-property/closed-value-content (block-status db content)))
+  (melange-property/closed-value-content (block-status db content)))
 
 (defn- status-closed-value-contents
   [db]
-  (set (map db-property/closed-value-content
-            (db-property/get-closed-property-values db :logseq.property/status))))
+  (set (map melange-property/closed-value-content
+            (melange-property/get-closed-property-values db :logseq.property/status))))
 
 (defn- status-closed-value-content-frequencies
   [db]
-  (frequencies (map db-property/closed-value-content
-                    (db-property/get-closed-property-values db :logseq.property/status))))
+  (frequencies (map melange-property/closed-value-content
+                    (melange-property/get-closed-property-values db :logseq.property/status))))
 
 (defn- blocks-by-title
   [db title]
@@ -138,9 +133,9 @@
    some operations"
   [dir*]
   (let [dir (node-path/resolve dir*)]
-    (->> (common-graph/get-files dir)
-         (concat (when (fs/existsSync (path/path-join dir* "assets"))
-                   (common-graph/readdir (path/path-join dir* "assets"))))
+    (->> (platform-node/get-files dir)
+         (concat (when (fs/existsSync (melange-common/path-join dir* (to-array ["assets"])))
+                   (platform-node/readdir (melange-common/path-join dir* (to-array ["assets"])))))
          (mapv #(hash-map :path %
                           ::rpath (node-path/relative dir* %))))))
 
@@ -502,7 +497,7 @@ abc
                             (db-test/find-block-by-content @conn #"plan release"))
           birthday-scheduled (:logseq.property/scheduled birthday-properties)
           birthday-date (js/Date. birthday-scheduled)]
-      (is (= 20251101 (date-time-util/ms->journal-day birthday-scheduled))
+      (is (= 20251101 (melange-common/journal-day-of-ms birthday-scheduled))
           "Repeated scheduled timestamp keeps its scheduled date")
       (is (= [8 0] [(.getHours birthday-date) (.getMinutes birthday-date)])
           "Repeated scheduled timestamp keeps its time")
@@ -525,7 +520,7 @@ abc
               :logseq.property.repeat/recur-frequency 2
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
              (-> report-properties
-                 (update :logseq.property/deadline date-time-util/ms->journal-day)
+                 (update :logseq.property/deadline melange-common/journal-day-of-ms)
                  (select-keys [:logseq.property/deadline
                                :logseq.property.repeat/repeated?
                                :logseq.property.repeat/temporal-property
@@ -541,8 +536,8 @@ abc
               :logseq.property.repeat/recur-frequency 1
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
              (-> mixed-properties
-                 (update :logseq.property/deadline date-time-util/ms->journal-day)
-                 (update :logseq.property/scheduled date-time-util/ms->journal-day)
+                 (update :logseq.property/deadline melange-common/journal-day-of-ms)
+                 (update :logseq.property/scheduled melange-common/journal-day-of-ms)
                  (select-keys [:logseq.property/deadline
                                :logseq.property/scheduled
                                :logseq.property.repeat/repeated?
@@ -1098,7 +1093,7 @@ abc
       (is (= #{"Interstellar" "some page"}
              (->>
               (ldb/get-page-blocks @conn
-                                   (:db/id (ldb/get-page @conn common-config/favorites-page-name))
+                                   (:db/id (ldb/get-page @conn melange-common/favorites-page-name))
                                    {:pull-keys '[* {:block/link [:block/title]}]})
               (map #(get-in % [:block/link :block/title]))
               set))))
@@ -1108,7 +1103,7 @@ abc
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
-                  (remove #(db-malli-schema/internal-ident? (:db/ident %)))
+                  (remove #(db-validation/internal-ident? (:db/ident %)))
                   count))
           "Correct number of user properties")
       (is (= #{{:db/ident :user.property/prop-bool :logseq.property/type :checkbox}
@@ -1175,17 +1170,17 @@ abc
              (:block/title (db-test/find-block-by-content @conn #"ref to")))
           "block-ref ((uuid)) is converted to page-ref [[uuid]] in block title on import")
 
-      (is (= 20221126
-             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
-                 :logseq.property/deadline
-                 date-time-util/ms->journal-day))
-          "deadline block has correct journal as property value")
+      (let [deadline (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
+                         :logseq.property/deadline)]
+        (is (= 20221126
+               (melange-common/journal-day-of-ms deadline))
+            "deadline block has correct journal as property value"))
 
       (is (= {:logseq.property/scheduled 20221125
               :logseq.property/deadline 20221125}
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn #"deadline and scheduled"))
                  (select-keys [:logseq.property/scheduled :logseq.property/deadline])
-                 (update-vals date-time-util/ms->journal-day)))
+                 (update-vals melange-common/journal-day-of-ms)))
           "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
@@ -1603,10 +1598,10 @@ abc
             "First namespace tests duplicate child page name and built-in page name")))
 
     (testing "journal timestamps"
-      (is (= (date-time-util/journal-day->ms 20240207)
+      (is (= (melange-common/journal-day-to-utc-ms 20240207)
              (:block/created-at (db-test/find-page-by-title @conn "Feb 7th, 2024")))
           "journal pages are created on their journal day")
-      (is (= (date-time-util/journal-day->ms 20240207)
+      (is (= (melange-common/journal-day-to-utc-ms 20240207)
              (:block/created-at (db-test/find-block-by-content @conn #"Inception")))
           "journal blocks are created on their page's journal day"))
 
@@ -1678,9 +1673,8 @@ abc
       (let [block (db-test/find-block-by-content @conn #"multiline block with prop and deadline")]
         (is (= "multiline block with prop and deadline\nlast line" (:block/title block)))
         (is (= 20221126
-               (-> (db-test/readable-properties block)
-                   :logseq.property/deadline
-                   date-time-util/ms->journal-day))
+               (melange-common/journal-day-of-ms
+                (:logseq.property/deadline (db-test/readable-properties block))))
             "multiline block has correct journal as property value")
         (is (= "red"
                (-> (db-test/readable-properties block)
@@ -1690,14 +1684,12 @@ abc
       (let [block (db-test/find-block-by-content @conn #"multiline block with deadline and scheduled in 1 line and sth else")]
         (is (= "multiline block with deadline and scheduled in 1 line and sth else\nsomething else\nlast line" (:block/title block)))
         (is (= 20221126
-               (-> (db-test/readable-properties block)
-                   :logseq.property/deadline
-                   date-time-util/ms->journal-day))
+               (melange-common/journal-day-of-ms
+                (:logseq.property/deadline (db-test/readable-properties block))))
             "multiline block with deadline and scheduled has correct deadline journal as property value")
         (is (= 20221126
-               (-> (db-test/readable-properties block)
-                   :logseq.property/scheduled
-                   date-time-util/ms->journal-day))
+               (melange-common/journal-day-of-ms
+                (:logseq.property/scheduled (db-test/readable-properties block))))
             "multiline block with deadline and scheduled has correct scheduled journal as property value"))
 
       (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"^logbook block"))))
@@ -1743,7 +1735,7 @@ abc
              (->> (entity-plus/lookup-kv-then-entity
                    (db-test/find-block-by-content @conn #"replace with same start string")
                    :block/raw-title)
-                  (re-seq db-content/id-ref-pattern)
+                  (melange-content/get-matched-ids)
                   distinct
                   count))
           "A block with ref names that start with same string has 2 distinct refs")
@@ -1752,7 +1744,7 @@ abc
              (->> (entity-plus/lookup-kv-then-entity
                    (db-test/find-block-by-content @conn #"replace case insensitive")
                    :block/raw-title)
-                  (re-seq db-content/id-ref-pattern)
+                  (melange-content/get-matched-ids)
                   distinct
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
@@ -1777,7 +1769,7 @@ abc
 
 (deftest-async import-journals-use-standard-uuids-and-keep-uuid-refs
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {})]
     (let [journal (db-test/find-journal-by-journal-day @conn 20260127)
@@ -1790,10 +1782,10 @@ abc
                                   @conn (:db/id journal) (:db/id ref-journal))
                            first
                            (d/entity @conn))]
-      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+      (is (= (uuid (melange-common/journal-page 20260127))
              (:block/uuid journal))
           "Imported journal page keeps the standard journal uuid")
-      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260101)
+      (is (= (uuid (melange-common/journal-page 20260101))
              (:block/uuid ref-journal))
           "Referenced journal page keeps the standard journal uuid")
       (is (= #{(:block/uuid ref-journal)}
@@ -1802,13 +1794,13 @@ abc
 
 (deftest-async import-journal-with-slash-title-format-does-not-create-namespace-pages
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:user-config {:journal/page-title-format "yyyy/MM/dd"}})
           journal (db-test/find-journal-by-journal-day @conn 20260127)]
     (is (= "2026/01/27" (:block/title journal))
           "Journal title follows slash title format")
-    (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+    (is (= (uuid (melange-common/journal-page 20260127))
              (:block/uuid journal))
           "Slash-formatted journal keeps the standard journal uuid")
     (is (nil? (:block/namespace journal))
@@ -1869,9 +1861,9 @@ abc
 
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)
-        standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
-        title (str "refs " (page-ref/->page-ref old-journal-uuid)
-                   " and " (block-ref/->block-ref old-journal-uuid))
+        standard-journal-uuid (uuid (melange-common/journal-page 20260127))
+        title (str "refs " (melange-common/to-page-ref old-journal-uuid)
+                   " and " (melange-common/to-block-ref old-journal-uuid))
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal 20260127
@@ -1886,8 +1878,8 @@ abc
           "Existing random journal uuid is normalized to the standard journal uuid")
       (is (nil? (d/entity @conn [:block/uuid old-journal-uuid]))
           "Old journal uuid no longer resolves after normalization")
-      (is (= (str "refs " (page-ref/->page-ref standard-journal-uuid)
-                  " and " (block-ref/->block-ref standard-journal-uuid))
+      (is (= (str "refs " (melange-common/to-page-ref standard-journal-uuid)
+                  " and " (melange-common/to-block-ref standard-journal-uuid))
              (:block/title ref-block))
           "Text references are rewritten to the standard journal uuid")
       (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
@@ -1895,7 +1887,7 @@ abc
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
@@ -1921,7 +1913,7 @@ abc
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %)
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%]))
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
                        "pages/Whiteboard___Arrow_head_toggle.md"
                        "pages/Library.md"])
@@ -1968,7 +1960,7 @@ abc
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2024_02_07.md"
                                                           "journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})
@@ -2006,7 +1998,7 @@ abc
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["ignored/icon-page.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["ignored/icon-page.md"])
           conn (db-test/create-conn)
           {:keys [import-state]} (import-files-to-db files conn {})]
     (is (= 2
@@ -2015,7 +2007,7 @@ abc
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_11_26.md"
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2024_11_26.md"
                                                           "pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
                                                           "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
                                                           "pages/Property.md" "pages/url.md"])
@@ -2043,7 +2035,7 @@ abc
 (deftest-async export-files-with-property-pages-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           ;; any page with properties
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_01_17.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2024_01_17.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
@@ -2126,7 +2118,7 @@ abc
 
 (deftest-async export-files-with-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:extract-code-snippets? true})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
@@ -2228,7 +2220,7 @@ abc
 
 (deftest-async export-files-without-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
+          files (mapv #(melange-common/path-join file-graph-dir (to-array [%])) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:extract-code-snippets? false})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)

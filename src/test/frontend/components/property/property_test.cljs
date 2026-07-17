@@ -3,8 +3,8 @@
             [frontend.components.property :as property-component]
             [frontend.db :as db]
             [frontend.state :as state]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.outliner.property :as outliner-property]))
 
 (deftest sanitize-property-values-for-display-filters-recycled-entity-values-test
@@ -60,7 +60,7 @@
                   db/entity (fn [id]
                               (when (= id property-id)
                                 property))
-                  db-property/get-class-ordered-properties (constantly [])
+                  melange-property/get-class-ordered-properties (constantly [])
                   entity-util/page? :page?
                   outliner-property/get-block-classes-properties (constantly {:all-classes []
                                                                               :classes-properties []})

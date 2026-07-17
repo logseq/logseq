@@ -14,9 +14,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.graph-parser.text :as text]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]))
@@ -63,7 +62,7 @@
                        :block-route-name (model/heading-content->route-name (:block/title block))}}
         {:to :page
          :path-params {:name (if (string? page-name-or-block-uuid)
-                               (util/page-name-sanity-lc page-name-or-block-uuid)
+                               (melange-common/page-name-sanity-lower page-name-or-block-uuid)
                                (str page-name-or-block-uuid))}})))
 
   (defn- default-page-route [page-name]
@@ -90,7 +89,7 @@
              (and (string? page-name) (not (string/blank? page-name))))
      (let [page (db/get-page page-name)]
        (if (and (not config/dev?)
-                (not= common-config/recycle-page-name (:block/title page))
+                (not= melange-common/recycle-page-name (:block/title page))
                 (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! (t :nav/cannot-go-to-internal-page) :warning)
@@ -116,17 +115,15 @@
 
 (defn built-in-page-title
   [page-name]
-  (case page-name
-    common-config/library-page-name
+  (cond
+    (= page-name melange-common/library-page-name)
     (t :library/title)
 
-    common-config/quick-add-page-name
+    (= page-name melange-common/quick-add-page-name)
     (t :editor.quick-add/title)
 
-    common-config/recycle-page-name
-    (t :storage.recycle/title)
-
-    nil))
+    (= page-name melange-common/recycle-page-name)
+    (t :storage.recycle/title)))
 
 (defn get-title
   [name path-params]
@@ -151,18 +148,18 @@
     (let [name (:name path-params)
           page (db/get-page name)
           page (and (db/page? page) page)
-          block? (util/uuid-string? name)
+          block? (melange-common/uuid-string? name)
           block-title (when (and block? (not page))
                         (when-let [block (db/entity [:block/uuid (uuid name)])]
                           (let [content (text/remove-level-spaces (:block/title block)
                                                                   :markdown
-                                                                  common-config/block-pattern)]
+                                                                  melange-common/block-pattern)]
                             (if (> (count content) 48)
                               (str (subs content 0 48) "...")
                               content))))
           block-name (:block/title page)
           block-name' (when block-name
-                        (if (common-util/uuid-string? block-name)
+                        (if (melange-common/uuid-string? block-name)
                           (t :ui/untitled)
                           (or (built-in-page-title block-name)
                                block-name)))]

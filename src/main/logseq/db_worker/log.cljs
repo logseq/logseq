@@ -1,12 +1,12 @@
 (ns logseq.db-worker.log
   "Unified db-worker-node logging."
-  (:require ["fs" :as fs]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
             [goog.log :as glog]
             [lambdaisland.glogi :as log]
-            [logseq.cli.root-dir :as root-dir]
-            [logseq.common.graph-dir :as graph-dir]))
+            [logseq.cli.root-dir :as root-dir]))
 
 (def stdio-redirected-env "LOGSEQ_DB_WORKER_NODE_STDIO_REDIRECTED_TO_LOG")
 
@@ -39,7 +39,7 @@
   (when-not (seq repo)
     (throw (ex-info "repo is required" {:code :missing-repo})))
   (node-path/join (graphs-dir root-dir)
-                  (graph-dir/repo->encoded-graph-dir-name repo)))
+                  (melange-common/repo-to-encoded-graph-dir-name repo)))
 
 (defn log-path
   [root-dir repo]

@@ -47,9 +47,9 @@
     (-> build-state
         (assoc-in [:shadow.build/config :closure-defines]
                   (assoc defines-in-config
-                         'logseq.common.version/REVISION revision
-                         'logseq.common.version/BUILD_TIME build-time))
+                         'logseq.melange.bridge.common.version/REVISION revision
+                         'logseq.melange.bridge.common.version/BUILD_TIME build-time))
         (assoc-in [:compiler-options :closure-defines]
                   (assoc defines-in-options
-                         'logseq.common.version/REVISION revision
-                         'logseq.common.version/BUILD_TIME build-time)))))
+                         'logseq.melange.bridge.common.version/REVISION revision
+                         'logseq.melange.bridge.common.version/BUILD_TIME build-time)))))

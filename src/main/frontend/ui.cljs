@@ -1,6 +1,7 @@
 (ns frontend.ui
   "Main ns for reusable components"
   (:require ["@emoji-mart/data" :as emoji-data]
+            [logseq.melange.bridge.common.api :as melange-common]
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
             ["@sentry/react" :refer [ErrorBoundary]]
@@ -1157,9 +1158,11 @@
        (time-picker (cond->
                      {:on-change (fn [value] (on-select' selected value))}
                       selected
-                      (assoc :default-value (str (util/zero-pad (.getHours selected))
+                      (assoc :default-value (str (melange-common/zero-pad
+                                                          (.getHours selected))
                                                  ":"
-                                                 (util/zero-pad (.getMinutes selected)))))))
+                                                 (melange-common/zero-pad
+                                                           (.getMinutes selected)))))))
 
      (shui/input
       {:type "text"

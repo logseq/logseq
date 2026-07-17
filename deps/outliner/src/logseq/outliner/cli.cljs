@@ -5,10 +5,10 @@
             ["path" :as node-path]
             [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as string]
-            [logseq.db :as ldb]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.sqlite.build :as sqlite-build]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (defn- find-on-classpath [classpath rel-path]

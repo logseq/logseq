@@ -4,8 +4,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -25,10 +24,10 @@
                       (shui/shortcut ["mod" "k"])]]]
     [:tr
      [:td.text-left (t :help/reference-autocomplete)]
-     [:td.text-right [:code page-ref/left-and-right-brackets]]]
+     [:td.text-right [:code melange-common/left-and-right-brackets]]]
     [:tr
      [:td.text-left (t :help/block-reference)]
-     [:td.text-right [:code block-ref/left-and-right-parens]]]
+     [:td.text-right [:code melange-common/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
      [:td.text-right [:code (t :help/open-link-in-sidebar-action)]]]

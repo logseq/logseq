@@ -41,9 +41,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -54,7 +52,7 @@
     (p/resolved true)
     (fs/file-exists?
      (config/get-repo-dir (state/get-current-repo))
-     (path/path-join common-config/local-assets-dir file-name))))
+     (melange-common/path-join melange-common/local-assets-dir (to-array [file-name])))))
 
 (defmethod events/handle :go/search [_]
   (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
@@ -208,7 +206,7 @@
                                  :else
                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
         current-block (when-let [s (state/get-current-page)]
-                        (when (util/uuid-string? s)
+                        (when (melange-common/uuid-string? s)
                           (db/entity [:block/uuid (uuid s)])))
         blocks (or (when block [block])
                    edit-block-or-selected
@@ -229,8 +227,10 @@
                                                        (= (util/nth-safe content (dec pos))
                                                           (util/nth-safe content (- pos 2))
                                                           ";"))
-                                                  [(str (common-util/safe-subs content 0 (- pos 2))
-                                                        (common-util/safe-subs content pos))
+                                                  [(str (melange-common/safe-substring-range
+                                                                             content 0 (- pos 2))
+                                                        (melange-common/safe-substring
+                                                                        content pos))
                                                    (- pos 2)]
                                                   :else
                                                   [nil pos])]
@@ -379,14 +379,14 @@
 (defmethod events/handle :asset/show-preview [[_ asset]]
   (when-let [asset-type-str (:logseq.property.asset/type asset)]
     (let [asset-type (keyword asset-type-str)
-          image? (contains? (common-config/img-formats) asset-type)
+          image? (melange-common/image-format? (name asset-type))
           video? (contains? config/video-formats asset-type)
           pdf? (= :pdf asset-type)
           file-name (str (:block/uuid asset) "." asset-type-str)
           ;; Prefer external-url so plugin-sandboxed assets resolve to their
           ;; real on-disk path; mirrors the asset-cp render-side fix.
           rel-path (or (:logseq.property.asset/external-url asset)
-                       (path/path-join (str "../" common-config/local-assets-dir) file-name))]
+                       (melange-common/path-join (str "../" melange-common/local-assets-dir) (to-array [file-name])))]
       (cond
         image?
         (p/let [url (assets-handler/<make-asset-url rel-path)]

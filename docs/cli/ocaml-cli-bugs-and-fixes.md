@@ -99,7 +99,7 @@ These were found through the OCaml CLI stress workflow but fixed outside the OCa
 - Symptom: reverse/rebase could accumulate multiple `:block/parent` or `:block/order` values.
 - Root cause: the temporary connection was created without the source DB schema, so cardinality-one replacement behavior was not preserved.
 - Fix: temp conns are created with `(:schema db)` before swapping in the source DB.
-- Regression coverage: deps/db and frontend worker tests cover cardinality-one preservation.
+- Regression coverage: Melange DB and frontend worker tests cover cardinality-one preservation.
 
 ### Receive queue failures were invisible to `sync status`
 
@@ -171,7 +171,7 @@ These were found through the OCaml CLI stress workflow but fixed outside the OCa
 - Symptom: remote apply could successfully commit an older temp DB view over a new local page delete; the next permanent recycle delete returned nil because the page was no longer recycled.
 - Root cause: remote apply protected only the exception path from stale pending snapshots. It did not recheck the pending tx id list just before committing the temp result to the live conn.
 - Fix: `batch-transact-with-temp-conn!` accepts a `:before-commit` hook, and remote apply uses it to abort and retry if pending local tx ids changed.
-- Regression coverage: worker test for temp-commit race, deps/db test for aborting live commit, and JavaScript harness tests for unique page targets.
+- Regression coverage: worker test for temp-commit race, Melange DB test for aborting live commit, and JavaScript harness tests for unique page targets.
 
 ### Concurrent validated transacts could lose writes
 

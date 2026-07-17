@@ -21,13 +21,13 @@
             [goog.object :as gobj]
             [logseq.api.db-based.tools :as api-tools]
             [logseq.cli.common.db-worker :as cli-db-worker]
-            [logseq.db :as ldb]
-            [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.view :as db-view]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.initial-data :as common-initial-data]
+            [logseq.melange.bridge.db.view :as db-view]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
@@ -1045,7 +1045,7 @@
    (fn []
      (let [storage-pool-name #'db-core/storage-pool-name]
        (platform/set-platform! (build-test-platform {:runtime :node}))
-       ;; For node, it should use graph-dir/repo->graph-dir-key
+       ;; Node storage pool names use the canonical GraphDir repository key.
        (is (string? (storage-pool-name test-repo)))))))
 
 (deftest storage-pool-name-uses-worker-util-for-browser
@@ -2082,7 +2082,7 @@
                                    (:datoms export-edn))
            dest-conn (sqlite-export/create-conn)
            dest-purple-eid (:db/id (d/entity @dest-conn :logseq.property/color.purple))]
-       (assert (= :datoms (::sqlite-export/graph-format export-edn))
+       (assert (= :datoms (:logseq.db.sqlite.export/graph-format export-edn))
                "Test relies on a datom-format export")
        (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
                "Test relies on shifted built-in eids between source and dest")
@@ -2101,8 +2101,8 @@
    (fn []
      (let [dest-conn (sqlite-export/create-conn)
            page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page))
-           invalid-export-edn {::sqlite-export/export-type :graph
-                               ::sqlite-export/graph-format :datoms
+           invalid-export-edn {:logseq.db.sqlite.export/export-type :graph
+                               :logseq.db.sqlite.export/graph-format :datoms
                                :datoms [[1 :block/title "Orphan Page"]
                                         [1 :block/name "orphan page"]
                                         [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]

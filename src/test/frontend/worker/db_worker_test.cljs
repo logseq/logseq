@@ -14,7 +14,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")

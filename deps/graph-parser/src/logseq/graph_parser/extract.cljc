@@ -4,15 +4,18 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require #?(:org.babashka/nbb [logseq.common.log :as log]
+  (:require #?(:org.babashka/nbb [logseq.melange.bridge.common.log :as log]
                :default [lambdaisland.glogi :as log])
+            #?(:org.babashka/nbb [logseq.melange.bridge.common.api :as melange-common]
+               :cljs [logseq.melange.bridge.common.api :as melange-common])
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.log :as common-log]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.collection :as melange-collection]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
@@ -28,20 +31,22 @@
   ;; Should be converted to POXIS first for external paths
   [path]
   (if (string/includes? path "/")
-    (last (common-util/split-last "/" path))
+    (last (melange-common/split-last "/" path))
     path))
 
 (defn- path->file-body
   [path]
   (when-let [file-name (path->file-name path)]
     (if (string/includes? file-name ".")
-      (first (common-util/split-last "." file-name))
+      (first (melange-common/split-last "." file-name))
       file-name)))
 
 (defn- safe-url-decode
   [string]
   (if (string/includes? string "%")
-    (some-> string str common-util/safe-decode-uri-component)
+    (melange-common/safe-decode-uri-component
+     (str string)
+     #(common-log/error :decode-uri-component-failed %))
     string))
 
 (defn- decode-namespace-underlines
@@ -64,7 +69,7 @@
   [file-name]
   (some-> file-name
           (decode-namespace-underlines)
-          (string/replace common-util/url-encoded-pattern safe-url-decode)
+          (string/replace melange-common/url-encoded-pattern safe-url-decode)
           (make-valid-namespaces)))
 
 ;; Keep for backward compatibility
@@ -73,7 +78,10 @@
 (defn- legacy-title-parsing
   [file-name-body]
   (let [title (string/replace file-name-body "." "/")]
-    (or (common-util/safe-decode-uri-component title) title)))
+    (or (melange-common/safe-decode-uri-component
+         title
+         #(common-log/error :decode-uri-component-failed %))
+        title)))
 
 (defn title-parsing
   "Convert file name in the given file name format to page title"
@@ -112,7 +120,7 @@
                                     (string? title)
                                     title))
             file-name (when-let [result (path->file-body file)]
-                        (if (mldoc-support? (common-util/get-file-ext file))
+                        (if (mldoc-support? (melange-common/file-extension file))
                           (title-parsing result filename-format)
                           result))]
         (or property-name
@@ -124,12 +132,12 @@
   (let [alias (:alias properties)
         alias' (if (coll? alias) alias [(str alias)])
         aliases (and alias'
-                     (seq (remove #(or (= page-name (common-util/page-name-sanity-lc %))
+                     (seq (remove #(or (= page-name (melange-common/page-name-sanity-lower %))
                                        (string/blank? %)) ;; disable blank alias
                                   alias')))
         aliases' (keep
                   (fn [alias]
-                    (let [page-name (common-util/page-name-sanity-lc alias)]
+                    (let [page-name (melange-common/page-name-sanity-lower alias)]
                       {:block/name page-name
                        :block/title alias}))
                   aliases)
@@ -143,7 +151,7 @@
                                      (let [tags (:tags properties)
                                            tags (if (coll? tags) tags [(str tags)])
                                            tags (remove string/blank? tags)]
-                                       (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
+                                       (map (fn [tag] {:block/name (melange-common/page-name-sanity-lower tag)
                                                        :block/title tag})
                                             tags)))))]
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
@@ -157,11 +165,11 @@
         invalid-properties (set (->> (map (comp name first) *invalid-properties)
                                      (concat invalid-properties)))
         page-m (->
-                (common-util/remove-nils-non-nested
+                (melange-collection/remove-nils-non-nested
                  (assoc
                   (gp-block/page-name->map page db true date-formatter
                                            :from-page from-page)
-                  :block/file {:file/path (common-util/path-normalize file)}))
+                  :block/file {:file/path (melange-common/normalize-nfc file)}))
                 (extract-page-alias-and-tags page-name properties))]
     (cond->
      page-m
@@ -192,8 +200,8 @@
   [db page-map ref-pages date-formatter format]
   (let [namespace-pages (let [page (:block/title page-map)]
                           (when (and (not (:block/journal-day page-map))
-                                     (text/namespace-page? page))
-                            (->> (common-util/split-namespace-pages page)
+                                     (melange-common/namespace-page? page))
+                            (->> (melange-common/split-namespace-pages page)
                                  (map (fn [page]
                                         (-> (gp-block/page-name->map page db true date-formatter)
                                             (assoc :block/format format)))))))
@@ -209,7 +217,7 @@
         pages (remove nil? pages)]
     (map (fn [page]
            (let [page-id (if-let [journal-day (:block/journal-day page)]
-                           (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                           (uuid (melange-common/journal-page journal-day))
                            (or (when db
                                  (:block/uuid (ldb/get-page db (:block/name page))))
                                (d/squuid)))]
@@ -274,7 +282,8 @@
   [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
   (if (string/blank? content)
     {}
-    (let [format (common-util/get-format file-path)
+    (let [format (some-> (melange-common/file-format-name file-path)
+                         keyword)
           _ (when verbose (println "Parsing start: " file-path))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
@@ -306,7 +315,7 @@
   (->> (common-util/distinct-by :block/name pages)
        (map (fn [page]
               (if-let [journal-day (:block/journal-day page)]
-                (assoc page :block/uuid (common-uuid/gen-uuid :journal-page-uuid journal-day))
+                (assoc page :block/uuid (uuid (melange-common/journal-page journal-day)))
                 (cond-> page
                   (nil? (:block/uuid page))
                   (assoc :block/uuid (d/squuid))))))))

@@ -14,9 +14,9 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
-            [logseq.common.config :as common-config]
-            [logseq.common.version :as build-version]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.version :as build-version]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-worker.log :as db-worker-log]
             [promesa.core :as p]))
 
@@ -828,7 +828,7 @@
                                                ['[:find ?e
                                                   :in $ ?title
                                                   :where [?e :block/title ?title]]
-                                                common-config/library-page-name]])]
+                                                melange-common/library-page-name]])]
                  (is (empty? library-result)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))

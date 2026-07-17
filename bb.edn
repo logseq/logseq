@@ -75,8 +75,8 @@
   dev:query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "pnpm exec nbb-logseq script/query.cljs" *command-line-args*)}
+   :task (apply shell {:dir "scripts" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "pnpm exec nbb-logseq src/logseq/tasks/db/query.cljs" *command-line-args*)}
 
   dev:transact
   {:doc "Transact against a DB graph's datascript db"
@@ -87,8 +87,8 @@
   dev:create
   {:doc "Create a DB graph given a sqlite.build EDN file"
    :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "pnpm exec nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
+   :task (apply shell {:dir "scripts" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "pnpm exec nbb-logseq src/logseq/tasks/db/create_graph.cljs" *command-line-args*)}
 
   dev:create-clojure-log-graph
   {:doc "Import local clojure-log chats into a DB graph"
@@ -109,8 +109,8 @@
   dev:datoms
   {:doc "Write db's datoms to a file"
    :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "pnpm exec nbb-logseq script/dump_datoms.cljs"
+   :task (apply shell {:dir "scripts" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "pnpm exec nbb-logseq src/logseq/tasks/db/dump_datoms.cljs"
                 *command-line-args*)}
 
   dev:diff-datoms

@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.ui
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -94,7 +95,7 @@
   (let [id (and
             (> (count fragment) 36)
             (subs fragment (- (count fragment) 36)))]
-    (if (and id (util/uuid-string? id))
+    (if (and id (melange-common/uuid-string? id))
       (let [elements (util/get-blocks-by-id id)]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
@@ -288,7 +289,7 @@
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))
                       (let [id (subs anchor 9)]
-                        (when (util/uuid-string? id)
+                        (when (melange-common/uuid-string? id)
                           (uuid id))))]
       (when (and ref anchor-id)
         (let [block-ids (map :block/uuid blocks)

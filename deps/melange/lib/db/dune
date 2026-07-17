@@ -1,0 +1,64 @@
+(library
+ (name melange_db)
+ (modes melange)
+ (modules
+  Asset
+  Block_title
+  Bidirectional
+  Class_read
+  Class_catalog
+  Content
+  Core_read
+  Delete_plan
+  Delete_workflow
+  Datalog_form
+  Db_ident
+  Entity_read
+  Entity_lookup
+  Frontend_read
+  Input_plan
+  Initial_data_workflow
+  Initial_projection
+  Initial_read
+  Kv_entity
+  Normalize_plan
+  Order
+  Property_catalog
+  Property_build
+  Property_identity
+  Property_order
+  Property_scope
+  Property_shape
+  Property_workflow
+  Property_type
+  Reference_filter
+  Reference_workflow
+  Rules
+  Rules_data
+  Schema
+  Schema_version
+  Sqlite_build
+  Sqlite_export
+  Sqlite_gc_workflow
+  Sqlite_lifecycle
+  Sqlite_policy
+  Tree_read
+  Tree_workflow
+  Transaction_policy
+  Transaction_workflow
+  Validation_datom
+  Validation_entity
+  Validation_identity
+  Validation_property
+  Validation_schema
+  View_filter
+  View_entity_selection
+  View_data_workflow
+  View_grouping
+  View_order
+  View_property_values
+  View_workflow
+  View_query_workflow)
+ (libraries melange.js rrbvec)
+ (preprocess
+  (pps melange.ppx)))

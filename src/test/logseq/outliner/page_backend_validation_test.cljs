@@ -1,6 +1,6 @@
 (ns logseq.outliner.page-backend-validation-test
   (:require [cljs.test :refer [deftest is]]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
 
 (deftest create-page-rejects-hashtag-title

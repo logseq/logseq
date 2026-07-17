@@ -2,8 +2,8 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.order :as sync-order]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))

@@ -1,8 +1,8 @@
 (ns frontend.db.reference-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.common.reference :as db-reference]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.reference :as db-reference]
             [shadow.resource :as rc]))
 
 (def test-transit (rc/inline "fixtures/references.transit"))
@@ -48,7 +48,7 @@
        {:block/title "foo",
         :block/uuid #uuid "68485f78-1e70-4173-a569-1ebcb2ba69e6",
         :build/keep-uuid? true}}],
-     :logseq.db.sqlite.export/export-type :page}))
+     :logseq.melange.bridge.db.sqlite.export/export-type :page}))
 
 (comment
   (defn- import-edn!

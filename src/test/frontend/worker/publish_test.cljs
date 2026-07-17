@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.publish :as worker-publish]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (deftest publish-payload-includes-embedded-blocks
   (testing "embedded blocks and their children are included in publish payload"

@@ -10,11 +10,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.content :as melange-content]
             [logseq.outliner.validate :as outliner-validate]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -82,7 +81,7 @@
                           obj-txs (mapcat (fn [obj]
                                             (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
                                               [{:db/id (:db/id obj)
-                                                :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
+                                                :block/title (melange-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
                                                [:db/retract (:db/id obj) :block/tags (:db/id entity)]]))
                                           objects)
                           txs (concat page-txs obj-txs)]
@@ -120,7 +119,9 @@
         (when class?
           (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
                 hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
-                add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
+                add-tag-to-nearest-node? (= melange-common/right-brackets
+                                            (melange-common/safe-substring-range
+                                                                 edit-content (- hash-idx 2) hash-idx))
                 nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
             (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
               (p/let [node-ent (db/get-case-page nearest-node)

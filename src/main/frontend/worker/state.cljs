@@ -1,7 +1,7 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [frontend.worker.platform :as platform]
-            [logseq.common.util :as common-util]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [frontend.worker.platform :as platform]
             [promesa.core :as p]))
 
 (defonce *main-thread (atom nil))
@@ -82,7 +82,7 @@
 
 (defn set-db-latest-tx-time!
   [repo]
-  (swap! *state assoc-in [:db/latest-transact-time repo] (common-util/time-ms)))
+  (swap! *state assoc-in [:db/latest-transact-time repo] (melange-common/now-ms)))
 
 (defn get-context
   []

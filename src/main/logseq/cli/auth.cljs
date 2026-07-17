@@ -2,7 +2,7 @@
   "CLI auth helpers for persisted login state."
   (:require [clojure.string :as string]
             [logseq.cli.transport :as transport]
-            [logseq.common.cognito-config :as cognito-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]
             ["child_process" :as child-process]
             ["crypto" :as crypto]
@@ -50,16 +50,16 @@
 
 (defn- oauth-client-id
   []
-  cognito-config/CLI-COGNITO-CLIENT-ID)
+  melange-common/cli-cognito-client-id)
 
 (defn- oauth-scope
   []
-  (or cognito-config/OAUTH-SCOPE
+  (or melange-common/oauth-scope
       default-scope))
 
 (defn- oauth-domain
   []
-  cognito-config/OAUTH-DOMAIN)
+  melange-common/oauth-domain)
 
 (defn- logout-complete-uri
   []

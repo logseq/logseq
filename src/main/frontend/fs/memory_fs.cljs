@@ -4,7 +4,7 @@
    Paths are denoted by `memory://`. No open-dir/get-files support."
   (:require [cljs-bean.core :as bean]
             [frontend.fs.protocol :as protocol]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defn- <readdir
@@ -26,7 +26,10 @@
                                            (-> (js/window.pfs.readdir dir)
                                                (p/then bean/->clj)
                                                (p/then (fn [rpaths]
-                                                         (mapv #(path/path-join dir %) rpaths)))))]
+                                                         (mapv #(melange-common/path-join
+                                                                          dir
+                                                                          (to-array [%]))
+                                                               rpaths)))))]
                        (p/recur result (concat (rest dirs) dir-content)))))]
     result))
 
@@ -57,13 +60,13 @@
 
    lightning-fs does not support's :recursive in mkdir options"
   [dir]
-  (p/let [fpath (path/url-to-path dir)
+  (p/let [fpath (melange-common/url-to-path dir)
           sub-dirs (p/loop [top-parent fpath
                             remains []]
                      (p/let [exists? (<exists? top-parent)]
                        (if exists?
                          (reverse remains) ;; top-parent is the first non-exist dir
-                         (p/recur (path/parent top-parent)
+                         (p/recur (melange-common/parent top-parent)
                                   (conj remains top-parent)))))]
     (p/loop [remains sub-dirs]
       (if (empty? remains)
@@ -74,7 +77,7 @@
 (defn- read-file-aux
   [dir path {:keys [text?]
              :as options}]
-  (-> (p/let [fpath (path/url-to-path (path/path-join dir path))
+  (-> (p/let [fpath (melange-common/url-to-path (melange-common/path-join dir (to-array [path])))
               result (js/window.pfs.readFile fpath (clj->js options))]
         (if text?
           (.toString ^js result)
@@ -87,58 +90,61 @@
   protocol/Fs
   (mkdir! [_this dir]
     (when js/window.pfs
-      (let [fpath (path/url-to-path dir)]
+      (let [fpath (melange-common/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
   (mkdir-recur! [_this dir]
     (when js/window.pfs
-      (let [fpath (path/url-to-path dir)]
+      (let [fpath (melange-common/url-to-path dir)]
         (-> (<mkdir-recur! fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir-recur error: " error)))))))
 
   (readdir [_this dir]
     (when js/window.pfs
-      (let [fpath (path/url-to-path dir)]
+      (let [fpath (melange-common/url-to-path dir)]
         (-> (<readdir fpath)
             (p/then (fn [rpaths]
-                      (mapv #(path/path-join "memory://" %) rpaths)))
+                      (mapv #(melange-common/path-join
+                                       "memory://"
+                                       (to-array [%]))
+                            rpaths)))
             (p/catch (fn [error]
                        (println "(memory-fs)Readdir error: " error)
                        (p/rejected (ex-info (str error) {} error))))))))
 
   (unlink! [_this _repo path opts]
     (when js/window.pfs
-      (p/let [fpath (path/url-to-path path)
+      (p/let [fpath (melange-common/url-to-path path)
               stat (js/window.pfs.stat fpath)]
         (if (= (.-type stat) "file")
           (js/window.pfs.unlink fpath opts)
           (p/rejected "Unlinking a directory is not allowed, use rmdir! instead")))))
   (rmdir! [_this dir]
-    (let [fpath (path/url-to-path dir)]
+    (let [fpath (melange-common/url-to-path dir)]
       (js/window.workerThread.rimraf fpath)))
   (read-file [_this dir path options]
     (read-file-aux dir path (assoc options :text? true)))
   (read-file-raw [_this dir path options]
     (read-file-aux dir path options))
   (write-file! [_this _repo dir rpath content _opts]
-    (p/let [fpath (path/url-to-path (path/path-join dir rpath))
-            containing-dir (path/parent fpath)
+    (p/let [fpath (melange-common/url-to-path (melange-common/path-join dir (to-array [rpath])))
+            containing-dir (melange-common/parent fpath)
             _ (<ensure-dir! containing-dir)
             _ (js/window.pfs.writeFile fpath content)]))
 
   (rename! [_this _repo old-path new-path]
-    (let [old-path (path/url-to-path old-path)
-          new-path (path/url-to-path new-path)]
+    (let [old-path (melange-common/url-to-path old-path)
+          new-path (melange-common/url-to-path new-path)]
       (js/window.pfs.rename old-path new-path)))
   (copy! [_this _repo old-path new-path]
-    (p/let [old-path (path/url-to-path old-path)
-            new-path (path/url-to-path new-path)
+    (p/let [old-path (melange-common/url-to-path old-path)
+            new-path (melange-common/url-to-path new-path)
             content (js/window.pfs.readFile old-path)
-            containing-dir (path/parent new-path)
+            containing-dir (melange-common/parent new-path)
             _ (<ensure-dir! containing-dir)]
       (js/window.pfs.writeFile new-path content)))
   (stat [_this fpath]
-    (let [fpath (path/url-to-path fpath)]
+    (let [fpath (melange-common/url-to-path fpath)]
       (js/window.pfs.stat fpath)))
 
   (open-dir [_this _dir]

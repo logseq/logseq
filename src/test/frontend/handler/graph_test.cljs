@@ -6,9 +6,9 @@
             [frontend.handler.graph]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
-            [logseq.common.graph-registry :as graph-registry]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.schema :as schema-catalog]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
 (deftest graph-registry-key-is-indexeddb-compatible-test
@@ -56,11 +56,11 @@
 (deftest upsert-current-graph-registry-repairs-missing-local-graph-uuid-test
   (async done
     (let [upsert-current-f (some-> (resolve 'frontend.handler.graph/<upsert-current-graph-registry!) deref)
-          conn (d/create-conn db-schema/schema)
+          conn (d/create-conn schema-catalog/schema)
           registry-entry (atom nil)]
       (is (fn? upsert-current-f) "Current graph registry upsert should exist")
       (d/transact! conn [{:db/ident :logseq.kv/schema-version
-                          :kv/value db-schema/version}])
+                          :kv/value schema-catalog/version}])
       (p/with-redefs [state/get-current-repo (constantly "logseq_db_broken")
                       db/get-db (fn
                                   ([repo]
@@ -160,48 +160,50 @@
                           "logseq_db_current")))))))
 
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
-  (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]
-    (is (fn? normalize-f) "Graph registry entry normalizer should exist")
-    (when normalize-f
-      (testing "remote graphs store graph-id without duplicating rtc-graph-id"
-        (is (= {:repo "logseq_db_work"
-                :graph-name "work"
-                :local-graph-id "local-uuid"
-                :graph-id "remote-uuid"}
-               (select-keys
-                (normalize-f {:repo "logseq_db_work"
-                              :graph-name "work"
-                              :local-graph-id "local-uuid"
-                              :graph-id "remote-uuid"})
-                [:repo :graph-name :local-graph-id :rtc-graph-id :graph-id]))))
-      (testing "local-only graphs use local graph uuid as canonical graph-id"
-        (is (= "local-uuid"
-               (:graph-id (normalize-f {:repo "logseq_db_local"
-                                        :graph-name "local"
-                                        :local-graph-id "local-uuid"})))))
-      (testing "missing graph identity fails fast"
-        (is (thrown? js/Error
-                     (normalize-f {:repo "logseq_db_broken"
-                                   :graph-name "broken"})))))))
+  (testing "remote graphs store graph-id without duplicating rtc-graph-id"
+    (is (= {:repo "logseq_db_work"
+            :graph-name "work"
+            :local-graph-id "local-uuid"
+            :graph-id "remote-uuid"}
+           (select-keys
+            (graph-registry/normalize-entry
+             {:repo "logseq_db_work"
+              :graph-name "work"
+              :local-graph-id "local-uuid"
+              :graph-id "remote-uuid"})
+            [:repo :graph-name :local-graph-id :rtc-graph-id :graph-id]))))
+  (testing "local-only graphs use local graph uuid as canonical graph-id"
+    (is (= "local-uuid"
+           (:graph-id
+            (graph-registry/normalize-entry
+             {:repo "logseq_db_local"
+              :graph-name "local"
+              :local-graph-id "local-uuid"})))))
+  (testing "missing graph identity fails fast"
+    (is (thrown? js/Error
+                 (graph-registry/normalize-entry
+                  {:repo "logseq_db_broken"
+                   :graph-name "broken"})))))
 
 (deftest resolve-registry-target-prefers-graph-id-test
-  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-registry-target) deref)]
-    (is (fn? resolve-f) "Graph registry target resolver should exist")
-    (when resolve-f
-      (let [registry [{:repo "logseq_db_work"
-                       :graph-name "work"
-                       :graph-id "remote-uuid"}
-                      {:repo "logseq_db_other"
-                       :graph-name "work"
-                       :graph-id "other-uuid"}]]
-        (is (= "logseq_db_work"
-               (:repo (resolve-f registry {:graph-id "remote-uuid"}))))
-        (is (= "logseq_db_other"
-               (:repo (resolve-f registry {:graph-identifier "logseq_db_other"}))))
-        (is (= "logseq_db_work"
-               (:repo (resolve-f registry {:graph-identifier "remote-uuid"})))
-            "Protocol URL graph identifiers can be canonical graph ids")
-        (is (nil? (resolve-f registry {:graph-id "missing-uuid"})))))))
+  (let [registry [{:repo "logseq_db_work"
+                   :graph-name "work"
+                   :graph-id "remote-uuid"}
+                  {:repo "logseq_db_other"
+                   :graph-name "work"
+                   :graph-id "other-uuid"}]]
+    (is (= "logseq_db_work"
+           (:repo (graph-registry/resolve-target
+                   registry {:graph-id "remote-uuid"}))))
+    (is (= "logseq_db_other"
+           (:repo (graph-registry/resolve-target
+                   registry {:graph-identifier "logseq_db_other"}))))
+    (is (= "logseq_db_work"
+           (:repo (graph-registry/resolve-target
+                   registry {:graph-identifier "remote-uuid"})))
+        "Protocol URL graph identifiers can be canonical graph ids")
+    (is (nil? (graph-registry/resolve-target
+               registry {:graph-id "missing-uuid"})))))
 
 (deftest upsert-registry-entry-replaces-local-id-after-remote-id-exists-test
   (let [registry [{:repo "logseq_db_work"

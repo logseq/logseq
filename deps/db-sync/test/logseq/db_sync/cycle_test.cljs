@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db-sync.cycle :as cycle]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn- new-conn []
   (db-test/create-conn))

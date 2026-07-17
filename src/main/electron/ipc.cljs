@@ -3,7 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [promesa.core :as p]
             [frontend.util :as util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]))
 
 (defn- maybe-read-transit
   [result]

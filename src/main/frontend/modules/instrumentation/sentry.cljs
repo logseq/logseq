@@ -4,7 +4,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [logseq.common.version :as build-version]))
+            [logseq.melange.bridge.common.version :as build-version]))
 
 (goog-define SENTRY-DSN "")
 

@@ -1,6 +1,7 @@
 (ns logseq.cli.command.graph
   "Graph-related CLI commands."
-  (:require ["fs" :as fs]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["fs" :as fs]
             ["path" :as node-path]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
@@ -11,9 +12,8 @@
             [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.graph-backup :as graph-backup]
+            [logseq.melange.bridge.platform.node :as platform-node]
             [promesa.core :as p]))
 
 (def ^:private graph-export-spec
@@ -22,7 +22,7 @@
           :validate #{"edn" "sqlite"}}
    :file {:desc "Export file path"
           :alias :f
-          :coerce common-graph/expand-home
+          :coerce platform-node/expand-home
           :complete :file}
    :edn-options {:desc "EDN map of export options. :export-type overrides the default :graph; remaining keys are forwarded as :graph-options"
                  :alias :e
@@ -36,7 +36,7 @@
           :alias :t
           :validate #{"edn" "sqlite"}}
    :input {:desc "Input path"
-           :coerce common-graph/expand-home
+           :coerce platform-node/expand-home
            :complete :file}})
 
 (def ^:private graph-create-spec
@@ -324,7 +324,7 @@
 
 (defn- export-root-path
   [config repo]
-  (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+  (when-let [graph-dir-name (melange-common/repo-to-encoded-graph-dir-name repo)]
     (node-path/join (cli-server/graphs-dir config)
                     graph-dir-name
                     export-root-dir-name)))
@@ -333,8 +333,8 @@
   [config repo]
   (when-let [export-root (export-root-path config repo)]
     (node-path/join export-root
-                    (str (graph-dir/graph-dir-key->encoded-dir-name
-                          (graph-dir/repo->graph-dir-key repo))
+                    (str (melange-common/graph-dir-key-to-encoded-dir-name
+                          (melange-common/repo-to-graph-dir-key repo))
                          "_"
                          (quot (.now js/Date) 1000)
                          ".sqlite"))))

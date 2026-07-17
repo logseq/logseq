@@ -6,14 +6,14 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util.ref :as ref]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defn- variable-rules
   []
-  {"today" (ref/->page-ref (db/get-journal-page-title (date/today)))
-   "yesterday" (ref/->page-ref (db/get-journal-page-title (date/yesterday)))
-   "tomorrow" (ref/->page-ref (db/get-journal-page-title (date/tomorrow)))
+  {"today" (melange-common/to-page-ref (db/get-journal-page-title (date/today)))
+   "yesterday" (melange-common/to-page-ref (db/get-journal-page-title (date/yesterday)))
+   "tomorrow" (melange-common/to-page-ref (db/get-journal-page-title (date/tomorrow)))
    "time" (date/get-current-time)
    "current page" (when-let [current-page (or
                                            (state/get-current-page)
@@ -23,7 +23,7 @@
                                  (db-utils/entity [:block/uuid block-uuid])
                                  (ldb/get-page (conn/get-db) current-page))
                           current-page' (:block/title page)]
-                      (when current-page' (ref/->page-ref current-page'))))})
+                      (when current-page' (melange-common/to-page-ref current-page'))))})
 
 (def template-re #"<%([^%].*?)%>")
 
@@ -42,5 +42,5 @@
                         :else
                         (if-let [nld (date/nld-parse match)]
                           (let [date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
-                            (ref/->page-ref (date/journal-name date)))
+                            (melange-common/to-page-ref (date/journal-name date)))
                           match))))))

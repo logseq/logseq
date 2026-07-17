@@ -1,12 +1,12 @@
 (ns logseq.cli.command.remove
   "Remove-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.id :as id-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private remove-block-spec
@@ -215,7 +215,7 @@
 
 (defn- normalize-name
   [value]
-  (common-util/page-name-sanity-lc (or value "")))
+  (melange-common/page-name-sanity-lower (or value "")))
 
 (defn- tag-entity?
   [entity]

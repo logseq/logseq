@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (deftest invoke-success-returns-decoded-transit-result

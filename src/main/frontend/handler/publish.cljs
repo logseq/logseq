@@ -12,9 +12,8 @@
             [frontend.handler.user :as user-handler]
             [frontend.image :as image]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [logseq.common.path :as path]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn- <sha256-hex
@@ -69,12 +68,12 @@
   #{"png" "jpg" "jpeg" "webp"})
 
 (def ^:private custom-publish-assets
-  [{:path (path/path-join "logseq" "publish.css")
+  [{:path (melange-common/path-join "logseq" (to-array ["publish.css"]))
     :type "css"
     :content-type "text/css; charset=utf-8"
     :meta-key :custom_publish_css_hash
     :asset-name "publish.css"}
-   {:path (path/path-join "logseq" "publish.js")
+   {:path (melange-common/path-join "logseq" (to-array ["publish.js"]))
     :type "js"
     :content-type "text/javascript; charset=utf-8"
     :meta-key :custom_publish_js_hash
@@ -245,7 +244,7 @@
     (if (or (not (string? asset-type)) (string/blank? asset-type) external-url (nil? asset-uuid))
       (p/resolved nil)
       (p/let [repo-dir (config/get-repo-dir repo)
-              asset-path (path/path-join "assets" (str asset-uuid "." asset-type))
+              asset-path (melange-common/path-join "assets" (to-array [(str asset-uuid "." asset-type)]))
               content (fs/read-file-raw repo-dir asset-path {})
               content-type (asset-content-type asset-type)]
         (if (image-asset? asset-type)
@@ -340,7 +339,7 @@
                           :content_length (count body)
                           :owner_sub (user-handler/user-uuid)
                           :owner_username (user-handler/username)
-                          :created_at (util/time-ms)}
+                          :created_at (melange-common/now-ms)}
             publish-meta (cond-> publish-meta
                            (get custom-assets :custom_publish_css_hash)
                            (assoc :custom_publish_css_hash (:custom_publish_css_hash custom-assets))

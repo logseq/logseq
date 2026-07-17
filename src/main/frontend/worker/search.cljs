@@ -1,17 +1,16 @@
 (ns frontend.worker.search
   "Full-text and fuzzy search"
-  (:require [cljs-bean.core :as bean]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.block-title :as db-block-title]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.graph-parser.text :as text]))
+
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.block-title :as db-block-title]
+            [logseq.melange.bridge.db.content :as melange-content]))
 
 (def ^:private max-vector-search-results 10)
 (def ^:private min-vector-search-score 0.5)
@@ -107,8 +106,8 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- valid-upsert-block?
   [item]
-  (and (common-util/uuid-string? (.-id item))
-       (common-util/uuid-string? (.-page item))))
+  (and (melange-common/uuid-string? (.-id item))
+       (melange-common/uuid-string? (.-page item))))
 
 (defn- throw-upsert-blocks-error!
   [item]
@@ -378,9 +377,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- build-search-bind
   [q input page limit use-namespace-last-part?]
   (let [namespace? (and use-namespace-last-part?
-                        (ns-util/namespace-page? q))
+                        (melange-common/namespace-page? q))
         last-part (when namespace?
-                    (some-> (text/get-namespace-last-part q)
+                    (some-> (melange-common/get-last-part q)
                             get-match-input))]
     (cond
       (and namespace? page)
@@ -522,7 +521,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (or (ldb/hidden? entity)
       (let [page (:block/page entity)]
         (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
+             (not= (:block/title page) melange-common/quick-add-page-name)))))
 
 (defn- page-or-object?
   [entity]
@@ -537,7 +536,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- block-search-title
   "Build display title from block entity with original casing."
   [block]
-  (let [title (db-content/recur-replace-uuid-in-block-title
+  (let [title (melange-content/recur-replace-uuid-in-block-title
                (assoc block :block/title (ldb/get-title-with-parents block)))
         title (cond-> title
                 (ldb/journal? block)
@@ -551,7 +550,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- block-result-title
   [block]
-  (db-content/recur-replace-uuid-in-block-title block))
+  (melange-content/recur-replace-uuid-in-block-title block))
 
 (defn- matched-alias
   [q block]
@@ -833,7 +832,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                 (or snippet result-title)))
               block-page (or
                           (:block/uuid (:block/page block))
-                          (when (and page (common-util/uuid-string? page))
+                          (when (and page (melange-common/uuid-string? page))
                             (uuid page)))
               parent-id (:db/id (:block/parent block))
               tag-ids (seq (map :db/id (:block/tags block)))
@@ -918,13 +917,13 @@ DROP TRIGGER IF EXISTS blocks_au;
            ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
            select "select id, page, title, rank from blocks_fts where "
            pg-sql (if page "page = ? and" "")
-           match-sql (if (ns-util/namespace-page? q)
+           match-sql (if (melange-common/namespace-page? q)
                        (str select pg-sql " title match ? or title match ? limit ?")
                        (str select pg-sql " title match ? limit ?"))
            non-match-sql (str select pg-sql " title like ? limit ?")
            matched-result (when (and (not page-only?)
                                      (not enough-exact-title-results?))
-                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+                            (search-blocks-aux search-db match-sql q match-input page limit-p (melange-common/namespace-page? q)))
            non-match-result (when (and (not page-only?) non-match-input)
                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
                                    (map (fn [result]

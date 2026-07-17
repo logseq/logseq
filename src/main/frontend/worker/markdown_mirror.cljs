@@ -1,19 +1,19 @@
 (ns frontend.worker.markdown-mirror
   "Markdown mirror derived-file support for DB graphs."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
-            [logseq.common.export.file :as common-file]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [frontend.common.export.file :as common-file]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
             [promesa.core :as p]))
 
 (defn repo-mirror-dir
   [repo]
-  (str (graph-dir/repo->encoded-graph-dir-name repo) "/mirror/markdown"))
+  (str (melange-common/repo-to-encoded-graph-dir-name repo)
+       "/mirror/markdown"))
 
 (def ^:private invalid-file-name-chars-re
   #"[<>:\"|?*\\/]")
@@ -214,12 +214,12 @@
   [title]
   (let [title (or title "")
         page-ref-targets (keep (fn [[_ prefix page-title]]
-                                 (when-not (common-util/uuid-string? page-title)
+                                 (when-not (melange-common/uuid-string? page-title)
                                    {:title page-title
                                     :tag? (= "#" prefix)}))
                                (re-seq ref-or-tag-re title))
         simple-tag-targets (keep (fn [[_ _ tag-title]]
-                                   (when-not (common-util/uuid-string? tag-title)
+                                   (when-not (melange-common/uuid-string? tag-title)
                                      {:title tag-title
                                       :tag? true}))
                                  (re-seq simple-hashtag-re title))]
@@ -229,7 +229,7 @@
   [status]
   (when-let [content (some-> (cond
                                (keyword? status) (name status)
-                               :else (or (db-property/closed-value-content status)
+                               :else (or (melange-property/closed-value-content status)
                                          (:block/title status)
                                          (:logseq.property/value status)))
                              str
@@ -314,7 +314,7 @@
         content (cond
                   (string? v) v
                   (keyword? v) (name v)
-                  :else (db-property/property-value-content v))]
+                  :else (melange-property/property-value-content v))]
     (= "number" (some-> content string/lower-case))))
 
 (defn- embed-target

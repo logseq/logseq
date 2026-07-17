@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 

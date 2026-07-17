@@ -1,10 +1,10 @@
 (ns frontend.worker.undo-redo
   "Undo redo new implementation"
+  (:require-macros [frontend.defkeywords :refer [defkeywords]])
   (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.client-op :as client-op]
             [lambdaisland.glogi :as log]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as m]
             [malli.util :as mu]))
 

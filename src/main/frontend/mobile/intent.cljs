@@ -1,5 +1,6 @@
 (ns frontend.mobile.intent
   (:require ["/frontend/utils" :as utils]
+            [logseq.melange.bridge.common.api :as melange-common]
             ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["@capacitor/filesystem" :refer [Filesystem]]
             ["@capacitor/share" :refer [^js Share]]
@@ -20,14 +21,17 @@
             [frontend.util :as util]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.log :as common-log]
             [promesa.core :as p]))
 
 (defn- normalize-native-file-path
   "Normalize iOS shared file URLs to paths that Capacitor Filesystem can read.
   iOS share extensions commonly provide `file://` URLs."
   [url]
-  (let [url (some-> url common-util/safe-decode-uri-component)]
+  (let [url (when (some? url)
+              (melange-common/safe-decode-uri-component
+               url
+               #(common-log/error :decode-uri-component-failed %)))]
     (cond
       (string/blank? url)
       url
@@ -168,7 +172,9 @@
 
                       :else
                       (if (mobile-util/native-ios?)
-                        (common-util/safe-decode-uri-component v)
+                        (melange-common/safe-decode-uri-component
+                         v
+                         #(common-log/error :decode-uri-component-failed %))
                         v))])))
 
 (defn- handle-asset-file [url _format]

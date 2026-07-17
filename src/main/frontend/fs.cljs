@@ -11,9 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defonce memory-backend (memory-fs/->MemoryFs))
@@ -60,7 +58,7 @@
     (js/console.error "BUG: (deprecation) path-only? is always true"))
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (map common-util/path-normalize result)))
+    (map melange-common/normalize-nfc result)))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -80,7 +78,7 @@
   "Use it only for plain-text files, not binary"
   [repo dir rpath content opts]
   (when content
-    (let [path (common-util/path-normalize rpath)
+    (let [path (melange-common/normalize-nfc rpath)
           fs-record (get-fs dir {:repo repo
                                  :rpath rpath})]
       (->
@@ -106,7 +104,7 @@
    which has file graph assumptions"
   [path content]
   (when (util/electron?)
-    (let [file-fpath (common-util/path-normalize path)]
+    (let [file-fpath (melange-common/normalize-nfc path)]
       ;; repo is nil because we don't want a backup file written
       (-> (ipc/ipc "writeFile" nil file-fpath content)
           (p/catch (fn [error]
@@ -119,12 +117,12 @@
   [repo file-name data]
   (let [repo-dir (config/get-repo-dir repo)]
     (if (util/electron?)
-      (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)
-            file-path (path/path-join assets-dir file-name)]
+      (let [assets-dir (melange-common/path-join repo-dir (to-array [melange-common/local-assets-dir]))
+            file-path (melange-common/path-join assets-dir (to-array [file-name]))]
         ;; Use writeFileBytes directly instead of ipc/ipc (write-file!) because
         ;; binary data like ArrayBuffer can't be transit-serialized
         (js/window.apis.writeFileBytes file-path data))
-      (let [file-path (path/path-join common-config/local-assets-dir file-name)]
+      (let [file-path (melange-common/path-join melange-common/local-assets-dir (to-array [file-name]))]
         (write-plain-text-file! repo repo-dir file-path data {:skip-transact? true
                                                               :skip-compare? true})))))
 
@@ -148,7 +146,7 @@
   ([fpath]
    (protocol/stat (get-fs fpath) fpath))
   ([dir path]
-   (let [fpath (path/path-join dir path)]
+   (let [fpath (melange-common/path-join dir (to-array [path]))]
      (protocol/stat (get-fs dir) fpath))))
 
 (defn mkdir-if-not-exists
@@ -189,7 +187,7 @@
   [path]
   (cond
     (util/electron?)
-    (path/url-to-path path)
+    (melange-common/url-to-path path)
 
     :else
     path))

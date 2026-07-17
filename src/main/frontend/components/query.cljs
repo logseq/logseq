@@ -10,7 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))

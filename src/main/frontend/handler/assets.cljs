@@ -4,10 +4,9 @@
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.db.frontend.asset :as db-asset]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.log :as common-log]
+            [logseq.melange.bridge.db.asset :as db-asset]
             [medley.core :as medley]
             [promesa.core :as p]))
 
@@ -69,10 +68,10 @@
 
 (defn asset-protocol-url->media-url
   [url]
-  (if (and (common-config/local-protocol-asset? url)
+  (if (and (melange-common/local-protocol-asset? url)
            (not (util/electron?)))
     (-> url
-        (common-config/remove-asset-protocol)
+        (melange-common/remove-asset-protocol)
         (string/replace-first "/logseq__colon/" ":/"))
     url))
 
@@ -82,8 +81,8 @@
                         (string/replace rpath #"^[.\/\\]+" ""))]
     (if config/publishing?
       (str "./" rpath)
-      (let [ret (let [rpath (if-not (string/starts-with? rpath common-config/local-assets-dir)
-                              (path/path-join common-config/local-assets-dir rpath)
+      (let [ret (let [rpath (if-not (string/starts-with? rpath melange-common/local-assets-dir)
+                              (melange-common/path-join melange-common/local-assets-dir (to-array [rpath]))
                               rpath)
                       encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
                       rpath (if encoded-chars? (js/decodeURI rpath) rpath)
@@ -94,8 +93,8 @@
                       has-schema? (string/starts-with? graph-root "file:")
                       protocol (if (util/electron?) "assets:" "file:")]
                   (if has-schema?
-                    (path/path-join graph-root rpath)
-                    (path/prepend-protocol protocol (path/path-join graph-root rpath))))]
+                    (melange-common/path-join graph-root (to-array [rpath]))
+                    (melange-common/prepend-protocol protocol (melange-common/path-join graph-root (to-array [rpath])))))]
         ret))))
 
 (defn normalize-asset-resource-url
@@ -103,26 +102,32 @@
   [path]
   (let [windows-drive-path? (windows-drive-absolute-path? path)
         protocol-link? (and (not windows-drive-path?)
-                            (common-config/protocol-path? path))]
+                            (melange-common/protocol-path? path))]
     (cond
       protocol-link?
       path
 
       ;; BUG: avoid double encoding from PDF assets
-      (or (path/absolute? path)
+      (or (melange-common/absolute? path)
           windows-drive-path?)
       (let [protocol (if (util/electron?) "assets://" "file://")
             path (if (util/electron?)
                    (protect-windows-drive-in-assets-path path)
                    path)]
-        (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
+        (if (boolean (re-find melange-common/url-encoded-pattern path)) ;; has encoded chars?
           ;; Incoming path might be already URL encoded. from PDF assets
-          (path/path-join protocol (common-util/safe-decode-uri-component path))
-          (path/path-join protocol path)))
+          (melange-common/path-join
+           protocol
+           (to-array [(melange-common/safe-decode-uri-component
+                       path
+                       #(common-log/error :decode-uri-component-failed %))]))
+          (melange-common/path-join protocol (to-array [path]))))
 
       :else ;; relative path or alias path
-      (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
-              (common-util/safe-decode-uri-component)))))
+      (when-some [resolved (resolve-asset-real-path-url (state/get-current-repo) path)]
+        (melange-common/safe-decode-uri-component
+         resolved
+         #(common-log/error :decode-uri-component-failed %))))))
 
 (defn <make-data-url
   [path]
@@ -138,7 +143,7 @@
   [css]
   (let [rel-paths (re-seq #"\(['\"]?(\.\./assets/.*?)['\"]?\)" css)
         rel-paths (vec (set (map second rel-paths)))
-        fixed-rel-paths (map (fn [p] (path/path-join "./logseq/" p)) rel-paths)]
+        fixed-rel-paths (map (fn [p] (melange-common/path-join "./logseq/" (to-array [p]))) rel-paths)]
     (p/let [blob-urls (p/all (map <make-data-url fixed-rel-paths))]
       (reduce (fn [css [rel-path blob-url]]
                 (string/replace css rel-path (str "'" blob-url "'")))
@@ -158,7 +163,7 @@
      (string/replace-first path #"^/" "")
      (let [repo (state/get-current-repo)
            repo-dir (config/get-repo-dir repo)
-           local-asset? (common-config/local-relative-asset? path)
+           local-asset? (melange-common/local-relative-asset? path)
            ;; Hack for path calculation
            path (string/replace path #"^(\.\.)?/" "./")
            js-url? (not (nil? js-url))]
@@ -172,9 +177,9 @@
 
           (util/electron?)
           (let [full-path (if local-asset?
-                            (path/path-join repo-dir path) path)]
+                            (melange-common/path-join repo-dir (to-array [path])) path)]
             ;; fullpath will be encoded
-            (path/prepend-protocol "assets:" (protect-windows-drive-in-assets-path full-path)))
+            (melange-common/prepend-protocol "assets:" (protect-windows-drive-in-assets-path full-path)))
 
          :else
          (p/let [binary (fs/read-file-raw repo-dir path {})
@@ -284,14 +289,14 @@
   [repo]
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
-          _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
+          _ (fs/mkdir-if-not-exists (melange-common/path-join repo-dir (to-array [assets-dir])))]
     [repo-dir assets-dir]))
 
 (defn get-asset-path
   "Get asset path from filename, ensure assets dir exists"
   [filename]
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
-    (path/path-join repo-dir assets-dir filename)))
+    (melange-common/path-join repo-dir (to-array [assets-dir filename]))))
 
 (defn- asset-transfer-in-progress?
   [progress-entry]

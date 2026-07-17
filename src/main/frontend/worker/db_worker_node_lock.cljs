@@ -4,10 +4,8 @@
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
-            [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
-            [logseq.common.graph-dir :as graph-dir]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defn- expand-home
@@ -26,22 +24,24 @@
 
 (defn repo->graph-dir-key
   [repo]
-  (graph-dir/repo->graph-dir-key repo))
+  (melange-common/repo-to-graph-dir-key repo))
 
 (defn canonical-graph-dir-key?
   [graph-dir-key]
   (and (seq graph-dir-key)
-       (not (string/starts-with? graph-dir-key common-config/db-version-prefix))))
+       (not (string/starts-with? graph-dir-key melange-common/db-version-prefix))))
 
 (defn decode-canonical-graph-dir-key
   [encoded-graph-dir-key]
-  (let [decoded (worker-util/decode-graph-dir-name encoded-graph-dir-key)]
+  (let [decoded (melange-common/decode-graph-dir-name encoded-graph-dir-key)]
     (when (canonical-graph-dir-key? decoded)
       decoded)))
 
 (defn repo-dir
   [graphs-root repo]
-  (node-path/join graphs-root (worker-util/encode-graph-dir-name (repo->graph-dir-key repo))))
+  (node-path/join graphs-root
+                  (melange-common/encode-graph-dir-name
+                   (repo->graph-dir-key repo))))
 
 (defn lock-path
   [root-dir repo]
@@ -158,7 +158,7 @@
                        :path path
                        :lock lock}))
 
-      (not (graph-dir/same-repo? repo (:repo lock)))
+      (not (melange-common/same-repo? repo (:repo lock)))
       (throw (ex-info "graph lock repo mismatch"
                       {:code :repo-locked
                        :path path

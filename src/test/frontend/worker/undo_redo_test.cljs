@@ -1,5 +1,6 @@
 (ns frontend.worker.undo-redo-test
-  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.worker.a-test-env]
             [frontend.worker.sync.apply-txs :as sync-apply]
@@ -7,9 +8,8 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.undo-redo :as worker-undo-redo]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.op :as outliner-op]))
 
 (def ^:private test-repo "test-worker-undo-redo")
@@ -656,8 +656,8 @@
                                     (local-tx-meta {:client-id "test-client"}))
           property-page (d/entity @conn :user.property/undo-rating)
           property-uuid (:block/uuid property-page)
-          today-day (date-time-util/ms->journal-day (js/Date.))
-          today-title (date-time-util/int->journal-title
+          today-day (melange-common/journal-day-of-ms (.getTime (js/Date.)))
+          today-title (melange-common/format-journal-day
                        today-day
                        (:logseq.property.journal/title-format
                         (d/entity @conn :logseq.class/Journal)))

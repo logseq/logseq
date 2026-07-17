@@ -1,15 +1,15 @@
 (ns frontend.worker.publish
   "Publish"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (defn- publish-entity-title
   [entity]
@@ -84,7 +84,7 @@
                               :source_block_uuid block-uuid-str
                               :source_block_content block-content
                               :source_block_format block-format
-                              :updated_at (common-util/time-ms)})
+                              :updated_at (melange-common/now-ms)})
                            targets))))))
             blocks)))
 
@@ -111,7 +111,7 @@
                         "")
         raw-content (string/trim raw-content)]
     (when-not (string/blank? raw-content)
-      (let [content (db-content/recur-replace-uuid-in-block-title
+      (let [content (melange-content/recur-replace-uuid-in-block-title
                      (assoc block :block/title raw-content))
             content (if (> (count content) publish-search-max-length)
                       (subs content 0 publish-search-max-length)
@@ -182,7 +182,7 @@
                            (remove nil?))
         page-eids (->> blocks (map :block/page) (keep :db/id))
         property-eids (->> (cons entity blocks)
-                           (map db-property/properties)
+                           (map melange-property/properties)
                            (mapcat (fn [props]
                                      (mapcat (fn [[k v]]
                                                (let [property (d/entity db k)

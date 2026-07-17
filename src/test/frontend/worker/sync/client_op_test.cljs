@@ -2,8 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.client-op :as client-op]
-            [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.db.sqlite.gc :as sqlite-gc]))
+            [logseq.melange.bridge.db.sqlite :as common-sqlite]
+            [logseq.melange.bridge.db.sqlite.gc :as sqlite-gc]))
 
 (defn- new-memory-db
   []

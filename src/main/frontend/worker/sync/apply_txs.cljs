@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.apply-txs
   "Pending tx and remote tx application helpers for db sync."
   (:require
+   [logseq.melange.bridge.common.api :as melange-common]
    [clojure.set :as set]
    [clojure.string :as string]
    [datascript.core :as d]
@@ -18,13 +19,12 @@
    [frontend.worker.sync.util :as sync-util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
-   [logseq.common.util :as common-util]
-   [logseq.common.version :as build-version]
-   [logseq.db :as ldb]
+   [logseq.melange.bridge.db.normalize :as melange-normalize]
+   [logseq.melange.bridge.common.version :as build-version]
+   [logseq.melange.bridge.db.core :as ldb]
    [logseq.db-sync.order :as sync-order]
    [logseq.db-sync.tx-sanitize :as tx-sanitize]
-   [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
    [logseq.outliner.core :as outliner-core]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.op.construct :as op-construct]
@@ -109,7 +109,7 @@
 (defn- normalize-tx-data [db-after db-before tx-data]
   (->> tx-data
        remove-ignored-attrs
-       (db-normalize/normalize-tx-data db-after db-before)
+       (melange-normalize/normalize-tx-data db-after db-before)
        (remove (fn [[_op e]]
                  (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
@@ -122,9 +122,9 @@
        (keep (fn [[e a v t added]]
                (let [reversed-datom (d/datom e a v t (not added))]
                  ;; trick: reverse the order of `db-before` and `db-after`
-                 (db-normalize/normalize-datom db-before db-after reversed-datom))))
-       (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
-       db-normalize/reorder-retract-entity))
+                 (melange-normalize/normalize-datom db-before db-after reversed-datom))))
+       (melange-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
+       melange-normalize/reorder-retract-entity))
 
 (defn normalize-rebased-pending-tx
   [{:keys [db-before db-after tx-data]}]
@@ -159,7 +159,7 @@
         online? (worker-state/online?)
         ws-open-state? (ws-open? ws)]
     (when (and online? ws-open-state?)
-      (let [elapsed-ms (- (common-util/time-ms) (:sent-at request))
+      (let [elapsed-ms (- (melange-common/now-ms) (:sent-at request))
             outliner-ops (mapv outliner-op->string (:outliner-ops request))
             outliner-op-tag (when (seq outliner-ops)
                               (string/join "," outliner-ops))
@@ -207,7 +207,7 @@
   [client request]
   (when-let [*upload-request (:upload-request client)]
     (when-not (:timer @*upload-request)
-      (let [request' (assoc request :sent-at (common-util/time-ms))
+      (let [request' (assoc request :sent-at (melange-common/now-ms))
             timer (js/setTimeout
                    (fn []
                      (when (= request' (dissoc @*upload-request :timer))
@@ -288,7 +288,7 @@
                      (let [[op e a v _t] item]
                        [op e a v])
                      item)))
-           db-normalize/reorder-retract-entity))
+           melange-normalize/reorder-retract-entity))
 
 (defn- inferred-outliner-ops?
   [tx-meta]
@@ -1052,7 +1052,7 @@
 
 (defn- replace-uuid-str-with-eid
   [db v]
-  (if (and (string? v) (common-util/uuid-string? v))
+  (if (and (string? v) (melange-common/uuid-string? v))
     (if-let [entity (d/entity db [:block/uuid (uuid v)])]
       (:db/id entity)
       v)
@@ -1095,7 +1095,7 @@
   (cond
     (uuid? e) e
 
-    (and (string? e) (common-util/uuid-string? e)) (uuid e)
+    (and (string? e) (melange-common/uuid-string? e)) (uuid e)
 
     (and (vector? e)
          (= :block/uuid (first e))

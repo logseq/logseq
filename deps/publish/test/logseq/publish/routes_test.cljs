@@ -1,6 +1,6 @@
 (ns logseq.publish.routes-test
   (:require [cljs.test :refer [async deftest is testing]]
-            [logseq.common.authorization :as authorization]
+            [logseq.melange.bridge.common.authorization :as authorization]
             [logseq.publish.common :as publish-common]
             [logseq.publish.routes :as routes]
             [promesa.core :as p]))

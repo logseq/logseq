@@ -3,7 +3,6 @@
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.auth :as auth-command]
-            [logseq.common.cognito-config :as cognito-config]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]))
@@ -34,8 +33,7 @@
                            :redirect-uri "http://localhost:8765/auth/callback"
                            :wait! (fn [] (p/resolved {:code "oauth-code"}))
                            :stop! (fn [] (p/resolved true))}]
-      (-> (p/with-redefs [cognito-config/CLI-COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6"
-                          cli-auth/start-login-callback-server! (fn [_opts]
+      (-> (p/with-redefs [cli-auth/start-login-callback-server! (fn [_opts]
                                                                   (p/resolved callback-server))
                           cli-auth/open-browser! (fn [url]
                                                    (swap! open-calls conj url)
@@ -136,8 +134,7 @@
           open-calls (atom [])]
       (cli-auth/write-auth-file! {:auth-path auth-path} (sample-auth))
       (is (fs/existsSync auth-path))
-      (-> (p/with-redefs [cognito-config/CLI-COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6"
-                          cli-auth/open-browser! (fn [url]
+      (-> (p/with-redefs [cli-auth/open-browser! (fn [url]
                                                    (swap! open-calls conj url)
                                                    (let [parsed (js/URL. url)
                                                          logout-uri (.get (.-searchParams parsed) "logout_uri")]
@@ -166,8 +163,7 @@
     (let [dir (node-helper/create-tmp-dir "cli-auth")
           auth-path (node-path/join dir "auth.json")
           open-calls (atom [])]
-      (-> (p/with-redefs [cognito-config/CLI-COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6"
-                          cli-auth/open-browser! (fn [url]
+      (-> (p/with-redefs [cli-auth/open-browser! (fn [url]
                                                    (swap! open-calls conj url)
                                                    (let [parsed (js/URL. url)
                                                          logout-uri (.get (.-searchParams parsed) "logout_uri")]

@@ -5,7 +5,7 @@
             [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.skill :as skill-command]
-            [logseq.common.path :as path]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (deftest test-skill-command-entries
   (let [entries skill-command/entries
@@ -134,8 +134,8 @@
         source-path (node-path/join tmp-root "source" "SKILL.md")
         cwd (node-path/join tmp-root "work")
         home-dir (node-path/join tmp-root "home")
-        local-path (path/path-join cwd ".agents" "skills" "logseq-cli" "SKILL.md")
-        global-path (path/path-join home-dir ".agents" "skills" "logseq-cli" "SKILL.md")]
+        local-path (melange-common/path-join cwd (to-array [".agents" "skills" "logseq-cli" "SKILL.md"]))
+        global-path (melange-common/path-join home-dir (to-array [".agents" "skills" "logseq-cli" "SKILL.md"]))]
     (try
       (fs/mkdirSync (node-path/dirname source-path) #js {:recursive true})
       (fs/mkdirSync (node-path/dirname local-path) #js {:recursive true})
@@ -212,7 +212,7 @@
 (deftest test-execute-skill-install-global-prefers-home-env
   (let [tmp-root (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-skill-home-"))
         source-path (node-path/join tmp-root "source-skill.md")
-        installed-file (path/path-join tmp-root ".agents" "skills" "logseq-cli" "SKILL.md")
+        installed-file (melange-common/path-join tmp-root (to-array [".agents" "skills" "logseq-cli" "SKILL.md"]))
         previous-home (.. js/process -env -HOME)]
     (try
       (fs/writeFileSync source-path "# installed\ncontent" "utf8")

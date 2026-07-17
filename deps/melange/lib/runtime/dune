@@ -1,0 +1,16 @@
+(library
+ (name melange_cljs_runtime)
+ (modes melange)
+ (implements melange_cljs_runtime_spec)
+ (modules Value_codec)
+ (libraries melange.js)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_runtime)
+ (modes melange)
+ (modules Keyword Uuid Date_time Persistent_vector Value Codec)
+ (libraries melange-edn-melange melange-transit-melange rrbvec)
+ (preprocess
+  (pps melange.ppx)))

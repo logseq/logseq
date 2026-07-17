@@ -1,5 +1,6 @@
 (ns frontend.date-test
-  (:require [cljs.test :refer [deftest is use-fixtures]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is use-fixtures]]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
@@ -28,13 +29,6 @@
     (is (= 3 (.getMonth result)))
     (is (= 5 (.getDate result)))
     (is (nil? (date/nld-parse nil)))))
-
-(deftest journal-title-formatters-test
-  (with-redefs [state/get-date-formatter (constantly "yyyy-MM-dd")]
-    (let [formatters (date/journal-title-formatters)]
-      (is (= "yyyy-MM-dd" (first formatters)))
-      (is (= 1 (count (filter #{"yyyy-MM-dd"} formatters))))
-      (is (some #{"MMM do, yyyy"} formatters)))))
 
 (deftest get-date-time-string-test
   (let [default-output (date/get-date-time-string test-date-time)]
@@ -99,8 +93,8 @@
 
 (deftest journal-day->utc-ms-test
   (is (= (tc/to-long (tf/parse (tf/formatter "yyyyMMdd") "20260405"))
-         (date/journal-day->utc-ms 20260405)))
-  (is (nil? (date/journal-day->utc-ms nil))))
+         (melange-common/journal-day-to-utc-ms 20260405)))
+  (is (nil? (melange-common/journal-day-to-utc-ms nil))))
 
 (deftest int->local-time-2-test
   (is (= (tf/unparse (tf/formatter "yyyy-MM-dd HH:mm")

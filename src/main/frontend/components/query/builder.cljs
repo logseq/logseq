@@ -13,11 +13,10 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.ref :as ref]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -236,7 +235,7 @@
 
        "task"
        (let [items (let [values (:property/closed-values (db/entity :logseq.property/status))]
-                     (mapv db-property/property-value-content values))]
+                     (mapv melange-property/property-value-content values))]
          (select items
                  (constantly nil)
                  {:multiple-choices? true
@@ -252,7 +251,7 @@
        "priority"
        (select
         (let [values (:property/closed-values (db/entity :logseq.property/priority))]
-          (mapv db-property/property-value-content values))
+          (mapv melange-property/property-value-content values))
         (constantly nil)
         {:multiple-choices? true
          :selected-choices #{}
@@ -341,7 +340,7 @@
 
 (defn- uuid->page-title
   [s]
-  (if (and (string? s) (common-util/uuid-string? s))
+  (if (and (string? s) (melange-common/uuid-string? s))
     (:block/title (db/entity [:block/uuid (uuid s)]))
     s))
 
@@ -356,7 +355,7 @@
       (t :query.builder/search-label clause)
 
       (= (keyword f) :page-ref)
-      (ref/->page-ref (uuid->page-title (second clause)))
+      (melange-common/to-page-ref (uuid->page-title (second clause)))
 
       (contains? #{:tags} (keyword f))
       (cond
@@ -532,9 +531,9 @@
   [q-str]
   (if (string/blank? q-str)
     ""
-    (if (or (common-util/wrapped-by-parens? q-str)
-            (common-util/wrapped-by-quotes? q-str)
-            (page-ref/page-ref? q-str)
+    (if (or (melange-common/wrapped-by-parens? q-str)
+            (melange-common/wrapped-by-quotes? q-str)
+            (melange-common/page-ref? q-str)
             (string/starts-with? q-str "[?"))
       q-str
       (str "\"" q-str "\""))))

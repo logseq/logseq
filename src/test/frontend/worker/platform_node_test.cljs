@@ -88,9 +88,10 @@
        (gobj/set opts "rowMode" row-mode))
      ((:exec sqlite) db opts))))
 
-(deftest node-platform-uses-linked-melange-js-api-package
+(deftest node-platform-uses-melange-bridge
   (let [source (node-platform-source)]
-    (is (string/includes? source "@logseq/melange-js-api"))
+    (is (string/includes? source "logseq.melange.bridge.platform.node"))
+    (is (not (string/includes? source "@logseq/melange-js-api")))
     (is (not (string/includes? source "./melange-js-api-node.js")))))
 
 (deftest node-platform-disables-vector-embedding-off-macos

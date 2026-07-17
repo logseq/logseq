@@ -5,15 +5,15 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker-common.util :as worker-util]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.common.delete-blocks :as delete-blocks]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.delete-blocks :as delete-blocks]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.collection :as melange-collection]
             [logseq.outliner.page :as outliner-page]))
 
 ;; Frontend migrations
@@ -21,7 +21,7 @@
 
 (defn- add-quick-add-page
   [_db]
-  (let [page (-> (-> (sqlite-util/build-new-page common-config/quick-add-page-name)
+  (let [page (-> (-> (sqlite-util/build-new-page melange-common/quick-add-page-name)
                      sqlite-create-graph/mark-block-as-built-in))]
     [page]))
 
@@ -33,7 +33,7 @@
        (let [page (d/entity db (:e d))]
          (when-not (string/blank? (:block/title page))
            {:db/id (:db/id page)
-            :block/name (common-util/page-name-sanity-lc (:block/title page))})))
+            :block/name (melange-common/page-name-sanity-lower (:block/title page))})))
      pages)))
 
 (defn delete-property
@@ -231,7 +231,7 @@
 
                             :else
                             data)))
-                  common-util/fast-remove-nils)
+                  melange-collection/fast-remove-nils)
         ;; using existing page's uuid
         data' (->>
                (walk/prewalk
@@ -257,7 +257,7 @@
   [conn version {:keys [properties classes fix delete-properties] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
-        new-properties (->> (select-keys db-property/built-in-properties properties)
+        new-properties (->> (select-keys property-catalog/built-in-properties properties)
                             ;; property already exists, this should never happen
                             (remove (fn [[k _]]
                                       (when (d/entity db k)
@@ -267,7 +267,7 @@
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
         classes' (->> (concat [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard] classes)
                       distinct)
-        new-classes (->> (select-keys db-class/built-in-classes classes')
+        new-classes (->> (select-keys class-catalog/built-in-classes classes')
                          ;; class already exists, this should never happen
                          (remove (fn [[k _]] (d/entity db k)))
                          (into {})

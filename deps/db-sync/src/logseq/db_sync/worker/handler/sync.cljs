@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.batch :as batch]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]

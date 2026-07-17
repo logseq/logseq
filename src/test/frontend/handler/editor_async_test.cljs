@@ -15,7 +15,7 @@
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defonce ^:private *previous-state (atom nil))

@@ -1,14 +1,14 @@
 (ns frontend.worker.commands
   "Invoke commands based on user settings"
-  (:require [cljs-time.coerce :as tc]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [datascript.core :as d]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
@@ -90,7 +90,7 @@
                                  ref?
                                  (or
                                   (and (uuid? value') (= (:block/uuid db-value) value'))
-                                  (= value' (db-property/property-value-content db-value))
+                                  (= value' (melange-property/property-value-content db-value))
                                   (= value' (:db/id db-value)))
 
                                  :else
@@ -184,11 +184,11 @@
   recurring tasks without a resolvable frequency. This form checks the value
   explicitly via `if-let`."
   [db entity]
-  (if-let [freq (db-property/property-value-content
+  (if-let [freq (melange-property/property-value-content
                  (:logseq.property.repeat/recur-frequency entity))]
     [freq nil]
     (let [property (d/entity db :logseq.property.repeat/recur-frequency)
-          default-value-block (db-property-build/build-property-value-block property property 1)
+          default-value-block (melange-property-build/build-property-value-block property property 1)
           default-value-tx-data [default-value-block
                                  {:db/id (:db/id property)
                                   :logseq.property/default-value [:block/uuid (:block/uuid default-value-block)]}]]
@@ -205,14 +205,22 @@
         current-value (cond->
                        (get entity property-ident)
                         date?
-                        (#(date-time-util/journal-day->ms (:block/journal-day %))))]
+                        (#(melange-common/journal-day-to-utc-ms (:block/journal-day %))))]
     (when (and frequency unit)
       (when-let [next-time-long (get-next-time current-value unit frequency repeat-type)]
         (let [journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
               {:keys [tx-data page-uuid]} (if journal-day
                                             {:page-uuid (:block/uuid (d/entity db journal-day))}
                                             (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                                  title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
+                                                  date-time (t/to-default-time-zone (tc/to-date-time next-time-long))
+                                                  title (melange-common/format-date-time
+                                                         (t/year date-time)
+                                                         (t/month date-time)
+                                                         (t/day date-time)
+                                                         (t/hour date-time)
+                                                         (t/minute date-time)
+                                                         (t/second date-time)
+                                                         formatter)]
                                               (outliner-page/create db title {})))
               value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat

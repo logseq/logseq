@@ -6,8 +6,8 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.assets :as sync-assets]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [promesa.core :as p]))
 
 (defn- asset-conn

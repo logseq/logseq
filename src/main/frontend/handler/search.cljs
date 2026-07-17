@@ -9,6 +9,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.melange.bridge.common.regex :as melange-regex]
             [promesa.core :as p]))
 
 (defn search
@@ -122,7 +123,7 @@
             lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))
             lc-q (fuzzy/search-normalize q (state/enable-search-remove-accents?))]
         (if (and (string/includes? lc-content lc-q)
-                 (not (util/safe-re-find #" " q)))
+                 (not (melange-regex/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
                 [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
             [:span

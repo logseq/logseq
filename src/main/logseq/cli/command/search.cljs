@@ -5,7 +5,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.cli.uuid-refs :as uuid-refs]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def ^:private search-spec

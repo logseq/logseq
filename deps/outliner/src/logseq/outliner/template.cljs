@@ -2,8 +2,8 @@
   "Template with variables"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (def ^:private template-re #"<%([^%].*?)%>")
 
@@ -73,7 +73,7 @@
 
 (defn- page-ref-for
   [page-or-title]
-  (page-ref/->page-ref
+  (melange-common/to-page-ref
    (if-let [page-uuid (:block/uuid page-or-title)]
      page-uuid
      page-or-title)))

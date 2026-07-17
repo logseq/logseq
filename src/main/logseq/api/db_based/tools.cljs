@@ -1,15 +1,14 @@
 (ns logseq.api.db-based.tools
   "Shared helpers for db-based API calls."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
@@ -32,7 +31,7 @@
                   (:logseq.property/classes e)
                   (update :logseq.property/classes #(mapv :db/ident %))
                   (:logseq.property/description e)
-                  (update :logseq.property/description db-property/property-value-content))
+                  (update :logseq.property/description melange-property/property-value-content))
                 {:block/title (:block/title e)
                  :block/uuid (str (:block/uuid e))})))))
 
@@ -55,7 +54,7 @@
                   (:logseq.property.view/type e)
                   (assoc :logseq.property.view/type (:db/ident (:logseq.property.view/type e)))
                   (:logseq.property/description e)
-                  (update :logseq.property/description db-property/property-value-content))
+                  (update :logseq.property/description melange-property/property-value-content))
                 {:block/title (:block/title e)
                  :block/uuid (str (:block/uuid e))})))))
 
@@ -64,7 +63,7 @@
   (let [datoms (d/datoms db :avet :block/page page-id)
         block-eids (mapv :e datoms)
         block-ents (map #(d/entity db %) block-eids)
-        blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
+        blocks (map #(assoc % :block/title (melange-content/recur-replace-uuid-in-block-title %)) block-ents)]
     (->> (otree/blocks->vec-tree db blocks page-id)
          (map #(update % :block/uuid str)))))
 
@@ -122,7 +121,7 @@
   (let [new-blocks-for-existing-pages
         (->> (filter #(and (= "block" (:entityType %))
                            (= "add" (:operation %))
-                           (common-util/uuid-string? (get-in % [:data :page-id]))) operations)
+                           (melange-common/uuid-string? (get-in % [:data :page-id]))) operations)
              (map (fn [op] (assoc op ::page-id (uuid (get-in op [:data :page-id]))))))
         edit-blocks
         (->> (filter #(and (= "block" (:entityType %)) (= "edit" (:operation %))) operations)
@@ -153,10 +152,11 @@
         new-pages (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))) operations)
         pages-and-blocks
         (into (mapv (fn [op]
-                      (cond-> {:page (if-let [journal-day (date-time-util/journal-title->int
-                                                           (get-in op [:data :title])
-                                                           ;; consider user's date-formatter as needed
-                                                           (date-time-util/safe-journal-title-formatters nil))]
+                      (cond-> {:page (if-let [journal-day (melange-common/parse-journal-title-day
+                                                          (melange-common/capitalize-all
+                                                           (get-in op [:data :title]))
+                                                          ;; consider user's date-formatter as needed
+                                                          (melange-common/safe-journal-title-formatters nil))]
                                        {:build/journal journal-day}
                                        {:block/title (get-in op [:data :title])})}
                         (some->> (:id op) (get new-blocks-by-page))
@@ -221,7 +221,7 @@
                            (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %)))
                                    operations)))
              distinct
-             (map #(vector % (if (common-util/uuid-string? %)
+             (map #(vector % (if (melange-common/uuid-string? %)
                                (let [ent (d/entity db [:block/uuid (uuid %)])
                                      ident (:db/ident ent)]
                                  (when-not (entity-util/property? ent)
@@ -230,7 +230,7 @@
                                                    {})))
                                  (swap! existing-properties assoc ident (select-keys ent [:db/cardinality :logseq.property/type]))
                                  ident)
-                               (db-property/create-user-property-ident-from-name %))))
+                               (melange-property/create-user-property-ident-from-name %))))
              (into {}))
         class-idents
         (->> (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
@@ -243,7 +243,7 @@
                            (filter #(and (= "block" (:entityType %)) (= "add" (:operation %)))
                                    operations)))
              distinct
-             (map #(vector % (if (common-util/uuid-string? %)
+             (map #(vector % (if (melange-common/uuid-string? %)
                                (let [ent (d/entity db [:block/uuid (uuid %)])
                                      ident (:db/ident ent)]
                                  (when-not (entity-util/class? ent)
@@ -265,7 +265,7 @@
            [:title :string]]]])
 
 (def ^:private uuid-string
-  [:and :string [:fn {:error/message "Must be a uuid string"} common-util/uuid-string?]])
+  [:and :string [:fn {:error/message "Must be a uuid string"} melange-common/uuid-string?]])
 
 (def ^:private upsert-nodes-operation-schema
   [:and

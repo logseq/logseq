@@ -2,10 +2,15 @@
  :deps
  {logseq/graph-parser
   {:local/root "../deps/graph-parser"}
+  logseq/db-sync
+  {:local/root "../deps/db-sync"}
   logseq/outliner
   {:local/root "../deps/outliner"}
   ;; for config.edn
-  logseq/common
-  {:local/root "../deps/common"}
+  logseq/melange-bridge
+  {:local/root "../deps/melange/bridge"}
   logseq/publishing
-  {:local/root "../deps/publishing"}}}
+  {:local/root "../deps/publishing"}
+  metosin/malli
+  {:git/url "https://github.com/metosin/malli"
+   :sha "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}}}

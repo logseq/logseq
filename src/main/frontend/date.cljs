@@ -1,6 +1,7 @@
 (ns frontend.date
   "Journal date related utility fns"
-  (:require ["chrono-node" :as chrono]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["chrono-node" :as chrono]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
@@ -9,9 +10,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.state :as state]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
-            [logseq.common.date :as common-date]
-            [logseq.common.util.date-time :as date-time-util]))
+            [lambdaisland.glogi :as log]))
 
 (def ^:private custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
 (def ^:private custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
@@ -19,14 +18,27 @@
 (def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
 (def ^:private iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))
 
+(defn- format-date-time
+  [date-time formatter]
+  (melange-common/format-date-time
+   (t/year date-time)
+   (t/month date-time)
+   (t/day date-time)
+   (t/hour date-time)
+   (t/minute date-time)
+   (t/second date-time)
+   formatter))
+
+(defn- parse-journal-title-day
+  [title formatters]
+  (melange-common/parse-journal-title-day
+   (melange-common/capitalize-all title)
+   (if (array? formatters) formatters (to-array formatters))))
+
 (defn nld-parse
   [s]
   (when (string? s)
     ((gobj/get chrono "parseDate") s)))
-
-(defn journal-title-formatters
-  []
-  (common-date/journal-title-formatters (state/get-date-formatter)))
 
 (defn get-date-time-string
   ([]
@@ -48,7 +60,7 @@
   ([date]
    (let [formatter (state/get-date-formatter)]
      (try
-       (date-time-util/format date formatter)
+       (format-date-time date formatter)
        (catch :default e
          (log/error :parse-journal-date {:message  "Failed to parse date to journal name."
                                          :date date
@@ -64,7 +76,7 @@
 
 (defn today-journal-day
   []
-  (date-time-util/date->int (js/Date.)))
+  (melange-common/journal-day-of-ms (js/Date.now)))
 
 (defn today-name
   []
@@ -84,21 +96,23 @@
 
 (defn valid-journal-title?
   [title]
-  (common-date/valid-journal-title? title (state/get-date-formatter)))
+  (melange-common/journal-title? title (state/get-date-formatter)))
 
 (defn journal-title->
   ([journal-title then-fn]
-   (journal-title-> journal-title then-fn (date-time-util/safe-journal-title-formatters (state/get-date-formatter))))
+   (journal-title-> journal-title then-fn
+                    (melange-common/safe-journal-title-formatters
+                     (state/get-date-formatter))))
   ([journal-title then-fn formatters]
-   (date-time-util/journal-title-> journal-title then-fn formatters)))
+   (when-let [journal-day (parse-journal-title-day journal-title formatters)]
+     (then-fn (tc/from-long (melange-common/journal-day-to-utc-ms journal-day))))))
 
 (defn journal-title->int
   [journal-title]
-  (date-time-util/journal-title->int
+  (parse-journal-title-day
    journal-title
-   (date-time-util/safe-journal-title-formatters (state/get-date-formatter))))
-
-(def journal-day->utc-ms date-time-util/journal-day->ms)
+   (melange-common/safe-journal-title-formatters
+    (state/get-date-formatter))))
 
 (defn journal-title->long
   [journal-title]

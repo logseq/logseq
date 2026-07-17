@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.block
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
@@ -15,8 +16,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.block-title :as db-block-title]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.block-title :as db-block-title]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
@@ -81,7 +82,7 @@
 (defn mark-last-input-time!
   [repo]
   (when repo
-    (state/set-editor-last-input-time! repo (util/time-ms))))
+    (state/set-editor-last-input-time! repo (melange-common/now-ms))))
 
 (defn- edit-block-aux
   [repo block content text-range {:keys [container-id direction event pos]}]

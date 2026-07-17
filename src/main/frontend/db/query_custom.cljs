@@ -4,7 +4,7 @@
             [frontend.db.query-react :as query-react]
             [frontend.state :as state]
             [frontend.util.datalog :as datalog-util]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.melange.bridge.db.rules :as rules]))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"

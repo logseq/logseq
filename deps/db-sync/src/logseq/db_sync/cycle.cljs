@@ -16,7 +16,7 @@
   (:refer-clojure :exclude [cycle])
   (:require
    [datascript.core :as d]
-   [logseq.db :as ldb]))
+   [logseq.melange.bridge.db.core :as ldb]))
 
 ;; -----------------------------------------------------------------------------
 ;; Config

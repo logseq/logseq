@@ -1,7 +1,7 @@
 (ns frontend.handler.db-based.editor
   "DB-based graph implementation"
-  (:require [clojure.string :as string]
-            [frontend.commands :as commands]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -13,9 +13,8 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.graph-parser.text :as text]
+
+            [logseq.melange.bridge.db.content :as melange-content]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
@@ -26,7 +25,7 @@
                         (= :block/uuid (first x))
                         (nil? (db/entity x)))
                    (and (map? x)
-                        (util/uuid-string? (:block/title x))
+                        (melange-common/uuid-string? (:block/title x))
                         (:block/uuid x)
                         (nil? (db/entity [:block/uuid (:block/uuid x)])))
                    (nil? x))) refs))
@@ -62,7 +61,8 @@
   [target]
   (when (and (string? target)
              (string/starts-with? target "#"))
-    (let [page-name (-> target (subs 1) text/page-ref-un-brackets!)]
+    (let [page-name (melange-common/get-page-name-or-self
+                     (subs target 1))]
       (when-not (string/blank? page-name)
         page-name))))
 
@@ -110,12 +110,13 @@
                 (let [heading-level (when (normalize-markdown-heading? block)
                                       (markdown-heading-level title))
                       title (if heading-level
-                              (commands/clear-markdown-heading (string/triml title))
+                              (melange-common/clear-markdown-heading
+                                                     (string/triml title))
                               title)
                       ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
-                      content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
+                      content' (str melange-common/block-pattern (if block-with-title? " " "\n") title)
                       hashtag-link-refs (existing-markdown-hashtag-link-refs ast)
                       parsed-block (block/parse-block (assoc block :block/title content'))
                       block' (-> (merge block
@@ -132,7 +133,7 @@
                                          hashtag-link-refs)
                                  (remove nil?)
                                  (util/distinct-by-last-wins ref-dedupe-key))))))
-        title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
+        title' (melange-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (assoc :block/title title'))]
@@ -166,7 +167,7 @@
    (doseq [id block-ids]
      (let [e (db/entity [:block/uuid id])
            raw-title (:block/raw-title e)
-           new-raw-title (commands/clear-markdown-heading raw-title)]
+           new-raw-title (melange-common/clear-markdown-heading raw-title)]
        (when (not= new-raw-title raw-title)
          (property-handler/set-block-property! id :block/title new-raw-title))))
    (property-handler/batch-set-block-property! block-ids :logseq.property/heading heading)))

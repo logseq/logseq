@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.state :as state]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defn add-page-to-recent!
   [db-id _click-from-recent?]

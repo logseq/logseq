@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [logseq.cli.common.db-worker :as cli-db-worker]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn- create-test-db
   []

@@ -1,8 +1,8 @@
 (ns logseq.outliner.pipeline-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (deftest block-content-refs
@@ -12,7 +12,7 @@
     (assert block)
     (is (= [(:db/id block)]
            (outliner-pipeline/block-content-refs @conn
-                                                 {:block/title (str "ref to " (page-ref/->page-ref (:block/uuid block)))})))))
+                                                 {:block/title (str "ref to " (melange-common/to-page-ref (:block/uuid block)))})))))
 
 (deftest db-rebuild-block-refs-for-query-block
   (let [conn (db-test/create-conn-with-blocks
@@ -42,6 +42,6 @@
         block (db-test/find-block-by-content @conn "self")
         block' (assoc (d/pull @conn '[:db/id :block/uuid :block/title] (:db/id block))
                       :block/title
-                      (str "self " (page-ref/->page-ref (:block/uuid block))))]
+                      (str "self " (melange-common/to-page-ref (:block/uuid block))))]
     (is (empty? (outliner-pipeline/db-rebuild-block-refs @conn block'))
         "A block should not rebuild a recursive ref to itself")))

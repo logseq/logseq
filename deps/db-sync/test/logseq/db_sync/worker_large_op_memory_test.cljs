@@ -6,7 +6,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.melange.bridge.db.validation :as db-validate]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 

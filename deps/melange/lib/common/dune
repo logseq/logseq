@@ -1,0 +1,29 @@
+(library
+ (name melange_common)
+ (modes melange)
+ (modules
+  Url_support
+  Authorization
+  Namespace
+  Page_ref
+  Block_ref
+  Plural
+  Macro
+  Config
+  Cognito_config
+  Date_time
+  Graph
+  Graph_dir
+  Graph_registry
+  Path
+  String_util
+  Util
+  Uuid
+  Version)
+ (libraries
+  melange-edn-melange
+  melange.js
+  melange_runtime
+  rrbvec)
+ (preprocess
+  (pps melange.ppx)))

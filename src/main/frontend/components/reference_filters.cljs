@@ -1,6 +1,7 @@
 (ns frontend.components.reference-filters
   "References filters"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -9,7 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [io.factorhouse.hsx.core :as hsx]
-            [logseq.db.common.reference :as db-reference]
+            [logseq.melange.bridge.db.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
@@ -105,7 +106,7 @@
      (let [all-filters (set
                         (concat (map :block/name included)
                                 (map :block/name excluded)))
-           refs (remove (fn [[page _]] (all-filters (util/page-name-sanity-lc page)))
+           refs (remove (fn [[page _]] (all-filters (melange-common/page-name-sanity-lower page)))
                         filtered-references)]
        (when (seq refs)
          [:div.mt-4

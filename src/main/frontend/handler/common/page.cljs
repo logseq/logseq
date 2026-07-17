@@ -18,10 +18,10 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
             [promesa.core :as p]))
 
 (defn- wrap-tags
@@ -31,8 +31,8 @@
     (->>
      (cons (first parts)
            (map (fn [s]
-                  (if (and (string/includes? s " ") (not (page-ref/page-ref? s)))
-                    (page-ref/->page-ref s)
+                  (if (and (string/includes? s " ") (not (melange-common/page-ref? s)))
+                    (melange-common/to-page-ref s)
                     s))
                 (rest parts)))
      (string/join " #"))))
@@ -89,7 +89,9 @@
              has-tags? (seq (:block/tags parsed-result))
              title' (if has-tags?
                       (some-> (first
-                               (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
+                               (melange-common/split-first
+                                            (str "#" melange-common/left-brackets)
+                                            (:block/title parsed-result)))
                               string/trim)
                       title)]
        (cond
@@ -97,11 +99,11 @@
          (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
-              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+              (seq (set/intersection class-catalog/private-tags (set (map :db/ident (:block/tags parsed-result))))))
          (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
-                                (keep #(when (ldb/private-tags (:db/ident %))
+                                (keep #(when (class-catalog/private-tags (:db/ident %))
                                          (pr-str (:block/title %)))
                                       (:block/tags parsed-result)))])
                              :error)
@@ -134,7 +136,7 @@
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)]
-    (when-let [page (db/get-page common-config/favorites-page-name)]
+    (when-let [page (db/get-page melange-common/favorites-page-name)]
       (let [blocks (ldb/get-page-blocks db (:db/id page))]
         (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
           (some (fn [block]
@@ -155,7 +157,7 @@
      (ui-outliner-tx/transact!
       {:outliner-op :insert-blocks}
       (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                  (db/get-page common-config/favorites-page-name)
+                                  (db/get-page melange-common/favorites-page-name)
                                   {})))))
 
 (defn <db-unfavorite-page!
@@ -206,9 +208,9 @@
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]
-  (let [old-page-name       (common-util/page-name-sanity-lc old-name)
-        redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                     (common-util/page-name-sanity-lc old-page-name))
+  (let [old-page-name       (melange-common/page-name-sanity-lower old-name)
+        redirect? (= (some-> (state/get-current-page) (melange-common/page-name-sanity-lower))
+                     (melange-common/page-name-sanity-lower old-page-name))
         page (db/entity repo page-id)]
 
     ;; Redirect to the newly renamed page
@@ -218,7 +220,7 @@
                                 :path-params {:name (str (:block/uuid page))}}))
 
     (let [home (get (state/get-config) :default-home {})]
-      (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
+      (when (= old-page-name (melange-common/page-name-sanity-lower (get home :page "")))
         (config-handler/set-config! :default-home (assoc home :page new-name))))
 
     (ui-handler/re-render-root!)))

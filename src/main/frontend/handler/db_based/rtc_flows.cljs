@@ -1,10 +1,10 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
-  (:require [frontend.common.missionary :as c.m]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.state :as state]
-            [logseq.common.util :as common-util]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
@@ -68,7 +68,7 @@ conditions:
                              (some? graph-uuid)
                              (not rtc-lock) ; no rtc loop now
                              (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data)))
-                    {:graph-uuid graph-uuid :t (common-util/time-ms)})))))
+                    {:graph-uuid graph-uuid :t (melange-common/now-ms)})))))
        (c.m/throttle 5000)))
 
 (def logout-flow

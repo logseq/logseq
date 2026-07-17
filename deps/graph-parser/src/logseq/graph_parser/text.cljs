@@ -1,16 +1,12 @@
 (ns logseq.graph-parser.text
   "Miscellaneous text util fns for the parser. Used by file and DB graphs"
-  (:require ["path" :as node-path]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["path" :as node-path]
             [clojure.set :as set]
             [clojure.string :as string]
             [goog.string :as gstring]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]))
-
-(def get-file-basename page-ref/get-file-basename)
 
 (defn- get-file-rootname
   "Returns the rootname of a file path. e.g. /a/b/c.md -> c"
@@ -19,22 +15,20 @@
     (.-name (node-path/parse (string/replace path "+" "/")))))
 
 (defn get-page-name
-  "Similar to page-ref/get-page-name but handles format-specific page-refs e.g. org/md"
+  "Extract a page name while handling format-specific page refs such as org and md."
   [s]
   (and (string? s)
-       (or (when-let [[_ label _path] (re-matches page-ref/markdown-page-ref-re s)]
+       (or (when-let [[_ label _path] (re-matches melange-common/markdown-page-ref-re s)]
              (string/trim label))
            (when-let [[_ path _label] (re-matches #"\[\[(file:.*)\]\[.+?\]\]" s)]
              (some-> (get-file-rootname path)
                      (string/replace "." "/")))
-           (-> (re-matches page-ref/page-ref-any-re s)
+           (-> (re-matches melange-common/page-ref-any-re s)
                second))))
-
-(def page-ref-un-brackets! page-ref/page-ref-un-brackets!)
 
 (defn get-nested-page-name
   [page-name]
-  (when-let [first-match (re-find page-ref/page-ref-without-nested-re page-name)]
+  (when-let [first-match (re-find melange-common/page-ref-without-nested-re page-name)]
     (second first-match)))
 
 (defn- remove-level-space-aux!
@@ -155,7 +149,7 @@
                  (name k))
       v'
 
-      (common-util/wrapped-by-quotes? v')
+      (melange-common/wrapped-by-quotes? v')
       v'
 
       ;; parse property value as needed
@@ -166,6 +160,3 @@
           (if-some [new-val (parse-non-string-property-value v')]
             new-val
             v'))))))
-
-(def namespace-page? ns-util/namespace-page?)
-(def get-namespace-last-part ns-util/get-last-part)

@@ -2,7 +2,7 @@
   "Remote `PersistentDB` implementation for Electron renderer via db-worker-node HTTP and SSE."
   (:require [clojure.string :as string]
             [frontend.persist-db.protocol :as protocol]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.handler.notification :as notification]

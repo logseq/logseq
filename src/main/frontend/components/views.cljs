@@ -36,11 +36,10 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.view :as db-view]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -317,7 +316,7 @@
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
         inline-title (state/get-component :block/inline-title)
-        many? (db-property/many? property)
+        many? (melange-property/many? property)
         block (if many? (first block*) block*)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
                                                    (or (and many? (:db/id row)) (:db/id block))
@@ -478,7 +477,7 @@
                                    (fn [row] (db-view/get-property-value-for-search row property)))]
                    {:id ident
                     :name (or (:name property)
-                              (db-property/built-in-display-title property t))
+                              (melange-property/built-in-display-title property t))
                     :header (or (:header property)
                                 header-cp)
                     :cell (or (:cell property)
@@ -554,7 +553,7 @@
         (when-not (= id :block/title)
           (when-let [property (db/entity id)]
             (and (contains? groupable-property-types (:logseq.property/type property))
-                 (or (not (db-property/many? property))
+                 (or (not (melange-property/many? property))
                      (contains? groupable-many-property-types (:logseq.property/type property)))))))))
 
 (defn- set-view-property!
@@ -1446,7 +1445,7 @@
                    timestamp?
                    (merge option
                           {:items (timestamp-options)
-                           :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
+                           :input-default-placeholder (if property (melange-property/built-in-display-title property t) (t :select/default-prompt))
                            :on-chosen (fn [value _ _ e]
                                         (shui/popup-hide!)
                                         (let [set-filter-fn (fn [value]
@@ -1470,7 +1469,7 @@
                                   {:value false :label (string/lower-case (t :ui/false))}]]
                        (merge option
                               {:items items
-                               :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
+                               :input-default-placeholder (if property (melange-property/built-in-display-title property t) (t :select/default-prompt))
                                :on-chosen (fn [value]
                                             (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
                                               (set-filters! {:or? (:or? filters)
@@ -1478,7 +1477,7 @@
                      (let [items values]
                        (merge option
                               {:items items
-                               :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
+                               :input-default-placeholder (if property (melange-property/built-in-display-title property t) (t :select/default-prompt))
                                :multiple-choices? true
                                :on-chosen (fn [_value _selected? selected]
                                             (let [selected-value (if (and (map? (first selected))
@@ -1683,7 +1682,7 @@
                        (.-target e)
                        (fn []
                          (let [option (cond->
-                                       {:input-default-placeholder (db-property/built-in-display-title property t)
+                                       {:input-default-placeholder (melange-property/built-in-display-title property t)
                                         :input-opts {:class "!px-3 !py-1"}
                                         :items items
                                         :extract-fn :label
@@ -1814,7 +1813,7 @@
                 :variant "ghost"
                 :size :sm
                 :disabled true}
-               [:span.text-xs (db-property/built-in-display-title property t)])
+               [:span.text-xs (melange-property/built-in-display-title property t)])
               (filter-operator property operator filters set-filters! idx)
               (filter-value view-entity table property operator value filters set-filters! idx opts)
               (shui/button
@@ -2134,7 +2133,7 @@
   [value]
   (cond
     (and (map? value) (or (:block/title value) (:logseq.property/value value)))
-    (db-property/property-value-content value)
+    (melange-property/property-value-content value)
 
     (= (:db/ident value) :logseq.property/empty-placeholder)
     (t :ui/empty)
@@ -2373,7 +2372,7 @@
 
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
-  (when-let [page (db/get-case-page common-config/views-page-name)]
+  (when-let [page (db/get-case-page melange-common/views-page-name)]
     (p/let [properties (cond->
                         {:logseq.property/view-for (:db/id view-parent)
                          :logseq.property.view/feature-type view-feature-type}
@@ -2395,7 +2394,8 @@
                            :all-pages
                            (t :view/all)
                            ""))
-            view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
+            view-block-id (uuid (melange-common/view-block
+                                 (str (:block/uuid view-parent) view-feature-type)))
             result (editor-handler/api-insert-new-block! view-title
                                                          (cond->
                                                           {:page (:block/uuid page)

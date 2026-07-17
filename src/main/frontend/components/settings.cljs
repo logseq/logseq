@@ -1,5 +1,6 @@
 (ns frontend.components.settings
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.common.missionary :as c.m]
@@ -31,8 +32,8 @@
             [frontend.version :as fv]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.common.version :as build-version]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.version :as build-version]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -448,7 +449,8 @@
                                                                format)
                          (notification/show! (t :settings.general/refresh-required-feedback)))
                         (shui/dialog-close-all!))))}
-      (for [format (sort (date/journal-title-formatters))]
+      (for [format (sort (melange-common/journal-title-formatters
+                          (state/get-date-formatter)))]
         [:option {:key format} format])]]]])
 
 (defn outdenting-row [t logical-outdenting?]

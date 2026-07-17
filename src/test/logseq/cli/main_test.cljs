@@ -6,7 +6,7 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
             [logseq.cli.test-helper :as test-helper]
-            [logseq.common.version :as version]
+            [logseq.melange.bridge.common.version :as version]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]))

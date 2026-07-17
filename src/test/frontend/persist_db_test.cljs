@@ -11,7 +11,7 @@
             [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defrecord FakeRemote [repo wrapped-worker]
@@ -47,7 +47,7 @@
            :remote-repo @persist-db/remote-repo
            :remote-runtime-state @persist-db/remote-runtime-state
            :db-worker @state/*db-worker
-           :transact-fn @ldb/*transact-fn}))
+           :transact-fn (ldb/transact-fn)}))
 
 (defn- restore-runtime-state!
   []
@@ -56,7 +56,7 @@
     (reset! persist-db/remote-repo remote-repo)
     (reset! persist-db/remote-runtime-state remote-runtime-state)
     (reset! state/*db-worker db-worker)
-    (reset! ldb/*transact-fn transact-fn)
+    (ldb/register-transact-fn! transact-fn)
     (reset! *previous-runtime-state nil)))
 
 (use-fixtures :each {:before save-runtime-state!
@@ -69,7 +69,7 @@
   (reset! persist-db/remote-repo nil)
   (reset! persist-db/remote-runtime-state nil)
   (reset! state/*db-worker nil)
-  (reset! ldb/*transact-fn nil)
+  (ldb/register-transact-fn! nil)
   (swap! state/state assoc :electron/user-cfgs {}))
 
 (defn- success-body

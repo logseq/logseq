@@ -23,11 +23,11 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.api.block :as api-block]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
@@ -53,7 +53,7 @@
           (notification/show! (t :property/private-built-in-not-usable) :error))
         property)
       ;; new property entered or converting page to property
-      (if (db-property/valid-property-name? property-title)
+      (if (melange-property/valid-property-name? property-title)
         (p/let [opts (cond-> {:property-name property-title}
                        (and (not property?) (ldb/internal-page? property))
                        (assoc :properties {:db/id (:db/id property)}))
@@ -88,7 +88,7 @@
                     default-open? class-schema?]
              :as opts}]
   (shortcut/use-disable-all-shortcuts!)
-  (let [property-name (or (and *property-name @*property-name) (db-property/built-in-display-title property t))
+  (let [property-name (or (and *property-name @*property-name) (melange-property/built-in-display-title property t))
         property-schema (or (and *property-schema @*property-schema)
                             (select-keys property [:logseq.property/type]))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -191,7 +191,7 @@
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
                                     (t :property/convert-page-to-property (:block/title x))
-                                    (let [property-title (or (db-property/built-in-display-title x t)
+                                    (let [property-title (or (melange-property/built-in-display-title x t)
                                                              (:block/title x))
                                           ident (:db/ident x)
                                           ns' (some-> ident (namespace))
@@ -206,7 +206,7 @@
                                         (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" _plugin-name)])]]))
                            :value (or (:block/uuid x) (:db/ident x))
                            :db/ident (:db/ident x)
-                           :block/title (or (db-property/built-in-display-title x t)
+                           :block/title (or (melange-property/built-in-display-title x t)
                                             (:block/title x))
                            :convert-page-to-property? convert?})) properties)
                  (util/distinct-by-last-wins (fn [item] (or (:value item) (:db/ident item)))))
@@ -322,7 +322,7 @@
 
 (hsx/defc property-key-title
   [block property class-schema?]
-  (let [title (db-property/built-in-display-title property t)
+  (let [title (melange-property/built-in-display-title property t)
         description (property-description-title property)
         key-title (shui/trigger-as
                    :a
@@ -391,7 +391,7 @@
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
-        (db-property/built-in-display-title property t)]
+        (melange-property/built-in-display-title property t)]
        (property-key-title block property class-schema?))]))
 
 (hsx/defc bidirectional-values-cp
@@ -764,7 +764,7 @@
                                (set-properties-order! properties-order)
                                (p/let [;; Before reordering properties,
                                        ;; check if the :block/order of these properties is reasonable.
-                                       normalize-tx-data (db-property/normalize-sorted-entities-block-order
+                                       normalize-tx-data (melange-property/normalize-sorted-entities-block-order
                                                           sorted-property-entities)
                                        _ (when (seq normalize-tx-data)
                                            (db/transact! (state/get-current-repo) normalize-tx-data))
@@ -787,7 +787,7 @@
 (hsx/defc properties-section
   [block properties opts]
   (when (seq properties)
-    (let [sorted-prop-entities (db-property/sort-properties (map (comp db/entity first) properties))
+    (let [sorted-prop-entities (melange-property/sort-properties (map (comp db/entity first) properties))
           prop-kv-map (reduce (fn [m [p v]] (assoc m p v)) {} properties)
           properties' (keep (fn [ent] (find prop-kv-map (:db/ident ent))) sorted-prop-entities)]
       (ordered-properties block properties' sorted-prop-entities opts))))
@@ -905,7 +905,7 @@
                                 existing-properties (set (map first block-own-properties'))
                                 result []]
                            (if-let [class (first classes)]
-                             (let [cur-properties (->> (db-property/get-class-ordered-properties class)
+                             (let [cur-properties (->> (melange-property/get-class-ordered-properties class)
                                                        (map :db/ident)
                                                        (remove existing-properties))]
                                (recur (rest classes)

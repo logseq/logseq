@@ -93,8 +93,8 @@ importers:
         specifier: 2.5.0
         version: 2.5.0(@js-joda/core@3.2.0)
       '@logseq/melange-js-api':
-        specifier: link:deps/melange/lib/js_api
-        version: link:deps/melange/lib/js_api
+        specifier: link:deps/melange/js_api
+        version: link:deps/melange/js_api
       '@logseq/react-tweet-embed':
         specifier: 1.3.1-1
         version: 1.3.1-1(react@19.2.6)
@@ -246,6 +246,9 @@ importers:
       '@jcesarmobile/ssl-skip':
         specifier: ^0.9.0
         version: 0.9.0
+      '@logseq/nbb-logseq':
+        specifier: github:logseq/nbb-logseq#feat-db-v34
+        version: https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
@@ -712,6 +715,12 @@ packages:
     resolution: {integrity: sha512-HHFVhGUKIOtITiT+sbQRdYuO5Q+a8FDj/vQSGUSxe6+5w2in5JsavfRsAN2tU/NCdBeFx/6q8evHMtOrXfdn2g==}
     peerDependencies:
       '@js-joda/core': '>=1.11.0'
+
+  '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
+    resolution: {tarball: https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb}
+    version: 1.2.173-feat-db-v34
+    engines: {node: '>=20.10.0'}
+    hasBin: true
 
   '@logseq/react-tweet-embed@1.3.1-1':
     resolution: {integrity: sha512-9O0oHs5depCvh6ZQvwtl1xb7B80YG5rUfY10uSUat5itOlcE3IWaYYpe6p/tcHErqHWnWgkXHitAB9M29FMbQg==}
@@ -2429,6 +2438,9 @@ packages:
     resolution: {integrity: sha512-2SPlun1JUPWoM6t3F0dw0FkCF/jWY8kttcY4f599GLTSjh2OCuuhdTkJQsEcZzBqbXZGKMK2OqW1oZsjtf/gQA==}
     engines: {node: '>=8'}
     hasBin: true
+
+  import-meta-resolve@4.2.0:
+    resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
 
   imurmurhash@0.1.4:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
@@ -5411,6 +5423,10 @@ snapshots:
     dependencies:
       '@js-joda/core': 3.2.0
 
+  '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
+    dependencies:
+      import-meta-resolve: 4.2.0
+
   '@logseq/react-tweet-embed@1.3.1-1(react@19.2.6)':
     dependencies:
       react: 19.2.6
@@ -7220,6 +7236,8 @@ snapshots:
     dependencies:
       pkg-dir: 4.2.0
       resolve-cwd: 3.0.0
+
+  import-meta-resolve@4.2.0: {}
 
   imurmurhash@0.1.4: {}
 

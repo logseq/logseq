@@ -1,6 +1,7 @@
 (ns frontend.db.async
   "Async queries"
-  (:require [cljs-time.coerce :as tc]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [datascript.core :as d]
@@ -12,8 +13,8 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.common.collection :as melange-collection]
             [promesa.core :as p]))
 
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
@@ -144,12 +145,12 @@
         e (cond
             (number? id-uuid-or-name)
             (db/entity id-uuid-or-name)
-            (util/uuid-string? name')
+            (melange-common/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else
             (db/get-page name'))
         id (or (and (:block/uuid e) (str (:block/uuid e)))
-               (and (util/uuid-string? name') name')
+               (and (melange-common/uuid-string? name') name')
                id-uuid-or-name)
         load-status (:block.temp/load-status e)]
     (cond
@@ -170,7 +171,7 @@
                  tx-data (concat
                           (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b))))
                                        block-and-children)
-                               (common-util/fast-remove-nils)
+                               (melange-collection/fast-remove-nils)
                                (remove empty?))
                           (when (and (:db/id block) children? include-collapsed-children?
                                      (not= :full (:block.temp/load-status (some-> (:db/id block) db/entity))))
@@ -234,7 +235,7 @@
           future-day (some->> future-date
                               (tf/unparse yyyyMMdd-formatter)
                               (parse-long))
-          start-time (date/journal-day->utc-ms date)
+          start-time (melange-common/journal-day-to-utc-ms date)
           future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
         (p/let [result (<q repo {}

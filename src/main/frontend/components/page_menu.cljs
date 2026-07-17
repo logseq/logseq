@@ -1,5 +1,6 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -14,7 +15,7 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -105,7 +106,7 @@
   (when-let [page' (latest-page page)]
     (when-let [page-name (and (db/page? page') (:block/name page'))]
       (let [page-title (str (:block/uuid page'))
-            block? (util/uuid-string? page-name)
+            block? (melange-common/uuid-string? page-name)
             contents? (= page-name "contents")
             public? (true? (:logseq.property/publishing-public? page'))
             favorited? (page-handler/favorited? page-title)

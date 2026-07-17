@@ -1,10 +1,10 @@
 (ns frontend.worker.sync.auth
   "Auth and endpoint helpers for db sync."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.util :as sync-util]
-            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (defn ws-base-url
@@ -32,7 +32,7 @@
     (try
       (let [exp-ms (some-> token worker-util/parse-jwt :exp (* 1000))]
         (or (not (number? exp-ms))
-            (<= exp-ms (common-util/time-ms))))
+            (<= exp-ms (melange-common/now-ms))))
       (catch :default _
         true))))
 

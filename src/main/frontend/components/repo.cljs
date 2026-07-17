@@ -17,8 +17,9 @@
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
+            [logseq.melange.bridge.common.regex :as melange-regex]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -142,7 +143,7 @@
   (if-let [target (graph-open-new-window-target repo)]
     (p/resolved target)
     (p/let [registry (graph/<get-graph-registry)
-            entry (graph/resolve-registry-target registry {:graph-identifier url})]
+            entry (graph-registry/resolve-target registry {:graph-identifier url})]
       (when entry
         {:repo (:repo entry)
          :graph-id (:graph-id entry)}))))
@@ -551,7 +552,7 @@
 (defn include-reserved-chars?
   "Includes reserved characters that would broken FS"
   [s]
-  (common-util/safe-re-find reserved-chars-pattern s))
+  (melange-regex/safe-re-find reserved-chars-pattern s))
 
 (defn- reserved-character-item
   [character label]

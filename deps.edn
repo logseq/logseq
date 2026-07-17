@@ -38,7 +38,7 @@
   instaparse/instaparse                 {:mvn/version "1.5.0"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   fipp/fipp                             {:mvn/version "0.6.29"}
-  logseq/common                         {:local/root "deps/common"}
+  logseq/melange-bridge                 {:local/root "deps/melange/bridge"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
   logseq/db-sync                        {:local/root "deps/db-sync"}
@@ -58,14 +58,14 @@
   logseq/logseq-schema                   {:git/url "https://github.com/logseq/logseq-schema"
                                           :git/sha "6eeb51cd6d80bbffa0873c1e79790dc1f4ff68cf"}}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/" "deps/melange/bridge/test-support"]
                   :extra-deps  {org.clojure/tools.namespace      {:mvn/version "1.5.0"}
                                 cider/cider-nrepl                {:mvn/version "0.59.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.15.0"}
                                 binaryage/devtools               {:mvn/version "1.0.7"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
-           :test {:extra-paths ["src/dev-cljs/" "src/test/"]
+           :test {:extra-paths ["src/dev-cljs/" "src/test/" "deps/melange/bridge/test-support"]
                   :extra-deps  {org.clojure/test.check           {:mvn/version "1.1.1"}
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}

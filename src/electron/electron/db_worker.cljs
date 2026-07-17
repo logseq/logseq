@@ -1,6 +1,6 @@
 (ns electron.db-worker
-  (:require [logseq.cli.server :as cli-server]
-            [logseq.common.graph-dir :as graph-dir]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.cli.server :as cli-server]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
 
@@ -11,7 +11,7 @@
 
 (defn- repo-key
   [repo]
-  (graph-dir/repo-identity repo))
+  (melange-common/repo-identity repo))
 
 (defn- merge-repo-entry
   [existing entry]

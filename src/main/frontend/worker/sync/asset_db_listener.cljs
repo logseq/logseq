@@ -2,7 +2,7 @@
   "Listen asset-block changes in db, generate asset-sync operations"
   (:require [datascript.core :as d]
             [frontend.worker.sync.client-op :as client-op]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defn- asset-checksum?
   [a]

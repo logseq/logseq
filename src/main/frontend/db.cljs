@@ -8,7 +8,7 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.outliner.op]))
 
 (import-vars

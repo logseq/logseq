@@ -1,9 +1,9 @@
 (ns frontend.worker.react
   "Compute reactive query affected keys"
-  (:require [cljs.spec.alpha :as s]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.spec.alpha :as s]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.property :as melange-property]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -63,7 +63,7 @@
 
 (defn- order-list-type
   [block]
-  (db-property/lookup block :logseq.property/order-list-type))
+  (melange-property/lookup block :logseq.property/order-list-type))
 
 (defn- sibling-entities
   [block]
@@ -197,7 +197,7 @@
                                         (distinct))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
-                               (let [block-id (if (and (string? block-id) (common-util/uuid-string? block-id))
+                               (let [block-id (if (and (string? block-id) (melange-common/uuid-string? block-id))
                                                 [:block/uuid block-id]
                                                 block-id)]
                                  (d/entity db-after block-id))) blocks)

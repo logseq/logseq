@@ -5,7 +5,7 @@
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [malli.core :as m]
             [malli.error :as me]
             [reitit.frontend.easy :as rfe]))
@@ -37,8 +37,11 @@ nested keys or positional errors e.g. tuples"
 (defn- config-key->deprecation-i18n-key
   [config-key]
   (when config-key
-    (if (= common-config/unused-in-db-graphs-deprecation
-           (get common-config/file-only-config config-key))
+    (if (= melange-common/unused-in-db-graphs-deprecation
+           (melange-common/file-only-config-description
+            (if-let [config-ns (namespace config-key)]
+              (str config-ns "/" (name config-key))
+              (name config-key))))
       :graph.validation/config-unused-in-db-graphs-warning
       (keyword "graph.validation"
                (str "config-" (normalize-config-key config-key) "-warning")))))
@@ -51,7 +54,10 @@ nested keys or positional errors e.g. tuples"
 
 (defn- deprecated-config-key?
   [config-key]
-  (or (contains? common-config/file-only-config config-key)
+  (or (some? (melange-common/file-only-config-description
+              (if-let [config-ns (namespace config-key)]
+                (str config-ns "/" (name config-key))
+                (name config-key))))
       (contains? #{:editor/command-trigger
                    :arweave/gateway}
                  config-key)))

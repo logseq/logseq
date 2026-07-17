@@ -1,0 +1,23 @@
+{
+  "name": "@logseq/melange-js-api",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./node.cjs",
+  "browser": "./browser.cjs",
+  "exports": {
+    ".": {
+      "browser": "./browser.cjs",
+      "default": "./node.cjs"
+    },
+    "./browser": "./browser.cjs",
+    "./node": "./node.cjs",
+    "./common": {
+      "require": "./common.cjs",
+      "import": "./common.mjs"
+    },
+    "./db": {
+      "require": "./db.cjs",
+      "import": "./db.mjs"
+    }
+  }
+}

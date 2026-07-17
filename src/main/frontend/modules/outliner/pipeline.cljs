@@ -1,5 +1,6 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.react :as react]
@@ -7,7 +8,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
   [tx-data]
@@ -27,7 +28,7 @@
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}
         current-block-id (state/get-current-page)
-        current-block (when (and current-block-id (util/uuid-string? current-block-id))
+        current-block (when (and current-block-id (melange-common/uuid-string? current-block-id))
                         (let [id (uuid current-block-id)]
                           (db/entity [:block/uuid id])))]
     (when (= repo (state/get-current-repo))
@@ -78,7 +79,7 @@
 
             ;; (when (seq deleted-assets)
             ;;   (doseq [asset deleted-assets]
-            ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
+            ;;     (fs/unlink! repo (melange-common/path-join (config/get-current-repo-assets-root) (to-array [(str (:block/uuid asset) "." (:ext asset))])) {})))
 
             (state/set-state! :editor/start-pos nil)
 

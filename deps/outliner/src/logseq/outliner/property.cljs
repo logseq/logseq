@@ -1,32 +1,32 @@
 (ns logseq.outliner.property
   "Property related operations"
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.db-ident :as db-ident]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]
+            [logseq.melange.bridge.db.property-type :as property-type-catalog]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.validate :as outliner-validate]
-            [malli.core :as m]
-            [malli.error :as me]
-            [malli.util :as mu]))
+            [logseq.outliner.validate :as outliner-validate]))
 
 (defn- throw-error-if-read-only-property
   [property-ident]
-  (when (db-property/read-only-properties property-ident)
+  (when (property-catalog/read-only-properties property-ident)
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
 
@@ -45,14 +45,14 @@
       (map
        (fn [property] [class-ident property])
        (cons :block/tags (keys properties))))
-    db-class/built-in-classes)
+    class-catalog/built-in-classes)
    (concat
     (mapcat
      (fn [[property-ident {:keys [properties]}]]
        (map
         (fn [property] [property-ident property])
         (cons :block/tags (keys properties))))
-     db-property/built-in-properties))
+     property-catalog/built-in-properties))
    set))
 
 (defn- throw-error-if-deleting-protected-property
@@ -70,7 +70,7 @@
   [entities]
   (when-let [private-tags
              (seq (set/intersection (set (mapcat #(map :db/ident (:block/tags %)) entities))
-                                    ldb/private-tags))]
+                                    class-catalog/private-tags))]
     (throw (ex-info "Can't remove private tags"
                     {:type :notification
                      :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags) ".")
@@ -81,7 +81,7 @@
 
 (defn- throw-error-if-deleting-required-property
   [property-ident]
-  (when (contains? db-malli-schema/required-properties property-ident)
+  (when (contains? db-validation/required-properties property-ident)
     (throw (ex-info "Can't remove required property"
                     {:type :notification
                      :payload {:message "Can't remove required property."
@@ -213,21 +213,6 @@
         true
         (conj update-block-tx)))))
 
-(defn- get-property-value-schema
-  "Gets a malli schema to validate the property value for the given property type and builds
-   it with additional args like datascript db"
-  [db property-type property & {:keys [new-closed-value?]
-                                :or {new-closed-value? false}}]
-  (let [property-val-schema (or (get db-property-type/built-in-validation-schemas property-type)
-                                (throw (ex-info (str "No validation for property type " (pr-str property-type)) {})))
-        [schema-opts schema-fn] (if (vector? property-val-schema)
-                                  (rest property-val-schema)
-                                  [{} property-val-schema])]
-    [:fn
-     schema-opts
-     (fn property-value-schema [property-val]
-       (db-malli-schema/validate-property-value db schema-fn [property property-val] {:new-closed-value? new-closed-value?}))]))
-
 (defn- fail-parse-double
   [v-str]
   (let [result (parse-double v-str)]
@@ -259,8 +244,8 @@
                       :db.cardinality/many
                       :db.cardinality/one)
         old-type (:logseq.property/type property)
-        old-ref-type? (db-property-type/user-ref-property-types old-type)
-        ref-type? (db-property-type/user-ref-property-types new-type)]
+        old-ref-type? (property-type-catalog/user-ref-property-types old-type)
+        ref-type? (property-type-catalog/user-ref-property-types new-type)]
     (cond-> [(cond->
               (outliner-core/block-with-updated-at
                {:db/ident ident
@@ -291,7 +276,7 @@
                      (into {}))
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
-                 :block/name (common-util/page-name-sanity-lc property-name)))
+                 :block/name (melange-common/page-name-sanity-lower property-name)))
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)
@@ -309,7 +294,7 @@
                           (mapcat
                            (fn [[property-id v]]
                              (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property)
+        many->one? (and (melange-property/many? property)
                         ;; For UI calls, :db/cardinality can have :one and :many values
                         (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
     (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
@@ -330,37 +315,40 @@
     property))
 
 (defn- validate-property-value-aux
-  [schema value {:keys [many?]}]
+  [db property value {:keys [many?] :as validate-options}]
   ;; normalize :many values since most components update them as a single value
   (let [value' (if (and many? (not (sequential? value)))
                  #{value}
-                 value)]
-    (me/humanize (mu/explain-data schema value'))))
+                 value)
+        options (dissoc validate-options :many?)]
+    (when-not (db-validation/property-value-valid?
+               db [property value'] options)
+      [(db-validation/property-value-error-message
+        (:logseq.property/type property))])))
 
 (defn validate-property-value
   [db property value]
-  (let [property-type (:logseq.property/type property)
-        many? (= :db.cardinality/many (:db/cardinality property))
-        schema (get-property-value-schema db property-type property)]
-    (validate-property-value-aux schema value {:many? many?})))
+  (validate-property-value-aux
+   db property value
+   {:many? (= :db.cardinality/many (:db/cardinality property))}))
 
 (defn- validate!
-  "Validates `data` against `schema`.
+  "Validates a property value.
    Throws an ex-info with readable message if validation fails."
-  [property schema value]
+  [db property value validate-options]
   (when-not (and
              (= :db.type/ref (:db/valueType property))
              (= value :logseq.property/empty-placeholder))
-    (when-not (m/validate schema value)
-      (let [errors (-> (m/explain schema value)
-                       (me/humanize))
+    (when-let [errors (validate-property-value-aux
+                       db property value validate-options)]
+      (let [first-error (if (coll? errors) (first errors) errors)
             error-msg (str "Property validation failed: \"" (:block/title property) "\" " (if (coll? errors) (first errors) errors))]
         (throw
          (ex-info "Schema validation failed"
                   {:type :notification
                    :payload {:message error-msg
                              :i18n-key :property.validation/invalid-value
-                             :i18n-args [(:block/title property) (if (coll? errors) (first errors) errors)]
+                             :i18n-args [(:block/title property) first-error]
                              :type :warning}
                    :property (:db/ident property)
                    :value value
@@ -368,23 +356,19 @@
 
 (defn- throw-error-if-invalid-property-value
   [db property value]
-  (let [property-type (:logseq.property/type property)
-        many? (= :db.cardinality/many (:db/cardinality property))
-        schema (get-property-value-schema db property-type property)
+  (let [many? (= :db.cardinality/many (:db/cardinality property))
         value' (if (and many? (not (sequential? value)))
                  #{value}
                  value)]
-    (validate! property schema value')))
+    (validate! db property value' {})))
 
 (defn- throw-error-if-invalid-new-property-value
   [db property value]
-  (let [property-type (:logseq.property/type property)
-        many? (= :db.cardinality/many (:db/cardinality property))
-        schema (get-property-value-schema db property-type property :new-closed-value? true)
+  (let [many? (= :db.cardinality/many (:db/cardinality property))
         value' (if (and many? (not (or (sequential? value) (set? value))))
                  #{value}
                  value)]
-    (validate! property schema value')))
+    (validate! db property value' {:new-closed-value? true})))
 
 (defn- ->eid
   [id]
@@ -415,7 +399,7 @@
             (throw (ex-info "value should be a string" {:block-id block-id
                                                         :property-id property-id
                                                         :value value'})))
-        new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
+        new-value-block (cond-> (melange-property-build/build-property-value-block (or block property) property value')
                           new-block-id
                           (assoc :block/uuid new-block-id))]
     (ldb/batch-transact-with-temp-conn!
@@ -694,7 +678,7 @@
            property-type (get property :logseq.property/type :default)
            many? (= :db.cardinality/many (:db/cardinality property))
            entity-id? (and (:entity-id? options) (number? v))
-           ref? (contains? db-property-type/all-ref-property-types property-type)
+           ref? (contains? property-type-catalog/all-ref-property-types property-type)
            extends? (= property-id :logseq.property.class/extends)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
                                         (not extends?)
@@ -767,7 +751,7 @@
                         [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
                        tx-meta)
 
-        (contains? db-property/db-attribute-properties property-id)
+        (contains? property-catalog/db-attribute-properties property-id)
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]]
                        tx-meta)
@@ -810,7 +794,7 @@
            db-attribute? (some? (db-schema/schema property-id))
            property (d/entity @conn property-id)
            property-type (get property :logseq.property/type :default)
-           ref? (db-property-type/all-ref-property-types property-type)
+           ref? (property-type-catalog/all-ref-property-types property-type)
            extends? (= property-id :logseq.property.class/extends)
            v' (cond
                 extends?
@@ -841,7 +825,7 @@
 
              :else
              (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-                   ref? (db-property-type/all-ref-property-types property-type)
+                   ref? (property-type-catalog/all-ref-property-types property-type)
                    existing-value (get block property-id)
                    many? (= :db.cardinality/many (:db/cardinality property))
                    many-ref-value-ids (fn [value]
@@ -872,7 +856,7 @@
   [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
-                     (try (db-property/create-user-property-ident-from-name property-name)
+                     (try (melange-property/create-user-property-ident-from-name property-name)
                           (catch :default e
                             (throw (ex-info (str e)
                                             {:type :notification
@@ -918,7 +902,7 @@
      {:outliner-op :batch-delete-property-value}
      (fn [conn]
        (when-let [property (d/entity @conn property-id)]
-         (when (and (db-property/many? property)
+         (when (and (melange-property/many? property)
                     (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
            (when (= property-id :block/tags)
              (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
@@ -996,7 +980,7 @@
   (let [property-ns (some-> property-id namespace)]
     (or (= :block/tags property-id)
         (= "logseq.property.class" property-ns)
-        (contains? db-property/schema-properties property-id))))
+        (contains? property-catalog/schema-properties property-id))))
 
 (defn- tag-class-page?
   [db block]
@@ -1082,13 +1066,13 @@
                      (merge
                       {:block/uuid id
                        :block/closed-value-property (:db/id property)}
-                      (if (db-property-type/property-value-content? (:logseq.property/type block) property)
+                      (if (property-type-catalog/property-value-content? (:logseq.property/type block) property)
                         {:logseq.property/value resolved-value}
                         {:block/title resolved-value})))
                      icon
                      (assoc :logseq.property/icon icon))]
                   (let [max-order (:block/order (last (entity-plus/lookup-kv-then-entity property :property/closed-values)))
-                        new-block (-> (db-property-build/build-closed-value-block block-id nil resolved-value
+                        new-block (-> (melange-property-build/build-closed-value-block block-id nil resolved-value
                                                                                   property {:icon icon})
                                       (assoc :block/order (db-order/gen-key max-order nil)))]
                     [new-block
@@ -1108,16 +1092,16 @@
   (let [db @conn
         property (d/entity db property-id)
         property-type (:logseq.property/type property)]
-    (when (contains? db-property-type/closed-value-property-types property-type)
+    (when (contains? property-type-catalog/closed-value-property-types property-type)
       (let [value' (if (string? value) (string/trim value) value)
             resolved-value (convert-property-input-string nil property value')
             validate-message (validate-property-value-aux
-                              (get-property-value-schema @conn property-type property {:new-closed-value? true})
-                              resolved-value
-                              {:many? (db-property/many? property)})]
+                              @conn property resolved-value
+                              {:many? (melange-property/many? property)
+                               :new-closed-value? true})]
         (cond
           (some (fn [b]
-                  (and (= (str resolved-value) (str (or (db-property/closed-value-content b)
+                  (and (= (str resolved-value) (str (or (melange-property/closed-value-content b)
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
                 (entity-plus/lookup-kv-then-entity property :property/closed-values))

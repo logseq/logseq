@@ -22,10 +22,10 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -195,7 +195,7 @@
   [property {:keys [set-sub-open! disabled?]}]
   (let [*form-data (hooks/use-ref {:icon (:logseq.property/icon property)
                                  :title (or (:block/title property) "")
-                                 :description (or (db-property/property-value-content (:logseq.property/description property)) "")})
+                                 :description (or (melange-property/property-value-content (:logseq.property/description property)) "")})
         [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
         [saving?, set-saving!] (hooks/use-state false)
         *el (hooks/use-ref nil)
@@ -255,9 +255,9 @@
   (let [create? (:create? block)
         uuid (:block/uuid block)
         *form-data (hooks/use-ref
-                    {:value (or (str (db-property/closed-value-content block)) "")
+                    {:value (or (str (melange-property/closed-value-content block)) "")
                      :icon (:logseq.property/icon block)
-                     :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
+                     :description (or (melange-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
         [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state false)
         *input-ref (hooks/use-ref nil)]
@@ -439,7 +439,7 @@
 
 (defn- empty-choice-content?
   [choice]
-  (let [content (db-property/closed-value-content choice)]
+  (let [content (melange-property/closed-value-content choice)]
     (or (nil? content)
         (and (string? content)
              (string/blank? content)))))
@@ -488,7 +488,7 @@
                                             {:choice block
                                              :owner-block owner-block'}))))
         icon (:logseq.property/icon block)
-        value (db-property/closed-value-content block)
+        value (melange-property/closed-value-content block)
         excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block')))
         global-choice? (empty? (:logseq.property/choice-classes block))]
     [:li
@@ -606,7 +606,7 @@
                existing-values (seq (:property/closed-values property))
                values' (if (seq existing-values)
                          (let [existing-ids (set (map :db/id existing-values))
-                               existing-titles (set (map db-property/property-value-content existing-values))]
+                               existing-titles (set (map melange-property/property-value-content existing-values))]
                            (remove (fn [{:keys [label value]}]
                                      (or (existing-ids (:db/id value))
                                          (existing-titles label)
@@ -650,7 +650,7 @@
            values (:property/closed-values property)
            value-ids (vec (keep :db/id values))
            choices (use-choice-blocks value-ids)
-           scoped-choices (db-property/scoped-closed-values property owner-block {:values choices})
+           scoped-choices (melange-property/scoped-closed-values property owner-block {:values choices})
            scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
            excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
            hidden-excluded-choices (filter (partial hidden-excluded-choice? excluded-ids) scoped-choices)
@@ -822,7 +822,7 @@
                                                 (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value (not default-value)))})
                  (let [default-value (:logseq.property/default-value property)]
                    {:icon :settings-2 :title (t :property/default-value)
-                    :desc (if default-value (db-property/property-value-content default-value) (t :property/set-value))
+                    :desc (if default-value (melange-property/property-value-content default-value) (t :property/set-value))
                     :submenu-content (fn [] (pdv/default-value-config property))}))]
     (dropdown-editor-menuitem (assoc option :disabled? config/publishing?))))
 
@@ -830,7 +830,7 @@
   "property: block entity"
   [property owner-block values {:keys [class-schema? debug? with-title? more-options]
                                 :or {with-title? true}}]
-  (let [title (db-property/built-in-display-title property t)
+  (let [title (melange-property/built-in-display-title property t)
         property-type (:logseq.property/type property)
         property-type-label' (some-> property-type (property-type-label))
         enable-closed-values? (contains? db-property-type/closed-value-property-types
@@ -873,7 +873,7 @@
                                                        (class-select property {:default-open? false})])}))
 
       (when (and (contains? db-property-type/default-value-ref-property-types property-type)
-                 (not (db-property/many? property))
+                 (not (melange-property/many? property))
                  (not (and enable-closed-values?
                            (seq (:property/closed-values property))))
                  (not= :logseq.property/enable-history? (:db/ident property)))
@@ -900,7 +900,7 @@
                                  (checkbox-state-mapping values))}))))
 
       (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
-        (let [many? (db-property/many? property)]
+        (let [many? (melange-property/many? property)]
           (dropdown-editor-menuitem {:icon :checks :title (t :property/multiple-values)
                                      :toggle-checked? many?
                                      :on-toggle-checked-change

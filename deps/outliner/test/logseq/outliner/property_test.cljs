@@ -1,9 +1,10 @@
 (ns logseq.outliner.property-test
   (:require [cljs.test :refer [deftest is testing are]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
@@ -21,7 +22,7 @@
 
       (testing "and change its cardinality"
         (outliner-property/upsert-property! conn :user.property/num {:db/cardinality :many} {})
-        (is (db-property/many? (d/entity @conn :user.property/num)))
+        (is (melange-property/many? (d/entity @conn :user.property/num)))
         (is (> (:block/updated-at (d/entity @conn :user.property/num))
                old-updated-at)))
 
@@ -85,7 +86,7 @@
           new-property-value (:user.property/default (db-test/find-block-by-content @conn "b2"))]
 
       (is (some? (:db/id new-property-value)) "New property value created")
-      (is (= "" (db-property/property-value-content new-property-value))
+      (is (= "" (melange-property/property-value-content new-property-value))
           "Property value has correct content")
       (is (= :user.property/default
              (get-in (d/entity @conn (:db/id new-property-value)) [:logseq.property/created-from-property :db/ident]))
@@ -102,7 +103,7 @@
           new-property-value (:user.property/num (db-test/find-block-by-content @conn "b2"))]
 
       (is (some? (:db/id new-property-value)) "New property value created")
-      (is (= 3 (db-property/property-value-content new-property-value))
+      (is (= 3 (melange-property/property-value-content new-property-value))
           "Property value has correct content")
       (is (= :user.property/num
              (get-in (d/entity @conn (:db/id new-property-value)) [:logseq.property/created-from-property :db/ident]))
@@ -127,7 +128,7 @@
           new-property-values (:user.property/num-many (db-test/find-block-by-content @conn "b2"))]
 
       (is (seq new-property-values) "New property values created")
-      (is (= #{3 4 5} (set (map db-property/property-value-content new-property-values)))
+      (is (= #{3 4 5} (set (map melange-property/property-value-content new-property-values)))
           "Property value has correct content"))))
 
 (deftest set-block-property-basic-cases
@@ -211,7 +212,7 @@
           _ (outliner-property/batch-set-property! conn block-ids :logseq.property/order-list-type "number")
           updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
       (is (= ["number" "number"]
-             (map #(db-property/property-value-content (:logseq.property/order-list-type %))
+             (map #(melange-property/property-value-content (:logseq.property/order-list-type %))
                   updated-blocks))
           "Property values are batch set")))
 
@@ -226,7 +227,7 @@
       (outliner-property/batch-set-property! conn [block-id] :user.property/reproducible-steps ["Step 1" "Step 2" "Step 3"])
       (is (= #{"Step 1" "Step 2" "Step 3"}
              (->> (:user.property/reproducible-steps (d/entity @conn [:block/uuid block-id]))
-                  (map db-property/property-value-content)
+                  (map melange-property/property-value-content)
                   set))
           "String vector values are persisted as many property values")))
 
@@ -246,7 +247,7 @@
       (outliner-property/batch-set-property! conn [target-id] :user.property/reproducible-steps source-values)
       (is (= #{"Step 1" "Step 2" "Step 3"}
              (->> (:user.property/reproducible-steps (d/entity @conn [:block/uuid target-id]))
-                  (map db-property/property-value-content)
+                  (map melange-property/property-value-content)
                   set))
           "Id vector values are persisted as many property values")))
 
@@ -346,7 +347,7 @@
         values (map (fn [d] (:block/uuid (d/entity @conn (:v d)))) (d/datoms @conn :avet :user.property/num))
         _ (outliner-property/add-existing-values-to-closed-values! conn :user.property/num values)]
     (is (= [1 2]
-           (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
+           (map melange-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
 (deftest add-existing-generated-value-to-closed-values-reparents-to-property
   (let [conn (db-test/create-conn-with-blocks
@@ -369,7 +370,7 @@
                (set (map :db/id (:block/closed-value-property closed-value)))))
         (is (= (:db/id property) (:db/id (:block/parent closed-value))))
         (is (= (:db/id property) (:db/id (:block/page closed-value))))
-        (is (= "Step 1" (db-property/closed-value-content closed-value)))
+        (is (= "Step 1" (melange-property/closed-value-content closed-value)))
 
         (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid block-uuid])] {})
         (is (some? (d/entity @conn [:block/uuid value-uuid])))))))
@@ -398,7 +399,7 @@
             b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :logseq.property/value 3]] @conn))]
         (is (ldb/closed-value? (d/entity @conn (:db/id b))))
         (is (= [2 3]
-               (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
+               (map melange-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
     (testing "Update choice successfully"
       (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :logseq.property/value 2]] @conn))
@@ -406,8 +407,8 @@
                                                                                :value 4
                                                                                :description "choice 4"})
             updated-b (d/entity @conn [:block/uuid (:block/uuid b)])]
-        (is (= 4 (db-property/closed-value-content updated-b)))
-        (is (= "choice 4" (db-property/property-value-content (:logseq.property/description updated-b))))))))
+        (is (= 4 (melange-property/closed-value-content updated-b)))
+        (is (= "choice 4" (melange-property/property-value-content (:logseq.property/description updated-b))))))))
 
 (deftest delete-closed-value!
   (let [closed-value-uuid (random-uuid)
@@ -563,7 +564,7 @@
            :logseq.property/type :checkbox}))))
 
   (testing "a schema property is part of the shared schema set"
-    (is (contains? db-property/schema-properties :logseq.property/public?))))
+    (is (contains? property-catalog/schema-properties :logseq.property/public?))))
 
 (deftest get-block-positioned-properties-filters-non-public
   (let [conn (db-test/create-conn-with-blocks [])

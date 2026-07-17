@@ -9,6 +9,7 @@
                      ["@capacitor/status-bar" :refer [^js StatusBar Style]]
                      ["path-complete-extname" :as pathCompleteExtname]
                      ["semver" :as semver]
+                     [logseq.melange.bridge.common.api :as melange-common]
                      [cljs-bean.core :as bean]
                      [cljs-time.core :as t]
                      [clojure.pprint]
@@ -21,8 +22,9 @@
                      [goog.object :as gobj]
                      [goog.string :as gstring]
                      [goog.userAgent]
-                     [logseq.common.config :as common-config]
-                     [logseq.common.util :as common-util]
+                     [logseq.melange.bridge.common.util :as common-util]
+                     [logseq.melange.bridge.common.collection :as melange-collection]
+                     [logseq.melange.bridge.common.regex :as melange-regex]
                      [promesa.core :as p]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
@@ -32,7 +34,6 @@
 
 #?(:cljs
    (do
-     (def safe-re-find common-util/safe-re-find)
      (defn safe-keyword
        [s]
        (when (string? s)
@@ -41,6 +42,9 @@
 #?(:cljs (goog-define NODETEST false)
    :clj (def NODETEST false))
 (defonce node-test? NODETEST)
+
+#?(:cljs (goog-define PUBLISHING false)
+   :clj (def PUBLISHING false))
 
 #?(:cljs
    (do
@@ -67,7 +71,7 @@
         iPad / Android Pad doesn't trigger!"
        []
        (when-not node-test?
-         (safe-re-find #"Mobi" js/navigator.userAgent)))
+         (melange-regex/safe-re-find #"Mobi" js/navigator.userAgent)))
      (def mobile? (memoize mobile*?))
      (def capacitor? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
 
@@ -102,11 +106,6 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
-#?(:cljs (def string-join-path common-util/string-join-path))
-
-#?(:cljs
-   (def uuid-string? common-util/uuid-string?))
-
 #?(:cljs
    (do
      (defn- electron*?
@@ -131,7 +130,7 @@
      (def nfs? (and (not (electron?))
                     (not (mobile-util/native-platform?))))
      (def web-platform? nfs?)
-     (def plugin-platform? (or (and web-platform? (not common-config/PUBLISHING)) (electron?)))))
+     (def plugin-platform? (or (and web-platform? (not PUBLISHING)) (electron?)))))
 
 #?(:cljs
    (def format common-util/format))
@@ -217,8 +216,6 @@
                            (.then bean/->clj)
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
-
-#?(:cljs (def zero-pad common-util/zero-pad))
 
 #?(:cljs
    (defn safe-parse-int
@@ -405,7 +402,7 @@
 #?(:cljs
    (defn scroll-to-element
      [elem-id]
-     (when-not (safe-re-find #"^/\d+$" elem-id)
+     (when-not (melange-regex/safe-re-find #"^/\d+$" elem-id)
        (when elem-id
          (when-let [elem (gdom/getElement elem-id)]
            (.scroll (app-scroll-container-node)
@@ -738,7 +735,7 @@
                                          (assoc :db/id (:db/id block)))
                                      block)) blocks)
            data (clj->js
-                 (common-util/remove-nils-non-nested
+                 (melange-collection/remove-nils-non-nested
                   {:text text
                    :html html
                    :blocks (when (and graph (seq blocks))
@@ -763,18 +760,12 @@
      (when ref
        @ref)))
 
-#?(:cljs
-   (def time-ms common-util/time-ms))
-
 (defn d
   [k f]
   (let [result (atom nil)]
     (println (str "Debug " k))
     (time (reset! result (doall (f))))
     @result))
-
-#?(:cljs
-   (def concat-without-nil common-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!
@@ -894,8 +885,8 @@
      []
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
-       (boolean (and (safe-re-find #"Chrome" user-agent)
-                     (safe-re-find #"Google Inc" vendor))))))
+       (boolean (and (melange-regex/safe-re-find #"Chrome" user-agent)
+                     (melange-regex/safe-re-find #"Google Inc" vendor))))))
 
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
@@ -909,7 +900,7 @@
 #?(:cljs
    (defn get-blocks-by-id
      [block-id]
-     (when (uuid-string? (str block-id))
+     (when (melange-common/uuid-string? (str block-id))
        (d/sel (format "[blockid='%s']" (str block-id))))))
 
 #?(:cljs
@@ -921,17 +912,6 @@
    (defn url-encode
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-#?(:cljs
-   (def page-name-sanity-lc
-     "Delegate to common-util to loosely couple app usages to graph-parser"
-     common-util/page-name-sanity-lc))
-
-#?(:cljs
-   (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
-
-#?(:cljs
-   (def get-page-title common-util/get-page-title))
 
 #?(:cljs
    (defn add-style!
@@ -954,22 +934,13 @@
                      (d/set-attr! :media "all"))]
            (d/append! parent-node link))))))
 
-;; fs
-#?(:cljs
-   (defn get-file-ext
-     [file]
-     (and
-      (string? file)
-      (string/includes? file ".")
-      (some-> (common-util/path->file-ext file) string/lower-case))))
-
 #?(:cljs
    (defn get-dir-and-basename
      [path]
      (let [parts (string/split path "/")
            basename (last parts)
-           dir (->> (butlast parts)
-                    string-join-path)]
+           dir (melange-common/join-path-segments
+                (to-array (butlast parts)))]
        [dir basename])))
 
 #?(:clj

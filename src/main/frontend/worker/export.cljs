@@ -1,9 +1,9 @@
 (ns frontend.worker.export
   "Export data"
-  (:require [datascript.core :as d]
-            [logseq.common.export.file :as common-file]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [datascript.core :as d]
+            [frontend.common.export.file :as common-file]
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (def get-all-page->content common-file/get-all-page->content)
 
@@ -12,7 +12,7 @@
   (some->> (d/datoms @conn :eavt)
            (keep (fn [{:keys [e a v t]}]
                    (cond
-                     (and (= a :block/title) (common-util/url? v))
+                     (and (= a :block/title) (melange-common/url? v))
                      (d/datom e a "https://logseq.com/debug" t)
 
                      (and (contains? #{:block/title :block/name} a)

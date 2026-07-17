@@ -5,28 +5,23 @@
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.server :as cli-server]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
 (deftest test-today-page-title-uses-default-time-zone
   (async done
-    (let [formatted-args* (atom nil)]
+    (let [default-zone-input* (atom nil)]
       (-> (p/with-redefs [transport/invoke (fn [_ method _args]
                                              (if (= method :thread-api/pull)
                                                (p/resolved {:logseq.property.journal/title-format "yyyy-MM-dd"})
                                                (p/rejected (ex-info "unexpected method" {:method method}))))
                           tc/from-date (fn [_] :utc-now)
                           t/to-default-time-zone (fn [date-time]
-                                                   (if (= date-time :utc-now)
-                                                     :local-now
-                                                     :unexpected-time))
-                          date-time-util/format (fn [date-time formatter]
-                                                  (reset! formatted-args* [date-time formatter])
-                                                  "2026-05-01")]
+                                                   (reset! default-zone-input* date-time)
+                                                   (t/date-time 2026 5 1 9 7 8))]
             (p/let [title (#'add-command/today-page-title {} "demo")]
               (is (= "2026-05-01" title))
-              (is (= [:local-now "yyyy-MM-dd"] @formatted-args*))))
+              (is (= :utc-now @default-zone-input*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

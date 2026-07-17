@@ -19,8 +19,7 @@ on:
       # Deps that logseq/cli depends on should trigger this workflow.
       - 'deps/outliner/**'
       - 'deps/graph-parser/**'
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
       - 'deps/db-sync/**'
       - 'src/main/frontend/worker/**'
       - 'src/main/logseq/db_worker/**'
@@ -40,8 +39,7 @@ on:
       # Deps that logseq/cli depends on should trigger this workflow.
       - 'deps/outliner/**'
       - 'deps/graph-parser/**'
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
       - 'deps/db-sync/**'
       - 'src/main/frontend/worker/**'
       - 'src/main/logseq/db_worker/**'

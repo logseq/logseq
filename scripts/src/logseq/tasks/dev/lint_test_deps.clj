@@ -6,20 +6,7 @@
   {:runner :cmd :name "clj-kondo (src test)" :cmd "clojure -M:clj-kondo --lint src test --cache false"})
 
 (def ^:private dep-plan
-  [{:dep "deps/common"
-    :steps [kondo-src-test-step
-            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
-            {:runner :bb :name "lint:carve" :cmd "lint:carve"}
-            {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
-            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
-   {:dep "deps/db"
-    :steps [kondo-src-test-step
-            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
-            {:runner :bb :name "lint:carve" :cmd "lint:carve"}
-            {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
-            {:runner :bb :name "lint:rules" :cmd "lint:rules"}
-            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
-   {:dep "deps/db-sync"
+  [{:dep "deps/db-sync"
     :steps [kondo-src-test-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}

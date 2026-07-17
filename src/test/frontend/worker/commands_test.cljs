@@ -4,8 +4,8 @@
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.commands :as commands]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]))
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]))
 
 (defn- get-next-time
   "Test helper. Three-arg form uses the `:double-plus` default (preserves prior
@@ -308,7 +308,7 @@
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]
     (testing "returns the explicit frequency when the property has a value"
-      (with-redefs [db-property/property-value-content (fn [_] 5)]
+      (with-redefs [melange-property/property-value-content (fn [_] 5)]
         (let [[freq tx] (resolve :mock-db {})]
           (is (= 5 freq))
           (is (nil? tx)
@@ -319,10 +319,10 @@
       ;; always selected the first branch (any 2-vector is truthy) and left
       ;; the default-value path unreachable. `if-let` is what makes both
       ;; branches reachable.
-      (with-redefs [db-property/property-value-content (fn [_] nil)
+      (with-redefs [melange-property/property-value-content (fn [_] nil)
                     d/entity (fn [_ _] {:db/id 42
                                         :block/uuid #uuid "00000000-0000-0000-0000-000000000001"})
-                    db-property-build/build-property-value-block
+                    melange-property-build/build-property-value-block
                     (fn [_ _ value] {:block/uuid #uuid "00000000-0000-0000-0000-000000000002"
                                      :logseq.property/value value})]
         (let [[freq tx] (resolve :mock-db {})]

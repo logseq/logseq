@@ -1,6 +1,6 @@
 (ns logseq.db-sync.worker-auth-test
   (:require [cljs.test :refer [async deftest is]]
-            [logseq.common.authorization :as authorization]
+            [logseq.melange.bridge.common.authorization :as authorization]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
 

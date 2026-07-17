@@ -1,7 +1,7 @@
 (ns frontend.worker.sync.large-title
   "Large title offload and rehydration helpers for db sync."
   (:require [datascript.core :as d]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]
             [frontend.worker.sync.util :refer [get-graph-id]]))
 

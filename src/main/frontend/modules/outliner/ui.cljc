@@ -5,7 +5,7 @@
                      [frontend.db.transact]
                      [logseq.outliner.op]
                      [frontend.modules.outliner.op]
-                     [logseq.db])))
+                     [logseq.melange.bridge.db.core])))
 
 (defmacro transact!
   [opts & body]

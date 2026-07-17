@@ -2,11 +2,11 @@
   "Query-related CLI commands."
   (:require [clojure.string :as string]
             [frontend.util.datalog :as datalog-util]
-            [logseq.db.frontend.rules :as rules]
+            [logseq.melange.bridge.db.rules :as rules]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private query-spec

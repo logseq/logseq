@@ -6,7 +6,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn- restore-cursor!

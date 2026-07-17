@@ -1,6 +1,7 @@
 (ns logseq.cli.command.upsert
   "Upsert-related CLI commands."
-  (:require ["crypto" :as crypto]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["crypto" :as crypto]
             ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
@@ -10,13 +11,11 @@
             [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
+            [logseq.melange.bridge.platform.node :as platform-node]
             [promesa.core :as p]))
 
 (def ^:private upsert-block-spec
@@ -39,7 +38,7 @@
              :coerce :string}
    :blocks {:desc "EDN vector of blocks [create only]"}
    :blocks-file {:desc "EDN file of blocks [create only]"
-                 :coerce common-graph/expand-home
+                 :coerce platform-node/expand-home
                  :complete :file}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
@@ -78,7 +77,7 @@
          :validate #{"first-child" "last-child" "sibling"}}
    :status {:desc "Set task status"
             :values (mapv (comp string/lower-case :value)
-                          (db-property/built-in-closed-values :logseq.property/status))}
+                          (melange-property/built-in-closed-values :logseq.property/status))}
    :priority {:desc "Set task priority"}
    :scheduled {:desc "Set task scheduled datetime"}
    :deadline {:desc "Set task deadline datetime"}
@@ -98,7 +97,7 @@
           :validate {:pred (comp parse-uuid str)
                      :ex-msg (constantly "Option uuid must be a valid UUID string")}}
    :path {:desc "Asset file path [create only]"
-          :coerce common-graph/expand-home
+          :coerce platform-node/expand-home
           :complete :file}
    :target-id {:desc "Target block db/id [create only]"
                :coerce :long}
@@ -183,7 +182,7 @@
       v)))
 
 (def ^:private available-status-idents
-  (mapv :db-ident (db-property/built-in-closed-values :logseq.property/status)))
+  (mapv :db-ident (melange-property/built-in-closed-values :logseq.property/status)))
 
 (def ^:private available-priority-values
   ["low" "medium" "high" "urgent"])
@@ -691,7 +690,7 @@
 (defn- pull-page-by-name
   [config repo page-name selector]
   (transport/invoke config :thread-api/pull
-                    [repo selector [:block/name (common-util/page-name-sanity-lc page-name)]]))
+                    [repo selector [:block/name (melange-common/page-name-sanity-lower page-name)]]))
 
 (def ^:private pull-tag-by-name add-command/pull-tag-by-name)
 (def ^:private pull-property-by-name add-command/pull-property-by-name)
@@ -849,7 +848,7 @@
 
 (defn- normalized-tag-lookup-name
   [value]
-  (some-> value normalize-tag-name common-util/page-name-sanity-lc))
+  (some-> value normalize-tag-name (melange-common/page-name-sanity-lower)))
 
 (defn- rename-target-same-as-current?
   [entity target-name]
@@ -903,7 +902,7 @@
   [value]
   (cond
     (uuid? value) value
-    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (and (string? value) (melange-common/uuid-string? (string/trim value)))
     (uuid (string/trim value))
     :else nil))
 
@@ -1258,7 +1257,7 @@
 
 (defn- graph-assets-dir-path
   [config repo]
-  (if-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+  (if-let [graph-dir-name (melange-common/repo-to-encoded-graph-dir-name repo)]
     (node-path/join (cli-server/graphs-dir config)
                     graph-dir-name
                     "assets")

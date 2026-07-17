@@ -2,13 +2,14 @@
   "common fns for exporting.
   exclude some fns which produce lazy-seq, which can cause strange behaviors
   when use together with dynamic var."
-  (:require [cljs.core.match :refer [match]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.handler.export.util :as export-util :refer-macros [removev concatv mapcatv]]
-            [logseq.common.export.file :as common-file]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [frontend.common.export.file :as common-file]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.outliner.tree :as otree]
             [malli.core :as m]
@@ -54,7 +55,7 @@
 ;; Global vars that are not explicitly passed in all fns
 ;; These vars must be bound in order to use most fns in this namespace
 (def ^:dynamic *current-db* nil)
-;; Config used by logseq.common.export.file fns
+;; Config used by frontend.common.export.file fns
 (def ^:dynamic *content-config* nil)
 
 ;;; internal utils
@@ -173,8 +174,8 @@
         repetition (if repetition
                      (str " " (repetition-to-string repetition))
                      "")
-        hour (when hour (common-util/zero-pad hour))
-        min  (when min (common-util/zero-pad min))
+        hour (when hour (melange-common/zero-pad hour))
+        min  (when min (melange-common/zero-pad min))
         time (cond
                (and hour min)
                (common-util/format " %s:%s" hour min)
@@ -185,8 +186,8 @@
     (common-util/format "%s%s-%s-%s %s%s%s%s"
                         open
                         (str year)
-                        (common-util/zero-pad month)
-                        (common-util/zero-pad day)
+                        (melange-common/zero-pad month)
+                        (melange-common/zero-pad day)
                         wday
                         time
                         repetition

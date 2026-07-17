@@ -1,0 +1,55 @@
+(melange.emit
+ (target node)
+ (modules
+  authorization_test
+  namespace_test
+  reference_test
+  language_test
+  configuration_test
+  date_time_test
+  graph_dir_test
+  graph_registry_test
+  graph_test
+  path_test
+  string_util_test
+  uuid_test
+  version_test)
+ (module_systems commonjs)
+ (libraries melange_common melange-fest melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias ./melange)
+  (:authorization_test ./node/test/common/authorization_test.js)
+  (:namespace_test ./node/test/common/namespace_test.js)
+  (:reference_test ./node/test/common/reference_test.js)
+  (:language_test ./node/test/common/language_test.js)
+  (:configuration_test ./node/test/common/configuration_test.js)
+  (:date_time_test ./node/test/common/date_time_test.js)
+  (:graph_dir_test ./node/test/common/graph_dir_test.js)
+  (:graph_registry_test ./node/test/common/graph_registry_test.js)
+  (:graph_test ./node/test/common/graph_test.js)
+  (:path_test ./node/test/common/path_test.js)
+  (:string_util_test ./node/test/common/string_util_test.js)
+  (:uuid_test ./node/test/common/uuid_test.js)
+  (:version_test ./node/test/common/version_test.js))
+ (action
+  (run
+   node
+   --test
+   %{authorization_test}
+   %{namespace_test}
+   %{reference_test}
+   %{language_test}
+   %{configuration_test}
+   %{date_time_test}
+   %{graph_dir_test}
+   %{graph_registry_test}
+   %{graph_test}
+   %{path_test}
+   %{string_util_test}
+   %{uuid_test}
+   %{version_test})))

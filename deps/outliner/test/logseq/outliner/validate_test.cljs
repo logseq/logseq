@@ -1,9 +1,9 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.validate :as outliner-validate]))
 
 (deftest validate-block-title-unique-for-properties

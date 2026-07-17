@@ -7,8 +7,8 @@
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -51,7 +51,7 @@
                   columns*)]
     (if (= (:db/ident class) :logseq.class/Asset)
       ;; Insert in front of tag's properties
-      (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
+      (let [[before-cols after-cols] (split-with #(not (melange-property/logseq-property? (:id %))) columns)]
         (concat before-cols [(build-asset-file-column config)] after-cols))
       columns)))
 
@@ -88,7 +88,7 @@
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
         columns (build-class-object-columns config class properties)
-        add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
+        add-new-object! (when (or asset? (not (class-catalog/private-tags (:db/ident class))))
                           (fn [view table {:keys [properties]}]
                             (if (= :logseq.class/Asset (:db/ident class))
                               (shui/dialog-open!

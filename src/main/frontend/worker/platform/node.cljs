@@ -1,7 +1,7 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["@logseq/melange-js-api/node" :as melange-js-api]
-            [frontend.worker.platform :as platform]))
+  (:require [frontend.worker.platform :as platform]
+            [logseq.melange.bridge.platform.node :as platform-node]))
 
 (defn- macos-arm64?
   []
@@ -29,8 +29,7 @@
 
 (defn node-platform
   [opts]
-  (let [platform (-> (.-Platform melange-js-api)
-                     (.node_platform (node-options->js opts))
+  (let [platform (-> (platform-node/node-platform (node-options->js opts))
                      platform/js-platform->platform)]
     (cond-> platform
       (not (vector-embedding-enabled? opts))

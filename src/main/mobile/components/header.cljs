@@ -1,6 +1,7 @@
 (ns mobile.components.header
   "App top header"
   (:require ["@capacitor/dialog" :refer [Dialog]]
+            [logseq.melange.bridge.common.api :as melange-common]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.components.repo :as repo]
@@ -18,9 +19,8 @@
             [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity :as entity-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -201,7 +201,7 @@
                                                  (rtc-indicator/details)
                                                  {}))
                       "favorite" (when-let [id (state/get-current-page)]
-                                   (when (common-util/uuid-string? id)
+                                   (when (melange-common/uuid-string? id)
                                      (when-let [block (db/entity [:block/uuid (uuid id)])]
                                        (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
                                          (p/do!
@@ -212,7 +212,7 @@
                                             (when-let [f @*configure-top-bar-f]
                                               (f favorited?))))))))
                       "page-setting" (when-let [id (state/get-current-page)]
-                                       (when (common-util/uuid-string? id)
+                                       (when (melange-common/uuid-string? id)
                                          (when-let [block (db/entity [:block/uuid (uuid id)])]
                                            (open-page-settings block))))
 
@@ -336,7 +336,7 @@
                   mobile-util/native-top-bar)
          (register-native-top-bar-events! *configure-top-bar-f)
          (let [block (when (and page-route?
-                                (common-util/uuid-string? route-id))
+                                (melange-common/uuid-string? route-id))
                        (db/entity [:block/uuid (uuid route-id)]))
                favorited? (when block
                             (page-handler/favorited? (str (:block/uuid block))))
@@ -362,7 +362,7 @@
                 mobile-util/native-top-bar
                 current-repo
                 page-route?
-                (common-util/uuid-string? route-id))
+                (melange-common/uuid-string? route-id))
          (let [cancelled? (atom false)
                page-id (uuid route-id)]
            (-> (db-async/<get-block current-repo page-id {:children? false})

@@ -4,7 +4,7 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [io.factorhouse.hsx.core :as hsx]))
 
 (defn- columns
@@ -30,7 +30,7 @@
                                       {:with-object-name? false
                                        :with-id? false})]
     [:div.ls-all-pages.w-full.mx-auto
-     (views/view {:view-parent (db/get-page common-config/views-page-name)
+     (views/view {:view-parent (db/get-page melange-common/views-page-name)
                   :view-feature-type :all-pages
                   :show-items-count? true
                   :columns columns'})]))

@@ -8,14 +8,13 @@
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [promesa.core :as p]))
 
 (defn- today-page-title
@@ -26,7 +25,14 @@
           now (-> (js/Date.)
                   tc/from-date
                   t/to-default-time-zone)]
-    (date-time-util/format now formatter)))
+    (melange-common/format-date-time
+     (t/year now)
+     (t/month now)
+     (t/day now)
+     (t/hour now)
+     (t/minute now)
+     (t/second now)
+     formatter)))
 
 (defn find-pages-by-name
   "Query all live (non-recycled) pages matching a given name. Returns a vector
@@ -38,7 +44,7 @@
                                      [{:find [[(list 'pull '?e selector) '...]]
                                        :in '[$ ?name]
                                        :where '[[?e :block/name ?name]]}
-                                      (common-util/page-name-sanity-lc page-name)]])]
+                                      (melange-common/page-name-sanity-lower page-name)]])]
     (vec (remove ldb/recycled? (or results [])))))
 
 (defn throw-ambiguous-page-error!
@@ -66,7 +72,7 @@
           page (first live)]
     (if (:db/id page)
       page
-      (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
+      (let [page-name-lc (melange-common/page-name-sanity-lower page-name)]
         (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops
                                     [repo [[:create-page [page-name {}]]] {}])]
           (transport/invoke config :thread-api/pull
@@ -82,7 +88,7 @@
                                       :where '[[?e :block/name ?name]
                                                [?e :block/tags ?t]
                                                [?t :db/ident :logseq.class/Tag]]}
-                                     (common-util/page-name-sanity-lc tag-name)]])]
+                                     (melange-common/page-name-sanity-lower tag-name)]])]
     (first result)))
 
 (defn pull-property-by-name
@@ -95,7 +101,7 @@
                                       :where '[[?e :block/name ?name]
                                                [?e :block/tags ?t]
                                                [?t :db/ident :logseq.class/Property]]}
-                                     (common-util/page-name-sanity-lc property-name)]])]
+                                     (melange-common/page-name-sanity-lower property-name)]])]
     (first result)))
 
 (def ^:private add-positions
@@ -144,12 +150,12 @@
                 block (cond
                         (some? current)
                         (update block :block/uuid (fn [value]
-                                                    (if (and (string? value) (common-util/uuid-string? value))
+                                                    (if (and (string? value) (melange-common/uuid-string? value))
                                                       (uuid value)
                                                       value)))
 
                         :else
-                        (assoc block :block/uuid (common-uuid/gen-uuid)))]
+                        (assoc block :block/uuid (melange-uuid/gen)))]
             (if (seq (:block/children block))
               (update block :block/children ensure-block-uuids)
               block)))
@@ -182,7 +188,7 @@
 
 (defn- public-built-in-property-key?
   [k]
-  (if-let [property (get db-property/built-in-properties k)]
+  (if-let [property (get property-catalog/built-in-properties k)]
     (true? (get-in property [:schema :public?]))
     true))
 
@@ -253,7 +259,7 @@
   [value]
   (cond
     (uuid? value) value
-    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (and (string? value) (melange-common/uuid-string? (string/trim value)))
     (uuid (string/trim value))
     :else nil))
 
@@ -324,7 +330,7 @@
 (defn- extract-page-refs
   [title]
   (when (string? title)
-    (->> (re-seq page-ref/page-ref-re title)
+    (->> (re-seq melange-common/page-ref-re title)
          (map second)
          (remove string/blank?))))
 
@@ -353,7 +359,7 @@
          (string/blank? value)
          acc
 
-         (common-util/uuid-string? value)
+         (melange-common/uuid-string? value)
          (update acc :uuid-refs conj value)
 
          (integer-string? value)
@@ -371,7 +377,7 @@
                            (let [value (string/trim ref-value)]
                              (if (string/blank? value)
                                acc
-                               (assoc acc (common-util/page-name-sanity-lc value) value))))
+                               (assoc acc (melange-common/page-name-sanity-lower value) value))))
                          {}
                          page-refs)]
       (p/let [resolved (p/all
@@ -426,7 +432,7 @@
   (mapv (fn update-block [block]
           (let [block' (if (string? (:block/title block))
                          (update block :block/title
-                                 #(db-content/title-ref->id-ref % refs :replace-tag? false))
+                                 #(melange-content/title-ref->id-ref % refs :replace-tag? false))
                          block)]
             (if (seq (:block/children block'))
               (update block' :block/children #(normalize-block-title-refs % refs))
@@ -449,13 +455,13 @@
   (cond
     (uuid? value) value
     (number? value) value
-    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (and (string? value) (melange-common/uuid-string? (string/trim value)))
     (uuid (string/trim value))
     (keyword? value) value
     (string? value) (let [text (-> value string/trim (string/replace #"^#+" ""))]
                       (cond
                         (string/blank? text) nil
-                        (common-util/valid-edn-keyword? text)
+                        (melange-common/valid-edn-keyword? text)
                         (common-util/safe-read-string {:log-error? false} text)
                         :else text))
     :else nil))
@@ -493,7 +499,7 @@
     (let [text (string/trim value)]
       (cond
         (string/blank? text) nil
-        (common-util/valid-edn-keyword? text)
+        (melange-common/valid-edn-keyword? text)
         (common-util/safe-read-string {:log-error? false} text)
         :else (keyword text)))
     :else nil))
@@ -502,15 +508,15 @@
   (into {}
         (keep (fn [[ident {:keys [title]}]]
                 (when (string? title)
-                  [(common-util/page-name-sanity-lc title) ident])))
-        db-property/built-in-properties))
+                  [(melange-common/page-name-sanity-lower title) ident])))
+        property-catalog/built-in-properties))
 
 (defn- property-title->ident
   [value]
   (when (string? value)
     (let [text (string/trim value)]
       (when (seq text)
-        (get built-in-properties-by-title (common-util/page-name-sanity-lc text))))))
+        (get built-in-properties-by-title (melange-common/page-name-sanity-lower text))))))
 
 (defn normalize-property-key-input
   [value]
@@ -521,7 +527,7 @@
     (let [text (string/trim value)]
       (cond
         (string/blank? text) nil
-        (common-util/valid-edn-keyword? text)
+        (melange-common/valid-edn-keyword? text)
         (let [parsed (common-util/safe-read-string {:log-error? false} text)]
           (when (keyword? parsed)
             {:type :ident :value parsed}))
@@ -570,7 +576,7 @@
     (string? value) (let [text (string/trim value)]
                       (if (string/blank? text)
                         {:ok? false}
-                        (if (common-util/valid-edn-keyword? text)
+                        (if (melange-common/valid-edn-keyword? text)
                           (let [parsed (common-util/safe-read-string {:log-error? false} text)]
                             (if (keyword? parsed)
                               {:ok? true :value parsed}
@@ -702,7 +708,7 @@
                        key-ident value]
                    (if (= type :id)
                      (recur (rest prop-entries) (assoc acc key-ident v))
-                     (let [property (get db-property/built-in-properties key-ident)]
+                     (let [property (get property-catalog/built-in-properties key-ident)]
                        (cond
                          (nil? property)
                          (if allow-non-built-in?
@@ -749,7 +755,7 @@
                  (let [{:keys [type value]} key-result]
                    (if (= type :id)
                      (recur (rest prop-entries) (conj acc value))
-                     (let [property (get db-property/built-in-properties value)]
+                     (let [property (get property-catalog/built-in-properties value)]
                        (cond
                          (nil? property)
                          (if allow-non-built-in?
@@ -800,7 +806,7 @@
   (cond
     (number? tag) tag
     (uuid? tag) [:block/uuid tag]
-    (and (string? tag) (common-util/uuid-string? (string/trim tag))) [:block/uuid (uuid (string/trim tag))]
+    (and (string? tag) (melange-common/uuid-string? (string/trim tag))) [:block/uuid (uuid (string/trim tag))]
     (keyword? tag) [:db/ident tag]
     :else nil))
 
@@ -810,7 +816,7 @@
                       {:block/tags [:db/ident]}
                       :logseq.property/public? :logseq.property/built-in?]]
     (p/let [entity (cond
-                     (and (string? tag) (common-util/uuid-string? (string/trim tag)))
+                     (and (string? tag) (melange-common/uuid-string? (string/trim tag)))
                      (pull-entity config repo tag-selector [:block/uuid (uuid (string/trim tag))])
 
                      (string? tag)
@@ -852,7 +858,7 @@
   (cond
     (number? value) (p/resolved value)
     (uuid? value) (resolve-entity-id config repo [:block/uuid value])
-    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (and (string? value) (melange-common/uuid-string? (string/trim value)))
     (resolve-entity-id config repo [:block/uuid (uuid (string/trim value))])
     (string? value)
     (p/let [page (ensure-page! config repo value)]
@@ -878,7 +884,7 @@
   (cond
     (number? value) (p/resolved value)
     (uuid? value) (resolve-entity-id config repo [:block/uuid value])
-    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (and (string? value) (melange-common/uuid-string? (string/trim value)))
     (resolve-entity-id config repo [:block/uuid (uuid (string/trim value))])
     (string? value)
     (resolve-page-id config repo value)
@@ -891,12 +897,14 @@
     (throw (ex-info "date property value must be a string" {:code :invalid-date :value value})))
   (p/let [journal (pull-entity config repo [:logseq.property.journal/title-format] :logseq.class/Journal)
           formatter (or (:logseq.property.journal/title-format journal) "MMM do, yyyy")
-          formatters (date-time-util/safe-journal-title-formatters formatter)
-          journal-day (date-time-util/journal-title->int value formatters)
+          formatters (melange-common/safe-journal-title-formatters formatter)
+          journal-day (melange-common/parse-journal-title-day
+                       (melange-common/capitalize-all value)
+                       formatters)
           _ (when-not journal-day
               (throw (ex-info (str "invalid date property value: " (pr-str value))
                               {:code :invalid-date :value value})))
-          title (date-time-util/int->journal-title journal-day formatter)
+          title (melange-common/format-journal-day journal-day formatter)
           page (ensure-page! config repo title)]
     (if-let [id (:db/id page)]
       id
@@ -912,7 +920,7 @@
       :entity (resolve-entity-id config repo (cond
                                                (number? value) value
                                                (uuid? value) [:block/uuid value]
-                                               (and (string? value) (common-util/uuid-string? (string/trim value)))
+                                               (and (string? value) (melange-common/uuid-string? (string/trim value)))
                                                [:block/uuid (uuid (string/trim value))]
                                                :else value))
       :node (resolve-node-id config repo value)
@@ -961,7 +969,7 @@
             ident (normalize-property-key text)]
         (if-not (seq text)
           (p/resolved nil)
-          (if (common-util/uuid-string? text)
+          (if (melange-common/uuid-string? text)
             (pull-entity config repo property-entity-selector [:block/uuid (uuid text)])
             (p/let [entity (lookup-by-title text)]
               (if (:db/id entity)
@@ -1016,7 +1024,7 @@
                                                 (resolve-property-entry-allow-non-built-in config repo k)
                                                 (cond
                                                   (keyword? k)
-                                                  (let [property (get db-property/built-in-properties k)]
+                                                  (let [property (get property-catalog/built-in-properties k)]
                                                     (when-not property
                                                       (throw (ex-info "unknown built-in property"
                                                                       {:code :unknown-property :property k})))
@@ -1028,7 +1036,7 @@
                                                   (number? k)
                                                   (p/let [entity (pull-entity config repo [:db/ident] k)
                                                           ident (:db/ident entity)
-                                                          property (get db-property/built-in-properties ident)]
+                                                          property (get property-catalog/built-in-properties ident)]
                                                     (cond
                                                       (nil? ident)
                                                       (throw (ex-info "property not found"
@@ -1048,7 +1056,7 @@
                                                   (string? k)
                                                   (let [ident (or (property-title->ident k)
                                                                   (normalize-property-key k))
-                                                        property (get db-property/built-in-properties ident)]
+                                                        property (get property-catalog/built-in-properties ident)]
                                                     (when-not property
                                                       (throw (ex-info "unknown built-in property"
                                                                       {:code :unknown-property :property k})))
@@ -1090,7 +1098,7 @@
                                           ident)
                                         (cond
                                           (keyword? k)
-                                          (let [property (get db-property/built-in-properties k)]
+                                          (let [property (get property-catalog/built-in-properties k)]
                                             (when-not property
                                               (throw (ex-info "unknown built-in property"
                                                               {:code :unknown-property :property k})))
@@ -1102,7 +1110,7 @@
                                           (number? k)
                                           (p/let [entity (pull-entity config repo [:db/ident] k)
                                                   ident (:db/ident entity)
-                                                  property (get db-property/built-in-properties ident)]
+                                                  property (get property-catalog/built-in-properties ident)]
                                             (cond
                                               (nil? ident)
                                               (throw (ex-info "property not found"
@@ -1122,7 +1130,7 @@
                                           (string? k)
                                           (let [ident (or (property-title->ident k)
                                                           (normalize-property-key k))
-                                                property (get db-property/built-in-properties ident)]
+                                                property (get property-catalog/built-in-properties ident)]
                                             (when-not property
                                               (throw (ex-info "unknown built-in property"
                                                               {:code :unknown-property :property k})))

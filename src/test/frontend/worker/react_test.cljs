@@ -2,8 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.react :as worker-react]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (deftest affected-keys-block-reactions
   (testing "reaction transactions affect block-reactions query key"

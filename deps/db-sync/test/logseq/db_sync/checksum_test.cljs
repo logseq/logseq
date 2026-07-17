@@ -3,9 +3,9 @@
             [cljs.reader :as reader]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.checksum :as checksum]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (defn- sample-db
   []

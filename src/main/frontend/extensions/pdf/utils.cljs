@@ -2,7 +2,7 @@
   (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [logseq.common.uuid :as common-uuid]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
             [promesa.core :as p]))
 
 (defonce MAX-SCALE 5.0)
@@ -118,7 +118,7 @@
 
 (defn gen-uuid
   []
-  (common-uuid/gen-uuid))
+  (melange-uuid/gen))
 
 (defn get-page-from-el
   [^js/HTMLElement el]

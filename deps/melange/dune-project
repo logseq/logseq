@@ -21,7 +21,13 @@
  (name melange-deps)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml melange melange-edn melange-transit melange-fest)
+ (depends
+  ocaml
+  melange
+  (melange-edn-melange (= 0.5.0))
+  (melange-transit-melange (= 0.1.0))
+  (melange-fest (= 0.2.0))
+  (rrbvec (= dev)))
  (tags
   ("add topics" "to describe" your project)))
 

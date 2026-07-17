@@ -1,11 +1,10 @@
 (ns logseq.outliner.op-construct-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op.construct :as op-construct]))
 
@@ -79,7 +78,9 @@
                                                      {:property-name "custom-prop"}]]]}
           {:keys [inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)
-          expected-page-uuid (common-uuid/gen-uuid :db-ident-block-uuid property-id)]
+          expected-page-uuid (uuid (melange-common/db-ident-block
+                                    (namespace property-id)
+                                    (name property-id)))]
       (is (= [[:delete-page [expected-page-uuid {}]]]
              inverse-outliner-ops)))))
 
@@ -91,7 +92,7 @@
           property-id :user.property/p-many
           _ (d/transact! conn [[:db/add property-id :logseq.property/classes :logseq.class/Root]])
           before-property (d/entity @conn property-id)
-          expected-schema (-> (db-property/get-property-schema (into {} before-property))
+          expected-schema (-> (melange-property/get-property-schema (into {} before-property))
                               (update :logseq.property/classes
                                       (fn [classes]
                                         (some->> classes
@@ -317,7 +318,7 @@
 
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
-    (let [today (date-time-util/ms->journal-day (js/Date.))
+    (let [today (melange-common/journal-day-of-ms (.getTime (js/Date.)))
           conn (db-test/create-conn-with-blocks
                 {:classes {:Movie {}}
                  :properties {:rating {:logseq.property/type :number}}
@@ -440,7 +441,9 @@
 
     (testing ":upsert-property"
       (let [property-ident :user.property/test-inverse
-            expected-page-uuid (common-uuid/gen-uuid :db-ident-block-uuid property-ident)
+            expected-page-uuid (uuid (melange-common/db-ident-block
+                                      (namespace property-ident)
+                                      (name property-ident)))
             {:keys [inverse-outliner-ops]}
             (op-construct/derive-history-outliner-ops
              @conn @conn [] {:outliner-op :upsert-property

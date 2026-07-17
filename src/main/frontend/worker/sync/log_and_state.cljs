@@ -1,7 +1,7 @@
 (ns frontend.worker.sync.log-and-state
   "Fns to generate rtc related logs"
+  (:require-macros [frontend.defkeywords :refer [defkeywords]])
   (:require [frontend.worker.shared-service :as shared-service]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as ma]))
 
 (def ^:private *rtc-log (atom nil))

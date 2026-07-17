@@ -1,9 +1,9 @@
 (ns ^:no-doc frontend.diff
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]))
+            [lambdaisland.glogi :as log]))
 
 (def inline-special-chars
   #{\* \_ \/ \` \+ \^ \~ \$})
@@ -47,7 +47,8 @@
           (+ pos 2)
 
           (contains? inline-special-chars (util/nth-safe markup pos))
-          (let [matched (->> (take-while inline-special-chars (common-util/safe-subs markup pos))
+          (let [matched (->> (take-while inline-special-chars
+                                         (melange-common/safe-substring markup pos))
                              (apply str))
                 matched? (and current-line (string/includes? current-line (string/reverse matched)))]
             (if matched?

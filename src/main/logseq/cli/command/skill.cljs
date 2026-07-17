@@ -5,7 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
-            [logseq.common.path :as path]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (def ^:private skill-dir-name "logseq-cli")
 (def ^:private skill-file-name "SKILL.md")
@@ -39,10 +39,10 @@
       {:ok? false
        :error {:code :skill-home-dir-unavailable
                :message "home directory is unavailable; cannot resolve --global install target"}}
-      (let [dir (path/path-join base-dir ".agents" "skills" skill-dir-name)]
+      (let [dir (melange-common/path-join base-dir (to-array [".agents" "skills" skill-dir-name]))]
         {:ok? true
          :dir dir
-         :file (path/path-join dir skill-file-name)}))))
+         :file (melange-common/path-join dir (to-array [skill-file-name]))}))))
 
 (defn resolve-skill-source-path
   [candidates]

@@ -1,10 +1,10 @@
 (ns logseq.db-worker.graph-backup-test
-  (:require ["fs" :as fs]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["fs" :as fs]
             ["path" :as node-path]
             [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
-            [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]))
 
@@ -28,8 +28,8 @@
   (let [graphs-dir "/tmp/logseq-graphs"
         repo "logseq_db_foo/bar"
         backup-name "daily:name/with space"
-        encoded-graph (graph-dir/repo->encoded-graph-dir-name repo)
-        encoded-backup (graph-dir/graph-dir-key->encoded-dir-name backup-name)
+        encoded-graph (melange-common/repo-to-encoded-graph-dir-name repo)
+        encoded-backup (melange-common/graph-dir-key-to-encoded-dir-name backup-name)
         backup-root (node-path/join graphs-dir encoded-graph "backup")
         backup-dir (node-path/join backup-root encoded-backup)]
     (is (= backup-root

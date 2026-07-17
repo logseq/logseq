@@ -21,7 +21,7 @@
       (let [new-node (api/list-node
                       (map (fn [[kw v]]
                              (api/list-node
-                              [(api/token-node 'logseq.common.defkeywords/defkeyword) kw v]))
+                              [(api/token-node 'frontend.defkeywords/defkeyword) kw v]))
                            kw->v))]
         {:node (with-meta new-node
                  (meta node))}))))

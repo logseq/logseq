@@ -5,19 +5,19 @@
             [electron.ipc :as ipc]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defn- local-file-based-graph?
   [s]
   (and (string? s)
-       (string/starts-with? s (str common-config/db-version-prefix common-config/file-version-prefix))))
+       (string/starts-with? s (str melange-common/db-version-prefix melange-common/file-version-prefix))))
 
 (defn- upload-temp-graph?
   [graph-name]
   (let [graph-name (some-> graph-name str string/lower-case)]
     (or (= "upload-temp" graph-name)
-        (= (str (string/lower-case common-config/db-version-prefix) "upload-temp") graph-name))))
+        (= (str (string/lower-case melange-common/db-version-prefix) "upload-temp") graph-name))))
 
 (defn get-all-graphs
   []
@@ -29,7 +29,7 @@
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
-                                (common-config/canonicalize-db-version-repo name)))))
+                                (melange-common/canonicalize-db-version-repo name)))))
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
     (distinct
      (concat
@@ -37,7 +37,7 @@
       (->> (some-> electron-disk-graphs bean/->clj)
            (remove upload-temp-graph?)
            (map (fn [repo-name]
-                  {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
+                  {:name (melange-common/canonicalize-db-version-repo repo-name)})))))))
 
 (defn delete-graph!
   [graph]

@@ -11,11 +11,13 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.rules :as rules]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -78,8 +80,8 @@ independent of format as format specific heading characters are stripped"
               (fn content-matches? [block-content external-content block-id]
                 (let [block (db-utils/entity repo block-id)
                       ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
-                  (= (-> (db-content/id-ref->title-ref block-content ref-tags)
-                         (db-content/content-id-ref->page ref-tags)
+                  (= (-> (melange-content/id-ref->title-ref block-content ref-tags)
+                         (melange-content/content-id-ref->page ref-tags)
                          heading-content->route-name)
                      (string/lower-case external-content))))
               (rules/extract-rules rules/db-query-dsl-rules [:has-property]))
@@ -351,10 +353,10 @@ independent of format as format specific heading characters are stripped"
                      (remove ldb/recycled?)
                      (remove (fn [d]
                                (and except-private-tags?
-                                    (contains? ldb/private-tags (:db/ident d)))))
+                                    (contains? class-catalog/private-tags (:db/ident d)))))
                      (remove (fn [d]
                                (and except-extends-hidden-tags?
-                                    (contains? ldb/extends-hidden-tags (:db/ident d))))))]
+                                    (contains? class-catalog/extends-hidden-tags (:db/ident d))))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
@@ -388,7 +390,7 @@ independent of format as format specific heading characters are stripped"
   (let [db (conn/get-db graph)
         result (sort-by (juxt (fn [p]
                                 (some-> (:db/ident p)
-                                        (db-property/plugin-property?)))
+                                        (melange-property/plugin-property?)))
                               ldb/built-in?
                               :block/title)
                         (remove ldb/recycled? (ldb/get-all-properties db)))]
@@ -404,7 +406,7 @@ independent of format as format specific heading characters are stripped"
       (remove (fn [p]
                 (let [ident (:db/ident p)]
                   (and (ldb/built-in? p)
-                       (not (:queryable? (db-property/built-in-properties ident)))))))
+                       (not (:queryable? (property-catalog/built-in-properties ident)))))))
       remove-ui-non-suitable-properties?
       (remove (fn [p]
                 (ui-non-suitable-property? block p {:class-schema? class-schema?}))))))

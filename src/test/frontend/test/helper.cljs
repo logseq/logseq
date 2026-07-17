@@ -12,13 +12,13 @@
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.sqlite.build :as sqlite-build]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn react-components
   [f]

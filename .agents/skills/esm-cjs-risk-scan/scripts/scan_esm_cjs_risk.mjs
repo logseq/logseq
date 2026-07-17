@@ -47,7 +47,8 @@ function scopeConfig(scope) {
       //  - src/test                           ← :test/:test-no-worker :node-test (test runner)
       //  - deps/cli/src                       ← CLI tool (nbb Node script)
       //  - deps/db-sync/src+test              ← DB sync server / Node adapter
-      //  - deps/db/script+test                ← DB utility scripts (Node)
+      //  - scripts/src/logseq/tasks/db        ← DB utility scripts (Node)
+      //  - deps/melange/bridge/test           ← DB boundary tests (Node)
       //  - deps/graph-parser/src+test+script  ← Parser CLI + tests
       //  - deps/publishing/script+test        ← Publishing scripts
       //
@@ -62,8 +63,8 @@ function scopeConfig(scope) {
           'deps/cli/src',
           'deps/db-sync/src',
           'deps/db-sync/test',
-          'deps/db/script',
-          'deps/db/test',
+          'scripts/src/logseq/tasks/db',
+          'deps/melange/bridge/test',
           'deps/graph-parser/src',
           'deps/graph-parser/test',
           'deps/graph-parser/script',

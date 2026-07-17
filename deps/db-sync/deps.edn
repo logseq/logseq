@@ -1,4 +1,4 @@
-{:paths ["src" "test" "../../resources"]
+{:paths ["src" "test" "../melange/bridge/test-support" "../../resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript"
@@ -7,13 +7,13 @@
                                          :exclusions [datascript/datascript]}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   cljs-bean/cljs-bean                   {:mvn/version "1.9.0"}
+  funcool/promesa                       {:mvn/version "11.0.678"}
   thheller/shadow-cljs                  {:mvn/version "3.4.4"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   metosin/reitit                        {:mvn/version "0.10.1"
                                          :exclusions [metosin/malli]}
-  logseq/common                         {:local/root "../common"}
-  logseq/db                             {:local/root "../db"}}
+  logseq/melange-bridge                 {:local/root "../melange/bridge"}}
  :aliases
  {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "1.5.0"}
                       cider/cider-nrepl                {:mvn/version "0.59.0"}

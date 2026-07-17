@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn- node-labels
   [result]

@@ -15,9 +15,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [logseq.db :as ldb]
-            [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.sqlite :as common-sqlite]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defn- publishing-export-options
@@ -51,7 +51,7 @@
 (defn- file-name [repo extension]
   (-> repo
       (string/replace #"^/+" "")
-      (str "_" (quot (util/time-ms) 1000))
+      (str "_" (quot (melange-common/now-ms) 1000))
       (str "." (string/lower-case (name extension)))))
 
 (defn- normalize-zip-entry
@@ -73,8 +73,8 @@
 (defn- <export-zipfile-to-desktop!
   [repo ^js zipfile]
   (let [repo-name (common-sqlite/sanitize-db-name repo)
-        export-dir (path/path-join (config/get-repo-dir repo) "export")
-        export-path (path/path-join export-dir (file-name repo-name "zip"))]
+        export-dir (melange-common/path-join (config/get-repo-dir repo) (to-array ["export"]))
+        export-path (melange-common/path-join export-dir (to-array [(file-name repo-name "zip")]))]
     (p/let [content (.arrayBuffer zipfile)
             _ (fs/mkdir-if-not-exists export-dir)
             _ (js/window.apis.writeFileBytes export-path content)]
@@ -250,7 +250,7 @@
                  :graph-not-changed)
                (p/do!
                 (when (> (.-size file) 0)
-                  (.move backup-handle backups-handle (str (util/time-ms) ".db.sqlite")))
+                  (.move backup-handle backups-handle (str (melange-common/now-ms) ".db.sqlite")))
                 (truncate-old-versioned-files! backups-handle)
                 (p/let [new-backup-handle ^js (.getFileHandle graph-dir-handle "db.sqlite" #js {:create true})]
                   (utils/writeFile new-backup-handle data))

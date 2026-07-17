@@ -11,8 +11,7 @@ on:
       - '!deps/publish/**.md'
       # Deps that logseq/publish depends on should trigger this workflow
       - 'deps/graph-parser/**'
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
   pull_request:
     branches: [master]
     paths:
@@ -21,8 +20,7 @@ on:
       - '!deps/publish/**.md'
       # Deps that logseq/publish depends on should trigger this workflow
       - 'deps/graph-parser/**'
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
 
 defaults:
   run:

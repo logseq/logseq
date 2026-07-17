@@ -6,9 +6,9 @@
    [datascript.storage :refer [IStorage]]
    [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db-sync.common :as common]
-   [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.common.sqlite :as common-sqlite]
-   [logseq.db.frontend.schema :as db-schema]))
+   [logseq.melange.bridge.db.normalize :as melange-normalize]
+   [logseq.melange.bridge.db.sqlite :as common-sqlite]
+   [logseq.melange.bridge.db.schema :as db-schema]))
 
 (def ^:private tx-log-outliner-op-migration-sql
   "alter table tx_log add column outliner_op TEXT")
@@ -186,7 +186,7 @@
                 (empty? tx-data))
     (let [created-at (common/now-ms)
           normalized-data (->> tx-data
-                               (db-normalize/normalize-tx-data db-after db-before)
+                               (melange-normalize/normalize-tx-data db-after db-before)
                                vec)
           tx-str (common/write-transit normalized-data)]
       (with-sql-transaction!

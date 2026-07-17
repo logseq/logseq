@@ -1,6 +1,7 @@
 (ns logseq.api.db-based
   "DB version related fns"
   (:require ["@emoji-mart/data" :as emoji-data]
+            [logseq.melange.bridge.common.api :as melange-common]
             [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
@@ -17,12 +18,10 @@
             [frontend.handler.page :as page-handler]
             [frontend.modules.layout.core]
             [frontend.state :as state]
-            [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.graph-parser.text :as text]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity :as entity-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
@@ -201,7 +200,7 @@
 (defn get-tag-objects
   [class-uuid-or-ident-or-title]
   (when-let [db (db/get-db)]
-    (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
+    (let [eid (if (melange-common/uuid-string? class-uuid-or-ident-or-title)
                (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
                  [:block/uuid id])
                (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
@@ -224,7 +223,7 @@
              (throw (ex-info "Tag title should be a string" {:title title})))
            (when (string/blank? title)
              (throw (ex-info "Tag title shouldn't be empty" {:title title})))
-           (when (text/namespace-page? title)
+           (when (melange-common/namespace-page? title)
              (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
            (p/let [opts (bean/->clj opts)
                    class-ident-namespace (api-block/resolve-class-prefix-for-db this)
@@ -284,9 +283,9 @@
                                          (str uuid-or-ident-or-title)
                                          uuid-or-ident-or-title)
                                        (string/replace #"^:+" ""))]
-                (if (text/namespace-page? title-or-ident)
+                (if (melange-common/namespace-page? title-or-ident)
                   (keyword title-or-ident)
-                  (if (util/uuid-string? title-or-ident)
+                  (if (melange-common/uuid-string? title-or-ident)
                     (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
                       [:block/uuid id])
                     (keyword (prefix-resolver plugin) title-or-ident)))))]

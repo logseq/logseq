@@ -17,7 +17,7 @@ when a plugin is installed, updated or removed"
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [malli.core :as m]
             [malli.error :as me]
             [promesa.core :as p]))
@@ -25,7 +25,7 @@ when a plugin is installed, updated or removed"
 (defn plugin-config-path
   "Full path to plugins.edn"
   []
-  (path/path-join (global-config-handler/global-config-dir) "plugins.edn"))
+  (melange-common/path-join (global-config-handler/global-config-dir) (to-array ["plugins.edn"])))
 
 (def common-plugin-keys
   "Vec of plugin keys to store in plugins.edn and to compare with installed-plugins state"

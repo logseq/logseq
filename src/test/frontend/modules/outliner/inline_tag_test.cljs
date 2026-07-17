@@ -2,10 +2,10 @@
   (:require [cljs.test :refer [use-fixtures deftest is testing] :as test]
             [datascript.core :as d]
             [frontend.test.helper :as test-helper]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
@@ -30,7 +30,7 @@
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
           block (db-test/find-block-by-content @conn "test")]
-      (doseq [class-ident db-class/page-classes]
+      (doseq [class-ident class-catalog/page-classes]
         (let [class (d/entity @conn class-ident)]
           (outliner-core/save-block! conn
                                      {:block/uuid (:block/uuid block)
@@ -46,7 +46,7 @@
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
           block (db-test/find-block-by-content @conn "test")]
-      (doseq [class-ident db-class/page-classes]
+      (doseq [class-ident class-catalog/page-classes]
         (let [class (d/entity @conn class-ident)
               new-block-id (random-uuid)
               _ (outliner-core/insert-blocks! conn

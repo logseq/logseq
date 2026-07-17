@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.rtc-background-tasks
   "Background tasks related to RTC"
-  (:require [cljs-time.core :as t]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-time.core :as t]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -8,8 +9,7 @@
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [missionary.core :as m]))
 
 (defn- run-background-task-when-not-publishing
@@ -27,7 +27,7 @@
     (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
       (when (and graph-uuid t
                  (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
-                 (> 5000 (- (common-util/time-ms) t)))
+                 (> 5000 (- (melange-common/now-ms) t)))
         (log/info :trying-to-restart-rtc graph-uuid :t (t/now))
         (c.m/<? (rtc-handler/<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
 

@@ -5,10 +5,10 @@
             [datascript.impl.entity :as de]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.validation :as db-validate]))
 
 (defn- get-property-by-title
   [db title]

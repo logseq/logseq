@@ -1,6 +1,7 @@
 (ns frontend.handler.comments
   "Handles creation, editing, deletion, and focus behavior for block comment threads."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -13,7 +14,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn- block-ref->entity
@@ -25,7 +26,7 @@
     (uuid? block-ref)
     (db/entity [:block/uuid block-ref])
 
-    (and (string? block-ref) (util/uuid-string? block-ref))
+    (and (string? block-ref) (melange-common/uuid-string? block-ref))
     (db/entity [:block/uuid (uuid block-ref)])
 
     (number? block-ref)
@@ -46,7 +47,7 @@
   (cond
     (map? block-ref) (:block/uuid block-ref)
     (uuid? block-ref) block-ref
-    (and (string? block-ref) (util/uuid-string? block-ref)) (uuid block-ref)
+    (and (string? block-ref) (melange-common/uuid-string? block-ref)) (uuid block-ref)
     :else nil))
 
 (defn- block-lookup-ref
@@ -102,7 +103,7 @@
                                     (uuid? block-uuid)
                                     block-uuid
 
-                                    (and (string? block-uuid) (util/uuid-string? block-uuid))
+                                    (and (string? block-uuid) (melange-common/uuid-string? block-uuid))
                                     (uuid block-uuid)
 
                                     :else

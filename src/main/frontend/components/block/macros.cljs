@@ -8,19 +8,19 @@
             [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.property :as melange-property]))
 
 (defn- properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by
   property idents and titles"
   [db block]
-  (->> (db-property/properties block)
+  (->> (melange-property/properties block)
        (mapcat (fn [[k v]]
                  ;; For now just support cardinality :one
                  (when-not (set? v)
                    (let [prop-val (some->> (:db/id v)
                                            (d/entity db)
-                                           db-property/property-value-content)
+                                           melange-property/property-value-content)
                          property (d/entity db k)]
                      [[(keyword (:block/title property)) prop-val]
                       [(:db/ident property) prop-val]]))))

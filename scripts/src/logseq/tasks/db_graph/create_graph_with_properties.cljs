@@ -4,6 +4,7 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require ["fs" :as fs]
             ["fs-extra$default" :as fse]
+            [logseq.melange.bridge.common.api :as melange-common]
             ["path" :as node-path]
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
@@ -11,17 +12,16 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
-  (date-time-util/int->journal-title (date-time-util/date->int date) "MMM do, yyyy"))
+  (melange-common/format-journal-day
+   (melange-common/journal-day-of-ms (.getTime date))
+   "MMM do, yyyy"))
 
 (defn- subtract-days
   [date days]
@@ -52,7 +52,7 @@
   []
   (let [today (new js/Date)
         yesterday (subtract-days today 1)
-        [today-int yesterday-int] (map date-time-util/date->int [today yesterday])
+        [today-int yesterday-int] (map (fn [date] (melange-common/journal-day-of-ms (.getTime date))) [today yesterday])
         two-days-ago (subtract-days today 2)
         closed-values-config (build-closed-values-config)
         ;; Stores random closed values for use with queries
@@ -63,7 +63,7 @@
         object-uuid (random-uuid)
         get-closed-value #(:value (get @closed-values %))
         get-closed-value-ref #(vector :block/uuid (:uuid (get @closed-values %)))
-        timestamp (common-util/time-ms)]
+        timestamp (melange-common/now-ms)]
     {:pages-and-blocks
      (vec
       (concat
@@ -87,7 +87,7 @@
           {:block/title "[[Property Queries]]"}
           {:block/title "[[Has Property Queries]]"}]}
         {:page {:build/journal yesterday-int}}
-        {:page {:build/journal (date-time-util/date->int two-days-ago)}}
+        {:page {:build/journal (melange-common/journal-day-of-ms (.getTime two-days-ago))}}
 
         ;; Block property blocks and queries
         {:page {:block/title "Block Properties"
@@ -128,8 +128,14 @@
           (query "(property node \"block object\")")
           (query "(property node-without-classes [[Page 1]])")
           (query "(property node-many [[Page object]])")
-          (query (str "(property date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")"))
-          (query (str "(property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))
+          (query (str "(property date "
+                      (melange-common/to-page-ref
+                       (string/capitalize (date-journal-title today)))
+                      ")"))
+          (query (str "(property date-many "
+                      (melange-common/to-page-ref
+                       (string/capitalize (date-journal-title yesterday)))
+                      ")"))
           (query (str "(property datetime "  timestamp ")"))]}
 
         ;; Page property pages and queries

@@ -9,9 +9,8 @@
             [electron.configs :as cfgs]
             [electron.interop :as interop]
             [electron.logger :as logger]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.platform.node :as platform-node]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -315,16 +314,16 @@
   "required by all internal state in the electron section"
   [graph-name]
   (when (and (string? graph-name)
-             (string/starts-with? graph-name common-config/db-version-prefix))
-    (let [repo (common-config/canonicalize-db-version-repo graph-name)]
-      (node-path/join (common-graph/get-db-graphs-dir)
-                      (graph-dir/repo->encoded-graph-dir-name repo)))))
+             (string/starts-with? graph-name melange-common/db-version-prefix))
+    (let [repo (melange-common/canonicalize-db-version-repo graph-name)]
+      (node-path/join (platform-node/get-db-graphs-dir)
+                      (melange-common/repo-to-encoded-graph-dir-name repo)))))
 
 (comment
   (defn get-graph-name
     "Reverse `get-graph-dir`"
     [graph-dir]
-    (str common-config/db-version-prefix (node-path/basename graph-dir))))
+    (str melange-common/db-version-prefix (node-path/basename graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]

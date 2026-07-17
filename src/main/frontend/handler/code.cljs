@@ -9,7 +9,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.graph-parser.utf8 :as utf8]))
 
 (defn- save-file! [path content]
@@ -17,7 +17,7 @@
     ;; This fn assumes path is is already in db
     (db-editor-handler/save-file! path content)
     (when (util/electron?)
-      (if (path/absolute? path)
+      (if (melange-common/absolute? path)
         (do
           ;; Set global state first in case it's invalid edn
           (when (= path (global-config-handler/global-config-path))

@@ -4,7 +4,7 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.server :as cli-server]
-            [logseq.common.version :as cli-version]
+            [logseq.melange.bridge.common.version :as cli-version]
             [promesa.core :as p]
             [logseq.cli.command.doctor :as doctor-command]))
 

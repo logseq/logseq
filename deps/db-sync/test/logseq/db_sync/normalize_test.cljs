@@ -1,19 +1,23 @@
 (ns logseq.db-sync.normalize-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.normalize :as melange-normalize]
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (defn- new-conn []
   (db-test/create-conn))
 
 (defn- create-page!
   [conn title]
-  (let [page-uuid (random-uuid)]
+  (let [page-uuid (random-uuid)
+        now (js/Date.now)]
     (d/transact! conn [{:block/uuid page-uuid
                         :block/name title
-                        :block/title title}])
+                        :block/title title
+                        :block/tags [:logseq.class/Page]
+                        :block/created-at now
+                        :block/updated-at now}])
     page-uuid))
 
 (defn- op-e-a-v
@@ -95,7 +99,7 @@
   (let [conn (new-conn)
         page-uuid (create-page! conn "Page")
         tx-report (d/transact! conn [[:db/retract [:block/uuid page-uuid] :block/title "Page"]])
-        normalized (db-normalize/normalize-tx-data (:db-after tx-report)
+        normalized (melange-normalize/normalize-tx-data (:db-after tx-report)
                                                    (:db-before tx-report)
                                                    (:tx-data tx-report))
         tx-data (mapv op-e-a-v normalized)]
@@ -108,7 +112,7 @@
         page-uuid (create-page! conn "Page")
         tx-report (d/transact! conn [{:block/uuid page-uuid
                                       :block/title "Page 2"}])
-        normalized (db-normalize/normalize-tx-data (:db-after tx-report)
+        normalized (melange-normalize/normalize-tx-data (:db-after tx-report)
                                                    (:db-before tx-report)
                                                    (:tx-data tx-report))
         tx-data (mapv op-e-a-v normalized)]
@@ -150,7 +154,7 @@
                                [:db/add -1 :block/order "a0"]
                                [:db/add [:block/uuid sibling-uuid] :block/title "sibling-2"]]
                               {})
-          normalized-a (db-normalize/normalize-tx-data (:db-after tx-report-a)
+          normalized-a (melange-normalize/normalize-tx-data (:db-after tx-report-a)
                                                        (:db-before tx-report-a)
                                                        (:tx-data tx-report-a))
 
@@ -165,7 +169,7 @@
                                [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid target-uuid]]
                                [:db/add [:block/uuid sibling-uuid] :block/title "sibling-3"]]
                               {})
-          normalized-b (db-normalize/normalize-tx-data (:db-after tx-report-b)
+          normalized-b (melange-normalize/normalize-tx-data (:db-after tx-report-b)
                                                        (:db-before tx-report-b)
                                                        (:tx-data tx-report-b))]
       (is (some? (d/entity (:db-after tx-report-a) [:block/uuid target-uuid])))
@@ -247,7 +251,7 @@
             tx-report (ldb/transact! conn
                                      [[:db/retractEntity [:block/uuid block-uuid]]]
                                      {:outliner-op :delete-blocks})
-            normalized (db-normalize/normalize-tx-data (:db-after tx-report)
+            normalized (melange-normalize/normalize-tx-data (:db-after tx-report)
                                                        (:db-before tx-report)
                                                        (:tx-data tx-report))]
         (is (some #(= [:db/retractEntity [:block/uuid history-uuid]] %) normalized))
@@ -368,7 +372,7 @@
                           move-candidate
                           (conj [:db/add [:block/uuid move-candidate] :block/parent [:block/uuid target]])))
               tx-report (d/with db-before tx-data {})
-              normalized (db-normalize/normalize-tx-data (:db-after tx-report)
+              normalized (melange-normalize/normalize-tx-data (:db-after tx-report)
                                                          (:db-before tx-report)
                                                          (:tx-data tx-report))
               replay-report (d/with db-before normalized {})

@@ -26,12 +26,11 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.util.ref :as ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [frontend.util.text :as text-util]
             [goog.functions :as gfun]
             [goog.object :as gobj]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -149,7 +148,7 @@
                          (some (fn [block]
                                  (and
                                   (:page? block)
-                                  (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+                                  (= (melange-common/page-name-sanity-lower input) (melange-common/page-name-sanity-lower (:block.temp/original-title block))))) blocks-result)))
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
         order* (cond
@@ -476,7 +475,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (common-util/split-last "/" input))))
+      (last (melange-common/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -543,7 +542,7 @@
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
-    (editor-handler/copy-block-ref! block-uuid ref/->block-ref)
+    (editor-handler/copy-block-ref! block-uuid melange-common/to-page-ref)
     (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmulti handle-action (fn [action _state _event] action))
@@ -679,7 +678,7 @@
   [input]
   (cond
     (string/includes? input "/")
-    (first (common-util/split-last "/" input))
+    (first (melange-common/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else

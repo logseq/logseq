@@ -1,6 +1,6 @@
 (ns logseq.db-sync.order
   (:require [datascript.core :as d]
-            [logseq.db.common.order :as db-order]))
+            [logseq.melange.bridge.db.order :as db-order]))
 
 (defn fix-duplicate-orders! [conn tx-data tx-meta]
   (let [db @conn

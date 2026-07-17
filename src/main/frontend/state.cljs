@@ -19,9 +19,9 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -439,11 +439,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn publishing-enable-editing?
   []
-  (and common-config/PUBLISHING (:publishing/enable-editing? (get-config))))
+  (and util/PUBLISHING (:publishing/enable-editing? (get-config))))
 
 (defn enable-editing?
   []
-  (or (not common-config/PUBLISHING) (:publishing/enable-editing? (get-config))))
+  (or (not util/PUBLISHING) (:publishing/enable-editing? (get-config))))
 
 (defonce built-in-macros
   {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -1772,7 +1772,7 @@ should be done through this fn in order to get global config and config defaults
       (or
        (nil? last-input-time)
 
-       (let [now (util/time-ms)]
+       (let [now (melange-common/now-ms)]
          (>= (- now last-input-time) diff))
 
        ;; not in editing mode
@@ -1814,7 +1814,7 @@ should be done through this fn in order to get global config and config defaults
       (if (and page
                ;; TODO: Use config/dev? when it's not a circular dep
                (not goog.DEBUG)
-               (not= common-config/recycle-page-name (:block/title page))
+               (not= melange-common/recycle-page-name (:block/title page))
                (or (and (ldb/hidden? page) (not (ldb/property? page)))
                    (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
         (pub-event! [:notification/show {:content "Cannot open an internal page." :status :warning}])
@@ -1917,7 +1917,7 @@ should be done through this fn in order to get global config and config defaults
     (when (and edit-input-id block
                (or
                 (publishing-enable-editing?)
-                (not common-config/PUBLISHING)))
+                (not util/PUBLISHING)))
       (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
             container (util/get-block-container block-element)
             block (if container

@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.transit :as dt]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def text-decoder (js/TextDecoder.))

@@ -14,10 +14,8 @@
             [frontend.util :as util]
             [goog.string :as gstring]
             [io.factorhouse.hsx.core :as hsx]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.common.uuid :as common-uuid]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
@@ -71,22 +69,22 @@
   [path format]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
-                   (path/trim-dir-prefix repo-dir path))
+                   (melange-common/trim-dir-prefix repo-dir path))
         file-path path
-        random-id (hooks/use-memo #(str (common-uuid/gen-uuid)) [path])
+        random-id (hooks/use-memo #(str (melange-uuid/gen)) [path])
         [content set-content!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)
              repo-dir (config/get-repo-dir repo)
              [dir path] (cond
-                          (path/absolute? path)
+                          (melange-common/absolute? path)
                           [nil path]
 
                           ;; assume local file, relative path
                           :else
                           [repo-dir path])]
-         (when (and format (contains? (common-config/text-formats) format))
+         (when (and format (melange-common/text-format? (name format)))
            (p/let [content (if-not (string/starts-with? path "/")
                              (db/get-file path)
                              (fs/read-file dir path))]
@@ -100,14 +98,14 @@
 
      (cond
        ;; image type
-       (and format (contains? (common-config/img-formats) format))
-       [:img {:src (path/path-join "file://" path)}]
+       (and format (melange-common/image-format? (name format)))
+       [:img {:src (melange-common/path-join "file://" (to-array [path]))}]
 
        (and format
-            (contains? (common-config/text-formats) format)
+            (melange-common/text-format? (name format))
             content)
        (let [content' (string/trim content)
-             mode (util/get-file-ext path)]
+             mode (melange-common/file-extension path)]
          (lazy-editor/editor {:file?     true
                               :file-path file-path}
                              (str "file-edit-" random-id)
@@ -117,7 +115,7 @@
 
        ;; wait for content load
        (and format
-            (contains? (common-config/text-formats) format))
+            (melange-common/text-format? (name format)))
        (ui/loading)
 
        :else
@@ -126,6 +124,7 @@
 (hsx/defc file
   [route-match]
   (let [path (get-path route-match)
-        format (common-util/get-format path)]
+        format (some-> (melange-common/file-format-name path)
+                       keyword)]
     ^{:key path}
     [file-inner path format]))

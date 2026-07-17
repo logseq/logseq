@@ -1,6 +1,7 @@
 (ns mobile.deeplink
   "Share/open link"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -12,7 +13,8 @@
             [frontend.util.text :as text-util]
             [frontend.util.url :as url-util]
             [goog :refer [Uri]]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.log :as common-log]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
 (def *link-to-another-graph (atom false))
@@ -41,7 +43,7 @@
     (p/let [registry (graph-handler/<get-graph-registry)
             repos (->> (state/get-repos)
                        (remove #(= (:url %) config/demo-repo)))
-            target-repo (:repo (graph-handler/resolve-registry-target
+            target-repo (:repo (graph-registry/resolve-target
                                 (concat registry
                                         (graph-handler/registry-from-repo-summaries repos))
                                 url-target))]
@@ -126,7 +128,9 @@
                                        [(keyword key) (.get search-params key)])
                                      ["title" "url" "type" "payload"]))]
             (if (:payload result)
-              (let [raw (common-util/safe-decode-uri-component (:payload result))
+              (let [raw (melange-common/safe-decode-uri-component
+                         (:payload result)
+                         #(common-log/error :decode-uri-component-failed %))
                     payload (-> raw
                                 js/JSON.parse
                                 (js->clj :keywordize-keys true))]

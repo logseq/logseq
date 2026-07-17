@@ -3,7 +3,7 @@
   (:require [frontend.db :as db]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.property :as db-property]
             [logseq.outliner.op]))
 
 (defn upsert-property!

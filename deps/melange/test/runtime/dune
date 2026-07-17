@@ -1,0 +1,15 @@
+(melange.emit
+ (target node)
+ (modules runtime_test)
+ (module_systems commonjs)
+ (libraries melange_runtime melange-fest melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias ./melange)
+  (:runtime_test ./node/test/runtime/runtime_test.js))
+ (action
+  (run node --test %{runtime_test})))

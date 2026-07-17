@@ -7,7 +7,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))

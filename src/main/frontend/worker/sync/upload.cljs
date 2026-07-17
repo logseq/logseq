@@ -12,10 +12,10 @@
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.util :refer [coerce-http-request fail-fast fetch-json] :as sync-util]
-   [logseq.common.config :as common-config]
-   [logseq.db :as ldb]
+   [logseq.melange.bridge.common.api :as melange-common]
+   [logseq.melange.bridge.db.core :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
-   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
    [promesa.core :as p]))
 
 (def upload-kvs-batch-size 500)
@@ -253,7 +253,8 @@
 (defn- <create-remote-graph-aux!
   [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
   (let [base (http-base-url)
-        graph-name (some-> repo common-config/strip-leading-db-version-prefix)
+        graph-name (when (some? repo)
+                     (melange-common/strip-leading-db-version-prefix repo))
         schema-version (some-> (worker-state/get-datascript-conn repo)
                                deref
                                ldb/get-graph-schema-version
@@ -323,7 +324,8 @@
 
 (defn create-remote-graph!
   [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
-  (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+  (let [target-graph-name (when (some? repo)
+                            (melange-common/strip-leading-db-version-prefix repo))]
     (cond
       (not (seq target-graph-name))
       (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})

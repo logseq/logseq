@@ -10,8 +10,7 @@ on:
       - '.github/workflows/deps-publishing.yml'
       - '!deps/publishing/**.md'
       # Deps that logseq/publishing depends on should trigger this workflow
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
   pull_request:
     branches: [master]
     paths:
@@ -19,8 +18,7 @@ on:
       - '.github/workflows/deps-publishing.yml'
       - '!deps/publishing/**.md'
       # Deps that logseq/publishing depends on should trigger this workflow
-      - 'deps/db/**'
-      - 'deps/common/**'
+      - 'deps/melange/**'
 
 defaults:
   run:

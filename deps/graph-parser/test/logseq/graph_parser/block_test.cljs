@@ -1,7 +1,7 @@
 (ns logseq.graph-parser.block-test
-  (:require [cljs.test :refer [deftest are testing is]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest are testing is]]
             [datascript.core :as d]
-            [logseq.common.uuid :as common-uuid]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
@@ -111,7 +111,7 @@
   (testing "slash-formatted journals do not keep namespace metadata"
     (let [journal (gp-block/page-name->map "2026/05/18" nil false "yyyy/MM/dd")]
       (is (= 20260518 (:block/journal-day journal)))
-      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260518)
+      (is (= (uuid (melange-common/journal-page 20260518))
              (:block/uuid journal)))
       (is (nil? (:block/namespace journal)))))
   (testing "non-journal slash pages keep namespace metadata"

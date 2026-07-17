@@ -12,7 +12,7 @@
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [promesa.core :as p]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))

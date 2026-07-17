@@ -14,7 +14,8 @@
             [logseq.cli.format :as cli-format]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
             [promesa.core :as p]))
 
 (defn- temp-root
@@ -75,16 +76,16 @@
 
 (deftest test-agent-bridge-built-in-properties
   (testing "Assignee is public and queryable"
-    (let [property (get db-property/built-in-properties :logseq.property/assignee)]
+    (let [property (get property-catalog/built-in-properties :logseq.property/assignee)]
       (is (= "Assignee" (:title property)))
       (is (= :node (get-in property [:schema :type])))
       (is (= :many (get-in property [:schema :cardinality])))
       (is (= true (get-in property [:schema :public?])))
       (is (= true (:queryable? property)))
-      (is (contains? db-property/public-built-in-properties :logseq.property/assignee))))
+      (is (contains? property-catalog/public-built-in-properties :logseq.property/assignee))))
 
   (testing "agent session id is an internal built-in property"
-    (let [property (get db-property/built-in-properties :logseq.property.agent/session-id)]
+    (let [property (get property-catalog/built-in-properties :logseq.property.agent/session-id)]
       (is (= "Agent Session ID" (:title property)))
       (is (= :string (get-in property [:schema :type])))
       (is (not (contains? (:schema property) :db/cardinality)))
@@ -92,10 +93,10 @@
       (is (= true (get-in property [:schema :hide?])))
       (is (= "Stores the AgentBridge session ID for a routed task."
              (get-in property [:properties :logseq.property/description])))
-      (is (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))
-      (is (db-property/logseq-property? :logseq.property.agent/session-id))
-      (is (db-property/internal-property? :logseq.property.agent/session-id))
-      (let [i18n-key (db-property/built-in-ident->i18n-key :logseq.property.agent/session-id)]
+      (is (contains? property-catalog/public-built-in-properties :logseq.property.agent/session-id))
+      (is (melange-property/logseq-property? :logseq.property.agent/session-id))
+      (is (melange-property/internal-property? :logseq.property.agent/session-id))
+      (let [i18n-key (melange-property/built-in-ident->i18n-key :logseq.property.agent/session-id)]
         (is (= :property.built-in/agent-session-id i18n-key))
         (is (contains? (read-dict "en.edn") i18n-key))
         (is (contains? (read-dict "zh-cn.edn") i18n-key))))))

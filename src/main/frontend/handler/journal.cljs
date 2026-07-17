@@ -1,9 +1,9 @@
 (ns ^:no-doc frontend.handler.journal
-  (:require [frontend.date :as date]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.util :as util]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [promesa.core :as p]
@@ -29,7 +29,7 @@
   (let [current-page (state/get-current-page)]
     (or (when current-page
           (date/journal-title->long (:block/title (db-model/get-block-by-uuid current-page))))
-        (util/time-ms))))
+        (melange-common/now-ms))))
 
 (defn go-to-prev-journal!
   []

@@ -16,7 +16,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]))
 

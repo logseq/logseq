@@ -1,24 +1,20 @@
 (ns logseq.outliner.page
   "Page-related fns for DB graphs"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]
+
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.content :as db-content]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.text :as text]
             [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]))
@@ -114,7 +110,7 @@
   (when page-uuid
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
       (let [today-page? (when-let [day (:block/journal-day page)]
-                          (= (date-time-util/ms->journal-day (js/Date.)) day))
+                          (= (melange-common/journal-day-of-ms (.getTime (js/Date.))) day))
             tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
                              {:outliner-op :delete-page
                               :deleted-page (:block/title page)
@@ -177,13 +173,13 @@
                               tags'))
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
-          (db-property-build/build-property-values-tx-m
+          (melange-property-build/build-property-values-tx-m
            page'
            (->> properties
                 (keep (fn [[k v]]
                         ;; TODO: Pass in property type in order to support property
                         ;; types other than :default
-                        (when (db-property/built-in-has-ref-value? k)
+                        (when (melange-property/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
       (cond-> (if class?
@@ -197,14 +193,14 @@
         true
         (conj (merge {:block/uuid (:block/uuid page)}
                      properties
-                     (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))))
+                     (melange-property-build/build-properties-with-ref-values property-vals-tx-m)))))))
 
 ;; TODO: Revisit title cleanup as this was copied from file implementation
 (defn ^:api sanitize-title
   [title]
   (let [title (-> (string/trim title)
-                  (text/page-ref-un-brackets!))
-        title (common-util/remove-boundary-slashes title)]
+                  (melange-common/get-page-name-or-self))
+        title (melange-common/remove-boundary-slashes title)]
     title))
 
 (defn- get-page-by-parent-name
@@ -219,15 +215,15 @@
       [?p :block/name ?parent-name]]
     db
     (if class? :logseq.property.class/extends :block/parent)
-    (common-util/page-name-sanity-lc parent-title)
-    (common-util/page-name-sanity-lc child-title))
+    (melange-common/page-name-sanity-lower parent-title)
+    (melange-common/page-name-sanity-lower child-title))
    first
    (d/entity db)))
 
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
   [db page & {:keys [parent]}]
-  (let [library (ldb/get-built-in-page db common-config/library-page-name)]
+  (let [library (ldb/get-built-in-page db melange-common/library-page-name)]
     (when (nil? library)
       (throw (ex-info "Library page doesn't exist" {})))
     (assoc page
@@ -240,9 +236,9 @@
     (->>
      (if (and (or (entity-util/class? page)
                   (entity-util/page? page))
-              (ns-util/namespace-page? title))
+              (melange-common/namespace-page? title))
        (let [class? (entity-util/class? page)
-             parts (->> (string/split title ns-util/parent-re)
+             parts (->> (string/split title #"/")
                         (map string/trim)
                         (remove string/blank?))
              pages (map-indexed
@@ -383,14 +379,14 @@
                                            :page-uuid (when (uuid? uuid') uuid')
                                            :skip-existing-page-check? true})
             [page parents'] (if (and (not (:block/journal-day page))
-                                     (text/namespace-page? title)
+                                     (melange-common/namespace-page? title)
                                      split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
                                 [(last pages) (butlast pages)])
                               [page nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
-                            (not (db-malli-schema/internal-ident? (:db/ident page)))))
+                            (not (db-validation/internal-ident? (:db/ident page)))))
           ;; Don't validate journal names because they can have '/'
           (when-not (or (contains? types :logseq.class/Journal)
                         (contains? (set (:block/tags page)) :logseq.class/Journal))
@@ -399,7 +395,7 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (if-let [journal-day (:block/journal-day page)]
-                            (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                            (uuid (melange-common/journal-page journal-day))
                             (:block/uuid page))
                 page (assoc page :block/uuid page-uuid)
                 page-txs (build-page-tx db properties page (select-keys options [:class? :tags :class-ident-namespace]))

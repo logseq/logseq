@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (def ^:private migration-deleted-attrs
   #{:block/path-refs

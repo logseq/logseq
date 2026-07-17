@@ -6,7 +6,7 @@
             [frontend.worker.state :as worker-state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]))
 

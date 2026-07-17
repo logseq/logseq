@@ -4,7 +4,7 @@
             ["path" :as ^js node-path]
             [cljs.reader :as reader]
             [electron.logger :as logger]
-            [logseq.common.graph-registry :as graph-registry]))
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]))
 
 ;; FIXME: move configs.edn to where it should be
 (defonce dot-root (.join node-path (.getPath app "home") ".logseq"))

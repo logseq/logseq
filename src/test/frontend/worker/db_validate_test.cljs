@@ -3,9 +3,9 @@
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.shared-service :as shared-service]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.validation :as db-validate]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- create-db-graph-conn
   []
