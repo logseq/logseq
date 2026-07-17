@@ -1,6 +1,58 @@
 (ns frontend.state-test
-  (:require [clojure.test :refer [deftest is]]
-            [frontend.state :as state]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]))
+
+(defn- caret-pos-when-editor-content-changes
+  [initial-content updated-content new-pos]
+  (let [block-id (random-uuid)
+        input-id (str "edit-block-" block-id)
+        input #js {:id input-id
+                   :value initial-content
+                   :selectionStart 2
+                   :selectionEnd 2}
+        editor-content (:editor/content @state/state)
+        last-saved-cursor (:editor/last-saved-cursor @state/state)
+        watch-key (keyword (str "caret-pos-" block-id))
+        observed-pos (atom nil)]
+    (set! (.-setSelectionRange input)
+          (fn [start end]
+            (set! (.-selectionStart input) start)
+            (set! (.-selectionEnd input) end)))
+    (add-watch editor-content watch-key
+               (fn [_ _ _ content-by-block]
+                 (when (= updated-content (get content-by-block block-id))
+                   (reset! observed-pos (cursor/pos input)))))
+    (try
+      (with-redefs [state/get-edit-block (constantly {:block/uuid block-id})
+                    gdom/getElement (constantly input)
+                    util/set-change-value
+                    (fn [node value & [caret-pos]]
+                      ;; Match the browser value setter, which moves the caret to the end.
+                      (set! (.-value node) value)
+                      (.setSelectionRange node (count value) (count value))
+                      (when (number? caret-pos)
+                        (.setSelectionRange node caret-pos caret-pos))
+                      ;; Match the synchronous React change handler.
+                      (state/set-edit-content! input-id value false))]
+        (state/set-block-content-and-last-pos! input-id updated-content new-pos))
+      {:observed-pos @observed-pos
+       :final-pos (cursor/pos input)}
+      (finally
+        (remove-watch editor-content watch-key)
+        (swap! editor-content dissoc block-id)
+        (swap! last-saved-cursor dissoc block-id)))))
+
+(deftest set-block-content-exposes-new-caret-before-content-change
+  (testing "Caret before trailing page-reference brackets"
+    (is (= {:observed-pos 8 :final-pos 8}
+           (caret-pos-when-editor-content-changes "[[]]" "[[foobar]]" 8))))
+
+  (testing "Caret at the end of the updated content"
+    (is (= {:observed-pos 6 :final-pos 6}
+           (caret-pos-when-editor-content-changes "" "foobar" 6)))))
 
 (deftest merge-configs
   (let [global-config
