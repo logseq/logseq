@@ -591,12 +591,12 @@
                                                             selected-component-page-entity-predicate-pattern))
       "The page component must use plain worker-payload predicates instead of ldb entity predicates."))
 
-(deftest worker-response-owns-queued-edit-block-test
+(deftest worker-response-owns-local-edit-block-callback-test
   (let [transact-source (source-for "src/main/frontend/db/transact.cljs")
         page-source (source-for "src/main/frontend/components/page.cljs")]
-    (is (string/includes? transact-source "state/take-edit-block-fn!")
-        "Each worker response must consume its own queued editor callback.")
-    (is (not (string/includes? page-source "state/take-edit-block-fn!"))
+    (is (string/includes? transact-source ":editor/edit-block-fn")
+        "Each worker response must run its local editor callback after publishing UI state.")
+    (is (not (string/includes? page-source ":editor/edit-block-fn"))
         "A later render must not consume a callback owned by another response.")))
 
 (deftest page-window-refresh-does-not-require-existing-window-test
@@ -1555,16 +1555,6 @@
         "cycle-todo! must not rehydrate the current edit block through renderer DB entities.")
     (is (string/includes? cycle-source "(db-based-cycle-todo! edit-block)")
         "cycle-todo! should use the current edit block already held in editor state.")))
-
-(deftest editor-edit-pending-new-block-loads-through-worker-test
-  (let [source (source-for "src/main/frontend/handler/editor.cljs")
-        pending-source (subs source
-                             (string/index-of source "(defn- edit-pending-new-block!")
-                             (string/index-of source "(defn get-state"))]
-    (is (not (string/includes? pending-source "db/entity"))
-        "edit-pending-new-block! must not resolve the inserted block through renderer DB entities.")
-    (is (string/includes? pending-source "db-async/<get-block")
-        "edit-pending-new-block! should load the inserted block through the worker block loader.")))
 
 (deftest editor-delete-block-aux-uses-passed-block-test
   (let [source (source-for "src/main/frontend/handler/editor.cljs")

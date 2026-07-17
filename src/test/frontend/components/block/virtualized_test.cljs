@@ -152,12 +152,12 @@
     (is (and timeout-index save-index (> save-index timeout-index))
         "Persist the final scroll position instead of publishing state during every scroll event.")))
 
-(deftest ordinary-scroll-does-not-schedule-selection-work
+(deftest ordinary-scroll-does-not-run-selection-work
   (let [source (source-for "src/main/frontend/components/block.cljs")
-        scheduler-source (form-source source "(defn- schedule-select-block-under-pointer!")]
-    (is (some? scheduler-source))
-    (is (string/includes? scheduler-source "block-selection/pointer-down?")
-        "Only pointer selection should schedule selection updates while scrolling.")))
+        selection-source (form-source source "(defn- select-block-under-pointer-after-scroll!")]
+    (is (some? selection-source))
+    (is (string/includes? selection-source "block-selection/pointer-down?")
+        "Only pointer selection should update selection while scrolling.")))
 
 (deftest unchanged-blocks-skip-deep-render-comparison
   (let [source (source-for "src/main/frontend/components/block.cljs")

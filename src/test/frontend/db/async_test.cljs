@@ -160,7 +160,24 @@
                  (p/catch
                   (fn [error]
                     (is false (str error))))
-                 (p/finally done))))))
+                (p/finally done))))))
+
+(deftest get-block-summaries-preserves-request-order-test
+  (let [block-a (random-uuid)
+        block-b (random-uuid)
+        parent-a 10
+        parent-b 20
+        rows [[2 block-b "b" parent-b]
+              [1 block-a "a" parent-a]]]
+    (is (= [{:db/id 1
+             :block/uuid block-a
+             :block/title "a"
+             :block/parent {:db/id parent-a}}
+            {:db/id 2
+             :block/uuid block-b
+             :block/title "b"
+             :block/parent {:db/id parent-b}}]
+           (#'db-async/order-block-summaries [block-a block-b] rows)))))
 
 (deftest get-all-properties-uses-worker-without-renderer-db-model-test
   (async done

@@ -1242,12 +1242,15 @@
 (def-thread-api :thread-api/get-block-sibling
   [repo block-id direction]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (when-let [block (d/entity @conn block-id)]
-      (some-> (case direction
-                :left (ldb/get-left-sibling block)
-                :right (ldb/get-right-sibling block)
-                nil)
-              entity-util/entity->map))))
+    (let [db @conn]
+      (when-let [block (d/entity db block-id)]
+        (let [sibling (case direction
+                        :left (ldb/get-left-sibling block)
+                        :right (ldb/get-right-sibling block)
+                        nil)]
+          (some->> sibling
+                   (#(worker-plain/entity-forward-map db % {}))
+                   worker-plain/with-explicit-ref-fields-recursive))))))
 
 (def-thread-api :thread-api/get-page-blocks-tree
   [repo page-id-name-or-uuid]

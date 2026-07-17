@@ -130,68 +130,18 @@
               :block-container :container}
              (editor/get-state))))))
 
-(deftest edit-pending-new-block-uses-persisted-block-test
-  (async done
-    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
-          pending-block {:block/uuid block-id
-                         :block/title "created"}
-          inserted-block (assoc pending-block :db/id 10)
-          calls (atom [])
-          original-get-state state/get-state
-          original-editor-get-state editor/get-state
-          original-get-current-repo state/get-current-repo
-          original-<get-block db-async/<get-block
-          original-indent-outdent-blocks! block-handler/indent-outdent-blocks!
-          original-edit-block! editor/edit-block!
-          original-set-state! state/set-state!
-          restore! (fn []
-                     (set! state/get-state original-get-state)
-                     (set! editor/get-state original-editor-get-state)
-                     (set! state/get-current-repo original-get-current-repo)
-                     (set! db-async/<get-block original-<get-block)
-                     (set! block-handler/indent-outdent-blocks! original-indent-outdent-blocks!)
-                     (set! editor/edit-block! original-edit-block!)
-                     (set! state/set-state! original-set-state!))]
-      (set! state/get-state (fn [k]
-                              (when (= :editor/pending-new-block k)
-                                {:block-prefixes ["abc"]
-                                 :tab-indent? true})))
-      (set! editor/get-state (constantly nil))
-      (set! state/get-current-repo (constantly "test"))
-      (set! db-async/<get-block
-            (fn [& _]
-              (throw (js/Error. "Persisted pending block must not be loaded again"))))
-      (set! block-handler/indent-outdent-blocks!
-            (fn [blocks indent? _opts]
-              (swap! calls conj [:indent blocks indent?])))
-      (set! editor/edit-block!
-            (fn [block pos opts]
-              (swap! calls conj [:edit block pos opts])))
-      (set! state/set-state!
-            (fn [k value]
-              (swap! calls conj [:set-state k value])))
-      (-> (try
-            (#'editor/edit-pending-new-block! inserted-block true)
-            (catch :default error
-              (p/rejected error)))
-          (p/then
-           (fn []
-             (is (= [[:indent [inserted-block] true]
-                     [:edit inserted-block
-                      3
-                      {:container-id nil
-                       :custom-content "abccreated"
-                       :save-code-editor? false
-                       :skip-load? true}]
-                     [:set-state :editor/pending-new-block nil]]
-                    @calls))))
-          (p/catch
-           (fn [error]
-             (is false (str error))))
-          (p/finally
-           (fn []
-             (restore!)
-             (done)))))))
+(deftest inserted-block-edit-uses-persisted-window-row-test
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        pending-block {:block/uuid block-id :block/title "created"}
+        inserted-block (assoc pending-block :db/id 10)
+        calls (atom [])]
+    (with-redefs [editor/edit-block! (fn [block pos opts]
+                                      (reset! calls [block pos opts]))]
+      ((#'editor/inserted-block-edit-fn pending-block 7) [inserted-block])
+      (is (= [inserted-block 0 {:container-id 7
+                                :save-code-editor? false
+                                :skip-load? true}]
+             @calls)))))
 
 (deftest save-block-if-changed-uses-passed-block-content-test
   (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -1202,8 +1152,7 @@
           (p/finally done)))))
 
 (deftest insert-block-saves-current-block-before-switching-editor-test
-  (let [tx-id (random-uuid)
-        current-id #uuid "11111111-1111-1111-1111-111111111111"
+  (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"
         editing-block (atom {:db/id 1
                              :block/uuid current-id
@@ -1215,12 +1164,10 @@
                        :block/page {:db/id 10}}
         next-block {:block/uuid next-id
                     :block/title "row 2"}
-        calls (atom [])]
-    (state/queue-edit-block-fn! tx-id
-                                (fn [_rows]
-                                  (reset! editing-block next-block)))
-    (try
-      (with-redefs [state/editor-in-composition? (constantly false)
+        calls (atom [])
+        edit-block-f (fn [_rows]
+                       (reset! editing-block next-block))]
+    (with-redefs [state/editor-in-composition? (constantly false)
                     state/get-editor-action (constantly nil)
                     state/get-current-repo (constantly "test")
                     state/get-editor-args (constantly [nil nil {}])
@@ -1236,7 +1183,7 @@
                                                      (swap! calls conj [:apply ops opts])
                                                      :tx)]
         (editor/outliner-insert-block!
-         {:editor/edit-block-fn-id tx-id}
+         {:editor/edit-block-fn edit-block-f}
          current-block
          next-block
          {:sibling? true :keep-uuid? true :outliner-op :create-view})
@@ -1248,12 +1195,9 @@
                   :source-outliner-op :create-view
                   :ui/page-id 10
                   :ui/page-window-opts {:offset 0}
-                  :editor/edit-block-fn-id tx-id}]]
+                  :editor/edit-block-fn edit-block-f}]]
                @calls)
-            "Insert metadata and operations must use one transaction."))
-      (finally
-        (state/remove-edit-block-fn! tx-id)
-        (state/set-state! :db/latest-transacted-entity-uuids {})))))
+            "Insert metadata and operations must use one transaction."))))
 
 (deftest split-current-block-keeps-rendered-title-in-sync-test
   (let [block {:block/title "Performance row 2"
@@ -1262,7 +1206,7 @@
             :block/raw-title "Performance"}
            (#'editor/current-block-with-title block "Performance")))))
 
-(deftest loaded-block-focuses-without-a-worker-read
+(deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
                   :block/title "before"}
@@ -1270,16 +1214,20 @@
     (with-redefs [state/get-edit-block (constantly nil)
                   editor/edit-block! (fn [block pos opts]
                                        (swap! calls conj [block pos opts]))]
-      (is (= {:prev-block previous
-             :new-content "before"
-              :pos 6}
-             (#'editor/focus-loaded-block! previous "" 7 true)))
-      (is (= [[previous 6 {:custom-content "before"
-                           :tail-len 0
-                           :container-id 7
-                           :save-code-editor? false
-                           :skip-load? true}]]
-             @calls)))))
+      (let [{:keys [edit-block-f] :as edit} (#'editor/loaded-block-edit previous "" 7)]
+        (is (= {:prev-block previous
+                :new-content "before"
+                :pos 6}
+               (dissoc edit :edit-block-f)))
+        (is (empty? @calls)
+            "Backspace must not focus before the worker response refreshes the UI.")
+        (edit-block-f)
+        (is (= [[previous 6 {:custom-content "before"
+                             :tail-len 0
+                             :container-id 7
+                             :save-code-editor? false
+                             :skip-load? true}]]
+               @calls))))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done

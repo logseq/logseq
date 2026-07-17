@@ -242,6 +242,22 @@
          (is (nil? (:page-window response))
              "Outliner mutations must not synchronously calculate a page window."))))))
 
+(deftest get-block-sibling-returns-plain-block-map-test
+  (restoring-worker-state
+   (fn []
+     (let [conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks (mapv (fn [idx]
+                                   {:block/title (str "block " idx)})
+                                 (range 1000))}])
+           block (db-test/find-block-by-content @conn "block 500")
+           get-sibling! (get-thread-api :thread-api/get-block-sibling)]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [sibling (get-sibling! test-repo (:db/id block) :right)]
+         (is (= "block 501" (:block/title sibling)))
+         (is (not (de/entity? (:block/parent sibling))))
+         (is (not (de/entity? (:block/page sibling)))))))))
+
 (deftest apply-outliner-ops-rejects-missing-connection-test
   (restoring-worker-state
    (fn []
@@ -1772,46 +1788,46 @@
 
 (deftest build-proxy-object-routes-requests-through-service-being-created
   (async done
-    (restoring-worker-state
-     (fn []
-       (let [*service @#'db-core/*service
-             old-service-value @*service
-             service-created (p/deferred)
-             old-calls (atom [])
-             new-calls (atom [])
-             service (fn [calls]
-                       {:status {:ready (p/resolved true)}
-                        :proxy #js {"remoteInvoke"
-                                   (fn [args]
-                                     (let [[method payload] args]
-                                       (swap! calls conj [method payload])
-                                       (p/resolved method)))}})
-             old-service (service old-calls)
-             new-service (service new-calls)]
-         (reset! *service ["graph-a" old-service])
-         (p/with-redefs [db-core/close-db! (fn [_repo] nil)
-                         shared-service/<create-service (fn [& _args]
-                                                          service-created)]
-           (let [proxy (#'db-core/build-proxy-object)
-                 remote-invoke (gobj/get proxy "remoteInvoke")
-                 create-request (remote-invoke
-                                 "thread-api/create-or-open-db"
-                                 (ldb/write-transit-str ["graph-b" {}]))
-                 query-request (remote-invoke
-                                "thread-api/get-db-schema"
-                                (ldb/write-transit-str ["graph-b"]))]
-             (p/resolve! service-created new-service)
-             (-> (p/all [create-request query-request])
-                 (p/then (fn [_]
-                           (is (empty? @old-calls))
-                           (is (= #{"thread-api/create-or-open-db"
-                                    "thread-api/get-db-schema"}
-                                  (set (map first @new-calls))))))
-                 (p/catch (fn [error]
-                            (is false (str "unexpected error: " error))))
-                 (p/finally (fn []
-                              (reset! *service old-service-value)
-                              (done)))))))))))
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [*service @#'db-core/*service
+              old-service-value @*service
+              service-created (p/deferred)
+              old-calls (atom [])
+              new-calls (atom [])
+              service (fn [calls]
+                        {:status {:ready (p/resolved true)}
+                         :proxy #js {"remoteInvoke"
+                                    (fn [args]
+                                      (let [[method payload] args]
+                                        (swap! calls conj [method payload])
+                                        (p/resolved method)))}})
+              old-service (service old-calls)
+              new-service (service new-calls)]
+          (reset! *service ["graph-a" old-service])
+          (p/with-redefs [db-core/close-db! (fn [_repo] nil)
+                          shared-service/<create-service (fn [& _args]
+                                                           service-created)]
+            (let [proxy (#'db-core/build-proxy-object)
+                  remote-invoke (gobj/get proxy "remoteInvoke")
+                  create-request (remote-invoke
+                                  "thread-api/create-or-open-db"
+                                  (ldb/write-transit-str ["graph-b" {}]))
+                  query-request (remote-invoke
+                                 "thread-api/get-db-schema"
+                                 (ldb/write-transit-str ["graph-b"]))]
+              (p/resolve! service-created new-service)
+              (-> (p/all [create-request query-request])
+                  (p/then (fn [_]
+                            (is (empty? @old-calls))
+                            (is (= #{"thread-api/create-or-open-db"
+                                     "thread-api/get-db-schema"}
+                                   (set (map first @new-calls))))))
+                  (p/catch (fn [error]
+                             (is false (str "unexpected error: " error))))
+                  (p/finally #(reset! *service old-service-value))))))))
+     (p/finally done))))
 
 ;; ---- <init-service! tests ----
 

@@ -1,5 +1,5 @@
 (ns frontend.handler.editor-async-test
-  (:require [cljs.test :refer [deftest is testing async use-fixtures]]
+  (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db.async :as db-async]
@@ -73,34 +73,14 @@
 
     (p/resolved nil)))
 
-(defn- <test-db-worker-with-blocks
-  [blocks api & args]
-  (case api
-    :thread-api/get-blocks
-    (let [[repo requests-transit] args
-          test-db (conn/get-db repo)
-          requests (ldb/read-transit-str requests-transit)
-          block-by-id (into {}
-                            (mapcat (fn [block]
-                                      [[(:block/uuid block) block]
-                                       [(str (:block/uuid block)) block]
-                                       [(:db/id block) block]]))
-                            blocks)]
-      (p/resolved
-       (ldb/write-transit-str
-        (mapv (fn [{:keys [id opts]}]
-                (let [block (or (get block-by-id id)
-                                (block-by-worker-id test-db id))]
-                  (if (:children? opts)
-                    block
-                    {:block block})))
-              requests))))
-
-    (apply <test-db-worker api args)))
-
 (defn- apply-test-outliner-ops!
   [_db ops opts]
-  (outliner-op/apply-ops! (conn/get-db test-helper/test-db false) ops opts))
+  (let [result (outliner-op/apply-ops! (conn/get-db test-helper/test-db false)
+                                        ops
+                                        (dissoc opts :editor/edit-block-fn))]
+    (when-let [edit-block-f (:editor/edit-block-fn opts)]
+      (edit-block-f nil))
+    result))
 
 (use-fixtures :each
   {:before (fn []
@@ -114,19 +94,6 @@
               (state/set-current-repo! (:git/current-repo previous-state))
               (state/replace-state! previous-state)
               (reset! *previous-state nil)))})
-
-(defn- fake-key-event
-  []
-  (let [stopped? (atom false)]
-    {:event #js {:preventDefault #(reset! stopped? true)
-                 :stopPropagation #(reset! stopped? true)}
-     :stopped? stopped?}))
-
-(defn- take-edit-block-fn!
-  ([]
-   (state/take-edit-block-fn!))
-  ([tx-id]
-   (state/take-edit-block-fn! tx-id)))
 
 (defn- delete-block
   [db block {:keys [embed? on-delete edit-content on-edit schedule-immediately?]}]
@@ -259,7 +226,7 @@
                                      (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
                                      (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
 
-(deftest-async backspace-between-empty-blocks-focuses-surviving-previous-block
+(deftest-async backspace-between-empty-blocks-focuses-current-block-like-master
   (load-test-files
    [{:page {:block/title "empty-delete-page"}
      :blocks
@@ -275,7 +242,6 @@
                            @conn)
                       (map first)
                       ldb/sort-by-order)
-          previous-block (nth blocks (- (count blocks) 2))
           current-block (last blocks)
           edit-calls (atom [])]
     (delete-block @conn current-block
@@ -293,9 +259,9 @@
                                                       @conn)
                                                (map first))]
                        (is (= 2 (count visible-blocks)))
-                       (is (= (:block/uuid previous-block)
+                       (is (= (:block/uuid current-block)
                               (some-> @edit-calls last :block :block/uuid))
-                           "The surviving previous block must keep the editor.")))})))
+                           "Backspace must keep the current block focused, matching master.")))})))
 
 (deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
   (let [previous-block {:db/id 1
@@ -304,37 +270,49 @@
         deleted-block {:db/id 2
                        :block/uuid (random-uuid)
                        :block/title "deleted"}
+        previous-dom #js {:getAttribute #({"blockid" (str (:block/uuid previous-block))
+                                           "containerid" nil} %)}
+        deleted-dom #js {}
         tx-opts (atom nil)
         edit-call (atom nil)]
-    (-> (p/with-redefs [db-async/<get-block-sibling
-                        (fn [_repo block-id direction]
-                          (is (= (:db/id deleted-block) block-id))
-                          (is (= :left direction))
+    (-> (p/with-redefs [util/get-prev-block-non-collapsed-non-embed
+                        (fn [block]
+                          (is (identical? deleted-dom block))
+                          previous-dom)
+                        db-async/<get-block
+                        (fn [_repo block-id _opts]
+                          (is (= (:block/uuid previous-block) block-id))
                           (p/resolved previous-block))
                         db-transact/apply-outliner-ops (fn [_conn _ops opts]
                                                         (reset! tx-opts opts)
                                                         (p/resolved nil))
-                        editor/edit-block! (fn [block pos]
-                                             (reset! edit-call [block pos]))]
+                        editor/edit-block! (fn [block pos opts]
+                                             (reset! edit-call [block pos opts]))]
           (-> (editor/delete-blocks! "test-repo"
                                      [(:block/uuid deleted-block)]
                                      [deleted-block]
-                                     []
+                                     [deleted-dom]
                                      false)
               (p/then
                (fn [_]
                  (is (nil? @edit-call)
                      "Deletion should not focus before the renderer applies the response")
-                 (is (some? (:editor/edit-block-fn-id @tx-opts))
-                     "Deletion should tag its renderer callback with the transaction id")
-                 (let [edit-block-f (take-edit-block-fn! (:editor/edit-block-fn-id @tx-opts))]
+                 (is (fn? (:editor/edit-block-fn @tx-opts))
+                     "Deletion should carry a response-local renderer callback")
+                 (let [edit-block-f (:editor/edit-block-fn @tx-opts)]
                    (is (fn? edit-block-f)
-                       "Deletion should queue a renderer callback")
+                       "Deletion should run focus from the worker response")
                    (when edit-block-f
-                     (edit-block-f)))
-                 (is (= [previous-block :max] @edit-call)
+                     (edit-block-f nil)))
+                 (is (= [previous-block 8
+                         {:custom-content "previous"
+                          :tail-len 0
+                          :container-id nil
+                          :save-code-editor? false
+                          :skip-load? true}]
+                        @edit-call)
                      "Deletion should restore focus from the renderer callback")))))
-        (p/finally #(state/set-state! :editor/edit-block-fn nil)))))
+        (p/finally (fn [] nil)))))
 
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
@@ -460,8 +438,7 @@
                  "Delete at the end of an empty asset title should merge the next title into the asset block")
              (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
                  "Delete merge must keep the current block renderable as an asset"))))
-        (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil))))))
+        (p/finally (fn [] nil)))))
 
 (deftest-async delete-at-empty-comments-end-merges-next-block-into-comments-block
   (load-test-files
@@ -518,218 +495,29 @@
              (is (= #{:logseq.class/Comments}
                     (set (map :db/ident (:block/tags (first comments-blocks)))))
                  "Delete merge must keep the current block tagged as a Comments block"))))
-        (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil))))))
+        (p/finally (fn [] nil)))))
 
-(deftest-async rapid-tab-after-new-block-indents-pending-block
-  (let [current-block {:db/id 1
-                       :block/uuid (random-uuid)
-                       :block/title "first"}
-        next-block {:db/id 2
-                    :block/uuid (random-uuid)
-                    :block/title ""}
-        input #js {:value "first"}
-        current-block-indents (atom [])
-        pending-block-indents (atom [])
-        edit-calls (atom [])
-        insert-config (atom nil)
-        {:keys [event stopped?]} (fake-key-event)
-        previous-document (.-document js/globalThis)]
-    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
-    (set! (.-document js/globalThis)
-          #js {:activeElement input
-               :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block next-block])
-                        state/get-edit-input-id (constantly "edit-block-current")
-                        gdom/getElement (constantly input)
-                        util/get-selection-start (constantly 5)
-                        util/get-selection-end (constantly 5)
-                        editor/get-state (constantly {:block current-block
-                                                      :value "first"
-                                                      :config {}
-                                                      :block-container #js {}})
-                        editor/insert-new-block-aux! (fn [config _block _value]
-                                                       (reset! insert-config config)
-                                                       (state/queue-edit-block-fn!
-                                                        (:editor/edit-block-fn-id config)
-                                                        #(p/do!
-                                                          (when-let [indent? (:tab-indent?
-                                                                           (state/get-state :editor/pending-new-block))]
-                                                            (block-handler/indent-outdent-blocks!
-                                                             [next-block] indent? nil))
-                                                          (editor/edit-block! next-block 0
-                                                                              {:container-id nil
-                                                                               :custom-content ""})
-                                                          (state/set-state! :editor/pending-new-block nil)))
-                                                       [(p/resolved true) true next-block])
-                        editor/get-new-container-id (constantly nil)
-                        editor/indent-outdent (fn [indent?]
-                                                (swap! current-block-indents conj indent?))
-                        editor/edit-block! (fn [block pos opts]
-                                             (swap! edit-calls conj {:block block
-                                                                     :pos pos
-                                                                     :opts opts})
-                                             (p/resolved nil))
-                        block-handler/indent-outdent-blocks! (fn [blocks indent? save-current-block]
-                                                               (swap! pending-block-indents conj
-                                                                      {:blocks blocks
-                                                                       :indent? indent?
-                                                                       :save-current-block save-current-block})
-                                                               (p/resolved nil))]
-          (editor/insert-new-block! nil nil)
-          ((editor/keydown-tab-handler :right) event)
-          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!
-                                             (:editor/edit-block-fn-id @insert-config))]
-                       (edit-block-f))]
-            (is @stopped? "Tab should still be consumed while the new block is pending")
-            (is (empty? @current-block-indents) "Tab must not indent the block that was split by Enter")
-            (is (= [{:blocks [next-block]
-                     :indent? true
-                     :save-current-block nil}]
-                   @pending-block-indents)
-                "Tab should apply to the newly inserted block once it exists")
-            (is (= [{:block next-block
-                     :pos 0
-                     :opts {:container-id nil
-                            :custom-content ""}}]
-                   @edit-calls)
-                "The pending block should still enter edit mode after applying queued Tab")))
-        (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil)
-                     (state/set-state! :editor/pending-new-block nil)
-                     (set! (.-document js/globalThis) previous-document))))))
-
-(deftest-async rapid-enter-waits-for-pending-new-block
-  (let [current-block {:db/id 1
-                       :block/uuid (random-uuid)
-                       :block/title "first"}
-        first-new-block {:db/id 2
-                         :block/uuid (random-uuid)
-                         :block/title ""}
-        inserted-blocks (atom [first-new-block])
-        insert-configs (atom [])
-        input #js {:value "first"}
-        edit-calls (atom [])
-        previous-document (.-document js/globalThis)]
-    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
-    (set! (.-document js/globalThis)
-          #js {:activeElement input
-               :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/<invoke-db-worker (fn [api & args]
-                                                 (when (= :thread-api/get-block-sibling api)
-                                                   (throw (js/Error. "Non-blank Enter must not wait for a sibling query")))
-                                                 (apply <test-db-worker-with-blocks
-                                                        [current-block first-new-block]
-                                                        api
-                                                        args))
-                        state/get-edit-input-id (constantly "edit-block-current")
-                        gdom/getElement (constantly input)
-                        util/get-selection-start (constantly 5)
-                        util/get-selection-end (constantly 5)
-                        editor/get-state (constantly {:block current-block
-                                                      :value "first"
-                                                      :config {}
-                                                      :node input
-                                                      :block-container #js {}})
-                        editor/inside-of-single-block (constantly false)
-                        ldb/get-right-sibling (constantly nil)
-                        editor/insert-new-block-aux! (fn [config _block _value]
-                                                       (swap! insert-configs conj config)
-                                                       (let [next-block (first @inserted-blocks)]
-                                                         (swap! inserted-blocks subvec 1)
-                                                         (state/queue-edit-block-fn!
-                                                          (:editor/edit-block-fn-id config)
-                                                          #(p/do!
-                                                            (editor/edit-block! next-block 0
-                                                                                {:container-id nil
-                                                                                 :custom-content ""})
-                                                            (state/set-state! :editor/pending-new-block nil)))
-                                                         [(p/resolved true) true next-block]))
-                        editor/get-new-container-id (constantly nil)
-                        editor/edit-block! (fn [block pos opts]
-                                             (swap! edit-calls conj {:block block
-                                                                     :pos pos
-                                                                     :opts opts})
-                                             (p/resolved nil))]
-          (editor/keydown-new-block-handler nil)
-          (editor/keydown-new-block-handler nil)
-          (p/let [_ (when-let [edit-block-f (take-edit-block-fn! (:editor/edit-block-fn-id (first @insert-configs)))]
-                       (edit-block-f))]
-            (is (= 1 (count @insert-configs))
-                "Enter should not start another insert while a new block is pending")
-            (is (= [{:block first-new-block
-                     :pos 0
-                     :opts {:container-id nil
-                            :custom-content ""}}]
-                   @edit-calls)
-                "The pending block should enter edit mode once the insert transaction completes")))
-        (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil)
-                     (state/set-state! :editor/pending-new-block nil)
-                     (set! (.-document js/globalThis) previous-document))))))
-
-(deftest pending-new-block-keeps-rapid-editor-input-off-the-old-textarea
-  (let [input #js {:value "Performance row 1"
-                   :selectionStart 17
-                   :selectionEnd 17}
-        delete-calls (atom [])
-        previous-document (.-document js/globalThis)]
-    (set! (.-document js/globalThis) #js {:activeElement input})
-    (state/set-state! :editor/pending-new-block {:block-prefixes [""]})
-    (try
-      (let [{enter-event :event enter-stopped? :stopped?} (fake-key-event)
-            {type-event :event type-stopped? :stopped?} (fake-key-event)
-            {backspace-event :event backspace-stopped? :stopped?} (fake-key-event)]
-        (aset type-event "key" "x")
-        (with-redefs [state/get-input (constantly input)
-                      editor/inside-of-editor-block (constantly true)
-                      editor/delete-and-update (fn [_input start end]
-                                                 (swap! delete-calls conj [start end]))]
-          (editor/keydown-new-block-handler enter-event)
-          ((editor/keydown-not-matched-handler :markdown) type-event nil)
-          (editor/keydown-backspace-handler false backspace-event))
-        (is (every? true? [@enter-stopped? @type-stopped? @backspace-stopped?]))
-        (is (= ["" ""]
-               (:block-prefixes (state/get-state :editor/pending-new-block)))
-            "Enter, typed text, and Backspace should reduce against the pending blocks")
-        (is (empty? @delete-calls)
-            "Backspace must not delete text from the old textarea while Enter is pending")
-        (is (= "Performance row 1" (.-value input))))
-      (finally
-        (state/set-state! :editor/pending-new-block nil)
-        (set! (.-document js/globalThis) previous-document)))))
-
-(deftest pending-rapid-enter-and-backspace-keep-page-refresh-target
-  (let [page-id (random-uuid)
-        block {:db/id 2
+(deftest-async top-level-blank-enter-does-not-query-right-sibling
+  (let [page {:db/id 10}
+        block {:db/id 1
                :block/uuid (random-uuid)
                :block/title ""
-               :block/page {:db/id page-id}}
-        previous-block {:db/id 1
-                        :block/uuid (random-uuid)
-                        :block/title "previous"
-                        :block/page {:db/id page-id}}
-        tx-meta (atom [])]
-    (try
-      (with-redefs [block-handler/page-window-tx-meta
-                    (constantly {:ui/page-id page-id})
-                    db-transact/apply-outliner-ops (fn [_conn _ops opts]
-                                                    (swap! tx-meta conj opts))
-                    editor/save-block-aux! (fn [& _args] nil)
-                    editor/save-current-block! (fn [& _args] nil)
-                    editor/edit-block! (fn [& _args] nil)]
-        (#'editor/finish-pending-new-block-edit!
-         block nil {:block-prefixes ["" "" "rapid"]})
-        (#'editor/delete-pending-new-block!
-         block nil {:previous-block previous-block
-                    :previous-title "previous"
-                    :previous-pos 8}))
-      (is (= [[:insert-blocks page-id]
-              [:delete-blocks page-id]]
-             (mapv (juxt :outliner-op :ui/page-id) @tx-meta)))
-      (finally
-        (state/set-state! :editor/edit-block-fn nil)
-        (state/set-state! :editor/pending-new-block nil)))))
+               :block/parent page}
+        input #js {:value ""}
+        inserts (atom 0)]
+    (p/with-redefs [editor/get-state (constantly {:block block
+                                                  :config {:page page}
+                                                  :node input})
+                    editor/inside-of-single-block (constantly false)
+                    state/get-input (constantly input)
+                    db-async/<get-block-sibling
+                    (fn [& _]
+                      (throw (js/Error. "Top-level Enter does not need a sibling lookup")))
+                    editor/insert-new-block! (fn [& _]
+                                               (swap! inserts inc)
+                                               (p/resolved nil))]
+      (p/let [_ (editor/keydown-new-block-handler nil)]
+        (is (= 1 @inserts))))))
 
 (deftest-async insert-above-awaits-async-insert
   (let [current-block {:db/id 1
@@ -761,74 +549,7 @@
           (p/let [_ (editor/insert-new-block! nil nil)]
             (is @cleared? "Insert above should await the async insert helper")))
         (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil)
-                     (state/set-state! :editor/pending-new-block nil)
                      (set! (.-document js/globalThis) previous-document))))))
-
-(deftest-async rejected-new-block-insert-removes-queued-edit-callback
-  (let [current-block {:db/id 1
-                       :block/uuid (random-uuid)
-                       :block/title "first"}
-        next-block {:db/id 2
-                    :block/uuid (random-uuid)
-                    :block/title ""}
-        input #js {:value "first"}
-        expected-error (js/Error. "insert failed")
-        result-promise (p/deferred)
-        insert-config (atom nil)
-        previous-document (.-document js/globalThis)]
-    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
-    (set! (.-document js/globalThis)
-          #js {:activeElement input
-               :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block next-block])
-                        state/get-edit-input-id (constantly "edit-block-current")
-                        gdom/getElement (constantly input)
-                        util/get-selection-start (constantly 5)
-                        util/get-selection-end (constantly 5)
-                        editor/get-state (constantly {:block current-block
-                                                      :value "first"
-                                                      :config {}
-                                                      :node input
-                                                      :block-container #js {}})
-                        editor/inside-of-single-block (constantly false)
-                        ldb/get-right-sibling (constantly nil)
-                        editor/insert-new-block-aux! (fn [config _block _value]
-                                                       (reset! insert-config config)
-                                                       [result-promise true next-block])
-                        editor/get-new-container-id (constantly nil)]
-          (let [insert-result (.catch (.then (editor/insert-new-block! nil nil)
-                                            (fn [_] ::resolved))
-                                      (fn [e] e))]
-            (.catch result-promise (fn [_] nil))
-            (p/let [_ (p/delay 0)
-                    _ (do
-                        (p/reject! result-promise expected-error)
-                        nil)
-                    result insert-result]
-              (is (identical? expected-error result)
-                  "Insert failure should still reject with the original error")
-              (is (nil? (take-edit-block-fn! (:editor/edit-block-fn-id @insert-config)))
-                  "Rejected insert should remove the queued tagged edit callback"))))
-        (p/finally (fn []
-                     (state/set-state! :editor/edit-block-fn nil)
-                     (state/set-state! :editor/pending-new-block nil)
-                     (set! (.-document js/globalThis) previous-document))))))
-
-(deftest tagged-enter-callback-does-not-block-delete-focus
-  (let [enter-tx-id (random-uuid)
-        edit-calls (atom [])]
-    (try
-      (state/queue-edit-block-fn! enter-tx-id #(swap! edit-calls conj :enter))
-      (state/queue-edit-block-fn! #(swap! edit-calls conj :delete-previous))
-      (when-let [edit-block-f (take-edit-block-fn! enter-tx-id)]
-        (edit-block-f))
-      (when-let [edit-block-f (take-edit-block-fn!)]
-        (edit-block-f))
-      (is (= [:enter :delete-previous] @edit-calls)
-          "Tagged Enter focus should not consume the untagged delete focus callback")
-      (finally
-        (state/set-state! :editor/edit-block-fn nil)))))
 
 (deftest-async indent-block-does-not-move-into-comments-area
   (load-test-files

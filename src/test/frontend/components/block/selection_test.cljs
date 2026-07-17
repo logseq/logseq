@@ -55,13 +55,10 @@
     nil :missing :c
     nil :a :missing))
 
-(deftest mounted-node-range-uses-current-rendered-order
-  (let [upper #js {:isConnected true}
-        middle #js {:isConnected true}
-        lower #js {:isConnected true}]
-    (is (true? (selection/mounted-nodes? lower upper)))
-    (is (= {:direction :up
-            :nodes [lower middle upper]}
-           (selection/mounted-node-range [upper middle lower] lower upper)))
-    (set! (.-isConnected lower) false)
-    (is (false? (selection/mounted-nodes? lower upper)))))
+(deftest unselected-block-ids-preserves-order-without-duplicate-ids
+  (is (= [:d :e]
+         (selection/unselected-block-ids [:a :b :c]
+                                         [:b :c :d :d :e])))
+  (is (= []
+         (selection/unselected-block-ids [:a :b]
+                                         [:a :b :a]))))

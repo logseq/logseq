@@ -20,7 +20,6 @@
 (deftest handled-local-response-skips-only-direct-response-work
   (let [original-state @state/state
         state-calls (atom [])
-        edit-callback-takes (atom [])
         refresh-calls (atom [])
         affected-keys [[:frontend.worker.react/block 1]
                        [:frontend.worker.react/journals]
@@ -28,7 +27,6 @@
                        [:custom :query]]
         repo "test"
         tx-meta {:client-id "client"
-                 :editor/edit-block-fn-id "edit"
                  :ui/handled-by-response? true}]
     (try
       (reset! state/state {:client-id "client"})
@@ -36,9 +34,6 @@
                     state/get-current-page (constantly nil)
                     state/set-state! (fn [& args]
                                        (swap! state-calls conj args))
-                    state/take-edit-block-fn! (fn [id]
-                                                (swap! edit-callback-takes conj id)
-                                                nil)
                     react/refresh! (fn [& args]
                                      (swap! refresh-calls conj args))]
         (pipeline/invoke-hooks {:repo repo
@@ -48,7 +43,6 @@
         (is (not-any? #(= :db/latest-transacted-entity-uuids (first %))
                       @state-calls))
         (is (some #(= :editor/start-pos (first %)) @state-calls))
-        (is (empty? @edit-callback-takes))
         (is (= [[repo [[:frontend.worker.react/refs 2]
                        [:custom :query]]]]
                @refresh-calls)))

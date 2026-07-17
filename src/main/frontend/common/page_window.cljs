@@ -1,4 +1,5 @@
-(ns frontend.common.page-window)
+(ns frontend.common.page-window
+  "Shared page-window constants and refresh positioning.")
 
 (def limit 60)
 
