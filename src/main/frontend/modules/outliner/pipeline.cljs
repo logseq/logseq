@@ -55,7 +55,7 @@
           affected-keys))
 
 (defn invoke-hooks
-  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
+  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys pages blocks]}]
   (let [{:keys [initial-pages? end?]} tx-meta
         response-handled? (and (:ui/handled-by-response? tx-meta)
                                (= (:client-id tx-meta)
@@ -83,10 +83,14 @@
           (when-not response-handled?
             (let [updated-ids (set (map :block/uuid blocks))
                   deleted-ids (set deleted-block-uuids)
+                  affected-page-uuids (into (set (keep :block/uuid pages))
+                                            (keep #(get-in % [:block/page :block/uuid]))
+                                            blocks)
                   tx-id (:db-sync/tx-id tx-meta)]
               (state/set-state! :db/latest-transacted-entity-uuids
                                 {:updated-ids updated-ids
                                  :deleted-ids deleted-ids
+                                 :affected-page-uuids affected-page-uuids
                                  :entity-tx-ids (zipmap (into updated-ids deleted-ids)
                                                         (repeat tx-id))
                                  :page-window-refresh? (structural-outliner-op?
