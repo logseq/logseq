@@ -1,6 +1,7 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
-  (:require [frontend.common.page-window :as page-window]
+  (:require ["react-dom" :as react-dom]
+            [frontend.common.page-window :as page-window]
             [frontend.modules.outliner.pipeline :as outliner-pipeline]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -151,6 +152,16 @@
       {:prepare-ms (- (now-ms) started-at)
        :publish-ms 0})))
 
+(defn- publish-worker-response!
+  [ops tx-meta current-window affected-page-uuids]
+  (let [ui-refresh-perf (volatile! nil)]
+    (react-dom/flushSync
+     (fn []
+       (vreset! ui-refresh-perf
+                (refresh-worker-op-blocks! ops tx-meta current-window affected-page-uuids))
+       (run-edit-block-fn! tx-meta current-window)))
+    @ui-refresh-perf))
+
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
                      ensure-local-op-tx-id
@@ -210,10 +221,9 @@
           (if-not (and (= request-repo (state/get-current-repo))
                        (= request-route (state/get-route-match)))
             nil
-            (let [ui-refresh-perf (refresh-worker-op-blocks!
+            (let [ui-refresh-perf (publish-worker-response!
                                    ops opts' current-window affected-page-uuids)
                   state-updated-at (now-ms)]
-              (run-edit-block-fn! opts' current-window)
               (on-next-frame!
                (fn []
                  (log-outliner-op-perf!
