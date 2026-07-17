@@ -46,15 +46,17 @@
           {:remote-db @persist-db/remote-db
            :remote-repo @persist-db/remote-repo
            :remote-runtime-state @persist-db/remote-runtime-state
+           :remote-runtime-recovery @persist-db/remote-runtime-recovery
            :db-worker @state/*db-worker
            :transact-fn @ldb/*transact-fn}))
 
 (defn- restore-runtime-state!
   []
-  (let [{:keys [remote-db remote-repo remote-runtime-state db-worker transact-fn]} @*previous-runtime-state]
+  (let [{:keys [remote-db remote-repo remote-runtime-state remote-runtime-recovery db-worker transact-fn]} @*previous-runtime-state]
     (reset! persist-db/remote-db remote-db)
     (reset! persist-db/remote-repo remote-repo)
     (reset! persist-db/remote-runtime-state remote-runtime-state)
+    (reset! persist-db/remote-runtime-recovery remote-runtime-recovery)
     (reset! state/*db-worker db-worker)
     (reset! ldb/*transact-fn transact-fn)
     (reset! *previous-runtime-state nil)))
@@ -68,6 +70,7 @@
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
   (reset! persist-db/remote-runtime-state nil)
+  (reset! persist-db/remote-runtime-recovery nil)
   (reset! state/*db-worker nil)
   (reset! ldb/*transact-fn nil)
   (swap! state/state assoc :electron/user-cfgs {}))
@@ -96,42 +99,49 @@
                   :error error}))))
 
 (defn- db-worker-runtime
-  [results sse-state]
+  [results health-results sse-state]
   {:base-url "http://127.0.0.1:9101"
    :auth-token nil
-   :fetch-fn (fn [{:keys [body]}]
-               (let [request (js->clj (js/JSON.parse body) :keywordize-keys true)
-                     method (:method request)]
-                 (case method
-                   "thread-api/set-db-sync-config"
-                   (p/resolved {:status 200
-                                :body (success-body nil)})
+   :fetch-fn (fn [{:keys [method body]}]
+               (if (= "GET" method)
+                 (let [result (first @health-results)]
+                   (swap! health-results #(vec (rest %)))
+                   (if (= :success result)
+                     (p/resolved {:status 200
+                                  :body (js/JSON.stringify #js {:status "ready"})})
+                     (p/rejected (js/Error. "Failed to fetch"))))
+                 (let [request (js->clj (js/JSON.parse body) :keywordize-keys true)
+                       invoke-method (:method request)]
+                   (case invoke-method
+                     "thread-api/set-db-sync-config"
+                     (p/resolved {:status 200
+                                  :body (success-body nil)})
 
-                   "thread-api/markdown-mirror-set-enabled"
-                   (p/resolved {:status 200
-                                :body (success-body nil)})
+                     "thread-api/markdown-mirror-set-enabled"
+                     (p/resolved {:status 200
+                                  :body (success-body nil)})
 
-                   "thread-api/update-thread-atom"
-                   (p/resolved {:status 200
-                                :body (success-body nil)})
+                     "thread-api/update-thread-atom"
+                     (p/resolved {:status 200
+                                  :body (success-body nil)})
 
-                   "thread-api/list-db"
-                   (let [result (first @results)]
-                     (swap! results #(vec (rest %)))
-                     (cond
-                       (= :success result)
-                       (p/resolved {:status 200
-                                    :body (success-body [{:name "logseq_db_graph_a"}])})
+                     "thread-api/list-db"
+                     (let [result (first @results)]
+                       (swap! results #(vec (rest %)))
+                       (cond
+                         (= :success result)
+                         (p/resolved {:status 200
+                                      :body (success-body [{:name "logseq_db_graph_a"}])})
 
-                       (= :app-error result)
-                       (p/resolved {:status 409
-                                    :body (error-body "repo-locked" "graph already locked")})
+                         (= :app-error result)
+                         (p/resolved {:status 409
+                                      :body (error-body "repo-locked" "graph already locked")})
 
-                       (fn? result)
-                       (result)
+                         (fn? result)
+                         (result)
 
-                       :else
-                       (p/rejected (js/Error. "Failed to fetch")))))))
+                         :else
+                         (p/rejected (js/Error. "Failed to fetch"))))))))
    :open-sse-fn (fn [{:keys [on-error]}]
                   (swap! (:open-count sse-state) inc)
                   (reset! (:on-error sse-state) on-error)
@@ -149,8 +159,9 @@
    :scheduled (atom [])})
 
 (defn- install-electron-failover-test-env!
-  [{:keys [current-repo repos results runtime-results events current-repo-updates notifications sse ipc-calls]
-    :or {sse (sse-state)}}]
+  [{:keys [current-repo repos results health-results runtime-results events current-repo-updates notifications sse ipc-calls]
+    :or {health-results (atom [:success])
+         sse (sse-state)}}]
   (let [originals {:original-state @state/state
                    :electron? util/electron?
                    :ipc ipc/ipc
@@ -179,7 +190,7 @@
                           (result repo)
 
                           :else
-                          (p/resolved (assoc (db-worker-runtime results sse) :repo repo))))
+                          (p/resolved (assoc (db-worker-runtime results health-results sse) :repo repo))))
 
                       (p/resolved nil))))
     (set! state/pub-event! (fn [event]
@@ -975,7 +986,7 @@
                             (restore-electron-failover-test-env! originals)
                             (done)))))))
 
-(deftest electron-sse-error-triggers-runtime-recovery
+(deftest electron-sse-error-keeps-healthy-runtime
   (async done
     (let [results (atom [])
           events (atom [])
@@ -998,6 +1009,43 @@
                   _ (is (fn? on-error))
                   _ (on-error (js/Error. "connect ECONNREFUSED"))
                   _ (is (= [] @events))
+                  _ (p/delay 50)]
+            (is (= [] @current-repo-updates))
+            (is (= [] @events))
+            (is (= [] @notifications))
+            (is (= 1 @(:close-count sse)))
+            (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
+                   @ipc-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
+(deftest electron-sse-error-recovers-unhealthy-runtime
+  (async done
+    (let [results (atom [])
+          health-results (atom [:failure])
+          events (atom [])
+          current-repo-updates (atom [])
+          notifications (atom [])
+          ipc-calls (atom [])
+          sse (sse-state)
+          ensure-remote! #'persist-db/<ensure-remote!
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_graph_a"
+                      :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                      :results results
+                      :health-results health-results
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications
+                      :sse sse
+                      :ipc-calls ipc-calls})]
+      (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")
+                  on-error @(:on-error sse)
+                  _ (is (fn? on-error))
+                  _ (on-error (js/Error. "connect ECONNREFUSED"))
                   _ (p/delay 50)]
             (is (= [] @current-repo-updates))
             (is (= [] @events))
@@ -1196,8 +1244,11 @@
                current-repo-updates (atom [])
                notifications (atom [])
                session-id "session-a"
+               runtime-ready (p/deferred)
+               waiter-resolved? (atom false)
+               old-worker (fn [& _] nil)
                wrapped-worker (fn [& _] nil)
-               old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+               old-client (->FakeRemote "logseq_db_graph_a" old-worker)
                new-client (->FakeRemote "logseq_db_graph_a" wrapped-worker)
                original-state @state/state
                original-ipc ipc/ipc
@@ -1215,13 +1266,12 @@
                                                     :session-id session-id
                                                     :request-failures 1
                                                     :recovery-triggered? true})
+           (reset! state/*db-worker old-worker)
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
                            (case channel
                              "db-worker-runtime"
-                             (p/resolved {:base-url "http://127.0.0.1:9101"
-                                          :auth-token nil
-                                          :repo repo})
+                             runtime-ready
 
                              (p/resolved nil))))
            (set! remote/start! (fn [{:keys [repo]}]
@@ -1240,7 +1290,18 @@
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
                                       nil))
-           (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client session-id)
+           (let [recovery-result (recovery! "logseq_db_graph_a" old-client session-id)
+                 waiter (-> (persist-db/<wait-for-db-worker-ready! "logseq_db_graph_a")
+                            (p/then (fn [result]
+                                      (reset! waiter-resolved? true)
+                                      result)))]
+             (-> (p/let [_ (p/delay 10)
+                       _ (is (false? @waiter-resolved?))
+                       _ (p/resolve! runtime-ready {:base-url "http://127.0.0.1:9101"
+                                                    :auth-token nil
+                                                    :repo "logseq_db_graph_a"})
+                       _ recovery-result
+                       _ waiter
                        _ (p/delay 0)]
                  (is (= [["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
@@ -1265,7 +1326,7 @@
                             (set! state/set-current-repo! original-set-current-repo!)
                             (set! notification/show! original-notification-show!)
                             (reset-runtime-state!)
-                            (done)))))))
+                            (done))))))))
 
 (deftest electron-list-db-runtime-recovery-does-not-release-fresh-same-repo-runtime
   (async done
@@ -1411,6 +1472,74 @@
                             (set! notification/show! original-notification-show!)
                             (reset-runtime-state!)
                             (done)))))))
+
+(deftest electron-recoverable-transaction-confirms-ambiguous-result
+  (async done
+         (let [retry-var (resolve 'frontend.persist-db/<retry-db-worker-transaction!)
+               retry! (some-> retry-var deref)
+               repo "logseq_db_graph_a"
+               attempts (atom [])
+               original-electron? util/electron?]
+           (is (fn? retry!) "recoverable transactions expose a retry boundary")
+           (if-not retry!
+             (done)
+             (do
+               (set! util/electron? (constantly true))
+               (reset! persist-db/remote-repo repo)
+               (reset! state/*db-worker
+                       (fn [qkw & args]
+                         (case qkw
+                           :thread-api/local-tx-applied?
+                           (p/resolved (and (= repo (first args))
+                                            (= (first @attempts) (second args))))
+
+                           (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+               (-> (p/let [result (retry! repo
+                                          (fn [tx-id]
+                                            (swap! attempts conj tx-id)
+                                            (p/rejected (js/TypeError. "Failed to fetch"))))]
+                     (is (nil? result))
+                     (is (= 1 (count @attempts)))
+                     (is (uuid? (first @attempts))))
+                   (p/catch (fn [error]
+                              (is false (str "unexpected error: " error))))
+                   (p/finally (fn []
+                                (set! util/electron? original-electron?)
+                                (done)))))))))
+
+(deftest electron-recoverable-transaction-replays-uncommitted-result
+  (async done
+         (let [retry-var (resolve 'frontend.persist-db/<retry-db-worker-transaction!)
+               retry! (some-> retry-var deref)
+               repo "logseq_db_graph_a"
+               attempts (atom [])
+               original-electron? util/electron?]
+           (is (fn? retry!) "recoverable transactions expose a retry boundary")
+           (if-not retry!
+             (done)
+             (do
+               (set! util/electron? (constantly true))
+               (reset! persist-db/remote-repo repo)
+               (reset! state/*db-worker
+                       (fn [qkw & _args]
+                         (case qkw
+                           :thread-api/local-tx-applied? (p/resolved false)
+                           (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+               (-> (p/let [result (retry! repo
+                                          (fn [tx-id]
+                                            (swap! attempts conj tx-id)
+                                            (if (= 1 (count @attempts))
+                                              (p/rejected (js/TypeError. "Failed to fetch"))
+                                              (p/resolved :persisted))))]
+                     (is (= :persisted result))
+                     (is (= 2 (count @attempts)))
+                     (is (uuid? (first @attempts)))
+                     (is (apply = @attempts)))
+                   (p/catch (fn [error]
+                              (is false (str "unexpected error: " error))))
+                   (p/finally (fn []
+                                (set! util/electron? original-electron?)
+                                (done)))))))))
 
 (deftest electron-list-db-late-stale-failure-does-not-increment-new-graph-count
   (async done
