@@ -4468,6 +4468,8 @@
         :data-block-title (:block/title block)
         :data-block-format (name (get block :block/format :markdown))
         :data-db-collapsable (boolean (editor-handler/db-collapsable? block))
+        :style (when (some? (:virtual/indent config))
+                 {:padding-left (:virtual/indent config)})
         :ref #(when (nil? @*ref) (reset! *ref %))
         :data-collapsed (and collapsed? (boolean has-child?))
         :class (str (when selected? "selected")
@@ -4701,6 +4703,7 @@
    :edit?
    :hide-bullet?
    :hide-block-control?
+   :virtual/indent
    :ref-matched-children-ids])
 
 (defn- block-render-state
@@ -5326,14 +5329,6 @@
                            (let [window-idx (- idx virtual-offset)]
                              (when (pos? window-idx)
                                (nth blocks (dec window-idx))))))
-        flat-list-item (fn [block item]
-                         (if (:virtual/flat-list? config)
-                           (react-core/createElement
-                            "div"
-                            #js {:style #js {:boxSizing "border-box"
-                                             :paddingLeft (* 29 (dec (or (:block/level block) 1)))}}
-                            item)
-                           item))
         render-item (fn [idx]
                       (when-let [block (block-at-index idx)]
                         (let [top? (zero? idx)
@@ -5344,13 +5339,12 @@
                                         (assoc :outliner/previous-block previous)
 
                                         (:virtual/flat-list? config)
-                                        (assoc :hide-children? true))]
-                          (flat-list-item
-                           block
-                           (block-item config'
-                                       block
-                                       {:top? top?
-                                        :bottom? bottom?})))))
+                                        (assoc :hide-children? true
+                                               :virtual/indent (* 29 (dec (or (:block/level block) 1)))))]
+                          (block-item config'
+                                      block
+                                      {:top? top?
+                                       :bottom? bottom?}))))
         virtualized? (and virtualized? (seq blocks))
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
@@ -5368,13 +5362,12 @@
                             (assoc :outliner/previous-block previous)
 
                             (:virtual/flat-list? config)
-                            (assoc :hide-children? true))]
-              (flat-list-item
-               block
-               (block-item config'
-                           block
-                           {:top? top?
-                            :bottom? bottom?})))
+                            (assoc :hide-children? true
+                                   :virtual/indent (* 29 (dec (or (:block/level block) 1)))))]
+              (block-item config'
+                          block
+                          {:top? top?
+                           :bottom? bottom?}))
             (react-core/createElement "div" #js {:style #js {:height 29}})))
         virtual-context #js {:renderItem render-virtual-item}
         scroll-container (or (:scroll-container config)

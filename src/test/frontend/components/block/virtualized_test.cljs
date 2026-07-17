@@ -65,6 +65,23 @@
       (is (string/includes? block-list-source
                             "(react-core/createElement \"div\" #js {:style #js {:height 29}})")))))
 
+(deftest flat-row-selection-highlight-keeps-parent-width
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")
+        block-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux")
+        render-config-source (form-source source "(def ^:private block-render-config-keys")]
+    (is (some? block-list-source))
+    (is (some? block-source))
+    (is (some? render-config-source))
+    (testing "flat rows indent their content inside the selectable block"
+      (is (string/includes? block-list-source ":virtual/indent"))
+      (is (string/includes? block-source ":padding-left (:virtual/indent config)"))
+      (is (string/includes? render-config-source ":virtual/indent")
+          "Moving a block between levels must update its rendered indent.")
+      (is (not (string/includes? block-list-source
+                                 ":paddingLeft (* 29"))
+          "Indent outside .ls-block makes a child selection narrower than its parent."))))
+
 (deftest flat-virtualized-rows-do-not-load-children-per-row
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-container-source (form-source source "(hsx/defc block-container\n")]
