@@ -175,7 +175,6 @@
       :block/component-editing-mode?         false
       :editor/op                             nil
       :editor/start-pos                      nil
-      :editor/pending-new-block              nil
       :editor/hidden-editors                 #{} ;; page names
 
       :editor/action                         nil
@@ -209,7 +208,6 @@
       :editor/next-edit-block                nil
       :editor/raw-mode-block                 nil
       :editor/virtualized-scroll-fn          nil
-      :editor/edit-block-fn                  nil
 
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      []
@@ -816,63 +814,6 @@ should be done through this fn in order to get global config and config defaults
   [f & args]
   (replace-state! (apply f (rfx/snapshot) args)))
 
-(defn- edit-block-fn-entry
-  [value]
-  (cond
-    (fn? value)
-    {:f value}
-
-    (and (map? value) (fn? (:f value)))
-    value
-
-    :else
-    nil))
-
-(defn- edit-block-fn-queue
-  [value]
-  (cond
-    (vector? value) (into [] (keep edit-block-fn-entry) value)
-    :else (if-let [entry (edit-block-fn-entry value)]
-            [entry]
-            [])))
-
-(defn- take-edit-block-fn-entry
-  [queue pred]
-  (let [[before [entry & after]] (split-with (complement pred) queue)]
-    (when entry
-      [entry (vec (concat before after))])))
-
-(defn queue-edit-block-fn!
-  ([f]
-   (queue-edit-block-fn! nil f))
-  ([tx-id f]
-   (when (fn? f)
-     (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %)
-                                                 {:tx-id tx-id
-                                                  :f f})))))
-
-(defn remove-edit-block-fn!
-  [tx-id]
-  (when tx-id
-    (update-state! :editor/edit-block-fn
-                   #(->> (edit-block-fn-queue %)
-                         (remove (fn [entry] (= tx-id (:tx-id entry))))
-                         vec))))
-
-(defn take-edit-block-fn!
-  ([]
-   (let [queue (edit-block-fn-queue (get-state :editor/edit-block-fn))]
-     (when-let [[entry more] (take-edit-block-fn-entry queue #(nil? (:tx-id %)))]
-       (set-state! :editor/edit-block-fn more)
-       (:f entry))))
-  ([tx-id]
-   (let [queue (edit-block-fn-queue (get-state :editor/edit-block-fn))
-         match (and tx-id
-                    (take-edit-block-fn-entry queue #(= tx-id (:tx-id %))))]
-     (when-let [[entry more] match]
-       (set-state! :editor/edit-block-fn more)
-       (:f entry)))))
-
 ;; State getters and setters
 ;; =========================
 ;; These fns handle any key except :config.
@@ -1176,9 +1117,7 @@ should be done through this fn in order to get global config and config defaults
                                         (.contains class-list "opacity-70")))))
                        vec)]
        (set-selection-blocks-aux! blocks)
-       (when direction (set-state! :selection/direction direction))
-       (let [ids (get-selection-block-ids)]
-         (when (seq ids) (pub-event! [:editor/load-blocks ids])))))))
+       (when direction (set-state! :selection/direction direction))))))
 
 (defn state-clear-selection!
   []
@@ -1332,35 +1271,31 @@ should be done through this fn in order to get global config and config defaults
     (doseq [item items]
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
-(defn clear-editor-last-pos!
-  []
-  (set-state! :editor/last-saved-cursor {}))
-
-(defn clear-cursor-range!
-  []
-  (set-state! :editor/cursor-range nil))
-
 (defn clear-edit!
   [& {:keys [clear-editing-block?]
       :or {clear-editing-block? true}}]
-  (clear-editor-action!)
-  (when clear-editing-block?
-    (set-state! :editor/editing? nil)
-    (set-state! :editor/block nil))
-  (set-state! :editor/args nil)
-  (when clear-editing-block?
-    (let [online-users (some-> (get-state :rtc/state) :online-users)]
-      (when (and (coll? online-users) (> (count online-users) 1))
-        (pub-event! [:rtc/presence-update {:editing-block-uuid nil}]))))
-  (set-state! :editor/start-pos nil)
-  (clear-editor-last-pos!)
-  (clear-cursor-range!)
-  (when clear-editing-block?
-    (set-state! :editor/content {}))
-  (set-state! :ui/select-query-cache {})
-  (set-state! :editor/block-refs #{})
-  (set-state! :editor/action-data nil)
-  (set-state! :view/selected-blocks nil))
+  (let [online-users (some-> (get-state :rtc/state) :online-users)]
+    (swap-state!
+     (fn [db]
+       (cond-> (assoc db
+                      :editor/action nil
+                      :editor/args nil
+                      :editor/start-pos nil
+                      :editor/last-saved-cursor {}
+                      :editor/cursor-range nil
+                      :ui/select-query-cache {}
+                      :editor/block-refs #{}
+                      :editor/action-data nil
+                      :view/selected-blocks nil)
+         clear-editing-block?
+         (assoc :editor/editing? nil
+                :editor/block nil
+                :editor/content {}))))
+    (when (and clear-editing-block?
+               (coll? online-users)
+               (> (count online-users) 1))
+      (pub-event! [:rtc/presence-update {:editing-block-uuid nil}])))
+  nil)
 
 (defn set-editor-last-pos!
   [new-pos]
@@ -1876,23 +1811,30 @@ should be done through this fn in order to get global config and config defaults
             block (assoc block :block.editing/direction direction
                          :block.editing/event event
                          :block.editing/pos pos)
-            content (string/trim (or content ""))]
+            content (string/trim (or content ""))
+            block-id (:block/uuid block)
+            editing-block-id (if property-block
+                               [container-id (:block/uuid property-block) block-id]
+                               [container-id block-id])
+            native-platform? (mobile-util/native-platform?)]
         (assert (and container-id (:block/uuid block))
                 "container-id or block uuid is missing")
-        (set-state! :editor/block-refs #{})
-        (set-state! :editor/block block)
-        (if property-block
-          (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
-          (set-editing-block-id! [container-id (:block/uuid block)]))
-        (set-state! :editor/container-id container-id)
-        (set-state! :editor/content content :nested-path (:block/uuid block))
-        (set-state! :editor/last-key-code nil)
-        (set-state! :editor/set-timestamp-block nil)
-        (set-state! :editor/cursor-range cursor-range)
+        (swap-state!
+         (fn [db]
+           (cond-> (-> db
+                       (assoc :editor/block-refs #{}
+                              :editor/block block
+                              :editor/editing? {editing-block-id true}
+                              :editor/container-id container-id
+                              :editor/last-key-code nil
+                              :editor/set-timestamp-block nil
+                              :editor/cursor-range cursor-range)
+                       (assoc-in [:editor/content block-id] content))
+             native-platform?
+             (assoc :mobile/show-action-bar? false))))
         (let [online-users (some-> (get-state :rtc/state) :online-users)]
           (when (and (coll? online-users) (> (count online-users) 1))
-            (when-let [block-uuid (:block/uuid block)]
-              (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-uuid)}]))))
+            (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-id)}])))
         (when (= :code (:logseq.property.node/display-type block))
           (pub-event! [:editor/focus-code-editor block block-element]))
         (when-let [input (gdom/getElement edit-input-id)]
@@ -1901,10 +1843,7 @@ should be done through this fn in order to get global config and config defaults
               (util/set-change-value input content))
 
             (when (and move-cursor? (not (block-component-editing?)))
-              (cursor/move-cursor-to input pos))
-
-            (when (mobile-util/native-platform?)
-              (set-state! :mobile/show-action-bar? false))))))))
+              (cursor/move-cursor-to input pos))))))))
 
 (defn set-last-key-code!
   [key-code]

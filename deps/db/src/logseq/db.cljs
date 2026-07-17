@@ -426,6 +426,31 @@
     (when (not= (:db/id right) (:db/id block))
       right)))
 
+(defn- get-ordinary-sibling
+  [block direction]
+  (let [db (.-db block)
+        parent-id (:db/id (:block/parent block))
+        block-order (:block/order block)
+        [eligible? closer?] (case direction
+                              :left [neg? pos?]
+                              :right [pos? neg?])
+        [sibling-id _]
+        (reduce (fn [[_ best-order :as best] datom]
+                  (let [child-id (:e datom)
+                        child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
+                    (if (and child-order
+                             (eligible? (compare child-order block-order))
+                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
+                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (or (nil? best-order)
+                                 (closer? (compare child-order best-order))))
+                      [child-id child-order]
+                      best)))
+                [nil nil]
+                (d/datoms db :avet :block/parent parent-id))]
+    (when sibling-id
+      (d/entity db sibling-id))))
+
 (defn get-right-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
@@ -438,19 +463,7 @@
       (get-right-sibling-for-property-children block parent)
 
       :else
-      (let [db (.-db block)
-            datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (->> (map (fn [d]
-                                     [(:e d)
-                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                              (sort-by last))
-            block-order (:block/order block)]
-
-        (some (fn [[e child-order]]
-                (when (and (> (compare child-order block-order) 0)
-                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
-                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
-                  (d/entity db e))) child-orders)))))
+      (get-ordinary-sibling block :right))))
 
 (defn- get-left-sibling-for-property-children
   [block parent]
@@ -472,19 +485,7 @@
       (get-left-sibling-for-property-children block parent)
 
       :else
-      (let [db (.-db block)
-            datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (->> (map (fn [d]
-                                     [(:e d)
-                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                              (sort-by last)
-                              reverse)
-            block-order (:block/order block)]
-        (some (fn [[e child-order]]
-                (when (and (< (compare child-order block-order) 0)
-                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
-                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
-                  (d/entity db e))) child-orders)))))
+      (get-ordinary-sibling block :left))))
 
 (defn get-down
   [block]
