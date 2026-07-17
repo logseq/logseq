@@ -1,5 +1,6 @@
 (ns frontend.db.transact-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.common.page-window :as page-window]
             [frontend.db.transact :as db-transact]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -83,17 +84,17 @@
       (is (= tx-id (:tx-id latest)))
       (is (not (:page-children-stale? latest))))))
 
-(deftest refresh-worker-op-blocks-publishes-structural-ops-test
+(deftest refresh-worker-op-blocks-publishes-structural-marker-test
   (let [block-id (random-uuid)
         target-id (random-uuid)
         tx-id (random-uuid)
-        page-window {:root {:block/uuid target-id}
-                     :rows [{:db/id 1 :block/uuid block-id}]}]
+        page-id (random-uuid)]
     (state/set-state! :db/latest-transacted-entity-uuids {})
     (#'db-transact/refresh-worker-op-blocks!
      [[:insert-blocks [[{:block/uuid block-id}] target-id {}]]]
-     {:db-sync/tx-id tx-id}
-     page-window
+     {:db-sync/tx-id tx-id
+      :ui/page-id page-id}
+     {:root {:block/uuid page-id} :rows []}
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id target-id} (:updated-ids latest)))
@@ -101,8 +102,9 @@
       (is (= {block-id tx-id target-id tx-id}
              (:entity-tx-ids latest)))
       (is (true? (:page-window-refresh? latest)))
+      (is (= page-id (:page-id latest)))
       (is (= tx-id (:tx-id latest)))
-      (is (= page-window (:page-window latest)))
+      (is (= page-id (get-in latest [:page-window :root :block/uuid])))
       (is (not (:page-children-stale? latest))))))
 
 (deftest refresh-worker-op-blocks-does-not-mark-page-lookup-as-updated-test
@@ -129,37 +131,22 @@
     (#'db-transact/refresh-worker-op-blocks!
      [[:indent-outdent-blocks [[block-id] true {}]]]
      {:db-sync/tx-id tx-id}
-     {:root {:block/uuid current-page-id}}
+     nil
      #{current-page-id target-page-id})
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
-      (is (= #{target-page-id} (:affected-page-uuids latest)))
+      (is (= #{current-page-id target-page-id} (:affected-page-uuids latest)))
       (is (= tx-id (get-in latest [:entity-tx-ids current-page-id])))
       (is (= tx-id (get-in latest [:entity-tx-ids target-page-id]))))))
 
-(deftest row-data-block-ids-use-worker-rows-for-content-only-test
-  (let [current-id (random-uuid)
-        inserted-id (random-uuid)]
-    (is (= #{current-id}
-           (#'db-transact/row-data-block-ids
-            [[:save-block [{:block/uuid current-id} {}]]])))
-    (is (nil?
-         (#'db-transact/row-data-block-ids
-          [[:save-block [{:block/uuid current-id} {}]]
-           [:insert-blocks [[{:block/uuid inserted-id}]
-                            current-id
-                            {:sibling? true}]]]))
-        "Structural operations refresh from their page window.")))
-
 (deftest editor-callback-runs-from-its-worker-response-test
   (let [callback-id (random-uuid)
-        rows [{:block/uuid (random-uuid)}]
         calls (atom [])]
-    (state/queue-edit-block-fn! callback-id #(reset! calls %))
+    (state/queue-edit-block-fn! callback-id #(reset! calls :called))
     (#'db-transact/run-edit-block-fn!
      {:editor/edit-block-fn-id callback-id}
-     {:rows rows})
-    (is (= rows @calls))
+     nil)
+    (is (= :called @calls))
     (is (nil? (state/take-edit-block-fn! callback-id))
         "The callback runs exactly once.")))
 
@@ -169,7 +156,6 @@
           tx-id (random-uuid)
           editor-info {:block-id block-id}
           calls (atom [])
-          page-window {:root {:block/uuid (random-uuid)} :rows []}
           worker-result (p/deferred)]
       (state/set-state! :db/latest-transacted-entity-uuids {})
       (state/set-state! :editor/pending-new-block {:typed-text "abc"})
@@ -192,20 +178,24 @@
                           [[:save-block [{:block/uuid block-id} {}]]]
                           {:db-sync/tx-id tx-id})]
               (p/let [_ (p/delay 0)
-                      _ (is (= [:thread-api/apply-outliner-ops]
+                      _ (is (= [:thread-api/undo-redo-set-pending-editor-info
+                                :thread-api/apply-outliner-ops]
                                (mapv first @calls)))
-                      _ (is (= editor-info
-                               (get-in @calls [0 1 2 :ui/editor-info])))
+                      _ (is (= editor-info (get-in @calls [0 1 1]))
+                            "Editor history is sent through its dedicated worker API.")
+                      _ (is (not-any? #(contains? (get-in @calls [1 1 2]) %)
+                                      [:ui/page-id :ui/page-window-opts :ui/editor-info :virtual/offset
+                                       :editor/edit-block-fn-id])
+                            "The mutation worker must not receive renderer or editor state.")
                       _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
                             "UI refresh state must not change until the worker transaction resolves.")
-                      _ (p/resolve! worker-result {:result ::persisted
-                                                  :page-window page-window})
+                      _ (p/resolve! worker-result {:result ::persisted})
                       value result
                       _ (p/delay 0)
                       latest (state/get-state :db/latest-transacted-entity-uuids)]
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
-                (is (= page-window (:page-window latest)))
+                (is (nil? (:page-window latest)))
                 (is (= tx-id (:tx-id latest)))
                 (is (= {:typed-text "abc"}
                        (state/get-state :editor/pending-new-block))
@@ -213,6 +203,60 @@
           (p/finally (fn []
                        (state/set-state! :editor/pending-new-block nil)
                        (done)))))))
+
+(deftest structural-op-loads-one-window-after-the-mutation-test
+  (async done
+    (let [page-id (random-uuid)
+          block-id (random-uuid)
+          tx-id (random-uuid)
+          mutation-result (p/deferred)
+          current-window {:root {:block/uuid page-id}
+                          :rows [{:block/uuid block-id :block/title ""}]
+                          :offset 1
+                          :total-count 61}
+          calls (atom [])]
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-current-page (constantly page-id)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api & args]
+                            (swap! calls conj [api (vec args)])
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              mutation-result
+
+                              :thread-api/get-page-blocks-window
+                              (p/resolved current-window)))]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:insert-blocks [[{:block/uuid block-id :block/title ""}]
+                                            page-id
+                                            {:sibling? false}]]]
+                          {:db-sync/tx-id tx-id
+                           :ui/page-id page-id
+                           :ui/page-window-opts {:anchor :bottom}})]
+              (p/let [_ (p/delay 0)
+                      _ (is (= [:thread-api/undo-redo-set-pending-editor-info
+                                :thread-api/apply-outliner-ops]
+                               (mapv first @calls))
+                            "The page window must not be queried before the DB mutation commits.")
+                      _ (p/resolve! mutation-result {:result ::persisted})
+                      value result
+                      latest (state/get-state :db/latest-transacted-entity-uuids)]
+                (is (= ::persisted value))
+                (is (= [:thread-api/undo-redo-set-pending-editor-info
+                        :thread-api/apply-outliner-ops
+                        :thread-api/get-page-blocks-window]
+                       (mapv first @calls)))
+                (is (= {:anchor :bottom :limit page-window/limit}
+                       (get-in @calls [2 1 2])))
+                (is (= current-window (:page-window latest))))))
+          (p/finally done)))))
 
 (deftest apply-outliner-ops-completes-before-next-frame-callback-test
   (async done

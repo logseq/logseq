@@ -3,6 +3,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
+            [frontend.common.page-window :as page-window]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -219,13 +220,22 @@
         (not (comments-model/comments-area? left)))))
 
 (defn page-window-tx-meta
-  [block]
-  (let [[_ _ editor-config] (state/get-editor-args)
-        page (:block/page block)
-        page-id (or (state/get-current-page) (:db/id page) page)]
-    (when page-id
-      {:ui/page-id page-id
-       :virtual/offset (or (:virtual/offset editor-config) 0)})))
+  ([block]
+   (page-window-tx-meta block nil))
+  ([block config]
+   (let [[_ _ editor-config] (state/get-editor-args)
+         config (merge editor-config config)
+         page (:block/page block)
+         page-id (or (:block/uuid page) (:db/id page) page (state/get-current-page))
+         offset (or (:virtual/offset config) 0)
+         total-count (:virtual/total-count config)
+         window-opts (if (and (number? total-count)
+                              (>= (+ offset page-window/limit) total-count))
+                       {:anchor :bottom}
+                       {:offset offset})]
+     (when page-id
+       {:ui/page-id page-id
+        :ui/page-window-opts window-opts}))))
 
 (let [*timeout (atom nil)]
   (defn indent-outdent-blocks!

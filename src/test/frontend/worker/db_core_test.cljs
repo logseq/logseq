@@ -239,7 +239,8 @@
          (is (= :db.cardinality/one (:db/cardinality result)))
          (is (= (:db/id result)
                 (:db/id (#'db-core/resolve-block-entity @conn :user.property/test-property))))
-         (is (= page-id (get-in response [:page-window :root :db/id]))))))))
+         (is (nil? (:page-window response))
+             "Outliner mutations must not synchronously calculate a page window."))))))
 
 (deftest apply-outliner-ops-rejects-missing-connection-test
   (restoring-worker-state
@@ -254,10 +255,11 @@
        (is (= :db/missing-connection (:type (ex-data error))))
        (is (= repo (:repo (ex-data error))))))))
 
-(deftest expand-block-returns-complete-newly-visible-rows-test
+(deftest expand-block-refreshes-through-the-page-window-api-test
   (restoring-worker-state
    (fn []
      (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           get-window! (get-thread-api :thread-api/get-page-blocks-window)
            page-id #uuid "00000000-0000-0000-0000-000000000001"
            parent-id #uuid "11111111-1111-1111-1111-111111111111"
            child-id #uuid "22222222-2222-2222-2222-222222222222"
@@ -289,14 +291,16 @@
                                        :block/collapsed? false}]
                                      {}]]]
                                   {:ui/page-id page-id
-                                   :ui/render-block-uuids #{parent-id}
-                                   :virtual/offset 0})
+                                   :affected-block-uuids #{parent-id}})
+             window (get-window! test-repo page-id {:offset 0 :limit 60})
              child-row (some #(when (= child-id (:block/uuid %)) %)
-                             (get-in response [:page-window :rows]))]
+                             (:rows window))]
+         (is (nil? (:page-window response))
+             "The mutation response must not calculate a page window.")
          (is (= "Child" (:block/title child-row))
-             "A newly revealed row must contain render data, not only layout."))))))
+             "The page-window API must return complete newly revealed rows."))))))
 
-(deftest insert-block-returns-complete-new-row-test
+(deftest insert-block-returns-complete-updated-block-without-page-window-test
   (restoring-worker-state
    (fn []
      (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
@@ -324,22 +328,21 @@
                                      existing-id
                                      {:sibling? true
                                       :keep-uuid? true}]]]
-                                  {:ui/page-id page-id
-                                   :ui/render-block-uuids #{inserted-id}
-                                   :virtual/offset 0})
-             inserted-row (some #(when (= inserted-id (:block/uuid %)) %)
-                                (get-in response [:page-window :rows]))
+                                  {:affected-block-uuids #{inserted-id}})
              inserted (d/entity @conn [:block/uuid inserted-id])]
          (is (some? inserted) "The insert op must persist the new block.")
-         (is (contains? inserted-row :block/title)
-             (str "The new virtual row must be renderable before the editor focuses it: "
+         (is (nil? (:page-window response))
+             "The mutation response must not calculate a page window.")
+         (is (= "" (:block/title inserted))
+             (str "The insert must persist before the frontend refreshes its window: "
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
 
-(deftest insert-blocks-at-bottom-keeps-new-rows-in-window-test
+(deftest insert-blocks-at-bottom-refreshes-through-one-window-query-test
   (restoring-worker-state
    (fn []
      (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           get-window! (get-thread-api :thread-api/get-page-blocks-window)
            page-id #uuid "00000000-0000-0000-0000-000000000001"
            block-ids (vec (repeatedly 150 random-uuid))
            inserted-ids [(random-uuid) (random-uuid)]
@@ -369,15 +372,13 @@
                                      (peek block-ids)
                                      {:sibling? true
                                       :keep-uuid? true}]]]
-                                  {:ui/page-id page-id
-                                   :ui/render-block-uuids (set inserted-ids)
-                                   :virtual/offset 0})
-             page-window (:page-window response)
+                                  {:affected-block-uuids (set inserted-ids)})
+             page-window (get-window! test-repo page-id {:anchor :bottom :limit 60})
              row-ids (set (map :block/uuid (:rows page-window)))]
-         (is (= 1 (:offset page-window))
-             "A window that was at the bottom must follow inserts that grow the page.")
+         (is (nil? (:page-window response))
+             "The mutation response must not calculate a page window.")
          (is (set/subset? (set inserted-ids) row-ids)
-             "Every inserted row must be renderable before its editor callback runs."))))))
+             "A single bottom-anchored refresh must contain every inserted row."))))))
 
 (deftest apply-outliner-ops-marks-link-container-pages-affected-test
   (restoring-worker-state
@@ -418,8 +419,7 @@
                                     [{:block/uuid source-block-id
                                       :block/title "Updated"}
                                      {}]]]
-                                  {:ui/page-id source-page-id
-                                   :ui/render-block-uuids #{source-block-id}})]
+                                  {:affected-block-uuids #{source-block-id}})]
          (is (= #{source-page-id container-page-id}
                 (:affected-page-uuids response))))))))
 
@@ -457,13 +457,13 @@
                 (get-in (d/entity @conn [:block/uuid child-id])
                         [:block/parent :block/uuid]))))))))
 
-(deftest delete-block-returns-complete-new-window-row-test
+(deftest delete-block-refreshes-complete-window-through-window-api-test
   (restoring-worker-state
    (fn []
      (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
            get-window! (get-thread-api :thread-api/get-page-blocks-window)
            page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-ids (vec (repeatedly 151 random-uuid))
+           block-ids (vec (repeatedly 61 random-uuid))
            conn (d/create-conn db-schema/schema)]
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn
@@ -480,19 +480,20 @@
                               :block/order (str idx)})
                            block-ids)))
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [current-window (get-window! test-repo page-id {:offset 0 :limit 150})
+       (let [current-window (get-window! test-repo page-id {:offset 0 :limit 60})
              current-row-ids (set (map :block/uuid (:rows current-window)))
              deleted-id (:block/uuid (first (:rows current-window)))
              response (apply-ops! test-repo
                                   [[:delete-blocks [[deleted-id] {}]]]
-                                  {:ui/page-id page-id
-                                   :ui/render-block-uuids #{deleted-id}
-                                   :virtual/offset 0})
+                                  {:affected-block-uuids #{deleted-id}})
+             refreshed-window (get-window! test-repo page-id {:offset 0 :limit 60})
              new-row (some #(when-not (contains? current-row-ids (:block/uuid %)) %)
-                           (get-in response [:page-window :rows]))]
+                           (:rows refreshed-window))]
+         (is (nil? (:page-window response))
+             "The mutation response must not calculate a page window.")
          (is (some? new-row) "Deleting a visible row must pull the next row into the window.")
          (is (contains? new-row :block/title)
-             "The newly visible row must be renderable without a second worker request."))))))
+             "The page-window refresh must return renderable rows."))))))
 
 (defn- fake-db
   ([]
@@ -1769,6 +1770,49 @@
     ;; Should contain the remoteInvoke function
     (is (fn? (gobj/get proxy "remoteInvoke")))))
 
+(deftest build-proxy-object-routes-requests-through-service-being-created
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [*service @#'db-core/*service
+             old-service-value @*service
+             service-created (p/deferred)
+             old-calls (atom [])
+             new-calls (atom [])
+             service (fn [calls]
+                       {:status {:ready (p/resolved true)}
+                        :proxy #js {"remoteInvoke"
+                                   (fn [args]
+                                     (let [[method payload] args]
+                                       (swap! calls conj [method payload])
+                                       (p/resolved method)))}})
+             old-service (service old-calls)
+             new-service (service new-calls)]
+         (reset! *service ["graph-a" old-service])
+         (p/with-redefs [db-core/close-db! (fn [_repo] nil)
+                         shared-service/<create-service (fn [& _args]
+                                                          service-created)]
+           (let [proxy (#'db-core/build-proxy-object)
+                 remote-invoke (gobj/get proxy "remoteInvoke")
+                 create-request (remote-invoke
+                                 "thread-api/create-or-open-db"
+                                 (ldb/write-transit-str ["graph-b" {}]))
+                 query-request (remote-invoke
+                                "thread-api/get-db-schema"
+                                (ldb/write-transit-str ["graph-b"]))]
+             (p/resolve! service-created new-service)
+             (-> (p/all [create-request query-request])
+                 (p/then (fn [_]
+                           (is (empty? @old-calls))
+                           (is (= #{"thread-api/create-or-open-db"
+                                    "thread-api/get-db-schema"}
+                                  (set (map first @new-calls))))))
+                 (p/catch (fn [error]
+                            (is false (str "unexpected error: " error))))
+                 (p/finally (fn []
+                              (reset! *service old-service-value)
+                              (done)))))))))))
+
 ;; ---- <init-service! tests ----
 
 (deftest init-service-returns-nil-for-nil-graph
@@ -2364,7 +2408,32 @@
                       {:db/id 44
                        :block/title "loaded"
                        :block/parent 42
-                       :block.temp/load-status nil}]}))))
+                      :block.temp/load-status nil}]}))))
+
+(deftest page-window-refs-count-keeps-reference-and-alias-counts
+  (let [target-id #uuid "11111111-1111-1111-1111-111111111111"
+        alias-id #uuid "22222222-2222-2222-2222-222222222222"
+        plain-id #uuid "33333333-3333-3333-3333-333333333333"
+        conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:block/uuid target-id
+                        :block/title "Target"}
+                       {:block/uuid alias-id
+                        :block/title "Alias"}
+                       {:block/uuid plain-id
+                        :block/title "Plain"}])
+    (d/transact! conn [{:block/uuid target-id
+                        :block/alias [[:block/uuid alias-id]]}
+                       {:block/uuid (random-uuid)
+                        :block/title "Target ref"
+                        :block/refs [[:block/uuid target-id]]}
+                       {:block/uuid (random-uuid)
+                        :block/title "Alias ref"
+                        :block/refs [[:block/uuid alias-id]]}])
+    (let [db @conn
+          refs-count #'db-core/block-refs-count]
+      (is (zero? (refs-count db (:db/id (d/entity db [:block/uuid plain-id])))))
+      (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid target-id])))))
+      (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid alias-id]))))))))
 
 (deftest page-block-window-does-not-scan-graph-wide-layout-attributes
   (restoring-worker-state

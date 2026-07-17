@@ -356,9 +356,8 @@
                      :replace-empty-target? replace-empty-target?
                      :outliner-op outliner-op}]
     (ui-outliner-tx/transact!
-     (cond-> {:outliner-op :insert-blocks
-              :ui/page-id (or (block-page-id current-block) (:db/id current-block))
-              :virtual/offset (or (:virtual/offset config) 0)}
+     (cond-> (merge {:outliner-op :insert-blocks}
+                    (block-handler/page-window-tx-meta current-block config))
        (and outliner-op (not= outliner-op :insert-blocks))
        (assoc :source-outliner-op outliner-op)
 
@@ -531,9 +530,9 @@
                      :save-code-editor? false
                      :skip-load? true})))
     (ui-outliner-tx/transact!
-     {:outliner-op :delete-blocks
-      :ui/page-id (or (block-page-id block) (:db/id block))
-      :editor/edit-block-fn-id edit-block-fn-id}
+     (merge {:outliner-op :delete-blocks
+             :editor/edit-block-fn-id edit-block-fn-id}
+            (block-handler/page-window-tx-meta block))
      (save-current-block! {:current-block previous-block})
      (outliner-op/delete-blocks! [block] {}))))
 
@@ -575,9 +574,9 @@
                                  :tail tail))
         (queue-pending-new-block-edit! config last-block true)
         (ui-outliner-tx/transact!
-         {:outliner-op :insert-blocks
-          :ui/page-id (or (block-page-id block) (:db/id block))
-          :editor/edit-block-fn-id edit-block-fn-id}
+         (merge {:outliner-op :insert-blocks
+                 :editor/edit-block-fn-id edit-block-fn-id}
+                (block-handler/page-window-tx-meta block))
          (save-block-aux! block prefix {})
          (outliner-op/insert-blocks! blocks block {:sibling? true :keep-uuid? true}))))))
 
@@ -802,15 +801,9 @@
                     _ (when edit-block-fn-id
                         (state/queue-edit-block-fn!
                          edit-block-fn-id
-                         (fn [rows]
-                           (when-let [inserted-block (or (some #(when (= (:block/uuid new-block)
-                                                                         (:block/uuid %))
-                                                                  %)
-                                                               rows)
-                                                        (first rows))]
-                             (edit-block! inserted-block :max
-                                          {:save-code-editor? false
-                                           :skip-load? true})))))]
+                         (fn []
+                           (edit-block! new-block :max
+                                        {:save-code-editor? false}))))]
                 (when target-block
                   (p/do!
                    (let [new-block' (if (seq properties)

@@ -11,6 +11,7 @@
    [datascript.impl.entity :as de]
    [datascript.storage :refer [IStorage] :as storage]
    [frontend.common.cache :as common.cache]
+   [frontend.common.page-window :as common-page-window]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
@@ -1922,6 +1923,14 @@
    :description-property nil
    :class-properties-property nil})
 
+(defn- block-refs-count
+  [db block-id]
+  (if (and (empty? (d/datoms db :avet :block/refs block-id))
+           (empty? (d/datoms db :eavt block-id :block/alias))
+           (empty? (d/datoms db :avet :block/alias block-id)))
+    0
+    (common-initial-data/get-block-refs-count db block-id)))
+
 (defn- assoc-render-property-data
   ([db block block-map]
    (assoc-render-property-data db block block-map false))
@@ -1940,7 +1949,7 @@
                     (block-reactions db (:db/id block)))
        refs-count?
        (assoc :block.temp/refs-count
-              (common-initial-data/get-block-refs-count db (:db/id block)))))))
+              (block-refs-count db (:db/id block)))))))
 
 (defn- get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]
@@ -1988,7 +1997,7 @@
         children?
         (assoc :children children')))))
 
-(def ^:private page-block-window-default-limit 150)
+(def ^:private page-block-window-default-limit common-page-window/limit)
 (def ^:private page-block-window-max-limit 500)
 
 (defn- clamp-page-block-window-limit
@@ -2212,71 +2221,34 @@
                :block.temp/has-children? has-children?)
         (dissoc :block/children))))
 
-(defn- flat-child-block-layout-row
-  [_db {:keys [block level parent-id has-children?]}]
-  {:db/id (:db/id block)
-   :block/uuid (:block/uuid block)
-   :block/order (:block/order block)
-   :block/collapsed? (:block/collapsed? block)
-   :block/level level
-   :block/parent {:db/id parent-id}
-   :block.temp/load-status :self
-   :block.temp/has-children? has-children?})
-
-(defn- page-window-before-op
-  [db id-or-page-name opts response-limit]
-  (when-let [root (resolve-block-entity db id-or-page-name)]
-    (let [{:keys [entries offset total-count]}
-          (flat-child-block-window db root opts)]
-      {:block-uuids (into #{}
-                          (map (comp :block/uuid :block))
-                          entries)
-       :bottom? (>= (+ offset response-limit) total-count)})))
-
 (defn- get-page-blocks-window-response
-  ([repo id-or-page-name opts]
-   (get-page-blocks-window-response repo id-or-page-name opts nil nil))
-  ([repo id-or-page-name opts render-block-uuids previous-window-block-uuids]
-   (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
-     (when-let [root (resolve-block-entity db id-or-page-name)]
-       (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
-             render-block-uuids
-             (when (or render-block-uuids previous-window-block-uuids)
-               (into (or render-block-uuids #{})
-                     (keep (fn [{:keys [block]}]
-                             (when-not (contains? previous-window-block-uuids (:block/uuid block))
-                               (:block/uuid block))))
-                     entries))
-             page-summary (worker-plain/attribute-value->plain db :block/page (:db/id root))
-             rows (mapv (fn [{:keys [block] :as entry}]
-                          (if (or (nil? render-block-uuids)
-                                  (contains? render-block-uuids (:block/uuid block)))
-                            (flat-child-block-row db page-summary entry)
-                            (flat-child-block-layout-row db entry)))
-                        entries)
-             commented-block-uuids (->> (mapv :block/uuid rows)
-                                        (comments/get-comment-thread-block-uuids db)
-                                        set)
-             rows (->> rows
-                       (mapv (fn [row]
-                               (cond-> row
-                                 (or (nil? render-block-uuids)
-                                     (contains? render-block-uuids (:block/uuid row)))
-                                 (assoc :block.temp/sync-conflicts
-                                        (or (client-op/get-sync-conflicts repo (:block/uuid row)) [])
-                                        :block.temp/comment-thread-present?
-                                        (contains? commented-block-uuids (str (:block/uuid row)))))))
-                       worker-plain/with-explicit-ref-fields-recursive)
-             root-row (->> (assoc-render-property-data db
-                                                       root
-                                                       (worker-plain/entity-forward-map db root {})
-                                                       true)
-                           worker-plain/with-explicit-ref-fields-recursive)]
-         {:root root-row
-          :rows rows
-          :offset offset
-          :limit limit
-          :total-count total-count})))))
+  [repo id-or-page-name opts]
+  (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
+    (when-let [root (resolve-block-entity db id-or-page-name)]
+      (let [{:keys [entries offset limit total-count]} (flat-child-block-window db root opts)
+            page-summary (worker-plain/attribute-value->plain db :block/page (:db/id root))
+            rows (mapv #(flat-child-block-row db page-summary %) entries)
+            commented-block-uuids (->> (mapv :block/uuid rows)
+                                       (comments/get-comment-thread-block-uuids db)
+                                       set)
+            rows (->> rows
+                      (mapv (fn [row]
+                              (assoc row
+                                     :block.temp/sync-conflicts
+                                     (or (client-op/get-sync-conflicts repo (:block/uuid row)) [])
+                                     :block.temp/comment-thread-present?
+                                     (contains? commented-block-uuids (str (:block/uuid row))))))
+                      worker-plain/with-explicit-ref-fields-recursive)
+            root-row (->> (assoc-render-property-data db
+                                                      root
+                                                      (worker-plain/entity-forward-map db root {})
+                                                      true)
+                          worker-plain/with-explicit-ref-fields-recursive)]
+        {:root root-row
+         :rows rows
+         :offset offset
+         :limit limit
+         :total-count total-count}))))
 
 (defn- sanitize-block-result
   [result]
@@ -2913,57 +2885,24 @@
     (try
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
-            editor-info (:ui/editor-info opts)
-            page-id (:ui/page-id opts)
-            page-window-offset (:virtual/offset opts)
-            render-block-uuids (:ui/render-block-uuids opts)
-            row-data-block-ids (:ui/row-data-block-ids opts)
-            previous-window
-            (when page-id
-              (page-window-before-op @conn page-id
-                                     {:offset page-window-offset
-                                      :limit page-block-window-default-limit}
-                                     (inc page-block-window-default-limit)))
-            previous-window-block-uuids (:block-uuids previous-window)
-            opts (dissoc opts :ui/page-id :ui/editor-info
-                         :ui/render-block-uuids :ui/row-data-block-ids :virtual/offset)
-            _ (worker-undo-redo/set-pending-editor-info! repo editor-info)
+            affected-block-uuids (:affected-block-uuids opts)
+            opts (dissoc opts :affected-block-uuids)
+            affected-page-uuids-before (collect-affected-page-uuids @conn affected-block-uuids)
             apply-started-at (perf-time-ms)
             result (worker-util/profile
                     "apply outliner ops"
                     (outliner-op/apply-ops! conn ops opts))
             applied-at (perf-time-ms)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
-            affected-page-uuids (collect-affected-page-uuids @conn render-block-uuids)
-            updated-blocks (when (seq row-data-block-ids)
-                             (into []
-                                   (keep (fn [block-id]
-                                           (:block (get-block-and-children @conn block-id {:children? false}))))
-                                   row-data-block-ids))
-            page-window (when page-id
-                          (get-page-blocks-window-response
-                           repo page-id
-                           (cond-> {:offset page-window-offset
-                                    :limit (inc page-block-window-default-limit)}
-                             (:bottom? previous-window)
-                             (assoc :anchor :bottom))
-                           (not-empty render-block-uuids)
-                           previous-window-block-uuids))
-            page-window-at (perf-time-ms)
+            affected-page-uuids (into affected-page-uuids-before
+                                      (collect-affected-page-uuids @conn affected-block-uuids))
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}
-                                                       page-window
-                                                       (assoc :page-window page-window)
-
-                                                       (seq updated-blocks)
-                                                       (assoc :updated-blocks updated-blocks)
-
                                                        (seq affected-page-uuids)
                                                        (assoc :affected-page-uuids affected-page-uuids)
 
                                                        goog.DEBUG
                                                        (assoc :perf {:apply-ms (- applied-at apply-started-at)
-                                                                     :page-window-ms (- page-window-at applied-at)
                                                                      :listener listener-perf})))
             plain-at (perf-time-ms)]
         (log-outliner-op-perf!
@@ -2971,7 +2910,7 @@
           :op-names (mapv first ops)
           :op-count (count ops)
           :apply-ms (- applied-at apply-started-at)
-          :plain-ms (- plain-at page-window-at)
+          :plain-ms (- plain-at applied-at)
           :total-ms (- plain-at started-at)})
         response)
       (catch :default e
@@ -3451,14 +3390,18 @@
         (log/info :db-worker/init-service {:graph graph
                                            :prev-graph prev-graph
                                            :import-type (:import-type start-opts)})
-        (p/let [service (shared-service/<create-service graph
-                                                        (bean/->js fns)
-                                                        #(on-become-master graph start-opts)
-                                                        broadcast-data-types
-                                                        {:import? (:import-type? start-opts)})]
-          (assert (p/promise? (get-in service [:status :ready])))
-          (reset! *service [graph service])
-          service)))))
+        (let [service-promise (shared-service/<create-service
+                               graph
+                               (bean/->js fns)
+                               #(on-become-master graph start-opts)
+                               broadcast-data-types
+                               {:import? (:import-type? start-opts)})]
+          (reset! *service [graph service-promise])
+          (p/let [service service-promise]
+            (assert (p/promise? (get-in service [:status :ready])))
+            (when (identical? service-promise (second @*service))
+              (reset! *service [graph service]))
+            service))))))
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
@@ -3497,8 +3440,9 @@
                               (string? payload) (ldb/read-transit-str payload)
                               (array? payload) (js->clj payload :keywordize-keys true)
                               :else payload)
-                   [graph opts] payload']
-               (p/let [service (<init-service! graph opts)
+                   [graph opts] payload'
+                   service-promise (<init-service! graph opts)]
+               (p/let [service service-promise
                        client-id (:client-id service)]
                  (when client-id
                    (platform/post-message! (platform/current)
@@ -3515,7 +3459,8 @@
 
              :else
              ;; ensure service is ready
-             (p/let [_ready-value (get-in service [:status :ready])]
+             (p/let [service service
+                     _ready-value (get-in service [:status :ready])]
                (js-invoke (:proxy service) k args)))))]))
    (into {})
    bean/->js))
