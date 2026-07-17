@@ -8,10 +8,10 @@
   [(core/command-entry ["login"]
                        :login
                        "Authenticate this machine with Logseq cloud"
-                       {:user {:desc "Email address (skips browser login)"
+                       {:user {:desc "Email address (skips browser login; requires --pass)"
                                :alias :u}
-                        :pass {:desc "Password (skips browser login)"
-                               :alias :p}})
+                        :pass {:desc "Password (skips browser login; may be visible in shell history/process list)"
+                               :alias :p}}
    (core/command-entry ["logout"]
                        :logout
                        "Remove persisted CLI auth"
