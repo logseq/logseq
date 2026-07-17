@@ -1402,6 +1402,27 @@ let class_property_orders runtime capabilities classes =
            (capabilities.generateOrder () [@u]))
        (empty_map runtime)
 
+let validate_class_extends_acyclic runtime all_idents classes =
+  classes
+  |> Support.Runtime_codec.map_to_entries runtime
+  |> Rrbvec.of_array
+  |> Rrbvec.map (function
+       | [| class_name; definition |] ->
+           let class_ident = get_ident runtime all_idents class_name in
+           let parent = field runtime definition "build/class-parent" in
+           let parents =
+             if Support.Runtime_codec.value_is_nil runtime parent then
+               field runtime definition "build/class-extends"
+               |> collection runtime
+             else Rrbvec.singleton parent
+           in
+           ( keyword_text runtime class_ident,
+             parents
+             |> Rrbvec.map (fun parent ->
+                 get_ident runtime all_idents parent |> keyword_text runtime) )
+       | _ -> invalid_arg "SQLite build classes expect map entries")
+  |> Melange_db.Sqlite_build.validate_class_extends_acyclic
+
 let build_classes runtime capabilities options all_idents properties page_uuids
     classes =
   let build_existing =
@@ -1623,6 +1644,7 @@ let build_blocks_tx_with build_all_idents build_properties runtime
   let all_idents =
     build_all_idents runtime options properties classes
   in
+  validate_class_extends_acyclic runtime all_idents classes;
   let class_orders = class_property_orders runtime capabilities classes in
   let properties_tx =
     build_properties runtime capabilities options all_idents class_orders

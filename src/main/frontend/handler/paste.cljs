@@ -124,7 +124,9 @@
 
 (defn- markdown-blocks?
   [text]
-  (boolean (melange-regex/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
+  (boolean (or (melange-regex/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)
+               (melange-regex/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
+               (melange-regex/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
 
 (defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"

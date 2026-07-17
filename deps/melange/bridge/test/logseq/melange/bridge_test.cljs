@@ -346,6 +346,9 @@
                                               "exp" (+ now-s 600) "sub" "用户"}
                                  client-id-payload #js {"iss" "issuer" "client_id" "client"
                                                         "exp" (+ now-s 600)}
+                                 additional-client-payload #js {"iss" "issuer"
+                                                                "aud" "additional-client"
+                                                                "exp" (+ now-s 600)}
                                  no-exp-payload #js {"iss" "issuer" "aud" "client"}
                                  boundary-payload #js {"iss" "issuer" "aud" "client"
                                                        "exp" now-s}
@@ -357,7 +360,10 @@
                                        (sign-jwt (.-privateKey key-pair) header no-exp-payload)
                                        (sign-jwt (.-privateKey key-pair) header boundary-payload)
                                        (sign-jwt (.-privateKey key-pair) header expired-payload)
-                                       (sign-jwt (.-privateKey wrong-key-pair) header payload)])
+                                       (sign-jwt (.-privateKey wrong-key-pair) header payload)
+                                       (sign-jwt (.-privateKey key-pair)
+                                                 header
+                                                 additional-client-payload)])
                                  (.then
                                   (fn [tokens]
                                     (let [valid-token (aget tokens 0)
@@ -366,6 +372,7 @@
                                           boundary-token (aget tokens 3)
                                           expired-token (aget tokens 4)
                                           wrong-signature-token (aget tokens 5)
+                                          additional-client-token (aget tokens 6)
                                           wrong-issuer-env (authorization-env "wrong" "client" "https://jwks/main")]
                                       (-> (js/Promise.resolve)
                                           (.then (fn []
@@ -387,6 +394,20 @@
                                           (.then (fn [] (authorization/verify-jwt client-id-token env)))
                                           (.then (fn [claims]
                                                    (is (= "client" (aget claims "client_id")))))
+                                          (.then (fn []
+                                                   (let [additional-client-env
+                                                         (authorization-env
+                                                          "issuer"
+                                                          "client"
+                                                          "https://jwks/main")]
+                                                     (set! (.-COGNITO_CLIENT_IDS additional-client-env)
+                                                           " ignored-client, additional-client ")
+                                                     (authorization/verify-jwt
+                                                      additional-client-token
+                                                      additional-client-env))))
+                                          (.then (fn [claims]
+                                                   (is (= "additional-client"
+                                                          (aget claims "aud")))))
                                           (.then (fn [] (authorization/verify-jwt no-exp-token env)))
                                           (.then (fn [claims]
                                                    (is (= "issuer" (aget claims "iss")))))

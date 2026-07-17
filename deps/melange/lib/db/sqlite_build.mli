@@ -6,6 +6,8 @@ val create_temp_id_state : unit -> temp_id_state
 val next_temp_id : temp_id_state -> int
 val default_temp_id_state : temp_id_state
 val class_property_order : string Rrbvec.t Rrbvec.t -> string Rrbvec.t
+val validate_class_extends_acyclic :
+  (string * string Rrbvec.t) Rrbvec.t -> unit
 val property_schema : collection:bool -> property_value -> property_schema
 
 val extract_blocks :

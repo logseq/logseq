@@ -119,9 +119,14 @@
                       content' (str melange-common/block-pattern (if block-with-title? " " "\n") title)
                       hashtag-link-refs (existing-markdown-hashtag-link-refs ast)
                       parsed-block (block/parse-block (assoc block :block/title content'))
+                      new-display-block? (and (nil? (:logseq.property.node/display-type block))
+                                              (contains? #{:code :math}
+                                                         (:logseq.property.node/display-type parsed-block)))
                       block' (-> (merge block
                                         parsed-block
-                                        {:block/title title}
+                                        {:block/title (if new-display-block?
+                                                        (:block/title parsed-block)
+                                                        title)}
                                         (when heading-level
                                           {:logseq.property/heading heading-level}))
                                  (dissoc :block/format))]

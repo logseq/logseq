@@ -84,6 +84,57 @@ let class_property_order constraints =
     invalid_arg "Cycle detected in class property constraints";
   ordered
 
+let validate_class_extends_acyclic classes =
+  let incoming = Hashtbl.create (Rrbvec.length classes) in
+  let outgoing = Hashtbl.create (Rrbvec.length classes) in
+  let edges = Hashtbl.create (Rrbvec.length classes) in
+  Rrbvec.iter
+    (fun (class_ident, _parents) -> Hashtbl.replace incoming class_ident 0)
+    classes;
+  Rrbvec.iter
+    (fun (class_ident, parents) ->
+      Rrbvec.iter
+        (fun parent_ident ->
+          if
+            Hashtbl.mem incoming parent_ident
+            && not (Hashtbl.mem edges (class_ident, parent_ident))
+          then (
+            Hashtbl.add edges (class_ident, parent_ident) ();
+            let parents =
+              Option.value
+                (Hashtbl.find_opt outgoing class_ident)
+                ~default:Rrbvec.empty
+            in
+            Hashtbl.replace outgoing class_ident
+              (Rrbvec.push_back parents parent_ident);
+            Hashtbl.replace incoming parent_ident
+              (Hashtbl.find incoming parent_ident + 1)))
+        parents)
+    classes;
+  let initial_queue =
+    classes
+    |> Rrbvec.filter_map (fun (class_ident, _parents) ->
+        if Hashtbl.find incoming class_ident = 0 then Some class_ident
+        else None)
+  in
+  let rec consume count queue =
+    match Rrbvec.pop_front queue with
+    | None -> count
+    | Some (class_ident, remaining) ->
+        let unlocked = ref Rrbvec.empty in
+        Option.value
+          (Hashtbl.find_opt outgoing class_ident)
+          ~default:Rrbvec.empty
+        |> Rrbvec.iter (fun parent_ident ->
+            let count = Hashtbl.find incoming parent_ident - 1 in
+            Hashtbl.replace incoming parent_ident count;
+            if count = 0 then
+              unlocked := Rrbvec.push_back !unlocked parent_ident);
+        consume (count + 1) (Rrbvec.append remaining !unlocked)
+  in
+  if consume 0 initial_queue <> Rrbvec.length classes then
+    Js.Exn.raiseError "Cycle detected in :build/class-extends"
+
 let property_schema ~collection value =
   let property_type =
     match value with

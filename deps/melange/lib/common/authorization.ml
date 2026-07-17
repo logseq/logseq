@@ -42,7 +42,14 @@ let validate_claims ~expected_issuer ~expected_client_id ~issuer
     in
     if
       not
-        (Option.equal String.equal selected_client_id (Some expected_client_id))
+        (Option.exists
+           (fun selected ->
+             expected_client_id |> Js.String.split ~sep:","
+             |> Array.exists (fun allowed ->
+                 let allowed = String.trim allowed in
+                 (not (String.equal allowed ""))
+                 && String.equal allowed selected))
+           selected_client_id)
     then Error Invalid_audience
     else if
       Option.exists

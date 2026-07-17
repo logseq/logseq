@@ -1236,6 +1236,22 @@
     {:direction (:direction range)
      :blocks (mapv selection-node-for-block-id (:block-ids range))}))
 
+(defn- selection-blocks-by-mounted-nodes
+  [start-node end-node]
+  (when-let [range (block-selection/mounted-node-range
+                    (array-seq (js/document.getElementsByClassName "ls-block"))
+                    start-node
+                    end-node)]
+    {:direction (:direction range)
+     :blocks (:nodes range)}))
+
+(defn- selection-blocks
+  [block-ids start-node end-node]
+  (when (seq block-ids)
+    (if (block-selection/mounted-nodes? start-node end-node)
+      (selection-blocks-by-mounted-nodes start-node end-node)
+      (selection-blocks-by-block-ids block-ids start-node end-node))))
+
 (defn highlight-selection-area!
   [end-block-id block-dom-element & {:keys [append? block-ids]}]
   (when-let [start-node (state/get-selection-start-block-or-first)]
@@ -1245,7 +1261,7 @@
           last-node (last selected-blocks)
           latest-visible-block (or last-node start-node)
           latest-block-id (when latest-visible-block (.-id latest-visible-block))]
-      (if-let [{:keys [blocks direction]} (selection-blocks-by-block-ids block-ids start-node end-block-node)]
+      (if-let [{:keys [blocks direction]} (selection-blocks block-ids start-node end-block-node)]
         (state/exit-editing-and-set-selected-blocks! blocks direction)
         (if (and start-node end-block-node)
         (let [blocks (util/get-nodes-between-two-nodes start-node end-block-node "ls-block")

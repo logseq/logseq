@@ -394,9 +394,10 @@
                    :<export-file (fn <export-file [conn m opts]
                                    (p/let [tx-reports
                                            (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                     (doseq [tx-report tx-reports]
-                                       (when tx-report
-                                         (on-tx-report tx-report)))))}
+                                     (p/loop [remaining-tx-reports (vec (keep identity tx-reports))]
+                                       (when-let [tx-report (first remaining-tx-reports)]
+                                         (p/let [_ (on-tx-report tx-report)]
+                                           (p/recur (subvec remaining-tx-reports 1)))))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)
@@ -414,10 +415,13 @@
                               "")
         import-graph-fn (or (:import-graph-fn opts)
                             (fn [user-inputs]
-                              (let [files (->> file-objs
+                               (let [files (->> file-objs
                                                (map #(hash-map :file-object %
-                                                               :path (melange-common/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
-                                               (remove #(and (not (string/starts-with? (:path %) "assets/"))
+                                                               :path (melange-common/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
+                                                                :fs-path (when (util/electron?)
+                                                                           (js/window.apis.getFilePath %))
+                                                                :last-modified-at (some-> (.-lastModified %) js/Date.)))
+                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                              (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                                 (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]

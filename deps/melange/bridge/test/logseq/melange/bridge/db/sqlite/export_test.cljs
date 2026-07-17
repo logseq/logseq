@@ -91,3 +91,23 @@
          {:logseq.db.sqlite.export/graph-format :datoms
           :datoms [[1 :block/title "Missing required page fields"]]})]
     (is (re-find #"exported EDN" (:error result)))))
+
+(deftest export-selected-nodes-with-missing-node
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        block (db-test/find-block-by-content @conn "b1")
+        result (try
+                 {:export (sqlite-export/build-export
+                           @conn
+                           {:export-type :selected-nodes
+                            :node-ids [[:block/uuid (:block/uuid block)]
+                                       [:block/uuid (random-uuid)]]})}
+                 (catch :default error
+                   {:error (ex-message error)}))]
+    (is (nil? (:error result)) (:error result))
+    (is (some? (:export result)) "Selected nodes export is present")
+    (when-let [export (:export result)]
+      (is (= ["b1"]
+             (mapv :block/title (mapcat :blocks (:pages-and-blocks export)))))
+      (is (nil? (:error (sqlite-export/validate-export export)))))))

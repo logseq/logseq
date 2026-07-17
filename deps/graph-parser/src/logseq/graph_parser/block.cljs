@@ -331,10 +331,13 @@
 
 (defn- page-name-string->map
   [original-page-name db date-formatter
-   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
+   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (melange-common/remove-boundary-slashes original-page-name)
-        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
+        [original-page-name' page-name journal-day]
+        (if skip-journal?
+          [original-page-name (melange-common/page-name-sanity-lower original-page-name) nil]
+          (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not journal-day)
                         (not (boolean (text/get-nested-page-name original-page-name')))

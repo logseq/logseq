@@ -34,6 +34,7 @@
    [lambdaisland.glogi :as log]
    [logseq.api.db-based.tools :as api-tools]
    [logseq.cli.common.db-worker :as cli-db-worker]
+   [logseq.melange.bridge.common.collection :as melange-collection]
    [logseq.melange.bridge.db.core :as ldb]
    [logseq.melange.bridge.db.initial-data :as common-initial-data]
    [logseq.melange.bridge.db.order :as db-order]
@@ -871,6 +872,16 @@
                (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+
+(defn- sanitize-block-result
+  [result]
+  (cond-> result
+    (:block result)
+    (update :block melange-collection/remove-nils-non-nested)
+
+    (:children result)
+    (update :children melange-collection/fast-remove-nils)))
+
 (def ^:private get-blocks-with-cache
   (common.cache/cache-fn
    *get-blocks-cache
@@ -884,6 +895,7 @@
             (mapv (fn [{:keys [id opts]}]
                     (let [id' (if (and (string? id) (melange-common/uuid-string? id)) (uuid id) id)]
                       (-> (common-initial-data/get-block-and-children db id' opts)
+                          sanitize-block-result
                           (assoc :id id)))))
             ldb/write-transit-str)))))
 

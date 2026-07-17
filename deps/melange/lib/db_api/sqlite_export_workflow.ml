@@ -3236,8 +3236,7 @@ let build_view_nodes_export runtime datascript database rows options =
 let buildSelectedNodesExportWith runtime datascript database eids =
   let top_nodes =
     eids |> collection runtime
-    |> Rrbvec.map (fun eid ->
-        entity_required runtime datascript database eid "selected node")
+    |> Rrbvec.filter_map (entity runtime datascript database)
   in
   let nodes =
     top_nodes

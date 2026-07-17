@@ -1,11 +1,35 @@
 (ns frontend.components.property.property-test
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.property :as property-component]
+            [frontend.components.property.value :as property-value]
             [frontend.db :as db]
+            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [logseq.melange.bridge.db.entity :as entity-util]
             [logseq.melange.bridge.db.property :as melange-property]
-            [logseq.outliner.property :as outliner-property]))
+            [logseq.outliner.property :as outliner-property]
+            [logseq.shui.ui :as shui]))
+
+(deftest removing-status-from-task-view-preserves-task-tag-test
+  (let [block-id (random-uuid)
+        calls* (atom [])
+        block {:block/uuid block-id}
+        status-property {:db/ident :logseq.property/status}
+        on-chosen (#'property-component/property-input-on-chosen
+                   block (atom nil) (atom nil) nil
+                   {:remove-property? true
+                    :view-parent {:db/ident :logseq.class/Task}})]
+    (with-redefs [db/entity (constantly status-property)
+                  property-value/batch-operation? (constantly false)
+                  property-value/get-operating-blocks (fn [_] [block])
+                  property-handler/batch-remove-block-property!
+                  (fn [& args] (swap! calls* conj args))
+                  shui/popup-hide! (constantly nil)]
+      (on-chosen {:value :logseq.property/status})
+      (is (= [[[block-id]
+               :logseq.property/status
+               {:preserve-task-tag? true}]]
+             @calls*)))))
 
 (deftest sanitize-property-values-for-display-filters-recycled-entity-values-test
   (let [active-value {:db/id 101

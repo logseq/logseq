@@ -202,11 +202,11 @@
                         :logseq.property.repeat/repeat-type.double-plus)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
-        current-value (cond->
-                       (get entity property-ident)
-                        date?
+         current-value (cond->
+                        (get entity property-ident)
+                         date?
                         (#(melange-common/journal-day-to-utc-ms (:block/journal-day %))))]
-    (when (and frequency unit)
+    (when (and frequency unit current-value)
       (when-let [next-time-long (get-next-time current-value unit frequency repeat-type)]
         (let [journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
               {:keys [tx-data page-uuid]} (if journal-day
@@ -229,21 +229,32 @@
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
 
+(def ^:private repeat-temporal-property-idents
+  [:logseq.property/scheduled :logseq.property/deadline])
+
+(defn- existing-repeat-temporal-property-idents
+  [entity]
+  (filterv #(some? (get entity %)) repeat-temporal-property-idents))
+
+(defn- reschedule-property-idents
+  [entity]
+  (let [explicit-property-ident (:db/ident (:logseq.property.repeat/temporal-property entity))]
+    (if explicit-property-ident
+      (let [other-property-idents (case explicit-property-ident
+                                   :logseq.property/scheduled
+                                   (when (:logseq.property/deadline entity)
+                                     [:logseq.property/deadline])
+
+                                   :logseq.property/deadline
+                                   (when (:logseq.property/scheduled entity)
+                                     [:logseq.property/scheduled])
+
+                                   nil)]
+        (distinct (cons explicit-property-ident other-property-idents)))
+      (existing-repeat-temporal-property-idents entity))))
+
 (defmethod handle-command :reschedule [_ db entity _datoms]
-  (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
-                           :logseq.property/scheduled)
-        other-property-idents (cond
-                                (and (= property-ident :logseq.property/scheduled)
-                                     (:logseq.property/deadline entity))
-                                [:logseq.property/deadline]
-
-                                (and (= property-ident :logseq.property/deadline)
-                                     (:logseq.property/scheduled entity))
-                                [:logseq.property/scheduled]
-
-                                :else
-                                (filter (fn [p] (get entity p)) [:logseq.property/deadline :logseq.property/scheduled]))]
-    (mapcat #(compute-reschedule-property-tx db entity %) (distinct (cons property-ident other-property-idents)))))
+  (mapcat #(compute-reschedule-property-tx db entity %) (reschedule-property-idents entity)))
 
 (defmethod handle-command :set-property [_ _db entity _datoms property value]
   (let [property' (get-property entity property)
