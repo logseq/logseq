@@ -1223,6 +1223,7 @@
       (with-redefs [state/editor-in-composition? (constantly false)
                     state/get-editor-action (constantly nil)
                     state/get-current-repo (constantly "test")
+                    state/get-editor-args (constantly [nil nil {}])
                     state/get-edit-block #(deref editing-block)
                     state/get-edit-input-id (constantly "edit-block-test")
                     gdom/getElement (constantly #js {:value "row 2"})
@@ -1246,7 +1247,7 @@
                  {:outliner-op :insert-blocks
                   :source-outliner-op :create-view
                   :ui/page-id 10
-                  :virtual/offset 0
+                  :ui/page-window-opts {:offset 0}
                   :editor/edit-block-fn-id tx-id}]]
                @calls)
             "Insert metadata and operations must use one transaction."))
@@ -1479,11 +1480,20 @@
            {:db/id 196
             :block/uuid block-uuid})))))
 
-(deftest indent-outdent-keeps-current-page-window-in-transaction
-  (with-redefs [state/get-editor-args (constantly [nil nil {:virtual/offset 200}])
-                state/get-current-page (constantly 20)]
-    (is (= {:ui/page-id 20
-            :virtual/offset 200}
+(deftest outliner-transaction-identifies-the-page-to-refresh
+  (with-redefs [state/get-current-page (constantly 20)
+                state/get-editor-args (constantly [nil nil {}])]
+    (is (= {:ui/page-id 10
+            :ui/page-window-opts {:offset 0}}
+           (#'block-handler/page-window-tx-meta
+            {:block/page {:db/id 10}})))))
+
+(deftest outliner-transaction-preserves-bottom-window-anchor
+  (with-redefs [state/get-editor-args
+                (constantly [nil nil {:virtual/offset 940
+                                      :virtual/total-count 1000}])]
+    (is (= {:ui/page-id 10
+            :ui/page-window-opts {:anchor :bottom}}
            (#'block-handler/page-window-tx-meta
             {:block/page {:db/id 10}})))))
 

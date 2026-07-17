@@ -2,7 +2,20 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.common.page-window :as page-window]))
+
+(deftest structural-refresh-keeps-the-visible-window-anchor
+  (is (= {:anchor :bottom}
+         (page-window/refresh-opts {:offset 40
+                                    :rows (vec (repeat 60 {}))
+                                    :total-count 100})))
+  (is (= {:offset 10}
+         (page-window/refresh-opts {:offset 10
+                                    :rows (vec (repeat 60 {}))
+                                    :total-count 100})))
+  (is (= {:offset 0}
+         (page-window/refresh-opts nil))))
 
 (defn- repo-root
   []
@@ -86,18 +99,25 @@
   (let [source (source-for "src/main/frontend/components/page.cljs")
         offset-source (form-source source "(defn- range->page-block-window-offset")]
     (is (some? offset-source))
+    (is (string/includes? source
+                          "(def ^:private page-block-window-limit common-page-window/limit)")
+        "The worker window should cover the rendered range, not hydrate 150 rows per scroll update.")
     (is (string/includes? source "page-block-window-step"))
     (is (string/includes? offset-source "page-window"))
     (is (string/includes? offset-source "loaded-end"))))
 
-(deftest page-window-loader-does-not-repeat-the-current-request
+(deftest page-window-loader-coalesces-range-changes-while-loading
   (let [source (source-for "src/main/frontend/components/page.cljs")
         loader-source (form-source source "(defn- page-window-loader")]
     (is (some? loader-source))
-    (is (string/includes? loader-source "(not= opts @*current-request)")
-        "Virtuoso can publish the same range before UI state commits; only one worker request should run.")
+    (is (string/includes? loader-source "*next-request")
+        "Virtuoso range changes should retain only the latest request while one worker request is running.")
+    (is (string/includes? loader-source "(when-not (= opts current-request) opts)")
+        "The pending request should be only the latest range that differs from the active request.")
+    (is (string/includes? loader-source "(nil? @*next-request)")
+        "An obsolete worker response should not publish an intermediate render window.")
     (is (string/includes? loader-source "p/finally")
-        "A completed or failed request must release the duplicate guard.")))
+        "The latest queued window should start after the active request settles.")))
 
 (deftest page-window-row-overrides-use-block-uuids
   (let [source (source-for "src/main/frontend/components/page.cljs")
