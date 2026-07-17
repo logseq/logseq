@@ -1,25 +1,24 @@
-module Runtime_codec : sig
-  type value = Melange_cljs_runtime_spec.Value_codec.value
-  type adapter = Melange_cljs_runtime_spec.Value_codec.adapter
-  type callback = Melange_cljs_runtime_spec.Value_codec.callback
-end
+type runtime_codec_value = Melange_cljs_runtime_spec.Value_codec.value
+type runtime_codec_adapter = Melange_cljs_runtime_spec.Value_codec.adapter
+type runtime_codec_callback = Melange_cljs_runtime_spec.Value_codec.callback
+type datascript_value = Melange_datascript_spec.Api.value
+type datascript_adapter = Melange_datascript_spec.Api.adapter
+type datascript_schema = Melange_datascript_spec.Api.schema
+type datascript_storage = Melange_datascript_spec.Api.storage
+type datascript_connection = Melange_datascript_spec.Api.connection
+type datascript_database = Melange_datascript_spec.Api.database
+type datascript_entity = Melange_datascript_spec.Api.entity
+type datascript_datom = Melange_datascript_spec.Api.datom
+type datascript_pull_pattern = Melange_datascript_spec.Api.pull_pattern
+type datascript_transaction_data = Melange_datascript_spec.Api.transaction_data
 
-module Datascript : sig
-  type value = Melange_datascript_spec.Api.value
-  type adapter = Melange_datascript_spec.Api.adapter
-  type schema = Melange_datascript_spec.Api.schema
-  type storage = Melange_datascript_spec.Api.storage
-  type connection = Melange_datascript_spec.Api.connection
-  type database = Melange_datascript_spec.Api.database
-  type entity = Melange_datascript_spec.Api.entity
-  type datom = Melange_datascript_spec.Api.datom
-  type pull_pattern = Melange_datascript_spec.Api.pull_pattern
-  type transaction_data = Melange_datascript_spec.Api.transaction_data
-  type transaction_metadata = Melange_datascript_spec.Api.transaction_metadata
-  type transaction_report = Melange_datascript_spec.Api.transaction_report
-  type listener_key = Melange_datascript_spec.Api.listener_key
-end
+type datascript_transaction_metadata =
+  Melange_datascript_spec.Api.transaction_metadata
 
+type datascript_transaction_report =
+  Melange_datascript_spec.Api.transaction_report
+
+type datascript_listener_key = Melange_datascript_spec.Api.listener_key
 type asset_value
 type block_title_encoded_workflow_options
 type class_catalog_encoded_value
@@ -86,21 +85,21 @@ end
 
 module Bidirectional : sig
   val getPropertiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
     int Js.Nullable.t ->
-    Runtime_codec.value array Js.Nullable.t
+    runtime_codec_value array Js.Nullable.t
 end
 
 module BlockTitle : sig
   type encoded_workflow_options = block_title_encoded_workflow_options
 
   val uniqueTitleWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_value ->
     block_title_encoded_workflow_options ->
     string Js.Nullable.t
 end
@@ -129,322 +128,322 @@ end
 
 module ClassRead : sig
   val extendsEntitiesCheckedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.value ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_value ->
+    datascript_entity array
 
   val logseqClassValueWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> bool
+    runtime_codec_adapter -> runtime_codec_value -> bool
 
   val objectsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    datascript_entity array
 
   val structuredChildren :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value array
 
   val userClassNamespace : string -> bool
 end
 
 module ClassWorkflow : sig
   val buildNew :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
     sqlite_util_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val createUserIdent :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
     string ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module ContentWorkflow : sig
-  val containsUuidRefWith : Runtime_codec.adapter -> Runtime_codec.value -> bool
+  val containsUuidRefWith : runtime_codec_adapter -> runtime_codec_value -> bool
 
   val contentIdRefToPageWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     Js.String.t ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     Js.String.t
 
   val idRefToTitleRefWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Datascript.database Js.Nullable.t ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    datascript_database Js.Nullable.t ->
     bool ->
     bool ->
-    Runtime_codec.value
+    runtime_codec_value
 
-  val matchedIdsWith : Runtime_codec.adapter -> string -> Runtime_codec.value
+  val matchedIdsWith : runtime_codec_adapter -> string -> runtime_codec_value
 
   val replaceTagRefsWithPageRefsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     Js.String.t ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     Js.String.t
 
   val replaceTagsWithIdRefsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     Js.String.t ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     Js.String.t
 
   val replaceTitleRefsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     bool ->
     Js.String.t
 
   val replaceUuidInBlockTitleWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     int ->
     bool ->
-    Datascript.value
+    datascript_value
 
   val updateBlockContentWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity ->
-    Datascript.value ->
-    Datascript.entity
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity ->
+    datascript_value ->
+    datascript_entity
 end
 
 module CoreRead : sig
   val aliasSourcePageWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value Js.Nullable.t ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value Js.Nullable.t ->
+    runtime_codec_value Js.Nullable.t
 
   val allPagesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity array
 
   val allTaggedPagesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value
 
   val casePageByReferenceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Runtime_codec.value ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    runtime_codec_value ->
+    datascript_entity Js.Nullable.t
 
   val hasChildrenByReferenceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool
 
   val hiddenOrInternalTagWith :
-    Runtime_codec.adapter -> Datascript.adapter -> Datascript.entity -> bool
+    runtime_codec_adapter -> datascript_adapter -> datascript_entity -> bool
 
   val journalPageByDatabaseWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Runtime_codec.value ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    runtime_codec_value ->
+    datascript_entity Js.Nullable.t
 
   val journalPageByDayInputWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Runtime_codec.value Js.Nullable.t ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    runtime_codec_value Js.Nullable.t ->
+    datascript_entity Js.Nullable.t
 
   val keyValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
-    Datascript.value Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
+    datascript_value Js.Nullable.t
 
   val lastChildBlockWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     bool Js.Nullable.t
 
   val lastDirectChildIdWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_value Js.Nullable.t
 
   val libraryPageWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity Js.Nullable.t
 
   val nonConsecutiveBlocksWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity array ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity array ->
+    datascript_entity array
 
   val optionalKeyValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.value ->
-    Datascript.value Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_value ->
+    datascript_value Js.Nullable.t
 
   val orphanedPagesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value Js.Nullable.t ->
-    Runtime_codec.value ->
-    Runtime_codec.callback Js.Nullable.t ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value Js.Nullable.t ->
+    runtime_codec_value ->
+    runtime_codec_callback Js.Nullable.t ->
+    datascript_entity array
 
   val pageAliasSetWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value array
 
   val pageBlocksByPageWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value Js.Nullable.t ->
-    Datascript.pull_pattern ->
-    Datascript.value array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value Js.Nullable.t ->
+    datascript_pull_pattern ->
+    datascript_value array Js.Nullable.t
 
   val pageBlocksCountWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
     int
 
   val pageByReferenceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Runtime_codec.value ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    runtime_codec_value ->
+    datascript_entity Js.Nullable.t
 
   val pageEmptyByReferenceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool
 
   val pageExistsInputWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value Js.Nullable.t ->
-    Runtime_codec.value ->
-    Runtime_codec.value array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value Js.Nullable.t ->
+    runtime_codec_value ->
+    runtime_codec_value array Js.Nullable.t
 
   val pageInLibraryWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity ->
     bool
 
   val pagesRelationWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     bool ->
-    Datascript.value
+    datascript_value
 
   val pagesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value array
 
   val parentsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     int ->
-    Datascript.entity array
+    datascript_entity array
 
   val sortPageRandomBlocksWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity array ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity array ->
+    datascript_entity array
 end
 
 module DbIdent : sig
   val createGenerated : string -> string -> string
 
   val ensureUniqueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val normalizeNamePart : string -> string
 end
 
 module DeleteWorkflow : sig
   val cleanupWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val expandWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module EntityLookup : sig
@@ -461,111 +460,111 @@ module EntityLookupWorkflow : sig
   type value = entity_lookup_workflow_value
 
   val dbBasedNullableWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     entity_lookup_workflow_capabilities ->
-    Datascript.database Js.Nullable.t ->
+    datascript_database Js.Nullable.t ->
     bool Js.Nullable.t
 
   val lookupSafeWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     entity_lookup_workflow_capabilities ->
     entity_lookup_workflow_value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     entity_lookup_workflow_value ->
     entity_lookup_workflow_log_lookup_error_callback ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val memoizedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool ->
-    Datascript.entity Js.Nullable.t
+    datascript_entity Js.Nullable.t
 end
 
 module EntityRead : sig
   val entityToMapWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val entityTypesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     string array
 
   val fieldPresentWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     string ->
     bool
 
   val fieldValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     string ->
-    Datascript.value
+    datascript_value
 
   val hasTagWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
     string ->
     bool Js.Nullable.t
 
   val hiddenWith :
-    Runtime_codec.adapter -> Datascript.adapter -> Datascript.entity -> bool
+    runtime_codec_adapter -> datascript_adapter -> datascript_entity -> bool
 
   val pageWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
     bool Js.Nullable.t
 
   val pagesByNameWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     string ->
-    Datascript.datom array
+    datascript_datom array
 
   val recycledWith :
-    Runtime_codec.adapter -> Datascript.adapter -> Datascript.entity -> bool
+    runtime_codec_adapter -> datascript_adapter -> datascript_entity -> bool
 end
 
 module FrontendRead : sig
   type encoded_extend = frontend_read_encoded_extend
 
   val allPropertiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value array
 
   val builtInClassProperty :
     bool -> bool -> bool -> string -> string array -> bool
 
   val builtInPageNullableWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
     string ->
-    Datascript.entity Js.Nullable.t
+    datascript_entity Js.Nullable.t
 
   val classIdentByDisplayType : string -> string Js.Nullable.t
 
   val classInstanceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_entity ->
     bool
 
   val classTitleWithExtends :
@@ -574,10 +573,10 @@ module FrontendRead : sig
     string Js.Nullable.t
 
   val classesParentsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value array
 
   val displayTypeByClassIdent : string -> string Js.Nullable.t
   val inlineTag : string -> string -> bool
@@ -585,132 +584,132 @@ module FrontendRead : sig
   val nodeDisplayTypeClasses : string array
 
   val pageParentsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Runtime_codec.value array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    runtime_codec_value array Js.Nullable.t
 
   val privateBuiltInPage : bool -> bool -> bool -> bool -> bool
 
   val titleWithParentsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     String.t ->
-    Runtime_codec.value
+    runtime_codec_value
 end
 
 module InitialDataWorkflow : sig
   type encoded_result = initial_data_workflow_encoded_result
 
   val blockAndChildrenWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     bool ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_value Js.Nullable.t
 
   val getWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     initial_data_workflow_encoded_result
 
   val withParentWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module InitialRead : sig
   val blockAliasesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value array
 
   val blockRefsCountWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     int
 
   val blockRefsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    datascript_entity array
 
   val childrenEntitiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
     bool ->
-    Datascript.entity array Js.Nullable.t
+    datascript_entity array Js.Nullable.t
 
   val childrenIdsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
     bool ->
     int array Js.Nullable.t
 
   val fullChildrenWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value array
 
   val latestJournalsNowWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     ((unit -> float)[@u]) ->
-    Datascript.entity array
+    datascript_entity array
 
   val oldestPageByNameInputWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    runtime_codec_value ->
     int Js.Nullable.t
 
   val oldestPageByTitle :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     string ->
     int Js.Nullable.t
 
   val recentPagesNullableWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.entity array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_entity array Js.Nullable.t
 end
 
 module InputWorkflow : sig
   type capabilities = input_workflow_capabilities
 
   val resolveWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     input_workflow_capabilities ->
-    Runtime_codec.value Js.Nullable.t ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value Js.Nullable.t ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module KvEntity : sig
@@ -719,70 +718,70 @@ end
 
 module NormalizePlan : sig
   val normalizeDatomWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value Js.Nullable.t
 
   val normalizeTxDataWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val removeConflictDatomsWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val removeRetractEntityRefsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val reorderRetractEntityWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val replaceAttrRetractV2With :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val replaceAttrRetractWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val sortDatomsWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 end
 
 module Order : sig
   val advanceCellWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> string Js.Nullable.t -> unit
+    runtime_codec_adapter -> runtime_codec_value -> string Js.Nullable.t -> unit
 
   val advanceTrackedMaxKey : string Js.Nullable.t -> unit
 
   val generateKeyWithStateWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     bool ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     string Js.Nullable.t ->
     string Js.Nullable.t ->
     string
 
   val generateNKeysWithStateWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     bool ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
     int ->
     string Js.Nullable.t ->
     string Js.Nullable.t ->
@@ -792,25 +791,25 @@ module Order : sig
     string Js.Nullable.t -> string Js.Nullable.t -> string
 
   val maxOrderWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value
 
   val nextOrderWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    datascript_value ->
     string Js.Nullable.t
 
   val previousOrderWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    datascript_value ->
     string Js.Nullable.t
 
   val validateOrderKey : string -> bool
@@ -828,57 +827,57 @@ module PropertyBuild : sig
   type value_callback = property_build_value_callback
 
   val buildClosedValueBlockWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     property_build_encoded_closed_value_options ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val buildClosedValuesWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.callback Js.Nullable.t ->
-    Runtime_codec.callback Js.Nullable.t ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_callback Js.Nullable.t ->
+    runtime_codec_callback Js.Nullable.t ->
+    runtime_codec_value
 
   val buildPropertiesWithRefValuesWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val buildPropertyValuesWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_value_callback ->
     property_build_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     property_build_encoded_property_values_options ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val buildValueBlockWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_value_callback ->
     property_build_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     property_build_encoded_value_block_options ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val closedValuesToBlocksWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module PropertyCatalog : sig
@@ -915,54 +914,54 @@ end
 
 module PropertyOrder : sig
   val classOrderedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_entity array
 
   val normalizeEntitiesValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val sortEntitiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity array ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity array ->
+    datascript_entity array
 end
 
 module PropertyScope : sig
   val closedValueByNameNullableWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.value ->
-    Datascript.value ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_value ->
+    datascript_value ->
+    runtime_codec_value Js.Nullable.t
 
   val closedValuesNullableWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.value ->
-    Runtime_codec.value array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_value ->
+    runtime_codec_value array Js.Nullable.t
 
   val scopedValuesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.entity ->
-    Runtime_codec.value Js.Nullable.t ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_entity ->
+    runtime_codec_value Js.Nullable.t ->
+    datascript_entity array
 end
 
 module PropertyShape : sig
   val isMany : string -> bool
 
   val isPropertyCreatedBlockWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> bool
+    runtime_codec_adapter -> runtime_codec_value -> bool
 end
 
 module PropertyType : sig
@@ -987,56 +986,56 @@ end
 
 module PropertyWorkflow : sig
   val blockValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database Js.Nullable.t ->
-    Datascript.entity ->
-    Datascript.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database Js.Nullable.t ->
+    datascript_entity ->
+    datascript_value ->
+    runtime_codec_value
 
   val builtInDisplayTitleWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    ((Runtime_codec.value -> Datascript.value)[@u]) ->
-    Datascript.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    ((runtime_codec_value -> datascript_value)[@u]) ->
+    datascript_value
 
   val contentWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_value
 
   val createUserIdent :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     string ->
     string Js.Nullable.t ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val lookupWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.value ->
-    Datascript.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_value ->
+    datascript_value
 
   val propertiesWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val publicBuiltInWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val schemaWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 end
 
 module ReferenceFilter : sig
   val unlinkedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
-    Datascript.entity array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
+    datascript_entity array Js.Nullable.t
 end
 
 module ReferenceWorkflow : sig
@@ -1044,16 +1043,16 @@ module ReferenceWorkflow : sig
   type encoded_result = reference_workflow_encoded_result
 
   val filtersWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     reference_workflow_encoded_filters Js.Nullable.t
 
   val linkedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     reference_workflow_encoded_result
 end
 
@@ -1065,11 +1064,11 @@ module Rules : sig
   val entries : (string * rules_encoded_form) array
 
   val extractWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val fullDependencies :
     string array -> (string * string array) array -> string array
@@ -1097,57 +1096,57 @@ module SchemaVersion : sig
   type encoded = schema_version_encoded
 
   val compareValuesWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value -> int
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value -> int
 
   val decodeValueWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    runtime_codec_value ->
     schema_version_encoded Js.Nullable.t
 
   val stringValueWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> string Js.Nullable.t
+    runtime_codec_adapter -> runtime_codec_value -> string Js.Nullable.t
 
-  val valueIsVersionWith : Runtime_codec.adapter -> Runtime_codec.value -> bool
+  val valueIsVersionWith : runtime_codec_adapter -> runtime_codec_value -> bool
   val version : schema_version_encoded
 end
 
 module SqliteBuild : sig
   val blockPropertyValueWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> bool
+    runtime_codec_adapter -> runtime_codec_value -> bool
 
   val extractBlocksWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.callback ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    runtime_codec_value ->
+    runtime_codec_callback ->
+    runtime_codec_value
 
   val getUsedPropertiesWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val nextTempId : unit -> int
 
   val pagePropertyValueWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> bool
+    runtime_codec_adapter -> runtime_codec_value -> bool
 
   val updateBlocksWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.callback ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    runtime_codec_value ->
+    runtime_codec_callback ->
+    runtime_codec_value
 end
 
 module SqliteBuildWorkflow : sig
   val buildBlocksTx :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val createBlocksInput :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.connection ->
-    Runtime_codec.value ->
-    Datascript.transaction_report Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_connection ->
+    runtime_codec_value ->
+    datascript_transaction_report Js.Nullable.t
 
-  val validateOptionsWith : Runtime_codec.adapter -> Runtime_codec.value -> unit
+  val validateOptionsWith : runtime_codec_adapter -> runtime_codec_value -> unit
 end
 
 module SqliteCliWorkflow : sig
@@ -1158,7 +1157,7 @@ module SqliteCliWorkflow : sig
   type storage = sqlite_cli_workflow_storage
 
   val newStorageWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_cli_workflow_adapter ->
     sqlite_cli_workflow_sqlite ->
     sqlite_cli_workflow_storage
@@ -1166,14 +1165,14 @@ module SqliteCliWorkflow : sig
   val openArgsWith : sqlite_cli_workflow_adapter -> string -> string array
 
   val openStorageConnectionWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_cli_workflow_adapter ->
     string Js.Nullable.t ->
     string ->
     sqlite_cli_workflow_connection
 
   val openStorageWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_cli_workflow_adapter ->
     string Js.Nullable.t ->
     string ->
@@ -1185,57 +1184,56 @@ module SqliteCreateGraph : sig
   type float_callback = sqlite_create_graph_float_callback
 
   val buildInitialClassesWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_create_graph_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val buildInitialData :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_value_callback ->
     sqlite_create_graph_float_callback ->
     property_build_value_callback ->
     string ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     sqlite_create_graph_encoded_initial_options ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val buildInitialViewsWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_create_graph_float_callback ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val buildProperties :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     property_build_value_callback ->
     property_build_value_callback ->
     sqlite_create_graph_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val markBuiltInWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 end
 
 module SqliteDebugWorkflow : sig
   val findMissingNode : sqlite_gc_workflow_database -> int array
-
   val findMissingWasm : sqlite_gc_workflow_database -> int array
 end
 
 module SqliteExport : sig
   val importTransactionDataWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 
   val sortPagesWith :
-    Runtime_codec.adapter -> Runtime_codec.value -> Runtime_codec.value
+    runtime_codec_adapter -> runtime_codec_value -> runtime_codec_value
 end
 
 module SqliteExportWorkflow : sig
@@ -1247,56 +1245,56 @@ module SqliteExportWorkflow : sig
   type export_capabilities = sqlite_export_workflow_export_capabilities
 
   val buildExportWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     sqlite_export_workflow_export_capabilities ->
     string ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value
 
   val buildImport :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val createSeededConnectionWith :
-    Datascript.adapter ->
-    Datascript.schema ->
-    Datascript.transaction_data ->
-    Datascript.connection
+    datascript_adapter ->
+    datascript_schema ->
+    datascript_transaction_data ->
+    datascript_connection
 
   val diffExportsWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_export_workflow_diff_capabilities ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val pruneUnreferencedUuidsWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val validateImportTransactionsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    datascript_database ->
     string ->
     sqlite_export_workflow_encoded_import_validation_result
 
   val validateSeededExport :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Datascript.schema ->
-    Datascript.transaction_data ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    datascript_schema ->
+    datascript_transaction_data ->
+    runtime_codec_value ->
     sqlite_export_workflow_encoded_import_validation_result
 end
 
@@ -1312,13 +1310,6 @@ module SqliteGcWorkflow : sig
 end
 
 module SqliteLifecycle : sig
-  module Domain : sig
-    type 'a backup = 'a sqlite_lifecycle_domain_backup
-    type 'a close = 'a sqlite_lifecycle_domain_close
-    type 'a open_db = 'a sqlite_lifecycle_domain_open_db
-    type remove = sqlite_lifecycle_domain_remove
-  end
-
   val backupConnection :
     'a sqlite_lifecycle_domain_backup ->
     sqlite_lifecycle_domain_remove ->
@@ -1336,10 +1327,10 @@ module SqliteLifecycle : sig
     unit Js.Promise.t
 
   val storageConnection :
-    Datascript.adapter ->
-    Datascript.storage ->
-    Datascript.schema ->
-    Datascript.connection
+    datascript_adapter ->
+    datascript_storage ->
+    datascript_schema ->
+    datascript_connection
 end
 
 module SqlitePolicy : sig
@@ -1354,37 +1345,37 @@ module SqliteUtil : sig
   type value_callback = sqlite_util_value_callback
 
   val buildClassWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_util_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value
 
   val buildPageWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_util_float_callback ->
     string ->
-    Runtime_codec.value
+    runtime_codec_value
 
   val buildProperty :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_util_value_callback ->
     sqlite_util_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 
   val importTxWith :
-    Runtime_codec.adapter ->
+    runtime_codec_adapter ->
     sqlite_util_float_callback ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_value ->
+    runtime_codec_value
 
   val kvWith :
-    Runtime_codec.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module TransactionExecution : sig
@@ -1392,42 +1383,42 @@ module TransactionExecution : sig
   type execution_adapter = transaction_execution_execution_adapter
 
   val batchWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     transaction_execution_execution_adapter ->
-    Datascript.connection ->
-    Datascript.transaction_metadata ->
-    ((Datascript.connection -> unit)[@u]) ->
-    ((Datascript.transaction_report -> unit)[@u]) Js.Nullable.t ->
-    Datascript.listener_key ->
-    Datascript.transaction_report
+    datascript_connection ->
+    datascript_transaction_metadata ->
+    ((datascript_connection -> unit)[@u]) ->
+    ((datascript_transaction_report -> unit)[@u]) Js.Nullable.t ->
+    datascript_listener_key ->
+    datascript_transaction_report
 
   val batchWithTemp :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     transaction_execution_execution_adapter ->
-    Datascript.connection ->
-    Datascript.transaction_metadata ->
-    ((Datascript.connection -> transaction_execution_collector -> unit)[@u]) ->
-    ((Datascript.transaction_report -> unit)[@u]) Js.Nullable.t ->
+    datascript_connection ->
+    datascript_transaction_metadata ->
+    ((datascript_connection -> transaction_execution_collector -> unit)[@u]) ->
+    ((datascript_transaction_report -> unit)[@u]) Js.Nullable.t ->
     ((unit -> unit)[@u]) Js.Nullable.t ->
-    ((Datascript.connection ->
-     Datascript.transaction_data ->
-     Datascript.transaction_metadata ->
-     Runtime_codec.value)
+    ((datascript_connection ->
+     datascript_transaction_data ->
+     datascript_transaction_metadata ->
+     runtime_codec_value)
     [@u]) ->
-    Datascript.listener_key ->
-    Runtime_codec.value Js.Nullable.t
+    datascript_listener_key ->
+    runtime_codec_value Js.Nullable.t
 
   val transactOwnedWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
     transaction_execution_execution_adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     bool ->
-    Runtime_codec.value Js.Nullable.t
+    runtime_codec_value Js.Nullable.t
 end
 
 module TransactionPolicy : sig
@@ -1462,89 +1453,89 @@ end
 
 module TransactionWorkflow : sig
   val replaceEntities :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module TreeWorkflow : sig
   val blockAndChildrenWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     bool ->
-    Datascript.entity array Js.Nullable.t
+    datascript_entity array Js.Nullable.t
 
   val childrenByReferenceWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Datascript.entity array Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    datascript_entity array Js.Nullable.t
 
   val firstChildOfWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
-    Datascript.entity Js.Nullable.t
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
+    datascript_entity Js.Nullable.t
 
   val firstChildWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     string ->
-    Datascript.entity ->
-    Datascript.entity Js.Nullable.t
+    datascript_entity ->
+    datascript_entity Js.Nullable.t
 
   val siblingWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity ->
     string ->
-    Datascript.entity Js.Nullable.t
+    datascript_entity Js.Nullable.t
 
   val sortWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.entity array ->
-    Datascript.entity array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_entity array ->
+    datascript_entity array
 end
 
 module ValidationDatabase : sig
   type encoded_counts = validation_database_encoded_counts
 
   val graphCountsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity array ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity array ->
     validation_database_encoded_counts
 end
 
 module ValidationDatom : sig
   val entitiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.datom array ->
-    Runtime_codec.callback Js.Nullable.t ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_datom array ->
+    runtime_codec_callback Js.Nullable.t ->
+    runtime_codec_value array
 
   val entityMapsWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.datom array ->
-    Runtime_codec.callback Js.Nullable.t ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_datom array ->
+    runtime_codec_callback Js.Nullable.t ->
+    runtime_codec_value
 end
 
 module ValidationEntity : sig
   val dispatchWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity ->
     string Js.Nullable.t
 end
 
@@ -1561,31 +1552,31 @@ module ValidationProperty : sig
   val errorMessage : string -> string
 
   val prepareEntitiesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value array ->
-    Runtime_codec.value array
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value array ->
+    runtime_codec_value array
 
   val requiredProperties : string array
 
   val validatePropertyValueWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.entity ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_entity ->
+    runtime_codec_value ->
     validation_property_encoded_validation_options ->
-    Runtime_codec.callback ->
-    Runtime_codec.callback ->
+    runtime_codec_callback ->
+    runtime_codec_callback ->
     bool
 
   val valueValidWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value ->
     validation_property_encoded_validation_options ->
     bool
 end
@@ -1604,24 +1595,24 @@ module ValidationSchema : sig
     validation_schema_print_local_counts_callback
 
   val validateDatabaseWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     validation_schema_encoded_workflow_options ->
     validation_schema_encoded_database_result
 
   val validateEntityWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
     validation_schema_encoded_workflow_options ->
     validation_schema_encoded_workflow_result
 
   val validateLocalDatabaseAndLogWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
     validation_schema_encoded_workflow_options ->
     bool ->
     string Js.Nullable.t ->
@@ -1629,9 +1620,9 @@ module ValidationSchema : sig
     validation_schema_encoded_local_database_result
 
   val validateTransactionWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.transaction_report ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_transaction_report ->
     validation_schema_encoded_workflow_options ->
     validation_schema_encoded_transaction_result
 end
@@ -1641,19 +1632,19 @@ module ViewDataWorkflow : sig
   type encoded_result = view_data_workflow_encoded_result
 
   val getPropertyValuesWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value Js.Nullable.t ->
-    Datascript.value array ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value Js.Nullable.t ->
+    datascript_value array ->
     view_property_values_encoded_entry array
 
   val getWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Datascript.value ->
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    datascript_value ->
     view_data_workflow_encoded_options ->
     view_data_workflow_encoded_result
 end
@@ -1662,18 +1653,18 @@ module ViewPropertyValues : sig
   type encoded_entry = view_property_values_encoded_entry
 
   val contentWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Datascript.database ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    datascript_database ->
+    runtime_codec_value ->
+    runtime_codec_value
 end
 
 module ViewWorkflow : sig
   val propertyValueForSearchWith :
-    Runtime_codec.adapter ->
-    Datascript.adapter ->
-    Runtime_codec.value ->
-    Runtime_codec.value ->
-    Runtime_codec.value
+    runtime_codec_adapter ->
+    datascript_adapter ->
+    runtime_codec_value ->
+    runtime_codec_value ->
+    runtime_codec_value
 end

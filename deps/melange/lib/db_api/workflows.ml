@@ -1,25 +1,35 @@
 open Melange_db_api_internal
 
-module Runtime_codec = Support.Runtime_codec
+type runtime_codec_value = Melange_cljs_runtime_spec.Value_codec.value
+type runtime_codec_adapter = Melange_cljs_runtime_spec.Value_codec.adapter
+type runtime_codec_callback = Melange_cljs_runtime_spec.Value_codec.callback
+type datascript_value = Melange_datascript_spec.Api.value
+type datascript_adapter = Melange_datascript_spec.Api.adapter
+type datascript_schema = Melange_datascript_spec.Api.schema
+type datascript_storage = Melange_datascript_spec.Api.storage
+type datascript_connection = Melange_datascript_spec.Api.connection
+type datascript_database = Melange_datascript_spec.Api.database
+type datascript_entity = Melange_datascript_spec.Api.entity
+type datascript_datom = Melange_datascript_spec.Api.datom
+type datascript_pull_pattern = Melange_datascript_spec.Api.pull_pattern
+type datascript_transaction_data = Melange_datascript_spec.Api.transaction_data
+
+type datascript_transaction_metadata =
+  Melange_datascript_spec.Api.transaction_metadata
+
+type datascript_transaction_report =
+  Melange_datascript_spec.Api.transaction_report
+
+type datascript_listener_key = Melange_datascript_spec.Api.listener_key
 (** Typed DB workflow API aggregation. *)
 
-module Datascript = Support.Datascript
-
 type asset_value = Asset.value
-
-type block_title_encoded_workflow_options =
-  Block_title.encoded_workflow_options
-
+type block_title_encoded_workflow_options = Block_title.encoded_workflow_options
 type class_catalog_encoded_value = Class_catalog.encoded_value
-type entity_lookup_workflow_capabilities =
-  Entity_lookup_workflow.capabilities
-
+type entity_lookup_workflow_capabilities = Entity_lookup_workflow.capabilities
 type entity_lookup_workflow_value = Entity_lookup_workflow.value
 type frontend_read_encoded_extend = Frontend_read.encoded_extend
-
-type initial_data_workflow_encoded_result =
-  Initial_data_workflow.encoded_result
-
+type initial_data_workflow_encoded_result = Initial_data_workflow.encoded_result
 type input_workflow_capabilities = Input_workflow.capabilities
 
 type property_build_encoded_value_block_options =
@@ -65,11 +75,8 @@ type transaction_execution_collector = Transaction_execution.collector
 type transaction_execution_execution_adapter =
   Transaction_execution.execution_adapter
 
-type transaction_policy_encoded_favorite =
-  Transaction_policy.encoded_favorite
-
-type transaction_runtime_invalid_callback =
-  Transaction_runtime.invalid_callback
+type transaction_policy_encoded_favorite = Transaction_policy.encoded_favorite
+type transaction_runtime_invalid_callback = Transaction_runtime.invalid_callback
 
 type transaction_runtime_pipeline_callback =
   Transaction_runtime.pipeline_callback
@@ -124,7 +131,6 @@ module ClassRead = Class_read
 module DbIdent = Db_ident
 module Order = Order
 module KvEntity = Kv_entity
-module Content = Content
 module ContentWorkflow = Content_workflow
 module PropertyType = Property_type
 module SchemaVersion = Schema_version
@@ -134,14 +140,11 @@ module EntityLookup = Entity_lookup
 module EntityLookupWorkflow = Entity_lookup_workflow
 module FrontendRead = Frontend_read
 module ReferenceFilter = Reference_filter
-module ViewFilter = View_filter
-module TreeRead = Tree_read
 module TreeWorkflow = Tree_workflow
 module CoreRead = Core_read
 module TransactionPolicy = Transaction_policy
 module TransactionWorkflow = Transaction_workflow
 module TransactionRuntime = Transaction_runtime
-module DeletePlan = Delete_plan
 module DeleteWorkflow = Delete_workflow
 module InitialRead = Initial_read
 module InitialDataWorkflow = Initial_data_workflow
@@ -153,11 +156,8 @@ module SqliteLifecycle = Sqlite_lifecycle
 module SqliteCliWorkflow = Sqlite_cli_workflow
 module SqliteBuild = Sqlite_build
 module SqliteExport = Sqlite_export
-module ViewOrder = View_order
 module ValidationIdentity = Validation_identity
 module ViewWorkflow = View_workflow
-module ViewQueryWorkflow = View_query_workflow
-module ViewGrouping = View_grouping
 module ViewPropertyValues = View_property_values
 module ViewDataWorkflow = View_data_workflow
 module ValidationDatom = Validation_datom
@@ -176,7 +176,6 @@ module ClassWorkflow = Class_workflow
 module SqliteCreateGraph = Sqlite_create_graph
 module SqliteBuildWorkflow = Sqlite_build_workflow
 module SqliteExportWorkflow = Sqlite_export_workflow
-module InputPlan = Input_plan
 module InputWorkflow = Input_workflow
 module NormalizePlan = Normalize_plan
 module PropertyCatalog = Property_catalog
