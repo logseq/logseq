@@ -3033,6 +3033,10 @@
   [block position]
   (get-in block [:block.temp/positioned-properties position]))
 
+(defn- block-metadata-ready?
+  [config]
+  (not (false? (:block-metadata-ready? config))))
+
 (defn- render-block-positioned-properties?
   [block position]
   (or (not (contains? block :block.temp/positioned-properties))
@@ -3049,16 +3053,18 @@
         entity-tx-id (rfx/use-entity-tx-id block)
         _ (hooks/use-effect!
            (fn []
-             (when-not positioned-properties-payload?
+             (when (and (not positioned-properties-payload?)
+                        (block-metadata-ready? config))
                (p/let [repo (state/get-current-repo)
-                       current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
+                       current-block (db-async/<get-block repo (:block/uuid block) {:children? false
+                                                                                    :render-data? true})]
                  (when current-block
                    (set-loaded-positioned-properties!
                     (or (block-positioned-properties-from-payload current-block position) []))
                    (set-current-block! current-block))))
 	             nil)
            [(:db/id block) (:block/uuid block) positioned-properties-payload?
-            position entity-tx-id])
+            position entity-tx-id (:block-metadata-ready? config)])
         positioned-properties (if positioned-properties-payload?
                                 payload-positioned-properties
                                 loaded-positioned-properties)
@@ -3219,16 +3225,17 @@
            [:div (date/int->local-time-2 (:block/created-at item))]]))]]))
 
 (hsx/defc task-spent-time-cp
-  [block]
+  [config block]
   (when (task-block? block)
     (let [[result set-result!] (hooks/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]
       (hooks/use-effect!
        (fn []
-         (p/let [result (db-async/<task-spent-time repo (:db/id block))]
-           (set-result! result)))
-       [(:logseq.property/status block)])
+         (when (block-metadata-ready? config)
+           (p/let [result (db-async/<task-spent-time repo (:db/id block))]
+             (set-result! result))))
+       [(:logseq.property/status block) (:block-metadata-ready? config)])
       (when (and time-spent (> time-spent 0))
         [:div.text-sm.time-spent.ml-1
          (shui/button
@@ -3285,7 +3292,7 @@
                :on-click on-mark-resolved)]])
 
 (hsx/defc sync-conflicts-warning-button
-  [block]
+  [config block]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
         sync-conflicts-payload? (contains? block :block.temp/sync-conflicts)
@@ -3296,11 +3303,12 @@
         visible-conflicts (visible-sync-conflicts block conflicts)]
     (hooks/use-effect!
      (fn []
-       (when (and repo block-id (nil? subscribed-conflicts) (not sync-conflicts-payload?))
+       (when (and (block-metadata-ready? config)
+                  repo block-id (nil? subscribed-conflicts) (not sync-conflicts-payload?))
          (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
            (state/set-sync-block-conflicts! repo block-id result)))
        nil)
-     [repo block-id subscribed-conflicts sync-conflicts-payload?])
+     [repo block-id subscribed-conflicts sync-conflicts-payload? (:block-metadata-ready? config)])
     (when (seq visible-conflicts)
       (ui/tooltip
        (shui/button
@@ -3403,7 +3411,7 @@
          [:div.block-head-wrap
           (block-title config block {:*show-query? *show-query?})])
 
-       (task-spent-time-cp block)]
+       (task-spent-time-cp config block)]
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
 
@@ -3558,7 +3566,7 @@
          [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
           (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
                         (:property? config))
-            (sync-conflicts-warning-button block))
+            (sync-conflicts-warning-button config block))
 
           (when (and (not table?)
                      (render-block-positioned-properties? block :block-right))
@@ -4290,13 +4298,15 @@
            [refs-count] (hooks/use-atom *refs-count)
            _ (hooks/use-effect!
               (fn []
-                (when-not (or refs-count-payload? (:view? config*) (entity/page? block))
+                (when-not (or (not (block-metadata-ready? config*))
+                              refs-count-payload? (:view? config*) (entity/page? block))
                   (when-let [id (:db/id block)]
                     (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
                       (reset! *refs-count count)))))
-              [(:db/id block)])
+              [(:db/id block) (:block-metadata-ready? config*)])
            _ (hooks/use-effect!
-              #(when-not comment-thread-presence-payload?
+              #(when-not (or (not (block-metadata-ready? config*))
+                             comment-thread-presence-payload?)
                  (schedule-comment-thread-presence-check! *comment-thread-present? block)))
            _ (hooks/use-effect!
               (fn []
@@ -4695,6 +4705,7 @@
    :edit?
    :hide-bullet?
    :hide-block-control?
+   :block-metadata-ready?
    :ref-matched-children-ids])
 
 (defn- block-render-state

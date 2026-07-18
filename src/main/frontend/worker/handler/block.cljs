@@ -120,6 +120,14 @@
    :description-property nil
    :class-properties-property nil})
 
+(defn- assoc-base-render-data
+  [db block block-map]
+  (cond-> (assoc block-map
+                 :block.temp/reactions (block-reactions db (:db/id block)))
+    (plain-render-block? db block)
+    (assoc :block.temp/positioned-properties {}
+           :block.temp/display-properties empty-render-display-properties)))
+
 (defn- block-refs-count
   [db block-id]
   (if (and (empty? (d/datoms db :avet :block/refs block-id))
@@ -162,7 +170,10 @@
                              (let [collapsed? (:block/collapsed? child)]
                                (-> (cond->> (worker-plain/entity-forward-map db child {})
                                      render-data?
-                                     (assoc-render-property-data db child))
+                                     (assoc-render-property-data db child)
+
+                                     (false? render-data?)
+                                     (assoc-base-render-data db child))
                                    (assoc :block.temp/has-children? (block-has-children? db (:db/id child))
                                           :block.temp/load-status (if (or all?
                                                                          (and (not collapsed?)
@@ -180,7 +191,10 @@
                                   (property-handler/display-properties-for-block db block)))
           block-map (cond->> block-map-base
                       render-data?
-                      (assoc-render-property-data db block))
+                      (assoc-render-property-data db block)
+
+                      (false? render-data?)
+                      (assoc-base-render-data db block))
           block' (cond-> (assoc block-map
                                 :block/tags (or (:block/tags block-map) [])
                                 :block/collapsed? (boolean (:block/collapsed? block-map)))

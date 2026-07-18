@@ -2434,7 +2434,7 @@
               (str "Large subtree was scanned past the result limit: "
                    @parent-index-scans)))))))
 
-(deftest get-blocks-returns-all-journal-blocks-render-ready
+(deftest get-blocks-returns-all-journal-blocks-with-cheap-render-markers
   (restoring-worker-state
    (fn []
      (let [get-blocks! (get-thread-api :thread-api/get-blocks)
@@ -2454,14 +2454,22 @@
                                [{:id journal-id
                                  :opts {:all? true
                                         :children? true
-                                        :render-data? true
+                                        :render-data? false
                                         :include-collapsed-children? true}}]))
                  ldb/read-transit-str
                  first)]
          (is (= 165 (count children)))
          (is (= :full (:block.temp/load-status block)))
          (is (every? #(= :full (:block.temp/load-status %)) children))
-         (is (every? #(contains? % :block.temp/positioned-properties) children)))))))
+         (is (every? #(= {} (:block.temp/positioned-properties %)) children)
+             "Plain blocks should carry a cheap negative marker instead of triggering UI hydration.")
+         (is (every? #(= {:full-properties []
+                          :hidden-properties []
+                          :description-property nil
+                          :class-properties-property nil}
+                         (:block.temp/display-properties %))
+                     children))
+         (is (every? #(= [] (:block.temp/reactions %)) children)))))))
 
 (deftest page-block-index-returns-all-ids-and-only-initial-render-data
   (restoring-worker-state

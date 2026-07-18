@@ -26,6 +26,13 @@
     (node-path/join (.cwd js/process) "src/main/frontend/components/block.cljs")
     "utf8")))
 
+(defn- property-source
+  []
+  (.toString
+   (fs/readFileSync
+    (node-path/join (.cwd js/process) "src/main/frontend/components/property.cljs")
+    "utf8")))
+
 (deftest journals-do-not-hydrate-every-page-before-rendering
   (let [source (journal-source)]
     (is (not (string/includes? source "p/all (map #(db-async/<get-block"))
@@ -37,8 +44,30 @@
         "A visible journal should request its root and blocks together.")
     (is (string/includes? source ":all? true")
         "The logical journal tree must not have a block count cap.")
-    (is (not (string/includes? source ":render-data? false"))
-        "The journal request must not return structure-only child payloads.")))
+    (is (string/includes? source ":render-data? keep-tree-resident?")
+        "Recent journals keep render payloads while older journals skip eager derivation.")))
+
+(deftest non-plain-base-tree-blocks-hydrate-positioned-properties-on-demand
+  (let [source (block-source)]
+    (is (string/includes? source "positioned-properties-payload?")
+        "Blocks with a render payload should not request positioned properties again.")
+    (is (string/includes? source "db-async/<get-block repo")
+        "Non-plain blocks should reuse the existing block batcher on demand.")
+    (is (string/includes? source ":render-data? true")
+        "The on-demand request must include positioned render data.")))
+
+(deftest old-journal-metadata-waits-until-scroll-settles
+  (let [journal (journal-source)
+        block (block-source)
+        property (property-source)]
+    (is (string/includes? journal "journal-metadata-hydration-delay-ms")
+        "Secondary metadata should wait until journal scrolling settles.")
+    (is (string/includes? journal ":block-metadata-ready? metadata-ready?")
+        "Each mounted journal should publish its metadata readiness to the block tree.")
+    (is (string/includes? block ":block-metadata-ready?")
+        "Block metadata requests should honor journal readiness.")
+    (is (string/includes? property ":block-metadata-ready?")
+        "Property metadata requests should honor journal readiness.")))
 
 (deftest two-most-recent-journal-trees-are-pinned-without-pinning-their-dom
   (let [source (journal-source)]
