@@ -1,11 +1,13 @@
 (ns frontend.components.views-test
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [deftest is testing]]
+            [cljs.test :refer [async deftest is testing]]
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
-            [goog.object :as gobj]))
+            [frontend.db.async :as db-async]
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 (deftest table-property-value-receives-view-parent
   (let [view-parent {:db/ident :logseq.class/Task}
@@ -156,6 +158,27 @@
 (deftest table-row-placeholder-matches-the-rendered-row-height
   (is (= 33 (#'views/lazy-item-placeholder-height true)))
   (is (= 24 (#'views/lazy-item-placeholder-height false))))
+
+(deftest loaded-views-use-the-worker-query-result
+  (async done
+    (let [fetched-views [{:db/id 12
+                          :block/order "b"
+                          :logseq.property.view/feature-type :all-pages}
+                         {:db/id 11
+                          :block/order "a"
+                          :logseq.property.view/feature-type :all-pages}]]
+      (-> (p/with-redefs [db-async/<get-views
+                          (fn [repo parent-id feature-type]
+                            (is (= ["repo" 151 :all-pages]
+                                   [repo parent-id feature-type]))
+                            (p/resolved fetched-views))]
+            (#'views/<get-or-load-views "repo" {:db/id 151} :all-pages))
+          (p/then (fn [result]
+                    (is (= [11 12] (mapv :db/id result))
+                        "The view returned by the worker must be reused instead of creating another one.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
 
 (deftest group-by-column-should-exclude-name-and-include-many-properties
   (is (views/group-by-column? {:id :block/page}))
