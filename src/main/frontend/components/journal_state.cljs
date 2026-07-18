@@ -1,6 +1,5 @@
 (ns frontend.components.journal-state)
 
-(defn slot-mounted?
-  [intersecting? focused? mounted?]
-  (or focused?
-      (and intersecting? mounted?)))
+(defn slot-load-now?
+  [visible? focused?]
+  (or visible? focused?))

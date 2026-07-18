@@ -37,6 +37,13 @@
     (and (> (.-bottom rect) (- (.-top root-rect) margin))
          (< (.-top rect) (+ (.-bottom root-rect) margin)))))
 
+(defn- journal-slot-visible?
+  [^js node ^js root]
+  (let [rect (.getBoundingClientRect node)
+        root-rect (.getBoundingClientRect root)]
+    (and (> (.-bottom rect) (.-top root-rect))
+         (< (.-top rect) (.-bottom root-rect)))))
+
 (defn- use-journal-slot-visibility!
   [cache-key *item-ref *mounted-ref *mount-timer-ref set-mounted! set-loaded!]
   (hooks/use-effect!
@@ -73,13 +80,16 @@
                            (fn [entries]
                              (let [intersecting? (boolean (some #(.-isIntersecting %)
                                                                 (array-seq entries)))
-                                   focused? (.contains node (.-activeElement js/document))]
+                                   focused? (.contains node (.-activeElement js/document))
+                                   visible? (journal-state/slot-load-now?
+                                             (journal-slot-visible? node root)
+                                             focused?)
+                                   mounted? (hooks/deref *mounted-ref)]
                                (cond
-                                 focused?
+                                 visible?
                                  (mount-slot!)
 
-                                 (journal-state/slot-mounted?
-                                  intersecting? focused? (hooks/deref *mounted-ref))
+                                 (and intersecting? mounted?)
                                  (cancel-pending-mount!)
 
                                  intersecting?
