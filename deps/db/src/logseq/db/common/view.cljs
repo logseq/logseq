@@ -569,19 +569,9 @@
   (cond
      journals?
      (let [journals (vec (ldb/get-latest-journals db))
-           ids (mapv :db/id journals)
-           selection-block-ids
-           (into []
-                 (mapcat (fn [journal]
-                           (->> (d/datoms db :avet :block/parent (:db/id journal))
-                                (mapv :e)
-                                (d/pull-many db [:block/uuid :block/order])
-                                ldb/sort-by-order
-                                (keep :block/uuid))))
-                 journals)]
+           ids (mapv :db/id journals)]
        {:count (count ids)
-        :data ids
-        :selection-block-ids selection-block-ids})
+        :data ids})
      :else
      (let [view (d/entity db view-id)
            group-by-property (:logseq.property.view/group-by-property view)

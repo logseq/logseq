@@ -138,8 +138,10 @@
   (<invoke-db-worker :thread-api/get-comment-thread-block-uuids graph block-uuids))
 
 (defn <get-page-blocks-tree
-  [graph page-id-name-or-uuid]
-  (<invoke-db-worker :thread-api/get-page-blocks-tree graph page-id-name-or-uuid))
+  ([graph page-id-name-or-uuid]
+   (<get-page-blocks-tree graph page-id-name-or-uuid nil))
+  ([graph page-id-name-or-uuid option]
+   (<invoke-db-worker :thread-api/get-page-blocks-tree graph page-id-name-or-uuid option)))
 
 (defn <get-block-class-default-properties
   [graph block-id]
@@ -235,7 +237,8 @@
   [requests]
   (mapv (fn [{:keys [id opts]}]
           {:id id
-           :opts (select-keys opts [:children? :properties :include-collapsed-children?])})
+           :opts (select-keys opts [:all? :children? :properties :render-data?
+                                    :include-collapsed-children?])})
         requests))
 
 (defn- <invoke-worker-get-blocks
@@ -333,7 +336,9 @@
                             :or {children? true}
                             :as opts}]
   (let [name' (str id-uuid-or-name)
-        opts (assoc opts :children? children?)
+        opts (assoc opts
+                    :children? children?
+                    :render-data? true)
         id (if (util/uuid-string? name') name' id-uuid-or-name)]
     (->
      (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
@@ -348,10 +353,6 @@
                                       (mapv (fn [id]
                                               {:id id :opts (assoc opts :children? false)})
                                             ids*))))
-
-(defn <get-page-blocks-window
-  [graph id-uuid-or-name opts]
-  (<invoke-db-worker :thread-api/get-page-blocks-window graph id-uuid-or-name opts))
 
 (defn <get-block-parents
   [graph id depth]

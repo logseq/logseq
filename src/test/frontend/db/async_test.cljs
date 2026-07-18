@@ -65,6 +65,21 @@
     (is (not (string/includes? source "Safety fallback: retry once"))
         "A failed batch must not repeat the same large request.")))
 
+(deftest block-batching-preserves-complete-tree-options-test
+  (let [id (random-uuid)
+        requests [{:id id
+                   :opts {:all? true
+                          :children? true
+                          :render-data? true
+                          :include-collapsed-children? true
+                          :skip-refresh? true}}]]
+    (is (= [{:id id
+             :opts {:all? true
+                    :children? true
+                    :render-data? true
+                    :include-collapsed-children? true}}]
+           (#'db-async/worker-get-blocks-requests requests)))))
+
 (deftest block-loaders-preserve-worker-error-cause-test
   (async done
          (let [cause (js/Error. "worker failed")

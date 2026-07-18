@@ -599,134 +599,27 @@
     (is (not (string/includes? page-source ":editor/edit-block-fn"))
         "A later render must not consume a callback owned by another response.")))
 
-(deftest page-window-refresh-does-not-require-existing-window-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))
-        refresh-index (string/index-of use-page-block-state-source ":page-window-refresh?")
-        refresh-source (when refresh-index
-                         (subs use-page-block-state-source
-                               (max 0 (- refresh-index 120))
-                               (min (count use-page-block-state-source)
-                                    (+ refresh-index 500))))]
-    (is (some? refresh-index)
-        "Page rendering must observe structural page-window refresh markers.")
-    (is (not (string/includes? refresh-source "(and page-window"))
-        "Structural page-window refresh must not be dropped while the initial page window is still loading.")
-    (is (string/includes? use-page-block-state-source "(hooks/use-effect!")
-        "Page-window reconciliation should not block browser paint.")
-    (is (and (string/includes? use-page-block-state-source "page-refresh?")
-             (string/includes? use-page-block-state-source "common-page-window/refresh-opts"))
-        "Structural refresh should preserve the current top or bottom window anchor.")))
-
-(deftest page-window-load-ignores-stale-responses-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        row-refresh-source source
-        loaded-refresh-source (subs source
-                                    (string/index-of source "(defn- refresh-loaded-child-overrides!")
-                                    (string/index-of source "(defn- refresh-loaded-children!"))
-        window-refresh-source (subs source
-                                    (string/index-of source "(defn- refresh-page-window-row-overrides!")
-                                    (string/index-of source "(defn- page-window-loader"))
-        page-window-loader-source (subs source
-                                        (string/index-of source "(defn- page-window-loader")
-                                        (string/index-of source "(defn- latest-page-tree-for"))
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? use-page-block-state-source "*page-window-request-id")
-        "Page window loading must track request order.")
-    (is (string/includes? page-window-loader-source "swap! *request-id inc")
-        "Each page window request should get a monotonically increasing id.")
-    (is (string/includes? page-window-loader-source "(= request-id @*request-id)")
-        "Only the latest page window response should update state.")
-    (is (and (string/includes? row-refresh-source "request-id (swap! *request-id inc)")
-             (string/includes? row-refresh-source "(= request-id @*request-id)"))
-        "Only the latest row refresh response should update state.")
-    (is (and (string/includes? loaded-refresh-source "refresh-row-overrides!")
-             (string/includes? window-refresh-source "refresh-row-overrides!"))
-        "Short and windowed pages should share one ordered row refresh path.")))
-
-(deftest page-window-rows-update-from-latest-block-tx-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? source "(defn- page-window-row-updated?")
-        "Page window row matching should be explicit and tested by source guard.")
-    (is (and (string/includes? source "db-async/<get-blocks")
-             (string/includes? use-page-block-state-source "refresh-page-window-row-overrides!"))
-        "Latest block tx refresh should fetch only affected window rows, not reload the whole page tree.")
-    (is (string/includes? use-page-block-state-source "set-page-window-row-overrides!")
-        "Latest block tx refresh should store updated row payloads separately from page window structure.")))
-
-(deftest page-window-structural-refresh-does-not-run-row-overrides-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))
-        refresh-index (string/index-of use-page-block-state-source "refresh-page-window-row-overrides!")
-        refresh-source (when refresh-index
-                         (subs use-page-block-state-source
-                               (max 0 (- refresh-index 360))
-                               (min (count use-page-block-state-source)
-                                    (+ refresh-index 220))))]
-    (is (some? refresh-index)
-        "Page window rows should still support row-level refreshes for content-only txs.")
-    (is (string/includes? refresh-source "when-not (:page-window-refresh? latest-transacted-entity-uuids)")
-        "Structural page-window refreshes must not also issue row-level refresh requests.")))
-
-(deftest page-window-flat-rows-keep-worker-order-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        page-blocks-source (subs source
-                                 (string/index-of source "(hsx/defc page-blocks-cp")
-                                 (string/index-of source "(hsx/defc today-queries"))]
-    (is (re-find #"(?s)page-window\?\s+children" page-blocks-source)
-        "Paginated page-window rows should be handled explicitly.")
-    (is (not (re-find #"(?s)page-window\?\s+\(ldb/sort-by-order children\)" page-blocks-source))
-        "Worker page-window rows are already flat DFS ordered and must not be sorted globally by :block/order.")))
-
-(deftest page-route-loads-page-root-without-full-children-test
+(deftest page-route-loads-complete-index-and-an-initial-render-window-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
         page-aux-source (subs source
                               (string/index-of source "(hsx/defc page-aux")
                               (string/index-of source "(hsx/defc page-cp"))]
-    (is (string/includes? page-aux-source "db-async/<get-page-blocks-window")
-        "Page route should load the initial top page-window together with page/root metadata.")
-    (is (string/includes? page-aux-source ":initial-page-window initial-page-window")
-        "Initial page-window rows should be passed into page rendering so the first rows are visible immediately.")
-    (is (not (string/includes? page-aux-source ":children? true"))
-        "Opening a page should not eagerly load the full block tree when page-window rendering owns rows.")
-    (is (not (string/includes? page-aux-source ":include-collapsed-children? true"))
-        "Opening a page should not eagerly load collapsed children before expansion.")))
+    (is (string/includes? page-aux-source "db-async/<get-page-blocks-tree"))
+    (is (string/includes? page-aux-source ":initial-limit initial-tree-render-limit"))
+    (is (string/includes? page-aux-source "db-async/<get-block-with-children")
+        "Journals still load one complete tree per visible journal.")
+    (is (not (string/includes? source "<get-page-blocks-window")))
+    (is (not (string/includes? source ":virtual/flat-list?")))))
 
-(deftest page-block-state-uses-initial-page-window-test
+(deftest page-tree-reconciles-worker-deltas-without-full-refresh-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? use-page-block-state-source "[block* initial-page-window]")
-        "Page block state should accept the initial page-window from page route loading.")
-    (is (string/includes? use-page-block-state-source "(hooks/use-state initial-page-window)")
-        "The first render should use initial page-window rows instead of waiting for a second async request.")
-    (is (string/includes? use-page-block-state-source "(or initial-page-window")
-        "Resetting page block state should keep initial page-window rows for the current page.")))
-
-(deftest loaded-children-rows-update-from-latest-block-tx-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        use-page-block-state-source (subs source
-                                          (string/index-of source "(defn- use-page-block-state")
-                                          (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? source "(defn- refresh-loaded-child-overrides!")
-        "Loaded children should refresh affected rows without reloading the page tree.")
-    (is (string/includes? source "loaded-children-affected-row-ids")
-        "Loaded children refresh should only fetch rows affected by the latest tx.")
-    (is (string/includes? source "merge-updated-loaded-child")
-        "Loaded children refresh should preserve child structure while merging updated row payloads.")
-    (is (and (string/includes? use-page-block-state-source "refresh-loaded-children! block*")
-             (string/includes? use-page-block-state-source "loaded-children"))
-        "Latest block tx should update loaded children as well as page-window rows.")))
+        loaded-tree-source (subs source
+                                 (string/index-of source "(defn- use-loaded-block-tree")
+                                 (string/index-of source "(hsx/defc page-blocks-cp"))]
+    (is (string/includes? loaded-tree-source "outliner-tree/reconcile-block-tree"))
+    (is (string/includes? loaded-tree-source ":updated-blocks"))
+    (is (string/includes? loaded-tree-source ":deleted-ids"))
+    (is (not (string/includes? loaded-tree-source "db-async/<get-block-with-children")))))
 
 (deftest selected-component-block-uses-plain-entity-predicates-test
   (is (zero? (direct-ui-db-call-count-in-files-with-pattern selected-component-block-entity-predicate-files
