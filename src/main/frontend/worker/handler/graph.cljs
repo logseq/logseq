@@ -10,7 +10,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.outliner.op :as outliner-op]))
 
 (defn- favorite-page
   [db]
@@ -64,20 +65,30 @@
                          (string/blank? (:block/title entity)))))
            vec))))
 
-(def-thread-api :thread-api/build-favorite-page-ops
-  [repo page-block-uuid]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (when-let [page (and (d/entity db [:block/uuid page-block-uuid])
-                         (favorite-page db))]
-      [[:insert-blocks [[(ldb/build-favorite-tx page-block-uuid)]
-                        (:block/uuid page)
-                        {}]]])))
+(defn- favorite-page-ops
+  [db page-block-uuid]
+  (when-let [page (and (d/entity db [:block/uuid page-block-uuid])
+                       (favorite-page db))]
+    [[:insert-blocks [[(ldb/build-favorite-tx page-block-uuid)]
+                      (:block/uuid page)
+                      {}]]]))
 
-(def-thread-api :thread-api/build-unfavorite-page-ops
-  [repo page-block-uuid]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (when-let [block (favorite-block db page-block-uuid)]
-      [[:delete-blocks [[(:block/uuid block)] {}]]])))
+(defn- unfavorite-page-ops
+  [db page-block-uuid]
+  (when-let [block (favorite-block db page-block-uuid)]
+    [[:delete-blocks [[(:block/uuid block)] {}]]]))
+
+(def-thread-api :thread-api/set-page-favorite
+  [repo page-block-uuid favorite?]
+  (let [conn (worker-state/get-datascript-conn repo)
+        db @conn
+        favorited? (boolean (favorite-block db page-block-uuid))
+        ops (cond
+              (and favorite? (not favorited?)) (favorite-page-ops db page-block-uuid)
+              (and (not favorite?) favorited?) (unfavorite-page-ops db page-block-uuid))]
+    (when (seq ops)
+      (outliner-op/apply-ops! conn ops nil))
+    nil))
 
 (defn- page-block-db-id
   [db page-block-uuid]
@@ -86,17 +97,25 @@
                            page-block-uuid)]
     (:db/id (d/entity db [:block/uuid page-block-uuid']))))
 
-(def-thread-api :thread-api/build-reorder-favorites-ops
+(defn- reorder-favorites-ops
+  [db favorite-page-uuids]
+  (when-let [page (favorite-page db)]
+    (let [page-block-ids (keep #(page-block-db-id db %) favorite-page-uuids)
+          current-blocks (ldb/sort-by-order (ldb/get-page-blocks db (:db/id page)))]
+      (->> (map vector page-block-ids current-blocks)
+           (keep (fn [[page-block-id block]]
+                   (when (not= page-block-id (:db/id (:block/link block)))
+                     [:save-block [(assoc block :block/link page-block-id) nil]])))
+           vec))))
+
+(def-thread-api :thread-api/reorder-favorites
   [repo favorite-page-uuids]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (when-let [page (favorite-page db)]
-      (let [page-block-ids (keep #(page-block-db-id db %) favorite-page-uuids)
-            current-blocks (ldb/sort-by-order (ldb/get-page-blocks db (:db/id page)))]
-        (->> (map vector page-block-ids current-blocks)
-             (keep (fn [[page-block-id block]]
-                     (when (not= page-block-id (:db/id (:block/link block)))
-                       [:save-block [(assoc block :block/link page-block-id) nil]])))
-             vec)))))
+  (let [conn (worker-state/get-datascript-conn repo)
+        db @conn
+        ops (reorder-favorites-ops db favorite-page-uuids)]
+    (when (seq ops)
+      (outliner-op/apply-ops! conn ops nil))
+    nil))
 
 (def-thread-api :thread-api/build-graph
   [repo option]
@@ -156,13 +175,3 @@
                        [(ldb/kv :logseq.kv/local-graph-uuid local-graph-uuid)]
                        {:graph-open/ensure-local-graph-uuid? true})
           local-graph-uuid))))
-
-(def-thread-api :thread-api/get-rtc-graph-e2ee?
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-graph-rtc-e2ee? @conn)))
-
-(def-thread-api :thread-api/get-graph-schema-version
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-graph-schema-version @conn)))

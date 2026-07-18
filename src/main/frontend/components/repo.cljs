@@ -56,7 +56,7 @@
     (p/resolved (true? graph-e2ee?))
 
     (= url (state/get-current-repo))
-    (p/let [e2ee? (<invoke-db-worker :thread-api/get-rtc-graph-e2ee? url)]
+    (p/let [e2ee? (<invoke-db-worker :thread-api/get-key-value url :logseq.kv/graph-rtc-e2ee?)]
       (if (nil? e2ee?) true (true? e2ee?)))
 
     :else

@@ -139,9 +139,7 @@
 (defn <reorder-favorites!
   [favorites]
   (when-let [repo (state/get-current-repo)]
-    (p/let [ops (state/<invoke-db-worker :thread-api/build-reorder-favorites-ops repo favorites)
-            _ (when (seq ops)
-                (state/<invoke-db-worker :thread-api/apply-outliner-ops repo ops nil))]
+    (p/let [_ (state/<invoke-db-worker :thread-api/reorder-favorites repo favorites)]
       (state/update-favorites-updated!))))
 
 (defn update-public-attribute!

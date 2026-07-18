@@ -3,12 +3,11 @@
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db.async :as db-async]
             [frontend.handler.comments :as comments-handler]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
 
-(deftest ensure-comments-area-adds-target-property-for-single-block-comments
+(deftest ensure-comments-area-uses-atomic-worker-command
   (async done
     (let [target-uuid #uuid "11111111-1111-1111-1111-111111111111"
           comments-uuid #uuid "22222222-2222-2222-2222-222222222222"
@@ -16,74 +15,19 @@
                          :block/uuid comments-uuid
                          :block/title "Comments"
                          :block/tags [{:db/ident comments-model/comments-tag-ident}]}
-          opts {:block-uuid target-uuid
-                :end? true
-                :edit-block? false
-                :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                              comments-model/comments-blocks-property #{[:block/uuid target-uuid]}}}
-          inserted (atom nil)
-          property-updates (atom [])]
+          calls (atom [])]
       (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                          db-async/<resolve-comments-area
-                          (fn [_repo block-ref]
+                          state/<invoke-db-worker
+                          (fn [api _repo block-ref]
+                            (is (= :thread-api/ensure-comments-area api))
+                            (swap! calls conj block-ref)
                             (is (= target-uuid block-ref))
-                            (p/resolved {:action :insert
-                                         :title "Comments"
-                                         :opts opts}))
-                          editor-handler/api-insert-new-block!
-                          (fn [title opts]
-                            (reset! inserted {:title title :opts opts})
-                            (p/resolved comments-area))
-                          db-property-handler/set-block-property!
-                          (fn [block-id property value]
-                            (swap! property-updates conj [block-id property value])
-                            (p/resolved nil))
-                          editor-handler/expand-block! (fn [_] (p/resolved nil))]
+                            (p/resolved comments-area))]
             (comments-handler/ensure-comments-area! target-uuid))
           (p/then
            (fn [result]
              (is (= comments-area result))
-             (is (contains? (get-in @inserted [:opts :other-attrs])
-                            comments-model/comments-blocks-property))
-             (is (= #{[:block/uuid target-uuid]}
-                    (get-in @inserted [:opts :other-attrs comments-model/comments-blocks-property])))
-             (is (empty? @property-updates)
-                 "New single-block comment areas should be created with the target property")
-             (done)))))))
-
-(deftest ensure-comments-area-backfills-existing-single-block-comments
-  (async done
-    (let [target-uuid #uuid "11111111-1111-1111-1111-111111111111"
-          comments-uuid #uuid "22222222-2222-2222-2222-222222222222"
-          comments-area {:db/id 2
-                         :block/uuid comments-uuid
-                         :block/title "Comments"
-                         :block/tags [{:db/ident comments-model/comments-tag-ident}]}
-          property-updates (atom [])]
-      (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                          db-async/<resolve-comments-area
-                          (fn [_repo block-ref]
-                            (is (= target-uuid block-ref))
-                            (p/resolved {:action :existing
-                                         :comments-area comments-area
-                                         :target-property {:block-id (:db/id comments-area)
-                                                           :property comments-model/comments-blocks-property
-                                                           :value #{[:block/uuid target-uuid]}}}))
-                          db-property-handler/set-block-property!
-                          (fn [block-id property value]
-                            (swap! property-updates conj [block-id property value])
-                            (p/resolved nil))
-                          editor-handler/api-insert-new-block!
-                          (fn [& _]
-                            (throw (js/Error. "should not insert a duplicate comments area")))]
-            (comments-handler/ensure-comments-area! target-uuid))
-          (p/then
-           (fn [result]
-             (is (= comments-area result))
-             (is (= [[(:db/id comments-area)
-                      comments-model/comments-blocks-property
-                      #{[:block/uuid target-uuid]}]]
-                    @property-updates))
+             (is (= [target-uuid] @calls))
              (done)))))))
 
 (deftest deleted-comment-thread-expand-is-no-op
@@ -91,7 +35,7 @@
     (async done
       (let [expanded (atom [])]
         (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                            db-async/<get-comments-area-block (fn [& _] (p/resolved nil))
+                            db-async/<get-block (fn [& _] (p/resolved nil))
                             editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
               (comments-handler/expand-comments-area!
                {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}))
@@ -104,7 +48,7 @@
     (async done
       (let [expanded (atom [])]
         (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                            db-async/<get-comments-area-block (fn [& _] (p/resolved nil))
+                            db-async/<get-block (fn [& _] (p/resolved nil))
                             editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
               (comments-handler/reveal-comments-area!
                {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}))
@@ -121,7 +65,7 @@
         edited (atom nil)]
     (async done
       (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                          db-async/<get-comments-area-block (fn [& _] (p/resolved comments-area))
+                          db-async/<get-block (fn [& _] (p/resolved comments-area))
                           editor-handler/edit-block! (fn [block pos opts]
                                                        (reset! edited [block pos opts]))]
             (comments-handler/edit-comments-area-title! comments-area :main))
