@@ -2,7 +2,6 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
-            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -2539,6 +2538,32 @@
          (is (not (contains? block :block.temp/display-properties)))
          (is (not (contains? block :block.temp/reactions))))))))
 
+(deftest get-blocks-projected-payload-skips-full-properties-map
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get-thread-api :thread-api/get-blocks)
+           block-id #uuid "22222222-2222-2222-2222-222222222222"
+           conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Projected row"
+                             :block/uuid block-id
+                             :block/updated-at 42
+                             :build/keep-uuid? true}]}])]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [block (-> (get-blocks! test-repo
+                                    (ldb/write-transit-str
+                                     [{:id block-id
+                                       :opts {:children? false
+                                              :properties [:block/title
+                                                           :block/updated-at]}}]))
+                       ldb/read-transit-str
+                       first
+                       :block)]
+         (is (= "Projected row" (:block/title block)))
+         (is (= 42 (:block/updated-at block)))
+         (is (not (contains? block :block/properties))
+             "Projected table rows must not compute every display property."))))))
+
 (deftest sanitize-block-result-removes-nil-values
   (is (= {:block {:db/id 42
                   :block/title "parent"}
@@ -2847,8 +2872,10 @@
            conn (d/create-conn db-schema/schema)
            class-tempid -1
            object-tempid -2
+           page-tempid -3
            class-uuid #uuid "33333333-3333-3333-3333-333333333333"
-           object-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+           object-uuid #uuid "44444444-4444-4444-4444-444444444444"
+           page-uuid #uuid "55555555-5555-5555-5555-555555555555"]
        (is (fn? convert!))
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id class-tempid
@@ -2856,14 +2883,28 @@
                            :block/name "tag"
                            :block/uuid class-uuid
                            :db/ident :user.class/tag
-                           :block/tags :logseq.class/Tag}
+                           :block/tags :logseq.class/Tag
+                           :block/created-at 1
+                           :block/updated-at 1}
+                          {:db/id page-tempid
+                           :block/title "Page"
+                           :block/name "page"
+                           :block/uuid page-uuid
+                           :block/tags :logseq.class/Page
+                           :block/created-at 1
+                           :block/updated-at 1}
                           {:db/id object-tempid
                            :block/title (str "hello #[[" class-uuid "]]")
                            :block/uuid object-uuid
-                           :block/tags class-tempid}])
+                           :block/tags class-tempid
+                           :block/page page-tempid
+                           :block/parent page-tempid
+                           :block/order "a0"
+                           :block/created-at 1
+                           :block/updated-at 1}])
        (reset! worker-state/*datascript-conns {test-repo conn})
        (when (fn? convert!)
-       (let [class-id (:db/id (d/entity @conn :user.class/tag))
+         (let [class-id (:db/id (d/entity @conn :user.class/tag))
                object-id (:db/id (d/entity @conn [:block/uuid object-uuid]))]
            (convert! test-repo class-id)
            (let [class (d/entity @conn class-id)
@@ -3264,8 +3305,9 @@
        (when (fn? set-favorite!)
          (set-favorite! test-repo page-uuid true)
          (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               page (d/entity @conn [:block/uuid page-uuid])
                favorite-block (first (ldb/get-page-blocks @conn (:db/id favorites-page)))]
-           (is (= page-uuid (get-in favorite-block [:block/link :block/uuid])))
+           (is (= (:db/id page) (get-in favorite-block [:block/link :db/id])))
            (set-favorite! test-repo page-uuid false)
            (is (empty? (ldb/get-page-blocks @conn (:db/id favorites-page))))))))))
 
@@ -3324,9 +3366,11 @@
        (when (fn? reorder!)
          (reorder! test-repo [page-b-uuid page-a-uuid])
          (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
-               page-uuids (mapv #(get-in % [:block/link :block/uuid])
-                                (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))]
-           (is (= [page-b-uuid page-a-uuid] page-uuids))))))))
+               page-a-id (:db/id (d/entity @conn [:block/uuid page-a-uuid]))
+               page-b-id (:db/id (d/entity @conn [:block/uuid page-b-uuid]))
+               page-ids (mapv #(get-in % [:block/link :db/id])
+                              (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))]
+           (is (= [page-b-id page-a-id] page-ids))))))))
 
 (deftest get-page-route-info-resolves-page-flags-and-alias-source
   (restoring-worker-state
