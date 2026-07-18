@@ -2,7 +2,8 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest is]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.components.journal-state :as journal-state]))
 
 (defn- journal-source
   []
@@ -57,22 +58,21 @@
     (is (string/includes? source "(outer-blocks-rendered)")
         "A loaded journal must notify its slot so offscreen DOM can be released.")))
 
-(deftest journal-slot-stays-mounted-until-its-tree-finishes-loading
-  (let [source (journal-source)]
-    (is (string/includes? source "journal-slot-mounted?")
-        "Journal slots need one mount decision that covers observer and loading state.")
-    (is (string/includes? source "(and mounted? (not loaded?))")
-        "A mounted slot must survive leaving the viewport while its tree is loading.")
-    (is (string/includes? source
-                          "(journal-slot-mounted? intersecting? focused? mounted? loaded?)")
-        "Intersection, focus, and in-flight loading must all participate in the decision.")
-    (is (string/includes? source "[cache-key loaded? mounted?]")
-        "The observer must refresh after a slot enters its loading state.")
-    (is (string/includes? source
-                          "(or (not mounted?) (not loaded?)) (assoc :style {:min-height placeholder-height})")
-        "The slot must preserve its geometry until the complete tree renders.")
-    (is (not (string/includes? source "(and recent? (not loaded?))"))
-        "Loading protection must apply to every on-demand journal, not only recent ones.")))
+(deftest journal-slot-waits-for-a-settled-intersection-before-mounting
+  (is (false? (journal-state/slot-mounted? true false false))
+      "A slot crossed during fast scrolling must not start a complete-tree request immediately."))
+
+(deftest journal-slot-releases-an-offscreen-in-flight-tree
+  (is (false? (journal-state/slot-mounted? false false true))
+      "An offscreen request must not commit its complete tree into the DOM."))
+
+(deftest journal-slot-keeps-focused-and-settled-visible-content-mounted
+  (is (true? (journal-state/slot-mounted? false true false))
+      "Focused journal content must remain stable outside the preload window.")
+  (is (true? (journal-state/slot-mounted? true false true))
+      "A mounted journal that remains near the viewport must stay mounted.")
+  (is (false? (journal-state/slot-mounted? false false false))
+      "Loaded offscreen DOM must be released while its measured placeholder remains."))
 
 (deftest journal-stream-never-nests-virtualizers
   (let [journal-component-source (journal-source)
