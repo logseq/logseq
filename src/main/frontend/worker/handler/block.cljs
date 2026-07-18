@@ -172,10 +172,12 @@
                                                                     :full
                                                                     :self)))))
                            children))
-          block-map-base (merge
-                          {:block/properties (property-handler/display-properties-for-block db block)}
-                          (property-handler/entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
-                          (worker-plain/entity-forward-map db block {:properties properties}))
+          block-map-base (cond-> (merge
+                                  (property-handler/entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
+                                  (worker-plain/entity-forward-map db block {:properties properties}))
+                           (or render-data? (empty? properties))
+                           (assoc :block/properties
+                                  (property-handler/display-properties-for-block db block)))
           block-map (cond->> block-map-base
                       render-data?
                       (assoc-render-property-data db block))

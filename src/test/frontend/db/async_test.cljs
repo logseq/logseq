@@ -129,6 +129,13 @@
                     (is false (str error))))
                  (p/finally done))))))
 
+(deftest block-batching-flush-is-not-frame-coupled-test
+  (let [source (source-for "src/main/frontend/db/async.cljs")]
+    (is (string/includes? source "(js/queueMicrotask flush-get-blocks-batch!)")
+        "Block fetches must flush before the next animation frame.")
+    (is (not (string/includes? source "(util/schedule flush-get-blocks-batch!)"))
+        "Worker requests must not be coupled to requestAnimationFrame.")))
+
 (deftest block-loaders-return-worker-data-without-renderer-db-test
   (async done
          (let [repo "logseq_db_async_block_worker"
@@ -149,14 +156,14 @@
                               (if (= 1 (count requests))
                                 [{:block block :children [child]}]
                                 [{:block block-a}
-                                 {:block block-b}])))
-                           db-async/<invoke-db-worker
-                           (fn [api repo' id depth]
-                             (swap! worker-calls conj [api repo' id depth])
-                             (p/resolved parents))]
+                                 {:block block-b}])))]
              (-> (p/let [block-result (db-async/<get-block repo (:block/uuid block) {:children? true})
                          blocks-result (db-async/<get-blocks repo [10 11] {:children? false})
-                         parents-result (db-async/<get-block-parents repo 42 1000)]
+                         parents-result (with-redefs [db-async/<invoke-db-worker
+                                                      (fn [api repo' id depth]
+                                                        (swap! worker-calls conj [api repo' id depth])
+                                                        parents)]
+                                          (db-async/<get-block-parents repo 42 1000))]
                    (is (= block block-result))
                    (is (= [{:block block-a}
                            {:block block-b}]
