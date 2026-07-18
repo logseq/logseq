@@ -522,6 +522,51 @@
       (p/let [_ (editor/keydown-new-block-handler nil)]
         (is (= 1 @inserts))))))
 
+(deftest-async api-insert-at-page-end-loads-only-the-page-and-last-child
+  (let [page-id (random-uuid)
+        page {:db/id 10
+              :block/uuid page-id
+              :block/title "page"}
+        last-child {:db/id 20
+                    :block/uuid (random-uuid)
+                    :block/title "last"
+                    :block/parent {:db/id 10}
+                    :block/page {:db/id 10}}
+        block-reads (atom [])
+        sibling-reads (atom [])
+        insertion (atom nil)]
+    (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                        db-async/<get-block-with-children
+                        (fn [& _]
+                          (throw (js/Error. "Page insertion must not load the complete tree")))
+                        db-async/<get-block
+                        (fn [_repo block-id opts]
+                          (swap! block-reads conj [block-id opts])
+                          (p/resolved (if (= page-id block-id)
+                                        page
+                                        {:block/uuid block-id})))
+                        db-async/<get-block-sibling
+                        (fn [_repo block-id direction]
+                          (swap! sibling-reads conj [block-id direction])
+                          (p/resolved last-child))
+                        editor/outliner-insert-block!
+                        (fn [config target new-block opts]
+                          (reset! insertion {:config config
+                                             :target target
+                                             :new-block new-block
+                                             :opts opts})
+                          (p/resolved nil))]
+          (editor/api-insert-new-block! "new" {:page page-id
+                                                 :edit-block? false
+                                                 :end? true}))
+        (p/then
+         (fn [_]
+           (is (= [[page-id {:children? false}]]
+                  (take 1 @block-reads)))
+           (is (= [[10 :last-child]] @sibling-reads))
+           (is (= last-child (:target @insertion)))
+           (is (true? (get-in @insertion [:opts :sibling?]))))))))
+
 (deftest-async insert-above-awaits-async-insert
   (let [current-block {:db/id 1
                        :block/uuid (random-uuid)

@@ -2563,6 +2563,14 @@
                              (= view-feature-type (:logseq.property.view/feature-type view)))))]
     (ldb/sort-by-order views)))
 
+(defn- <get-or-load-views
+  [repo view-parent view-feature-type]
+  (let [views (get-views view-parent view-feature-type)]
+    (if (seq views)
+      (p/resolved views)
+      (p/let [views (db-async/<get-views repo (:db/id view-parent) view-feature-type)]
+        (ldb/sort-by-order views)))))
+
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
   (p/let [repo (state/get-current-repo)
@@ -3139,21 +3147,15 @@
             (set-views! nil)
             (set-view-entity! view-entity*)
             (when-not view-entity*
-              (let [views (get-views view-parent view-feature-type)]
+              (p/let [views (<get-or-load-views repo view-parent view-feature-type)]
                 (if-let [v (first views)]
                   (do
                     (set-views! views)
                     (when-not view-entity* (set-view-entity! v)))
-                  (p/let [_ (db-async/<get-views repo (:db/id view-parent) view-feature-type)]
-                    (let [views (get-views view-parent view-feature-type)]
-                      (if-let [v (first views)]
-                        (do
-                          (set-views! views)
-                          (set-view-entity! v))
-                        (when (and view-parent view-feature-type (not view-entity*))
-                          (p/let [new-view (create-view! view-parent view-feature-type {:auto-triggered? true})]
-                            (set-views! (concat views [new-view]))
-                            (set-view-entity! new-view)))))))))))
+                  (when (and view-parent view-feature-type (not view-entity*))
+                    (p/let [new-view (create-view! view-parent view-feature-type {:auto-triggered? true})]
+                      (set-views! [new-view])
+                      (set-view-entity! new-view))))))))
         nil)
      [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
     (when view-entity
