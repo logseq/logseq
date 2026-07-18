@@ -242,7 +242,7 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
-(deftest structural-ops-run-editor-callback-after-dom-commit-test
+(deftest structural-ops-publish-tree-and-editor-in-one-dom-commit-test
   (async done
     (let [page-id (random-uuid)
           block-id (random-uuid)
@@ -284,8 +284,8 @@
               {:ui/page-id page-id
                :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
           (p/then (fn []
-                    (is (= [:commit-start :publish :commit-end [:insert block-id]
-                            :commit-start :publish :commit-end [:delete block-id]]
+                    (is (= [:commit-start :publish [:insert block-id] :commit-end
+                            :commit-start :publish [:delete block-id] :commit-end]
                            @calls))))
           (p/finally (fn []
                        (set! (.-flushSync react-dom) original-flush-sync)

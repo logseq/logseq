@@ -155,8 +155,8 @@
      (fn []
        (vreset! ui-refresh-perf
                 (refresh-worker-op-blocks! ops tx-meta updated-blocks deleted-block-uuids
-                                           affected-page-uuids render-invalidated-block-uuids))))
-    (run-edit-block-fn! tx-meta {:rows updated-blocks})
+                                           affected-page-uuids render-invalidated-block-uuids))
+       (run-edit-block-fn! tx-meta {:rows updated-blocks})))
     @ui-refresh-perf))
 
 (defn transact [worker-transact repo tx-data tx-meta]
