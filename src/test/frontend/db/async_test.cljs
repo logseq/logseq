@@ -129,6 +129,30 @@
                     (is false (str error))))
                  (p/finally done))))))
 
+(deftest block-batching-coalesces-identical-requests-test
+  (async done
+         (let [repo "logseq_db_async_duplicate_batch"
+               worker-requests (atom [])]
+           (p/with-redefs [state/<invoke-db-worker
+                           (fn [_api _repo requests-transit]
+                             (let [requests (ldb/read-transit-str requests-transit)]
+                               (swap! worker-requests into requests)
+                               (p/resolved
+                                (ldb/write-transit-str
+                                 (mapv (fn [{:keys [id]}]
+                                         {:id id
+                                          :block {:db/id id}})
+                                       requests)))))]
+             (-> (p/let [results (p/all (repeatedly 17
+                                                    #(db-async/<get-block repo 42 {:children? false
+                                                                                 :skip-refresh? true})))]
+                   (is (= 1 (count @worker-requests)))
+                   (is (= (repeat 17 {:db/id 42}) results)))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
+
 (deftest block-batching-flush-is-not-frame-coupled-test
   (let [source (source-for "src/main/frontend/db/async.cljs")]
     (is (string/includes? source "(js/queueMicrotask flush-get-blocks-batch!)")

@@ -135,6 +135,20 @@
   (is (= "<span></span>"
          (render-lazy-item {:db/id 43 :block/title ""}))))
 
+(deftest lazy-item-loads-all-pages-rows-during-scroll
+  (is (not (#'views/lazy-item-ready-to-load? 42 nil nil true false false)))
+  (is (#'views/lazy-item-ready-to-load? 42 nil nil true true true))
+  (is (#'views/lazy-item-ready-to-load? 42 nil nil false false false))
+  (is (not (#'views/lazy-item-ready-to-load? 42 nil nil false false true)))
+  (is (not (#'views/lazy-item-ready-to-load? 42 {:db/id 42} nil false true true)))
+  (is (not (#'views/lazy-item-ready-to-load? 42 nil 42 true true true))))
+
+(deftest table-row-loads-only-from-the-latest-all-pages-range
+  (is (#'views/table-row-load-while-scrolling? :all-pages [10 20] 15))
+  (is (not (#'views/table-row-load-while-scrolling? :all-pages [10 20] 21)))
+  (is (not (#'views/table-row-load-while-scrolling? :all-pages nil 15)))
+  (is (not (#'views/table-row-load-while-scrolling? :query-result [10 20] 15))))
+
 (deftest group-by-column-should-exclude-name-and-include-many-properties
   (is (views/group-by-column? {:id :block/page}))
   (is (not (views/group-by-column? {:id :block/title
