@@ -619,12 +619,16 @@
 
 (deftest page-tree-reconciles-worker-deltas-without-full-refresh-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
+        tree-source (source-for "src/main/frontend/modules/outliner/tree.cljs")
         loaded-tree-source (subs source
                                  (string/index-of source "(defn- use-loaded-block-tree")
                                  (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? loaded-tree-source "outliner-tree/reconcile-block-tree"))
-    (is (string/includes? loaded-tree-source ":updated-blocks"))
-    (is (string/includes? loaded-tree-source ":deleted-ids"))
+    (is (string/includes? loaded-tree-source "outliner-tree/apply-loaded-tree-event")
+        "The page hook should delegate worker and optimistic deltas to one tree event path.")
+    (is (string/includes? tree-source "(reconcile-block-tree base-root")
+        "The shared tree event path must reconcile authoritative worker deltas.")
+    (is (string/includes? tree-source "(:updated-blocks event)"))
+    (is (string/includes? tree-source "(:deleted-ids event)"))
     (is (string/includes? loaded-tree-source "rfx/use-entity-tx-id")
         "Each page tree should subscribe only to transactions affecting its own root.")
     (is (not (string/includes? loaded-tree-source
