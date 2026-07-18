@@ -374,9 +374,9 @@
                             :or {children? true}
                             :as opts}]
   (let [name' (str id-uuid-or-name)
-        opts (assoc opts
-                    :children? children?
-                    :render-data? true)
+        opts (cond-> (assoc opts :children? children?)
+               (not (contains? opts :render-data?))
+               (assoc :render-data? true))
         id (if (util/uuid-string? name') name' id-uuid-or-name)]
     (->
      (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
@@ -412,7 +412,9 @@
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
+  (p/then (<get-block graph eid {:children? false
+                                 :properties [:block.temp/refs-count]})
+          :block.temp/refs-count))
 
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
