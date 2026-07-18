@@ -262,7 +262,7 @@
   (let [should-schedule? (not (:scheduled? @*get-blocks-batch-state))]
     (when should-schedule?
       (swap! *get-blocks-batch-state assoc :scheduled? true)
-      (util/schedule flush-get-blocks-batch!))))
+      (js/queueMicrotask flush-get-blocks-batch!))))
 
 (defn- enqueue-get-blocks-request!
   [graph request]
