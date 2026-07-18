@@ -199,6 +199,9 @@
         (let [sibling (case direction
                         :left (ldb/get-left-sibling block)
                         :right (ldb/get-right-sibling block)
+                        :last-child (some->> (:db/id block)
+                                             (ldb/get-block-last-direct-child-id db)
+                                             (d/entity db))
                         nil)]
           (some->> sibling
                    (#(worker-plain/entity-forward-map db % {}))

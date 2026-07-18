@@ -462,7 +462,7 @@
                                 :plain-ms
                                 :total-ms]))))))))
 
-(deftest get-block-sibling-returns-plain-block-map-test
+(deftest get-block-sibling-returns-navigation-blocks-as-plain-maps-test
   (restoring-worker-state
    (fn []
      (let [conn (db-test/create-conn-with-blocks
@@ -471,12 +471,18 @@
                                    {:block/title (str "block " idx)})
                                  (range 1000))}])
            block (db-test/find-block-by-content @conn "block 500")
+           page (ldb/get-page @conn "page 1")
            get-sibling! (get-thread-api :thread-api/get-block-sibling)]
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [sibling (get-sibling! test-repo (:db/id block) :right)]
+       (let [sibling (get-sibling! test-repo (:db/id block) :right)
+             last-child (get-sibling! test-repo (:db/id page) :last-child)]
          (is (= "block 501" (:block/title sibling)))
          (is (not (de/entity? (:block/parent sibling))))
-         (is (not (de/entity? (:block/page sibling)))))))))
+         (is (not (de/entity? (:block/page sibling))))
+         (is (= "block 999" (:block/title last-child))
+             "Finding the insertion target must not hydrate every page child.")
+         (is (not (de/entity? (:block/parent last-child))))
+         (is (not (de/entity? (:block/page last-child)))))))))
 
 (deftest apply-outliner-ops-rejects-missing-connection-test
   (restoring-worker-state

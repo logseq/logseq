@@ -75,15 +75,15 @@
         "Loading protection must apply to every on-demand journal, not only recent ones.")))
 
 (deftest journal-stream-never-nests-virtualizers
-  (let [journal-source (journal-source)
-        block-source (block-source)]
-    (is (not (string/includes? journal-source "ui/virtualized-list"))
+  (let [journal-component-source (journal-source)
+        block-component-source (block-source)]
+    (is (not (string/includes? journal-component-source "ui/virtualized-list"))
         "Journal slots must not wrap journal block virtualizers in another virtualizer.")
-    (is (string/includes? journal-source "js/IntersectionObserver.")
+    (is (string/includes? journal-component-source "js/IntersectionObserver.")
         "One viewport observer should mount and release journal slots on demand.")
-    (is (not (string/includes? block-source "(:journals? config)"))
+    (is (not (string/includes? block-component-source "(:journals? config)"))
         "A mounted journal owns the one root block virtualizer.")
-    (is (string/includes? block-source "(:block-children? config)")
+    (is (string/includes? block-component-source "(:block-children? config)")
         "Recursive block children must never create another virtualizer.")))
 
 (deftest journal-slots-preserve-height-while-their-dom-is-released

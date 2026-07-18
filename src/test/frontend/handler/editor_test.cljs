@@ -1053,7 +1053,8 @@
         input #js {:value ""}
         originals [state/get-input cursor/pos util/stop state/get-current-repo
                    state/get-edit-block db-async/<get-block-sibling
-                   editor/get-state editor/delete-block-inner!]
+                   editor/get-state editor/delete-block-inner!
+                   util/get-prev-block-non-collapsed-non-embed]
         restore! (fn []
                    (set! state/get-input (nth originals 0))
                    (set! cursor/pos (nth originals 1))
@@ -1062,7 +1063,8 @@
                    (set! state/get-edit-block (nth originals 4))
                    (set! db-async/<get-block-sibling (nth originals 5))
                    (set! editor/get-state (nth originals 6))
-                   (set! editor/delete-block-inner! (nth originals 7)))]
+                   (set! editor/delete-block-inner! (nth originals 7))
+                   (set! util/get-prev-block-non-collapsed-non-embed (nth originals 8)))]
     (set! state/get-input (constantly input))
     (set! cursor/pos (constantly 0))
     (set! util/stop (fn [_] (reset! stopped? true)))
@@ -1071,6 +1073,7 @@
     (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
     (set! editor/get-state (constantly {:config {}}))
     (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
+    (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
     (-> (#'editor/delete-block-when-zero-pos! nil)
         (p/then (fn []
                   {:deleted? @deleted?
@@ -1136,6 +1139,7 @@
                           state/get-current-repo (constantly test-helper/test-db)
                           state/get-edit-block #(deref *block)
                           editor/get-state #(deref *editor-state)
+                          util/get-prev-block-non-collapsed-non-embed (constantly nil)
                           db-async/<get-block-sibling
                           (fn [& _] sibling-promise)
                           editor/delete-block-inner!

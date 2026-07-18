@@ -265,44 +265,44 @@
                        :thread-api/apply-outliner-ops
                        request-repo
                        ops
-                       worker-opts))]
-        (let [optimistic-ui-ms (when optimistic?
-                                 (publish-optimistic-editor-ops! ops opts'))
-              result-promise
-              (p/let [response (request)
-                      {:keys [result affected-page-uuids updated-blocks deleted-block-uuids
-                              render-invalidated-block-uuids perf]} response
-                      mutation-returned-at (now-ms)
-                      worker-returned-at (now-ms)]
-                (if-not (and (= request-repo (state/get-current-repo))
-                             (= request-route (state/get-route-match)))
-                  nil
-                  (let [ui-refresh-perf (publish-worker-response!
-                                         ops opts' updated-blocks deleted-block-uuids affected-page-uuids
-                                         render-invalidated-block-uuids)
-                        state-updated-at (now-ms)]
-                    (on-next-frame!
-                     (fn []
-                       (log-outliner-op-perf!
-                        {:stage :ui-updated
-                         :perf-id perf-id
-                         :op-names (mapv first ops)
-                         :op-count (count ops)
-                         :worker-apply-ms (:apply-ms perf)
-                         :worker-perf (dissoc perf :listener)
-                         :worker-listener (:listener perf)
-                         :worker-roundtrip-ms (- mutation-returned-at started-at)
-                         :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
-                         :ui-refresh ui-refresh-perf
-                         :state-update-ms (- state-updated-at worker-returned-at)
-                         :optimistic-ui-ms optimistic-ui-ms
-                         :total-to-next-frame-ms (- (now-ms) started-at)})))))
-                result)]
-          (if optimistic?
-            (p/catch result-promise
-                     (fn [error]
-                       (when (and (= request-repo (state/get-current-repo))
-                                  (= request-route (state/get-route-match)))
-                         (publish-optimistic-rollback! ops opts'))
-                       (throw error)))
-            result-promise))))))
+                       worker-opts))
+            optimistic-ui-ms (when optimistic?
+                               (publish-optimistic-editor-ops! ops opts'))
+            result-promise
+            (p/let [response (request)
+                    {:keys [result affected-page-uuids updated-blocks deleted-block-uuids
+                            render-invalidated-block-uuids perf]} response
+                    mutation-returned-at (now-ms)
+                    worker-returned-at (now-ms)]
+              (if-not (and (= request-repo (state/get-current-repo))
+                           (= request-route (state/get-route-match)))
+                nil
+                (let [ui-refresh-perf (publish-worker-response!
+                                       ops opts' updated-blocks deleted-block-uuids affected-page-uuids
+                                       render-invalidated-block-uuids)
+                      state-updated-at (now-ms)]
+                  (on-next-frame!
+                   (fn []
+                     (log-outliner-op-perf!
+                      {:stage :ui-updated
+                       :perf-id perf-id
+                       :op-names (mapv first ops)
+                       :op-count (count ops)
+                       :worker-apply-ms (:apply-ms perf)
+                       :worker-perf (dissoc perf :listener)
+                       :worker-listener (:listener perf)
+                       :worker-roundtrip-ms (- mutation-returned-at started-at)
+                       :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
+                       :ui-refresh ui-refresh-perf
+                       :state-update-ms (- state-updated-at worker-returned-at)
+                       :optimistic-ui-ms optimistic-ui-ms
+                       :total-to-next-frame-ms (- (now-ms) started-at)})))))
+              result)]
+        (if optimistic?
+          (p/catch result-promise
+                   (fn [error]
+                     (when (and (= request-repo (state/get-current-repo))
+                                (= request-route (state/get-route-match)))
+                       (publish-optimistic-rollback! ops opts'))
+                     (throw error)))
+          result-promise)))))

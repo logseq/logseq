@@ -581,19 +581,16 @@
     (let [before? (if page false before?)
           sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))]
-      (p/let [block-result (db-async/<get-block-with-children (state/get-current-repo)
-                                                              (or page block-uuid))
-              block (worker-block-with-children block-result)]
+      (p/let [repo (state/get-current-repo)
+              block (db-async/<get-block repo (or page block-uuid) {:children? false})]
         (when block
           (if (ldb/recycled? block)
             (notification/show! (t :storage.recycle/readonly) :warning)
             (p/let [left-or-parent (when before?
-                                     (<left-sibling-or-parent (state/get-current-repo) block))]
-              (let [last-block (when (not sibling?)
-                                 (let [children (worker-children block)
-                                       blocks (ldb/sort-by-order children)]
-                                   (last blocks)))
-                    new-block (-> (select-keys block [:block/page])
+                                     (<left-sibling-or-parent repo block))
+                    last-block (when (and (not sibling?) (not start?))
+                                 (db-async/<get-block-sibling repo (:db/id block) :last-child))]
+              (let [new-block (-> (select-keys block [:block/page])
                                   (assoc :block/title content))
                     new-block (assoc new-block :block/page
                                      (if page
@@ -652,7 +649,7 @@
                    (when edit-existing-block?
                      (edit-block! last-block :max))
                    (when-let [id (:block/uuid new-block)]
-                     (db-async/<get-block (state/get-current-repo) id {:children? false}))))))))))))
+                     (db-async/<get-block repo id {:children? false}))))))))))))
 
 (defn get-selected-blocks
   []
