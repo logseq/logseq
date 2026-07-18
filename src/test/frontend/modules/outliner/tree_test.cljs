@@ -1,12 +1,22 @@
 (ns frontend.modules.outliner.tree-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.modules.outliner.tree :as tree]
+            [logseq.outliner.tree :as otree]))
 
 (def root-id #uuid "00000000-0000-0000-0000-000000000001")
 (def a-id #uuid "00000000-0000-0000-0000-000000000002")
 (def b-id #uuid "00000000-0000-0000-0000-000000000003")
 (def c-id #uuid "00000000-0000-0000-0000-000000000004")
 (def d-id #uuid "00000000-0000-0000-0000-000000000005")
+
+(deftest vec-tree-data-materializes-indexable-children
+  (let [result (otree/blocks->vec-tree-data
+                [{:db/id 2
+                  :block/parent {:db/id 1}
+                  :block/order "a"}]
+                {:db/id 1}
+                {:include-root? false})]
+    (is (vector? result))))
 
 (defn- loaded-tree
   []
@@ -76,6 +86,59 @@
   (testing "deleting a parent removes its loaded descendants"
     (let [result (tree/reconcile-block-tree (tree/index-block-tree (loaded-tree)) [] #{a-id})]
       (is (= [c-id] (mapv :block/uuid (:block/children result)))))))
+
+(deftest inserting-a-sibling-does-not-resort-the-loaded-list
+  (let [root (tree/index-block-tree (loaded-tree))
+        result (with-redefs [cljs.core/sort-by
+                             (fn [& _]
+                               (throw (js/Error. "Existing siblings must not be resorted")))]
+                 (tree/reconcile-block-tree
+                  root
+                  [{:db/id 5
+                    :block/uuid d-id
+                    :block/title "D"
+                    :block/parent {:db/id 1}
+                    :block/order "b"}]
+                  #{}))]
+    (is (= [a-id d-id c-id]
+           (mapv :block/uuid (:block/children result))))))
+
+(deftest equal-sibling-orders-remain-addressable
+  (let [inserted (tree/reconcile-block-tree
+                  (tree/index-block-tree (loaded-tree))
+                  [{:db/id 5
+                    :block/uuid d-id
+                    :block/title "D"
+                    :block/parent {:db/id 1}
+                    :block/order "a"}]
+                  #{})
+        updated (tree/reconcile-block-tree inserted
+                                           [{:db/id 5
+                                             :block/uuid d-id
+                                             :block/title "D changed"
+                                             :block/parent {:db/id 1}
+                                             :block/order "a"}]
+                                           #{})]
+    (is (= [a-id d-id c-id]
+           (mapv :block/uuid (:block/children updated))))
+    (is (= "D changed"
+           (get-in updated [:block/children 1 :block/title])))))
+
+(deftest deleting-a-sibling-does-not-reindex-the-surviving-list
+  (let [root (tree/index-block-tree (loaded-tree))
+        result (with-redefs [cljs.core/reduce-kv
+                             (fn [& _]
+                               (throw (js/Error. "Surviving siblings must not be reindexed")))]
+                 (tree/reconcile-block-tree root [] #{a-id}))]
+    (is (= [c-id]
+           (mapv :block/uuid (:block/children result))))))
+
+(deftest structural-deltas-accept-sequential-children
+  (let [root (loaded-tree)
+        root (assoc root :block/children (seq (:block/children root)))
+        result (tree/reconcile-block-tree (tree/index-block-tree root) [] #{a-id})]
+    (is (= [c-id]
+           (mapv :block/uuid (:block/children result))))))
 
 (defn- fail-if-realized
   []
