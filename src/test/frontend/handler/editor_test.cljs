@@ -1282,6 +1282,7 @@
           original-<get-block db-async/<get-block
           original-get-edit-block state/get-edit-block
           original-edit-block! editor/edit-block!]
+      (aset sibling-dom "__logseqBlock" sibling-block)
       (set! db-async/<get-block
             (fn [_repo id _opts]
               (swap! worker-lookups conj id)
@@ -1300,8 +1301,8 @@
             (is (= "beforeafter" new-content))
             (is (= 6 pos))
             (edit-block-f)
-            (is (= [(:block/uuid sibling-block)]
-                   @worker-lookups))
+            (is (empty? @worker-lookups)
+                "A mounted previous block must not be fetched from the worker again.")
             (is (= [{:block sibling-block
                      :pos 6
                      :opts {:custom-content "beforeafter"
@@ -1317,6 +1318,27 @@
                        (set! state/get-edit-block original-get-edit-block)
                        (set! editor/edit-block! original-edit-block!)
                        (done)))))))
+
+(deftest left-sibling-or-parent-uses-mounted-previous-sibling-test
+  (async done
+    (let [parent {:db/id 10}
+          block {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/parent parent}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/parent parent}
+          worker-lookups (atom 0)]
+      (-> (p/with-redefs [db-async/<get-block-sibling
+                          (fn [& _]
+                            (swap! worker-lookups inc)
+                            (p/resolved nil))]
+            (p/let [result (#'editor/<left-sibling-or-parent
+                             test-helper/test-db block previous)]
+              (is (= previous result))
+              (is (zero? @worker-lookups)
+                  "A mounted direct sibling must satisfy tree navigation locally.")))
+          (p/finally done)))))
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
