@@ -87,20 +87,29 @@
     (is (string/includes? source "(outer-blocks-rendered)")
         "A loaded journal must notify its slot so offscreen DOM can be released.")))
 
-(deftest journal-slot-waits-for-a-settled-intersection-before-mounting
-  (is (false? (journal-state/slot-mounted? true false false))
-      "A slot crossed during fast scrolling must not start a complete-tree request immediately."))
+(deftest visible-journal-slot-mounts-immediately
+  (is (true? (journal-state/slot-load-now? true false))
+      "A journal inside the real viewport must start loading without an artificial delay."))
+
+(deftest journal-prefetch-slots-still-wait-for-scroll-to-settle
+  (let [source (journal-source)]
+    (is (string/includes? source "journal-slot-visible?")
+        "The observer must distinguish the real viewport from its preload margin.")
+    (is (string/includes? source "visible?\n                                 (mount-slot!)")
+        "A visible journal must mount immediately.")
+    (is (string/includes? source "intersecting?\n                                 (schedule-mount!)")
+        "A journal seen only by the preload margin should retain the settled-scroll delay.")))
 
 (deftest journal-slot-releases-an-offscreen-in-flight-tree
-  (is (false? (journal-state/slot-mounted? false false true))
+  (is (false? (journal-state/slot-load-now? false false))
       "An offscreen request must not commit its complete tree into the DOM."))
 
 (deftest journal-slot-keeps-focused-and-settled-visible-content-mounted
-  (is (true? (journal-state/slot-mounted? false true false))
+  (is (true? (journal-state/slot-load-now? false true))
       "Focused journal content must remain stable outside the preload window.")
-  (is (true? (journal-state/slot-mounted? true false true))
-      "A mounted journal that remains near the viewport must stay mounted.")
-  (is (false? (journal-state/slot-mounted? false false false))
+  (is (true? (journal-state/slot-load-now? true false))
+      "A journal in the real viewport must load immediately.")
+  (is (false? (journal-state/slot-load-now? false false))
       "Loaded offscreen DOM must be released while its measured placeholder remains."))
 
 (deftest journal-stream-never-nests-virtualizers
