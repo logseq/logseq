@@ -345,6 +345,135 @@
                 (is (= 1 @callback-count)))))
           (p/finally done)))))
 
+(deftest dependent-outliner-mutations-reach-the-worker-in-call-order-test
+  (async done
+    (let [repo "ordered-worker-repo"
+          first-id (random-uuid)
+          second-id (random-uuid)
+          first-result (p/deferred)
+          second-result (p/deferred)
+          calls (atom [])]
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly repo)
+                          state/get-current-page (constantly nil)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api _repo & args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              (let [block-id (-> args first first second first first)]
+                                (swap! calls conj block-id)
+                                (if (= block-id first-id)
+                                  first-result
+                                  second-result))))]
+            (let [first-request (db-transact/apply-outliner-ops
+                                 nil
+                                 [[:delete-blocks [[first-id] {}]]]
+                                 {:outliner-op :delete-blocks})
+                  second-request (db-transact/apply-outliner-ops
+                                  nil
+                                  [[:delete-blocks [[second-id] {}]]]
+                                  {:outliner-op :delete-blocks})]
+              (p/let [_ (p/delay 0)
+                      _ (is (= [first-id] @calls)
+                            "A dependent mutation must wait for the previous worker response.")
+                      _ (p/resolve! first-result {:result :first})
+                      _ (p/delay 0)
+                      _ (is (= [first-id second-id] @calls))
+                      _ (p/resolve! second-result {:result :second})
+                      values (p/all [first-request second-request])]
+                (is (= [:first :second] values)))))
+          (p/finally done)))))
+
+(deftest failed-outliner-mutation-does-not-stall-the-next-call-test
+  (async done
+    (let [repo "recovering-worker-repo"
+          first-id (random-uuid)
+          second-id (random-uuid)
+          first-result (p/deferred)
+          second-result (p/deferred)
+          calls (atom [])]
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly repo)
+                          state/get-current-page (constantly nil)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api _repo & args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              (let [block-id (-> args first first second first first)]
+                                (swap! calls conj block-id)
+                                (if (= block-id first-id)
+                                  first-result
+                                  second-result))))]
+            (let [first-request (db-transact/apply-outliner-ops
+                                 nil
+                                 [[:delete-blocks [[first-id] {}]]]
+                                 {:outliner-op :delete-blocks})
+                  second-request (db-transact/apply-outliner-ops
+                                  nil
+                                  [[:delete-blocks [[second-id] {}]]]
+                                  {:outliner-op :delete-blocks})]
+              (p/let [_ (p/delay 0)
+                      _ (is (= [first-id] @calls))
+                      _ (p/reject! first-result (js/Error. "first mutation failed"))
+                      first-error (p/catch first-request identity)
+                      _ (is (instance? js/Error first-error))
+                      _ (p/delay 0)
+                      _ (is (= [first-id second-id] @calls)
+                            "A rejected mutation must release the repo queue.")
+                      _ (p/resolve! second-result {:result :second})
+                      second-value second-request]
+                (is (= :second second-value)))))
+          (p/finally done)))))
+
+(deftest independent-repos-do-not-share-an-outliner-mutation-queue-test
+  (async done
+    (let [current-repo (atom "repo-a")
+          first-result (p/deferred)
+          second-result (p/deferred)
+          calls (atom [])]
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo #(deref current-repo)
+                          state/get-current-page (constantly nil)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api repo & _args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              (do
+                                (swap! calls conj repo)
+                                (if (= repo "repo-a") first-result second-result))))]
+            (let [first-request (db-transact/apply-outliner-ops
+                                 nil
+                                 [[:delete-blocks [[(random-uuid)] {}]]]
+                                 {:outliner-op :delete-blocks})
+                  _ (reset! current-repo "repo-b")
+                  second-request (db-transact/apply-outliner-ops
+                                  nil
+                                  [[:delete-blocks [[(random-uuid)] {}]]]
+                                  {:outliner-op :delete-blocks})]
+              (p/let [_ (p/delay 0)
+                      _ (is (= ["repo-a" "repo-b"] @calls)
+                            "Independent graphs must start their mutations without waiting for each other.")
+                      _ (p/resolve! first-result {:result :first})
+                      _ (p/resolve! second-result {:result :second})
+                      _ (p/all [(p/catch first-request identity) second-request])]
+                nil)))
+          (p/finally done)))))
+
 (deftest structural-ops-publish-tree-and-editor-in-one-dom-commit-test
   (async done
     (let [page-id (random-uuid)
