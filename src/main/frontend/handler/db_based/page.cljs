@@ -46,14 +46,7 @@
             (ldb/built-in? page-entity)
             (notification/show! (t :page.convert/page-to-tag-built-in) :error)
             :else
-            (-> (state/<invoke-db-worker :thread-api/build-convert-page-to-tag-tx repo (:db/id page-entity))
-                (p/then
-                 (fn [txs]
-                   (state/<invoke-db-worker :thread-api/transact
-                                            repo
-                                            txs
-                                            {:outliner-op :save-block}
-                                            nil))))))))
+            (state/<invoke-db-worker :thread-api/convert-page-to-tag repo (:db/id page-entity))))))
 
 (defn convert-tag-to-page!
   [entity]
@@ -69,12 +62,7 @@
               (notification/show! (t :page.convert/tag-to-page-has-children) :error false)
               (let [convert-fn
                     (fn convert-fn [_]
-                  (p/let [txs (state/<invoke-db-worker :thread-api/build-convert-tag-to-page-tx repo (:db/id entity))]
-                    (state/<invoke-db-worker :thread-api/transact
-                                             repo
-                                             txs
-                                             {:outliner-op :save-block}
-                                             nil)))]
+                      (state/<invoke-db-worker :thread-api/convert-tag-to-page repo (:db/id entity)))]
                 (-> (shui/dialog-confirm!
                      (t :page.convert/tag-to-page-confirm-desc)
                      {:id :convert-tag-to-page

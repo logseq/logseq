@@ -32,8 +32,8 @@
   [api repo & args]
   (let [db (conn/get-db repo)]
     (case api
-      :thread-api/get-today-journal-title
-      (p/resolved "today")
+      :thread-api/get-journal-page-by-day
+      (p/resolved {:block/title "today"})
 
       :thread-api/resolve-query-inputs
       (let [[inputs {:keys [current-page current-page-title today-title]}] args

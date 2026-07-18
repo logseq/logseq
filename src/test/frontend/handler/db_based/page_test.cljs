@@ -10,14 +10,12 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
-(deftest convert-tag-to-page-uses-worker-build-and-transact-test
+(deftest convert-tag-to-page-uses-atomic-worker-command-test
   (async done
     (let [previous-state @state/state
           original-invoke-db-worker state/<invoke-db-worker
           class-id 42
           class-uuid #uuid "33333333-3333-3333-3333-333333333333"
-          tx-data [[:db/retract class-id :block/tags :logseq.class/Tag]
-                   [:db/add class-id :block/tags :logseq.class/Page]]
           calls (atom [])]
       (swap! state/state assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
@@ -28,8 +26,7 @@
                 (p/resolved false)
                 :thread-api/get-structured-children
                 (p/resolved [])
-                :thread-api/build-convert-tag-to-page-tx (p/resolved tx-data)
-                :thread-api/transact (p/resolved {:tx-data tx-data})
+                :thread-api/convert-tag-to-page (p/resolved nil)
                 (p/rejected (js/Error. (str "unexpected worker call: " (pr-str args)))))))
       (p/with-redefs [shui/dialog-confirm!
                       (fn [& _]
@@ -46,8 +43,7 @@
 	             (fn []
 	               (is (= [[:thread-api/page-exists? "test" "Tag" #{:logseq.class/Page}]
 	                       [:thread-api/get-structured-children "test" class-id]
-                           [:thread-api/build-convert-tag-to-page-tx "test" class-id]
-	                       [:thread-api/transact "test" tx-data {:outliner-op :save-block} nil]]
+                           [:thread-api/convert-tag-to-page "test" class-id]]
 	                      @calls))))
             (p/catch
              (fn [error]
@@ -176,15 +172,12 @@
                (reset! state/state previous-state)
                (done))))))))
 
-(deftest convert-page-to-tag-uses-worker-build-and-transact-test
+(deftest convert-page-to-tag-uses-atomic-worker-command-test
   (async done
     (let [previous-state @state/state
           original-invoke-db-worker state/<invoke-db-worker
           page-id 43
           page-uuid #uuid "55555555-5555-5555-5555-555555555555"
-          tx-data [{:db/id page-id
-                    :block/tags #{:logseq.class/Tag}}
-                   [:db/retract page-id :block/tags :logseq.class/Page]]
           calls (atom [])]
       (swap! state/state assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
@@ -194,15 +187,10 @@
                 (p/resolved nil)
 
                 :thread-api/page-exists? (p/resolved false)
-                :thread-api/build-convert-page-to-tag-tx
+                :thread-api/convert-page-to-tag
                 (do
                   (swap! calls conj (vec args))
-                  (p/resolved tx-data))
-
-                :thread-api/transact
-                (do
-                  (swap! calls conj (vec args))
-                  (p/resolved {:tx-data tx-data}))
+                  (p/resolved nil))
 
                 (p/rejected (js/Error. (str "unexpected worker call: " (pr-str args)))))))
       (p/with-redefs [db/transact!
@@ -215,8 +203,7 @@
               :block/tags [{:db/ident :logseq.class/Page}]})
             (p/then
 	             (fn []
-		               (is (= [[:thread-api/build-convert-page-to-tag-tx "test" page-id]
-		                       [:thread-api/transact "test" tx-data {:outliner-op :save-block} nil]]
+		               (is (= [[:thread-api/convert-page-to-tag "test" page-id]]
 		                      @calls))))
             (p/catch
              (fn [error]

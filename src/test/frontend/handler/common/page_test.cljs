@@ -88,32 +88,23 @@
                 [:redirect page-uuid]]
                @calls))))))
 
-(deftest-async favorite-mutations-use-worker-outliner-ops-test
+(deftest-async favorite-mutations-use-atomic-worker-commands-test
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
-        favorite-ops [[:insert-blocks [[{:block/link [:block/uuid page-uuid]
-                                         :block/title ""}]
-                                       #uuid "22222222-2222-2222-2222-222222222222"
-                                       {}]]]
-        unfavorite-ops [[:delete-blocks [[#uuid "33333333-3333-3333-3333-333333333333"] {}]]]
         calls (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test")
                     state/<invoke-db-worker
                     (fn [api repo & args]
                       (swap! calls conj (into [api repo] args))
                       (case api
-                        :thread-api/build-favorite-page-ops (p/resolved favorite-ops)
-                        :thread-api/build-unfavorite-page-ops (p/resolved unfavorite-ops)
-                        :thread-api/apply-outliner-ops (p/resolved nil)
+                        :thread-api/set-page-favorite (p/resolved nil)
                         (throw (ex-info "Unexpected worker API" {:api api}))))
                     conn/get-db
                     (fn [& _]
                       (throw (js/Error. "renderer DB conn should not be used")))]
       (p/let [_ (page-common-handler/<db-favorite-page! page-uuid)
               _ (page-common-handler/<db-unfavorite-page! page-uuid)]
-        (is (= [[:thread-api/build-favorite-page-ops "test" page-uuid]
-                [:thread-api/apply-outliner-ops "test" favorite-ops nil]
-                [:thread-api/build-unfavorite-page-ops "test" page-uuid]
-                [:thread-api/apply-outliner-ops "test" unfavorite-ops nil]]
+        (is (= [[:thread-api/set-page-favorite "test" page-uuid true]
+                [:thread-api/set-page-favorite "test" page-uuid false]]
                @calls))))))
 
 (deftest-async edit-page-when-present-uses-worker-page-lookup-test

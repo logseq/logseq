@@ -9,9 +9,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
             [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.property :as outliner-property]
             [logseq.outliner.tree :as otree]))
 
 (defn create!
@@ -48,25 +46,6 @@
    * :now-ms           - timestamp recorded in the delete op metadata."
   [conn page-uuid & {:as options}]
   (outliner-page/delete! conn page-uuid options))
-
-(defn- first-url-property-value
-  [db block-id]
-  (when-let [block (d/entity db block-id)]
-    (some (fn [datom]
-            (let [property-id (:a datom)]
-              (when (db-property/property? property-id)
-                (when-let [property (d/entity db property-id)]
-                  (when (= :url (:logseq.property/type property))
-                    (let [value (:v datom)
-                          value (if (number? value) (d/entity db value) value)]
-                      (or (:block/title value)
-                          (when (string? value) value))))))))
-          (d/datoms db :eavt (:db/id block)))))
-
-(def-thread-api :thread-api/get-first-url-property-value
-  [repo block-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (first-url-property-value @conn block-id)))
 
 (defn- page-route-info
   [db page-id-name-or-uuid]
@@ -129,27 +108,6 @@
   [repo page-id-name-or-uuid route-name]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (block-by-page-name-and-block-route-name @conn page-id-name-or-uuid route-name)))
-
-(def-thread-api :thread-api/get-today-journal-title
-  [repo today-journal-day fallback-title]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (or (:block/title (ldb/get-journal-page-by-day @conn today-journal-day))
-        fallback-title)
-    fallback-title))
-
-(def-thread-api :thread-api/get-date-formatter
-  [repo fallback-formatter]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (or (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
-        fallback-formatter)
-    fallback-formatter))
-
-(def-thread-api :thread-api/get-journal-page-title
-  [repo journal-day fallback-title]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (or (:block/title (ldb/get-journal-page-by-day @conn journal-day))
-        fallback-title)
-    fallback-title))
 
 (defn- page-entity->summary
   [page]
@@ -251,29 +209,6 @@
     (let [db @conn]
       (when-let [page (ldb/get-page db page-id-name-or-uuid)]
         (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))))
-
-(def-thread-api :thread-api/get-block-class-default-properties
-  [repo block-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (when-let [classes-properties (some-> (outliner-property/get-block-classes-properties db block-id)
-                                            :classes-properties)]
-        (->> classes-properties
-             (keep (fn [property]
-                     (when-let [default-value (:logseq.property/default-value property)]
-                       [(:db/ident property)
-                        (if (:db/id default-value)
-                          (entity-util/entity->map default-value)
-                          default-value)])))
-             (into {}))))))
-
-(def-thread-api :thread-api/get-class-properties
-  [repo class-id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (when-let [class (d/entity db class-id)]
-        (mapv #(worker-plain/entity-forward-map db % {})
-              (outliner-property/get-class-properties class))))))
 
 (defn- route-title-info
   [db route-name]

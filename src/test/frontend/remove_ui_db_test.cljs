@@ -1043,7 +1043,7 @@
         "db-sync handler must not read RTC metadata from renderer DB entities.")
     (is (not (string/includes? source "db/get-db"))
         "db-sync handler must not read graph metadata through db/get-db.")
-    (is (string/includes? source ":thread-api/get-rtc-graph-e2ee?")
+    (is (string/includes? source ":thread-api/get-key-value")
         "db-sync invite access checks should read graph E2EE metadata from the worker.")))
 
 (deftest repo-component-rtc-metadata-uses-worker-test
@@ -1054,7 +1054,7 @@
         "repo upload flow must not read graph E2EE metadata from renderer DB entities.")
     (is (not (string/includes? source "db/get-db"))
         "repo upload flow must not read graph metadata through db/get-db.")
-    (is (string/includes? source ":thread-api/get-rtc-graph-e2ee?")
+    (is (string/includes? source ":thread-api/get-key-value")
         "repo upload flow should read graph E2EE metadata from the worker.")))
 
 (deftest rtc-background-tasks-metadata-uses-worker-test
@@ -1106,7 +1106,7 @@
   (let [source (source-for "src/main/frontend/handler/events.cljs")]
     (is (not (string/includes? source "(when-let [db (db/get-db)]\n                                       (str (:kv/value (db/entity db :logseq.kv/schema-version))))"))
         "capture-error must not read graph schema version from the renderer DB.")
-    (is (string/includes? source ":thread-api/get-graph-schema-version")
+    (is (string/includes? source ":thread-api/get-key-value")
         "capture-error should read graph schema version from the worker.")))
 
 (deftest publish-graph-uuid-uses-worker-test
@@ -1254,9 +1254,6 @@
 
 (deftest common-page-favorite-mutations-use-worker-test
   (let [source (source-for "src/main/frontend/handler/common/page.cljs")
-        apply-source (subs source
-                           (string/index-of source "(defn- <apply-favorite-ops!")
-                           (string/index-of source "(defn <db-favorite-page!"))
         mutation-source (subs source
                               (string/index-of source "(defn <db-favorite-page!")
                               (string/index-of source ";; favorites fns end"))]
@@ -1266,12 +1263,10 @@
         "favorite mutation helpers must not resolve favorites page through renderer DB.")
     (is (not (string/includes? mutation-source "d/entity"))
         "favorite mutation helpers must not check target pages through renderer DB.")
-    (is (string/includes? mutation-source ":thread-api/build-favorite-page-ops")
-        "favorite mutation helper should ask worker to build favorite insert ops.")
-    (is (string/includes? mutation-source ":thread-api/build-unfavorite-page-ops")
-        "unfavorite mutation helper should ask worker to build favorite delete ops.")
-    (is (string/includes? apply-source ":thread-api/apply-outliner-ops")
-        "favorite mutation helpers should apply worker-built outliner ops in the worker.")))
+    (is (string/includes? mutation-source ":thread-api/set-page-favorite")
+        "favorite mutations should use the atomic worker command.")
+    (is (not (string/includes? mutation-source ":thread-api/apply-outliner-ops"))
+        "favorite mutations should not expose worker-built ops to the renderer.")))
 
 (deftest common-page-edit-when-present-uses-worker-test
   (let [source (source-for "src/main/frontend/handler/common/page.cljs")
@@ -1671,10 +1666,8 @@
         "favorite reordering must not read current favorite blocks through the renderer DB.")
     (is (not (string/includes? reorder-source "db/get-page"))
         "favorite reordering must not resolve favorite pages through the renderer DB.")
-    (is (string/includes? reorder-source ":thread-api/build-reorder-favorites-ops")
-        "favorite reordering should ask the worker to build save-block ops.")
-    (is (string/includes? reorder-source ":thread-api/apply-outliner-ops")
-        "favorite reordering should apply worker-built outliner ops in the worker.")))
+    (is (string/includes? reorder-source ":thread-api/reorder-favorites")
+        "favorite reordering should be one atomic worker command.")))
 
 (deftest page-autocomplete-chosen-result-uses-worker-test
   (let [source (source-for "src/main/frontend/handler/page.cljs")
@@ -1694,15 +1687,30 @@
   (let [source (source-for "src/main/frontend/handler/db_based/page.cljs")]
     (is (not (string/includes? source "(let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]"))
         "tag-to-page conversion must not rehydrate object tags through renderer DB entities.")
-    (is (string/includes? source ":thread-api/build-convert-tag-to-page-tx")
-        "tag-to-page conversion should build conversion tx-data inside the worker.")))
+    (is (string/includes? source ":thread-api/convert-tag-to-page")
+        "tag-to-page conversion should transact atomically inside the worker.")))
 
 (deftest db-page-convert-page-to-tag-uses-worker-test
   (let [source (source-for "src/main/frontend/handler/db_based/page.cljs")]
     (is (not (string/includes? source "(db-class/build-new-class (db/get-db)"))
         "page-to-tag conversion must not build class tx-data from the renderer DB.")
-    (is (string/includes? source ":thread-api/build-convert-page-to-tag-tx")
-        "page-to-tag conversion should build conversion tx-data inside the worker.")))
+    (is (string/includes? source ":thread-api/convert-page-to-tag")
+        "page-to-tag conversion should transact atomically inside the worker.")))
+
+(deftest positioned-properties-fallback-reuses-block-render-payload-test
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        positioned-source (subs source
+                                (string/index-of source "(hsx/defc block-positioned-properties")
+                                (string/index-of source "(defn- render-block-reactions?"))]
+    (is (not (string/includes? positioned-source ":thread-api/get-block-positioned-properties"))
+        "The fallback should refresh one canonical block render payload instead of issuing a second property RPC.")
+    (is (string/includes? positioned-source "db-async/<get-block")
+        "The fallback should refresh the canonical worker block payload.")))
+
+(deftest remote-open-reuses-create-or-open-schema-result-test
+  (let [source (source-for "src/main/frontend/persist_db/remote.cljs")]
+    (is (not (string/includes? source "thread-api/get-db-schema"))
+        "Remote graph open should reuse the schema returned by create-or-open-db.")))
 
 (deftest db-page-add-tag-validates-through-worker-test
   (let [source (source-for "src/main/frontend/handler/db_based/page.cljs")

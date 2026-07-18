@@ -6,8 +6,6 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -65,26 +63,13 @@
 (defn- <comments-area-block
   [comments-area]
   (if-let [repo (state/get-current-repo)]
-    (db-async/<get-comments-area-block repo (worker-block-ref comments-area))
+    (db-async/<get-block repo (worker-block-ref comments-area) {:children? false})
     (p/resolved nil)))
 
 (defn ensure-comments-area!
   [block-id]
   (when-let [repo (state/get-current-repo)]
-    (p/let [{:keys [action comments-area target-property title opts]}
-            (db-async/<resolve-comments-area repo (worker-block-ref block-id))]
-      (case action
-        :existing
-        (p/let [_ (when target-property
-                    (db-property-handler/set-block-property! (:block-id target-property)
-                                                             (:property target-property)
-                                                             (:value target-property)))]
-          comments-area)
-
-        :insert
-        (editor-handler/api-insert-new-block! title opts)
-
-        nil))))
+    (state/<invoke-db-worker :thread-api/ensure-comments-area repo (worker-block-ref block-id))))
 
 (defn ensure-comments-area-for-selected-blocks!
   [block-refs]
@@ -94,28 +79,13 @@
                       block-handler/get-top-level-blocks
                       comments-model/comment-target-blocks)]
     (when (seq blocks)
-      (p/let [{:keys [action block-ref comments-area title opts]}
-              (db-async/<resolve-comments-area-for-blocks (state/get-current-repo)
-                                                          (mapv worker-block-ref blocks))]
-        (case action
-          :single
-          (p/let [comments-area (ensure-comments-area! block-ref)]
-            (when comments-area
-              (editor-handler/expand-block! (:block/uuid comments-area)))
-            comments-area)
-
-          :existing
-          (p/do!
-           (editor-handler/expand-block! (:block/uuid comments-area))
-           comments-area)
-
-          :insert
-          (p/let [comments-area (editor-handler/api-insert-new-block! title opts)]
-            (when comments-area
-              (editor-handler/expand-block! (:block/uuid comments-area)))
-            comments-area)
-
-          nil)))))
+      (p/let [comments-area (state/<invoke-db-worker
+                             :thread-api/ensure-comments-area-for-blocks
+                             (state/get-current-repo)
+                             (mapv worker-block-ref blocks))]
+        (when comments-area
+          (editor-handler/expand-block! (:block/uuid comments-area)))
+        comments-area))))
 
 (defn- focus-comments-reply!
   [comments-area-el]
@@ -234,18 +204,10 @@
   [comment-block content]
   (editor-handler/save-block! (state/get-current-repo) comment-block content))
 
-(defn- <comment-delete-targets
-  [comment-block]
-  (when-let [repo (state/get-current-repo)]
-    (db-async/<get-comment-delete-targets repo (worker-block-ref comment-block))))
-
 (defn delete-comment!
   [comment-block]
-  (p/let [targets (<comment-delete-targets comment-block)]
-    (when (seq targets)
-      (ui-outliner-tx/transact!
-       {:outliner-op :delete-blocks}
-       (outliner-op/delete-blocks! targets nil)))))
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/delete-comment repo (worker-block-ref comment-block))))
 
 (defn paste-assets!
   [target-block e]

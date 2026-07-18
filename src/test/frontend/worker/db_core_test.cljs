@@ -118,8 +118,7 @@
      :thread-api/build-publishing-html}
 
    "src/main/frontend/worker/handler/maintenance.cljs"
-   #{:thread-api/get-db-schema
-     :thread-api/reset-db
+   #{:thread-api/reset-db
      :thread-api/gc-graph}
 
    "src/main/frontend/worker/handler/markdown.cljs"
@@ -131,36 +130,35 @@
    #{:thread-api/get-favorite-pages
      :thread-api/favorited-page?
      :thread-api/get-recent-pages
-     :thread-api/build-favorite-page-ops
-     :thread-api/build-unfavorite-page-ops
-     :thread-api/build-reorder-favorites-ops
+     :thread-api/set-page-favorite
+     :thread-api/reorder-favorites
      :thread-api/build-graph
      :thread-api/get-all-page-titles
      :thread-api/mobile-logs
      :thread-api/get-key-value
      :thread-api/get-rtc-graph-uuid
      :thread-api/get-graph-uuid
-     :thread-api/ensure-local-graph-uuid
-     :thread-api/get-rtc-graph-e2ee?
-     :thread-api/get-graph-schema-version}})
+     :thread-api/ensure-local-graph-uuid}})
 
 (def ^:private domain-handler-thread-apis
   {"src/main/frontend/worker/handler/property.cljs"
    #{:thread-api/get-all-classes
+     :thread-api/get-first-url-property-value
      :thread-api/get-structured-children
      :thread-api/get-class-extends-children-tree
      :thread-api/get-alias-source-page
      :thread-api/get-property-closed-values
      :thread-api/get-property-node-selector-data
      :thread-api/get-class-objects
+     :thread-api/get-block-class-default-properties
+     :thread-api/get-class-properties
      :thread-api/validate-block-tag
-     :thread-api/build-convert-tag-to-page-tx
-     :thread-api/build-convert-page-to-tag-tx
+     :thread-api/convert-tag-to-page
+     :thread-api/convert-page-to-tag
      :thread-api/get-property-values
      :thread-api/get-bidirectional-properties
      :thread-api/get-all-properties
      :thread-api/get-display-properties
-     :thread-api/get-block-positioned-properties
      :thread-api/validate-property-value
      :thread-api/reorder-display-property
      :thread-api/get-date-scheduled-or-deadlines}
@@ -202,12 +200,8 @@
      :thread-api/resolve-query-inputs}
 
    "src/main/frontend/worker/handler/page.cljs"
-   #{:thread-api/get-first-url-property-value
-     :thread-api/get-page-route-info
+   #{:thread-api/get-page-route-info
      :thread-api/get-block-by-page-name-and-block-route-name
-     :thread-api/get-today-journal-title
-     :thread-api/get-date-formatter
-     :thread-api/get-journal-page-title
      :thread-api/get-journal-page-by-day
      :thread-api/get-latest-journals
      :thread-api/page-exists?
@@ -218,10 +212,15 @@
      :thread-api/get-block-immediate-children
      :thread-api/get-block-sibling
      :thread-api/get-page-blocks-tree
-     :thread-api/get-block-class-default-properties
-     :thread-api/get-class-properties
      :thread-api/get-route-title
-     :thread-api/get-file-content}})
+     :thread-api/get-file-content}
+
+   "src/main/frontend/worker/handler/comments.cljs"
+   #{:thread-api/ensure-comments-area
+     :thread-api/ensure-comments-area-for-blocks
+     :thread-api/delete-comment
+     :thread-api/get-comment-threads-for-block
+     :thread-api/get-comment-thread-block-uuids}})
 
 (def ^:private extracted-handler-thread-apis
   (merge infrastructure-handler-thread-apis domain-handler-thread-apis))
@@ -259,7 +258,7 @@
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
-          :thread-api/get-db-schema :thread-api/build-publishing-html :thread-api/reset-db
+          :thread-api/build-publishing-html :thread-api/reset-db
           :thread-api/get-file-content :thread-api/get-all-properties :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
@@ -275,20 +274,18 @@
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn
           :thread-api/get-fsrs-due-card-block-ids :thread-api/get-view-data
           :thread-api/get-class-objects :thread-api/validate-block-tag
-          :thread-api/build-convert-tag-to-page-tx
-          :thread-api/build-convert-page-to-tag-tx
-          :thread-api/build-favorite-page-ops
-          :thread-api/build-unfavorite-page-ops
-          :thread-api/build-reorder-favorites-ops
+          :thread-api/convert-tag-to-page
+          :thread-api/convert-page-to-tag
+          :thread-api/set-page-favorite
+          :thread-api/reorder-favorites
           :thread-api/get-page-route-info :thread-api/get-block-by-page-name-and-block-route-name
           :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
-          :thread-api/get-today-journal-title :thread-api/get-date-formatter :thread-api/get-journal-page-title
           :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
           :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
           :thread-api/get-block-page-info
-          :thread-api/get-comments-area-block :thread-api/resolve-comments-area
-          :thread-api/resolve-comments-area-for-blocks :thread-api/get-comment-delete-targets
+          :thread-api/ensure-comments-area :thread-api/ensure-comments-area-for-blocks
+          :thread-api/delete-comment
           :thread-api/get-comment-threads-for-block :thread-api/get-comment-thread-block-uuids
           :thread-api/get-block-immediate-children :thread-api/get-block-sibling
           :thread-api/get-page-blocks-tree :thread-api/get-block-class-default-properties :thread-api/get-class-properties
@@ -299,9 +296,8 @@
           :thread-api/get-display-properties :thread-api/reorder-display-property
           :thread-api/get-all-properties :thread-api/get-property-values :thread-api/get-bidirectional-properties
           :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
-          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid :thread-api/get-rtc-graph-e2ee?
+          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid
           :thread-api/ensure-local-graph-uuid
-          :thread-api/get-graph-schema-version
           :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
           :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
           :thread-api/api-list-tags :thread-api/api-list-pages :thread-api/api-build-upsert-nodes-edn])))
@@ -2038,14 +2034,14 @@
                                   "thread-api/create-or-open-db"
                                   (ldb/write-transit-str ["graph-b" {}]))
                   query-request (remote-invoke
-                                 "thread-api/get-db-schema"
-                                 (ldb/write-transit-str ["graph-b"]))]
+                                       "thread-api/get-key-value"
+                                       (ldb/write-transit-str ["graph-b" :logseq.kv/schema-version]))]
               (p/resolve! service-created new-service)
               (-> (p/all [create-request query-request])
                   (p/then (fn [_]
                             (is (empty? @old-calls))
                             (is (= #{"thread-api/create-or-open-db"
-                                     "thread-api/get-db-schema"}
+                                          "thread-api/get-key-value"}
                                    (set (map first @new-calls))))))
                   (p/catch (fn [error]
                              (is false (str "unexpected error: " error))))
@@ -2199,27 +2195,6 @@
          (is (= [latest-uuid] (mapv :block/uuid result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
-
-(deftest get-date-formatter-returns-worker-journal-format
-  (restoring-worker-state
-   (fn []
-     (let [get-date-formatter! (get-thread-api :thread-api/get-date-formatter)
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (is (= "MMM do, yyyy" (get-date-formatter! test-repo "MMM do, yyyy")))
-       (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd"]])
-       (is (= "yyyy-MM-dd" (get-date-formatter! test-repo "MMM do, yyyy")))))))
-
-(deftest get-db-schema-returns-schema-for-open-graph
-  (restoring-worker-state
-   (fn []
-     (let [get-db-schema! (get @thread-api/*thread-apis :thread-api/get-db-schema)
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn [{:block/title "test page"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (is (= {:schema db-schema/schema}
-              (get-db-schema! test-repo)))))))
 
 ;; ---- q / datoms / pull thread-api tests ----
 
@@ -2521,28 +2496,6 @@
                                       property-row))
                                   (:full-properties result))]
          (is (= property-value (:value fresh-property))))))))
-
-(deftest get-block-positioned-properties-returns-plain-property-maps
-  (restoring-worker-state
-   (fn []
-     (let [positioned-properties! (get-thread-api :thread-api/get-block-positioned-properties)
-           block-id #uuid "11111111-1111-1111-1111-111111111111"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Scheduled task"
-                           :block/uuid block-id
-                           :block/properties {:unsafe "map value"}
-                           :logseq.property/scheduled 1783612800000}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [block-db-id (:db/id (d/entity @conn [:block/uuid block-id]))
-             result (positioned-properties! test-repo {:block-id block-db-id
-                                                       :position :block-below})
-             scheduled-property (some (fn [property]
-                                        (when (= :logseq.property/scheduled (:db/ident property))
-                                          property))
-                                      result)]
-         (is (= "Scheduled" (:block/title scheduled-property)))
-         (is (= :datetime (:logseq.property/type scheduled-property))))))))
 
 (deftest get-block-children-stops-scanning-large-subtrees
   (let [conn (d/create-conn db-schema/schema)
@@ -3350,16 +3303,16 @@
                                             :value 123})
                [:operators :value-source :many? :values :value-after-operator-change])))))))
 
-(deftest build-convert-tag-to-page-tx-updates-tagged-object-title-refs
+(deftest convert-tag-to-page-updates-worker-db-atomically
   (restoring-worker-state
    (fn []
-     (let [build-convert-tx! (get @thread-api/*thread-apis :thread-api/build-convert-tag-to-page-tx)
+     (let [convert! (get @thread-api/*thread-apis :thread-api/convert-tag-to-page)
            conn (d/create-conn db-schema/schema)
            class-tempid -1
            object-tempid -2
            class-uuid #uuid "33333333-3333-3333-3333-333333333333"
            object-uuid #uuid "44444444-4444-4444-4444-444444444444"]
-       (is (fn? build-convert-tx!))
+       (is (fn? convert!))
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id class-tempid
                            :block/title "Tag"
@@ -3372,20 +3325,16 @@
                            :block/uuid object-uuid
                            :block/tags class-tempid}])
        (reset! worker-state/*datascript-conns {test-repo conn})
+       (when (fn? convert!)
        (let [class-id (:db/id (d/entity @conn :user.class/tag))
-             object-id (:db/id (d/entity @conn [:block/uuid object-uuid]))
-             tx-data (build-convert-tx! test-repo class-id)]
-         (is (some #{[:db/retract class-id :db/ident]} tx-data))
-         (is (some #{[:db/retract class-id :block/tags :logseq.class/Tag]} tx-data))
-         (is (some #{[:db/add class-id :block/tags :logseq.class/Page]} tx-data))
-         (is (some #{[:db/retract object-id :block/tags class-id]} tx-data))
-         (is (some #(and (map? %)
-                         (= object-id (:db/id %))
-                         (= (str "hello [[" class-uuid "]]") (:block/title %)))
-                   tx-data))
-         (is (= (str "hello #[[" class-uuid "]]")
-                (:block/title (d/entity @conn object-id)))
-             "building tx-data should not mutate the worker DB"))))))
+               object-id (:db/id (d/entity @conn [:block/uuid object-uuid]))]
+           (convert! test-repo class-id)
+           (let [class (d/entity @conn class-id)
+                 object (d/entity @conn object-id)]
+             (is (nil? (:db/ident class)))
+             (is (contains? (set (map :db/ident (:block/tags class))) :logseq.class/Page))
+             (is (= (str "hello [[" class-uuid "]]") (:block/title object)))
+             (is (not-any? #(= class-id (:db/id %)) (:block/tags object))))))))))
 
 (deftest validate-block-tag-runs-unique-tag-validation-in-worker
   (restoring-worker-state
@@ -3436,14 +3385,14 @@
          (is (= :warning (get-in result [:payload :type])))
          (is (string? (get-in result [:payload :message]))))))))
 
-(deftest build-convert-page-to-tag-tx-builds-class-from-worker-db
+(deftest convert-page-to-tag-updates-worker-db-atomically
   (restoring-worker-state
    (fn []
-     (let [build-convert-tx! (get @thread-api/*thread-apis :thread-api/build-convert-page-to-tag-tx)
+     (let [convert! (get @thread-api/*thread-apis :thread-api/convert-page-to-tag)
            conn (d/create-conn db-schema/schema)
            page-tempid -1
            page-uuid #uuid "55555555-5555-5555-5555-555555555555"]
-       (is (fn? build-convert-tx!))
+       (is (fn? convert!))
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id page-tempid
                            :block/title "Page"
@@ -3452,18 +3401,17 @@
                            :block/created-at 123
                            :block/tags :logseq.class/Page}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
-             tx-data (build-convert-tx! test-repo page-id)
-             class-tx (first tx-data)]
-         (is (= page-uuid (:block/uuid class-tx)))
-         (is (= "Page" (:block/title class-tx)))
-         (is (= 123 (:block/created-at class-tx)))
-         (is (= :user.class/Page (:db/ident class-tx)))
-         (is (contains? (:block/tags class-tx) :logseq.class/Tag))
-         (is (some #{[:db/retract page-id :block/tags :logseq.class/Page]} tx-data))
-         (is (contains? (set (map :db/ident (:block/tags (d/entity @conn page-id))))
-                        :logseq.class/Page)
-             "building tx-data should not mutate the worker DB"))))))
+       (when (fn? convert!)
+         (let [page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))]
+           (convert! test-repo page-id)
+           (let [class (d/entity @conn page-id)
+                 tag-idents (set (map :db/ident (:block/tags class)))]
+             (is (= page-uuid (:block/uuid class)))
+             (is (= "Page" (:block/title class)))
+             (is (= 123 (:block/created-at class)))
+             (is (= :user.class/Page (:db/ident class)))
+             (is (contains? tag-idents :logseq.class/Tag))
+             (is (not (contains? tag-idents :logseq.class/Page))))))))))
 
 ;; ---- undo-redo thread-api tests ----
 
@@ -3582,33 +3530,6 @@
 (deftest get-rtc-graph-uuid-returns-nil-for-missing-conn
   (let [get-uuid! (get @thread-api/*thread-apis :thread-api/get-rtc-graph-uuid)]
     (is (nil? (get-uuid! "nonexistent-repo")))))
-
-(deftest get-rtc-graph-e2ee-returns-value-from-conn
-  (restoring-worker-state
-   (fn []
-     (let [get-e2ee?! (get @thread-api/*thread-apis :thread-api/get-rtc-graph-e2ee?)
-           conn (d/create-conn db-schema/schema)]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [ldb/get-graph-rtc-e2ee? (fn [_db] false)]
-         (is (= false (get-e2ee?! test-repo))))))))
-
-(deftest get-rtc-graph-e2ee-returns-nil-for-missing-conn
-  (let [get-e2ee?! (get @thread-api/*thread-apis :thread-api/get-rtc-graph-e2ee?)]
-    (is (nil? (get-e2ee?! "nonexistent-repo")))))
-
-(deftest get-graph-schema-version-returns-value-from-conn
-  (restoring-worker-state
-   (fn []
-     (let [get-schema-version! (get @thread-api/*thread-apis :thread-api/get-graph-schema-version)
-           conn (d/create-conn db-schema/schema)]
-       (is (fn? get-schema-version!))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [ldb/get-graph-schema-version (fn [_db] 65)]
-         (is (= 65 (get-schema-version! test-repo))))))))
-
-(deftest get-graph-schema-version-returns-nil-for-missing-conn
-  (let [get-schema-version! (get @thread-api/*thread-apis :thread-api/get-graph-schema-version)]
-    (is (nil? (get-schema-version! "nonexistent-repo")))))
 
 ;; ---- search-delete-blocks / search-truncate-tables tests ----
 
@@ -3788,10 +3709,10 @@
        (with-redefs [common-initial-data/get-block-refs (fn [_db _id] [])]
          (is (false? (block-refs-check! test-repo source-id {:unlinked? false}))))))))
 
-(deftest build-favorite-page-ops-builds-insert-op-from-worker-db
+(deftest set-page-favorite-mutates-worker-db
   (restoring-worker-state
    (fn []
-     (let [build-favorite-page-ops! (get-thread-api :thread-api/build-favorite-page-ops)
+     (let [set-favorite! (get @thread-api/*thread-apis :thread-api/set-page-favorite)
            conn (d/create-conn db-schema/schema)
            favorites-page-uuid #uuid "11111111-1111-1111-1111-111111111111"
            page-uuid #uuid "22222222-2222-2222-2222-222222222222"]
@@ -3802,38 +3723,40 @@
                            :block/title "Favorite page"
                            :block/name "favorite page"}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (is (= [[:insert-blocks [[{:block/link [:block/uuid page-uuid]
-                                  :block/title ""}]
-                                favorites-page-uuid
-                                {}]]]
-              (build-favorite-page-ops! test-repo page-uuid)))))))
+       (is (fn? set-favorite!))
+       (when (fn? set-favorite!)
+         (set-favorite! test-repo page-uuid true)
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               favorite-block (first (ldb/get-page-blocks @conn (:db/id favorites-page)))]
+           (is (= page-uuid (get-in favorite-block [:block/link :block/uuid])))
+           (set-favorite! test-repo page-uuid false)
+           (is (empty? (ldb/get-page-blocks @conn (:db/id favorites-page))))))))))
 
-(deftest build-unfavorite-page-ops-builds-delete-op-from-worker-db
+(deftest set-page-favorite-is-idempotent
   (restoring-worker-state
    (fn []
-     (let [build-unfavorite-page-ops! (get-thread-api :thread-api/build-unfavorite-page-ops)
+     (let [set-favorite! (get @thread-api/*thread-apis :thread-api/set-page-favorite)
            conn (d/create-conn db-schema/schema)
            favorites-page-uuid #uuid "11111111-1111-1111-1111-111111111111"
-           page-uuid #uuid "22222222-2222-2222-2222-222222222222"
-           favorite-block-uuid #uuid "33333333-3333-3333-3333-333333333333"]
+           page-uuid #uuid "22222222-2222-2222-2222-222222222222"]
        (d/transact! conn [{:block/uuid favorites-page-uuid
                            :block/title common-config/favorites-page-name
                            :block/name common-config/favorites-page-name}
                           {:block/uuid page-uuid
                            :block/title "Favorite page"
-                           :block/name "favorite page"}
-                          {:block/uuid favorite-block-uuid
-                           :block/title ""
-                           :block/page [:block/uuid favorites-page-uuid]
-                           :block/link [:block/uuid page-uuid]}])
+                           :block/name "favorite page"}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (is (= [[:delete-blocks [[favorite-block-uuid] {}]]]
-              (build-unfavorite-page-ops! test-repo page-uuid)))))))
+       (is (fn? set-favorite!))
+       (when (fn? set-favorite!)
+         (set-favorite! test-repo page-uuid true)
+         (set-favorite! test-repo page-uuid true)
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])]
+           (is (= 1 (count (ldb/get-page-blocks @conn (:db/id favorites-page)))))))))))
 
-(deftest build-reorder-favorites-ops-builds-save-ops-from-worker-db
+(deftest reorder-favorites-mutates-worker-db
   (restoring-worker-state
    (fn []
-     (let [build-reorder-favorites-ops! (get-thread-api :thread-api/build-reorder-favorites-ops)
+     (let [reorder! (get @thread-api/*thread-apis :thread-api/reorder-favorites)
            conn (d/create-conn db-schema/schema)
            favorites-page-uuid #uuid "11111111-1111-1111-1111-111111111111"
            page-a-uuid #uuid "22222222-2222-2222-2222-222222222222"
@@ -3860,16 +3783,13 @@
                            :block/order "b"
                            :block/link [:block/uuid page-b-uuid]}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [ops (build-reorder-favorites-ops! test-repo [page-b-uuid page-a-uuid])
-             changed-blocks (mapv (fn [[op [block opts]]]
-                                    [op
-                                     (:block/uuid block)
-                                     (:block/link block)
-                                     opts])
-                                  ops)]
-         (is (= [[:save-block favorite-a-uuid (:db/id (d/entity @conn [:block/uuid page-b-uuid])) nil]
-                 [:save-block favorite-b-uuid (:db/id (d/entity @conn [:block/uuid page-a-uuid])) nil]]
-                changed-blocks)))))))
+       (is (fn? reorder!))
+       (when (fn? reorder!)
+         (reorder! test-repo [page-b-uuid page-a-uuid])
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               page-uuids (mapv #(get-in % [:block/link :block/uuid])
+                                (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))]
+           (is (= [page-b-uuid page-a-uuid] page-uuids))))))))
 
 (deftest get-page-route-info-resolves-page-flags-and-alias-source
   (restoring-worker-state

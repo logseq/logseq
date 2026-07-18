@@ -59,21 +59,27 @@
 
 (defn <get-today-journal-title
   [graph]
-  (<invoke-db-worker :thread-api/get-today-journal-title
-                     graph
-                     (date/today-journal-day)
-                     (date/today)))
+  (p/let [page (<invoke-db-worker :thread-api/get-journal-page-by-day
+                                  graph
+                                  (date/today-journal-day))]
+    (or (:block/title page) (date/today))))
 
 (defn <get-date-formatter
   [graph]
-  (<invoke-db-worker :thread-api/get-date-formatter graph "MMM do, yyyy"))
+  (p/let [journal-class (<invoke-db-worker
+                         :thread-api/pull
+                         graph
+                         [:logseq.property.journal/title-format]
+                         :logseq.class/Journal)]
+    (or (:logseq.property.journal/title-format journal-class)
+        "MMM do, yyyy")))
 
 (defn <get-journal-page-title
   [graph journal-title]
-  (<invoke-db-worker :thread-api/get-journal-page-title
-                     graph
-                     (date/journal-title->int journal-title)
-                     journal-title))
+  (p/let [page (<invoke-db-worker :thread-api/get-journal-page-by-day
+                                  graph
+                                  (date/journal-title->int journal-title))]
+    (or (:block/title page) journal-title)))
 
 (defn <get-journal-page-by-day
   [graph journal-day]
@@ -122,22 +128,6 @@
 (defn <get-block-sibling
   [graph block-id direction]
   (<invoke-db-worker :thread-api/get-block-sibling graph block-id direction))
-
-(defn <get-comments-area-block
-  [graph block-ref]
-  (<invoke-db-worker :thread-api/get-comments-area-block graph block-ref))
-
-(defn <resolve-comments-area
-  [graph block-ref]
-  (<invoke-db-worker :thread-api/resolve-comments-area graph block-ref))
-
-(defn <resolve-comments-area-for-blocks
-  [graph block-refs]
-  (<invoke-db-worker :thread-api/resolve-comments-area-for-blocks graph block-refs))
-
-(defn <get-comment-delete-targets
-  [graph comment-block-ref]
-  (<invoke-db-worker :thread-api/get-comment-delete-targets graph comment-block-ref))
 
 (defn <get-comment-threads-for-block
   [graph block-uuid]
