@@ -351,6 +351,22 @@
             (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
             result))))))
 
+(defonce ^:private *date-watch-interval (atom nil))
+
+(defn watch-for-date!
+  []
+  (when-some [interval @*date-watch-interval]
+    (js/clearInterval interval))
+  (let [*last-date (atom nil)
+        check-date! (fn []
+                      (let [today (date/today)]
+                        (when (and today (not= today @*last-date))
+                          (reset! *last-date today)
+                          (create-today-journal!))))]
+    (check-date!)
+    (reset! *date-watch-interval
+            (js/setInterval check-date! 3000))))
+
 (defn open-today-in-sidebar
   []
   (p/let [page (<today-journal-page)]
