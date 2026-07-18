@@ -165,7 +165,6 @@
 
    "src/main/frontend/worker/handler/block.cljs"
    #{:thread-api/get-blocks
-     :thread-api/get-page-blocks-window
      :thread-api/get-block-refs
      :thread-api/get-block-refs-count
      :thread-api/get-block-source
@@ -253,7 +252,6 @@
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
-          :thread-api/get-page-blocks-window
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
@@ -431,9 +429,7 @@
          (is (= :default (:logseq.property/type result)))
          (is (= :db.cardinality/one (:db/cardinality result)))
          (is (= (:db/id result)
-                (:db/id (#'block-handler/resolve-block-entity @conn :user.property/test-property))))
-         (is (nil? (:page-window response))
-             "Outliner mutations must not synchronously calculate a page window."))))))
+                (:db/id (#'block-handler/resolve-block-entity @conn :user.property/test-property)))))))))
 
 (deftest get-block-sibling-returns-plain-block-map-test
   (restoring-worker-state
@@ -464,52 +460,7 @@
        (is (= :db/missing-connection (:type (ex-data error))))
        (is (= repo (:repo (ex-data error))))))))
 
-(deftest expand-block-refreshes-through-the-page-window-api-test
-  (restoring-worker-state
-   (fn []
-     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
-           get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           parent-id #uuid "11111111-1111-1111-1111-111111111111"
-           child-id #uuid "22222222-2222-2222-2222-222222222222"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Parent"
-                           :block/uuid parent-id
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"
-                           :block/created-at 1
-                           :block/updated-at 1
-                           :block/collapsed? true}
-                          {:block/title "Child"
-                           :block/uuid child-id
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid parent-id]
-                           :block/order "a0"
-                           :block/created-at 1
-                           :block/updated-at 1}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [response (apply-ops! test-repo
-                                  [[:collapse-expand-blocks
-                                    [[{:block/uuid parent-id
-                                       :block/collapsed? false}]
-                                     {}]]]
-                                  {:ui/page-id page-id
-                                   :affected-block-uuids #{parent-id}})
-             window (get-window! test-repo page-id {:offset 0 :limit 60})
-             child-row (some #(when (= child-id (:block/uuid %)) %)
-                             (:rows window))]
-         (is (nil? (:page-window response))
-             "The mutation response must not calculate a page window.")
-         (is (= "Child" (:block/title child-row))
-             "The page-window API must return complete newly revealed rows."))))))
-
-(deftest insert-block-returns-complete-updated-block-without-page-window-test
+(deftest insert-block-persists-before-returning-test
   (restoring-worker-state
    (fn []
      (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
@@ -530,64 +481,20 @@
                            :block/created-at 1
                            :block/updated-at 1}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [response (apply-ops! test-repo
-                                  [[:insert-blocks
-                                    [[{:block/uuid inserted-id
-                                       :block/title ""}]
-                                     existing-id
-                                     {:sibling? true
-                                      :keep-uuid? true}]]]
-                                  {:affected-block-uuids #{inserted-id}})
+       (let [_response (apply-ops! test-repo
+                                   [[:insert-blocks
+                                     [[{:block/uuid inserted-id
+                                        :block/title ""}]
+                                      existing-id
+                                      {:sibling? true
+                                       :keep-uuid? true}]]]
+                                   {:affected-block-uuids #{inserted-id}})
              inserted (d/entity @conn [:block/uuid inserted-id])]
          (is (some? inserted) "The insert op must persist the new block.")
-         (is (nil? (:page-window response))
-             "The mutation response must not calculate a page window.")
          (is (= "" (:block/title inserted))
-             (str "The insert must persist before the frontend refreshes its window: "
+             (str "The insert must persist before the frontend consumes the response: "
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
-
-(deftest insert-blocks-at-bottom-refreshes-through-one-window-query-test
-  (restoring-worker-state
-   (fn []
-     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
-           get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-ids (vec (repeatedly 150 random-uuid))
-           inserted-ids [(random-uuid) (random-uuid)]
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (map-indexed
-                           (fn [idx block-id]
-                             {:block/title (str "Block " idx)
-                              :block/uuid block-id
-                              :block/page [:block/uuid page-id]
-                              :block/parent [:block/uuid page-id]
-                              :block/order (let [value (str "000" idx)]
-                                             (str "a" (subs value (- (count value) 3))))})
-                           block-ids)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [response (apply-ops! test-repo
-                                  [[:insert-blocks
-                                    [(mapv (fn [block-id]
-                                             {:block/uuid block-id
-                                              :block/title ""})
-                                           inserted-ids)
-                                     (peek block-ids)
-                                     {:sibling? true
-                                      :keep-uuid? true}]]]
-                                  {:affected-block-uuids (set inserted-ids)})
-             page-window (get-window! test-repo page-id {:anchor :bottom :limit 60})
-             row-ids (set (map :block/uuid (:rows page-window)))]
-         (is (nil? (:page-window response))
-             "The mutation response must not calculate a page window.")
-         (is (set/subset? (set inserted-ids) row-ids)
-             "A single bottom-anchored refresh must contain every inserted row."))))))
 
 (deftest apply-outliner-ops-marks-link-container-pages-affected-test
   (restoring-worker-state
@@ -691,44 +598,6 @@
          (is (= parent-id
                 (get-in (d/entity @conn [:block/uuid child-id])
                         [:block/parent :block/uuid]))))))))
-
-(deftest delete-block-refreshes-complete-window-through-window-api-test
-  (restoring-worker-state
-   (fn []
-     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
-           get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-ids (vec (repeatedly 61 random-uuid))
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (map-indexed
-                           (fn [idx block-id]
-                             {:block/title (str "Block " idx)
-                              :block/uuid block-id
-                              :block/page [:block/uuid page-id]
-                              :block/parent [:block/uuid page-id]
-                              :block/order (str idx)})
-                           block-ids)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [current-window (get-window! test-repo page-id {:offset 0 :limit 60})
-             current-row-ids (set (map :block/uuid (:rows current-window)))
-             deleted-id (:block/uuid (first (:rows current-window)))
-             response (apply-ops! test-repo
-                                  [[:delete-blocks [[deleted-id] {}]]]
-                                  {:affected-block-uuids #{deleted-id}})
-             refreshed-window (get-window! test-repo page-id {:offset 0 :limit 60})
-             new-row (some #(when-not (contains? current-row-ids (:block/uuid %)) %)
-                           (:rows refreshed-window))]
-         (is (nil? (:page-window response))
-             "The mutation response must not calculate a page window.")
-         (is (some? new-row) "Deleting a visible row must pull the next row into the window.")
-         (is (contains? new-row :block/title)
-             "The page-window refresh must return renderable rows."))))))
 
 (defn- fake-db
   ([]
@@ -2528,6 +2397,70 @@
               (str "Large subtree was scanned past the result limit: "
                    @parent-index-scans)))))))
 
+(deftest get-blocks-returns-all-journal-blocks-render-ready
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get-thread-api :thread-api/get-blocks)
+           conn (db-test/create-conn-with-blocks
+                 {:pages-and-blocks
+                  [{:page {:build/journal 20260716}
+                    :blocks (mapv (fn [index]
+                                    {:block/title (str "Block " index)})
+                                  (range 165))}]})
+           journal-id (d/q '[:find ?journal .
+                             :where [?journal :block/journal-day 20260716]]
+                           @conn)]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [{:keys [block children]}
+             (-> (get-blocks! test-repo
+                              (ldb/write-transit-str
+                               [{:id journal-id
+                                 :opts {:all? true
+                                        :children? true
+                                        :render-data? true
+                                        :include-collapsed-children? true}}]))
+                 ldb/read-transit-str
+                 first)]
+         (is (= 165 (count children)))
+         (is (= :full (:block.temp/load-status block)))
+         (is (every? #(= :full (:block.temp/load-status %)) children))
+         (is (every? #(contains? % :block.temp/positioned-properties) children)))))))
+
+(deftest page-block-index-returns-all-ids-and-only-initial-render-data
+  (restoring-worker-state
+   (fn []
+     (let [get-page-tree! (get-thread-api :thread-api/get-page-blocks-tree)
+           page-id #uuid "00000000-0000-0000-0000-000000000001"
+           block-ids (mapv (fn [index]
+                             (uuid (str "10000000-0000-0000-0000-"
+                                        (.padStart (str index) 12 "0"))))
+                           (range 75))
+           conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "Long page"
+                          :block/uuid page-id
+                          :build/keep-uuid? true}
+                   :blocks (mapv (fn [index block-id]
+                                   {:block/title (str "Block " index)
+                                    :block/uuid block-id
+                                    :build/keep-uuid? true})
+                                 (range 75)
+                                 block-ids)}])]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [{:keys [block index blocks]}
+             (get-page-tree! test-repo page-id {:initial-limit 20})
+             result-by-name (get-page-tree! test-repo "long page" {:initial-limit 20})]
+         (is (= page-id (:block/uuid block)))
+         (is (= page-id (get-in result-by-name [:block :block/uuid]))
+             "Page routes may resolve the same index by normalized page name.")
+         (is (= block-ids (mapv :block/uuid index))
+             "The complete ordered block index is returned once.")
+         (is (= 20 (count blocks))
+             "Only the first render window is hydrated.")
+         (is (every? #(= :index (:block.temp/load-status %)) index))
+         (is (every? #(contains? % :block.temp/positioned-properties) blocks))
+         (is (every? #(not (contains? % :block/title)) index)
+             "Index entries must not precompute block render payloads."))))))
+
 (deftest get-blocks-includes-render-critical-property-data
   (restoring-worker-state
    (fn []
@@ -2550,7 +2483,8 @@
        (let [result (-> (get-blocks! test-repo
                                       (ldb/write-transit-str
                                        [{:id block-id
-                                         :opts {:children? false}}]))
+                                         :opts {:children? false
+                                                :render-data? true}}]))
                         ldb/read-transit-str
                         first
                         :block)
@@ -2582,6 +2516,29 @@
          (is (map? display-properties))
          (is (map? (:block/properties result))))))))
 
+(deftest get-blocks-default-payload-skips-render-derived-data
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get-thread-api :thread-api/get-blocks)
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (db-test/create-conn-with-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "View row"
+                             :block/uuid block-id
+                             :build/keep-uuid? true}]}])]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [block (-> (get-blocks! test-repo
+                                    (ldb/write-transit-str
+                                     [{:id block-id
+                                       :opts {:children? false}}]))
+                       ldb/read-transit-str
+                       first
+                       :block)]
+         (is (= "View row" (:block/title block)))
+         (is (not (contains? block :block.temp/positioned-properties)))
+         (is (not (contains? block :block.temp/display-properties)))
+         (is (not (contains? block :block.temp/reactions))))))))
+
 (deftest sanitize-block-result-removes-nil-values
   (is (= {:block {:db/id 42
                   :block/title "parent"}
@@ -2600,78 +2557,7 @@
                       {:db/id 44
                        :block/title "loaded"
                        :block/parent 42
-                      :block.temp/load-status nil}]}))))
-
-(deftest page-window-refs-count-keeps-reference-and-alias-counts
-  (let [target-id #uuid "11111111-1111-1111-1111-111111111111"
-        alias-id #uuid "22222222-2222-2222-2222-222222222222"
-        plain-id #uuid "33333333-3333-3333-3333-333333333333"
-        conn (d/create-conn db-schema/schema)]
-    (d/transact! conn [{:block/uuid target-id
-                        :block/title "Target"}
-                       {:block/uuid alias-id
-                        :block/title "Alias"}
-                       {:block/uuid plain-id
-                        :block/title "Plain"}])
-    (d/transact! conn [{:block/uuid target-id
-                        :block/alias [[:block/uuid alias-id]]}
-                       {:block/uuid (random-uuid)
-                        :block/title "Target ref"
-                        :block/refs [[:block/uuid target-id]]}
-                       {:block/uuid (random-uuid)
-                        :block/title "Alias ref"
-                        :block/refs [[:block/uuid alias-id]]}])
-    (let [db @conn
-          refs-count #'block-handler/block-refs-count]
-      (is (zero? (refs-count db (:db/id (d/entity db [:block/uuid plain-id])))))
-      (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid target-id])))))
-      (is (= 2 (refs-count db (:db/id (d/entity db [:block/uuid alias-id]))))))))
-
-(deftest page-block-window-does-not-scan-graph-wide-layout-attributes
-  (restoring-worker-state
-   (fn []
-     (let [target-page-id #uuid "00000000-0000-0000-0000-000000000001"
-           other-page-id #uuid "00000000-0000-0000-0000-000000000002"
-           original-datoms d/datoms
-           graph-wide-layout-scans (atom [])
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    [{:block/title "Target"
-                      :block/name "target"
-                      :block/uuid target-page-id
-                      :block/tags :logseq.class/Page}
-                     {:block/title "Target block"
-                      :block/uuid (random-uuid)
-                      :block/page [:block/uuid target-page-id]
-                      :block/parent [:block/uuid target-page-id]
-                      :block/order "a0"}
-                     {:block/title "Other"
-                      :block/name "other"
-                      :block/uuid other-page-id
-                      :block/tags :logseq.class/Page}
-                     {:block/title "Other block"
-                      :block/uuid (random-uuid)
-                      :block/page [:block/uuid other-page-id]
-                      :block/parent [:block/uuid other-page-id]
-                      :block/order "a0"}])
-       (with-redefs [d/datoms (fn [db index & components]
-                                (when (and (= :aevt index)
-                                           (= 1 (count components))
-                                           (contains? #{:block/parent
-                                                        :block/order
-                                                        :block/collapsed?
-                                                        :block/closed-value-property
-                                                        :logseq.property/created-from-property}
-                                                      (first components)))
-                                  (swap! graph-wide-layout-scans conj (first components)))
-                                (apply original-datoms db index components))]
-         (let [db @conn
-               root (d/entity db [:block/uuid target-page-id])
-               layout (#'block-handler/page-block-layout db root)]
-           (is (= 1 (:block-count layout)))
-           (is (empty? @graph-wide-layout-scans)
-               "A page window should inspect target-page entities, not every graph entity")))))))
+                       :block.temp/load-status nil}]}))))
 
 (deftest get-blocks-preserves-page-tagged-block-title
   (restoring-worker-state
@@ -2721,355 +2607,6 @@
                        :block)]
          (is (= [] (:block/tags block)))
          (is (false? (:block/collapsed? block))))))))
-
-(deftest get-page-blocks-window-preserves-page-tagged-block-title
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-id #uuid "11111111-1111-1111-1111-111111111111"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Page block"
-                           :block/uuid block-id
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"
-                           :block/tags :logseq.class/Page}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [result (get-window! test-repo page-id {:limit 10})
-             row (first (:rows result))
-             tag-idents (set (map :db/ident (:block/tags row)))]
-         (is (= "Page block" (:block/title row)))
-         (is (= "Page block" (:block/raw-title row)))
-         (is (contains? tag-idents :logseq.class/Page)))))))
-
-(deftest get-page-blocks-window-resolves-uuid-string
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-id #uuid "11111111-1111-1111-1111-111111111111"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Child"
-                           :block/uuid block-id
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [result (get-window! test-repo (str page-id) {:anchor :top :limit 10})]
-         (is (= page-id (get-in result [:root :block/uuid])))
-         (is (= [block-id] (mapv :block/uuid (:rows result)))))))))
-
-(deftest get-page-blocks-window-includes-unpaged-parent-descendants
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           root-id #uuid "00000000-0000-0000-0000-000000000001"
-           regular-id #uuid "11111111-1111-1111-1111-111111111111"
-           page-id #uuid "22222222-2222-2222-2222-222222222222"
-           nested-page-id #uuid "33333333-3333-3333-3333-333333333333"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Library"
-                           :block/uuid root-id}
-                          {:block/title "Regular block"
-                           :block/uuid regular-id
-                           :block/page [:block/uuid root-id]
-                           :block/parent [:block/uuid root-id]
-                           :block/order "a0"}
-                          {:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/parent [:block/uuid root-id]
-                           :block/order "a1"
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Nested page"
-                           :block/name "nested page"
-                           :block/uuid nested-page-id
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"
-                           :block/tags :logseq.class/Page}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [result (get-window! test-repo root-id {:limit 10})]
-         (is (= [regular-id page-id nested-page-id]
-                (mapv :block/uuid (:rows result)))))))))
-
-(deftest get-page-blocks-window-returns-flat-paginated-render-rows
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-1 #uuid "11111111-1111-1111-1111-111111111111"
-           block-2 #uuid "22222222-2222-2222-2222-222222222222"
-           block-3 #uuid "33333333-3333-3333-3333-333333333333"
-           block-4 #uuid "44444444-4444-4444-4444-444444444444"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "One"
-                           :block/uuid block-1
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"
-                           :logseq.property/scheduled 1783612800000}
-                          {:block/title "Two"
-                           :block/uuid block-2
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid block-1]
-                           :block/order "a0"}
-                          {:block/title "Three"
-                           :block/uuid block-3
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a1"}
-                          {:block/title "Four"
-                           :block/uuid block-4
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a2"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [top-window (get-window! test-repo page-id {:anchor :top :limit 3})
-             bottom-window (get-window! test-repo page-id {:anchor :bottom :limit 2})
-             scheduled-property (some (fn [property]
-                                        (when (= :logseq.property/scheduled (:db/ident property))
-                                          property))
-                                      (get-in (first (:rows top-window))
-                                              [:block.temp/positioned-properties :block-below]))]
-         (is (= 4 (:total-count top-window)))
-         (is (= 0 (:offset top-window)))
-         (is (= [block-1 block-2 block-3] (mapv :block/uuid (:rows top-window))))
-         (is (= [1 2 1] (mapv :block/level (:rows top-window))))
-         (is (= [true false false]
-                (mapv :block.temp/has-children? (:rows top-window))))
-         (is (= page-id (get-in (first (:rows top-window)) [:block/page :block/uuid])))
-         (is (= "page" (get-in (first (:rows top-window)) [:block/page :block/name])))
-         (is (= (:db/id (:root top-window))
-                (:block/parent-id (first (:rows top-window)))))
-         (is (every? #(= :self (:block.temp/load-status %)) (:rows top-window)))
-         (is (= {:full-properties []
-                 :hidden-properties []
-                 :description-property nil
-                 :class-properties-property nil}
-                (:block.temp/display-properties (last (:rows top-window)))))
-         (is (= 2 (:offset bottom-window)))
-         (is (= [block-3 block-4] (mapv :block/uuid (:rows bottom-window))))
-         (is (= "Scheduled" (:block/title scheduled-property)))
-         (is (contains? (first (:rows top-window)) :block.temp/positioned-properties))
-         (is (contains? (first (:rows top-window)) :block.temp/sync-conflicts))
-         (is (contains? (first (:rows top-window)) :block.temp/comment-thread-present?)))))))
-
-(deftest get-page-blocks-window-paginates-visible-flat-rows-for-collapsed-blocks
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-1 #uuid "11111111-1111-1111-1111-111111111111"
-           block-2 #uuid "22222222-2222-2222-2222-222222222222"
-           block-3 #uuid "33333333-3333-3333-3333-333333333333"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Page"
-                           :block/name "page"
-                           :block/uuid page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Collapsed parent"
-                           :block/uuid block-1
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a0"
-                           :block/collapsed? true}
-                          {:block/title "Hidden child"
-                           :block/uuid block-2
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid block-1]
-                           :block/order "a0"}
-                          {:block/title "Visible sibling"
-                           :block/uuid block-3
-                           :block/page [:block/uuid page-id]
-                           :block/parent [:block/uuid page-id]
-                           :block/order "a1"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [window (get-window! test-repo page-id {:anchor :top :limit 10})
-             bottom-window (get-window! test-repo page-id {:anchor :bottom :limit 1})]
-         (is (= 2 (:total-count window)))
-         (is (= [block-1 block-3] (mapv :block/uuid (:rows window))))
-         (is (= [1 1] (mapv :block/level (:rows window))))
-         (is (true? (:block.temp/has-children? (first (:rows window)))))
-         (is (not (contains? (first (:rows window)) :block/children)))
-         (is (= 1 (:offset bottom-window)))
-         (is (= [block-3] (mapv :block/uuid (:rows bottom-window)))))))))
-
-(deftest get-page-blocks-window-seeks-large-flat-page-edges
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-count 5000
-           window-limit 60
-           block-ids (repeatedly block-count random-uuid)
-           orders (db-order/gen-n-keys block-count nil nil)
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (map (fn [idx block-id order]
-                                 {:block/title (str "Block " idx)
-                                  :block/uuid block-id
-                                  :block/page [:block/uuid page-id]
-                                  :block/parent [:block/uuid page-id]
-                                  :block/order order})
-                               (range block-count)
-                               block-ids
-                               orders)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [started-at (.now js/performance)
-             bottom-window (get-window! test-repo page-id {:offset (- block-count window-limit)
-                                                            :limit window-limit
-                                                            :total-count block-count})
-             elapsed-ms (- (.now js/performance) started-at)]
-         (is (= block-count (:total-count bottom-window)))
-         (is (= (- block-count window-limit) (:offset bottom-window)))
-         (is (= (subvec (vec block-ids) (- block-count window-limit))
-                (mapv :block/uuid (:rows bottom-window))))
-         (is (< elapsed-ms 250)
-             (str "Large flat page edge window took " elapsed-ms "ms")))))))
-
-(deftest get-page-blocks-window-does-not-trust-stale-total-count
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-ids [#uuid "11111111-1111-1111-1111-111111111111"
-                      #uuid "22222222-2222-2222-2222-222222222222"
-                      #uuid "33333333-3333-3333-3333-333333333333"]
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (map-indexed (fn [idx block-id]
-                                         {:block/title (str "Block " idx)
-                                          :block/uuid block-id
-                                          :block/page [:block/uuid page-id]
-                                          :block/parent [:block/uuid page-id]
-                                          :block/order (str "a" idx)})
-                                       block-ids)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [window (get-window! test-repo page-id {:anchor :bottom
-                                                    :limit 10
-                                                    :total-count 2})]
-         (is (= 3 (:total-count window)))
-         (is (= block-ids (mapv :block/uuid (:rows window)))))))))
-
-(deftest get-page-blocks-window-seeks-large-nested-page-edges
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           parent-count 2000
-           parent-ids (vec (repeatedly parent-count random-uuid))
-           child-ids (vec (repeatedly parent-count random-uuid))
-           parent-orders (db-order/gen-n-keys parent-count nil nil)
-           expected-ids (->> (map vector parent-ids child-ids) (mapcat identity) vec)
-           total-count (count expected-ids)
-           window-limit 60
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (mapcat (fn [idx parent-id child-id order]
-                                    [{:block/title (str "Parent " idx)
-                                      :block/uuid parent-id
-                                      :block/page [:block/uuid page-id]
-                                      :block/parent [:block/uuid page-id]
-                                      :block/order order}
-                                     {:block/title (str "Child " idx)
-                                      :block/uuid child-id
-                                      :block/page [:block/uuid page-id]
-                                      :block/parent [:block/uuid parent-id]
-                                      :block/order "a0"}])
-                                  (range parent-count)
-                                  parent-ids
-                                  child-ids
-                                  parent-orders)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [started-at (.now js/performance)
-             bottom-window (get-window! test-repo page-id {:offset (- total-count window-limit)
-                                                            :limit window-limit
-                                                            :total-count total-count})
-             elapsed-ms (- (.now js/performance) started-at)]
-         (is (= total-count (:total-count bottom-window)))
-         (is (= (subvec expected-ids (- total-count window-limit))
-                (mapv :block/uuid (:rows bottom-window))))
-         (is (= (vec (take window-limit (cycle [1 2])))
-                (mapv :block/level (:rows bottom-window))))
-         (is (< elapsed-ms 250)
-             (str "Large nested page edge window took " elapsed-ms "ms")))))))
-
-(deftest ^:long get-page-blocks-window-handles-10k-deep-page
-  (restoring-worker-state
-   (fn []
-     (let [get-window! (get-thread-api :thread-api/get-page-blocks-window)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-count 10000
-           block-ids (vec (repeatedly block-count random-uuid))
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn
-                    (into [{:block/title "Page"
-                            :block/name "page"
-                            :block/uuid page-id
-                            :block/tags :logseq.class/Page}]
-                          (map-indexed
-                           (fn [idx block-id]
-                             {:block/title (str "Block " idx)
-                              :block/uuid block-id
-                              :block/page [:block/uuid page-id]
-                              :block/parent [:block/uuid (if (zero? idx)
-                                                          page-id
-                                                          (nth block-ids (dec idx)))]
-                              :block/order "a0"})
-                           block-ids)))
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (get-window! test-repo page-id {:anchor :top :limit 60})
-       (let [started-at (.now js/performance)
-             window (get-window! test-repo page-id {:anchor :top :limit 60})
-             top-elapsed-ms (- (.now js/performance) started-at)
-             bottom-started-at (.now js/performance)
-             bottom-window (get-window! test-repo page-id {:anchor :bottom
-                                                            :limit 60
-                                                            :total-count block-count})
-             bottom-elapsed-ms (- (.now js/performance) bottom-started-at)]
-         (is (= block-count (:total-count window)))
-         (is (= (subvec block-ids 0 60)
-                (mapv :block/uuid (:rows window))))
-         (is (= (subvec block-ids (- block-count 60))
-                (mapv :block/uuid (:rows bottom-window))))
-         (is (< top-elapsed-ms 80)
-             (str "10k deep page top window took " top-elapsed-ms "ms"))
-         (is (< bottom-elapsed-ms 80)
-             (str "10k deep page bottom window took " bottom-elapsed-ms "ms")))))))
 
 (deftest route-title-returns-page-and-block-data
   (restoring-worker-state
