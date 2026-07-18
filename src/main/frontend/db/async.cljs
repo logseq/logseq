@@ -253,6 +253,8 @@
   (atom {:scheduled? false
          :queue []}))
 
+(defonce ^:private *get-blocks-in-flight (atom {}))
+
 (def ^:private get-blocks-batch-limit 50)
 
 (defn- complete-tree-entry-group?
@@ -276,27 +278,45 @@
       (swap! *get-blocks-batch-state assoc :scheduled? true)
       (js/queueMicrotask flush-get-blocks-batch!))))
 
+(defn- get-blocks-request-key
+  [graph request]
+  [graph (first (worker-get-blocks-requests [request]))])
+
 (defn- enqueue-get-blocks-request!
   [graph request]
-  (let [result (p/deferred)]
-    (swap! *get-blocks-batch-state
-           (fn [state]
-             (update state :queue conj {:graph graph
-                                        :request request
-                                        :result result})))
-    (schedule-get-blocks-batch-flush!)
-    result))
+  (let [request-key (get-blocks-request-key graph request)]
+    (or (get @*get-blocks-in-flight request-key)
+        (let [result (p/deferred)]
+          (swap! *get-blocks-in-flight assoc request-key result)
+          (swap! *get-blocks-batch-state
+                 (fn [state]
+                   (update state :queue conj {:graph graph
+                                              :request request
+                                              :request-key request-key
+                                              :result result})))
+          (schedule-get-blocks-batch-flush!)
+          result))))
+
+(defn- clear-get-blocks-in-flight!
+  [{:keys [request-key result]}]
+  (swap! *get-blocks-in-flight
+         (fn [in-flight]
+           (if (identical? result (get in-flight request-key))
+             (dissoc in-flight request-key)
+             in-flight))))
 
 (defn- resolve-batched-get-block-groups!
   [entry-groups responses]
   (doseq [[idx entries] (map-indexed vector entry-groups)
-          {:keys [result]} entries]
-    (p/resolve! result (nth responses idx nil))))
+          {:keys [result] :as entry} entries]
+    (p/resolve! result (nth responses idx nil))
+    (clear-get-blocks-in-flight! entry)))
 
 (defn- reject-batched-get-blocks!
   [entries error]
-  (doseq [{:keys [result]} entries]
-    (p/reject! result error)))
+  (doseq [{:keys [result] :as entry} entries]
+    (p/reject! result error)
+    (clear-get-blocks-in-flight! entry)))
 
 (defn- flush-get-blocks-batch!
   []
