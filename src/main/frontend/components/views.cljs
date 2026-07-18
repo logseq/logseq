@@ -2041,8 +2041,23 @@
       (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns)
       (set-sized-columns! sized-columns)))})
 
+(defn- lazy-item-ready-to-load?
+  [db-id item loading-db-id scrolling? load-while-scrolling? range-gated-loading?]
+  (and db-id
+       (not item)
+       (not= db-id loading-db-id)
+       (or load-while-scrolling?
+           (and (not range-gated-loading?) (not scrolling?)))))
+
+(defn- table-row-load-while-scrolling?
+  [view-feature-type load-range idx]
+  (and (= :all-pages view-feature-type)
+       (some? load-range)
+       (<= (first load-range) idx (second load-range))))
+
 (hsx/defc lazy-item
-  [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
+  [data idx {:keys [properties list-view? gallery-view? scrolling? load-while-scrolling?
+                    range-gated-loading?]} item-render]
   (let [row (util/nth-safe data idx)
         db-id (cond (map? row) (:db/id row)
                     (number? row) row
@@ -2050,6 +2065,7 @@
         [item set-item!] (hooks/use-state (when (and (map? row)
                                                      (contains? row :block/title))
                                             row))
+        *loading-db-id (hooks/use-memo #(atom nil) [])
         list-or-gallery? (or list-view? gallery-view?)
         opts (if list-or-gallery?
                {:skip-refresh? true
@@ -2060,18 +2076,32 @@
                 :skip-refresh? true})]
     (hooks/use-effect!
      #(do
-        (when (and db-id (not item) (not scrolling?))
-          (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
-            (set-item! block)))
+        (when (lazy-item-ready-to-load? db-id item @*loading-db-id scrolling?
+                                        load-while-scrolling? range-gated-loading?)
+          (reset! *loading-db-id db-id)
+          (-> (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
+                (when (= db-id @*loading-db-id)
+                  (set-item! block)))
+              (p/finally (fn []
+                           (when (= db-id @*loading-db-id)
+                             (reset! *loading-db-id nil))))))
         nil)
-     [db-id scrolling?])
+     [db-id scrolling? load-while-scrolling? range-gated-loading?])
     (if item
       (item-render item)
       [:div {:style {:min-height 24}}])))
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
-  (let [[scrolling? set-scrolling!] (hooks/use-state false)]
+  (let [[scrolling? set-scrolling!] (hooks/use-state false)
+        [load-range set-load-range!] (hooks/use-state nil)
+        *load-range-timeout (hooks/use-memo #(atom nil) [])
+        all-pages? (= :all-pages (:view-feature-type option))]
+    (hooks/use-effect!
+     (fn []
+       #(when-let [timeout @*load-range-timeout]
+          (js/clearTimeout timeout)))
+     [])
     (when (seq rows)
       (virtualized-list
        {:ref #(reset! *scroller-ref %)
@@ -2086,9 +2116,25 @@
         :total-count (count rows)
         :context {:scrolling scrolling?}
         :is-scrolling set-scrolling!
+        :rangeChanged (fn [^js range]
+                        (when all-pages?
+                          (let [start-index (.-startIndex range)
+                                end-index (.-endIndex range)]
+                            (when-let [timeout @*load-range-timeout]
+                              (js/clearTimeout timeout))
+                            (reset! *load-range-timeout
+                                    (js/setTimeout
+                                     #(do
+                                        (reset! *load-range-timeout nil)
+                                        (set-load-range! [start-index end-index]))
+                                     50)))))
         :item-content (fn [idx _user ^js context]
                         (let [option (assoc option
                                             :scrolling? (when context (.-scrolling context))
+                                            :load-while-scrolling?
+                                            (table-row-load-while-scrolling?
+                                             (:view-feature-type option) load-range idx)
+                                            :range-gated-loading? all-pages?
                                             :table-view? true)]
                           (lazy-item (:data table) idx option
                                      (fn [row]
