@@ -3060,13 +3060,10 @@
            (fn []
              (when-not positioned-properties-payload?
                (p/let [repo (state/get-current-repo)
-                       properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
-                                                              repo
-                                                              {:block-id (:db/id block)
-                                                               :position position})
                        current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
-                 (set-loaded-positioned-properties! properties)
                  (when current-block
+                   (set-loaded-positioned-properties!
+                    (or (block-positioned-properties-from-payload current-block position) []))
                    (set-current-block! current-block))))
 	             nil)
            [(:db/id block) (:block/uuid block) positioned-properties-payload?

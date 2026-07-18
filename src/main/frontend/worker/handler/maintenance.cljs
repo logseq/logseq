@@ -20,11 +20,6 @@
       (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db)))))
 
-(def-thread-api :thread-api/get-db-schema
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    {:schema (:schema @conn)}))
-
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
   (reset-db! repo db-transit)

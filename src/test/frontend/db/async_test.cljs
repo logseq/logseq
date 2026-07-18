@@ -3,11 +3,56 @@
             ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
+            [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [promesa.core :as p]))
+
+(deftest journal-display-helpers-use-one-journal-summary-api-test
+  (async done
+    (let [calls (atom [])]
+      (p/with-redefs [date/today-journal-day (constantly 20260718)
+                      date/today (constantly "Jul 18th, 2026")
+                      date/journal-title->int (constantly 20260717)
+                      db-async/<invoke-db-worker
+                      (fn [api & args]
+                        (swap! calls conj (into [api] args))
+                        (p/resolved
+                         (case api
+                           :thread-api/get-journal-page-by-day
+                           (case (last args)
+                             20260718 {:block/title "Today from DB"}
+                             20260717 nil)
+                           :thread-api/get-today-journal-title "Today from DB"
+                           :thread-api/get-journal-page-title "Jul 17th, 2026")))]
+        (-> (p/let [today (db-async/<get-today-journal-title "graph")
+                    missing (db-async/<get-journal-page-title "graph" "Jul 17th, 2026")]
+              (is (= "Today from DB" today))
+              (is (= "Jul 17th, 2026" missing))
+              (is (= [[:thread-api/get-journal-page-by-day "graph" 20260718]
+                      [:thread-api/get-journal-page-by-day "graph" 20260717]]
+                     @calls)))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
+
+(deftest date-formatter-uses-worker-pull-with-ui-fallback-test
+  (async done
+    (let [calls (atom [])]
+      (p/with-redefs [db-async/<invoke-db-worker
+                      (fn [& args]
+                        (swap! calls conj (vec args))
+                        (p/resolved nil))]
+        (-> (p/let [formatter (db-async/<get-date-formatter "graph")]
+              (is (= "MMM do, yyyy" formatter))
+              (is (= [[:thread-api/pull
+                       "graph"
+                       [:logseq.property.journal/title-format]
+                       :logseq.class/Journal]]
+                     @calls)))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
 
 (defn- source-for
   [relative-file]

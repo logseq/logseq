@@ -19,6 +19,25 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.validate :as outliner-validate]))
 
+(defn- first-url-property-value
+  [db block-id]
+  (when-let [block (d/entity db block-id)]
+    (some (fn [datom]
+            (let [property-id (:a datom)]
+              (when (db-property/property? property-id)
+                (when-let [property (d/entity db property-id)]
+                  (when (= :url (:logseq.property/type property))
+                    (let [value (:v datom)
+                          value (if (number? value) (d/entity db value) value)]
+                      (or (:block/title value)
+                          (when (string? value) value))))))))
+          (d/datoms db :eavt (:db/id block)))))
+
+(def-thread-api :thread-api/get-first-url-property-value
+  [repo block-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (first-url-property-value @conn block-id)))
+
 (defn get-all-classes
   [db {:keys [except-root-class? except-private-tags? except-extends-hidden-tags?]
        :or {except-root-class? false
@@ -130,6 +149,29 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (class-extends-children-tree @conn class-id)))
 
+(def-thread-api :thread-api/get-block-class-default-properties
+  [repo block-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [classes-properties (some-> (outliner-property/get-block-classes-properties db block-id)
+                                            :classes-properties)]
+        (->> classes-properties
+             (keep (fn [property]
+                     (when-let [default-value (:logseq.property/default-value property)]
+                       [(:db/ident property)
+                        (if (:db/id default-value)
+                          (entity-util/entity->map default-value)
+                          default-value)])))
+             (into {}))))))
+
+(def-thread-api :thread-api/get-class-properties
+  [repo class-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [class (d/entity db class-id)]
+        (mapv #(worker-plain/entity-forward-map db % {})
+              (outliner-property/get-class-properties class))))))
+
 (def-thread-api :thread-api/get-alias-source-page
   [repo page-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -177,10 +219,9 @@
            :payload (:payload (ex-data e))}
           (throw e))))))
 
-(def-thread-api :thread-api/build-convert-tag-to-page-tx
-  [repo class-id]
-  (let [db @(worker-state/get-datascript-conn repo)
-        objects (db-class/get-class-objects db class-id)
+(defn- convert-tag-to-page-tx
+  [db class-id]
+  (let [objects (db-class/get-class-objects db class-id)
         page-txs [[:db/retract class-id :db/ident]
                   [:db/retract class-id :block/tags :logseq.class/Tag]
                   [:db/retract class-id :logseq.property.class/extends]
@@ -195,16 +236,33 @@
                            objects)]
     (vec (concat page-txs object-txs))))
 
-(def-thread-api :thread-api/build-convert-page-to-tag-tx
-  [repo page-id]
-  (let [db @(worker-state/get-datascript-conn repo)
-        page (d/entity db page-id)
+(def-thread-api :thread-api/convert-tag-to-page
+  [repo class-id]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (worker-state/set-db-latest-tx-time! repo)
+    (ldb/transact! conn
+                   (convert-tag-to-page-tx @conn class-id)
+                   {:outliner-op :save-block})
+    nil))
+
+(defn- convert-page-to-tag-tx
+  [db page-id]
+  (let [page (d/entity db page-id)
         class-tx (db-class/build-new-class db
                                            {:block/uuid (:block/uuid page)
                                             :block/title (:block/title page)
                                             :block/created-at (:block/created-at page)})]
     [class-tx
      [:db/retract page-id :block/tags :logseq.class/Page]]))
+
+(def-thread-api :thread-api/convert-page-to-tag
+  [repo page-id]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (worker-state/set-db-latest-tx-time! repo)
+    (ldb/transact! conn
+                   (convert-page-to-tag-tx @conn page-id)
+                   {:outliner-op :save-block})
+    nil))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
@@ -679,11 +737,6 @@
   (->> (block-positioned-property-ids db block-id position)
        (keep #(display-property-map db %))
        vec))
-
-(def-thread-api :thread-api/get-block-positioned-properties
-  [repo {:keys [block-id position]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (block-positioned-properties @conn block-id position)))
 
 (defn- sort-by-order-recursive
   [form]
