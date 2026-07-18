@@ -148,89 +148,28 @@
 (defn- use-loaded-block-tree
   [block*]
   (let [[stored-root set-stored-root!] (hooks/use-state block*)
-        latest-tx (rfx/use-sub [:db/latest-transacted-entity-uuids])
-        root (outliner-tree/reconcile-block-tree
-              stored-root
-              (:updated-blocks latest-tx)
-              (:deleted-ids latest-tx))]
+        root-tx-id (rfx/use-entity-tx-id block*)
+        latest-tx (when root-tx-id
+                    (state/get-state :db/latest-transacted-entity-uuids))
+        root (if (= root-tx-id (:tx-id latest-tx))
+               (outliner-tree/reconcile-block-tree
+                stored-root
+                (:updated-blocks latest-tx)
+                (:deleted-ids latest-tx))
+               stored-root)]
     (hooks/use-effect!
      (fn []
-       (set-stored-root! block*)
+       (set-stored-root! (outliner-tree/index-block-tree block*))
        nil)
      [(:block/uuid block*)])
     (hooks/use-effect!
      (fn []
        (set-stored-root! root)
        nil)
-     [(:tx-id latest-tx)])
-    {:root root
-     :merge-blocks! (fn [blocks]
-                      (set-stored-root!
-                       #(outliner-tree/reconcile-block-tree % blocks #{})))}))
+     [root-tx-id])
+    root))
 
 (def ^:private initial-tree-render-limit 60)
-(def ^:private tree-render-overscan-px 2000)
-(def ^:private default-block-height 29)
-
-(defn- use-tree-render-window
-  [block config]
-  (let [repo (state/get-current-repo)
-        container-id (state/resolve-container-id (:container-id config))
-        temporary-collapsed (or (rfx/use-sub [:ui/collapsed-blocks repo container-id]) {})
-        visible-blocks (hooks/use-memo
-                        #(outliner-tree/visible-blocks (:block/children block) temporary-collapsed)
-                        [(:block/children block) temporary-collapsed])
-        total-count (count visible-blocks)
-        [render-limit set-render-limit!] (hooks/use-state initial-tree-render-limit)
-        [average-height set-average-height!] (hooks/use-state default-block-height)
-        *root (hooks/use-ref nil)
-        desired-count (min render-limit total-count)
-        desired-blocks (subvec visible-blocks 0 desired-count)
-        rendered-blocks (->> desired-blocks
-                             (take-while #(not= :index (:block.temp/load-status %)))
-                             vec)
-        rendered-count (count rendered-blocks)
-        tree (page-children->tree block rendered-blocks)
-        remaining-count (- total-count rendered-count)]
-    (hooks/use-effect!
-     (fn []
-       (set-render-limit! initial-tree-render-limit)
-       (set-average-height! default-block-height)
-       nil)
-     [(:block/uuid block)])
-    (hooks/use-effect!
-     (fn []
-       (when-let [root (hooks/deref *root)]
-         (when-let [rendered (.querySelector root ".page-blocks-inner")]
-           (let [height (.-height (.getBoundingClientRect rendered))]
-             (when (and (pos? rendered-count) (pos? height))
-               (set-average-height! (max default-block-height
-                                         (/ height rendered-count)))))))
-       nil)
-     [rendered-count temporary-collapsed])
-    (hooks/use-effect!
-     (fn []
-       (when-let [root (hooks/deref *root)]
-         (let [scroll-container (or (util/app-scroll-container-node root) js/window)
-               update-limit!
-               (fn []
-                 (let [root-top (.-top (.getBoundingClientRect root))
-                       viewport-bottom (if (identical? scroll-container js/window)
-                                         (.-innerHeight js/window)
-                                         (.-bottom (.getBoundingClientRect scroll-container)))
-                       target-count (outliner-tree/viewport-render-limit
-                                     root-top viewport-bottom average-height total-count
-                                     initial-tree-render-limit tree-render-overscan-px)]
-                   (set-render-limit! target-count)))]
-           (update-limit!)
-           (.addEventListener scroll-container "scroll" update-limit! #js {:passive true})
-           #(.removeEventListener scroll-container "scroll" update-limit!))))
-     [average-height total-count (:block/uuid block)])
-    {:root-ref *root
-     :tree tree
-     :desired-blocks desired-blocks
-     :total-count total-count
-     :spacer-height (* remaining-count average-height)}))
 
 (hsx/defc page-blocks-cp
   [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
@@ -238,33 +177,9 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [{:keys [root merge-blocks!]} (use-loaded-block-tree block*)
-        block root
+  (let [block (use-loaded-block-tree block*)
         quick-add-page? (= (:block/title block) common-config/quick-add-page-name)
-        [quick-add-children set-quick-add-children!] (hooks/use-state nil)
-        *hydrating-ids (hooks/use-memo #(atom #{}) [(:block/uuid block)])
-        {:keys [root-ref tree desired-blocks total-count spacer-height]}
-        (use-tree-render-window block config)]
-    (hooks/use-effect!
-     (fn []
-       (let [missing-ids (->> desired-blocks
-                              (filter #(= :index (:block.temp/load-status %)))
-                              (map :db/id)
-                              (remove @*hydrating-ids)
-                              vec)]
-         (when (seq missing-ids)
-           (swap! *hydrating-ids into missing-ids)
-           (-> (p/let [results (db-async/<get-blocks
-                                (state/get-current-repo)
-                                missing-ids
-                                {:children? false
-                                 :render-data? true})
-                       blocks (vec (keep :block results))]
-                 (merge-blocks! blocks))
-               (p/finally #(swap! *hydrating-ids
-                                   (fn [ids] (apply disj ids missing-ids))))))
-         nil))
-     [(mapv :db/id desired-blocks)])
+        [quick-add-children set-quick-add-children!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (if quick-add-page?
@@ -275,7 +190,8 @@
     (when block
       (let [block-id (:block/uuid block)
             block? (not (entity/page? block))
-            full-children tree
+            full-children (:block/children block)
+            total-count (count full-children)
             mobile-length-limit 50
             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
                                [(take mobile-length-limit full-children) true]
@@ -293,10 +209,11 @@
                        :else
                        children)
             block (assoc block :block/children full-children)
-            config (assoc config
-                          :library? (ldb/library? block)
-                          :block-tree/complete? true
-                          :virtual/tree-prefix? true)
+            config (cond-> (assoc config
+                                  :library? (ldb/library? block)
+                                  :block-tree/complete? true)
+                     (:block.temp/index-tree? block)
+                     (assoc :block-tree/index? true))
             document-mode? (rfx/use-sub [:document/mode?])]
         (cond
           (and
@@ -315,12 +232,8 @@
                                config)
                 config hiccup-config
                 blocks (if block? [block] (ldb/sort-by-order children))]
-            [:div.relative {:ref root-ref}
+            [:div.relative
              (page-blocks-inner block blocks config sidebar? false block-id)
-             (when (pos? spacer-height)
-               [:div.outliner-tree-spacer
-                {:style {:height spacer-height
-                         :pointer-events :none}}])
              (when more?
                (shui/button {:variant :ghost
                              :class "text-muted-foreground w-full"
@@ -712,10 +625,15 @@
                      {:keys [block children index blocks]} result
                      page-block (when block
                                   (let [children (page-children->tree block (or index children))
-                                        root (assoc block :block/children children)]
-                                    (if (seq blocks)
-                                      (outliner-tree/reconcile-block-tree root blocks #{})
-                                      root)))
+                                        root (cond-> (assoc block :block/children children)
+                                               index (assoc :block.temp/index-tree? true))
+                                        root (if (seq blocks)
+                                               (outliner-tree/reconcile-block-tree
+                                                (outliner-tree/index-block-tree root)
+                                                blocks
+                                                #{})
+                                               root)]
+                                    (outliner-tree/index-block-tree root)))
                      refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
                                   (db-async/<get-block-refs-count repo (:db/id page-block)))
                      page-block (cond-> page-block
