@@ -12,6 +12,7 @@
 
 (def ^:private journal-item-estimated-height 720)
 (def ^:private journal-slot-mount-delay-ms 120)
+(def ^:private journal-metadata-hydration-delay-ms 400)
 (defonce ^:private journal-item-height-by-key* (atom {}))
 
 (defn- journal-item-cache-key
@@ -103,6 +104,46 @@
                (.removeEventListener node "focusout" on-focus-out)))))))
    [cache-key]))
 
+(defn- use-journal-metadata-readiness
+  [mounted? loaded? recent?]
+  (let [[metadata-ready? set-metadata-ready!] (hooks/use-state recent?)]
+    (hooks/use-effect!
+     (fn []
+       (cond
+         recent?
+         (do
+           (set-metadata-ready! true)
+           nil)
+
+         (and mounted? loaded?)
+         (let [root (util/app-scroll-container-node)
+               *timer (atom nil)
+               cancel! (fn []
+                         (when-let [timer @*timer]
+                           (js/clearTimeout timer)
+                           (reset! *timer nil)))
+               schedule! (fn []
+                           (cancel!)
+                           (set-metadata-ready! false)
+                           (reset! *timer
+                                   (js/setTimeout
+                                    #(do
+                                       (reset! *timer nil)
+                                       (set-metadata-ready! true))
+                                    journal-metadata-hydration-delay-ms)))]
+           (schedule!)
+           (.addEventListener root "scroll" schedule! #js {:passive true})
+           (fn []
+             (cancel!)
+             (.removeEventListener root "scroll" schedule!)))
+
+         :else
+         (do
+           (set-metadata-ready! false)
+           nil)))
+     [mounted? loaded? recent?])
+    metadata-ready?))
+
 (hsx/defc journal-slot
   [id last? recent?]
   (let [cache-key (journal-item-cache-key id)
@@ -113,7 +154,8 @@
                              journal-item-estimated-height))
         *item-ref (hooks/use-ref nil)
         *mounted-ref (hooks/use-ref mounted?)
-        *mount-timer-ref (hooks/use-ref nil)]
+        *mount-timer-ref (hooks/use-ref nil)
+        metadata-ready? (use-journal-metadata-readiness mounted? loaded? recent?)]
     (hooks/set-ref! *mounted-ref mounted?)
     (hooks/use-effect!
      (fn []
@@ -144,6 +186,7 @@
        (page/page-cp {:db/id id
                       :journals? true
                       :keep-tree-resident? recent?
+                      :block-metadata-ready? metadata-ready?
                       :on-page-blocks-rendered #(set-loaded! true)}))]))
 
 (defn- sub-journals

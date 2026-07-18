@@ -759,7 +759,8 @@
 
 (defn- use-display-properties
   [block opts enabled? show-empty-and-hidden?]
-  (let [repo (state/get-current-repo)
+  (let [enabled? (and enabled? (not (false? (:block-metadata-ready? opts))))
+        repo (state/get-current-repo)
         request-opts (display-properties-request-opts opts)
         display-properties-payload? (and (contains? block :block.temp/display-properties)
                                          (not show-empty-and-hidden?)
