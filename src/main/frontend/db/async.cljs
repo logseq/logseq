@@ -275,9 +275,10 @@
     (schedule-get-blocks-batch-flush!)
     result))
 
-(defn- resolve-batched-get-blocks!
-  [entries responses]
-  (doseq [[idx {:keys [result]}] (map-indexed vector entries)]
+(defn- resolve-batched-get-block-groups!
+  [entry-groups responses]
+  (doseq [[idx entries] (map-indexed vector entry-groups)
+          {:keys [result]} entries]
     (p/resolve! result (nth responses idx nil))))
 
 (defn- reject-batched-get-blocks!
@@ -291,17 +292,22 @@
     (swap! *get-blocks-batch-state
            (fn [state] (assoc state :scheduled? false :queue [])))
     (doseq [[graph graph-entries] (group-by :graph queue)
-            entries (partition-all get-blocks-batch-limit graph-entries)]
-      (let [requests (->> entries (map :request) worker-get-blocks-requests)]
+            entry-groups (->> graph-entries
+                              (group-by :request)
+                              vals
+                              (partition-all get-blocks-batch-limit))]
+      (let [requests (->> entry-groups
+                          (map (comp :request first))
+                          worker-get-blocks-requests)]
         (->
          (p/let [result (<invoke-worker-get-blocks graph requests)
                  _ (when-not (= (count result) (count requests))
                      (throw (ex-info "Unexpected get-blocks response count"
                                      {:request-count (count requests)
                                       :response-count (count result)})))]
-           (resolve-batched-get-blocks! entries result))
+           (resolve-batched-get-block-groups! entry-groups result))
          (p/catch (fn [error]
-                    (reject-batched-get-blocks! entries error))))))))
+                    (reject-batched-get-blocks! (mapcat identity entry-groups) error))))))))
 
 (defn- <fetch-blocks-from-worker-batched
   [graph requests]
