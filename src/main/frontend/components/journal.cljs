@@ -1,5 +1,6 @@
 (ns frontend.components.journal
-  (:require [frontend.components.page :as page]
+  (:require [frontend.components.journal-state :as journal-state]
+            [frontend.components.page :as page]
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
@@ -10,6 +11,7 @@
             [io.factorhouse.hsx.core :as hsx]))
 
 (def ^:private journal-item-estimated-height 720)
+(def ^:private journal-slot-mount-delay-ms 120)
 (defonce ^:private journal-item-height-by-key* (atom {}))
 
 (defn- journal-item-cache-key
@@ -34,11 +36,72 @@
     (and (> (.-bottom rect) (- (.-top root-rect) margin))
          (< (.-top rect) (+ (.-bottom root-rect) margin)))))
 
-(defn- journal-slot-mounted?
-  [intersecting? focused? mounted? loaded?]
-  (or intersecting?
-      focused?
-      (and mounted? (not loaded?))))
+(defn- use-journal-slot-visibility!
+  [cache-key *item-ref *mounted-ref *mount-timer-ref set-mounted! set-loaded!]
+  (hooks/use-effect!
+   (fn []
+     (let [node (hooks/deref *item-ref)
+           root (util/app-scroll-container-node)]
+       (when (and node root)
+         (letfn [(cancel-pending-mount! []
+                   (when-let [timer (hooks/deref *mount-timer-ref)]
+                     (js/clearTimeout timer)
+                     (hooks/set-ref! *mount-timer-ref nil)))
+                 (release-slot! []
+                   (cancel-pending-mount!)
+                   (hooks/set-ref! *mounted-ref false)
+                   (set-loaded! false)
+                   (set-mounted! false))
+                 (mount-slot! []
+                   (cancel-pending-mount!)
+                   (when-not (hooks/deref *mounted-ref)
+                     (set-loaded! false))
+                   (hooks/set-ref! *mounted-ref true)
+                   (set-mounted! true))
+                 (schedule-mount! []
+                   (when-not (hooks/deref *mount-timer-ref)
+                     (hooks/set-ref!
+                      *mount-timer-ref
+                      (js/setTimeout
+                       (fn []
+                         (hooks/set-ref! *mount-timer-ref nil)
+                         (when (journal-slot-near-viewport? node root)
+                           (mount-slot!)))
+                       journal-slot-mount-delay-ms))))]
+           (let [observer (js/IntersectionObserver.
+                           (fn [entries]
+                             (let [intersecting? (boolean (some #(.-isIntersecting %)
+                                                                (array-seq entries)))
+                                   focused? (.contains node (.-activeElement js/document))]
+                               (cond
+                                 focused?
+                                 (mount-slot!)
+
+                                 (journal-state/slot-mounted?
+                                  intersecting? focused? (hooks/deref *mounted-ref))
+                                 (cancel-pending-mount!)
+
+                                 intersecting?
+                                 (schedule-mount!)
+
+                                 :else
+                                 (release-slot!))))
+                           #js {:root root
+                                :rootMargin "400px 0px"})
+                 on-focus-out (fn []
+                                (js/setTimeout
+                                 #(let [focused? (.contains node (.-activeElement js/document))]
+                                    (when (and (not focused?)
+                                               (not (journal-slot-near-viewport? node root)))
+                                      (release-slot!)))
+                                 0))]
+             (.observe observer node)
+             (.addEventListener node "focusout" on-focus-out)
+             (fn []
+               (cancel-pending-mount!)
+               (.disconnect observer)
+               (.removeEventListener node "focusout" on-focus-out)))))))
+   [cache-key]))
 
 (hsx/defc journal-slot
   [id last? recent?]
@@ -48,7 +111,10 @@
         [placeholder-height set-placeholder-height!]
         (hooks/use-state (or (get @journal-item-height-by-key* cache-key)
                              journal-item-estimated-height))
-        *item-ref (hooks/use-ref nil)]
+        *item-ref (hooks/use-ref nil)
+        *mounted-ref (hooks/use-ref mounted?)
+        *mount-timer-ref (hooks/use-ref nil)]
+    (hooks/set-ref! *mounted-ref mounted?)
     (hooks/use-effect!
      (fn []
        (set-placeholder-height! (or (get @journal-item-height-by-key* cache-key)
@@ -57,34 +123,8 @@
        (set-mounted! recent?)
        nil)
      [cache-key])
-    (hooks/use-effect!
-     (fn []
-       (let [node (hooks/deref *item-ref)
-             root (util/app-scroll-container-node)]
-         (when (and node root)
-           (let [observer (js/IntersectionObserver.
-                           (fn [entries]
-                             (let [intersecting? (boolean (some #(.-isIntersecting %)
-                                                                (array-seq entries)))
-                                   focused? (.contains node (.-activeElement js/document))]
-                               (set-mounted!
-                                (journal-slot-mounted? intersecting? focused? mounted? loaded?))))
-                           #js {:root root
-                                :rootMargin "400px 0px"})
-                 on-focus-out (fn []
-                                (js/setTimeout
-                                 #(let [focused? (.contains node (.-activeElement js/document))]
-                                    (when (and (not (journal-slot-mounted?
-                                                     false focused? mounted? loaded?))
-                                               (not (journal-slot-near-viewport? node root)))
-                                      (set-mounted! false)))
-                                 0))]
-             (.observe observer node)
-             (.addEventListener node "focusout" on-focus-out)
-             (fn []
-               (.disconnect observer)
-               (.removeEventListener node "focusout" on-focus-out))))))
-     [cache-key loaded? mounted?])
+    (use-journal-slot-visibility!
+     cache-key *item-ref *mounted-ref *mount-timer-ref set-mounted! set-loaded!)
     (hooks/use-effect!
      (fn []
        (when (and mounted? (hooks/deref *item-ref))
