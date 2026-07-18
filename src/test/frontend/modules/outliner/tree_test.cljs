@@ -35,7 +35,7 @@
      :block/children []}]})
 
 (deftest reconcile-block-tree-preserves-unchanged-subtree-identities
-  (let [root (loaded-tree)
+  (let [root (tree/index-block-tree (loaded-tree))
         old-a (first (:block/children root))
         old-c (second (:block/children root))
         result (tree/reconcile-block-tree root
@@ -53,7 +53,7 @@
 (deftest reconcile-block-tree-applies-structural-deltas-without-full-refresh
   (testing "insert and sort"
     (let [result (tree/reconcile-block-tree
-                  (loaded-tree)
+                  (tree/index-block-tree (loaded-tree))
                   [{:db/id 5
                     :block/uuid d-id
                     :block/title "D"
@@ -64,7 +64,7 @@
 
   (testing "move retains descendants"
     (let [result (tree/reconcile-block-tree
-                  (loaded-tree)
+                  (tree/index-block-tree (loaded-tree))
                   [{:db/id 2
                     :block/uuid a-id
                     :block/parent {:db/id 1}
@@ -74,27 +74,78 @@
       (is (= [b-id] (mapv :block/uuid (get-in result [:block/children 1 :block/children]))))))
 
   (testing "deleting a parent removes its loaded descendants"
-    (let [result (tree/reconcile-block-tree (loaded-tree) [] #{a-id})]
+    (let [result (tree/reconcile-block-tree (tree/index-block-tree (loaded-tree)) [] #{a-id})]
       (is (= [c-id] (mapv :block/uuid (:block/children result)))))))
 
-(deftest tree-viewport-projection-keeps-real-tree-semantics
-  (let [root (loaded-tree)]
-    (is (= [a-id b-id c-id]
-           (mapv :block/uuid (tree/visible-blocks (:block/children root) {}))))
-    (is (= [a-id c-id]
-           (mapv :block/uuid (tree/visible-blocks (:block/children root) {a-id true}))))
-    (is (= [a-id b-id c-id]
-           (mapv :block/uuid (tree/visible-blocks
-                              (assoc-in (:block/children root) [0 :block/collapsed?] true)
-                              {a-id false}))))))
+(defn- fail-if-realized
+  []
+  (lazy-seq
+   (throw (js/Error. "Unrelated subtree was realized"))))
 
-(deftest viewport-render-limit-shrinks-when-scrolling-back
-  (is (= 97 (tree/viewport-render-limit 0 800 29 1000 60 2000))
-      "The top viewport should only render a bounded tree prefix.")
-  (is (= 407 (tree/viewport-render-limit -9000 800 29 1000 60 2000))
-      "The prefix should extend beyond the current viewport with overscan.")
-  (is (= 97 (tree/viewport-render-limit 0 800 29 1000 60 2000))
-      "Returning to the top should release deep subtree DOM immediately."))
+(defn- indexed-tree-with-unrealized-c-children
+  []
+  (let [indexed (tree/index-block-tree (loaded-tree))]
+    (with-meta
+      (assoc-in indexed [:block/children 1 :block/children] (fail-if-realized))
+      (meta indexed))))
+
+(deftest reconcile-block-tree-does-not-scan-unrelated-subtrees
+  (testing "content updates only rebuild the changed node's ancestor path"
+    (let [result (tree/reconcile-block-tree
+                  (indexed-tree-with-unrealized-c-children)
+                  [{:db/id 3
+                    :block/uuid b-id
+                    :block/title "B changed"
+                    :block/parent {:db/id 2}
+                    :block/order "a"}]
+                  #{})]
+      (is (= "B changed"
+             (get-in result [:block/children 0 :block/children 0 :block/title])))))
+
+  (testing "inserts only sort the affected sibling list"
+    (let [result (tree/reconcile-block-tree
+                  (indexed-tree-with-unrealized-c-children)
+                  [{:db/id 5
+                    :block/uuid d-id
+                    :block/title "D"
+                    :block/parent {:db/id 2}
+                    :block/order "b"}]
+                  #{})]
+      (is (= [b-id d-id]
+             (mapv :block/uuid (get-in result [:block/children 0 :block/children]))))))
+
+  (testing "moves retain descendants and only update affected sibling lists"
+    (let [result (tree/reconcile-block-tree
+                  (indexed-tree-with-unrealized-c-children)
+                  [{:db/id 3
+                    :block/uuid b-id
+                    :block/title "B"
+                    :block/parent {:db/id 1}
+                    :block/order "b"}]
+                  #{})]
+      (is (empty? (get-in result [:block/children 0 :block/children])))
+      (is (= [a-id b-id c-id]
+             (mapv :block/uuid (:block/children result))))))
+
+  (testing "deletes only traverse the removed subtree"
+    (let [result (tree/reconcile-block-tree
+                  (indexed-tree-with-unrealized-c-children)
+                  []
+                  #{a-id})]
+      (is (= [c-id] (mapv :block/uuid (:block/children result)))))))
+
+(deftest unrelated-worker-deltas-preserve-the-root-identity
+  (let [root (tree/index-block-tree (loaded-tree))
+        result (tree/reconcile-block-tree
+                root
+                [{:db/id 999
+                  :block/uuid (random-uuid)
+                  :block/title "Another page"
+                  :block/parent {:db/id 998}
+                  :block/order "a"}]
+                #{(random-uuid)})]
+    (is (identical? root result)
+        "An unrelated transaction must not wake or reconcile this page tree.")))
 
 (deftest resident-journal-tree-keeps-receiving-worker-deltas
   (tree/keep-block-tree-resident! (loaded-tree))

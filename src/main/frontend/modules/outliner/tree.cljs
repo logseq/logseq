@@ -49,100 +49,236 @@
   [entity]
   (or (:db/id entity) (:block/uuid entity)))
 
-(defn- tree-entities
+(def ^:private tree-index-key ::tree-index)
+
+(defn- index-aliases
+  [index entity key]
+  (cond-> index
+    (:db/id entity) (assoc-in [:aliases (:db/id entity)] key)
+    (:block/uuid entity) (assoc-in [:aliases (:block/uuid entity)] key)))
+
+(defn- index-subtree
+  [index entity parent-key]
+  (let [key (entity-key entity)
+        index (-> index
+                  (index-aliases entity key)
+                  (assoc-in [:parent-by-key key] parent-key))]
+    (reduce-kv
+     (fn [result position child]
+       (-> result
+           (assoc-in [:child-position key (entity-key child)] position)
+           (index-subtree child key)))
+     index
+     (vec (:block/children entity)))))
+
+(defn index-block-tree
+  "Attach a navigation index used to patch a loaded tree without scanning it again."
   [root]
-  (tree-seq #(seq (:block/children %)) :block/children root))
+  (when root
+    (if (get (meta root) tree-index-key)
+      root
+      (let [root-key (entity-key root)
+            index (index-subtree {:root-key root-key
+                                  :aliases {}
+                                  :parent-by-key {}
+                                  :child-position {}}
+                                 root
+                                 nil)]
+        (with-meta root (assoc (meta root) tree-index-key index))))))
+
+(defn- tree-index
+  [root]
+  (or (get (meta root) tree-index-key)
+      (get (meta (index-block-tree root)) tree-index-key)))
+
+(defn- resolve-key
+  [index id]
+  (or (get-in index [:aliases id])
+      (when (map? id)
+        (or (get-in index [:aliases (:db/id id)])
+            (get-in index [:aliases (:block/uuid id)])))))
+
+(defn- key-chain
+  [index key]
+  (loop [current key
+         result ()]
+    (cond
+      (nil? current)
+      nil
+
+      (= current (:root-key index))
+      (vec (cons current result))
+
+      :else
+      (recur (get-in index [:parent-by-key current])
+             (cons current result)))))
+
+(defn- node-path
+  [index key]
+  (when-let [chain (key-chain index key)]
+    (loop [parent-key (first chain)
+           child-keys (next chain)
+           path []]
+      (if-let [child-key (first child-keys)]
+        (when-let [position (get-in index [:child-position parent-key child-key])]
+          (recur child-key
+                 (next child-keys)
+                 (conj path :block/children position)))
+        path))))
+
+(defn- node-at
+  [root index key]
+  (when-let [path (node-path index key)]
+    (get-in root path)))
+
+(defn- assoc-node
+  [root index key node]
+  (let [path (node-path index key)]
+    (if (seq path)
+      (assoc-in root path node)
+      node)))
+
+(defn- children-at
+  [root index parent-key]
+  (:block/children (node-at root index parent-key)))
+
+(defn- assoc-children
+  [root index parent-key children]
+  (assoc-node root index parent-key
+              (assoc (node-at root index parent-key) :block/children children)))
+
+(defn- reindex-children
+  [index parent-key children]
+  (reduce-kv
+   (fn [result position child]
+     (let [key (entity-key child)]
+       (-> result
+           (assoc-in [:parent-by-key key] parent-key)
+           (assoc-in [:child-position parent-key key] position))))
+   (assoc-in index [:child-position parent-key] {})
+   children))
+
+(defn- remove-indexed-subtree
+  [index node]
+  (let [index (reduce remove-indexed-subtree index (:block/children node))
+        key (entity-key node)]
+    (cond-> (-> index
+                (update :parent-by-key dissoc key)
+                (update :child-position dissoc key))
+      (:db/id node) (update :aliases dissoc (:db/id node))
+      (:block/uuid node) (update :aliases dissoc (:block/uuid node)))))
+
+(defn- without-child
+  [children child-key]
+  (into [] (remove #(= child-key (entity-key %))) children))
+
+(defn- sorted-with-child
+  [children child]
+  (->> (conj (vec children) child)
+       (sort-by :block/order)
+       vec))
+
+(defn- merge-node-payload
+  [node changed]
+  (merge node (dissoc changed :block/children :block/level)))
+
+(defn- update-subtree-level
+  [node level]
+  (assoc node
+         :block/level level
+         :block/children (mapv #(update-subtree-level % (inc level))
+                               (:block/children node))))
+
+(defn- delete-node
+  [{:keys [root index] :as state} id]
+  (if-let [key (resolve-key index id)]
+    (if (= key (:root-key index))
+      {:root nil :index index}
+      (let [parent-key (get-in index [:parent-by-key key])
+            node (node-at root index key)
+            children (without-child (children-at root index parent-key) key)
+            root (assoc-children root index parent-key children)
+            index (-> index
+                      (remove-indexed-subtree node)
+                      (reindex-children parent-key children))]
+        {:root root :index index}))
+    state))
+
+(defn- insert-node
+  [{:keys [root index] :as state} changed]
+  (if-let [parent-key (resolve-key index (:block/parent changed))]
+    (let [parent (node-at root index parent-key)
+          node (-> changed
+                   (assoc :block/children (vec (:block/children changed)))
+                   (update-subtree-level (inc (:block/level parent))))
+          children (sorted-with-child (:block/children parent) node)
+          root (assoc-children root index parent-key children)
+          index (-> index
+                    (index-subtree node parent-key)
+                    (reindex-children parent-key children))]
+      {:root root :index index})
+    state))
+
+(defn- update-existing-node
+  [{:keys [root index] :as state} key changed]
+  (let [node (node-at root index key)
+        old-parent-key (get-in index [:parent-by-key key])
+        parent-changed? (contains? changed :block/parent)
+        new-parent-key (if parent-changed?
+                         (resolve-key index (:block/parent changed))
+                         old-parent-key)
+        order-changed? (and (contains? changed :block/order)
+                            (not= (:block/order node) (:block/order changed)))
+        structural? (or (not= old-parent-key new-parent-key) order-changed?)]
+    (cond
+      (and parent-changed? (nil? new-parent-key))
+      (delete-node state key)
+
+      (not structural?)
+      {:root (assoc-node root index key (merge-node-payload node changed))
+       :index index}
+
+      :else
+      (let [old-children (without-child (children-at root index old-parent-key) key)
+            root (assoc-children root index old-parent-key old-children)
+            index (reindex-children index old-parent-key old-children)
+            new-parent (node-at root index new-parent-key)
+            node (-> node
+                     (merge-node-payload changed)
+                     (update-subtree-level (inc (:block/level new-parent))))
+            new-children (sorted-with-child (:block/children new-parent) node)
+            root (assoc-children root index new-parent-key new-children)
+            index (-> index
+                      (assoc-in [:parent-by-key key] new-parent-key)
+                      (reindex-children new-parent-key new-children))]
+        {:root root :index index}))))
+
+(defn- update-node
+  [{:keys [root index] :as state} changed]
+  (if-let [key (or (resolve-key index (:db/id changed))
+                   (resolve-key index (:block/uuid changed)))]
+    (if (= key (:root-key index))
+      {:root (merge-node-payload root changed)
+       :index index}
+      (update-existing-node state key changed))
+    (insert-node state changed)))
 
 (defn reconcile-block-tree
   "Apply changed and deleted entities to a loaded block tree.
 
-  The whole tree is scanned to restore authoritative parent/order relationships,
-  but unchanged subtrees retain their object identity so React only reconciles
-  changed nodes and their ancestor paths."
+  Content updates rebuild one ancestor path. Structural updates only rebuild the
+  affected sibling lists and a moved or deleted subtree."
   [root changed-entities deleted-ids]
-  (if-not root
+  (if (or (nil? root)
+          (and (empty? changed-entities) (empty? deleted-ids)))
     root
-    (let [old-entities (tree-entities root)
-          old-by-key (into {} (map (juxt entity-key identity)) old-entities)
-          aliases (into {}
-                        (mapcat (fn [entity]
-                                  (keep (fn [id]
-                                          (when id [id (entity-key entity)]))
-                                        [(:db/id entity) (:block/uuid entity)])))
-                        old-entities)
-          deleted-keys (into #{} (map #(get aliases % %)) deleted-ids)
-          changed-by-key (into {}
-                               (keep (fn [entity]
-                                       (when-let [key (or (get aliases (:db/id entity))
-                                                         (get aliases (:block/uuid entity))
-                                                         (entity-key entity))]
-                                         [key entity])))
-                               changed-entities)
-          entities-by-key (reduce-kv
-                           (fn [result key old-entity]
-                             (if (contains? deleted-keys key)
-                               result
-                               (assoc result key
-                                      (merge (dissoc old-entity :block/children :block/level)
-                                             (some-> (get changed-by-key key)
-                                                     (dissoc :block/children :block/level))))))
-                           {}
-                           old-by-key)
-          entities-by-key (reduce-kv
-                           (fn [result key entity]
-                             (if (or (contains? deleted-keys key)
-                                     (contains? result key))
-                               result
-                               (assoc result key (dissoc entity :block/children :block/level))))
-                           entities-by-key
-                           changed-by-key)
-          root-key (entity-key root)
-          candidate-root (when-let [root-entity (get entities-by-key root-key)]
-                           (-> (otree/blocks->vec-tree-data
-                                (vals entities-by-key)
-                                root-entity
-                                {:include-root? true
-                                 :keep-block-tx-id? true})
-                               first
-                               (assoc :block/level (or (:block/level root) 0))))]
-      (letfn [(reuse-unchanged [candidate]
-                (let [children (mapv reuse-unchanged (:block/children candidate))
-                      candidate (assoc candidate :block/children children)
-                      old (get old-by-key (entity-key candidate))
-                      same-children? (and (= (count (:block/children old)) (count children))
-                                          (every? true?
-                                                  (map identical?
-                                                       (:block/children old)
-                                                       children)))]
-                  (if (and old
-                           same-children?
-                           (= (dissoc old :block/children)
-                              (dissoc candidate :block/children)))
-                    old
-                    candidate)))]
-        (some-> candidate-root reuse-unchanged)))))
-
-(defn visible-blocks
-  "Return a flat DFS projection while keeping the canonical data as a tree."
-  [children temporary-collapsed]
-  (letfn [(walk [blocks]
-            (mapcat (fn [block]
-                      (let [block-id (:block/uuid block)
-                            collapsed? (if (contains? temporary-collapsed block-id)
-                                         (get temporary-collapsed block-id)
-                                         (:block/collapsed? block))]
-                        (cons (dissoc block :block/children)
-                              (when-not collapsed?
-                                (walk (:block/children block))))))
-                    blocks))]
-    (vec (walk children))))
-
-(defn viewport-render-limit
-  [root-top viewport-bottom average-height total-count initial-limit overscan-px]
-  (-> (/ (+ (- viewport-bottom root-top) overscan-px) average-height)
-      js/Math.ceil
-      (max initial-limit)
-      (min total-count)))
+    (let [index (tree-index root)
+          {:keys [root index]}
+          (reduce delete-node {:root root :index index} deleted-ids)
+          {:keys [root index]}
+          (reduce update-node {:root root :index index} changed-entities)]
+      (when root
+        (with-meta root (assoc (meta root) tree-index-key index))))))
 
 (defonce ^:private *resident-block-trees (atom {}))
 (defonce ^:private *resident-block-tree-order (atom []))

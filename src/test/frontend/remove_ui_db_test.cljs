@@ -599,7 +599,7 @@
     (is (not (string/includes? page-source ":editor/edit-block-fn"))
         "A later render must not consume a callback owned by another response.")))
 
-(deftest page-route-loads-complete-index-and-an-initial-render-window-test
+(deftest page-route-loads-complete-index-and-uses-bounded-tree-virtualization-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
         page-aux-source (subs source
                               (string/index-of source "(hsx/defc page-aux")
@@ -609,7 +609,13 @@
     (is (string/includes? page-aux-source "db-async/<get-block-with-children")
         "Journals still load one complete tree per visible journal.")
     (is (not (string/includes? source "<get-page-blocks-window")))
-    (is (not (string/includes? source ":virtual/flat-list?")))))
+    (is (not (string/includes? source ":virtual/flat-list?")))
+    (is (string/includes? source ":block-tree/index? true")
+        "A page keeps its complete lightweight tree while visible index nodes hydrate themselves.")
+    (is (not (string/includes? source "use-tree-render-window"))
+        "Page rendering must not grow an irreversible prefix as the user scrolls.")
+    (is (not (string/includes? source ":virtual/tree-prefix?")))
+    (is (not (string/includes? source "outliner-tree-spacer")))))
 
 (deftest page-tree-reconciles-worker-deltas-without-full-refresh-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
@@ -619,6 +625,11 @@
     (is (string/includes? loaded-tree-source "outliner-tree/reconcile-block-tree"))
     (is (string/includes? loaded-tree-source ":updated-blocks"))
     (is (string/includes? loaded-tree-source ":deleted-ids"))
+    (is (string/includes? loaded-tree-source "rfx/use-entity-tx-id")
+        "Each page tree should subscribe only to transactions affecting its own root.")
+    (is (not (string/includes? loaded-tree-source
+                               "rfx/use-sub [:db/latest-transacted-entity-uuids]"))
+        "A block edit must not wake every mounted journal tree.")
     (is (not (string/includes? loaded-tree-source "db-async/<get-block-with-children")))))
 
 (deftest selected-component-block-uses-plain-entity-predicates-test
