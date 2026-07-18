@@ -1302,6 +1302,10 @@
        (cell-render-f)
        cell-placeholder)]))
 
+(defn- eager-table-cells?
+  [view-feature-type]
+  (= :all-pages view-feature-type))
+
 (defn- click-cell
   [node]
   (when-let [trigger (dom/sel1 node ".jtrigger")]
@@ -1397,8 +1401,9 @@
      body)))
 
 (hsx/defc table-row-inner
-  [table row props {:keys [show-add-property? scrolling?]}]
+  [table row props {:keys [show-add-property? scrolling? view-feature-type]}]
   (let [*ref (hooks/use-ref nil)
+        eager-cells? (eager-table-cells? view-feature-type)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -1407,7 +1412,7 @@
                                   :cell (fn [_table _row _column])})
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column {:keys [_lazy?]}]
+        row-cell-f (fn [column _cell-option]
                      (let [id (str (:id row) "-" (:id column))
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
@@ -1416,16 +1421,17 @@
                            cell-opts {:key id
                                       :select? select?
                                       :add-property? add-property?
-                                      :style style}
-                           cell-placeholder (table-cell-container cell-opts nil)]
+                                      :style style}]
                        (if (and scrolling? (not (:block/title row)))
-                         cell-placeholder
+                         (table-cell-container cell-opts nil)
                          (when-let [render (get column :cell)]
-                           (lazy-table-cell
-                            (fn []
-                              (table-cell-container
-                               cell-opts (render table row column style)))
-                            cell-placeholder)))))]
+                           (let [cell-render (fn []
+                                               (table-cell-container
+                                                cell-opts (render table row column style)))]
+                             (if eager-cells?
+                               [:div.h-full (cell-render)]
+                               (lazy-table-cell cell-render
+                                                (table-cell-container cell-opts nil))))))))]
     (shui/table-row
      (merge
       props
@@ -1481,16 +1487,13 @@
 
 (hsx/defc table-row
   [table row props option]
-  (let [block row
-        block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
-        row' (when block'
-               (-> block'
-                   (update :block/tags (fn [tags]
-                                         (keep (fn [tag]
-                                                 (when (map? tag)
-                                                   tag))
-                                               tags)))
-                   (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
+  (let [row' (-> row
+                 (update :block/tags (fn [tags]
+                                       (keep (fn [tag]
+                                               (when (map? tag)
+                                                 tag))
+                                             tags)))
+                 (assoc :block.temp/refs-count (:block.temp/refs-count row)))]
     (table-row-inner table row' props option)))
 
 (hsx/defc search
@@ -2055,9 +2058,15 @@
        (some? load-range)
        (<= (first load-range) idx (second load-range))))
 
+(def ^:private all-pages-range-load-delay-ms 20)
+
+(defn- lazy-item-placeholder-height
+  [table-view?]
+  (if table-view? 33 24))
+
 (hsx/defc lazy-item
   [data idx {:keys [properties list-view? gallery-view? scrolling? load-while-scrolling?
-                    range-gated-loading?]} item-render]
+                    range-gated-loading? table-view?]} item-render]
   (let [row (util/nth-safe data idx)
         db-id (cond (map? row) (:db/id row)
                     (number? row) row
@@ -2089,7 +2098,7 @@
      [db-id scrolling? load-while-scrolling? range-gated-loading?])
     (if item
       (item-render item)
-      [:div {:style {:min-height 24}}])))
+      [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}])))
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
@@ -2127,7 +2136,7 @@
                                      #(do
                                         (reset! *load-range-timeout nil)
                                         (set-load-range! [start-index end-index]))
-                                     50)))))
+                                     all-pages-range-load-delay-ms)))))
         :item-content (fn [idx _user ^js context]
                         (let [option (assoc option
                                             :scrolling? (when context (.-scrolling context))

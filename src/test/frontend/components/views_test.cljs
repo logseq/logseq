@@ -149,6 +149,14 @@
   (is (not (#'views/table-row-load-while-scrolling? :all-pages nil 15)))
   (is (not (#'views/table-row-load-while-scrolling? :query-result [10 20] 15))))
 
+(deftest all-pages-table-cells-render-with-the-virtualized-row
+  (is (#'views/eager-table-cells? :all-pages))
+  (is (not (#'views/eager-table-cells? :query-result))))
+
+(deftest table-row-placeholder-matches-the-rendered-row-height
+  (is (= 33 (#'views/lazy-item-placeholder-height true)))
+  (is (= 24 (#'views/lazy-item-placeholder-height false))))
+
 (deftest group-by-column-should-exclude-name-and-include-many-properties
   (is (views/group-by-column? {:id :block/page}))
   (is (not (views/group-by-column? {:id :block/title
