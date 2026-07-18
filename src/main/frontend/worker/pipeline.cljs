@@ -608,6 +608,25 @@
   [{:keys [tx-meta] :as tx-report} context]
   (try
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+          changed-entities (concat pages blocks)
+          db-after (:db-after tx-report)
+          render-dependent-eids
+          (into #{}
+                (mapcat (fn [entity]
+                          (let [entity-id (:db/id entity)
+                                property-ident (:db/ident entity)]
+                            (concat
+                             (map :e (d/datoms db-after :avet :block/tags entity-id))
+                             (when property-ident
+                               (d/q '[:find [?e ...]
+                                      :in $ ?property
+                                      :where [?e ?property]]
+                                    db-after property-ident))))))
+                changed-entities)
+          render-invalidated-block-uuids
+          (into #{}
+                (keep #(some-> (d/entity db-after %) :block/uuid))
+                render-dependent-eids)
           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
           deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-block-ids (set (map :db/id deleted-blocks))
@@ -626,6 +645,7 @@
        :affected-keys affected-query-keys
        :deleted-block-uuids deleted-block-uuids
        :deleted-assets deleted-assets
+       :render-invalidated-block-uuids render-invalidated-block-uuids
        :pages pages
        :blocks blocks})
     (catch :default e

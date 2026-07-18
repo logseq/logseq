@@ -1,8 +1,8 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
   (:require ["react-dom" :as react-dom]
-            [frontend.common.page-window :as page-window]
             [frontend.modules.outliner.pipeline :as outliner-pipeline]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -59,10 +59,6 @@
       (catch :default error
         (log/error :db/editor-callback-failed {:error error})))))
 
-(defn- outliner-ops-need-page-window-refresh?
-  [ops]
-  (boolean (some (comp outliner-pipeline/structural-outliner-op? first) ops)))
-
 (defn- op-block-uuids
   [ops]
   (->> ops
@@ -116,29 +112,25 @@
        set))
 
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta current-window updated-blocks affected-page-uuids]
+  [ops tx-meta updated-blocks deleted-block-uuids affected-page-uuids render-invalidated-block-uuids]
   (let [started-at (now-ms)
         affected-page-uuids (set affected-page-uuids)
         affected-ids (op-block-uuids ops)
-        changed-ids (into affected-ids affected-page-uuids)
         page-id (or (:ui/page-id tx-meta) (state/get-current-page))
-        deleted-ids (->> ops
-                         (filter #(= :delete-blocks (first %)))
-                         (mapcat (comp first second))
-                         set)
-        updated-ids (apply disj affected-ids deleted-ids)]
-    (if (seq affected-ids)
+        deleted-ids (set deleted-block-uuids)
+        updated-ids (into (into (apply disj affected-ids deleted-ids)
+                                render-invalidated-block-uuids)
+                          (keep :block/uuid)
+                          updated-blocks)
+        changed-ids (into (into updated-ids deleted-ids) affected-page-uuids)]
+    (if (seq changed-ids)
       (let [tx-id (:db-sync/tx-id tx-meta)
             value (cond-> {:updated-ids updated-ids
                            :deleted-ids deleted-ids
                            :entity-tx-ids (zipmap changed-ids (repeat tx-id))
-                           :page-window-refresh? (outliner-ops-need-page-window-refresh? ops)
                            :tx-id tx-id}
                     page-id
                     (assoc :page-id page-id)
-
-                    current-window
-                    (assoc :page-window current-window)
 
                     (seq updated-blocks)
                     (assoc :updated-blocks updated-blocks)
@@ -147,6 +139,7 @@
                     (assoc :affected-page-uuids affected-page-uuids))
             changed-paths (outliner-pipeline/refresh-state-paths changed-ids)
             prepared-at (now-ms)]
+        (outliner-tree/reconcile-resident-block-trees! updated-blocks deleted-ids)
         (state/set-state! :db/latest-transacted-entity-uuids
                           value
                           :changed-paths changed-paths)
@@ -156,13 +149,14 @@
        :publish-ms 0})))
 
 (defn- publish-worker-response!
-  [ops tx-meta current-window updated-blocks affected-page-uuids]
+  [ops tx-meta updated-blocks deleted-block-uuids affected-page-uuids render-invalidated-block-uuids]
   (let [ui-refresh-perf (volatile! nil)]
     (react-dom/flushSync
      (fn []
        (vreset! ui-refresh-perf
-                (refresh-worker-op-blocks! ops tx-meta current-window updated-blocks affected-page-uuids))
-       (run-edit-block-fn! tx-meta current-window)))
+                (refresh-worker-op-blocks! ops tx-meta updated-blocks deleted-block-uuids
+                                           affected-page-uuids render-invalidated-block-uuids))))
+    (run-edit-block-fn! tx-meta {:rows updated-blocks})
     @ui-refresh-perf))
 
 (defn transact [worker-transact repo tx-data tx-meta]
@@ -187,9 +181,6 @@
             perf-id (random-uuid)
             request-repo (state/get-current-repo)
             request-route (state/get-route-match)
-            request-page-id (or (:ui/page-id opts) (state/get-current-page))
-            structural? (outliner-ops-need-page-window-refresh? ops)
-            page-window-opts (or (:ui/page-window-opts opts) {:offset 0})
             opts' (-> opts
                       ensure-local-op-tx-id
                       (assoc
@@ -198,13 +189,9 @@
                        :ui/handled-by-response? true
                        :local-tx? true))
             affected-block-uuids (op-block-uuids ops)
-            worker-opts (cond-> (dissoc opts' :ui/page-id :ui/page-window-opts
-                                       :editor/edit-block-fn)
+            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
                           (seq affected-block-uuids)
-                          (assoc :affected-block-uuids affected-block-uuids)
-
-                          (and (not structural?) (seq affected-block-uuids))
-                          (assoc :return-updated-blocks? true))
+                          (assoc :affected-block-uuids affected-block-uuids))
             request #(p/do!
                       (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                                request-repo
@@ -215,20 +202,16 @@
                        ops
                        worker-opts))]
         (p/let [response (request)
-                {:keys [result affected-page-uuids updated-blocks perf]} response
+                {:keys [result affected-page-uuids updated-blocks deleted-block-uuids
+                        render-invalidated-block-uuids perf]} response
                 mutation-returned-at (now-ms)
-                current-window (when (and structural? request-page-id)
-                                 (state/<invoke-db-worker
-                                  :thread-api/get-page-blocks-window
-                                  request-repo
-                                  request-page-id
-                                  (assoc page-window-opts :limit page-window/limit)))
                 worker-returned-at (now-ms)]
           (if-not (and (= request-repo (state/get-current-repo))
                        (= request-route (state/get-route-match)))
             nil
             (let [ui-refresh-perf (publish-worker-response!
-                                   ops opts' current-window updated-blocks affected-page-uuids)
+                                   ops opts' updated-blocks deleted-block-uuids affected-page-uuids
+                                   render-invalidated-block-uuids)
                   state-updated-at (now-ms)]
               (on-next-frame!
                (fn []
@@ -240,7 +223,7 @@
                    :worker-apply-ms (:apply-ms perf)
                    :worker-listener (:listener perf)
                    :worker-roundtrip-ms (- mutation-returned-at started-at)
-                   :page-window-ms (- worker-returned-at mutation-returned-at)
+                   :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
                    :ui-refresh ui-refresh-perf
                    :state-update-ms (- state-updated-at worker-returned-at)
                    :total-to-next-frame-ms (- (now-ms) started-at)})))))

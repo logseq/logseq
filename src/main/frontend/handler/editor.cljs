@@ -357,7 +357,7 @@
                      :outliner-op outliner-op}]
     (ui-outliner-tx/transact!
      (cond-> (merge {:outliner-op :insert-blocks}
-                    (block-handler/page-window-tx-meta current-block config))
+                    (block-handler/outliner-tx-meta current-block config))
        (and outliner-op (not= outliner-op :insert-blocks))
        (assoc :source-outliner-op outliner-op)
 
@@ -709,7 +709,7 @@
      (let [blocks (block-handler/get-top-level-blocks [block])]
        (ui-outliner-tx/transact!
         (cond-> (merge {:outliner-op :delete-blocks}
-                       (block-handler/page-window-tx-meta block))
+                       (block-handler/outliner-tx-meta block))
           edit-block-f
           (assoc :editor/edit-block-fn (fn [_rows] (edit-block-f))))
         (outliner-op/delete-blocks! blocks {}))))))
@@ -801,7 +801,7 @@
       (let [children (worker-children current-block)]
         (ui-outliner-tx/transact!
           (assoc (merge {:outliner-op :delete-blocks}
-                        (block-handler/page-window-tx-meta current-block))
+                        (block-handler/outliner-tx-meta current-block))
                  :editor/edit-block-fn
                  (fn [_rows]
                    (edit-block! next-block 0 {:save-code-editor? false
@@ -822,7 +822,7 @@
            (not delete-concat?))
       (ui-outliner-tx/transact!
         (assoc (merge {:outliner-op :delete-blocks}
-                      (block-handler/page-window-tx-meta prev-block))
+                      (block-handler/outliner-tx-meta prev-block))
                :editor/edit-block-fn
                (fn [_rows]
                  (edit-block! current-block 0 {:save-code-editor? false
@@ -843,7 +843,7 @@
          (mobile-util/mobile-focus-hidden-input)
          (ui-outliner-tx/transact!
           (cond-> (merge {:outliner-op :delete-blocks}
-                         (block-handler/page-window-tx-meta delete-target))
+                         (block-handler/outliner-tx-meta delete-target))
             edit-block-f
             (assoc :editor/edit-block-fn (fn [_rows] (edit-block-f))))
           (when (seq children)
@@ -864,7 +864,7 @@
     (let [input-empty? (string/blank? (state/get-edit-content))
           loaded-block (if delete-concat?
                          current-block
-                         (:outliner/previous-block config))]
+                         nil)]
       (p/let [loaded-previous-edit (loaded-block-edit loaded-block value (:container-id config))
               block-e (or current-block
                           (p/let [result (db-async/<get-block-with-children repo block-id {:children? true})]
@@ -908,7 +908,7 @@
       (notification/show! (t :storage.recycle/readonly) :warning)
       (ui-outliner-tx/transact!
        (merge {:outliner-op :move-blocks}
-              (block-handler/page-window-tx-meta (first blocks)))
+              (block-handler/outliner-tx-meta (first blocks)))
        (outliner-op/move-blocks! blocks target opts)))))
 
 (defn move-selected-blocks
@@ -952,7 +952,7 @@
         (ui-outliner-tx/transact!
          (cond-> (merge {:outliner-op :delete-blocks
                          :mobile-action-bar? mobile-action-bar?}
-                        (block-handler/page-window-tx-meta (first blocks)))
+                        (block-handler/outliner-tx-meta (first blocks)))
            edit-block-fn
            (assoc :editor/edit-block-fn edit-block-fn))
          (when (seq blocks)
@@ -1872,7 +1872,7 @@
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
                                      (merge {:outliner-op :move-blocks}
-                                            (block-handler/page-window-tx-meta (first blocks')))
+                                            (block-handler/outliner-tx-meta (first blocks')))
                                      (outliner-op/move-blocks-up-down! blocks' up?))]
                          (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
@@ -2919,8 +2919,7 @@
             editor-state (get-state)
             editor-config (:config editor-state)
             custom-query? (:custom-query? editor-config)]
-        (p/let [left-or-parent (or (:outliner/previous-block editor-config)
-                                   (<left-sibling-or-parent repo block))]
+        (p/let [left-or-parent (<left-sibling-or-parent repo block)]
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
@@ -3725,7 +3724,7 @@
       (save-current-block!) ;; Save the input contents before collapsing
       (ui-outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
        (merge {:outliner-op :collapse-expand-blocks}
-              (block-handler/page-window-tx-meta (state/get-edit-block)))
+              (block-handler/outliner-tx-meta (state/get-edit-block)))
        (outliner-op/collapse-expand-blocks! block-ids value))
       (doseq [block-id block-ids]
         (state/set-collapsed-block! block-id value)))))

@@ -101,7 +101,6 @@
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
             affected-block-uuids (:affected-block-uuids opts)
-            return-updated-blocks? (:return-updated-blocks? opts)
             opts (dissoc opts :affected-block-uuids :return-updated-blocks?)
             affected-page-uuids-before (collect-affected-page-uuids @conn affected-block-uuids)
             apply-started-at (perf-time-ms)
@@ -109,18 +108,37 @@
                     "apply outliner ops"
                     (outliner-op/apply-ops! conn ops opts))
             applied-at (perf-time-ms)
+            listener-result (db-listener/take-outliner-op-result! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
+            changed-entities (distinct
+                              (concat (:pages listener-result)
+                                      (:blocks listener-result)
+                                      (keep #(d/entity @conn [:block/uuid %])
+                                            affected-block-uuids)
+                                      (keep #(d/entity @conn [:block/uuid %])
+                                            (:render-invalidated-block-uuids listener-result))))
+            updated-blocks (keep (fn [entity]
+                                   (some-> (block-handler/get-block-and-children
+                                            @conn (:db/id entity) {:children? false
+                                                                   :render-data? true})
+                                           :block))
+                                 changed-entities)
             affected-page-uuids (into affected-page-uuids-before
-                                      (collect-affected-page-uuids @conn affected-block-uuids))
-            updated-blocks (when return-updated-blocks?
-                             (keep (fn [block-uuid]
-                                     (some-> (block-handler/get-block-and-children @conn block-uuid {:children? false})
-                                             :block))
-                                   affected-block-uuids))
+                                      (keep (fn [entity]
+                                              (some-> (entity-page entity) :block/uuid)))
+                                      changed-entities)
             response (worker-plain/worker-plain-value @conn
                                                      (cond-> {:result result}
                                                        (seq updated-blocks)
                                                        (assoc :updated-blocks updated-blocks)
+
+                                                       (seq (:deleted-block-uuids listener-result))
+                                                       (assoc :deleted-block-uuids
+                                                              (:deleted-block-uuids listener-result))
+
+                                                       (seq (:render-invalidated-block-uuids listener-result))
+                                                       (assoc :render-invalidated-block-uuids
+                                                              (:render-invalidated-block-uuids listener-result))
 
                                                        (seq affected-page-uuids)
                                                        (assoc :affected-page-uuids affected-page-uuids)

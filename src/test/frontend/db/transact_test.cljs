@@ -1,7 +1,6 @@
 (ns frontend.db.transact-test
   (:require ["react-dom" :as react-dom]
             [cljs.test :refer [async deftest is]]
-            [frontend.common.page-window :as page-window]
             [frontend.db.transact :as db-transact]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -39,77 +38,32 @@
              [:delete-closed-value [:logseq.property/status block-b]]
              [:batch-delete-property-value [[block-a block-b] :block/tags 4]]])))))
 
-(deftest outliner-ops-refresh-page-window-only-for-structural-ops-test
-  (is (false? (#'db-transact/outliner-ops-need-page-window-refresh?
-               [[:save-block [{:block/uuid (random-uuid)} {}]]
-                [:set-block-property [(random-uuid) :block/tags 4]]])))
-  (is (true? (#'db-transact/outliner-ops-need-page-window-refresh?
-              [[:insert-blocks [[{:block/uuid (random-uuid)}] (random-uuid) {}]]])))
-  (is (true? (#'db-transact/outliner-ops-need-page-window-refresh?
-              [[:move-blocks [[(random-uuid)] (random-uuid) {}]]]))))
-
-(deftest collapse-expand-ops-refresh-page-window-test
-  (let [block-id (random-uuid)
-        tx-id (random-uuid)]
-    (is (true? (#'db-transact/outliner-ops-need-page-window-refresh?
-                [[:collapse-expand-blocks [[{:block/uuid block-id
-                                              :block/collapsed? true}]
-                                           {}]]])))
-    (state/set-state! :db/latest-transacted-entity-uuids {})
-    (#'db-transact/refresh-worker-op-blocks!
-     [[:collapse-expand-blocks [[{:block/uuid block-id
-                                   :block/collapsed? true}]
-                                {}]]]
-     {:db-sync/tx-id tx-id}
-     nil
-     nil
-     nil)
-    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id} (:updated-ids latest)))
-      (is (= tx-id (get-in latest [:entity-tx-ids block-id])))
-      (is (true? (:page-window-refresh? latest)))
-      (is (= tx-id (:tx-id latest))))))
-
-(deftest refresh-worker-op-blocks-publishes-content-ops-test
-  (let [block-id (random-uuid)
-        tx-id (random-uuid)]
-    (state/set-state! :db/latest-transacted-entity-uuids {})
-    (#'db-transact/refresh-worker-op-blocks!
-     [[:save-block [{:block/uuid block-id} {}]]]
-     {:db-sync/tx-id tx-id}
-     nil
-     nil
-     nil)
-    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id} (:updated-ids latest)))
-      (is (= #{} (:deleted-ids latest)))
-      (is (false? (:page-window-refresh? latest)))
-      (is (= tx-id (:tx-id latest)))
-      (is (not (:page-children-stale? latest))))))
-
-(deftest refresh-worker-op-blocks-publishes-structural-marker-test
+(deftest refresh-worker-op-blocks-publishes-authoritative-delta-test
   (let [block-id (random-uuid)
         target-id (random-uuid)
+        deleted-id (random-uuid)
+        invalidated-id (random-uuid)
         tx-id (random-uuid)
-        page-id (random-uuid)]
+        page-id (random-uuid)
+        updated-block {:block/uuid block-id :block/title "persisted"}]
     (state/set-state! :db/latest-transacted-entity-uuids {})
     (#'db-transact/refresh-worker-op-blocks!
      [[:insert-blocks [[{:block/uuid block-id}] target-id {}]]]
      {:db-sync/tx-id tx-id
       :ui/page-id page-id}
-     {:root {:block/uuid page-id} :rows []}
-     nil
-     nil)
+     [updated-block]
+     [deleted-id]
+     [page-id]
+     [invalidated-id])
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id target-id} (:updated-ids latest)))
-      (is (= #{} (:deleted-ids latest)))
-      (is (= {block-id tx-id target-id tx-id}
-             (:entity-tx-ids latest)))
-      (is (true? (:page-window-refresh? latest)))
+      (is (= #{block-id target-id invalidated-id} (:updated-ids latest)))
+      (is (= #{deleted-id} (:deleted-ids latest)))
+      (is (= [updated-block] (:updated-blocks latest)))
+      (is (= #{page-id} (:affected-page-uuids latest)))
       (is (= page-id (:page-id latest)))
       (is (= tx-id (:tx-id latest)))
-      (is (= page-id (get-in latest [:page-window :root :block/uuid])))
-      (is (not (:page-children-stale? latest))))))
+      (is (every? #(= tx-id (get-in latest [:entity-tx-ids %]))
+                  [block-id target-id deleted-id invalidated-id page-id])))))
 
 (deftest refresh-worker-op-blocks-does-not-mark-page-lookup-as-updated-test
   (let [block-id (random-uuid)
@@ -120,6 +74,7 @@
      [[:save-block [{:block/uuid block-id} {}]]]
      {:db-sync/tx-id tx-id
       :ui/page-id page-db-id}
+     nil
      nil
      nil
      nil)
@@ -138,7 +93,8 @@
      {:db-sync/tx-id tx-id}
      nil
      nil
-     #{current-page-id target-page-id})
+     #{current-page-id target-page-id}
+     nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
       (is (= #{current-page-id target-page-id} (:affected-page-uuids latest)))
@@ -185,7 +141,7 @@
                       _ (is (= editor-info (get-in @calls [0 1 1]))
                             "Editor history is sent through its dedicated worker API.")
                       _ (is (not-any? #(contains? (get-in @calls [1 1 2]) %)
-                                      [:ui/page-id :ui/page-window-opts :ui/editor-info :virtual/offset
+                                      [:ui/page-id :ui/editor-info :virtual/offset
                                        :editor/edit-block-fn])
                             "The mutation worker must not receive renderer or editor state.")
                       _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
@@ -200,25 +156,22 @@
                 (is (= ::persisted value))
                 (is (= #{block-id} (:updated-ids latest)))
                 (is (= [updated-block] (:updated-blocks latest)))
-                (is (nil? (:page-window latest)))
                 (is (= tx-id (:tx-id latest))))))
           (p/finally (fn []
                        (done)))))))
 
-(deftest structural-op-loads-one-window-after-the-mutation-test
+(deftest journal-insert-publishes-changed-blocks-without-reloading-the-page-test
   (async done
     (let [page-id (random-uuid)
-          block-id (random-uuid)
+          target-id (random-uuid)
+          inserted-id (random-uuid)
           tx-id (random-uuid)
-          mutation-result (p/deferred)
-          current-window {:root {:block/uuid page-id}
-                          :rows [{:block/uuid block-id :block/title ""}]
-                          :offset 1
-                          :total-count 61}
+          inserted-block {:block/uuid inserted-id
+                          :block/parent {:db/id page-id}
+                          :block/order "b"}
           calls (atom [])]
       (-> (p/with-redefs [util/node-test? false
                           state/get-current-repo (constantly "test-repo")
-                          state/get-current-page (constantly page-id)
                           state/get-route-match (constantly nil)
                           state/get-editor-info (constantly nil)
                           state/<invoke-db-worker
@@ -229,34 +182,25 @@
                               (p/resolved nil)
 
                               :thread-api/apply-outliner-ops
-                              mutation-result
+                              (p/resolved {:result ::persisted
+                                           :updated-blocks [inserted-block]})
 
-                              :thread-api/get-page-blocks-window
-                              (p/resolved current-window)))]
-            (let [result (db-transact/apply-outliner-ops
-                          nil
-                          [[:insert-blocks [[{:block/uuid block-id :block/title ""}]
-                                            page-id
-                                            {:sibling? false}]]]
-                          {:db-sync/tx-id tx-id
-                           :ui/page-id page-id
-                           :ui/page-window-opts {:anchor :bottom}})]
-              (p/let [_ (p/delay 0)
-                      _ (is (= [:thread-api/undo-redo-set-pending-editor-info
-                                :thread-api/apply-outliner-ops]
-                               (mapv first @calls))
-                            "The page window must not be queried before the DB mutation commits.")
-                      _ (p/resolve! mutation-result {:result ::persisted})
-                      value result
-                      latest (state/get-state :db/latest-transacted-entity-uuids)]
-                (is (= ::persisted value))
-                (is (= [:thread-api/undo-redo-set-pending-editor-info
-                        :thread-api/apply-outliner-ops
-                        :thread-api/get-page-blocks-window]
-                       (mapv first @calls)))
-                (is (= {:anchor :bottom :limit page-window/limit}
-                       (get-in @calls [2 1 2])))
-                (is (= current-window (:page-window latest))))))
+                              (p/resolved nil)))]
+            (p/let [value (db-transact/apply-outliner-ops
+                           nil
+                           [[:insert-blocks [[{:block/uuid inserted-id}]
+                                             target-id
+                                             {:keep-uuid? true}]]]
+                           {:db-sync/tx-id tx-id
+                            :ui/page-id page-id
+                            :ui/all-page-blocks? true})
+                    latest (state/get-state :db/latest-transacted-entity-uuids)]
+              (is (= ::persisted value))
+              (is (= [:thread-api/undo-redo-set-pending-editor-info
+                      :thread-api/apply-outliner-ops]
+                     (mapv first @calls)))
+              (is (= [inserted-block] (:updated-blocks latest)))
+              (is (= #{inserted-id target-id} (:updated-ids latest)))))
           (p/finally done)))))
 
 (deftest apply-outliner-ops-runs-editor-callback-synchronously-test
@@ -273,8 +217,7 @@
                           state/get-editor-info (constantly nil)
                           state/<invoke-db-worker
                           (fn [_api & _args]
-                            (p/resolved {:result ::persisted
-                                         :page-window {:rows []}}))]
+                            (p/resolved {:result ::persisted}))]
             (let [result (db-transact/apply-outliner-ops
                           nil
                           [[:save-block [{:block/uuid block-id} {}]]]
@@ -299,7 +242,7 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
-(deftest structural-ops-publish-ui-and-editor-in-one-commit-test
+(deftest structural-ops-run-editor-callback-after-dom-commit-test
   (async done
     (let [page-id (random-uuid)
           block-id (random-uuid)
@@ -325,11 +268,8 @@
                           (fn [api & _args]
                             (case api
                               :thread-api/apply-outliner-ops
-                              (p/resolved {:result ::persisted})
-
-                              :thread-api/get-page-blocks-window
-                              (p/resolved {:root {:block/uuid page-id}
-                                           :rows [{:block/uuid block-id}]})
+                              (p/resolved {:result ::persisted
+                                           :updated-blocks [{:block/uuid block-id}]})
 
                               (p/resolved nil)))]
             (p/do!
@@ -344,8 +284,8 @@
               {:ui/page-id page-id
                :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
           (p/then (fn []
-                    (is (= [:commit-start :publish [:insert block-id] :commit-end
-                            :commit-start :publish [:delete block-id] :commit-end]
+                    (is (= [:commit-start :publish :commit-end [:insert block-id]
+                            :commit-start :publish :commit-end [:delete block-id]]
                            @calls))))
           (p/finally (fn []
                        (set! (.-flushSync react-dom) original-flush-sync)
@@ -374,9 +314,7 @@
               (reset! route {:data {:name :page}
                              :path-params {:name "new-page"}})
               (state/set-state! :db/latest-transacted-entity-uuids new-context-state)
-              (p/resolve! worker-result {:result ::persisted
-                                         :page-window {:root {:block/uuid (random-uuid)}
-                                                       :rows []}})
+              (p/resolve! worker-result {:result ::persisted})
               (p/let [value result
                       _ (p/delay 0)]
                 (is (= ::persisted value))

@@ -4465,8 +4465,6 @@
         :data-block-title (:block/title block)
         :data-block-format (name (get block :block/format :markdown))
         :data-db-collapsable (boolean (editor-handler/db-collapsable? block))
-        :style (when (some? (:virtual/indent config))
-                 {:padding-left (:virtual/indent config)})
         :ref #(when (nil? @*ref) (reset! *ref %))
         :data-collapsed (and collapsed? (boolean has-child?))
         :class (str (when selected? "selected")
@@ -4700,7 +4698,6 @@
    :edit?
    :hide-bullet?
    :hide-block-control?
-   :virtual/indent
    :ref-matched-children-ids])
 
 (defn- block-render-state
@@ -4829,9 +4826,12 @@
 (hsx/defc block-container
   [config block* & {:as opts}]
   (let [[local-block set-block!] (hooks/use-state block*)
+        complete-tree? (:block-tree/complete? config)
         complete-flat-row? (and (:hide-children? config)
                                 (:block.temp/load-status block*))
-        block (if complete-flat-row? block* local-block)
+        complete-tree-node? (= :full (:block.temp/load-status block*))
+        complete-payload? (or complete-tree? complete-flat-row?)
+        block (if complete-payload? block* local-block)
         id (or (:db/id block*) (:block/uuid block*))
         block-uuid (:block/uuid block)
         entity-tx-id (rfx/use-entity-tx-id block)
@@ -4857,22 +4857,27 @@
                              (set-block! (block-with-children-tree block children)))))]
     (hooks/use-effect!
      (fn []
-       (when-not complete-flat-row?
+       (when-not complete-payload?
          (set-block! block*))
        nil)
-     [(:block/uuid block*) (block-render-state block*) complete-flat-row?])
+     [(:block/uuid block*) (block-render-state block*) complete-payload?])
     (hooks/use-effect!
      (fn []
-       (when-not complete-flat-row?
+       (when (and (not complete-tree?)
+                  (not complete-flat-row?)
+                  (not complete-tree-node?))
          (refresh-block!))
        nil)
-     [id load-children? ignore-block-collapsed? temporary-collapsed-state complete-flat-row?])
+     [id load-children? ignore-block-collapsed? temporary-collapsed-state
+      complete-tree? complete-flat-row? complete-tree-node?])
     (hooks/use-effect!
      (fn []
-       (when (and entity-tx-id (not complete-flat-row?))
+       (when (and entity-tx-id
+                  (not complete-tree?)
+                  (not complete-flat-row?))
          (refresh-block!))
        nil)
-     [block-uuid entity-tx-id complete-flat-row?])
+     [block-uuid entity-tx-id complete-tree? complete-flat-row?])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -5271,11 +5276,7 @@
         loop-linked? (and linked-block (contains? (:links config) (:db/id linked-block)))
         config (if linked-block
                  (-> (assoc config :original-block original-block)
-                     (dissoc :hide-children?
-                             :virtual/flat-list?
-                             :virtual/offset
-                             :virtual/total-count
-                             :virtual/on-range-changed)
+                     (dissoc :block-tree/complete?)
                      (update :links (fn [ids] (conj (or ids #{}) (:db/id linked-block)))))
                  config)
         item (or (if loop-linked? item linked-block) item)
@@ -5301,72 +5302,27 @@
   [config blocks]
   (let [blocks (vec blocks)
         blocks-count (count blocks)
-        virtual-total-count (:virtual/total-count config)
-        virtual-offset (or (:virtual/offset config) 0)
-        virtual-window? (and (integer? virtual-total-count)
-                             (> virtual-total-count blocks-count))
         zoomed-child-blocks? (and (:block-children? config)
                                   (not (and (:id config)
                                             (= (:id config)
                                                (str (:block/parent-uuid (first blocks)))))))
         disable-virtualized? (or (util/rtc-test?)
-                                 (:journals? config)
-                                 (and (not virtual-window?)
-                                      (< blocks-count 10))
+                                 (:virtual/tree-prefix? config)
+                                 (< blocks-count 10)
                                  zoomed-child-blocks?)
         [virtualized? _] (hooks/use-state (not disable-virtualized?))
-        block-at-index (fn [idx]
-                         (if virtual-window?
-                           (let [window-idx (- idx virtual-offset)]
-                             (when (<= 0 window-idx (dec blocks-count))
-                           (nth blocks window-idx)))
-                          (nth blocks idx)))
-        previous-block (fn [idx]
-                         (when (:virtual/flat-list? config)
-                           (let [window-idx (- idx virtual-offset)]
-                             (when (pos? window-idx)
-                               (nth blocks (dec window-idx))))))
-        render-item (fn [idx]
-                      (when-let [block (block-at-index idx)]
-                        (let [top? (zero? idx)
-                              bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                              previous (previous-block idx)
-                              config' (cond-> (assoc config :top? top?)
-                                        previous
-                                        (assoc :outliner/previous-block previous)
-
-                                        (:virtual/flat-list? config)
-                                        (assoc :hide-children? true
-                                               :virtual/indent (* 29 (dec (or (:block/level block) 1)))))]
-                          (block-item config'
-                                      block
-                                      {:top? top?
-                                       :bottom? bottom?}))))
         virtualized? (and virtualized? (seq blocks))
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
                                 virtualized-block-ids)
-        render-virtual-item
-        (fn [idx]
-          (if-let [block (block-at-index idx)]
-            (let [top? (zero? idx)
-                  bottom? (= (dec (or virtual-total-count blocks-count)) idx)
-                  previous (previous-block idx)
-                  config' (cond-> (assoc config
-                                         :top? top?
-                                         :selection/block-ids selection-block-ids)
-                            previous
-                            (assoc :outliner/previous-block previous)
-
-                            (:virtual/flat-list? config)
-                            (assoc :hide-children? true
-                                   :virtual/indent (* 29 (dec (or (:block/level block) 1)))))]
-              (block-item config'
-                          block
-                          {:top? top?
-                           :bottom? bottom?}))
-            (react-core/createElement "div" #js {:style #js {:height 29}})))
-        virtual-context #js {:renderItem render-virtual-item}
+        render-item (fn [idx item-config]
+                      (let [top? (zero? idx)
+                            bottom? (= (dec blocks-count) idx)
+                            block (nth blocks idx)]
+                        (block-item (assoc item-config :top? top?)
+                                    block
+                                    {:top? top?
+                                     :bottom? bottom?})))
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
                                (util/app-scroll-container-node node)
@@ -5375,42 +5331,42 @@
                            (scroll-container)
                            scroll-container)
         *virtualized-ref (hooks/use-ref nil)
-        on-range-changed (fn [range]
-                           (when-let [f (:virtual/on-range-changed config)]
-                             (f range))
-                           (when (block-selection/pointer-down?)
-                             (select-block-under-pointer! selection-block-ids
-                                                          (state/get-selection-direction))))
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent scroll-container
-                        :context virtual-context
                         :compute-item-key (fn [idx]
-                                            (if-let [block (block-at-index idx)]
-                                              (str (:container-id config) "-" (:block/uuid block))
-                                              (str (:container-id config) "-placeholder-" idx)))
-                        ;; Leave some space for the new inserted block
+                                            (str (:container-id config)
+                                                 "-"
+                                                 (:block/uuid (nth blocks idx))))
+                        ;; Leave some space for the new inserted block.
                         :increase-viewport-by 254
                         :overscan 254
                         :skipAnimationFrameInResizeObserver true
-                        :total-count (or virtual-total-count blocks-count)
-                        :rangeChanged on-range-changed
-                        :item-content (fn [idx _ context]
-                                        ((gobj/get context "renderItem") idx))})]
+                        :total-count blocks-count
+                        :rangeChanged (fn [_range]
+                                        (when (block-selection/pointer-down?)
+                                          (select-block-under-pointer!
+                                           selection-block-ids
+                                           (state/get-selection-direction))))
+                        :item-content (fn [idx]
+                                        (render-item
+                                         idx
+                                         (assoc config
+                                                :selection/block-ids selection-block-ids)))})]
     (hooks/use-effect!
      (fn []
-       (when virtualized?
-         (when (:current-page? config)
-            (let [ref (.-current *virtualized-ref)]
-              (ui-handler/scroll-to-anchor-block ref blocks false)
-              (state/set-state! :editor/virtualized-scroll-fn
-                                #(ui-handler/scroll-to-anchor-block ref blocks false)))))
-        (fn []))
+       (when (and virtualized? (:current-page? config))
+         (let [ref (.-current *virtualized-ref)]
+           (ui-handler/scroll-to-anchor-block ref blocks false)
+           (state/set-state! :editor/virtualized-scroll-fn
+                             #(ui-handler/scroll-to-anchor-block ref blocks false))))
+       (fn []))
      [])
     (hooks/use-effect!
      (fn []
        (if (and scroll-container (seq selection-block-ids))
-         (let [handler #(select-block-under-pointer-after-scroll! selection-block-ids scroll-container)]
+         (let [handler #(select-block-under-pointer-after-scroll!
+                         selection-block-ids scroll-container)]
            (.addEventListener scroll-container "scroll" handler #js {:passive true})
            #(.removeEventListener scroll-container "scroll" handler))
          (fn [])))
@@ -5420,14 +5376,13 @@
      (cond-> {:data-level (or (:level config) 0)}
        virtualized?
        (assoc :data-virtuoso-scroller true))
-     (cond
-       virtualized?
+     (if virtualized?
        (ui/virtualized-list virtual-opts)
-       :else
        (map-indexed (fn [idx block]
                       ^{:key (str (:container-id config) "-" (:block/uuid block))}
-                      [:<> (render-item idx)])
+                      [:<> (render-item idx config)])
                     blocks))]))
+
 
 (hsx/defc blocks-container
   [config blocks]

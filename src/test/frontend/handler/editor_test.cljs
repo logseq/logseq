@@ -1194,7 +1194,6 @@
                  {:outliner-op :insert-blocks
                   :source-outliner-op :create-view
                   :ui/page-id 10
-                  :ui/page-window-opts {:offset 0}
                   :editor/edit-block-fn edit-block-f}]]
                @calls)
             "Insert metadata and operations must use one transaction."))))
@@ -1429,20 +1428,9 @@
             :block/uuid block-uuid})))))
 
 (deftest outliner-transaction-identifies-the-page-to-refresh
-  (with-redefs [state/get-current-page (constantly 20)
-                state/get-editor-args (constantly [nil nil {}])]
-    (is (= {:ui/page-id 10
-            :ui/page-window-opts {:offset 0}}
-           (#'block-handler/page-window-tx-meta
-            {:block/page {:db/id 10}})))))
-
-(deftest outliner-transaction-preserves-bottom-window-anchor
-  (with-redefs [state/get-editor-args
-                (constantly [nil nil {:virtual/offset 940
-                                      :virtual/total-count 1000}])]
-    (is (= {:ui/page-id 10
-            :ui/page-window-opts {:anchor :bottom}}
-           (#'block-handler/page-window-tx-meta
+  (with-redefs [state/get-current-page (constantly 20)]
+    (is (= {:ui/page-id 10}
+           (#'block-handler/outliner-tx-meta
             {:block/page {:db/id 10}})))))
 
 (deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks

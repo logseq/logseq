@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.plain-value :as worker-plain]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
@@ -203,12 +204,73 @@
                    (#(worker-plain/entity-forward-map db % {}))
                    worker-plain/with-explicit-ref-fields-recursive))))))
 
+(defn- block-index-entry
+  [block parent-ids level]
+  {:db/id (:db/id block)
+   :block/uuid (:block/uuid block)
+   :block/parent {:db/id (:db/id (:block/parent block))}
+   :block/order (:block/order block)
+   :block/collapsed? (boolean (:block/collapsed? block))
+   :block/level level
+   :block.temp/has-children? (contains? parent-ids (:db/id block))
+   :block.temp/load-status :index})
+
+(defn- visible-index-entries
+  [index]
+  (loop [entries index
+         collapsed-level nil
+         result []]
+    (if-let [entry (first entries)]
+      (let [level (:block/level entry)
+            hidden? (and collapsed-level (> level collapsed-level))
+            collapsed-level (cond
+                              hidden? collapsed-level
+                              (:block/collapsed? entry) level
+                              :else nil)]
+        (recur (next entries)
+               collapsed-level
+               (cond-> result (not hidden?) (conj entry))))
+      result)))
+
+(defn- get-page-block-index
+  [db page-id-name-or-uuid initial-limit]
+  (assert (pos-int? initial-limit))
+  (when-let [root (or (block-ref-entity db page-id-name-or-uuid)
+                      (ldb/get-page db page-id-name-or-uuid))]
+    (let [tree-entities (vec (ldb/get-block-and-children db (:block/uuid root)))
+          children (subvec tree-entities 1)
+          parent-ids (into #{} (keep #(some-> % :block/parent :db/id)) children)
+          levels (volatile! {(:db/id root) 0})
+          index (mapv (fn [block]
+                        (let [parent-id (:db/id (:block/parent block))
+                              level (inc (get @levels parent-id 0))]
+                          (vswap! levels assoc (:db/id block) level)
+                          (block-index-entry block parent-ids level)))
+                      children)
+          initial-ids (->> index
+                           visible-index-entries
+                           (take initial-limit)
+                           (map :db/id))
+          blocks (mapv (fn [block-id]
+                         (:block (block-handler/get-block-and-children
+                                  db block-id {:children? false
+                                               :render-data? true})))
+                       initial-ids)
+          block (:block (block-handler/get-block-and-children
+                         db (:db/id root) {:children? false
+                                           :render-data? true}))]
+      {:block block
+       :index index
+       :blocks blocks})))
+
 (def-thread-api :thread-api/get-page-blocks-tree
-  [repo page-id-name-or-uuid]
+  [repo page-id-name-or-uuid & [option]]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
-      (when-let [page (ldb/get-page db page-id-name-or-uuid)]
-        (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))))
+      (if-let [initial-limit (:initial-limit option)]
+        (get-page-block-index db page-id-name-or-uuid initial-limit)
+        (when-let [page (ldb/get-page db page-id-name-or-uuid)]
+          (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page)))))))
 
 (defn- route-title-info
   [db route-name]

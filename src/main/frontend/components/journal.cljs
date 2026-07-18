@@ -44,7 +44,7 @@
       (swap! journal-item-height-by-key* assoc cache-key height))))
 
 (hsx/defc journal-cp
-  [id last? selection-block-ids]
+  [id last? keep-tree-resident?]
   (let [cache-key (journal-item-cache-key id)
         [reserve set-reserve!] (hooks/use-state {:cache-key cache-key
                                                  :height (get @journal-item-height-by-key* cache-key)})
@@ -83,7 +83,7 @@
        reserve-height (assoc :on-input clear-reserve!))
      (page/page-cp {:db/id id
                     :journals? true
-                    :selection/block-ids selection-block-ids})]))
+                    :keep-tree-resident? keep-tree-resident?})]))
 
 (defn- sub-journals
   []
@@ -98,7 +98,7 @@
 
 (hsx/defc all-journals
   []
-  (let [{:keys [data selection-block-ids]} (sub-journals)]
+  (let [{:keys [data]} (sub-journals)]
     (when (seq data)
       [:div#journals
        (ui/virtualized-list
@@ -112,4 +112,4 @@
          :item-content (fn [idx]
                          (let [id (util/nth-safe data idx)
                                last? (= (inc idx) (count data))]
-                           (journal-cp id last? selection-block-ids)))})])))
+                           (journal-cp id last? (< idx 2))))})])))
