@@ -1347,17 +1347,8 @@
 (hsx/defc block-reference
   [config id label]
   (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
-        [_block set-block!] (hooks/use-state nil)
         self-reference? (when (set? (:ref-set config))
-                          (contains? (:ref-set config) block-id))]
-    (hooks/use-effect!
-     (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          block-id
-                                          {:children? false
-                                           :skip-refresh? true})]
-         (set-block! block)))
-     [])
+                         (contains? (:ref-set config) block-id))]
     (when-not self-reference?
       (page-reference config block-id label))))
 
