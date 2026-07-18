@@ -306,7 +306,7 @@
 
 (defn- worker-children
   [block]
-  (:children block))
+  (or (:children block) (:block/children block)))
 
 (defn- worker-block-with-children
   [result]
@@ -887,7 +887,7 @@
       (delete-block-aux! block edit-block-f))))
 
 (defn delete-block-inner!
-  [repo {:keys [block-id value config block-container current-block next-block delete-concat?]}]
+  [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id (not (one-page-another-block current-block next-block)))
     (let [input-empty? (string/blank? (state/get-edit-content))
           loaded-block (if delete-concat?
@@ -895,6 +895,7 @@
                          nil)]
       (p/let [loaded-previous-edit (loaded-block-edit loaded-block value (:container-id config))
               block-e (or current-block
+                          block
                           (p/let [result (db-async/<get-block-with-children repo block-id {:children? true})]
                             (worker-block-with-children result)))]
         (when (:block/parent block-e)

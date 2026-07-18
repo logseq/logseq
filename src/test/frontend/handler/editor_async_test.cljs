@@ -263,6 +263,53 @@
                               (some-> @edit-calls last :block :block/uuid))
                            "Backspace must keep the current block focused, matching master.")))})))
 
+(deftest-async backspace-uses-the-loaded-editor-block-before-worker-persistence
+  (let [page {:db/id 10}
+        previous-block {:db/id 1
+                        :block/uuid (random-uuid)
+                        :block/title ""
+                        :block/parent page
+                        :block/page page}
+        current-block {:block/uuid (random-uuid)
+                       :block/title ""
+                       :block/parent page
+                       :block/page page}
+        previous-dom #js {:__logseqBlock previous-block
+                          :getAttribute (fn [attr]
+                                          (case attr
+                                            "blockid" (str (:block/uuid previous-block))
+                                            "containerid" nil
+                                            nil))}
+        worker-fetches (atom 0)
+        applied-ops (atom nil)]
+    (-> (p/with-redefs [state/get-edit-content (constantly "")
+                        util/get-prev-block-non-collapsed-non-embed
+                        (constantly previous-dom)
+                        db-async/<get-block-with-children
+                        (fn [& _]
+                          (swap! worker-fetches inc)
+                          (p/resolved nil))
+                        db-transact/apply-outliner-ops
+                        (fn [_db ops _opts]
+                          (reset! applied-ops ops)
+                          (p/resolved nil))
+                        editor/edit-block! (constantly nil)]
+          (editor/delete-block-inner!
+           test-helper/test-db
+           {:block-id (:block/uuid current-block)
+            :block current-block
+            :value ""
+            :config {}
+            :block-container #js {}}))
+        (p/then
+         (fn []
+           (is (zero? @worker-fetches)
+               "Backspace must not wait for an optimistic editor block to reach the worker.")
+           (is (= [[:delete-blocks [[(:block/uuid previous-block)] {}]]]
+                  @applied-ops)
+               "The loaded tree should provide enough state for the immediate optimistic delete.")))
+        (p/finally (fn [] nil)))))
+
 (deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
   (let [previous-block {:db/id 1
                         :block/uuid (random-uuid)

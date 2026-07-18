@@ -22,6 +22,23 @@
                     (resolve result))))
          (.catch reject)))))
 
+(defonce ^:private *repo->outliner-mutation-tail (atom {}))
+
+(defn- enqueue-outliner-mutation!
+  [repo request-f]
+  (let [previous (get @*repo->outliner-mutation-tail repo (p/resolved nil))
+        result (p/then previous (fn [_] (request-f)))
+        tail (p/catch result (constantly nil))]
+    (swap! *repo->outliner-mutation-tail assoc repo tail)
+    (p/finally tail
+               (fn []
+                 (swap! *repo->outliner-mutation-tail
+                        (fn [repo->tail]
+                          (if (identical? tail (get repo->tail repo))
+                            (dissoc repo->tail repo)
+                            repo->tail)))))
+    result))
+
 (defn- ensure-local-op-tx-id
   [tx-meta]
   (cond-> (or tx-meta {})
@@ -269,7 +286,7 @@
             optimistic-ui-ms (when optimistic?
                                (publish-optimistic-editor-ops! ops opts'))
             result-promise
-            (p/let [response (request)
+            (p/let [response (enqueue-outliner-mutation! request-repo request)
                     {:keys [result affected-page-uuids updated-blocks deleted-block-uuids
                             render-invalidated-block-uuids perf]} response
                     mutation-returned-at (now-ms)
