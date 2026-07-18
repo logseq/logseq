@@ -103,7 +103,7 @@
       [:div#journals
        (ui/virtualized-list
         {:custom-scroll-parent (util/app-scroll-container-node)
-         :increase-viewport-by {:top 100 :bottom 100}
+         :increase-viewport-by {:top 600 :bottom 1200}
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
                              (let [id (util/nth-safe data idx)]

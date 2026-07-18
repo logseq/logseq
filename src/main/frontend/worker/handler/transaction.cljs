@@ -103,6 +103,7 @@
             affected-block-uuids (:affected-block-uuids opts)
             opts (dissoc opts :affected-block-uuids :return-updated-blocks?)
             affected-page-uuids-before (collect-affected-page-uuids @conn affected-block-uuids)
+            collected-before-at (perf-time-ms)
             apply-started-at (perf-time-ms)
             result (worker-util/profile
                     "apply outliner ops"
@@ -110,50 +111,60 @@
             applied-at (perf-time-ms)
             listener-result (db-listener/take-outliner-op-result! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
-            changed-entities (distinct
-                              (concat (:pages listener-result)
-                                      (:blocks listener-result)
-                                      (keep #(d/entity @conn [:block/uuid %])
-                                            affected-block-uuids)
-                                      (keep #(d/entity @conn [:block/uuid %])
-                                            (:render-invalidated-block-uuids listener-result))))
-            updated-blocks (keep (fn [entity]
-                                   (some-> (block-handler/get-block-and-children
-                                            @conn (:db/id entity) {:children? false
-                                                                   :render-data? true})
-                                           :block))
-                                 changed-entities)
+            listener-at (perf-time-ms)
+            changed-entities (into []
+                                   (distinct)
+                                   (concat (:pages listener-result)
+                                           (:blocks listener-result)
+                                           (keep #(d/entity @conn [:block/uuid %])
+                                                 affected-block-uuids)
+                                           (keep #(d/entity @conn [:block/uuid %])
+                                                 (:render-invalidated-block-uuids listener-result))))
             affected-page-uuids (into affected-page-uuids-before
                                       (keep (fn [entity]
                                               (some-> (entity-page entity) :block/uuid)))
                                       changed-entities)
-            response (worker-plain/worker-plain-value @conn
-                                                     (cond-> {:result result}
-                                                       (seq updated-blocks)
-                                                       (assoc :updated-blocks updated-blocks)
+            changes-collected-at (perf-time-ms)
+            updated-blocks (into []
+                                 (keep (fn [entity]
+                                         (some-> (block-handler/get-block-and-children
+                                                  @conn (:db/id entity) {:children? false
+                                                                         :render-data? true})
+                                                 :block)))
+                                 changed-entities)
+            hydrated-at (perf-time-ms)
+            response (worker-plain/worker-plain-value
+                      @conn
+                      (cond-> {:result result}
+                        (seq updated-blocks)
+                        (assoc :updated-blocks updated-blocks)
 
-                                                       (seq (:deleted-block-uuids listener-result))
-                                                       (assoc :deleted-block-uuids
-                                                              (:deleted-block-uuids listener-result))
+                        (seq (:deleted-block-uuids listener-result))
+                        (assoc :deleted-block-uuids
+                               (:deleted-block-uuids listener-result))
 
-                                                       (seq (:render-invalidated-block-uuids listener-result))
-                                                       (assoc :render-invalidated-block-uuids
-                                                              (:render-invalidated-block-uuids listener-result))
+                        (seq (:render-invalidated-block-uuids listener-result))
+                        (assoc :render-invalidated-block-uuids
+                               (:render-invalidated-block-uuids listener-result))
 
-                                                       (seq affected-page-uuids)
-                                                       (assoc :affected-page-uuids affected-page-uuids)
-
-                                                       goog.DEBUG
-                                                       (assoc :perf {:apply-ms (- applied-at apply-started-at)
-                                                                     :listener listener-perf})))
-            plain-at (perf-time-ms)]
+                        (seq affected-page-uuids)
+                        (assoc :affected-page-uuids affected-page-uuids)))
+            plain-at (perf-time-ms)
+            perf {:collect-before-ms (- collected-before-at started-at)
+                  :apply-ms (- applied-at apply-started-at)
+                  :listener-ms (- listener-at applied-at)
+                  :collect-changes-ms (- changes-collected-at listener-at)
+                  :hydrate-ms (- hydrated-at changes-collected-at)
+                  :plain-ms (- plain-at hydrated-at)
+                  :total-ms (- plain-at started-at)
+                  :listener listener-perf}
+            response (cond-> response
+                       goog.DEBUG (assoc :perf perf))]
         (log-outliner-op-perf!
-         {:perf-id perf-id
-          :op-names (mapv first ops)
-          :op-count (count ops)
-          :apply-ms (- applied-at apply-started-at)
-          :plain-ms (- plain-at applied-at)
-          :total-ms (- plain-at started-at)})
+         (merge (dissoc perf :listener)
+                {:perf-id perf-id
+                 :op-names (mapv first ops)
+                 :op-count (count ops)}))
         response)
       (catch :default error
         (let [data (ex-data error)

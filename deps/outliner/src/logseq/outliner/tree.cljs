@@ -18,16 +18,16 @@
                     (when-let [children (get parent-blocks parent)]
                       (ldb/sort-by-order children)))
           block-children (fn block-children [parent level]
-                           (map (fn [m]
-                                  (let [id (:db/id m)
-                                        children (block-children id (inc level))]
-                                    (cond-> (assoc m
-                                                   :block/level level
-                                                   :block/children children
-                                                   :block/parent {:db/id parent})
-                                      (not keep-block-tx-id?)
-                                      (dissoc :block/tx-id))))
-                                (sort-fn parent)))
+                           (mapv (fn [m]
+                                   (let [id (:db/id m)
+                                         children (block-children id (inc level))]
+                                     (cond-> (assoc m
+                                                    :block/level level
+                                                    :block/children children
+                                                    :block/parent {:db/id parent})
+                                       (not keep-block-tx-id?)
+                                       (dissoc :block/tx-id))))
+                                 (sort-fn parent)))
           children (block-children root-id 1)]
       (if include-root?
         [(cond-> (assoc root :block/children children)

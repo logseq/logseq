@@ -12,6 +12,7 @@
         default-result (otree/blocks->vec-tree-data [child] root {:include-root? false})
         renderer-result (otree/blocks->vec-tree-data [child] root {:include-root? false
                                                                    :keep-block-tx-id? true})]
+    (is (vector? default-result))
     (is (= [1] (mapv :block/level default-result)))
     (is (nil? (:block/tx-id (first default-result))))
     (is (= 9 (:block/tx-id (first renderer-result))))))

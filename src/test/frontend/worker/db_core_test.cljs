@@ -430,6 +430,38 @@
          (is (= (:db/id result)
                 (:db/id (#'block-handler/resolve-block-entity @conn :user.property/test-property)))))))))
 
+(deftest apply-outliner-ops-reports-each-worker-phase-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [response (apply-ops! test-repo
+                                  [[:upsert-property
+                                    [:user.property/perf-property
+                                     {:logseq.property/type :default}
+                                     {:property-name "perf-property"}]]]
+                                  {})
+             perf (:perf response)]
+         (doseq [phase [:collect-before-ms
+                        :apply-ms
+                        :listener-ms
+                        :collect-changes-ms
+                        :hydrate-ms
+                        :plain-ms
+                        :total-ms]]
+           (is (number? (get perf phase))
+               (str "Missing worker phase " phase)))
+         (is (every? #(<= 0 %)
+                     (map perf [:collect-before-ms
+                                :apply-ms
+                                :listener-ms
+                                :collect-changes-ms
+                                :hydrate-ms
+                                :plain-ms
+                                :total-ms]))))))))
+
 (deftest get-block-sibling-returns-plain-block-map-test
   (restoring-worker-state
    (fn []

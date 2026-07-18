@@ -38,3 +38,9 @@
         "The two most recent journals should keep their logical trees resident.")
     (is (string/includes? source ":keep-tree-resident?")
         "Resident logical trees must not pin their DOM nodes.")))
+
+(deftest journal-stream-prefetches-complete-trees-before-they-enter-the-viewport
+  (let [source (journal-source)]
+    (is (string/includes? source
+                          ":increase-viewport-by {:top 600 :bottom 1200}")
+        "The outer stream must mount journals early enough to hide full-tree fetch latency.")))

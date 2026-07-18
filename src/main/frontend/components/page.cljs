@@ -231,7 +231,7 @@
                                 :document/mode? document-mode?}
                                config)
                 config hiccup-config
-                blocks (if block? [block] (ldb/sort-by-order children))]
+                blocks (if block? [block] children)]
             [:div.relative
              (page-blocks-inner block blocks config sidebar? false block-id)
              (when more?

@@ -632,6 +632,14 @@
         "A block edit must not wake every mounted journal tree.")
     (is (not (string/includes? loaded-tree-source "db-async/<get-block-with-children")))))
 
+(deftest page-render-preserves-the-tree-index-order-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        page-blocks-source (subs source
+                                 (string/index-of source "(hsx/defc page-blocks-cp")
+                                 (string/index-of source "(hsx/defc today-queries"))]
+    (is (not (string/includes? page-blocks-source "ldb/sort-by-order children"))
+        "The indexed tree already owns sibling order; a render must not sort a wide page again.")))
+
 (deftest selected-component-block-uses-plain-entity-predicates-test
   (is (zero? (direct-ui-db-call-count-in-files-with-pattern selected-component-block-entity-predicate-files
                                                             selected-component-block-entity-predicate-pattern))
