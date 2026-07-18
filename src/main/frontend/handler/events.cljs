@@ -211,8 +211,9 @@
 (defn- <current-graph-schema-version
   []
   (if @state/db-worker-ready?
-    (p/let [version (state/<invoke-db-worker :thread-api/get-graph-schema-version
-                                             (state/get-current-repo))]
+    (p/let [version (state/<invoke-db-worker :thread-api/get-key-value
+                                             (state/get-current-repo)
+                                             :logseq.kv/schema-version)]
       (some-> version str))
     (p/resolved nil)))
 

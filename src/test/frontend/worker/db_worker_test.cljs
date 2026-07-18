@@ -41,7 +41,7 @@
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
-          :thread-api/get-db-schema :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
+          :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
           :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
@@ -57,13 +57,11 @@
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn
           :thread-api/get-fsrs-due-card-block-ids :thread-api/get-view-data
           :thread-api/get-class-objects :thread-api/validate-block-tag
-          :thread-api/build-convert-tag-to-page-tx
-          :thread-api/build-convert-page-to-tag-tx
-          :thread-api/build-favorite-page-ops
-          :thread-api/build-unfavorite-page-ops
-          :thread-api/build-reorder-favorites-ops
+          :thread-api/convert-tag-to-page
+          :thread-api/convert-page-to-tag
+          :thread-api/set-page-favorite
+          :thread-api/reorder-favorites
           :thread-api/get-page-route-info :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
-          :thread-api/get-today-journal-title :thread-api/get-date-formatter :thread-api/get-journal-page-title
           :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
           :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
@@ -76,9 +74,8 @@
           :thread-api/get-display-properties :thread-api/reorder-display-property
           :thread-api/get-all-properties :thread-api/get-property-values :thread-api/get-bidirectional-properties
           :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
-          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid :thread-api/get-rtc-graph-e2ee?
+          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid
           :thread-api/ensure-local-graph-uuid
-          :thread-api/get-graph-schema-version
           :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
           :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
           :thread-api/api-list-tags :thread-api/api-list-pages :thread-api/api-build-upsert-nodes-edn])))

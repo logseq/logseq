@@ -851,16 +851,17 @@
             (fn [qkw & args]
               (swap! worker-calls conj [qkw args])
               (case qkw
-                :thread-api/create-or-open-db (p/resolved nil)
+                :thread-api/create-or-open-db (p/resolved {:schema {:repo (first args)}})
                 :thread-api/markdown-mirror-set-enabled (p/resolved nil)
-                :thread-api/get-db-schema (p/resolved {:schema {:repo (first args)}})
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
       (-> (protocol/<open-and-fetch-schema (browser/->InBrowser) "logseq_db_graph_a" {})
-          (p/then (fn [_]
+          (p/then (fn [result]
+                    (is (= {:schema {:repo "logseq_db_graph_a"}} result))
                     (is (= [:thread-api/markdown-mirror-set-enabled
                             ["logseq_db_graph_a" false]]
                            (first (filter #(= :thread-api/markdown-mirror-set-enabled (first %))
-                                          @worker-calls))))))
+                                          @worker-calls))))
+                    (is (not-any? #(= :thread-api/get-db-schema (first %)) @worker-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

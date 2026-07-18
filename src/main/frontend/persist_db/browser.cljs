@@ -285,9 +285,9 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<open-and-fetch-schema [_this repo opts]
-    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+    (-> (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
                 _ (<sync-markdown-mirror-setting! repo)]
-          (state/<invoke-db-worker :thread-api/get-db-schema repo))
+          result)
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]

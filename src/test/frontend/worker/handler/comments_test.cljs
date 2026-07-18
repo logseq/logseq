@@ -1,7 +1,9 @@
 (ns frontend.worker.handler.comments-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.comments :as worker-comments]
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
 
 (def ^:private comments-blocks-property :logseq.property.comments/blocks)
@@ -16,13 +18,15 @@
 
 (defn- conn-with-single-comment-thread
   []
-  (db-test/create-conn-with-blocks
-   {:pages-and-blocks
-    [{:page {:block/title "Page"}
-      :blocks [{:block/title "Target"
-                :build/children [{:block/title "Comments"
-                                  :build/tags [:logseq.class/Comments]
-                                  :build/children [{:block/title "Reply"}]}]}]}]}))
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "Target"
+                           :build/children [{:block/title "Comments"
+                                             :build/tags [:logseq.class/Comments]
+                                             :build/children [{:block/title "Reply"}]}]}]}]})]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    conn))
 
 (defn- conn-with-multi-comment-thread
   []
@@ -36,43 +40,76 @@
         first-block (block @conn "First")
         second-block (block @conn "Second")
         comments-area (block @conn "Comments")]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
     (d/transact! conn [{:db/id (:db/id comments-area)
                         comments-blocks-property [(:db/id first-block) (:db/id second-block)]}])
     conn))
 
-(deftest resolve-comments-area-adds-missing-target-property
+(deftest ensure-comments-area-updates-existing-thread-atomically
   (let [conn (conn-with-single-comment-thread)
-        db @conn
-        target (block db "Target")
-        result (worker-comments/resolve-comments-area db (:block/uuid target))]
-    (is (= :existing (:action result)))
-    (is (= "Comments" (get-in result [:comments-area :block/title])))
-    (is (= {:block-id (:db/id (block db "Comments"))
-            :property comments-blocks-property
-            :value #{[:block/uuid (:block/uuid target)]}}
-           (:target-property result)))))
+        target (block @conn "Target")
+        ensure! (some-> (resolve 'frontend.worker.handler.comments/ensure-comments-area!) deref)]
+    (is (fn? ensure!))
+    (when (fn? ensure!)
+      (let [result (ensure! conn (:block/uuid target))
+            comments-area (d/entity @conn [:block/uuid (:block/uuid result)])]
+        (is (= "Comments" (:block/title result)))
+        (is (= #{(:block/uuid target)}
+               (set (map :block/uuid (get comments-area comments-blocks-property)))))))))
 
-(deftest resolve-comments-area-for-blocks-reuses-matching-thread
+(deftest ensure-comments-area-is-idempotent
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "Target"}]}]})
+        target (block @conn "Target")
+        ensure! (some-> (resolve 'frontend.worker.handler.comments/ensure-comments-area!) deref)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (is (fn? ensure!))
+    (when (fn? ensure!)
+      (let [first-result (ensure! conn (:block/uuid target))
+            second-result (ensure! conn (:block/uuid target))]
+        (is (= (:block/uuid first-result) (:block/uuid second-result)))
+        (is (= 1 (count (filter #(= "Comments" (:block/title %))
+                                (ldb/get-children @conn (:db/id target))))))))))
+
+(deftest ensure-comments-area-for-blocks-reuses-matching-thread
   (let [conn (conn-with-multi-comment-thread)
         first-block (block @conn "First")
         second-block (block @conn "Second")
         comments-area (block @conn "Comments")
-        result (worker-comments/resolve-comments-area-for-blocks
-                @conn
-                [(:block/uuid first-block) (:block/uuid second-block)])]
-    (is (= :existing (:action result)))
-    (is (= (:block/uuid comments-area)
-           (get-in result [:comments-area :block/uuid])))))
+        ensure! (some-> (resolve 'frontend.worker.handler.comments/ensure-comments-area-for-blocks!) deref)]
+    (is (fn? ensure!))
+    (when (fn? ensure!)
+      (let [result (ensure! conn [(:block/uuid first-block) (:block/uuid second-block)])]
+        (is (= (:block/uuid comments-area)
+               (:block/uuid result)))))))
 
-(deftest get-comment-delete-targets-promotes-last-reply-delete-to-thread
+(deftest delete-comment-removes-thread-when-deleting-last-reply
   (let [conn (conn-with-single-comment-thread)
-        db @conn
-        reply (block db "Reply")
-        result (worker-comments/get-comment-delete-targets db (:block/uuid reply))]
-    (is (= [(block-uuid db "Comments")]
-           (mapv :block/uuid result)))
-    (is (= [(block-uuid db "Reply")]
-           (mapv :block/uuid (:block/children (first result)))))))
+        reply (block @conn "Reply")
+        comments-area-uuid (block-uuid @conn "Comments")
+        delete! (some-> (resolve 'frontend.worker.handler.comments/delete-comment!) deref)]
+    (is (fn? delete!))
+    (when (fn? delete!)
+      (delete! conn (:block/uuid reply))
+      (is (nil? (d/entity @conn [:block/uuid comments-area-uuid]))))))
+
+(deftest delete-comment-keeps-thread-when-another-reply-exists
+  (let [conn (conn-with-single-comment-thread)
+        comments-area (block @conn "Comments")
+        first-reply (block @conn "Reply")
+        delete! (some-> (resolve 'frontend.worker.handler.comments/delete-comment!) deref)]
+    (d/transact! conn [{:block/title "Second reply"
+                        :block/uuid (random-uuid)
+                        :block/parent (:db/id comments-area)
+                        :block/page (get-in comments-area [:block/page :db/id])}])
+    (is (fn? delete!))
+    (when (fn? delete!)
+      (delete! conn (:block/uuid first-reply))
+      (testing "the thread survives and only the selected reply is recycled"
+        (is (not (ldb/recycled? (d/entity @conn [:block/uuid (:block/uuid comments-area)]))))
+        (is (nil? (d/entity @conn [:block/uuid (:block/uuid first-reply)])))))))
 
 (deftest get-comment-thread-block-uuids-finds-comment-targets
   (let [conn (conn-with-multi-comment-thread)

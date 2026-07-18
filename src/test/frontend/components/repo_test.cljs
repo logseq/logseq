@@ -134,10 +134,11 @@
                                                     (reset! current-repo (second event))
                                                     (p/resolved nil))
                                  repo/<invoke-db-worker
-                                 (fn [op repo]
-                                   (swap! calls conj [op repo])
-                                   (is (= :thread-api/get-rtc-graph-e2ee? op))
+                                 (fn [op repo key]
+                                   (swap! calls conj [op repo key])
+                                   (is (= :thread-api/get-key-value op))
                                    (is (= "logseq_db_other" repo))
+                                   (is (= :logseq.kv/graph-rtc-e2ee? key))
                                    (p/resolved false))
                                  rtc-handler/<rtc-upload-graph! (fn [repo graph-e2ee?]
                                                                   (swap! calls conj [:upload repo graph-e2ee?])
@@ -150,7 +151,7 @@
                    (upload-fn {:url "logseq_db_other"}))
                  (p/then (fn [_]
                            (is (= [[:graph/switch "logseq_db_other"]
-                                   [:thread-api/get-rtc-graph-e2ee? "logseq_db_other"]
+                                   [:thread-api/get-key-value "logseq_db_other" :logseq.kv/graph-rtc-e2ee?]
                                    [:upload "logseq_db_other" false]]
                                   @calls))
                            (finish-async-test! done)))
@@ -171,10 +172,11 @@
                                  state/get-current-repo (fn []
                                                           "logseq_db_demo")
                                  repo/<invoke-db-worker
-                                 (fn [op repo]
-                                   (swap! calls conj [op repo])
-                                   (is (= :thread-api/get-rtc-graph-e2ee? op))
+                                 (fn [op repo key]
+                                   (swap! calls conj [op repo key])
+                                   (is (= :thread-api/get-key-value op))
                                    (is (= "logseq_db_demo" repo))
+                                   (is (= :logseq.kv/graph-rtc-e2ee? key))
                                    (p/resolved false))
                                  rtc-handler/<rtc-upload-graph! (fn [repo graph-e2ee?]
                                                                   (swap! calls conj [:upload repo graph-e2ee?])
@@ -186,7 +188,7 @@
                                  shui/popup-hide! (fn [& _] nil)]
                    (upload-fn {:url "logseq_db_demo"}))
                  (p/then (fn [_]
-                           (is (= [[:thread-api/get-rtc-graph-e2ee? "logseq_db_demo"]
+                           (is (= [[:thread-api/get-key-value "logseq_db_demo" :logseq.kv/graph-rtc-e2ee?]
                                    [:upload "logseq_db_demo" false]]
                                   @calls))
                            (finish-async-test! done)))

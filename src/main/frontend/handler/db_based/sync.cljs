@@ -105,7 +105,7 @@
 
 (defn- <get-rtc-graph-e2ee?
   [repo]
-  (state/<invoke-db-worker :thread-api/get-rtc-graph-e2ee? repo))
+  (state/<invoke-db-worker :thread-api/get-key-value repo :logseq.kv/graph-rtc-e2ee?))
 
 (defn- <ensure-invite-auth!
   []

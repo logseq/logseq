@@ -167,24 +167,17 @@
                              repo
                              page-block-uuid)))
 
-(defn- <apply-favorite-ops!
-  [repo ops]
-  (when (seq ops)
-    (state/<invoke-db-worker :thread-api/apply-outliner-ops repo ops nil)))
-
 (defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (when-let [repo (state/get-current-repo)]
-    (p/let [ops (state/<invoke-db-worker :thread-api/build-favorite-page-ops repo page-block-uuid)]
-      (<apply-favorite-ops! repo ops))))
+    (state/<invoke-db-worker :thread-api/set-page-favorite repo page-block-uuid true)))
 
 (defn <db-unfavorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (when-let [repo (state/get-current-repo)]
-    (p/let [ops (state/<invoke-db-worker :thread-api/build-unfavorite-page-ops repo page-block-uuid)]
-      (<apply-favorite-ops! repo ops))))
+    (state/<invoke-db-worker :thread-api/set-page-favorite repo page-block-uuid false)))
 
 ;; favorites fns end ================
 

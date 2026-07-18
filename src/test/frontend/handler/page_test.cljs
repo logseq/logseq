@@ -330,9 +330,6 @@
   (async done
     (let [page-a #uuid "11111111-1111-1111-1111-111111111111"
           page-b #uuid "22222222-2222-2222-2222-222222222222"
-          ops [[:save-block [{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
-                               :block/link 1}
-                              nil]]]
           calls (atom [])
           previous-state @state/state
           previous-worker @state/*db-worker
@@ -342,8 +339,7 @@
               (fn [api repo & args]
                 (swap! calls conj (into [api repo] args))
                 (case api
-                  :thread-api/build-reorder-favorites-ops (p/resolved ops)
-                  :thread-api/apply-outliner-ops (p/resolved nil)
+                  :thread-api/reorder-favorites (p/resolved nil)
                   (p/resolved nil))))
       (set! state/update-favorites-updated!
             (fn []
@@ -352,8 +348,7 @@
           (p/then
            (fn []
              (let [calls' (vec (remove #(= :thread-api/update-thread-atom (first %)) @calls))]
-               (is (= [[:thread-api/build-reorder-favorites-ops "test" [page-a page-b]]
-                       [:thread-api/apply-outliner-ops "test" ops nil]
+               (is (= [[:thread-api/reorder-favorites "test" [page-a page-b]]
                        [:favorites-updated]]
                       calls')))))
           (p/catch

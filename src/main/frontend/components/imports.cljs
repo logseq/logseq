@@ -348,9 +348,20 @@
       (doseq [{:keys [asset-id asset-type payload]} staged-assets]
         (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true})))))
 
+(defn build-file-graph-worker-options
+  [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
+   default-config]
+  {:user-options
+   (merge
+    (dissoc user-options :graph-name)
+    {:tag-classes (some-> tag-classes string/trim not-empty (string/split #",\s*") set)
+     :property-classes (some-> property-classes string/trim not-empty (string/split #",\s*") set)
+     :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
+   :default-config default-config})
+
 (defn- import-file-graph
   [*files
-   {:keys [graph-name tag-classes property-classes property-parent-classes] :as user-options}
+   {:keys [graph-name] :as user-options}
    config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
@@ -359,16 +370,10 @@
           repo (state/get-current-repo)
           serialized-files (<serialize-import-files *files)
           serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options {:user-options
-                   (merge
-                    (dissoc user-options :graph-name)
-                    {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
-                     :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
-                     :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
-                   ;; common options
-                   :notify-user show-notification
-                   :default-config config/config-default-content}
+          options (build-file-graph-worker-options user-options config/config-default-content)
           import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+          _ (doseq [notification (:notifications import-result)]
+              (show-notification notification))
           _ (write-staged-assets! repo (:staged-assets import-result))]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)

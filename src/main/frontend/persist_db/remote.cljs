@@ -219,8 +219,7 @@
     (invoke! client "thread-api/release-access-handles" [repo]))
 
   (<open-and-fetch-schema [_this repo opts]
-    (p/let [_ (invoke! client "thread-api/create-or-open-db" [repo opts])]
-      (invoke! client "thread-api/get-db-schema" [repo])))
+    (invoke! client "thread-api/create-or-open-db" [repo opts]))
 
   (<export-db [_this repo _opts]
     (invoke! client "thread-api/export-db-binary" [repo]))

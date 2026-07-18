@@ -701,7 +701,12 @@
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (start-db! repo opts))
+  (p/let [_ (start-db! repo opts)
+          conn (or (worker-state/get-datascript-conn repo)
+                   (throw (ex-info "Missing worker graph connection"
+                                   {:type :db/missing-connection
+                                    :repo repo})))]
+    {:schema (:schema @conn)}))
 
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]

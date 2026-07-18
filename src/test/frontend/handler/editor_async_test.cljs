@@ -717,25 +717,16 @@
                                :block/title "Comments"
                                :block/tags #{comments-model/comments-tag-ident}
                                comments-model/comments-blocks-property [first-block second-block]}
-        inserts (atom [])
+        command-targets (atom [])
         expanded (atom [])]
     (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
                         block-handler/get-top-level-blocks identity
-                        db-async/<resolve-comments-area-for-blocks
-                        (fn [_repo block-refs]
+                        state/<invoke-db-worker
+                        (fn [api _repo block-refs]
+                          (is (= :thread-api/ensure-comments-area-for-blocks api))
+                          (reset! command-targets (vec block-refs))
                           (is (= [first-uuid second-uuid] (vec block-refs)))
-                          (p/resolved {:action :insert
-                                       :title "Comments"
-                                       :opts {:block-uuid second-uuid
-                                              :sibling? true
-                                              :edit-block? false
-                                              :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                                            comments-model/comments-blocks-property #{[:block/uuid first-uuid]
-                                                                                                     [:block/uuid second-uuid]}}}}))
-                        editor/api-insert-new-block! (fn [content opts]
-                                                       (swap! inserts conj {:content content
-                                                                           :opts opts})
-                                                       (p/resolved created-comments-area))
+                          (p/resolved created-comments-area))
                         editor/expand-block! (fn [block-uuid]
                                                (swap! expanded conj block-uuid)
                                                (p/resolved nil))]
@@ -745,15 +736,7 @@
                                                                                     second-block])]
             (is (= created-comments-area area)
                 "Selected blocks should share one comments area")
-            (is (= [{:content "Comments"
-                     :opts {:block-uuid second-uuid
-                            :sibling? true
-                            :edit-block? false
-                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                          comments-model/comments-blocks-property #{[:block/uuid first-uuid]
-                                                                                   [:block/uuid second-uuid]}}}}]
-                   @inserts)
-                "A range comments area should be inserted after the last selected top block with lookup-ref targets")
+            (is (= [first-uuid second-uuid] @command-targets))
             (is (= [created-comments-area-uuid] @expanded)
                 "The range comments area should be expanded inline"))))))
 
@@ -794,43 +777,23 @@
         created-comments-area {:block/uuid created-comments-area-uuid
                                :block/title "Comments"
                                :block/tags #{comments-model/comments-tag-ident}}
-        inserts (atom [])
+        command-targets (atom [])
         expanded (atom [])]
     (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
                         block-handler/get-top-level-blocks identity
-                        db-async/<resolve-comments-area-for-blocks
-                        (fn [_repo block-refs]
+                        state/<invoke-db-worker
+                        (fn [api _repo block-refs]
+                          (is (= :thread-api/ensure-comments-area-for-blocks api))
+                          (reset! command-targets (vec block-refs))
                           (is (= [block-uuid] (vec block-refs)))
-                          (p/resolved {:action :single
-                                       :block-ref block-uuid}))
-                        db-async/<resolve-comments-area
-                        (fn [_repo block-ref]
-                          (is (= block-uuid block-ref))
-                          (p/resolved {:action :insert
-                                       :title "Comments"
-                                       :opts {:block-uuid block-uuid
-                                              :end? true
-                                              :edit-block? false
-                                              :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                                            comments-model/comments-blocks-property #{[:block/uuid block-uuid]}}}}))
-                        editor/api-insert-new-block! (fn [content opts]
-                                                       (swap! inserts conj {:content content
-                                                                           :opts opts})
-                                                       (p/resolved created-comments-area))
+                          (p/resolved created-comments-area))
                         editor/expand-block! (fn [block-uuid]
                                                (swap! expanded conj block-uuid)
                                                (p/resolved nil))]
           (p/let [area (comments-handler/ensure-comments-area-for-selected-blocks! [block])]
             (is (= created-comments-area area)
                 "A single selected block should use a child comments area")
-            (is (= [{:content "Comments"
-                     :opts {:block-uuid block-uuid
-                            :end? true
-                            :edit-block? false
-                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                          comments-model/comments-blocks-property #{[:block/uuid block-uuid]}}}}]
-                   @inserts)
-                "Single-block comments area should be inserted as a child with the target property")
+            (is (= [block-uuid] @command-targets))
             (is (= [created-comments-area-uuid] @expanded)
                 "The single-block comments area should be expanded inline"))))))
 
@@ -1004,23 +967,17 @@
                          @inserted)
                       "Inserted comment blocks should be tagged as #Comment"))))))
 
-(deftest-async comment-delete-targets-use-worker
-  (let [delete-targets (resolve 'frontend.handler.comments/<comment-delete-targets)
-        comment-block {:block/uuid (random-uuid)
+(deftest-async comment-delete-uses-atomic-worker-command
+  (let [comment-block {:block/uuid (random-uuid)
                        :block/title "first"}
-        comments-area {:block/uuid (random-uuid)
-                       :block/title "Comments"
-                       :block/tags #{comments-model/comments-tag-ident}}
         resolved-block-ref (atom nil)]
-    (is (fn? delete-targets))
-    (when (fn? delete-targets)
-      (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
-                          db-async/<get-comment-delete-targets
-                          (fn [_repo block-ref]
-                            (reset! resolved-block-ref block-ref)
-                            (p/resolved [comments-area]))]
-            (delete-targets comment-block))
-          (p/then
-           (fn [targets]
-             (is (= (:block/uuid comment-block) @resolved-block-ref))
-             (is (= [comments-area] targets))))))))
+    (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                        state/<invoke-db-worker
+                        (fn [api _repo block-ref]
+                          (is (= :thread-api/delete-comment api))
+                          (reset! resolved-block-ref block-ref)
+                          (p/resolved nil))]
+          (comments-handler/delete-comment! comment-block))
+        (p/then
+         (fn []
+           (is (= (:block/uuid comment-block) @resolved-block-ref)))))))

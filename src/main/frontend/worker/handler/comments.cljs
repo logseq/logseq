@@ -5,7 +5,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.outliner.op :as outliner-op]))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)
 (def ^:private comments-blocks-property :logseq.property.comments/blocks)
@@ -128,21 +129,14 @@
               comments-area))
           (get (first blocks) :logseq.property.comments/_blocks))))
 
-(defn get-comments-area-block
-  [db block-ref]
-  (some->> (block-ref-entity db block-ref)
-           (block-map db)))
-
-(defn resolve-comments-area
+(defn- resolve-comments-area
   [db block-ref]
   (when-let [block (block-ref-entity db block-ref)]
     (if-let [comments-area (comments-area-child db block)]
       (cond-> {:action :existing
                :comments-area (block-map db comments-area)}
         (not (seq (get comments-area comments-blocks-property)))
-        (assoc :target-property {:block-id (:db/id comments-area)
-                                 :property comments-blocks-property
-                                 :value (single-comment-targets block)}))
+        (assoc :missing-target (block-lookup-ref block)))
       {:action :insert
        :title (comments-area-title block)
        :opts (merge {:block-uuid (:block/uuid block)
@@ -151,7 +145,7 @@
                                    comments-blocks-property (single-comment-targets block)}}
                     (comments-area-insert-position block))})))
 
-(defn resolve-comments-area-for-blocks
+(defn- resolve-comments-area-for-blocks
   [db block-refs]
   (let [blocks (->> block-refs
                     (keep #(block-ref-entity db %))
@@ -172,7 +166,7 @@
                   :other-attrs {:block/tags #{comments-tag-ident}
                                 comments-blocks-property (set (map block-lookup-ref blocks))}}})))))
 
-(defn get-comment-delete-targets
+(defn- get-comment-delete-targets
   [db comment-block-ref]
   (when-let [comment-block (block-ref-entity db comment-block-ref)]
     (let [comments-area (:block/parent comment-block)
@@ -182,6 +176,73 @@
                (<= (count live-children) 1))
         [(block-map-with-children db comments-area)]
         [(block-map db comment-block)]))))
+
+(defn- insert-comments-area!
+  [conn {:keys [title opts]}]
+  (let [db @conn
+        target (block-ref-entity db (:block-uuid opts))
+        children (when (:end? opts)
+                   (ldb/sort-by-order (ldb/get-children db (:db/id target))))
+        [insert-target sibling?] (cond
+                                   (:sibling? opts) [target true]
+                                   (seq children) [(last children) true]
+                                   :else [target false])
+        comments-area-uuid (ldb/new-block-id)
+        comments-area (merge {:block/title title
+                              :block/uuid comments-area-uuid}
+                             (:other-attrs opts))
+        insert-opts {:sibling? sibling?
+                     :keep-uuid? true}]
+    (outliner-op/apply-ops!
+     conn
+     [[:insert-blocks [[comments-area] (:block/uuid insert-target) insert-opts]]]
+     nil)
+    (some->> (d/entity @conn [:block/uuid comments-area-uuid])
+             (block-map @conn))))
+
+(defn ensure-comments-area!
+  [conn block-ref]
+  (when-let [{:keys [action comments-area missing-target] :as resolution}
+             (resolve-comments-area @conn block-ref)]
+    (case action
+      :existing
+      (do
+        (when missing-target
+          (ldb/transact!
+           conn
+           [[:db/add
+             [:block/uuid (:block/uuid comments-area)]
+             comments-blocks-property
+             missing-target]]
+           {:outliner-op :save-block}))
+        (or (some->> (d/entity @conn [:block/uuid (:block/uuid comments-area)])
+                     (block-map @conn))
+            comments-area))
+
+      :insert
+      (insert-comments-area! conn resolution)
+
+      nil)))
+
+(defn ensure-comments-area-for-blocks!
+  [conn block-refs]
+  (when-let [{:keys [action block-ref comments-area] :as resolution}
+             (resolve-comments-area-for-blocks @conn block-refs)]
+    (case action
+      :single (ensure-comments-area! conn block-ref)
+      :existing comments-area
+      :insert (insert-comments-area! conn resolution)
+      nil)))
+
+(defn delete-comment!
+  [conn comment-block-ref]
+  (let [target-uuids (mapv :block/uuid (get-comment-delete-targets @conn comment-block-ref))]
+    (when (seq target-uuids)
+      (outliner-op/apply-ops!
+       conn
+       [[:delete-blocks [target-uuids {}]]]
+       nil))
+    nil))
 
 (defn get-comment-threads-for-block
   [db block-uuid]
@@ -210,7 +271,8 @@
                                    [block-id block-uuid]))))
                        block-uuids)]
     (when (seq id->uuid)
-      (->> (d/datoms db :aevt :logseq.property.comments/blocks)
+      (->> (keys id->uuid)
+           (mapcat #(d/datoms db :avet comments-blocks-property %))
            (keep (fn [{comments-area-id :e block-id :v}]
                    (when-let [block-uuid (get id->uuid block-id)]
                      (let [comments-area (d/entity db comments-area-id)]
@@ -221,25 +283,20 @@
                          (str block-uuid))))))
            vec))))
 
-(def-thread-api :thread-api/get-comments-area-block
+(def-thread-api :thread-api/ensure-comments-area
   [repo block-ref]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (get-comments-area-block @conn block-ref)))
+    (ensure-comments-area! conn block-ref)))
 
-(def-thread-api :thread-api/resolve-comments-area
-  [repo block-ref]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (resolve-comments-area @conn block-ref)))
-
-(def-thread-api :thread-api/resolve-comments-area-for-blocks
+(def-thread-api :thread-api/ensure-comments-area-for-blocks
   [repo block-refs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (resolve-comments-area-for-blocks @conn block-refs)))
+    (ensure-comments-area-for-blocks! conn block-refs)))
 
-(def-thread-api :thread-api/get-comment-delete-targets
+(def-thread-api :thread-api/delete-comment
   [repo comment-block-ref]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (get-comment-delete-targets @conn comment-block-ref)))
+    (delete-comment! conn comment-block-ref)))
 
 (def-thread-api :thread-api/get-comment-threads-for-block
   [repo block-uuid]
