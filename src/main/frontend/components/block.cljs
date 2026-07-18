@@ -4827,10 +4827,13 @@
   [config block* & {:as opts}]
   (let [[local-block set-block!] (hooks/use-state block*)
         complete-tree? (:block-tree/complete? config)
+        index-node? (and (:block-tree/index? config)
+                         (= :index (:block.temp/load-status block*)))
         complete-flat-row? (and (:hide-children? config)
                                 (:block.temp/load-status block*))
         complete-tree-node? (= :full (:block.temp/load-status block*))
-        complete-payload? (or complete-tree? complete-flat-row?)
+        complete-payload? (or (and complete-tree? (not index-node?))
+                              complete-flat-row?)
         block (if complete-payload? block* local-block)
         id (or (:db/id block*) (:block/uuid block*))
         block-uuid (:block/uuid block)
@@ -4850,11 +4853,15 @@
                              (db-async/<get-block-with-children
                                     (state/get-current-repo)
                                     id
-                                    {:children? load-children?
+                                    {:children? (and load-children? (not index-node?))
                                      :include-collapsed-children? (and load-children?
+                                                                       (not index-node?)
                                                                        ignore-block-collapsed?)
                                      :skip-refresh? false})]
-                             (set-block! (block-with-children-tree block children)))))]
+                             (set-block!
+                              (cond-> (block-with-children-tree block children)
+                                index-node?
+                                (assoc :block/children (:block/children block*)))))))]
     (hooks/use-effect!
      (fn []
        (when-not complete-payload?
@@ -4863,21 +4870,19 @@
      [(:block/uuid block*) (block-render-state block*) complete-payload?])
     (hooks/use-effect!
      (fn []
-       (when (and (not complete-tree?)
-                  (not complete-flat-row?)
+       (when (and (not complete-payload?)
                   (not complete-tree-node?))
          (refresh-block!))
        nil)
      [id load-children? ignore-block-collapsed? temporary-collapsed-state
-      complete-tree? complete-flat-row? complete-tree-node?])
+      complete-payload? complete-tree-node? index-node?])
     (hooks/use-effect!
      (fn []
        (when (and entity-tx-id
-                  (not complete-tree?)
-                  (not complete-flat-row?))
+                  (not complete-payload?))
          (refresh-block!))
        nil)
-     [block-uuid entity-tx-id complete-tree? complete-flat-row?])
+     [block-uuid entity-tx-id complete-payload? index-node?])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -5307,7 +5312,7 @@
                                             (= (:id config)
                                                (str (:block/parent-uuid (first blocks)))))))
         disable-virtualized? (or (util/rtc-test?)
-                                 (:virtual/tree-prefix? config)
+                                 (:journals? config)
                                  (< blocks-count 10)
                                  zoomed-child-blocks?)
         [virtualized? _] (hooks/use-state (not disable-virtualized?))

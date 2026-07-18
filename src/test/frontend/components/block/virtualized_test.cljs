@@ -55,14 +55,29 @@
                                "(rfx/use-sub [:db/latest-transacted-entity-uuids])"))
         "A transaction must not re-render every visible block.")))
 
-(deftest complete-page-tree-does-not-refetch-individual-children
+(deftest page-index-nodes-hydrate-only-their-own-render-payload
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-container-source (form-source source "(hsx/defc block-container\n")]
     (is (some? block-container-source))
-    (is (string/includes? block-container-source ":block-tree/complete?"))
-    (is (string/includes? block-container-source "complete-tree?"))
-    (is (string/includes? block-container-source "(not complete-tree?)")
-        "A complete page or journal payload must not hydrate each mounted child.")))
+    (is (string/includes? block-container-source ":block-tree/index?"))
+    (is (string/includes? block-container-source "index-node?"))
+    (is (string/includes? block-container-source ":children? (and load-children? (not index-node?))")
+        "A visible structure-only node may hydrate itself but must not request its children again.")
+    (is (string/includes? block-container-source ":block/children (:block/children block*)")
+        "Hydrating a node must retain the complete structural children already returned with the page index.")))
+
+(deftest page-trees-use-the-existing-bounded-virtuoso-path
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (some? block-list-source))
+    (is (not (string/includes? block-list-source ":virtual/tree-prefix?"))
+        "Tree pages must release rows through Virtuoso instead of disabling virtualization.")))
+
+(deftest journal-items-do-not-nest-a-second-virtualizer
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (string/includes? block-list-source "(:journals? config)")
+        "The journal stream owns virtualization; each mounted journal renders one complete tree.")))
 
 (deftest recursive-block-children-keep-the-left-border-dom
   (let [source (source-for "src/main/frontend/components/block.cljs")
