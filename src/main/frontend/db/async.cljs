@@ -255,6 +255,18 @@
 
 (def ^:private get-blocks-batch-limit 50)
 
+(defn- complete-tree-entry-group?
+  [entries]
+  (true? (get-in (first entries) [:request :opts :all?])))
+
+(defn- get-blocks-entry-batches
+  [entry-groups]
+  (mapcat (fn [same-kind-groups]
+            (if (complete-tree-entry-group? (first same-kind-groups))
+              (map vector same-kind-groups)
+              (partition-all get-blocks-batch-limit same-kind-groups)))
+          (partition-by complete-tree-entry-group? entry-groups)))
+
 (declare flush-get-blocks-batch!)
 
 (defn- schedule-get-blocks-batch-flush!
@@ -292,11 +304,11 @@
     (swap! *get-blocks-batch-state
            (fn [state] (assoc state :scheduled? false :queue [])))
     (doseq [[graph graph-entries] (group-by :graph queue)
-            entry-groups (->> graph-entries
-                              (group-by :request)
-                              vals
-                              (partition-all get-blocks-batch-limit))]
-      (let [requests (->> entry-groups
+            entry-batch (->> graph-entries
+                             (group-by :request)
+                             vals
+                             get-blocks-entry-batches)]
+      (let [requests (->> entry-batch
                           (map (comp :request first))
                           worker-get-blocks-requests)]
         (->
@@ -305,9 +317,9 @@
                      (throw (ex-info "Unexpected get-blocks response count"
                                      {:request-count (count requests)
                                       :response-count (count result)})))]
-           (resolve-batched-get-block-groups! entry-groups result))
+           (resolve-batched-get-block-groups! entry-batch result))
          (p/catch (fn [error]
-                    (reject-batched-get-blocks! (mapcat identity entry-groups) error))))))))
+                    (reject-batched-get-blocks! (mapcat identity entry-batch) error))))))))
 
 (defn- <fetch-blocks-from-worker-batched
   [graph requests]
