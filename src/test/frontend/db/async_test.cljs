@@ -190,6 +190,75 @@
                     (is false (str error))))
                  (p/finally done))))))
 
+(deftest block-batching-shares-identical-in-flight-requests-across-flushes-test
+  (async done
+         (let [repo "logseq_db_async_in_flight"
+               worker-calls (atom 0)
+               response (ldb/write-transit-str [{:id 42
+                                                  :block {:db/id 42}}])]
+           (-> (p/with-redefs [state/<invoke-db-worker
+                               (fn [& _]
+                                 (swap! worker-calls inc)
+                                 (p/let [_ (p/delay 20)]
+                                   response))]
+                 (let [first-result (db-async/<get-block repo 42 {:children? false})
+                       second-result* (atom nil)]
+                   (-> (p/let [_ (p/delay 0)
+                               _ (is (= 1 @worker-calls))
+                               _ (do
+                                   (reset! second-result*
+                                           (db-async/<get-block repo 42 {:children? false}))
+                                   nil)
+                               _ (p/delay 0)
+                               _ (is (= 1 @worker-calls)
+                                     "An identical request must join the pending worker call after its batch has flushed.")
+                               results (p/all [first-result @second-result*])]
+                         (is (= [{:db/id 42} {:db/id 42}] results)))
+                       (p/catch
+                        (fn [error]
+                          (is false (str error)))))))
+               (p/finally done)))))
+
+(deftest failed-in-flight-block-request-is-cleared-for-retry-test
+  (async done
+         (let [repo "logseq_db_async_in_flight_retry"
+               worker-calls (atom 0)
+               cause (js/Error. "worker failed")
+               response (ldb/write-transit-str [{:id 42
+                                                  :block {:db/id 42}}])
+               capture-error (fn [promise]
+                               (p/create
+                                (fn [resolve _reject]
+                                  (-> promise
+                                      (p/then resolve)
+                                      (p/catch resolve)))))]
+           (-> (p/with-redefs [state/<invoke-db-worker
+                               (fn [& _]
+                                 (if (= 1 (swap! worker-calls inc))
+                                   (p/let [_ (p/delay 20)]
+                                     (throw cause))
+                                   (p/resolved response)))]
+                 (let [first-result (db-async/<get-block repo 42 {:children? false})
+                       second-result* (atom nil)]
+                   (-> (p/let [_ (p/delay 0)
+                               _ (do
+                                   (reset! second-result*
+                                           (db-async/<get-block repo 42 {:children? false}))
+                                   nil)
+                               _ (p/delay 0)
+                               _ (is (= 1 @worker-calls))
+                               errors (p/all [(capture-error first-result)
+                                              (capture-error @second-result*)])
+                               _ (is (every? #(= cause (ex-cause %)) errors))
+                               retry-result (db-async/<get-block repo 42 {:children? false})]
+                         (is (= {:db/id 42} retry-result))
+                         (is (= 2 @worker-calls)
+                             "A failed shared request must not poison the next retry."))
+                       (p/catch
+                        (fn [error]
+                          (is false (str error)))))))
+               (p/finally done)))))
+
 (deftest block-batching-flush-is-not-frame-coupled-test
   (let [source (source-for "src/main/frontend/db/async.cljs")]
     (is (string/includes? source "(js/queueMicrotask flush-get-blocks-batch!)")
