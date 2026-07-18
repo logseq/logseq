@@ -62,14 +62,11 @@
   (let [key (entity-key entity)
         index (-> index
                   (index-aliases entity key)
-                  (assoc-in [:parent-by-key key] parent-key))]
-    (reduce-kv
-     (fn [result position child]
-       (-> result
-           (assoc-in [:child-position key (entity-key child)] position)
-           (index-subtree child key)))
-     index
-     (vec (:block/children entity)))))
+                  (assoc-in [:parent-by-key key] parent-key)
+                  (assoc-in [:order-by-key key] (:block/order entity)))]
+    (reduce #(index-subtree %1 %2 key)
+            index
+            (:block/children entity))))
 
 (defn index-block-tree
   "Attach a navigation index used to patch a loaded tree without scanning it again."
@@ -81,7 +78,7 @@
             index (index-subtree {:root-key root-key
                                   :aliases {}
                                   :parent-by-key {}
-                                  :child-position {}}
+                                  :order-by-key {}}
                                  root
                                  nil)]
         (with-meta root (assoc (meta root) tree-index-key index))))))
@@ -113,27 +110,57 @@
       (recur (get-in index [:parent-by-key current])
              (cons current result)))))
 
+(defn- first-ordered-position
+  [children order]
+  (loop [low 0
+         high (count children)]
+    (if (< low high)
+      (let [middle (quot (+ low high) 2)
+            middle-order (:block/order (nth children middle))]
+        (if (neg? (compare middle-order order))
+          (recur (inc middle) high)
+          (recur low middle)))
+      low)))
+
+(defn- child-position
+  [children child-key order]
+  (loop [position (first-ordered-position children order)]
+    (when (< position (count children))
+      (let [child (nth children position)
+            order-comparison (compare (:block/order child) order)]
+        (cond
+          (= child-key (entity-key child))
+          position
+
+          (pos? order-comparison)
+          nil
+
+          :else
+          (recur (inc position)))))))
+
 (defn- node-path
-  [index key]
+  [root index key]
   (when-let [chain (key-chain index key)]
-    (loop [parent-key (first chain)
+    (loop [parent root
            child-keys (next chain)
            path []]
       (if-let [child-key (first child-keys)]
-        (when-let [position (get-in index [:child-position parent-key child-key])]
-          (recur child-key
+        (when-let [position (child-position (:block/children parent)
+                                            child-key
+                                            (get-in index [:order-by-key child-key]))]
+          (recur (nth (:block/children parent) position)
                  (next child-keys)
                  (conj path :block/children position)))
         path))))
 
 (defn- node-at
   [root index key]
-  (when-let [path (node-path index key)]
+  (when-let [path (node-path root index key)]
     (get-in root path)))
 
 (defn- assoc-node
   [root index key node]
-  (let [path (node-path index key)]
+  (let [path (node-path root index key)]
     (if (seq path)
       (assoc-in root path node)
       node)))
@@ -147,36 +174,40 @@
   (assoc-node root index parent-key
               (assoc (node-at root index parent-key) :block/children children)))
 
-(defn- reindex-children
-  [index parent-key children]
-  (reduce-kv
-   (fn [result position child]
-     (let [key (entity-key child)]
-       (-> result
-           (assoc-in [:parent-by-key key] parent-key)
-           (assoc-in [:child-position parent-key key] position))))
-   (assoc-in index [:child-position parent-key] {})
-   children))
-
 (defn- remove-indexed-subtree
   [index node]
   (let [index (reduce remove-indexed-subtree index (:block/children node))
         key (entity-key node)]
     (cond-> (-> index
                 (update :parent-by-key dissoc key)
-                (update :child-position dissoc key))
+                (update :order-by-key dissoc key))
       (:db/id node) (update :aliases dissoc (:db/id node))
       (:block/uuid node) (update :aliases dissoc (:block/uuid node)))))
 
 (defn- without-child
-  [children child-key]
-  (into [] (remove #(= child-key (entity-key %))) children))
+  [children child-key order]
+  (let [children (vec children)]
+    (if-some [position (child-position children child-key order)]
+      (into (subvec children 0 position)
+            (subvec children (inc position)))
+      (throw (ex-info "Indexed child is missing from its parent"
+                      {:child-key child-key})))))
 
-(defn- sorted-with-child
+(defn- insert-ordered-child
   [children child]
-  (->> (conj (vec children) child)
-       (sort-by :block/order)
-       vec))
+  (let [children (vec children)
+        order (:block/order child)
+        position (loop [low 0
+                        high (count children)]
+                   (if (< low high)
+                     (let [middle (quot (+ low high) 2)
+                           middle-order (:block/order (nth children middle))]
+                       (if (pos? (compare middle-order order))
+                         (recur low middle)
+                         (recur (inc middle) high)))
+                     low))]
+    (into (conj (subvec children 0 position) child)
+          (subvec children position))))
 
 (defn- merge-node-payload
   [node changed]
@@ -196,11 +227,11 @@
       {:root nil :index index}
       (let [parent-key (get-in index [:parent-by-key key])
             node (node-at root index key)
-            children (without-child (children-at root index parent-key) key)
+            children (without-child (children-at root index parent-key)
+                                    key
+                                    (get-in index [:order-by-key key]))
             root (assoc-children root index parent-key children)
-            index (-> index
-                      (remove-indexed-subtree node)
-                      (reindex-children parent-key children))]
+            index (remove-indexed-subtree index node)]
         {:root root :index index}))
     state))
 
@@ -211,11 +242,9 @@
           node (-> changed
                    (assoc :block/children (vec (:block/children changed)))
                    (update-subtree-level (inc (:block/level parent))))
-          children (sorted-with-child (:block/children parent) node)
+          children (insert-ordered-child (:block/children parent) node)
           root (assoc-children root index parent-key children)
-          index (-> index
-                    (index-subtree node parent-key)
-                    (reindex-children parent-key children))]
+          index (index-subtree index node parent-key)]
       {:root root :index index})
     state))
 
@@ -239,18 +268,19 @@
        :index index}
 
       :else
-      (let [old-children (without-child (children-at root index old-parent-key) key)
+      (let [old-children (without-child (children-at root index old-parent-key)
+                                        key
+                                        (get-in index [:order-by-key key]))
             root (assoc-children root index old-parent-key old-children)
-            index (reindex-children index old-parent-key old-children)
             new-parent (node-at root index new-parent-key)
             node (-> node
                      (merge-node-payload changed)
                      (update-subtree-level (inc (:block/level new-parent))))
-            new-children (sorted-with-child (:block/children new-parent) node)
+            new-children (insert-ordered-child (:block/children new-parent) node)
             root (assoc-children root index new-parent-key new-children)
             index (-> index
                       (assoc-in [:parent-by-key key] new-parent-key)
-                      (reindex-children new-parent-key new-children))]
+                      (assoc-in [:order-by-key key] (:block/order node)))]
         {:root root :index index}))))
 
 (defn- update-node

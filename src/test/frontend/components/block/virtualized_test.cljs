@@ -79,6 +79,22 @@
     (is (string/includes? block-list-source "(:journals? config)")
         "The journal stream owns virtualization; each mounted journal renders one complete tree.")))
 
+(deftest block-children-never-nest-a-second-virtualizer
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (string/includes? block-list-source
+                          "disable-virtualized? (or (util/rtc-test?)\n                                 (:journals? config)\n                                 (:block-children? config)")
+        "Only the outer page or journal stream may own virtualization.")
+    (is (string/includes? block-list-source
+                          "virtualized? (and virtualization-enabled?\n                          (not disable-virtualized?)")
+        "A mounted list must turn virtualization off if it becomes a child list.")))
+
+(deftest supplied-selection-ids-do-not-remap-every-virtual-row-id
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (not (string/includes? block-list-source "virtualized-block-ids"))
+        "A wide page already supplies selection IDs; rendering must not map the whole list again.")))
+
 (deftest recursive-block-children-keep-the-left-border-dom
   (let [source (source-for "src/main/frontend/components/block.cljs")
         children-source (form-source source "(hsx/defc block-children\n")]

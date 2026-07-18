@@ -221,6 +221,7 @@
                    :op-names (mapv first ops)
                    :op-count (count ops)
                    :worker-apply-ms (:apply-ms perf)
+                   :worker-perf (dissoc perf :listener)
                    :worker-listener (:listener perf)
                    :worker-roundtrip-ms (- mutation-returned-at started-at)
                    :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
