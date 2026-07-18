@@ -452,6 +452,7 @@
         linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
         [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
         [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
+        outer-blocks-rendered (:on-page-blocks-rendered option)
         container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         container-id (or (:container-id option) (state/get-container-id container-key))
         repo (or repo current-repo)
@@ -539,8 +540,11 @@
                  {:style {:margin-left (if (util/mobile?) 0 -20)}
                   :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                     :on-page-blocks-rendered #(when-not (= linked-refs-blocks-ready-page-id page-id)
-                                                                                 (reset! linked-refs-blocks-ready-page-id* page-id))
+                                                     :on-page-blocks-rendered #(do
+                                                                                (when-not (= linked-refs-blocks-ready-page-id page-id)
+                                                                                  (reset! linked-refs-blocks-ready-page-id* page-id))
+                                                                                (when outer-blocks-rendered
+                                                                                  (outer-blocks-rendered)))
                                                      :container-id container-id}))]))]
 
            (when-not (or preview? recycle-page?)
