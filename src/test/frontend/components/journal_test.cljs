@@ -46,9 +46,33 @@
     (is (string/includes? source ":keep-tree-resident?")
         "Resident logical trees must not pin their DOM nodes.")
     (is (string/includes? source ":on-page-blocks-rendered")
-        "Recent journals must finish loading before an offscreen slot releases its DOM.")
-    (is (string/includes? source "(and recent? (not loaded?))")
-        "An offscreen recent journal stays mounted only until its tree is resident.")))
+        "Recent journals must finish loading before an offscreen slot releases its DOM.")))
+
+(deftest page-block-ready-callback-reaches-the-journal-slot
+  (let [source (page-source)]
+    (is (string/includes? source "outer-blocks-rendered")
+        "Page-local readiness must not replace the caller's readiness callback.")
+    (is (string/includes? source "(when outer-blocks-rendered")
+        "Pages without an outer readiness callback must remain valid.")
+    (is (string/includes? source "(outer-blocks-rendered)")
+        "A loaded journal must notify its slot so offscreen DOM can be released.")))
+
+(deftest journal-slot-stays-mounted-until-its-tree-finishes-loading
+  (let [source (journal-source)]
+    (is (string/includes? source "journal-slot-mounted?")
+        "Journal slots need one mount decision that covers observer and loading state.")
+    (is (string/includes? source "(and mounted? (not loaded?))")
+        "A mounted slot must survive leaving the viewport while its tree is loading.")
+    (is (string/includes? source
+                          "(journal-slot-mounted? intersecting? focused? mounted? loaded?)")
+        "Intersection, focus, and in-flight loading must all participate in the decision.")
+    (is (string/includes? source "[cache-key loaded? mounted?]")
+        "The observer must refresh after a slot enters its loading state.")
+    (is (string/includes? source
+                          "(or (not mounted?) (not loaded?)) (assoc :style {:min-height placeholder-height})")
+        "The slot must preserve its geometry until the complete tree renders.")
+    (is (not (string/includes? source "(and recent? (not loaded?))"))
+        "Loading protection must apply to every on-demand journal, not only recent ones.")))
 
 (deftest journal-stream-never-nests-virtualizers
   (let [journal-source (journal-source)
@@ -67,8 +91,10 @@
     (is (string/includes? source "journal-item-height-by-key*")
         "Measured journal heights must survive DOM release.")
     (is (string/includes? source ":min-height placeholder-height"))
-    (is (string/includes? source ":rootMargin \"1200px 0px\"")
-        "Complete journal trees should mount before entering the viewport.")
+    (is (string/includes? source ":rootMargin \"400px 0px\"")
+        "Only journals close to the viewport should request their complete trees.")
+    (is (string/includes? source "margin 400")
+        "Focus release and viewport loading should use the same bounded window.")
     (is (string/includes? source "(map-indexed")
         "The UI should retain a lightweight ordered slot for every journal ID.")))
 

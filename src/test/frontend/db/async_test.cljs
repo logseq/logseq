@@ -80,6 +80,43 @@
                     :include-collapsed-children? true}}]
            (#'db-async/worker-get-blocks-requests requests)))))
 
+(deftest complete-trees-return-independently-while-ordinary-blocks-stay-batched-test
+  (async done
+         (let [complete-tree-repo "logseq_db_async_complete_trees"
+               ordinary-block-repo "logseq_db_async_ordinary_blocks"
+               worker-request-counts (atom [])]
+           (p/with-redefs [state/<invoke-db-worker
+                           (fn [_api repo requests-transit]
+                             (let [requests (ldb/read-transit-str requests-transit)]
+                               (swap! worker-request-counts conj [repo (count requests)])
+                               (p/resolved
+                                (ldb/write-transit-str
+                                 (mapv (fn [{:keys [id]}]
+                                         {:id id
+                                          :block {:db/id id}})
+                                       requests)))))]
+             (-> (p/let [_ (p/all (mapv #(db-async/<get-block-with-children
+                                          complete-tree-repo
+                                          %
+                                          {:all? true
+                                           :children? true
+                                           :include-collapsed-children? true})
+                                        [1 2 3]))
+                         _ (is (= [[complete-tree-repo 1]
+                                   [complete-tree-repo 1]
+                                   [complete-tree-repo 1]]
+                                  @worker-request-counts)
+                               "Each complete tree should unblock the renderer as soon as it is ready.")
+                         _ (reset! worker-request-counts [])
+                         _ (p/all (mapv #(db-async/<get-block ordinary-block-repo % {:children? false})
+                                        [4 5 6]))]
+                   (is (= [[ordinary-block-repo 3]] @worker-request-counts)
+                       "Small block reads should keep sharing one worker roundtrip."))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
+
 (deftest block-loaders-preserve-worker-error-cause-test
   (async done
          (let [cause (js/Error. "worker failed")

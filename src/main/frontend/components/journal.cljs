@@ -30,9 +30,15 @@
   [^js node ^js root]
   (let [rect (.getBoundingClientRect node)
         root-rect (.getBoundingClientRect root)
-        margin 1200]
+        margin 400]
     (and (> (.-bottom rect) (- (.-top root-rect) margin))
          (< (.-top rect) (+ (.-bottom root-rect) margin)))))
+
+(defn- journal-slot-mounted?
+  [intersecting? focused? mounted? loaded?]
+  (or intersecting?
+      focused?
+      (and mounted? (not loaded?))))
 
 (hsx/defc journal-slot
   [id last? recent?]
@@ -60,24 +66,25 @@
                            (fn [entries]
                              (let [intersecting? (boolean (some #(.-isIntersecting %)
                                                                 (array-seq entries)))
-                                   focused? (.contains node (.-activeElement js/document))
-                                   loading-recent? (and recent? (not loaded?))]
-                               (set-mounted! (or intersecting? focused? loading-recent?))))
+                                   focused? (.contains node (.-activeElement js/document))]
+                               (set-mounted!
+                                (journal-slot-mounted? intersecting? focused? mounted? loaded?))))
                            #js {:root root
-                                :rootMargin "1200px 0px"})
+                                :rootMargin "400px 0px"})
                  on-focus-out (fn []
                                 (js/setTimeout
-                                 #(when (and (not (.contains node (.-activeElement js/document)))
-                                             (not (and recent? (not loaded?)))
-                                             (not (journal-slot-near-viewport? node root)))
-                                    (set-mounted! false))
+                                 #(let [focused? (.contains node (.-activeElement js/document))]
+                                    (when (and (not (journal-slot-mounted?
+                                                     false focused? mounted? loaded?))
+                                               (not (journal-slot-near-viewport? node root)))
+                                      (set-mounted! false)))
                                  0))]
              (.observe observer node)
              (.addEventListener node "focusout" on-focus-out)
              (fn []
                (.disconnect observer)
                (.removeEventListener node "focusout" on-focus-out))))))
-     [cache-key loaded? recent?])
+     [cache-key loaded? mounted?])
     (hooks/use-effect!
      (fn []
        (when (and mounted? (hooks/deref *item-ref))
@@ -92,7 +99,7 @@
     [:div.journal-item.content
      (cond-> {:ref *item-ref}
        last? (assoc :class "journal-last-item")
-       (not mounted?) (assoc :style {:min-height placeholder-height}))
+       (or (not mounted?) (not loaded?)) (assoc :style {:min-height placeholder-height}))
      (when mounted?
        (page/page-cp {:db/id id
                       :journals? true
