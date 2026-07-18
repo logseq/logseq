@@ -117,6 +117,61 @@
                     (is false (str error))))
                  (p/finally done))))))
 
+(deftest block-refs-counts-reuse-get-block-test
+  (async done
+         (let [repo "logseq_db_async_refs_counts"
+               block-ids [1 2 3]
+               calls (atom [])]
+           (p/with-redefs [db-async/<get-block
+                           (fn [repo' id opts]
+                             (swap! calls conj [repo' id opts])
+                             (p/resolved {:block.temp/refs-count (* 2 id)}))]
+             (-> (p/let [counts (p/all (mapv #(db-async/<get-block-refs-count repo %)
+                                              block-ids))]
+                   (is (= [2 4 6] counts))
+                   (is (= [[repo 1 {:children? false
+                                    :properties [:block.temp/refs-count]}]
+                           [repo 2 {:children? false
+                                    :properties [:block.temp/refs-count]}]
+                           [repo 3 {:children? false
+                                    :properties [:block.temp/refs-count]}]]
+                          @calls)
+                       "Refs counts should use the existing bounded get-blocks path."))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
+
+(deftest complete-tree-loader-preserves-explicit-render-data-option-test
+  (async done
+         (let [requests (atom [])]
+           (p/with-redefs [db-async/<fetch-blocks-from-worker-batched
+                           (fn [_repo requests']
+                             (reset! requests requests')
+                             (p/resolved [{:block {:db/id 42}
+                                           :children []}]))]
+             (-> (p/let [result (db-async/<get-block-with-children
+                                         "logseq_db_async_base_tree"
+                                         42
+                                         {:all? true
+                                          :children? true
+                                          :render-data? false
+                                          :include-collapsed-children? true})]
+                   (is (= {:block {:db/id 42}
+                           :children []}
+                          result))
+                   (is (= [{:id 42
+                            :opts {:all? true
+                                   :children? true
+                                   :render-data? false
+                                   :include-collapsed-children? true}}]
+                          @requests)
+                       "A caller must be able to request a complete base tree without eager render derivation."))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
+
 (deftest block-loaders-preserve-worker-error-cause-test
   (async done
          (let [cause (js/Error. "worker failed")

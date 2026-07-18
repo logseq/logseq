@@ -629,7 +629,7 @@
                                page-id-uuid-or-name
                                {:all? true
                                 :children? true
-                                :render-data? true
+                                :render-data? keep-tree-resident?
                                 :include-collapsed-children? true})
                               (db-async/<get-page-blocks-tree
                                repo
