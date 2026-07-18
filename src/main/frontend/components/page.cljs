@@ -148,20 +148,29 @@
 (defn- use-loaded-block-tree
   [block*]
   (let [[stored-root set-stored-root!] (hooks/use-state block*)
+        *optimistic-state (hooks/use-ref nil)
         root-tx-id (rfx/use-entity-tx-id block*)
         latest-tx (when root-tx-id
                     (state/get-state :db/latest-transacted-entity-uuids))
-        root (if (= root-tx-id (:tx-id latest-tx))
-               (outliner-tree/reconcile-block-tree
-                stored-root
-                (:updated-blocks latest-tx)
-                (:deleted-ids latest-tx))
-               stored-root)]
+        event-result (when (= root-tx-id (:tx-id latest-tx))
+                       (outliner-tree/apply-loaded-tree-event
+                        stored-root
+                        (hooks/deref *optimistic-state)
+                        latest-tx))
+        root (or (:root event-result) stored-root)]
     (hooks/use-effect!
      (fn []
+       (set! (.-current *optimistic-state) nil)
        (set-stored-root! (outliner-tree/index-block-tree block*))
        nil)
      [(:block/uuid block*)])
+    (hooks/use-layout-effect!
+     (fn []
+       (when event-result
+         (set! (.-current *optimistic-state)
+               (:optimistic-state event-result)))
+       nil)
+     [root-tx-id])
     (hooks/use-effect!
      (fn []
        (set-stored-root! root)

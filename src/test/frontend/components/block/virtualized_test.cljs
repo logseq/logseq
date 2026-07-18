@@ -2,7 +2,8 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest is]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util :as util]))
 
 (defn- repo-root
   []
@@ -21,6 +22,144 @@
                   (count source)))]
     (when (and start end)
       (subs source start end))))
+
+(deftest visible-row-cache-reuses-unchanged-rendered-values
+  (let [cache* (atom nil)
+        calls* (atom [])
+        render! (fn [input]
+                  (swap! calls* conj input)
+                  #js {:input input})
+        first-render (util/cached-render! cache* :page :a 1 = render!)
+        second-render (util/cached-render! cache* :page :a 1 = render!)
+        changed-render (util/cached-render! cache* :page :a 2 = render!)
+        changed-context-render (util/cached-render! cache* :other-page :a 2 = render!)]
+    (is (identical? first-render second-render))
+    (is (not (identical? second-render changed-render)))
+    (is (not (identical? changed-render changed-context-render)))
+    (is (= [1 2 2] @calls*))))
+
+(deftest visible-row-cache-evicts-items-outside-the-virtuoso-range
+  (let [cache* (atom nil)
+        calls* (atom [])
+        render! (fn [input]
+                  (swap! calls* conj input)
+                  #js {:input input})]
+    (util/cached-render! cache* :page :a :a = render!)
+    (util/cached-render! cache* :page :b :b = render!)
+    (util/retain-render-cache-keys! cache* #{:b})
+    (util/cached-render! cache* :page :b :b = render!)
+    (util/cached-render! cache* :page :a :a = render!)
+    (is (= [:a :b :a] @calls*))))
+
+(deftest unchanged-list-rows-reuse-their-rendered-elements
+  (let [cache* (atom nil)
+        calls* (atom [])
+        render! (fn [input]
+                  (swap! calls* conj (:id input))
+                  #js {:id (:id input)})
+        inputs [{:id :a :value 1}
+                {:id :b :value 2}
+                {:id :c :value 3}]
+        first-render (util/reconcile-render-cache! cache* :page inputs :id = render!)
+        second-render (util/reconcile-render-cache! cache* :page inputs :id = render!)]
+    (is (= [:a :b :c] @calls*))
+    (is (every? true? (map identical? first-render second-render)))))
+
+(deftest render-cache-updates-only-changed-and-new-rows
+  (let [cache* (atom nil)
+            calls* (atom [])
+            render! (fn [input]
+                      (swap! calls* conj [(:id input) (:value input)])
+                      #js {:id (:id input) :value (:value input)})]
+        (util/reconcile-render-cache! cache*
+                    :page
+                    [{:id :a :value 1} {:id :b :value 2} {:id :c :value 3}]
+                    :id
+                    =
+                    render!)
+        (reset! calls* [])
+        (util/reconcile-render-cache! cache*
+                    :page
+                    [{:id :a :value 1} {:id :d :value 4} {:id :b :value 20} {:id :c :value 3}]
+                    :id
+                    =
+                    render!)
+        (is (= [[:d 4] [:b 20]] @calls*))
+        (reset! calls* [])
+        (util/reconcile-render-cache! cache*
+                    :page
+                    [{:id :a :value 1} {:id :d :value 4} {:id :c :value 3}]
+                    :id
+                    =
+                    render!)
+        (util/reconcile-render-cache! cache*
+                    :page
+                    [{:id :a :value 1} {:id :d :value 4} {:id :b :value 20} {:id :c :value 3}]
+                    :id
+                    =
+                    render!)
+        (is (= [[:b 20]] @calls*)
+            "A deleted row must leave the cache.")))
+
+(deftest render-cache-invalidates-when-the-tree-context-changes
+  (let [cache* (atom nil)
+            calls* (atom [])
+            render! (fn [input]
+                      (swap! calls* conj (:id input))
+                      #js {:id (:id input)})
+            inputs [{:id :a :edge :top} {:id :b :edge :bottom}]]
+        (util/reconcile-render-cache! cache* :page-a inputs :id = render!)
+        (reset! calls* [])
+        (util/reconcile-render-cache! cache* :page-b inputs :id = render!)
+        (is (= [:a :b] @calls*))
+        (reset! calls* [])
+        (util/reconcile-render-cache! cache*
+                    :page-b
+                    [{:id :a :edge :top} {:id :b :edge :middle}]
+                    :id
+                    =
+                    render!)
+        (is (= [:b] @calls*)
+            "Changing a row's top/bottom role must replace its rendered element.")))
+
+(deftest complete-journal-trees-use-the-keyed-render-cache
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (string/includes? block-list-source "util/reconcile-render-cache!")
+        "A non-virtualized complete tree must not recreate every unchanged React row.")
+    (is (not (string/includes? block-list-source
+                               "(map-indexed (fn [idx block]"))
+        "The complete-tree path should reconcile cached keyed rows instead of remapping them.")))
+
+(deftest fast-root-scroll-renders-lightweight-block-content
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")
+        placeholder-source (form-source source "(defn- block-scroll-seek-placeholder")]
+    (is (string/includes? block-list-source ":scrollSeekConfiguration")
+        "The single root virtualizer should avoid mounting full blocks during fast scrolling.")
+    (is (string/includes? block-list-source ":context #js {:blocks blocks}")
+        "Passing a CLJS map would deep-convert every block on each tree delta.")
+    (is (string/includes? block-list-source ":ScrollSeekPlaceholder block-scroll-seek-placeholder"))
+    (is (some? placeholder-source))
+    (when placeholder-source
+      (is (string/includes? placeholder-source "(.-height props)")
+          "The placeholder must preserve Virtuoso's measured row height.")
+      (is (string/includes? placeholder-source "(:blocks context)")
+          "The Virtuoso context may remain a ClojureScript map.")
+      (is (string/includes? placeholder-source ":block/raw-title")
+          "Fast scrolling should show block text instead of a blank skeleton.")
+      (is (string/includes? placeholder-source ":block/title")
+          "A structure payload without raw-title should still show its title.")
+      (is (string/includes? placeholder-source "(gobj/get block \"raw-title\")")
+          "Virtuoso converts context rows to plain objects with unqualified keys."))))
+
+(deftest root-virtualizer-reuses-visible-row-elements-only
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (string/includes? block-list-source "util/cached-render!")
+        "A tree delta should recreate only the changed visible row element.")
+    (is (string/includes? block-list-source "util/retain-render-cache-keys!")
+        "Rows leaving the Virtuoso range must be released from the element cache.")))
 
 (deftest scroll-position-persistence-runs-after-scrolling-stops
   (let [source (source-for "src/main/frontend/handler/common.cljs")
@@ -73,18 +212,18 @@
     (is (not (string/includes? block-list-source ":virtual/tree-prefix?"))
         "Tree pages must release rows through Virtuoso instead of disabling virtualization.")))
 
-(deftest journal-items-do-not-nest-a-second-virtualizer
+(deftest journal-items-own-their-single-root-virtualizer
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
-    (is (string/includes? block-list-source "(:journals? config)")
-        "The journal stream owns virtualization; each mounted journal renders one complete tree.")))
+    (is (not (string/includes? block-list-source "(:journals? config)"))
+        "The journal ID stream is lightweight; a mounted journal virtualizes its root blocks once.")))
 
 (deftest block-children-never-nest-a-second-virtualizer
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
     (is (string/includes? block-list-source
-                          "disable-virtualized? (or (util/rtc-test?)\n                                 (:journals? config)\n                                 (:block-children? config)")
-        "Only the outer page or journal stream may own virtualization.")
+                          "disable-virtualized? (or (util/rtc-test?)\n                                 (:block-children? config)")
+        "Only the page or journal root may own virtualization.")
     (is (string/includes? block-list-source
                           "virtualized? (and virtualization-enabled?\n                          (not disable-virtualized?)")
         "A mounted list must turn virtualization off if it becomes a child list.")))

@@ -119,6 +119,26 @@
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
+(deftest container-id-is-stable-for-an-equal-render-context
+  (let [original-state @state/state
+        context {:db/id 42 :journals? true}]
+    (try
+      (let [initial-state (assoc original-state
+                                 :ui/container-id 0
+                                 :ui/cached-key->container-id {})]
+        (reset! state/state initial-state)
+        (rfx/init! {:initial-value initial-state
+                    :registry (atom {})})
+        (is (= 1 (state/get-container-id context)))
+        (is (= 1 (state/get-container-id (into {} context)))
+            "A page rerender must keep editor subscriptions on the same container.")
+        (is (= {context 1}
+               (state/get-state :ui/cached-key->container-id))))
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})))))
+
 (deftest rfx-state-subscriptions-read-top-level-and-nested-paths
   (let [original-state @state/state]
     (try
