@@ -3,22 +3,10 @@
             [frontend.db.react :as react]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]))
-
-(def ^:private structural-outliner-ops
-  #{:insert-blocks
-    :delete-blocks
-    :move-blocks
-    :move-blocks-up-down
-    :indent-outdent-blocks
-    :apply-template
-    :collapse-expand-blocks})
-
-(defn structural-outliner-op?
-  [op]
-  (contains? structural-outliner-ops op))
 
 (defn refresh-state-paths
   [affected-ids]
@@ -55,7 +43,8 @@
           affected-keys))
 
 (defn invoke-hooks
-  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys pages blocks]}]
+  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys pages blocks
+           render-invalidated-block-uuids]}]
   (let [{:keys [initial-pages? end?]} tx-meta
         response-handled? (and (:ui/handled-by-response? tx-meta)
                                (= (:client-id tx-meta)
@@ -81,20 +70,23 @@
         :else
         (do
           (when-not response-handled?
-            (let [updated-ids (set (map :block/uuid blocks))
+            (let [updated-blocks (vec (distinct (concat pages blocks)))
+                  updated-ids (into (set render-invalidated-block-uuids)
+                                    (keep :block/uuid)
+                                    updated-blocks)
                   deleted-ids (set deleted-block-uuids)
                   affected-page-uuids (into (set (keep :block/uuid pages))
                                             (keep #(get-in % [:block/page :block/uuid]))
                                             blocks)
                   tx-id (:db-sync/tx-id tx-meta)]
+              (outliner-tree/reconcile-resident-block-trees! updated-blocks deleted-ids)
               (state/set-state! :db/latest-transacted-entity-uuids
                                 {:updated-ids updated-ids
                                  :deleted-ids deleted-ids
+                                 :updated-blocks updated-blocks
                                  :affected-page-uuids affected-page-uuids
                                  :entity-tx-ids (zipmap (into updated-ids deleted-ids)
                                                         (repeat tx-id))
-                                 :page-window-refresh? (structural-outliner-op?
-                                                        (:outliner-op tx-meta))
                                  :tx-id tx-id}
                                 :changed-paths (refresh-state-paths
                                                 (into updated-ids deleted-ids)))))

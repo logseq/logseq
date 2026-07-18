@@ -173,7 +173,7 @@
                       state/get-edit-block (constantly block)
                       state/set-editing-block-id! (fn [value]
                                                     (swap! calls conj [:set-editing value]))
-                      block-handler/page-window-tx-meta (constantly nil)
+                      block-handler/outliner-tx-meta (constantly nil)
                       outliner-op/indent-outdent-blocks! (fn [& _] nil)]
         (-> (block-handler/indent-outdent-blocks! [block] true (constantly nil))
             (p/then (fn []

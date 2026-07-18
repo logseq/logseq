@@ -22,11 +22,18 @@
     (js/Date.now)))
 
 (defonce ^:private *outliner-op-perf (atom {}))
+(defonce ^:private *outliner-op-results (atom {}))
 
 (defn take-outliner-op-perf!
   [perf-id]
   (let [result (get @*outliner-op-perf perf-id)]
     (swap! *outliner-op-perf dissoc perf-id)
+    result))
+
+(defn take-outliner-op-result!
+  [perf-id]
+  (let [result (get @*outliner-op-results perf-id)]
+    (swap! *outliner-op-results dissoc perf-id)
     result))
 
 (defn- log-outliner-op-perf!
@@ -52,16 +59,20 @@
     (let [started-at (perf-time-ms)
           result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
           pipeline-at (perf-time-ms)
-          tx-report' (:tx-report result)]
+          tx-report' (:tx-report result)
+          data (when result
+                 (merge {:repo repo
+                         :request-id (:request-id tx-meta)
+                         :tx-meta (transit-safe-tx-meta tx-meta)
+                         :tx-data (:tx-data tx-report')}
+                        (dissoc result :tx-report)))]
+      (when-let [perf-id (:ui/perf-id tx-meta)]
+        (swap! *outliner-op-results assoc perf-id data))
       (when result
         {:tx-report tx-report'
          :started-at started-at
          :pipeline-at pipeline-at
-         :data (merge {:repo repo
-                       :request-id (:request-id tx-meta)
-                       :tx-meta (transit-safe-tx-meta tx-meta)
-                       :tx-data (:tx-data tx-report')}
-                      (dissoc result :tx-report))}))))
+         :data data}))))
 
 (defn- broadcast-main-thread-sync!
   [repo {:keys [tx-meta]} {:keys [tx-report started-at pipeline-at data]}]
