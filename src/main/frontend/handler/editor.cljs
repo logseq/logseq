@@ -739,11 +739,25 @@
                                                :save-code-editor? false
                                                :skip-load? true})})))
 
+(defn- previous-block-node
+  [block-container config]
+  (if (:embed? config)
+    (util/get-prev-block-non-collapsed
+     block-container
+     {:container (util/rec-get-blocks-container block-container)})
+    (util/get-prev-block-non-collapsed-non-embed block-container)))
+
+(defn- mounted-block
+  [node]
+  (when node
+    (gobj/get node "__logseqBlock")))
+
 (defn- move-to-prev-block
   [repo sibling-block value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-      (p/let [block (db-async/<get-block repo (uuid sibling-block-id) {:children? false})]
+      (p/let [block (or (mounted-block sibling-block)
+                        (db-async/<get-block repo (uuid sibling-block-id) {:children? false}))]
         (when block
           (previous-block-edit block value
                                (some-> (dom/attr sibling-block "containerid")
@@ -778,11 +792,28 @@
   (or (ldb/asset? block)
       (comments-model/comments-area? block)))
 
+(defn- block-ref-key
+  [block-ref]
+  (if (map? block-ref)
+    (or (:db/id block-ref) (:block/uuid block-ref))
+    block-ref))
+
+(defn- mounted-left-sibling-or-parent
+  [block previous-block]
+  (let [parent-key (block-ref-key (:block/parent block))]
+    (when (and parent-key previous-block
+               (or (= parent-key (block-ref-key previous-block))
+                   (= parent-key (block-ref-key (:block/parent previous-block)))))
+      previous-block)))
+
 (defn- <left-sibling-or-parent
-  [repo block]
-  (p/let [left (when-let [block-id (:db/id block)]
-                 (db-async/<get-block-sibling repo block-id :left))]
-    (or left (:block/parent block))))
+  ([repo block]
+   (<left-sibling-or-parent repo block nil))
+  ([repo block previous-block]
+   (or (mounted-left-sibling-or-parent block previous-block)
+       (p/let [left (when-let [block-id (:db/id block)]
+                      (db-async/<get-block-sibling repo block-id :left))]
+         (or left (:block/parent block))))))
 
 (defn- delete-block-with-previous!
   [{:keys [block current-block next-block prev-block new-content edit-block-f
@@ -872,8 +903,10 @@
         (when (:block/parent block-e)
           (let [has-children? (seq (worker-children block-e))
                 block block-e
-                current-block (or current-block block)]
-            (p/let [left (<left-sibling-or-parent repo block)]
+                current-block (or current-block block)
+                sibling-or-parent-node (previous-block-node block-container config)
+                previous-block (mounted-block sibling-or-parent-node)]
+            (p/let [left (<left-sibling-or-parent repo block previous-block)]
               (let [left-has-children? (and left
                                             (or (= (:db/id left) (block-parent-id block))
                                                 (worker-has-children? left)))
@@ -881,24 +914,18 @@
                                               (= (:db/id current-block) (block-parent-id next-block))
                                               (not (worker-has-children? next-block)))]
                 (when-not (and has-children? left-has-children? (not delete-empty-parent?))
-                  (let [block-parent block-container
-                        sibling-or-parent-block (if (:embed? config)
-                                                  (util/get-prev-block-non-collapsed
-                                                   block-parent
-                                                   {:container (util/rec-get-blocks-container block-parent)})
-                                                  (util/get-prev-block-non-collapsed-non-embed block-parent))]
-                    (p/let [{:keys [prev-block new-content edit-block-f]}
-                            (or loaded-previous-edit
-                                (move-to-prev-block repo sibling-or-parent-block value))]
-                      (delete-block-with-previous!
-                       {:block block
-                        :current-block current-block
-                        :next-block next-block
-                        :prev-block prev-block
-                        :new-content new-content
-                        :edit-block-f edit-block-f
-                        :input-empty? input-empty?
-                        :delete-concat? delete-concat?}))))))))))))
+                  (p/let [{:keys [prev-block new-content edit-block-f]}
+                          (or loaded-previous-edit
+                              (move-to-prev-block repo sibling-or-parent-node value))]
+                    (delete-block-with-previous!
+                     {:block block
+                      :current-block current-block
+                      :next-block next-block
+                      :prev-block prev-block
+                      :new-content new-content
+                      :edit-block-f edit-block-f
+                      :input-empty? input-empty?
+                      :delete-concat? delete-concat?})))))))))))
 
 (defn move-blocks!
   [blocks target opts]
@@ -2918,8 +2945,11 @@
             value (gobj/get input "value")
             editor-state (get-state)
             editor-config (:config editor-state)
+            previous-block (some-> (previous-block-node (:block-container editor-state)
+                                                        editor-config)
+                                   mounted-block)
             custom-query? (:custom-query? editor-config)]
-        (p/let [left-or-parent (<left-sibling-or-parent repo block)]
+        (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]

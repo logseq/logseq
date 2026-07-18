@@ -1320,6 +1320,53 @@
           ret)
         @last-mem))))
 
+(defn reconcile-render-cache!
+  "Return rendered values in input order while reusing unchanged keyed values.
+
+  `context` invalidates the complete cache. Removed input keys are evicted on every
+  reconciliation."
+  [cache* context inputs key-fn same-input? render-fn]
+  (let [{cached-context :context cached-items :items} @cache*
+        cached-items (if (= context cached-context) cached-items {})
+        [next-items rendered]
+        (reduce (fn [[next-items rendered] input]
+                  (let [key (key-fn input)
+                        cached (get cached-items key)
+                        value (if (and cached
+                                       (same-input? (:input cached) input))
+                                (:rendered cached)
+                                (render-fn input))]
+                    [(assoc! next-items key {:input input
+                                             :rendered value})
+                     (conj! rendered value)]))
+                [(transient {}) (transient [])]
+                inputs)
+        next-items (persistent! next-items)
+        rendered (persistent! rendered)]
+    (reset! cache* {:context context
+                    :items next-items})
+    rendered))
+
+(defn cached-render!
+  "Render one keyed input or reuse its cached rendered value."
+  [cache* context key input same-input? render-fn]
+  (let [{cached-context :context cached-items :items} @cache*
+        cached-items (if (= context cached-context) cached-items {})
+        cached (get cached-items key)
+        rendered (if (and cached (same-input? (:input cached) input))
+                   (:rendered cached)
+                   (render-fn input))]
+    (reset! cache* {:context context
+                    :items (assoc cached-items key {:input input
+                                                    :rendered rendered})})
+    rendered))
+
+(defn retain-render-cache-keys!
+  "Evict cached rendered values whose keys are not retained."
+  [cache* retained-keys]
+  (swap! cache* update :items select-keys retained-keys)
+  nil)
+
 ;; requestAnimationFrame fallback
 #?(:cljs
    (def schedule

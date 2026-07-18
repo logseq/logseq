@@ -4,35 +4,17 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(def ^:private journal-item-reserve-height-ms 5000)
+(def ^:private journal-item-estimated-height 720)
 (defonce ^:private journal-item-height-by-key* (atom {}))
 
 (defn- journal-item-cache-key
   [id]
   [(state/get-current-repo) id])
-
-(defn- css-px
-  [v]
-  (let [n (js/parseFloat v)]
-    (if (js/Number.isNaN n) 0 n)))
-
-(defn- journal-item-content-height
-  [^js node]
-  (when-let [content (.-firstElementChild node)]
-    (let [style (js/getComputedStyle node)
-          extra-height (+ (css-px (.-paddingTop style))
-                          (css-px (.-paddingBottom style))
-                          (css-px (.-borderTopWidth style))
-                          (css-px (.-borderBottomWidth style)))]
-      (js/Math.round
-       (+ (.-height (.getBoundingClientRect content))
-          extra-height)))))
 
 (defn- remember-journal-item-height!
   [cache-key ^js node]
@@ -41,49 +23,81 @@
                        (.-height)
                        js/Math.round)]
     (when (pos? height)
-      (swap! journal-item-height-by-key* assoc cache-key height))))
+      (swap! journal-item-height-by-key* assoc cache-key height)
+      height)))
 
-(hsx/defc journal-cp
-  [id last? keep-tree-resident?]
+(defn- journal-slot-near-viewport?
+  [^js node ^js root]
+  (let [rect (.getBoundingClientRect node)
+        root-rect (.getBoundingClientRect root)
+        margin 1200]
+    (and (> (.-bottom rect) (- (.-top root-rect) margin))
+         (< (.-top rect) (+ (.-bottom root-rect) margin)))))
+
+(hsx/defc journal-slot
+  [id last? recent?]
   (let [cache-key (journal-item-cache-key id)
-        [reserve set-reserve!] (hooks/use-state {:cache-key cache-key
-                                                 :height (get @journal-item-height-by-key* cache-key)})
-        reserve-height (when (= cache-key (:cache-key reserve))
-                         (:height reserve))
-        clear-reserve! #(set-reserve! {:cache-key cache-key :height nil})
+        [mounted? set-mounted!] (hooks/use-state recent?)
+        [loaded? set-loaded!] (hooks/use-state false)
+        [placeholder-height set-placeholder-height!]
+        (hooks/use-state (or (get @journal-item-height-by-key* cache-key)
+                             journal-item-estimated-height))
         *item-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (set-reserve! {:cache-key cache-key
-                      :height (get @journal-item-height-by-key* cache-key)})
-       (let [timeout-id (js/setTimeout clear-reserve!
-                                       journal-item-reserve-height-ms)]
-         #(js/clearTimeout timeout-id)))
+       (set-placeholder-height! (or (get @journal-item-height-by-key* cache-key)
+                                    journal-item-estimated-height))
+       (set-loaded! false)
+       (set-mounted! recent?)
+       nil)
      [cache-key])
     (hooks/use-effect!
      (fn []
-       (when-let [node (hooks/deref *item-ref)]
-         (when-not reserve-height
-           (remember-journal-item-height! cache-key node))
-         (let [observer (js/ResizeObserver.
-                         (fn []
-                           (if reserve-height
-                             (when (>= (or (journal-item-content-height node) 0)
-                                       (dec reserve-height))
-                               (clear-reserve!))
-                             (remember-journal-item-height! cache-key node))))]
+       (let [node (hooks/deref *item-ref)
+             root (util/app-scroll-container-node)]
+         (when (and node root)
+           (let [observer (js/IntersectionObserver.
+                           (fn [entries]
+                             (let [intersecting? (boolean (some #(.-isIntersecting %)
+                                                                (array-seq entries)))
+                                   focused? (.contains node (.-activeElement js/document))
+                                   loading-recent? (and recent? (not loaded?))]
+                               (set-mounted! (or intersecting? focused? loading-recent?))))
+                           #js {:root root
+                                :rootMargin "1200px 0px"})
+                 on-focus-out (fn []
+                                (js/setTimeout
+                                 #(when (and (not (.contains node (.-activeElement js/document)))
+                                             (not (and recent? (not loaded?)))
+                                             (not (journal-slot-near-viewport? node root)))
+                                    (set-mounted! false))
+                                 0))]
+             (.observe observer node)
+             (.addEventListener node "focusout" on-focus-out)
+             (fn []
+               (.disconnect observer)
+               (.removeEventListener node "focusout" on-focus-out))))))
+     [cache-key loaded? recent?])
+    (hooks/use-effect!
+     (fn []
+       (when (and mounted? (hooks/deref *item-ref))
+         (let [node (hooks/deref *item-ref)
+               update-height! #(when-let [height (remember-journal-item-height! cache-key node)]
+                                 (set-placeholder-height! height))
+               observer (js/ResizeObserver. update-height!)]
+           (update-height!)
            (.observe observer node)
            #(.disconnect observer))))
-     [cache-key reserve-height])
+     [cache-key mounted?])
     [:div.journal-item.content
      (cond-> {:ref *item-ref}
        last? (assoc :class "journal-last-item")
-       reserve-height (assoc :style {:min-height reserve-height})
-       reserve-height (assoc :on-focus clear-reserve!)
-       reserve-height (assoc :on-input clear-reserve!))
-     (page/page-cp {:db/id id
-                    :journals? true
-                    :keep-tree-resident? keep-tree-resident?})]))
+       (not mounted?) (assoc :style {:min-height placeholder-height}))
+     (when mounted?
+       (page/page-cp {:db/id id
+                      :journals? true
+                      :keep-tree-resident? recent?
+                      :on-page-blocks-rendered #(set-loaded! true)}))]))
 
 (defn- sub-journals
   []
@@ -101,15 +115,8 @@
   (let [{:keys [data]} (sub-journals)]
     (when (seq data)
       [:div#journals
-       (ui/virtualized-list
-        {:custom-scroll-parent (util/app-scroll-container-node)
-         :increase-viewport-by {:top 600 :bottom 1200}
-         :skipAnimationFrameInResizeObserver true
-         :compute-item-key (fn [idx]
-                             (let [id (util/nth-safe data idx)]
-                               (str "journal-" id)))
-         :total-count (count data)
-         :item-content (fn [idx]
-                         (let [id (util/nth-safe data idx)
-                               last? (= (inc idx) (count data))]
-                           (journal-cp id last? (< idx 2))))})])))
+       (map-indexed
+        (fn [idx id]
+          ^{:key (str "journal-" id)}
+          [journal-slot id (= (inc idx) (count data)) (< idx 2)])
+        data)])))

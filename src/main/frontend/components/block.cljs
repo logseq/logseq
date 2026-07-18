@@ -4324,6 +4324,12 @@
                                   (reset! *use-plugin-renderer? false))
         set-plugin-renderer-error! #(reset! *plugin-renderer-error? %)
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
+        _mounted-block-effect (hooks/use-layout-effect!
+                               (fn []
+                                 (when-let [node @*ref]
+                                   (gobj/set node "__logseqBlock" block))
+                                 nil)
+                               [block])
         config* (if original-block
                   (assoc config* :original-block original-block)
                   config*)
@@ -5303,12 +5309,35 @@
 (def block-item
   (memo-react-component block-item-inner same-block-render-input?))
 
+(defn- block-scroll-seek-placeholder
+  [^js props]
+  (let [context (.-context props)
+        blocks (or (when context (.-blocks context))
+                   (:blocks context))
+        block (when blocks (nth blocks (.-index props) nil))
+        title (or (:block/raw-title block)
+                  (when block (gobj/get block "raw-title"))
+                  (when block (gobj/get block "block/raw-title"))
+                  (:block/title block)
+                  (when block (gobj/get block "title"))
+                  (when block (gobj/get block "block/title"))
+                  "")]
+    (react-core/createElement
+     "div"
+     #js {:className "block-scroll-seek-placeholder"
+          :style #js {:height (.-height props)
+                      :boxSizing "border-box"
+                      :overflow "hidden"
+                      :padding "3px 0 3px 32px"
+                      :textOverflow "ellipsis"
+                      :whiteSpace "nowrap"}}
+     title)))
+
 (hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
   (let [blocks (vec blocks)
         blocks-count (count blocks)
         disable-virtualized? (or (util/rtc-test?)
-                                 (:journals? config)
                                  (:block-children? config)
                                  (< blocks-count 10))
         [virtualization-enabled? _] (hooks/use-state (not disable-virtualized?))
@@ -5317,14 +5346,56 @@
                           (seq blocks))
         selection-block-ids (or (:selection/block-ids config)
                                 (when virtualized? (mapv :block/uuid blocks)))
+        render-block-item (fn [block item-config top? bottom?]
+                            (block-item (assoc item-config :top? top?)
+                                        block
+                                        {:top? top?
+                                         :bottom? bottom?}))
+        same-render-input? (fn [[old-block old-config old-top? old-bottom?]
+                                [new-block new-config new-top? new-bottom?]]
+                             (and (= old-top? new-top?)
+                                  (= old-bottom? new-bottom?)
+                                  (same-block-render-input? [old-config old-block]
+                                                            [new-config new-block])))
+        render-block-element (fn [[block item-config top? bottom?]]
+                               (react-core/createElement
+                                react-core/Fragment
+                                #js {:key (str (:container-id item-config)
+                                               "-"
+                                               (:block/uuid block))}
+                                (render-block-item block item-config top? bottom?)))
+        *virtualized-render-cache (hooks/use-memo #(atom nil) [])
         render-item (fn [idx item-config]
                       (let [top? (zero? idx)
                             bottom? (= (dec blocks-count) idx)
-                            block (nth blocks idx)]
-                        (block-item (assoc item-config :top? top?)
-                                    block
-                                    {:top? top?
-                                     :bottom? bottom?})))
+                            block (nth blocks idx)
+                            input [block item-config top? bottom?]]
+                        (util/cached-render!
+                         *virtualized-render-cache
+                         (:container-id item-config)
+                         (:block/uuid block)
+                         input
+                         same-render-input?
+                         render-block-element)))
+        *render-cache (hooks/use-memo #(atom nil) [])
+        nonvirtualized-inputs (when-not virtualized?
+                                (reduce-kv (fn [result idx block]
+                                             (conj result
+                                                   [block
+                                                    config
+                                                    (zero? idx)
+                                                    (= (dec blocks-count) idx)]))
+                                           []
+                                           blocks))
+        nonvirtualized-elements
+        (when-not virtualized?
+          (util/reconcile-render-cache!
+           *render-cache
+           (:container-id config)
+           nonvirtualized-inputs
+           (fn [[block]] (:block/uuid block))
+           same-render-input?
+           render-block-element))
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
                                (util/app-scroll-container-node node)
@@ -5344,8 +5415,25 @@
                         :increase-viewport-by 254
                         :overscan 254
                         :skipAnimationFrameInResizeObserver true
+                        :context #js {:blocks blocks}
+                        :components {:ScrollSeekPlaceholder block-scroll-seek-placeholder}
+                        :scrollSeekConfiguration
+                        {:enter (fn [velocity]
+                                  (> (js/Math.abs velocity) 300))
+                        :exit (fn [velocity]
+                                 (< (js/Math.abs velocity) 40))}
                         :total-count blocks-count
-                        :rangeChanged (fn [_range]
+                        :rangeChanged (fn [^js range]
+                                        (let [start-index (.-startIndex range)
+                                              end-index (.-endIndex range)
+                                              retained-keys (into #{}
+                                                                  (map :block/uuid)
+                                                                  (subvec blocks
+                                                                          start-index
+                                                                          (inc end-index)))]
+                                          (util/retain-render-cache-keys!
+                                           *virtualized-render-cache
+                                           retained-keys))
                                         (when (block-selection/pointer-down?)
                                           (select-block-under-pointer!
                                            selection-block-ids
@@ -5380,10 +5468,7 @@
        (assoc :data-virtuoso-scroller true))
      (if virtualized?
        (ui/virtualized-list virtual-opts)
-       (map-indexed (fn [idx block]
-                      ^{:key (str (:container-id config) "-" (:block/uuid block))}
-                      [:<> (render-item idx config)])
-                    blocks))]))
+       (seq nonvirtualized-elements))]))
 
 
 (hsx/defc blocks-container

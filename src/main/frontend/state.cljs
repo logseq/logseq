@@ -2075,7 +2075,7 @@ should be done through this fn in order to get global config and config defaults
   (if (seq key)
     (or (get (get-state :ui/cached-key->container-id) key)
         (let [id (get-next-container-id)]
-          (update-state! :ui/cached-key->container-id assoc key id)
+          (update-state! :ui/cached-key->container-id #(assoc % key id))
           id))
     (get-next-container-id)))
 
@@ -2089,7 +2089,7 @@ should be done through this fn in order to get global config and config defaults
 (comment
   (defn remove-container-key!
     [key]
-    (update-state! :ui/cached-key->container-id dissoc key)))
+    (update-state! :ui/cached-key->container-id #(dissoc % key))))
 
 (defn get-editor-info
   []
