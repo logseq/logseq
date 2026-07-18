@@ -242,6 +242,109 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
+(deftest structural-editor-ops-publish-an-optimistic-tree-before-worker-response-test
+  (async done
+    (let [page-id (random-uuid)
+          target-id (random-uuid)
+          inserted-id (random-uuid)
+          tx-id (random-uuid)
+          worker-result (p/deferred)
+          callback-rows (atom [])]
+      (state/set-state! :db/latest-transacted-entity-uuids {})
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-current-page (constantly page-id)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              worker-result
+
+                              (p/resolved nil)))]
+            (let [inserted-block {:block/uuid inserted-id
+                                  :block/title ""}
+                  ops [[:insert-blocks [[inserted-block]
+                                        target-id
+                                        {:sibling? true
+                                         :keep-uuid? true
+                                         :outliner-op :insert-blocks}]]]
+                  result (db-transact/apply-outliner-ops
+                          nil
+                          ops
+                          {:db-sync/tx-id tx-id
+                           :ui/page-id page-id
+                           :editor/edit-block-fn #(reset! callback-rows %)})]
+              (p/let [_ (p/delay 0)
+                      optimistic (state/get-state :db/latest-transacted-entity-uuids)
+                      _ (is (= ops (:optimistic-ops optimistic)))
+                      _ (is (= tx-id (:optimistic-tx-id optimistic)))
+                      _ (is (not= tx-id (:tx-id optimistic))
+                            "The worker confirmation must publish a distinct entity version.")
+                      _ (is (= [inserted-block] @callback-rows)
+                            "The cursor target should publish before persistence finishes.")
+                      persisted-block (assoc inserted-block
+                                              :block/parent {:db/id 1}
+                                              :block/order "a0")
+                      _ (p/resolve! worker-result {:result ::persisted
+                                                   :updated-blocks [persisted-block]})
+                      value result
+                      confirmed (state/get-state :db/latest-transacted-entity-uuids)]
+                (is (= ::persisted value))
+                (is (= tx-id (:tx-id confirmed)))
+                (is (= tx-id (:confirmed-optimistic-tx-id confirmed)))
+                (is (= [inserted-block] @callback-rows)
+                    "Worker confirmation must not reset the cursor a second time."))))
+          (p/finally done)))))
+
+(deftest failed-optimistic-editor-op-publishes-a-targeted-rollback-test
+  (async done
+    (let [page-id (random-uuid)
+          target-id (random-uuid)
+          inserted-id (random-uuid)
+          tx-id (random-uuid)
+          worker-result (p/deferred)
+          callback-count (atom 0)]
+      (state/set-state! :db/latest-transacted-entity-uuids {})
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "test-repo")
+                          state/get-current-page (constantly page-id)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              worker-result
+
+                              (p/resolved nil)))]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:insert-blocks [[{:block/uuid inserted-id
+                                              :block/title ""}]
+                                            target-id
+                                            {:sibling? true
+                                             :keep-uuid? true
+                                             :outliner-op :insert-blocks}]]]
+                          {:db-sync/tx-id tx-id
+                           :ui/page-id page-id
+                           :editor/edit-block-fn (fn [_] (swap! callback-count inc))})]
+              (p/let [_ (p/delay 0)
+                      _ (is (= 1 @callback-count))
+                      _ (p/reject! worker-result (js/Error. "worker failed"))
+                      _ (p/catch result identity)
+                      rollback (state/get-state :db/latest-transacted-entity-uuids)]
+                (is (= tx-id (:rollback-optimistic-tx-id rollback)))
+                (is (= 1 @callback-count)))))
+          (p/finally done)))))
+
 (deftest structural-ops-publish-tree-and-editor-in-one-dom-commit-test
   (async done
     (let [page-id (random-uuid)
@@ -285,7 +388,8 @@
                :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
           (p/then (fn []
                     (is (= [:commit-start :publish [:insert block-id] :commit-end
-                            :commit-start :publish [:delete block-id] :commit-end]
+                            :commit-start :publish [:delete block-id] :commit-end
+                            :publish]
                            @calls))))
           (p/finally (fn []
                        (set! (.-flushSync react-dom) original-flush-sync)

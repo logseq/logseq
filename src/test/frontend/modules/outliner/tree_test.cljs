@@ -210,6 +210,161 @@
     (is (identical? root result)
         "An unrelated transaction must not wake or reconcile this page tree.")))
 
+(defn- fractional-loaded-tree
+  []
+  (-> (loaded-tree)
+      (assoc-in [:block/children 0 :block/order] "a0")
+      (assoc-in [:block/children 0 :block/children 0 :block/order] "a0")
+      (assoc-in [:block/children 1 :block/order] "a2")))
+
+(deftest optimistic-enter-inserts-a-sibling-without-rebuilding-the-tree
+  (let [root (tree/index-block-tree (fractional-loaded-tree))
+        old-a (first (:block/children root))
+        old-c (second (:block/children root))
+        result (tree/apply-optimistic-ops
+                root
+                [[:save-block [{:block/uuid a-id
+                                :block/title "A edited"}
+                               nil]]
+                 [:insert-blocks [[{:block/uuid d-id
+                                    :block/title ""}]
+                                   a-id
+                                   {:sibling? true
+                                    :keep-uuid? true
+                                    :outliner-op :insert-blocks}]]])]
+    (is (= [a-id d-id c-id]
+           (mapv :block/uuid (:block/children result))))
+    (is (= "A edited" (get-in result [:block/children 0 :block/title])))
+    (is (= {:db/id 1} (get-in result [:block/children 1 :block/parent])))
+    (is (neg? (compare "a0" (get-in result [:block/children 1 :block/order]))))
+    (is (neg? (compare (get-in result [:block/children 1 :block/order]) "a2")))
+    (is (not (identical? old-a (first (:block/children result)))))
+    (is (identical? old-c (get-in result [:block/children 2])))))
+
+(deftest optimistic-enter-inserts-the-first-child
+  (let [result (tree/apply-optimistic-ops
+                (tree/index-block-tree (fractional-loaded-tree))
+                [[:insert-blocks [[{:block/uuid d-id
+                                    :block/title ""}]
+                                   a-id
+                                   {:sibling? false
+                                    :keep-uuid? true
+                                    :outliner-op :insert-blocks}]]])]
+    (is (= [d-id b-id]
+           (mapv :block/uuid
+                 (get-in result [:block/children 0 :block/children]))))
+    (is (= {:db/id 2}
+           (get-in result [:block/children 0 :block/children 0 :block/parent])))
+    (is (= 2
+           (get-in result [:block/children 0 :block/children 0 :block/level])))))
+
+(deftest optimistic-simple-delete-applies-the-accompanying-save
+  (let [result (tree/apply-optimistic-ops
+                (tree/index-block-tree (loaded-tree))
+                [[:delete-blocks [[c-id] {}]]
+                 [:save-block [{:block/uuid a-id
+                                :block/title "merged"}
+                               nil]]])]
+    (is (= [a-id] (mapv :block/uuid (:block/children result))))
+    (is (= "merged" (get-in result [:block/children 0 :block/title])))))
+
+(deftest optimistic-tree-rejects-operations-it-cannot-prove
+  (let [root (tree/index-block-tree (loaded-tree))]
+    (is (nil? (tree/apply-optimistic-ops
+               root
+               [[:move-blocks [[a-id] c-id {:sibling? true}]]])))
+    (is (nil? (tree/apply-optimistic-ops
+               root
+               [[:insert-blocks [[{:block/uuid d-id}]
+                                  a-id
+                                  {:sibling? true
+                                  :keep-uuid? false}]]])))))
+
+(deftest loaded-tree-events-confirm-or-rollback-an-optimistic-delta
+  (let [root (tree/index-block-tree (fractional-loaded-tree))
+        tx-id (random-uuid)
+        ops [[:insert-blocks [[{:block/uuid d-id
+                                :block/title ""}]
+                              a-id
+                              {:sibling? true
+                               :keep-uuid? true
+                               :outliner-op :insert-blocks}]]]
+        optimistic (tree/apply-loaded-tree-event
+                    root
+                    nil
+                    {:optimistic-tx-id tx-id
+                     :optimistic-ops ops})
+        optimistic-root (:root optimistic)
+        optimistic-state (:optimistic-state optimistic)
+        confirmed (tree/apply-loaded-tree-event
+                   optimistic-root
+                   optimistic-state
+                   {:confirmed-optimistic-tx-id tx-id
+                    :updated-blocks [{:db/id 5
+                                      :block/uuid d-id
+                                      :block/parent {:db/id 1}
+                                      :block/order "a1"
+                                      :block/title "persisted"}]
+                    :deleted-ids #{}})
+        rolled-back (tree/apply-loaded-tree-event
+                     optimistic-root
+                     optimistic-state
+                     {:rollback-optimistic-tx-id tx-id})]
+    (is (= [a-id d-id c-id]
+           (mapv :block/uuid (:block/children optimistic-root))))
+    (is (identical? root (:base-root optimistic-state)))
+    (is (= "persisted" (get-in confirmed [:root :block/children 1 :block/title])))
+    (is (nil? (:optimistic-state confirmed)))
+    (is (identical? root (:root rolled-back)))
+    (is (nil? (:optimistic-state rolled-back)))))
+
+(deftest loaded-tree-events-replay-rapid-optimistic-enters-from-the-authoritative-base
+  (let [root (tree/index-block-tree (fractional-loaded-tree))
+        first-tx-id (random-uuid)
+        second-tx-id (random-uuid)
+        second-id (random-uuid)
+        insert-after (fn [block-id target-id]
+                       [[:insert-blocks [[{:block/uuid block-id
+                                          :block/title ""}]
+                                        target-id
+                                        {:sibling? true
+                                         :keep-uuid? true
+                                         :outliner-op :insert-blocks}]]])
+        first-event (tree/apply-loaded-tree-event
+                     root nil
+                     {:optimistic-tx-id first-tx-id
+                      :optimistic-ops (insert-after d-id a-id)})
+        second-event (tree/apply-loaded-tree-event
+                      (:root first-event)
+                      (:optimistic-state first-event)
+                      {:optimistic-tx-id second-tx-id
+                       :optimistic-ops (insert-after second-id d-id)})
+        confirmed-first (tree/apply-loaded-tree-event
+                         (:root second-event)
+                         (:optimistic-state second-event)
+                         {:confirmed-optimistic-tx-id first-tx-id
+                          :updated-blocks [{:db/id 5
+                                            :block/uuid d-id
+                                            :block/parent {:db/id 1}
+                                            :block/order "a1"}]
+                          :deleted-ids #{}})
+        rolled-back-first (tree/apply-loaded-tree-event
+                           (:root second-event)
+                           (:optimistic-state second-event)
+                           {:rollback-optimistic-tx-id first-tx-id})]
+    (is (= [a-id d-id second-id c-id]
+           (mapv :block/uuid (:block/children (:root second-event)))))
+    (is (= [a-id d-id second-id c-id]
+           (mapv :block/uuid (:block/children (:root confirmed-first))))
+        "Confirming the first Enter must replay the still-pending second Enter.")
+    (is (= [second-tx-id]
+           (mapv :tx-id (get-in confirmed-first [:optimistic-state :pending]))))
+    (is (= [a-id c-id]
+           (mapv :block/uuid (:block/children (:root rolled-back-first))))
+        "A delta depending on a failed target stays pending but cannot render invalid data.")
+    (is (= [second-tx-id]
+           (mapv :tx-id (get-in rolled-back-first [:optimistic-state :pending]))))))
+
 (deftest resident-journal-tree-keeps-receiving-worker-deltas
   (tree/keep-block-tree-resident! (loaded-tree))
   (tree/reconcile-resident-block-trees!
