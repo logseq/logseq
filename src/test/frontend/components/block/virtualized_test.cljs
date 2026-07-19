@@ -312,6 +312,23 @@
     (is (string/includes? source "render-block-reactions?")
         "Complete empty payloads should not mount components that render nothing.")))
 
+(deftest block-reactions-do-not-refetch-the-current-user
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        reactions-source (form-source source "(hsx/defc block-reactions")]
+    (is (some? reactions-source))
+    (is (string/includes? reactions-source "user-handler/user-uuid"))
+    (is (not (string/includes? reactions-source "db-async/<get-block"))
+        "Every reaction block should reuse the authenticated user UUID from its payload.")))
+
+(deftest block-reactions-wait-for-batched-metadata-hydration
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        predicate-source (form-source source "(defn- render-block-reactions?")
+        outline-source (form-source source "(defn- block-renderer-outline-view")]
+    (is (some? predicate-source))
+    (is (string/includes? predicate-source "block-metadata-ready?")
+        "Incomplete virtual rows must not start one reaction query per block while hydration is pending.")
+    (is (string/includes? outline-source "(render-block-reactions? config block)"))))
+
 (deftest normal-block-collapse-uses-reactive-ui-state
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux")]
