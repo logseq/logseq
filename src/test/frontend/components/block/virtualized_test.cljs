@@ -161,6 +161,25 @@
     (is (string/includes? block-list-source "util/retain-render-cache-keys!")
         "Rows leaving the Virtuoso range must be released from the element cache.")))
 
+(deftest root-virtualizer-publishes-row-data-atomically
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (string/includes? block-list-source ":data (to-array blocks)")
+        "Virtuoso must receive the rows in the same update as their count without converting block maps.")
+    (is (not (string/includes? block-list-source ":total-count blocks-count"))
+        "A separate totalCount can expose an index before its row data is current.")
+    (is (string/includes? block-list-source ":compute-item-key (fn [_idx block]")
+        "A row key must come from the row supplied by Virtuoso, not an index closure.")
+    (is (string/includes? block-list-source ":item-content (fn [idx block]")
+        "New rows must render from Virtuoso's atomic data payload.")))
+
+(deftest root-virtualizer-measures-new-editor-rows-after-layout
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        block-list-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-list")]
+    (is (not (string/includes? block-list-source
+                               ":skipAnimationFrameInResizeObserver true"))
+        "A newly focused editor row can be transiently zero-sized until the next animation frame.")))
+
 (deftest scroll-position-persistence-runs-after-scrolling-stops
   (let [source (source-for "src/main/frontend/handler/common.cljs")
         listener-source (form-source source "(defn listen-to-scroll!")

@@ -1,14 +1,13 @@
 (ns frontend.components.journal
   (:require [frontend.components.journal-state :as journal-state]
             [frontend.components.page :as page]
-            [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.shui.hooks :as hooks]
-            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (def ^:private journal-item-estimated-height 720)
@@ -216,15 +215,14 @@
   (when-let [repo (state/get-current-repo)]
     (some-> (react/q repo
                      [:frontend.worker.react/journals]
-                     {:query-fn (fn [_]
-                                  (p/let [result (views/<load-view-data nil {:journals? true})]
-                                    (update result :data #(vec (remove nil? %)))))}
+                     {:query-fn (fn [_ _]
+                                  (db-async/<get-latest-journals repo))}
                      nil)
             db-hooks/use-query)))
 
 (hsx/defc all-journals
   []
-  (let [{:keys [data]} (sub-journals)]
+  (let [data (sub-journals)]
     (when (seq data)
       [:div#journals
        (map-indexed

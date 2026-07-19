@@ -1,7 +1,34 @@
 (ns frontend.handler-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [frontend.date :as date]
             [frontend.handler.page :as page-handler]))
+
+(defn- source-for
+  [relative-path]
+  (.toString
+   (fs/readFileSync
+    (node-path/join (.cwd js/process) relative-path)
+    "utf8")))
+
+(deftest app-enters-db-restoring-state-before-render-test
+  (let [source (source-for "src/main/frontend/handler.cljs")
+        start-source (subs source (string/index-of source "(defn start!"))
+        restoring-index (string/index-of start-source "(state/set-db-restoring! true)")
+        render-index (string/index-of start-source "(render)")]
+    (is (and restoring-index render-index (< restoring-index render-index))
+        "The initial route must stay behind the restoring screen until the worker graph is ready.")))
+
+(deftest startup-header-defers-page-queries-until-the-graph-is-ready-test
+  (let [source (source-for "src/main/frontend/components/header.cljs")]
+    (is (string/includes? source
+                          "[current-repo current-page db-restoring?]")
+        "Toolbar page queries must rerun after graph restoration.")
+    (is (string/includes? source
+                          "(if db-restoring?\n         (do\n           (set-page! nil)")
+        "Toolbar page queries must not reach the worker during graph restoration.")))
 
 (deftest date-watch-queries-the-journal-only-when-the-day-changes-test
   (let [today (atom "Jul 19th, 2026")
