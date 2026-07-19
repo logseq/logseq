@@ -44,6 +44,57 @@
      :block/level 1
      :block/children []}]})
 
+(deftest loaded-tree-node-resolves-complete-subtrees-by-id-and-uuid
+  (let [loaded-node (some-> (resolve 'frontend.modules.outliner.tree/loaded-node) deref)
+        root (-> (loaded-tree)
+                 (assoc-in [:block/children 0 :block.temp/load-status] :full)
+                 tree/index-block-tree)
+        expected (get-in root [:block/children 0])]
+    (is (fn? loaded-node)
+        "Loaded property blocks need an indexed tree resolver instead of another worker request.")
+    (when loaded-node
+      (is (identical? expected (loaded-node root 2)))
+      (is (identical? expected (loaded-node root a-id)))
+      (is (identical? expected (loaded-node root {:db/id 2
+                                                  :block/uuid a-id})))
+      (is (nil? (loaded-node root 999))))))
+
+(deftest loaded-tree-node-reads-the-current-reconciled-payload
+  (let [loaded-node (some-> (resolve 'frontend.modules.outliner.tree/loaded-node) deref)
+        root (-> (loaded-tree)
+                 (assoc-in [:block/children 0 :block/children 0 :block.temp/load-status] :full)
+                 tree/index-block-tree)
+        updated (tree/reconcile-block-tree
+                 root
+                 [{:db/id 3
+                   :block/uuid b-id
+                   :block/title "B changed"
+                   :block/parent {:db/id 2}
+                   :block/order "a"}]
+                 #{})]
+    (is (fn? loaded-node))
+    (when loaded-node
+      (is (= "B changed" (:block/title (loaded-node updated b-id))))
+      (is (= :full (:block.temp/load-status (loaded-node updated 3)))))))
+
+(deftest loaded-tree-node-does-not-scan-a-wide-sibling-group
+  (let [loaded-node (some-> (resolve 'frontend.modules.outliner.tree/loaded-node) deref)
+        children (mapv (fn [id]
+                         {:db/id id
+                          :block/uuid (random-uuid)
+                          :block/order (.padStart (str id) 4 "0")
+                          :block/children []})
+                       (range 2 202))
+        root (tree/index-block-tree {:db/id 1
+                                     :block/uuid root-id
+                                     :block/children children})]
+    (is (fn? loaded-node))
+    (when loaded-node
+      (with-redefs [cljs.core/tree-seq
+                    (fn [& _]
+                      (throw (js/Error. "Loaded tree lookup must use its navigation index")))]
+        (is (= 201 (:db/id (loaded-node root 201))))))))
+
 (deftest reconcile-block-tree-preserves-unchanged-subtree-identities
   (let [root (tree/index-block-tree (loaded-tree))
         old-a (first (:block/children root))
