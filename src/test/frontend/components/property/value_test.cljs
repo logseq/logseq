@@ -8,6 +8,17 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(deftest compact-closed-values-require-worker-loading-test
+  (is (#'property-value/compact-closed-values?
+       {:property/closed-values
+        [{:db-ident :logseq.property.view/type.table}
+         {:db-ident :logseq.property.view/type.list}]}))
+  (is (not (#'property-value/compact-closed-values?
+            {:property/closed-values
+             [{:db/id 1 :db/ident :logseq.property.view/type.table}
+              {:db/id 2 :db/ident :logseq.property.view/type.list}]})))
+  (is (not (#'property-value/compact-closed-values? {}))))
+
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])
         block {:db/id 1}
