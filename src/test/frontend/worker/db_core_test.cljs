@@ -2453,7 +2453,9 @@
            target (db-test/find-block-by-content @conn "Block 0")
            referring-block (db-test/find-block-by-content @conn "Block 1")
            comments-area (db-test/find-block-by-content @conn "Block 2")
-           _ (d/transact! conn [{:db/id (:db/id referring-block)
+           _ (d/transact! conn [{:db/id journal-id
+                                 :logseq.property/heading 1}
+                                {:db/id (:db/id referring-block)
                                  :block/refs [(:db/id target)]}
                                 {:db/id (:db/id comments-area)
                                  :logseq.property.comments/blocks [(:db/id target)]}])]
@@ -2465,6 +2467,7 @@
                                  :opts {:all? true
                                         :children? true
                                         :render-data? false
+                                        :root-render-data? true
                                         :block-metadata? true
                                         :include-collapsed-children? true}}]))
                  ldb/read-transit-str
@@ -2476,6 +2479,9 @@
          (is (= 165 (count children)))
          (is (= :full (:block.temp/load-status block)))
          (is (every? #(= :full (:block.temp/load-status %)) children))
+         (is (contains? block :block.temp/display-properties)
+             "The journal root should carry full render data in its initial tree response.")
+         (is (contains? block :block.temp/positioned-properties))
          (is (every? #(contains? % :block.temp/positioned-properties) plain-results)
              "Plain blocks should carry cheap negative property markers.")
          (is (every? #(contains? % :block.temp/display-properties) plain-results))
