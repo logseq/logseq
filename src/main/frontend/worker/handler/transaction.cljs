@@ -112,14 +112,17 @@
             listener-result (db-listener/take-outliner-op-result! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             listener-at (perf-time-ms)
-            changed-entities (into []
-                                   (distinct)
-                                   (concat (:pages listener-result)
-                                           (:blocks listener-result)
-                                           (keep #(d/entity @conn [:block/uuid %])
-                                                 affected-block-uuids)
-                                           (keep #(d/entity @conn [:block/uuid %])
-                                                 (:render-invalidated-block-uuids listener-result))))
+            changed-entities (->> (concat (:blocks listener-result)
+                                          (keep #(d/entity @conn [:block/uuid %])
+                                                affected-block-uuids)
+                                          (keep #(d/entity @conn [:block/uuid %])
+                                                (:render-invalidated-block-uuids listener-result)))
+                                  (common-util/distinct-by :db/id)
+                                  vec)
+            entity-updated-block-uuids
+            (into (set (:render-invalidated-block-uuids listener-result))
+                  (keep :block/uuid)
+                  (:blocks listener-result))
             affected-page-uuids (into affected-page-uuids-before
                                       (keep (fn [entity]
                                               (some-> (entity-page entity) :block/uuid)))
@@ -146,6 +149,13 @@
                         (seq (:render-invalidated-block-uuids listener-result))
                         (assoc :render-invalidated-block-uuids
                                (:render-invalidated-block-uuids listener-result))
+
+                        (seq entity-updated-block-uuids)
+                        (assoc :entity-updated-block-uuids entity-updated-block-uuids)
+
+                        (seq (:structural-parent-uuids listener-result))
+                        (assoc :structural-parent-uuids
+                               (:structural-parent-uuids listener-result))
 
                         (seq affected-page-uuids)
                         (assoc :affected-page-uuids affected-page-uuids)))

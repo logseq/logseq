@@ -622,19 +622,46 @@
         tree-source (source-for "src/main/frontend/modules/outliner/tree.cljs")
         loaded-tree-source (subs source
                                  (string/index-of source "(defn- use-loaded-block-tree")
-                                 (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? loaded-tree-source "outliner-tree/apply-loaded-tree-event")
-        "The page hook should delegate worker and optimistic deltas to one tree event path.")
-    (is (string/includes? tree-source "(reconcile-block-tree base-root")
-        "The shared tree event path must reconcile authoritative worker deltas.")
-    (is (string/includes? tree-source "(:updated-blocks event)"))
-    (is (string/includes? tree-source "(:deleted-ids event)"))
-    (is (string/includes? loaded-tree-source "rfx/use-entity-tx-id")
-        "Each page tree should subscribe only to transactions affecting its own root.")
-    (is (not (string/includes? loaded-tree-source
-                               "rfx/use-sub [:db/latest-transacted-entity-uuids]"))
-        "A block edit must not wake every mounted journal tree.")
+                                 (string/index-of source "(hsx/defc page-blocks-cp"))
+        page-root-source (subs source
+                               (string/index-of source "(hsx/defc page-root-body")
+                               (string/index-of source "(hsx/defc page-blocks-cp"))]
+    (is (string/includes? loaded-tree-source "outliner-tree/reconcile-block-tree")
+        "Journal render-data hydration should reconcile into the authoritative tree.")
+    (is (not (string/includes? loaded-tree-source "optimistic"))
+        "Enter and Delete must not maintain a second speculative tree state.")
+    (is (string/includes? tree-source "(defn reconcile-block-tree")
+        "The shared tree reconciler must apply authoritative worker deltas.")
+    (is (string/includes? loaded-tree-source "outliner-tree/resident-block-tree")
+        "A resident journal should render the already-reconciled authoritative tree.")
+    (is (string/includes? loaded-tree-source
+                          "#(or (outliner-tree/resident-block-tree")
+        "Stale hydration data must not be reapplied over a newer resident tree.")
+    (is (string/includes? loaded-tree-source "rfx/use-entity-tree-tx-id")
+        "The authoritative page tree needs its own revision, separate from the page entity.")
+    (is (not (string/includes? loaded-tree-source "rfx/use-entity-tx-id"))
+        "Saving a descendant's content must not wake the page block's entity renderer.")
+    (is (string/includes? loaded-tree-source
+                          "rfx/snapshot-sub [:db/latest-transacted-entity-uuids]")
+        "The tree revision and authoritative delta must come from the same snapshot.")
+    (is (string/includes? page-root-source "rfx/use-entity-children-tx-id page")
+        "Only a direct change to the root child list should wake the page root.")
+    (is (string/includes? loaded-tree-source
+                          "outliner-tree/keep-block-tree-resident! root")
+        "Every mounted page or block-root tree must accumulate worker deltas even when React skips an intermediate snapshot.")
     (is (not (string/includes? loaded-tree-source "db-async/<get-block-with-children")))))
+
+(deftest indent-outdent-restores-the-editor-from-the-authoritative-commit-test
+  (let [block-handler-source (source-for "src/main/frontend/handler/block.cljs")
+        editor-source (source-for "src/main/frontend/handler/editor.cljs")]
+    (is (string/includes? block-handler-source
+                          "[blocks indent? save-current-block edit-block-fn]")
+        "Indent/outdent needs a commit callback in addition to saving the current content.")
+    (is (string/includes? block-handler-source
+                          "(assoc :editor/edit-block-fn edit-block-fn)"))
+    (is (string/includes? editor-source
+                          "(moved-block-edit-fn block pos")
+        "The cursor target should be restored after the moved tree has committed.")))
 
 (deftest page-render-preserves-the-tree-index-order-test
   (let [source (source-for "src/main/frontend/components/page.cljs")

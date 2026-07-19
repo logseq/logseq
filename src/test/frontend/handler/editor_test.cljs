@@ -92,8 +92,31 @@
               {:db/id 1
                :logseq.property/order-list-type {:block/title "number"}})))
   (is (false? (editor/own-order-number-list?
-               {:db/id 2
-                :logseq.property/order-list-type {:block/title "roman"}}))))
+              {:db/id 2
+               :logseq.property/order-list-type {:block/title "roman"}}))))
+
+(deftest selected-delete-restores-the-mounted-previous-block-test
+  (let [block-id (random-uuid)
+        block {:db/id 1
+               :block/uuid block-id
+               :block/title "previous"}
+        sibling #js {}
+        edits (atom [])]
+    (aset sibling "__logseqBlock" block)
+    (with-redefs [dom/attr (fn [node attr]
+                             (when (identical? node sibling)
+                               (case attr
+                                 "blockid" (str block-id)
+                                 "containerid" "17"
+                                 nil)))
+                  state/get-edit-block (constantly nil)
+                  editor/edit-block! (fn [& args]
+                                       (swap! edits conj args))]
+      (let [edit-after-delete (#'editor/edit-previous-window-block-fn sibling)]
+        (edit-after-delete [])
+        (is (= block (ffirst @edits)))
+        (is (= (count (:block/title block))
+               (second (first @edits))))))))
 
 (deftest get-state-uses-editor-args-block-without-renderer-rehydration-test
   (let [block {:db/id 1

@@ -258,7 +258,7 @@
 
 (defonce ^:private *get-blocks-in-flight (atom {}))
 
-(def ^:private get-blocks-batch-limit 50)
+(def ^:private get-blocks-batch-limit 25)
 
 (defn- complete-tree-entry-group?
   [entries]

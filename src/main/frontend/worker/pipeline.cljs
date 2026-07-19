@@ -559,6 +559,32 @@
                    tx-data)]
     (throw (ex-info "journal page protected attr updated" violation))))
 
+(defn- structural-parent-ids
+  [{:keys [db-before db-after tx-data]}]
+  (into #{}
+        (mapcat (fn [datom]
+                  (case (:a datom)
+                    :block/parent
+                    [(:v datom)]
+
+                    :block/order
+                    (keep #(some-> (d/entity % (:e datom))
+                                   :block/parent
+                                   :db/id)
+                          [db-before db-after])
+
+                    [])))
+        tx-data))
+
+(defn- collect-structural-parent-uuids
+  [{:keys [db-before db-after] :as tx-report}]
+  (into #{}
+        (keep (fn [id]
+                (some-> (or (d/entity db-after id)
+                            (d/entity db-before id))
+                        :block/uuid)))
+        (structural-parent-ids tx-report)))
+
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
@@ -575,15 +601,16 @@
                                  :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                  :db-after (:db-after result)))
                         tx-report)
-           {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
+           {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report*)
            deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
            deleted-block-ids (set (map :db/id deleted-blocks))
            blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
            block-refs (when (seq blocks')
                         (rebuild-block-refs tx-report* blocks'))
            tx-id-data (let [db-after (:db-after tx-report*)
-                            updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
-                                                   (concat pages blocks))
+                            updated-blocks (remove (fn [b]
+                                                     (contains? deleted-block-ids (:db/id b)))
+                                                   blocks)
                             tx-id (get-in tx-report* [:tempids :db/current-tx])]
                         (keep (fn [b]
                                 (when-let [db-id (:db/id b)]
@@ -627,6 +654,7 @@
           (into #{}
                 (keep #(some-> (d/entity db-after %) :block/uuid))
                 render-dependent-eids)
+          structural-parent-uuids (collect-structural-parent-uuids tx-report)
           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
           deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-block-ids (set (map :db/id deleted-blocks))
@@ -646,6 +674,7 @@
        :deleted-block-uuids deleted-block-uuids
        :deleted-assets deleted-assets
        :render-invalidated-block-uuids render-invalidated-block-uuids
+       :structural-parent-uuids structural-parent-uuids
        :pages pages
        :blocks blocks})
     (catch :default e

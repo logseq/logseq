@@ -1476,7 +1476,7 @@
 (defn- hashtag-search-tag-page-name
   [s]
   (when (and (not (string/blank? s))
-	             (= \# (first s)))
+                     (= \# (first s)))
     (text/page-ref-un-brackets! (subs s 1))))
 
 (defn- search-link-cp
@@ -1984,9 +1984,21 @@
 
 (declare block-list)
 
+(defn- resident-tree-node
+  [config block]
+  (let [root (some-> (:block-tree/root* config) hooks/deref)
+        resident-root (some-> root :block/uuid tree/resident-block-tree)]
+    (or (tree/loaded-node resident-root block)
+        (tree/loaded-node root block))))
+
 (hsx/defc block-children
   [config block children collapsed?]
-  (let [ref? (:ref? config)
+  (let [_children-tx-id (rfx/use-entity-children-tx-id block)
+        resident-block (resident-tree-node config block)
+        children (if resident-block
+                   (:block/children resident-block)
+                   children)
+        ref? (:ref? config)
         query? (:custom-query? config)
         library? (:library? config)
         children (when (coll? children)
@@ -2194,8 +2206,8 @@
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (not (:hide-block-icon? config))
-	                        (or (and (entity/page? block)
-	                                 (not (:library? config)))
+                                (or (and (entity/page? block)
+                                         (not (:library? config)))
                             (:logseq.property/icon block)
                             link?
                             (some :logseq.property/icon (:block/tags block))
@@ -2290,9 +2302,9 @@
            bullet'
            (ui/tooltip
             bullet'
-	            [:div.flex.flex-col.gap-1.p-2
-	             (when-let [created-by (:logseq.property/created-by-ref block)]
-	               [:div (:block/title created-by)])
+                    [:div.flex.flex-col.gap-1.p-2
+                     (when-let [created-by (:logseq.property/created-by-ref block)]
+                       [:div (:block/title created-by)])
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
@@ -2401,9 +2413,9 @@
                                               (util/stop e)
                                               (when *show-query? (swap! *show-query? not)))}
                           (ui/icon "settings"))
-	                         [:div.opacity-75 (if show-query?
-	                                            (t :block/hide-query)
-	                                            (t :block/set-query))]))]
+                                 [:div.opacity-75 (if show-query?
+                                                    (t :block/hide-query)
+                                                    (t :block/set-query))]))]
     (hooks/use-effect!
      (fn []
        (if-let [property (:logseq.property/created-from-property block)]
@@ -2448,13 +2460,13 @@
          (t :block/practice))
         [:div (t :block/practice-cards)]))
      (when-let [message property-validation-message]
-	         (ui/tooltip
-	          (shui/button
-	           {:size :sm
-	            :variant :ghost
-	            :class "ls-type-warning ls-small-icon px-1 !py-0 h-4 ml-1"}
-	           (ui/icon "alert-triangle"))
-	          [:div.opacity-75 message]))]))
+                 (ui/tooltip
+                  (shui/button
+                   {:size :sm
+                    :variant :ghost
+                    :class "ls-type-warning ls-small-icon px-1 !py-0 h-4 ml-1"}
+                   (ui/icon "alert-triangle"))
+                  [:div.opacity-75 message]))]))
 
 (hsx/defc block-title
   [config block {:keys [*show-query?]}]
@@ -3071,7 +3083,7 @@
                    (set-loaded-positioned-properties!
                     (or (block-positioned-properties-from-payload current-block position) []))
                    (set-current-block! current-block))))
-	             nil)
+                     nil)
            [(:db/id block) (:block/uuid block) positioned-properties-payload?
             position entity-tx-id (:block-metadata-ready? config)])
         positioned-properties (if positioned-properties-payload?
@@ -3081,9 +3093,9 @@
                 block
                 (or current-block block))
         properties (cond->> positioned-properties
-		                     (= position :block-below)
-		                     (remove (fn [property]
-	                               (= (:db/ident property) :logseq.property/icon))))
+                                     (= position :block-below)
+                                     (remove (fn [property]
+                                       (= (:db/ident property) :logseq.property/icon))))
         has-viewable-properties? (seq properties)
         opts (merge config
                     {:icon? true
@@ -3170,7 +3182,7 @@
                             :show-used? true
                             :icon-value nil}))
                         {:align :start
-	                         :content-props {:class "ls-icon-picker"}}))]
+                                 :content-props {:class "ls-icon-picker"}}))]
     (when (seq summary)
       [:div.ls-block-reactions.flex.flex-row.flex-wrap.items-center.mt-1
        (for [{:keys [emoji-id count reacted-by-me? usernames]} summary]
@@ -4158,14 +4170,14 @@
    (let [uuid-str (some-> (:block/uuid block) str)
          page-title (or (some-> (:block/page block) :block/title)
                       (when (entity/page? block) (:block/title block)))
-	         properties-map (if (:db/id block)
-	                          (->> block
-	                            (keep (fn [[k v]]
-	                                    (when (and (qualified-keyword? k)
-	                                               (not= k :logseq.property.class/properties))
-	                                      [k v])))
-	                            (into {}))
-	                          (->> (:block/properties block)
+                 properties-map (if (:db/id block)
+                                  (->> block
+                                    (keep (fn [[k v]]
+                                            (when (and (qualified-keyword? k)
+                                                       (not= k :logseq.property.class/properties))
+                                              [k v])))
+                                    (into {}))
+                                  (->> (:block/properties block)
                             (remove (fn [[property-id _]] (= property-id :logseq.property.class/properties)))
                             (into {})))
          children (when include-children?
@@ -4668,11 +4680,11 @@
          [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
           (refs-cp block {})]))
 
-	     (when (and (not collapsed?) (not (or table? property?))
-	                (query-block? block))
-	       (let [query-block (:logseq.property/query block)]
-	         (when query-block
-	           (query-result config block query-block))))
+             (when (and (not collapsed?) (not (or table? property?))
+                        (query-block? block))
+               (let [query-block (:logseq.property/query block)]
+                 (when query-block
+                   (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
                  table?
@@ -4720,12 +4732,6 @@
   [(dissoc block :block/children)
    (mapv :block/uuid (:block/children block))])
 
-(defn- block-changed?
-  [old-block new-block]
-  (and (not (identical? old-block new-block))
-       (not= (block-render-state old-block)
-             (block-render-state new-block))))
-
 (defn- block-with-children-tree
   [block children]
   (when block
@@ -4734,11 +4740,19 @@
         (assoc block :block/children tree)
         (first tree)))))
 
-(defn- same-block-render-input?
+(defn- same-block-list-item-input?
   [[old-config old-block] [new-config new-block]]
-  (and (not (block-changed? old-block new-block))
+  (and (= (:block/uuid old-block) (:block/uuid new-block))
+       (= (some-> old-block :block/link :block/uuid)
+          (some-> new-block :block/link :block/uuid))
        (every? #(= (get old-config %) (get new-config %))
                block-render-config-keys)))
+
+(defn- same-loaded-block-input?
+  [[old-config old-block] [new-config new-block]]
+  (and (same-block-list-item-input? [old-config old-block]
+                                    [new-config new-block])
+       (= (:block/tx-id old-block) (:block/tx-id new-block))))
 
 (defn- memo-react-component
   [component same-args?]
@@ -4836,15 +4850,17 @@
         {:navigating-block navigating-block :navigated? navigated?})])))
 
 (def loaded-block-container
-  (memo-react-component loaded-block-container-inner same-block-render-input?))
+  (memo-react-component loaded-block-container-inner same-loaded-block-input?))
+
+(defn- unloaded-block-placeholder
+  []
+  (react-core/createElement "div" #js {:style #js {:minHeight 28}}))
 
 (hsx/defc block-container
   [config block* & {:as opts}]
-  (let [loaded-tree-block (when-not (= :full (:block.temp/load-status block*))
-                            (some-> (:block-tree/root* config)
-                                    hooks/deref
-                                    (tree/loaded-node block*)))
-        loaded-tree-block (when (= :full (:block.temp/load-status loaded-tree-block))
+  (let [loaded-tree-block (resident-tree-node config block*)
+        loaded-tree-block (when (and loaded-tree-block
+                                     (not= :index (:block.temp/load-status loaded-tree-block)))
                             loaded-tree-block)
         tree-payload? (some? loaded-tree-block)
         block* (or loaded-tree-block block*)
@@ -4859,7 +4875,15 @@
                                    (or tree-payload? complete-tree-node?)
                                    (not index-node?))
                               complete-flat-row?)
-        block (if complete-payload? block* local-block)
+        block (cond
+                complete-payload?
+                block*
+
+                complete-tree?
+                (assoc local-block :block/children (:block/children block*))
+
+                :else
+                local-block)
         id (or (:db/id block*) (:block/uuid block*))
         block-uuid (:block/uuid block)
         entity-tx-id (rfx/use-entity-tx-id block)
@@ -4909,13 +4933,15 @@
          (refresh-block!))
        nil)
      [block-uuid entity-tx-id complete-payload? index-node?])
-    (when (or (:view? config) (:block/title block))
-      (let [metadata-payload-ready? (or complete-payload?
-                                        (contains? block :block.temp/sync-conflicts))
-            config (cond-> config
-                     (not metadata-payload-ready?)
-                     (assoc :block-metadata-ready? false))]
-        (loaded-block-container config block opts)))))
+    (if (and index-node? (nil? (:block/title block)))
+      (unloaded-block-placeholder)
+      (when (or (:view? config) (:block/title block))
+        (let [metadata-payload-ready? (or complete-payload?
+                                          (contains? block :block.temp/sync-conflicts))
+              config (cond-> config
+                       (not metadata-payload-ready?)
+                       (assoc :block-metadata-ready? false))]
+          (loaded-block-container config block opts))))))
 
 (defn divide-lists
   [[f & l]]
@@ -5332,43 +5358,19 @@
           :bottom? bottom?})])))
 
 (def block-item
-  (memo-react-component block-item-inner same-block-render-input?))
-
-(defn- block-scroll-seek-placeholder
-  [^js props]
-  (let [context (.-context props)
-        blocks (or (when context (.-blocks context))
-                   (:blocks context))
-        block (when blocks (nth blocks (.-index props) nil))
-        title (or (:block/raw-title block)
-                  (when block (gobj/get block "raw-title"))
-                  (when block (gobj/get block "block/raw-title"))
-                  (:block/title block)
-                  (when block (gobj/get block "title"))
-                  (when block (gobj/get block "block/title"))
-                  "")]
-    (react-core/createElement
-     "div"
-     #js {:className "block-scroll-seek-placeholder"
-          :style #js {:height (.-height props)
-                      :boxSizing "border-box"
-                      :overflow "hidden"
-                      :padding "3px 0 3px 32px"
-                      :textOverflow "ellipsis"
-                      :whiteSpace "nowrap"}}
-     title)))
+  (memo-react-component block-item-inner same-block-list-item-input?))
 
 (hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
   (let [blocks (vec blocks)
         blocks-count (count blocks)
         disable-virtualized? (or (util/rtc-test?)
-                                 (:block-children? config)
-                                 (< blocks-count 10))
+                                 (:block-children? config)                                 )
         [virtualization-enabled? _] (hooks/use-state (not disable-virtualized?))
         virtualized? (and virtualization-enabled?
                           (not disable-virtualized?)
                           (seq blocks))
+        boundary-roles? (not (:block-children? config))
         selection-block-ids (or (:selection/block-ids config)
                                 (when virtualized? (mapv :block/uuid blocks)))
         render-block-item (fn [block item-config top? bottom?]
@@ -5376,50 +5378,20 @@
                                         block
                                         {:top? top?
                                          :bottom? bottom?}))
-        same-render-input? (fn [[old-block old-config old-top? old-bottom?]
-                                [new-block new-config new-top? new-bottom?]]
-                             (and (= old-top? new-top?)
-                                  (= old-bottom? new-bottom?)
-                                  (same-block-render-input? [old-config old-block]
-                                                            [new-config new-block])))
-        render-block-element (fn [[block item-config top? bottom?]]
-                               (react-core/createElement
-                                react-core/Fragment
-                                #js {:key (str (:container-id item-config)
-                                               "-"
-                                               (:block/uuid block))}
-                                (render-block-item block item-config top? bottom?)))
-        *virtualized-render-cache (hooks/use-memo #(atom nil) [])
-        render-item (fn [idx block item-config]
-                      (let [top? (zero? idx)
-                            bottom? (= (dec blocks-count) idx)
-                            input [block item-config top? bottom?]]
-                        (util/cached-render!
-                         *virtualized-render-cache
-                         (:container-id item-config)
-                         (:block/uuid block)
-                         input
-                         same-render-input?
-                         render-block-element)))
-        *render-cache (hooks/use-memo #(atom nil) [])
-        nonvirtualized-inputs (when-not virtualized?
-                                (reduce-kv (fn [result idx block]
-                                             (conj result
-                                                   [block
-                                                    config
-                                                    (zero? idx)
-                                                    (= (dec blocks-count) idx)]))
-                                           []
-                                           blocks))
+        render-block-element (fn [idx block item-config]
+                               (let [top? (and boundary-roles? (zero? idx))
+                                     bottom? (and boundary-roles? (= (dec blocks-count) idx))]
+                                 (react-core/createElement
+                                  react-core/Fragment
+                                  #js {:key (str (:container-id item-config)
+                                                 "-"
+                                                 (:block/uuid block))}
+                                  (render-block-item block item-config top? bottom?))))
         nonvirtualized-elements
         (when-not virtualized?
-          (util/reconcile-render-cache!
-           *render-cache
-           (:container-id config)
-           nonvirtualized-inputs
-           (fn [[block]] (:block/uuid block))
-           same-render-input?
-           render-block-element))
+          (map-indexed (fn [idx block]
+                         (render-block-element idx block config))
+                       blocks))
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
                                (util/app-scroll-container-node node)
@@ -5438,33 +5410,10 @@
                         ;; Leave some space for the new inserted block.
                         :increase-viewport-by 254
                         :overscan 254
-                        :context #js {:blocks blocks}
-                        :components {:ScrollSeekPlaceholder block-scroll-seek-placeholder}
-                        :scrollSeekConfiguration
-                        {:enter (fn [velocity]
-                                  (> (js/Math.abs velocity) 300))
-                        :exit (fn [velocity]
-                                 (< (js/Math.abs velocity) 40))}
-                        :rangeChanged (fn [^js range]
-                                        (let [start-index (.-startIndex range)
-                                              end-index (.-endIndex range)
-                                              retained-keys (into #{}
-                                                                  (map :block/uuid)
-                                                                  (subvec blocks
-                                                                          start-index
-                                                                          (inc end-index)))]
-                                          (util/retain-render-cache-keys!
-                                           *virtualized-render-cache
-                                           retained-keys))
-                                        (when (block-selection/pointer-down?)
-                                          (select-block-under-pointer!
-                                           selection-block-ids
-                                           (state/get-selection-direction))))
                         :data (to-array blocks)
                         :item-content (fn [idx block]
-                                        (render-item
-                                         idx
-                                         block
+                                        (render-block-element
+                                         idx block
                                          (assoc config
                                                 :selection/block-ids selection-block-ids)))})]
     (hooks/use-effect!

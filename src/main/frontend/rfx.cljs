@@ -329,6 +329,20 @@
         db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
     (or uuid-tx-id db-tx-id)))
 
+(defn use-entity-children-tx-id
+  [entity]
+  (let [tx-ids-path [:db/latest-transacted-entity-uuids :children-tx-ids]
+        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
+        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
+    (or uuid-tx-id db-tx-id)))
+
+(defn use-entity-tree-tx-id
+  [entity]
+  (let [tx-ids-path [:db/latest-transacted-entity-uuids :tree-tx-ids]
+        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
+        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
+    (or uuid-tx-id db-tx-id)))
+
 (defn register-state-sub-id!
   [sub-id]
   (swap! !state-sub-ids conj sub-id)

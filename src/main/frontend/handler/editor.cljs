@@ -764,9 +764,11 @@
   [sibling-block]
   (when-let [block-id (some-> (dom/attr sibling-block "blockid") uuid)]
     (let [container-id (some-> (dom/attr sibling-block "containerid")
-                               util/safe-parse-int)]
+                               util/safe-parse-int)
+          mounted (mounted-block sibling-block)]
       (fn [rows]
-        (when-let [block (some #(when (= block-id (:block/uuid %)) %) rows)]
+        (when-let [block (or (some #(when (= block-id (:block/uuid %)) %) rows)
+                             mounted)]
           (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id))]
             (edit-block-f)))))))
 
@@ -3037,17 +3039,28 @@
       :else
       false)))
 
+(defn- moved-block-edit-fn
+  [block pos content container-id]
+  (fn [rows]
+    (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
+                     block)]
+      (edit-block! block' pos {:container-id container-id
+                               :custom-content content
+                               :save-code-editor? false
+                               :skip-load? true}))))
+
 (defn indent-outdent
   [indent?]
-  (let [{:keys [block]} (get-state)
+  (let [{:keys [block pos value config]} (get-state)
         container-id (get-new-container-id (if indent? :indent :outdent) {})]
     (when block
       (p/let [root-block (get-focused-root-block)]
         (when (block-eligible-for-indent-outdent? block indent? root-block)
-          (p/do!
-           (when container-id
-             (state/set-editing-block-id! [container-id (:block/uuid block)]))
-           (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)))))))
+          (let [block (current-block-with-title block value)
+                edit-block-fn (moved-block-edit-fn block pos value
+                                                   (or container-id (:container-id config)))]
+            (block-handler/indent-outdent-blocks! [block] indent? save-current-block!
+                                                  edit-block-fn)))))))
 
 (defn keydown-tab-handler
   [direction]

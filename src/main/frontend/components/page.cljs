@@ -186,38 +186,33 @@
 (defn- use-loaded-block-tree
   [block* render-blocks]
   (let [[stored-root set-stored-root!] (hooks/use-state block*)
-        *optimistic-state (hooks/use-ref nil)
-        *applied-render-blocks (hooks/use-ref nil)
-        root-tx-id (rfx/use-entity-tx-id block*)
+        tree-owner (or (:block/page block*) block*)
+        root-tx-id (rfx/use-entity-tree-tx-id tree-owner)
         latest-tx (when root-tx-id
-                    (state/get-state :db/latest-transacted-entity-uuids))
-        event-result (when (= root-tx-id (:tx-id latest-tx))
-                       (outliner-tree/apply-loaded-tree-event
-                        stored-root
-                        (hooks/deref *optimistic-state)
-                        latest-tx))
-        root (or (:root event-result) stored-root)
-        render-blocks-new? (and (some? render-blocks)
-                                (not (identical? render-blocks
-                                                 (hooks/deref *applied-render-blocks))))
-        root (if render-blocks-new?
-               (outliner-tree/reconcile-block-tree root render-blocks #{})
-               root)
-        _ (when-not (identical? render-blocks (hooks/deref *applied-render-blocks))
-            (hooks/set-ref! *applied-render-blocks render-blocks))]
+                    (rfx/snapshot-sub [:db/latest-transacted-entity-uuids]))
+        root-from-tx (hooks/use-memo
+                      #(if (= root-tx-id (:tx-id latest-tx))
+                         (outliner-tree/reconcile-block-tree stored-root
+                                                             (:updated-blocks latest-tx)
+                                                             (:deleted-ids latest-tx))
+                         stored-root)
+                      [(:block/uuid block*) root-tx-id])
+        root (hooks/use-memo
+              #(or (outliner-tree/resident-block-tree (:block/uuid block*))
+                   (if (some? render-blocks)
+                     (outliner-tree/reconcile-block-tree root-from-tx render-blocks #{})
+                     root-from-tx))
+              [root-from-tx render-blocks])]
+    (hooks/use-layout-effect!
+     (fn []
+       (outliner-tree/keep-block-tree-resident! root)
+       nil)
+     [root])
     (hooks/use-effect!
      (fn []
-       (set! (.-current *optimistic-state) nil)
        (set-stored-root! (outliner-tree/index-block-tree block*))
        nil)
      [(:block/uuid block*)])
-    (hooks/use-layout-effect!
-     (fn []
-       (when event-result
-         (set! (.-current *optimistic-state)
-               (:optimistic-state event-result)))
-       nil)
-     [root-tx-id])
     (hooks/use-effect!
      (fn []
        (set-stored-root! root)
@@ -225,7 +220,55 @@
      [root-tx-id render-blocks])
     root))
 
-(def ^:private initial-tree-render-limit 60)
+(def ^:private initial-tree-render-limit 25)
+
+(defn- visible-page-children
+  [page children quick-add-children]
+  (cond
+    (= (:block/title page) common-config/quick-add-page-name)
+    (or quick-add-children children)
+
+    (entity/class? page)
+    (remove (fn [block]
+              (contains? (set (map :db/id (:block/tags block))) (:db/id page)))
+            children)
+
+    (entity/property? page)
+    (remove (fn [block]
+              (some? (get block (:db/ident page))))
+            children)
+
+    :else
+    children))
+
+(hsx/defc page-root-body
+  [page initial-children config sidebar? hide-add-button? journals? quick-add-children]
+  (let [_children-tx-id (rfx/use-entity-children-tx-id page)
+        page (or (outliner-tree/resident-block-tree (:block/uuid page)) page)
+        full-children (:block/children page)
+        total-count (count full-children)
+        mobile-length-limit 50
+        [children more?] (if (and (> total-count mobile-length-limit)
+                                 (util/mobile?)
+                                 journals?)
+                           [(take mobile-length-limit full-children) true]
+                           [full-children false])
+        children (visible-page-children page (or children initial-children)
+                                        quick-add-children)]
+    (if (and (not config/publishing?)
+             (zero? total-count))
+      (add-button page config)
+      [:div.relative
+       (page-blocks-inner page children config sidebar? false (:block/uuid page))
+       (when more?
+         (shui/button {:variant :ghost
+                       :class "text-muted-foreground w-full"
+                       :on-click (fn []
+                                   (route-handler/redirect-to-page! (:block/uuid page)))}
+                      (t :ui/load-more)))
+       (when (and (not more?)
+                  (not hide-add-button?))
+         (add-button page config))])))
 
 (hsx/defc page-blocks-cp
   [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
@@ -248,25 +291,6 @@
     (when block
       (let [block-id (:block/uuid block)
             block? (not (entity/page? block))
-            full-children (:block/children block)
-            total-count (count full-children)
-            mobile-length-limit 50
-            [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
-                               [(take mobile-length-limit full-children) true]
-                               [full-children false])
-            children (cond
-                       quick-add-page?
-                       (or quick-add-children children)
-
-                       (entity/class? block)
-                       (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
-
-                       (entity/property? block)
-                       (remove (fn [b] (some? (get b (:db/ident block)))) children)
-
-                       :else
-                       children)
-            block (assoc block :block/children full-children)
             config (cond-> (assoc config
                                   :library? (ldb/library? block)
                                   :block-tree/complete? true
@@ -274,14 +298,7 @@
                      (:block.temp/index-tree? block)
                      (assoc :block-tree/index? true))
             document-mode? (rfx/use-sub [:document/mode?])]
-        (cond
-          (and
-           (not block?)
-           (not config/publishing?)
-           (zero? total-count) block)
-          (add-button block config)
-
-          :else
+        (if block?
           (let [hiccup-config (merge
                                {:id (str (:block/uuid block))
                                 :db/id (:db/id block)
@@ -290,17 +307,20 @@
                                 :document/mode? document-mode?}
                                config)
                 config hiccup-config
-                blocks (if block? [block] children)]
+                blocks [block]]
             [:div.relative
              (page-blocks-inner block blocks config sidebar? false block-id)
-             (when more?
-               (shui/button {:variant :ghost
-                             :class "text-muted-foreground w-full"
-                             :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                            (t :ui/load-more)))
-             (when-not more?
-               (when-not hide-add-button?
-                 (add-button block config)))]))))))
+             (when-not hide-add-button?
+               (add-button block config))])
+          (let [hiccup-config (merge
+                               {:id (str (:block/uuid block))
+                                :db/id (:db/id block)
+                                :block? false
+                                :editor-box editor/box
+                                :document/mode? document-mode?}
+                               config)]
+            (page-root-body block (:block/children block) hiccup-config sidebar?
+                            hide-add-button? journals? quick-add-children)))))))
 
 (hsx/defc today-queries
   [repo today? sidebar?]

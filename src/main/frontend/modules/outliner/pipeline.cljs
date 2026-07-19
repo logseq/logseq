@@ -9,10 +9,19 @@
             [logseq.db :as ldb]))
 
 (defn refresh-state-paths
-  [affected-ids]
-  (into [[:db/latest-transacted-entity-uuids :tx-id]]
-        (map #(vector :db/latest-transacted-entity-uuids :entity-tx-ids %))
-        affected-ids))
+  ([entity-ids]
+   (refresh-state-paths entity-ids #{} #{}))
+  ([entity-ids structural-parent-ids]
+   (refresh-state-paths entity-ids structural-parent-ids #{}))
+  ([entity-ids structural-parent-ids tree-ids]
+   (into [[:db/latest-transacted-entity-uuids :tx-id]]
+         (concat
+          (map #(vector :db/latest-transacted-entity-uuids :entity-tx-ids %)
+               entity-ids)
+          (map #(vector :db/latest-transacted-entity-uuids :children-tx-ids %)
+               structural-parent-ids)
+          (map #(vector :db/latest-transacted-entity-uuids :tree-tx-ids %)
+               tree-ids)))))
 
 (defn- update-editing-block-title-if-changed!
   [tx-data]
@@ -44,7 +53,7 @@
 
 (defn invoke-hooks
   [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys pages blocks
-           render-invalidated-block-uuids]}]
+           render-invalidated-block-uuids structural-parent-uuids]}]
   (let [{:keys [initial-pages? end?]} tx-meta
         response-handled? (and (:ui/handled-by-response? tx-meta)
                                (= (:client-id tx-meta)
@@ -70,7 +79,7 @@
         :else
         (do
           (when-not response-handled?
-            (let [updated-blocks (vec (distinct (concat pages blocks)))
+            (let [updated-blocks (vec (distinct blocks))
                   updated-ids (into (set render-invalidated-block-uuids)
                                     (keep :block/uuid)
                                     updated-blocks)
@@ -87,9 +96,15 @@
                                  :affected-page-uuids affected-page-uuids
                                  :entity-tx-ids (zipmap (into updated-ids deleted-ids)
                                                         (repeat tx-id))
+                                 :children-tx-ids (zipmap structural-parent-uuids
+                                                          (repeat tx-id))
+                                 :tree-tx-ids (zipmap affected-page-uuids
+                                                      (repeat tx-id))
                                  :tx-id tx-id}
                                 :changed-paths (refresh-state-paths
-                                                (into updated-ids deleted-ids)))))
+                                                (into updated-ids deleted-ids)
+                                                structural-parent-uuids
+                                                affected-page-uuids))))
 
           (when (and current-block-id
                      (some (fn [block]
