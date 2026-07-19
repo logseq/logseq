@@ -3227,15 +3227,21 @@
 (hsx/defc task-spent-time-cp
   [config block]
   (when (task-block? block)
-    (let [[result set-result!] (hooks/use-state nil)
+    (let [task-spent-time-payload? (contains? block :block.temp/task-spent-time)
+          [loaded-result set-loaded-result!] (hooks/use-state nil)
           repo (state/get-current-repo)
+          result (if task-spent-time-payload?
+                   (:block.temp/task-spent-time block)
+                   loaded-result)
           [status-history time-spent] result]
       (hooks/use-effect!
        (fn []
-         (when (block-metadata-ready? config)
+         (when (and (not task-spent-time-payload?)
+                    (block-metadata-ready? config))
            (p/let [result (db-async/<task-spent-time repo (:db/id block))]
-             (set-result! result))))
-       [(:logseq.property/status block) (:block-metadata-ready? config)])
+             (set-loaded-result! result))))
+       [(:logseq.property/status block) task-spent-time-payload?
+        (:block-metadata-ready? config)])
       (when (and time-spent (> time-spent 0))
         [:div.text-sm.time-spent.ml-1
          (shui/button
@@ -4839,6 +4845,7 @@
                                     (tree/loaded-node block*)))
         loaded-tree-block (when (= :full (:block.temp/load-status loaded-tree-block))
                             loaded-tree-block)
+        tree-payload? (some? loaded-tree-block)
         block* (or loaded-tree-block block*)
         [local-block set-block!] (hooks/use-state block*)
         complete-tree? (:block-tree/complete? config)
@@ -4847,7 +4854,9 @@
         complete-flat-row? (and (:hide-children? config)
                                 (:block.temp/load-status block*))
         complete-tree-node? (= :full (:block.temp/load-status block*))
-        complete-payload? (or (and complete-tree? (not index-node?))
+        complete-payload? (or (and complete-tree?
+                                   (or tree-payload? complete-tree-node?)
+                                   (not index-node?))
                               complete-flat-row?)
         block (if complete-payload? block* local-block)
         id (or (:db/id block*) (:block/uuid block*))
@@ -4869,6 +4878,7 @@
                                     (state/get-current-repo)
                                     id
                                     {:children? (and load-children? (not index-node?))
+                                     :block-metadata? true
                                      :include-collapsed-children? (and load-children?
                                                                        (not index-node?)
                                                                        ignore-block-collapsed?)
@@ -4899,7 +4909,12 @@
        nil)
      [block-uuid entity-tx-id complete-payload? index-node?])
     (when (or (:view? config) (:block/title block))
-      (loaded-block-container config block opts))))
+      (let [metadata-payload-ready? (or complete-payload?
+                                        (contains? block :block.temp/sync-conflicts))
+            config (cond-> config
+                     (not metadata-payload-ready?)
+                     (assoc :block-metadata-ready? false))]
+        (loaded-block-container config block opts)))))
 
 (defn divide-lists
   [[f & l]]
