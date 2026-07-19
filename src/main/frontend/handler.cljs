@@ -140,6 +140,7 @@
 
 (defn start!
   [render]
+  (state/set-db-restoring! true)
   (let [t1 (util/time-ms)
         ui-ready (p/do!
                   (idb/start)
@@ -152,7 +153,6 @@
       (register-components-fns!)
       (user-handler/restore-tokens-from-localstorage)
       (user.login/setup-configure!)
-      (state/set-db-restoring! true)
       (when (util/electron?)
         (el/listen!))
 

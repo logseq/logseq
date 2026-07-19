@@ -3125,7 +3125,7 @@
         *version (hooks/use-memo #(atom 0) [repo k (:db/id view-parent)])
         query-ref (when (and repo view-parent k)
                     (react/q repo [k (:db/id view-parent)]
-                             {:query-fn (fn [_] (swap! *version inc))}
+                             {:query-fn (fn [_ _] (swap! *version inc))}
                              nil))]
     (db-hooks/use-query query-ref)))
 

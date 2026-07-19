@@ -86,8 +86,10 @@
   (<invoke-db-worker :thread-api/get-journal-page-by-day graph journal-day))
 
 (defn <get-latest-journals
-  [graph n]
-  (<invoke-db-worker :thread-api/get-latest-journals graph n))
+  ([graph]
+   (<get-latest-journals graph js/Number.MAX_SAFE_INTEGER))
+  ([graph n]
+   (<invoke-db-worker :thread-api/get-latest-journals graph n)))
 
 (defn <get-block-by-page-name-and-block-route-name
   [graph page-id-name-or-uuid route-name]

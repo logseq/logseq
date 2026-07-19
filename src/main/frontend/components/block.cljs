@@ -5390,10 +5390,9 @@
                                                (:block/uuid block))}
                                 (render-block-item block item-config top? bottom?)))
         *virtualized-render-cache (hooks/use-memo #(atom nil) [])
-        render-item (fn [idx item-config]
+        render-item (fn [idx block item-config]
                       (let [top? (zero? idx)
                             bottom? (= (dec blocks-count) idx)
-                            block (nth blocks idx)
                             input [block item-config top? bottom?]]
                         (util/cached-render!
                          *virtualized-render-cache
@@ -5432,14 +5431,13 @@
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent scroll-container
-                        :compute-item-key (fn [idx]
+                        :compute-item-key (fn [_idx block]
                                             (str (:container-id config)
                                                  "-"
-                                                 (:block/uuid (nth blocks idx))))
+                                                 (:block/uuid block)))
                         ;; Leave some space for the new inserted block.
                         :increase-viewport-by 254
                         :overscan 254
-                        :skipAnimationFrameInResizeObserver true
                         :context #js {:blocks blocks}
                         :components {:ScrollSeekPlaceholder block-scroll-seek-placeholder}
                         :scrollSeekConfiguration
@@ -5447,7 +5445,6 @@
                                   (> (js/Math.abs velocity) 300))
                         :exit (fn [velocity]
                                  (< (js/Math.abs velocity) 40))}
-                        :total-count blocks-count
                         :rangeChanged (fn [^js range]
                                         (let [start-index (.-startIndex range)
                                               end-index (.-endIndex range)
@@ -5463,9 +5460,11 @@
                                           (select-block-under-pointer!
                                            selection-block-ids
                                            (state/get-selection-direction))))
-                        :item-content (fn [idx]
+                        :data (to-array blocks)
+                        :item-content (fn [idx block]
                                         (render-item
                                          idx
+                                         block
                                          (assoc config
                                                 :selection/block-ids selection-block-ids)))})]
     (hooks/use-effect!

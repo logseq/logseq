@@ -169,10 +169,10 @@
   [{:keys [current-repo t]}]
   (let [_route-match (rfx/use-sub [:route-match])
         current-page (sidebar/get-current-page)
+        db-restoring? (rfx/use-sub [:db/restoring?])
         [page set-page!] (hooks/use-state nil)
         [recycle-page? set-recycle-page?!] (hooks/use-state false)
-        ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (rfx/use-sub [:db/restoring?])) true)
+        working-page? (not db-restoring?)
         page-menu (when page
                     (if (and working-page? (entity/page? page))
                       (page-menu/page-menu page)
@@ -259,21 +259,25 @@
                  (remove nil?)))]
     (hooks/use-effect!
      (fn []
-       (p/do!
-        (if (and current-repo current-page)
-          (p/let [page (db-async/<get-block current-repo
-                                            (if (util/uuid-string? current-page)
-                                              (uuid current-page)
-                                              current-page)
-                                            {:children? false})]
-            (set-page! page))
-          (set-page! nil))
-        (if current-repo
-          (p/let [recycle-page (db-async/<get-block current-repo common-config/recycle-page-name {:children? false})]
-            (set-recycle-page?! (boolean recycle-page)))
-          (set-recycle-page?! false)))
+       (if db-restoring?
+         (do
+           (set-page! nil)
+           (set-recycle-page?! false))
+         (p/do!
+          (if (and current-repo current-page)
+            (p/let [page (db-async/<get-block current-repo
+                                              (if (util/uuid-string? current-page)
+                                                (uuid current-page)
+                                                current-page)
+                                              {:children? false})]
+              (set-page! page))
+            (set-page! nil))
+          (if current-repo
+            (p/let [recycle-page (db-async/<get-block current-repo common-config/recycle-page-name {:children? false})]
+              (set-recycle-page?! (boolean recycle-page)))
+            (set-recycle-page?! false))))
        nil)
-     [current-repo current-page])
+     [current-repo current-page db-restoring?])
 
     (ui/tooltip
      (shui/button-ghost-icon

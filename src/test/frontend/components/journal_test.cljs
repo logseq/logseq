@@ -36,7 +36,13 @@
 (deftest journals-do-not-hydrate-every-page-before-rendering
   (let [source (journal-source)]
     (is (not (string/includes? source "p/all (map #(db-async/<get-block"))
-        "The journal list must not hydrate every journal in a separate fan-out.")))
+        "The journal list must not hydrate every journal in a separate fan-out.")
+    (is (string/includes? source "db-async/<get-latest-journals")
+        "The journal index should reuse the existing worker summary API.")
+    (is (string/includes? source ":query-fn (fn [_ _]")
+        "Reactive query functions receive the previous result and transaction context.")
+    (is (not (string/includes? source "views/<load-view-data"))
+        "Journals should not route through the generic view API.")))
 
 (deftest unloaded-journal-slots-render-their-indexed-date-title
   (let [source (journal-source)]
