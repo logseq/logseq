@@ -17,19 +17,18 @@
 (defn summarize
   "Summarize reactions for display."
   [reactions current-user-id]
-  (let [reaction-user-id (fn [reaction]
-                           (let [user (:logseq.property/created-by-ref reaction)]
-                             (cond
-                               (number? user) user
-                               (map? user) (:db/id user)
-                               :else nil)))
+  (let [reaction-by-current-user? (fn [reaction]
+                                    (let [user (:logseq.property/created-by-ref reaction)]
+                                      (if (map? user)
+                                        (or (= current-user-id (:db/id user))
+                                            (= current-user-id (:block/uuid user)))
+                                        (= current-user-id user))))
         reaction-username (fn [reaction]
                             (let [user (:logseq.property/created-by-ref reaction)]
                               (when (map? user)
                                 (:block/title user))))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)
-                                user-id (reaction-user-id reaction)
                                 username (reaction-username reaction)]
                             (if (string? emoji-id)
                               (-> acc
@@ -37,7 +36,7 @@
                                   (cond-> (string? username)
                                     (update-in [emoji-id :usernames] (fnil conj #{}) username))
                                   (update-in [emoji-id :reacted-by-me?]
-                                             (fnil #(or % (= current-user-id user-id)) false)))
+                                             (fnil #(or % (reaction-by-current-user? reaction)) false)))
                               acc)))
                         {}
                         reactions)]

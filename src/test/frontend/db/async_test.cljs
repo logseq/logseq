@@ -71,12 +71,14 @@
                    :opts {:all? true
                           :children? true
                           :render-data? true
+                          :root-render-data? true
                           :include-collapsed-children? true
                           :skip-refresh? true}}]]
     (is (= [{:id id
              :opts {:all? true
                     :children? true
                     :render-data? true
+                    :root-render-data? true
                     :include-collapsed-children? true}}]
            (#'db-async/worker-get-blocks-requests requests)))))
 

@@ -113,7 +113,7 @@
   [db block-id]
   (mapv #(d/pull db
                  '[:db/id :block/uuid :logseq.property.reaction/emoji-id
-                   {:logseq.property/created-by-ref [:db/id :block/title]}]
+                   {:logseq.property/created-by-ref [:db/id :block/uuid :block/title]}]
                  (:e %))
         (d/datoms db :avet :logseq.property.reaction/target block-id)))
 
@@ -155,7 +155,8 @@
            (block-reactions db (:db/id block)))))
 
 (defn get-block-and-children
-  [db id-or-page-name {:keys [all? children? properties render-data? include-collapsed-children?]
+  [db id-or-page-name {:keys [all? children? properties render-data? root-render-data?
+                              include-collapsed-children?]
                        :or {include-collapsed-children? false}}]
   (when-let [block (resolve-block-entity db id-or-page-name)]
     (let [block-refs-count? (some #{:block.temp/refs-count} properties)
@@ -193,7 +194,7 @@
                            (assoc :block/properties
                                   (property-handler/display-properties-for-block db block)))
           block-map (cond
-                      render-data?
+                      (or render-data? root-render-data?)
                       (assoc-render-property-data db block block-map-base)
 
                       (false? render-data?)
@@ -249,11 +250,11 @@
              (or (query-handler/task-spent-time db block-id now-ms) [])))))
 
 (defn- assoc-result-block-metadata
-  [result db conflicts-by-block commented-block-uuids now-ms render-data?]
+  [result db conflicts-by-block commented-block-uuids now-ms render-data? root-render-data?]
   (cond-> result
     (:block result)
     (update :block #(assoc-block-metadata db conflicts-by-block commented-block-uuids
-                                          now-ms render-data? %))
+                                          now-ms (or render-data? root-render-data?) %))
 
     (:children result)
     (update :children (fn [children]
@@ -286,7 +287,8 @@
                      (get-in request [:opts :block-metadata?])
                      (assoc-result-block-metadata
                       db conflicts-by-block commented-block-uuids now-ms
-                      (true? (get-in request [:opts :render-data?])))))
+                      (true? (get-in request [:opts :render-data?]))
+                      (true? (get-in request [:opts :root-render-data?])))))
                  requests
                  results)
            (mapv #(-> %
