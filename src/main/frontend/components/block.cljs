@@ -3565,10 +3565,10 @@
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
 
-	          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-	                        (:property? config) (:hide-block-tags? config))
-	            (when (seq (:block/tags block))
-	              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
+                  (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+                                (:property? config) (:hide-block-tags? config))
+                    (when (seq (:block/tags block))
+                      (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (defn non-dragging?
   [e]
@@ -4040,7 +4040,8 @@
      :on-drag-end (fn [event]
                     (doseq [block (or (seq (state/get-selection-blocks)) [(.-target event)])]
                       (dom/remove-class! block "dragging"))
-                    (dom/remove! js/document.body (dom/sel1 "#dragging-ghost-element"))
+                    (when-let [node (dom/sel1 "#dragging-ghost-element")]
+                      (dom/remove! js/document.body node))
                     (block-drag-end event *move-to'))}))
 
 (defn- root-block?
