@@ -52,18 +52,23 @@
      {:db-sync/tx-id tx-id
       :ui/page-id page-id}
      [updated-block]
+     #{block-id invalidated-id}
      [deleted-id]
      [page-id]
-     [invalidated-id])
+     [target-id])
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id target-id invalidated-id} (:updated-ids latest)))
+      (is (= #{block-id invalidated-id} (:updated-ids latest)))
       (is (= #{deleted-id} (:deleted-ids latest)))
       (is (= [updated-block] (:updated-blocks latest)))
       (is (= #{page-id} (:affected-page-uuids latest)))
       (is (= page-id (:page-id latest)))
       (is (= tx-id (:tx-id latest)))
       (is (every? #(= tx-id (get-in latest [:entity-tx-ids %]))
-                  [block-id target-id deleted-id invalidated-id page-id])))))
+                  [block-id deleted-id invalidated-id]))
+      (is (nil? (get-in latest [:entity-tx-ids target-id])))
+      (is (nil? (get-in latest [:entity-tx-ids page-id])))
+      (is (= tx-id (get-in latest [:tree-tx-ids page-id])))
+      (is (= tx-id (get-in latest [:children-tx-ids target-id]))))))
 
 (deftest refresh-worker-op-blocks-does-not-mark-page-lookup-as-updated-test
   (let [block-id (random-uuid)
@@ -75,6 +80,7 @@
      {:db-sync/tx-id tx-id
       :ui/page-id page-db-id}
      nil
+     #{block-id}
      nil
      nil
      nil)
@@ -92,14 +98,15 @@
      [[:indent-outdent-blocks [[block-id] true {}]]]
      {:db-sync/tx-id tx-id}
      nil
+     #{block-id}
      nil
      #{current-page-id target-page-id}
      nil)
     (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
       (is (= #{block-id} (:updated-ids latest)))
       (is (= #{current-page-id target-page-id} (:affected-page-uuids latest)))
-      (is (= tx-id (get-in latest [:entity-tx-ids current-page-id])))
-      (is (= tx-id (get-in latest [:entity-tx-ids target-page-id]))))))
+      (is (nil? (get-in latest [:entity-tx-ids current-page-id])))
+      (is (nil? (get-in latest [:entity-tx-ids target-page-id]))))))
 
 (deftest editor-callback-runs-from-its-worker-response-test
   (let [calls (atom [])]
@@ -149,7 +156,8 @@
                       updated-block {:block/uuid block-id
                                      :block/title "persisted"}
                       _ (p/resolve! worker-result {:result ::persisted
-                                                   :updated-blocks [updated-block]})
+                                                   :updated-blocks [updated-block]
+                                                   :entity-updated-block-uuids #{block-id}})
                       value result
                       _ (p/delay 0)
                       latest (state/get-state :db/latest-transacted-entity-uuids)]
@@ -183,7 +191,9 @@
 
                               :thread-api/apply-outliner-ops
                               (p/resolved {:result ::persisted
-                                           :updated-blocks [inserted-block]})
+                                           :updated-blocks [inserted-block]
+                                           :entity-updated-block-uuids #{inserted-id}
+                                           :structural-parent-uuids #{page-id}})
 
                               (p/resolved nil)))]
             (p/let [value (db-transact/apply-outliner-ops
@@ -200,7 +210,9 @@
                       :thread-api/apply-outliner-ops]
                      (mapv first @calls)))
               (is (= [inserted-block] (:updated-blocks latest)))
-              (is (= #{inserted-id target-id} (:updated-ids latest)))))
+              (is (= #{inserted-id} (:updated-ids latest)))
+              (is (= tx-id (get-in latest [:children-tx-ids page-id])))
+              (is (nil? (get-in latest [:entity-tx-ids target-id])))))
           (p/finally done)))))
 
 (deftest apply-outliner-ops-runs-editor-callback-synchronously-test
@@ -242,7 +254,7 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
-(deftest structural-editor-ops-publish-an-optimistic-tree-before-worker-response-test
+(deftest structural-editor-ops-publish-authoritative-rows-after-worker-response-test
   (async done
     (let [page-id (random-uuid)
           target-id (random-uuid)
@@ -266,9 +278,12 @@
                               worker-result
 
                               (p/resolved nil)))]
-            (let [inserted-block {:block/uuid inserted-id
+            (let [saved-block {:block/uuid target-id
+                               :block/title "typed before Enter"}
+                  inserted-block {:block/uuid inserted-id
                                   :block/title ""}
-                  ops [[:insert-blocks [[inserted-block]
+                  ops [[:save-block [saved-block nil]]
+                       [:insert-blocks [[inserted-block]
                                         target-id
                                         {:sibling? true
                                          :keep-uuid? true
@@ -280,33 +295,35 @@
                            :ui/page-id page-id
                            :editor/edit-block-fn #(reset! callback-rows %)})]
               (p/let [_ (p/delay 0)
-                      optimistic (state/get-state :db/latest-transacted-entity-uuids)
-                      _ (is (= ops (:optimistic-ops optimistic)))
-                      _ (is (= tx-id (:optimistic-tx-id optimistic)))
-                      _ (is (not= tx-id (:tx-id optimistic))
-                            "The worker confirmation must publish a distinct entity version.")
-                      _ (is (= [inserted-block] @callback-rows)
-                            "The cursor target should publish before persistence finishes.")
-                      persisted-block (assoc inserted-block
-                                              :block/parent {:db/id 1}
-                                              :block/order "a0")
+                      _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
+                            "Enter must not publish an uncommitted tree delta.")
+                      _ (is (= [] @callback-rows)
+                            "The cursor must not target an uncommitted inserted block.")
+                      persisted-saved-block (assoc saved-block :db/id 1)
+                      persisted-inserted-block (assoc inserted-block
+                                                       :db/id 2
+                                                       :block/parent {:db/id 3}
+                                                       :block/order "a0")
                       _ (p/resolve! worker-result {:result ::persisted
-                                                   :updated-blocks [persisted-block]})
+                                                   :updated-blocks [persisted-saved-block
+                                                                    persisted-inserted-block]
+                                                   :entity-updated-block-uuids #{target-id inserted-id}
+                                                   :structural-parent-uuids #{page-id}})
                       value result
-                      confirmed (state/get-state :db/latest-transacted-entity-uuids)]
+                      latest (state/get-state :db/latest-transacted-entity-uuids)]
                 (is (= ::persisted value))
-                (is (= tx-id (:tx-id confirmed)))
-                (is (= tx-id (:confirmed-optimistic-tx-id confirmed)))
-                (is (= [inserted-block] @callback-rows)
-                    "Worker confirmation must not reset the cursor a second time."))))
+                (is (= tx-id (:tx-id latest)))
+                (is (= [persisted-saved-block persisted-inserted-block]
+                       (:updated-blocks latest)))
+                (is (= [persisted-saved-block persisted-inserted-block]
+                       @callback-rows)
+                    "Enter must update content and cursor from the same authoritative response."))))
           (p/finally done)))))
 
-(deftest failed-optimistic-editor-op-publishes-a-targeted-rollback-test
+(deftest failed-delete-does-not-publish-an-uncommitted-tree-test
   (async done
     (let [page-id (random-uuid)
-          target-id (random-uuid)
-          inserted-id (random-uuid)
-          tx-id (random-uuid)
+          deleted-id (random-uuid)
           worker-result (p/deferred)
           callback-count (atom 0)]
       (state/set-state! :db/latest-transacted-entity-uuids {})
@@ -327,22 +344,17 @@
                               (p/resolved nil)))]
             (let [result (db-transact/apply-outliner-ops
                           nil
-                          [[:insert-blocks [[{:block/uuid inserted-id
-                                              :block/title ""}]
-                                            target-id
-                                            {:sibling? true
-                                             :keep-uuid? true
-                                             :outliner-op :insert-blocks}]]]
-                          {:db-sync/tx-id tx-id
-                           :ui/page-id page-id
+                          [[:delete-blocks [[deleted-id] {}]]]
+                          {:ui/page-id page-id
                            :editor/edit-block-fn (fn [_] (swap! callback-count inc))})]
               (p/let [_ (p/delay 0)
-                      _ (is (= 1 @callback-count))
+                      _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids)))
+                      _ (is (zero? @callback-count))
                       _ (p/reject! worker-result (js/Error. "worker failed"))
                       _ (p/catch result identity)
-                      rollback (state/get-state :db/latest-transacted-entity-uuids)]
-                (is (= tx-id (:rollback-optimistic-tx-id rollback)))
-                (is (= 1 @callback-count)))))
+                      latest (state/get-state :db/latest-transacted-entity-uuids)]
+                (is (= {} latest))
+                (is (zero? @callback-count)))))
           (p/finally done)))))
 
 (deftest dependent-outliner-mutations-reach-the-worker-in-call-order-test
@@ -501,7 +513,8 @@
                             (case api
                               :thread-api/apply-outliner-ops
                               (p/resolved {:result ::persisted
-                                           :updated-blocks [{:block/uuid block-id}]})
+                                           :updated-blocks [{:block/uuid block-id}]
+                                           :entity-updated-block-uuids #{block-id}})
 
                               (p/resolved nil)))]
             (p/do!
@@ -517,8 +530,7 @@
                :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
           (p/then (fn []
                     (is (= [:commit-start :publish [:insert block-id] :commit-end
-                            :commit-start :publish [:delete block-id] :commit-end
-                            :publish]
+                            :commit-start :publish [:delete block-id] :commit-end]
                            @calls))))
           (p/finally (fn []
                        (set! (.-flushSync react-dom) original-flush-sync)

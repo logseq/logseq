@@ -118,6 +118,44 @@
       (finally
         (set! (.-write js/process.stderr) orig-write)))))
 
+(deftest inserting-a-block-keeps-parent-content-revision-stable-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "1"
+                          :build/children [{:block/title "2"
+                                            :build/children [{:block/title "3"}]}]}]}])
+        ancestor (db-test/find-block-by-content @conn "1")
+        parent (db-test/find-block-by-content @conn "2")
+        target (db-test/find-block-by-content @conn "3")
+        page (:block/page target)
+        page-tx-id (:block/tx-id page)
+        ancestor-tx-id (:block/tx-id ancestor)
+        parent-tx-id (:block/tx-id parent)
+        inserted-id (random-uuid)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-core/insert-blocks!
+       conn
+       [{:block/uuid inserted-id
+         :block/title ""
+         :block/page (:db/id (:block/page target))}]
+       target
+       {:sibling? true
+        :keep-uuid? true})
+      (let [ancestor' (d/entity @conn (:db/id ancestor))
+            parent' (d/entity @conn (:db/id parent))
+            page' (d/entity @conn (:db/id page))
+            inserted (d/entity @conn [:block/uuid inserted-id])]
+        (is (= page-tx-id (:block/tx-id page'))
+            "Changing a descendant must not revise the owning page entity.")
+        (is (= parent-tx-id (:block/tx-id parent'))
+            "A children change must not masquerade as a parent content change.")
+        (is (some? (:block/tx-id inserted)))
+        (is (= ancestor-tx-id (:block/tx-id ancestor'))
+            "An unchanged ancestor should not receive the structural revision."))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
