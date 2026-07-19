@@ -800,8 +800,8 @@
       (:publishing? request-opts)
       (:state-hide-empty-properties? request-opts)])
     (cond
-      (not enabled?) empty-display-properties
       display-properties-payload? (:block.temp/display-properties block)
+      (not enabled?) empty-display-properties
       :else loaded-display-properties)))
 
 (defn use-has-hidden-properties

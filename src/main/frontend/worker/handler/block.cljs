@@ -4,10 +4,13 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.common.thread-api :refer [def-thread-api]]
+   [frontend.worker.handler.comments :as comments-handler]
    [frontend.worker.handler.property :as property-handler]
+   [frontend.worker.handler.query :as query-handler]
    [frontend.worker.handler.search :as search-handler]
    [frontend.worker.plain-value :as worker-plain]
    [frontend.worker.state :as worker-state]
+   [frontend.worker.sync.client-op :as client-op]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
    [logseq.db.common.initial-data :as common-initial-data]
@@ -137,24 +140,19 @@
     (common-initial-data/get-block-refs-count db block-id)))
 
 (defn- assoc-render-property-data
-  ([db block block-map]
-   (assoc-render-property-data db block block-map false))
-  ([db block block-map refs-count?]
-   (let [plain? (plain-render-block? db block)]
-     (cond-> (assoc block-map
-                    :block.temp/positioned-properties
-                    (if plain?
-                      {}
-                      (block-positioned-properties-map db block))
-                    :block.temp/display-properties
-                    (if plain?
-                      empty-render-display-properties
-                      (property-handler/display-properties db block {} false))
-                    :block.temp/reactions
-                    (block-reactions db (:db/id block)))
-       refs-count?
-       (assoc :block.temp/refs-count
-              (block-refs-count db (:db/id block)))))))
+  [db block block-map]
+  (let [plain? (plain-render-block? db block)]
+    (assoc block-map
+           :block.temp/positioned-properties
+           (if plain?
+             {}
+             (block-positioned-properties-map db block))
+           :block.temp/display-properties
+           (if plain?
+             empty-render-display-properties
+             (property-handler/display-properties db block {} false))
+           :block.temp/reactions
+           (block-reactions db (:db/id block)))))
 
 (defn get-block-and-children
   [db id-or-page-name {:keys [all? children? properties render-data? include-collapsed-children?]
@@ -167,13 +165,18 @@
           children-ids (set (map :db/id children))
           children' (when children?
                       (map (fn [child]
-                             (let [collapsed? (:block/collapsed? child)]
-                               (-> (cond->> (worker-plain/entity-forward-map db child {})
-                                     render-data?
-                                     (assoc-render-property-data db child)
+                             (let [collapsed? (:block/collapsed? child)
+                                   child-map-base (worker-plain/entity-forward-map db child {})
+                                   child-map (cond
+                                               render-data?
+                                               (assoc-render-property-data db child child-map-base)
 
-                                     (false? render-data?)
-                                     (assoc-base-render-data db child))
+                                               (false? render-data?)
+                                               (assoc-base-render-data db child child-map-base)
+
+                                               :else
+                                               child-map-base)]
+                               (-> child-map
                                    (assoc :block.temp/has-children? (block-has-children? db (:db/id child))
                                           :block.temp/load-status (if (or all?
                                                                          (and (not collapsed?)
@@ -189,12 +192,15 @@
                            (or render-data? (empty? properties))
                            (assoc :block/properties
                                   (property-handler/display-properties-for-block db block)))
-          block-map (cond->> block-map-base
+          block-map (cond
                       render-data?
-                      (assoc-render-property-data db block)
+                      (assoc-render-property-data db block block-map-base)
 
                       (false? render-data?)
-                      (assoc-base-render-data db block))
+                      (assoc-base-render-data db block block-map-base)
+
+                      :else
+                      block-map-base)
           block' (cond-> (assoc block-map
                                 :block/tags (or (:block/tags block-map) [])
                                 :block/collapsed? (boolean (:block/collapsed? block-map)))
@@ -223,17 +229,70 @@
     (:children result)
     (update :children common-util/fast-remove-nils)))
 
+(defn- result-blocks
+  [{:keys [block children]}]
+  (cond-> (vec children)
+    block (conj block)))
+
+(defn- assoc-block-metadata
+  [db conflicts-by-block commented-block-uuids now-ms render-data? block]
+  (let [block-id (:db/id block)
+        block-uuid (:block/uuid block)]
+    (cond-> (assoc block
+                   :block.temp/refs-count (block-refs-count db block-id)
+                   :block.temp/comment-thread-present?
+                   (contains? commented-block-uuids (str block-uuid))
+                   :block.temp/sync-conflicts
+                   (vec (get conflicts-by-block block-uuid)))
+      render-data?
+      (assoc :block.temp/task-spent-time
+             (or (query-handler/task-spent-time db block-id now-ms) [])))))
+
+(defn- assoc-result-block-metadata
+  [result db conflicts-by-block commented-block-uuids now-ms render-data?]
+  (cond-> result
+    (:block result)
+    (update :block #(assoc-block-metadata db conflicts-by-block commented-block-uuids
+                                          now-ms render-data? %))
+
+    (:children result)
+    (update :children (fn [children]
+                        (mapv #(assoc-block-metadata db conflicts-by-block commented-block-uuids
+                                                     now-ms render-data? %)
+                              children)))))
+
 (defn- get-blocks-response
   [repo requests]
   (when-let [db (some-> (worker-state/get-datascript-conn repo) deref)]
-    (->> requests
-         (mapv (fn [{:keys [id opts]}]
-                 (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                   (-> (get-block-and-children db id' opts)
-                       sanitize-block-result
-                       worker-plain/with-explicit-ref-fields-recursive
-                       (assoc :id id)))))
-         ldb/write-transit-str)))
+    (let [results (mapv (fn [{:keys [id opts]}]
+                          (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                            (assoc (get-block-and-children db id' opts) :id id)))
+                        requests)
+          metadata-blocks (->> (map vector requests results)
+                               (keep (fn [[request result]]
+                                       (when (get-in request [:opts :block-metadata?])
+                                         (result-blocks result))))
+                               (mapcat identity))
+          commented-block-uuids (when (seq metadata-blocks)
+                                  (->> metadata-blocks
+                                       (mapv :block/uuid)
+                                       (comments-handler/get-comment-thread-block-uuids db)
+                                       set))
+          conflicts-by-block (when (seq metadata-blocks)
+                               (client-op/get-all-sync-conflicts repo))
+          now-ms (common-util/time-ms)]
+      (->> (mapv (fn [request result]
+                   (cond-> result
+                     (get-in request [:opts :block-metadata?])
+                     (assoc-result-block-metadata
+                      db conflicts-by-block commented-block-uuids now-ms
+                      (true? (get-in request [:opts :render-data?])))))
+                 requests
+                 results)
+           (mapv #(-> %
+                      sanitize-block-result
+                      worker-plain/with-explicit-ref-fields-recursive))
+           ldb/write-transit-str))))
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]

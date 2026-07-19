@@ -145,10 +145,49 @@
       tree
       (:block/children (first tree)))))
 
+(defn- blocks-missing-render-data
+  [root]
+  (->> (tree-seq (comp seq :block/children) :block/children root)
+       (remove #(contains? % :block.temp/display-properties))
+       (keep :db/id)
+       vec))
+
+(defn- use-journal-render-blocks
+  [{:keys [journals? page hydration-ready? keep-tree-resident?
+           page-id-uuid-or-name]}]
+  (let [*render-blocks (hooks/use-memo #(atom nil) [])
+        [render-blocks] (hooks/use-atom *render-blocks)]
+    (hooks/use-effect!
+     (fn []
+       (let [cancelled? (atom false)]
+         (when (and journals? page hydration-ready? (nil? render-blocks))
+           (let [ids (blocks-missing-render-data page)]
+             (p/let [results (if (seq ids)
+                               (db-async/<get-blocks
+                                (state/get-current-repo)
+                                ids
+                                {:render-data? true
+                                 :block-metadata? true})
+                               [])]
+               (when-not @cancelled?
+                 (let [blocks (mapv :block results)]
+                   (reset! *render-blocks blocks)
+                   (when keep-tree-resident?
+                     (when-let [resident-root (or (outliner-tree/resident-block-tree
+                                                   page-id-uuid-or-name)
+                                                  page)]
+                       (outliner-tree/keep-block-tree-resident!
+                        (outliner-tree/reconcile-block-tree resident-root blocks #{})))))))))
+         #(reset! cancelled? true)))
+     [journals? (:db/id page) hydration-ready? render-blocks
+      keep-tree-resident? page-id-uuid-or-name])
+    [render-blocks *render-blocks]))
+
 (defn- use-loaded-block-tree
-  [block*]
+  [block* render-blocks]
   (let [[stored-root set-stored-root!] (hooks/use-state block*)
         *optimistic-state (hooks/use-ref nil)
+        *applied-render-blocks (hooks/use-ref nil)
         root-tx-id (rfx/use-entity-tx-id block*)
         latest-tx (when root-tx-id
                     (state/get-state :db/latest-transacted-entity-uuids))
@@ -157,7 +196,15 @@
                         stored-root
                         (hooks/deref *optimistic-state)
                         latest-tx))
-        root (or (:root event-result) stored-root)]
+        root (or (:root event-result) stored-root)
+        render-blocks-new? (and (some? render-blocks)
+                                (not (identical? render-blocks
+                                                 (hooks/deref *applied-render-blocks))))
+        root (if render-blocks-new?
+               (outliner-tree/reconcile-block-tree root render-blocks #{})
+               root)
+        _ (when-not (identical? render-blocks (hooks/deref *applied-render-blocks))
+            (hooks/set-ref! *applied-render-blocks render-blocks))]
     (hooks/use-effect!
      (fn []
        (set! (.-current *optimistic-state) nil)
@@ -175,7 +222,7 @@
      (fn []
        (set-stored-root! root)
        nil)
-     [root-tx-id])
+     [root-tx-id render-blocks])
     root))
 
 (def ^:private initial-tree-render-limit 60)
@@ -186,7 +233,7 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [block (use-loaded-block-tree block*)
+  (let [block (use-loaded-block-tree block* (:journal/render-blocks config))
         *block-tree (hooks/use-ref block)
         quick-add-page? (= (:block/title block) common-config/quick-add-page-name)
         [quick-add-children set-quick-add-children!] (hooks/use-state nil)]
@@ -318,7 +365,7 @@
        (t :property/set-property)))]])
 
 (hsx/defc db-page-title
-  [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]
+  [page {:keys [sidebar? journals? container-id tag-dialog? display-title block-metadata-ready?]}]
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class "title"
@@ -343,6 +390,7 @@
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
+        :block-metadata-ready? block-metadata-ready?
         :journal-page? (entity/journal? page)
         :on-title-click (fn [e]
                           (cond
@@ -514,7 +562,11 @@
                                   :journals? journals?
                                   :container-id container-id
                                   :display-title page-display-title
-                                  :tag-dialog? tag-dialog?}))
+                                  :tag-dialog? tag-dialog?
+                                  :block-metadata-ready?
+                                  (if journals?
+                                    (:journal/render-data-ready? option)
+                                    (:block-metadata-ready? option))}))
                 (lsp-pagebar-slot)]
                (when (and (entity/page? page)
                           (not (ldb/library? page)))
@@ -582,16 +634,47 @@
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
       [:div.opacity-75 (t :page/not-found)])))
 
+(defn- render-loaded-page
+  [option page refs-count journals? journal-render-blocks]
+  (let [rendered-page (some #(when (= (:db/id page) (:db/id %)) %)
+                            journal-render-blocks)
+        page' (if rendered-page (merge page rendered-page) page)]
+    (page-inner (cond-> (assoc option
+                               :page page'
+                               :selection/block-ids (mapv :block/uuid (:block/children page'))
+                               :refs-count refs-count)
+                  journals?
+                  (assoc :block-metadata-ready? false
+                         :journal/render-data-ready? (some? journal-render-blocks)
+                         :journal/render-blocks journal-render-blocks)))))
+
+(defn- use-route-block-uuid
+  [route-page-name block-route-name]
+  (let [[route-block-uuid set-route-block-uuid!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (if (and block-route-name route-page-name)
+         (p/let [block (db-async/<get-block-by-page-name-and-block-route-name
+                        (state/get-current-repo)
+                        route-page-name
+                        block-route-name)]
+           (set-route-block-uuid! (some-> block :block/uuid str)))
+         (set-route-block-uuid! nil))
+       nil)
+     [route-page-name block-route-name])
+    route-block-uuid))
+
 (hsx/defc page-aux
   [option]
   (let [page-name (:page-name option)
         provided-page (:page option)
         route-page-name (get-page-name option)
         block-route-name (get-block-route-name option)
-        [route-block-uuid set-route-block-uuid!] (hooks/use-state nil)
+        route-block-uuid (use-route-block-uuid route-page-name block-route-name)
         page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
                                  (get-sanity-page-name option page-name route-block-uuid))
         journals? (:journals? option)
+        journal-hydration-ready? (:block-metadata-ready? option)
         keep-tree-resident? (:keep-tree-resident? option)
         resident-page (when keep-tree-resident?
                         (outliner-tree/resident-block-tree page-id-uuid-or-name))
@@ -604,18 +687,14 @@
         [page] (hooks/use-atom *page)
         [refs-count] (hooks/use-atom *refs-count)
         page (or provided-page page)
-        loading? (if provided-page false loading?)]
-    (hooks/use-effect!
-     (fn []
-       (if (and block-route-name route-page-name)
-         (p/let [block (db-async/<get-block-by-page-name-and-block-route-name
-                        (state/get-current-repo)
-                        route-page-name
-                        block-route-name)]
-           (set-route-block-uuid! (some-> block :block/uuid str)))
-         (set-route-block-uuid! nil))
-       nil)
-     [route-page-name block-route-name])
+        loading? (if provided-page false loading?)
+        [journal-render-blocks *journal-render-blocks]
+        (use-journal-render-blocks
+         {:journals? journals?
+          :page page
+          :hydration-ready? journal-hydration-ready?
+          :keep-tree-resident? keep-tree-resident?
+          :page-id-uuid-or-name page-id-uuid-or-name})]
     (hooks/use-effect!
      (fn []
        (when-not provided-page
@@ -625,6 +704,7 @@
              (reset! *page resident-page))
            (do
              (reset! *loading? true)
+             (reset! *journal-render-blocks nil)
              (p/let [repo (state/get-current-repo)
                      result (if journals?
                               (db-async/<get-block-with-children
@@ -632,7 +712,8 @@
                                page-id-uuid-or-name
                                {:all? true
                                 :children? true
-                                :render-data? keep-tree-resident?
+                                :render-data? false
+                                :block-metadata? true
                                 :include-collapsed-children? true})
                               (db-async/<get-page-blocks-tree
                                repo
@@ -651,7 +732,9 @@
                                                root)]
                                     (outliner-tree/index-block-tree root)))
                      refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
-                                  (db-async/<get-block-refs-count repo (:db/id page-block)))
+                                  (if (contains? page-block :block.temp/refs-count)
+                                    (:block.temp/refs-count page-block)
+                                    (db-async/<get-block-refs-count repo (:db/id page-block))))
                      page-block (cond-> page-block
                                   (some? refs-count)
                                   (assoc :block.temp/refs-count refs-count))]
@@ -672,10 +755,7 @@
      [provided-page page-id-uuid-or-name preview-or-sidebar? (:tag-dialog? option)
       journals? keep-tree-resident? resident-page])
     (when (and page (not loading?))
-      (page-inner (assoc option
-                         :page page
-                         :selection/block-ids (mapv :block/uuid (:block/children page))
-                         :refs-count refs-count)))))
+      (render-loaded-page option page refs-count journals? journal-render-blocks))))
 
 (hsx/defc page-cp
   [option]

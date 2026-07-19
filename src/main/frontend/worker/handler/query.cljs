@@ -62,7 +62,7 @@
                  :logseq.property.history/ref-value-title (:block/title status)})))
        (sort-by :block/created-at)))
 
-(defn- task-spent-time
+(defn task-spent-time
   [db block-id now-ms]
   (let [status-history (block-status-history db block-id)]
     (when (seq status-history)

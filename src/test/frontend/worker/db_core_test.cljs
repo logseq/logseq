@@ -2434,7 +2434,7 @@
               (str "Large subtree was scanned past the result limit: "
                    @parent-index-scans)))))))
 
-(deftest get-blocks-returns-all-journal-blocks-with-cheap-render-markers
+(deftest get-blocks-returns-a-complete-journal-tree-with-cheap-metadata
   (restoring-worker-state
    (fn []
      (let [get-blocks! (get-thread-api :thread-api/get-blocks)
@@ -2442,11 +2442,21 @@
                  {:pages-and-blocks
                   [{:page {:build/journal 20260716}
                     :blocks (mapv (fn [index]
-                                    {:block/title (str "Block " index)})
+                                    (cond-> {:block/title (str "Block " index)}
+                                      (= index 2)
+                                      (assoc :build/tags [:logseq.class/Comments])))
                                   (range 165))}]})
+           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
            journal-id (d/q '[:find ?journal .
                              :where [?journal :block/journal-day 20260716]]
-                           @conn)]
+                           @conn)
+           target (db-test/find-block-by-content @conn "Block 0")
+           referring-block (db-test/find-block-by-content @conn "Block 1")
+           comments-area (db-test/find-block-by-content @conn "Block 2")
+           _ (d/transact! conn [{:db/id (:db/id referring-block)
+                                 :block/refs [(:db/id target)]}
+                                {:db/id (:db/id comments-area)
+                                 :logseq.property.comments/blocks [(:db/id target)]}])]
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [{:keys [block children]}
              (-> (get-blocks! test-repo
@@ -2455,21 +2465,43 @@
                                  :opts {:all? true
                                         :children? true
                                         :render-data? false
+                                        :block-metadata? true
                                         :include-collapsed-children? true}}]))
                  ldb/read-transit-str
-                 first)]
+                 first)
+             target-result (some #(when (= "Block 0" (:block/title %)) %) children)
+             property-block-result (some #(when (= "Block 2" (:block/title %)) %) children)
+             plain-results (remove #(= "Block 2" (:block/title %)) children)
+             unrelated-result (some #(when (= "Block 3" (:block/title %)) %) children)]
          (is (= 165 (count children)))
          (is (= :full (:block.temp/load-status block)))
          (is (every? #(= :full (:block.temp/load-status %)) children))
-         (is (every? #(= {} (:block.temp/positioned-properties %)) children)
-             "Plain blocks should carry a cheap negative marker instead of triggering UI hydration.")
-         (is (every? #(= {:full-properties []
-                          :hidden-properties []
-                          :description-property nil
-                          :class-properties-property nil}
-                         (:block.temp/display-properties %))
-                     children))
-         (is (every? #(= [] (:block.temp/reactions %)) children)))))))
+         (is (every? #(contains? % :block.temp/positioned-properties) plain-results)
+             "Plain blocks should carry cheap negative property markers.")
+         (is (every? #(contains? % :block.temp/display-properties) plain-results))
+         (is (not (contains? property-block-result :block.temp/display-properties))
+             "Blocks with properties should defer expensive derivation until the settled batch.")
+         (is (every? #(contains? % :block.temp/reactions) children))
+         (is (every? #(contains? % :block.temp/refs-count) children)
+             "Reference counts must be bundled instead of fetched once per mounted block.")
+         (is (every? #(contains? % :block.temp/comment-thread-present?) children)
+             "Comment presence must be bundled instead of fetched once per mounted journal.")
+         (is (= 1 (:block.temp/refs-count target-result)))
+         (is (true? (:block.temp/comment-thread-present? target-result)))
+         (is (= 0 (:block.temp/refs-count unrelated-result)))
+         (is (false? (:block.temp/comment-thread-present? unrelated-result)))
+         (let [hydrated (-> (get-blocks! test-repo
+                                         (ldb/write-transit-str
+                                          [{:id (:db/id property-block-result)
+                                            :opts {:children? false
+                                                   :render-data? true
+                                                   :block-metadata? true}}]))
+                            ldb/read-transit-str
+                            first
+                            :block)]
+           (is (contains? hydrated :block.temp/display-properties))
+           (is (contains? hydrated :block.temp/task-spent-time))
+           (is (contains? hydrated :block.temp/sync-conflicts))))))))
 
 (deftest page-block-index-returns-all-ids-and-only-initial-render-data
   (restoring-worker-state

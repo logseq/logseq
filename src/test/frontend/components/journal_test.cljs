@@ -38,14 +38,37 @@
     (is (not (string/includes? source "p/all (map #(db-async/<get-block"))
         "The journal list must not hydrate every journal in a separate fan-out.")))
 
-(deftest visible-journals-request-one-complete-renderable-tree
+(deftest visible-journals-render-a-complete-base-tree-before-secondary-data
   (let [source (page-source)]
     (is (string/includes? source "db-async/<get-block-with-children")
         "A visible journal should request its root and blocks together.")
     (is (string/includes? source ":all? true")
         "The logical journal tree must not have a block count cap.")
-    (is (string/includes? source ":render-data? keep-tree-resident?")
-        "Recent journals keep render payloads while older journals skip eager derivation.")))
+    (is (string/includes? source ":render-data? false")
+        "Expensive derived properties must not block the first visible journal content.")
+    (is (string/includes? source ":block-metadata? true")
+        "The base tree must carry cheap metadata markers that prevent per-block requests.")))
+
+(deftest journal-secondary-data-reuses-the-existing-block-batcher
+  (let [source (page-source)]
+    (is (string/includes? source "db-async/<get-blocks")
+        "Missing derived properties should be hydrated through the existing block batcher.")
+    (is (string/includes? source ":render-data? true")
+        "The settled batch should contain derived render properties.")
+    (is (string/includes? source "outliner-tree/reconcile-block-tree")
+        "The batch should be merged into the existing outliner tree instead of rebuilding a flat UI list.")))
+
+(deftest journal-secondary-data-is-merged-before-metadata-effects-render
+  (let [source (page-source)]
+    (is (string/includes? source "render-blocks-new?")
+        "A new metadata batch must be detected during render, not in a later effect.")
+    (is (string/includes? source "(outliner-tree/reconcile-block-tree root render-blocks #{})")
+        "The block tree must already contain the batch when metadata-ready components render.")))
+
+(deftest journal-page-reuses-bundled-root-reference-count
+  (let [source (page-source)]
+    (is (string/includes? source "(contains? page-block :block.temp/refs-count)")
+        "A complete journal payload should not wait for another root reference-count request.")))
 
 (deftest non-plain-base-tree-blocks-hydrate-positioned-properties-on-demand
   (let [source (block-source)]
@@ -86,6 +109,15 @@
         "Block metadata requests should honor journal readiness.")
     (is (string/includes? property ":block-metadata-ready?")
         "Property metadata requests should honor journal readiness.")))
+
+(deftest journal-block-trees-never-start-per-block-metadata-effects
+  (let [page (page-source)
+        property (property-source)]
+    (is (string/includes? page ":block-metadata-ready? false")
+        "Journal block trees must only consume the page-level metadata batch.")
+    (is (string/includes? property
+                          "display-properties-payload? (:block.temp/display-properties block)")
+        "A completed payload must render even while per-block requests stay disabled.")))
 
 (deftest two-most-recent-journal-trees-are-pinned-without-pinning-their-dom
   (let [source (journal-source)]
