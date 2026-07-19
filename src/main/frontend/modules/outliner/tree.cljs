@@ -159,6 +159,14 @@
   (when-let [path (node-path root index key)]
     (get-in root path)))
 
+(defn loaded-node
+  "Returns the node identified by `id` from the indexed loaded `root` tree."
+  [root id]
+  (when root
+    (let [index (tree-index root)]
+      (when-let [key (resolve-key index id)]
+        (node-at root index key)))))
+
 (defn- assoc-node
   [root index key node]
   (let [path (node-path root index key)]
