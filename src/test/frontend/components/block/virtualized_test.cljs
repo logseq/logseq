@@ -281,6 +281,23 @@
     (is (string/includes? conflict-source "sync-conflicts-payload?")
         "Virtual rows should use the conflict snapshot from their page window.")))
 
+(deftest task-spent-time-payload-does-not-refetch
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        task-source (form-source source "(hsx/defc task-spent-time-cp")]
+    (is (some? task-source))
+    (is (string/includes? task-source ":block.temp/task-spent-time"))
+    (is (string/includes? task-source "task-spent-time-payload?")
+        "Journal metadata batches should prevent one spent-time request per task block.")))
+
+(deftest incomplete-property-blocks-wait-for-their-existing-batched-hydration
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        container-source (form-source source "(hsx/defc block-container\n")]
+    (is (some? container-source))
+    (is (string/includes? container-source ":block-metadata? true")
+        "The existing block fetch should include metadata instead of starting parallel requests.")
+    (is (string/includes? container-source "metadata-payload-ready?")
+        "Metadata effects must stay disabled until the batched block payload arrives.")))
+
 (deftest comment-presence-payload-does-not-refetch
   (let [source (source-for "src/main/frontend/components/block.cljs")
         block-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux")]

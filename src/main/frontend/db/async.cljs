@@ -237,7 +237,7 @@
   [requests]
   (mapv (fn [{:keys [id opts]}]
           {:id id
-           :opts (select-keys opts [:all? :children? :properties :render-data?
+           :opts (select-keys opts [:all? :children? :properties :render-data? :block-metadata?
                                     :include-collapsed-children?])})
         requests))
 
