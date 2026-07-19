@@ -2565,11 +2565,19 @@
 
 (defn- <get-or-load-views
   [repo view-parent view-feature-type]
-  (let [views (get-views view-parent view-feature-type)]
-    (if (seq views)
-      (p/resolved views)
-      (p/let [views (db-async/<get-views repo (:db/id view-parent) view-feature-type)]
-        (ldb/sort-by-order views)))))
+  (p/let [views (db-async/<get-views repo (:db/id view-parent) view-feature-type)]
+    (ldb/sort-by-order views)))
+
+(defn- current-view-from
+  [views current-view]
+  (or (some #(when (= (:db/id %) (:db/id current-view)) %) views)
+      (first views)))
+
+(defn- view-with-display-type
+  [view-entity display-type]
+  (if (:logseq.property.view/type view-entity)
+    view-entity
+    (assoc view-entity :logseq.property.view/type (built-in-property display-type))))
 
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
@@ -2724,7 +2732,7 @@
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
-   {:keys [view-feature-type title-key additional-actions]
+   {:keys [view-feature-type title-key additional-actions display-type]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
         references? (contains? #{:linked-references :unlinked-references} view-feature-type)
@@ -2766,9 +2774,11 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       (pv/property-value view-entity (built-in-property :logseq.property.view/type) {:icon? true
-                                                                                      :popup-focus-trigger? false
-                                                                                      :popup-auto-focus-trigger? false})]
+       (pv/property-value (view-with-display-type view-entity display-type)
+                          (built-in-property :logseq.property.view/type)
+                          {:icon? true
+                           :popup-focus-trigger? false
+                           :popup-auto-focus-trigger? false})]
 
       (more-actions view-entity columns table option)
 
@@ -3027,15 +3037,19 @@
                 (set-properties! properties))
               (p/finally #(set-loading! false))))))))
 
+(defn- view-display-type
+  [view-entity view-feature-type]
+  (or (:db/ident (:logseq.property.view/type view-entity))
+      (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+        :logseq.property.view/type.list)
+      :logseq.property.view/type.table))
+
 (hsx/defc view-aux
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         [properties set-properties!] (hooks/use-state nil)
         group-by-property (:logseq.property.view/group-by-property view-entity)
-        display-type (or (:db/ident (get view-entity :logseq.property.view/type))
-                         (when (= (:view-type option) :linked-references)
-                           :logseq.property.view/type.list)
-                         :logseq.property.view/type.table)
+        display-type (view-display-type view-entity view-feature-type)
         list-view? (= display-type :logseq.property.view/type.list)
         group-by-property-ident (or (:db/ident group-by-property)
                                     (when (and list-view? (nil? group-by-property))
@@ -3139,31 +3153,30 @@
   [{:keys [view-parent view-feature-type] view-entity* :view-entity :as option}]
   (let [[views set-views!] (hooks/use-state nil)
         [view-entity set-view-entity!] (hooks/use-state view-entity*)
-        query? (= view-feature-type :query-result)]
+        query? (= view-feature-type :query-result)
+        current-view-entity (if query? view-entity* view-entity)
+        view-tx-id (rfx/use-entity-tx-id current-view-entity)]
     (hooks/use-effect!
      #(do
         (when-not query?
           (let [repo (state/get-current-repo)]
-            (set-views! nil)
-            (set-view-entity! view-entity*)
-            (when-not view-entity*
-              (p/let [views (<get-or-load-views repo view-parent view-feature-type)]
-                (if-let [v (first views)]
-                  (do
-                    (set-views! views)
-                    (when-not view-entity* (set-view-entity! v)))
-                  (when (and view-parent view-feature-type (not view-entity*))
-                    (p/let [new-view (create-view! view-parent view-feature-type {:auto-triggered? true})]
-                      (set-views! [new-view])
-                      (set-view-entity! new-view))))))))
+            (p/let [views (<get-or-load-views repo view-parent view-feature-type)]
+              (if-let [v (current-view-from views (or view-entity view-entity*))]
+                (do
+                  (set-views! views)
+                  (set-view-entity! v))
+                (when (and view-parent view-feature-type (not view-entity*))
+                  (p/let [new-view (create-view! view-parent view-feature-type {:auto-triggered? true})]
+                    (set-views! [new-view])
+                    (set-view-entity! new-view)))))))
         nil)
-     [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
-    (when view-entity
+     [(:db/id view-parent) view-feature-type (:db/id view-entity*) query? view-tx-id])
+    (when current-view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type
-                                                  (:logseq.property.view/feature-type view-entity))
+                                                  (:logseq.property.view/feature-type current-view-entity))
                            :views views
                            :set-views! set-views!
                            :set-view-entity! set-view-entity!)]
-        ^{:key (str "view-" (:db/id view-entity))}
-        [sub-view view-entity option']))))
+        ^{:key (str "view-" (:db/id current-view-entity))}
+        [sub-view current-view-entity option']))))

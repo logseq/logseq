@@ -52,6 +52,34 @@
             (p/catch #(is false (str %)))
             (p/finally done))))))
 
+(deftest get-views-loads-referenced-view-metadata-test
+  (async done
+    (let [calls (atom [])]
+      (p/with-redefs [db-async/<q
+                      (fn [& args]
+                        (swap! calls conj args)
+                        (p/resolved []))]
+        (-> (p/let [_ (db-async/<get-views "graph" 42 :linked-references)]
+              (let [[graph opts query class-id feature-type] (first @calls)]
+                (is (= "graph" graph))
+                (is (= {:transact-db? false} opts))
+                (is (= 42 class-id))
+                (is (= :linked-references feature-type))
+                (is (= '[:find
+                         [(pull ?b
+                            [*
+                             {:logseq.property.view/type
+                              [:db/id :db/ident :logseq.property/icon]}
+                             {:logseq.property.view/group-by-property
+                              [:db/id :db/ident :logseq.property/icon]}]) ...]
+                         :in $ ?class-id ?view-feature-type
+                         :where
+                         [?b :logseq.property/view-for ?class-id]
+                         [?b :logseq.property.view/feature-type ?view-feature-type]]
+                       query))))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
+
 (deftest date-formatter-uses-worker-pull-with-ui-fallback-test
   (async done
     (let [calls (atom [])]
