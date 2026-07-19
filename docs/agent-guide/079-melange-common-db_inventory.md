@@ -267,22 +267,21 @@ The final migration uses narrowly scoped interfaces for opaque handles and primi
 | --- | --- |
 | `deps/melange/spec/cljs_runtime/value_codec.mli` | Named scalar, keyword, UUID, vector, set, map, ordered-map, sequence, lazy-sequence, mutable-cell, callback, promise, logging, and error operations |
 | `deps/melange/spec/datascript/api.mli` | Opaque connection, database, entity, entity-database, datom, query, pull, transaction, listener, report, and storage operations |
-| `deps/melange/spec/authorization/platform.mli` | Clock, JWT decode, JWKS fetch, Web Crypto import, byte conversion, and signature verification primitives |
-| `deps/melange/spec/crypto/digest.mli` | Buffer, SHA-256, and digest-byte primitives for asset checksum workflows |
-| `deps/melange/spec/db_runtime/ident.mli` | Runtime target and random-byte primitives for DB ident creation |
 | `deps/melange/spec/db_worker/platform.mli` | Typed DB worker platform operations |
 | `deps/melange/spec/js_api/entry_browser.mli` and `entry_node.mli` | Exact Browser and Node bridge contracts receiving runtime/platform adapters per call |
 
-The interfaces expose named operations rather than a generic JavaScript escape hatch. DataScript and SQLite handles remain opaque, and the scalar tag path resolves an entity id through the owning DataScript entity database before reading `:db/ident`. Contract and behavior tests were added RED before the corresponding implementation.
+The interfaces expose named operations rather than a generic JavaScript escape hatch. Authorization, asset digest, and DB-ident behavior is implemented by concrete Common and DB workflows instead of virtual specification directories. DataScript and SQLite handles remain opaque, and the scalar tag path resolves an entity id through the owning DataScript entity database before reading `:db/ident`. Contract and behavior tests were added RED before the corresponding implementation.
 
 ## Final verification
 
 | Command | Result |
 | --- | --- |
-| `node deps/melange/test/cljs_boundary_test.js` | PASS, 1 source-boundary test |
-| `cd deps/melange && opam exec -- dune build @runtest @bundle` | PASS; 93 Common domain tests, 248 DB domain tests, 14 Common JS contract tests, 95 DB JS contract tests, 10 package-resolution tests, 55 bridge tests with 249 assertions, and platform, graph-fs, boundary, and dependency contracts |
+| `node deps/melange/test/cljs_boundary_test.js` | PASS, 3 source-boundary tests |
+| `node deps/melange/test/repository_contract_test.js` | PASS, 8 repository contract tests |
+| `cd deps/melange && bb lint:rules` | PASS, 37 Datalog rules |
+| `cd deps/melange && opam exec -- dune build @runtest @bundle` | PASS; 93 Common domain tests, 248 DB domain tests, 14 Common JS contract tests, 95 DB JS contract tests, 10 package-resolution tests, 55 bridge tests with 249 assertions, and platform, graph-fs, boundary, generation-drift, and dependency contracts |
 | `pnpm melange:build-js-api` | PASS; package entries remain unchanged and Common/DB artifacts regenerate in the gitignored source dist directory |
-| `pnpm cljs:test` | PASS; test artifact compiled from 1,141 files |
+| `pnpm cljs:test` | PASS; test artifact compiled from 1,142 files |
 | `LOGSEQ_STABLE_IDENTS=1 node static/tests.js -n frontend.worker.pipeline-test` | PASS, 19 tests with 90 assertions |
 | `pnpm cljs:run-test` | Migration-owned tests PASS: 1,008 tests, 4,130 assertions, 0 failures; 16 environment errors are all the missing `better-sqlite3@12.9.0` Node 22.21.1 darwin-arm64 native binding |
 | `pnpm cljs:build-electron` | PASS for app, DB worker, DB worker Node, and Electron targets |

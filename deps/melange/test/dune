@@ -23,7 +23,9 @@
   (:db_namespace_package
    ../bridge/test/package_contract/db_namespace_package.cljs)
   (:db_namespace_package_test ./db_namespace_package_test.js)
-  (:api_public_boundary_test ./api_public_boundary_test.js))
+  (:api_public_boundary_test ./api_public_boundary_test.js)
+  (:cljs_boundary_test ./cljs_boundary_test.js)
+  (:repository_contract_test ./repository_contract_test.js))
  (action
   (setenv
    LOGSEQ_MELANGE_JS_API_NODE
@@ -40,4 +42,6 @@
       (run node --test %{package_resolution_test})
       (run node --test %{common_namespace_package_test})
       (run node --test %{db_namespace_package_test})
-      (run node --test %{api_public_boundary_test})))))))
+      (run node --test %{api_public_boundary_test})
+      (run node --test %{cljs_boundary_test})
+      (run node --test %{repository_contract_test})))))))

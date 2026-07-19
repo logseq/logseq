@@ -1,0 +1,29 @@
+{:min-bb-version "1.0.168"
+ :deps
+ {logseq/bb-tasks
+  {:git/url "https://github.com/logseq/bb-tasks"
+   :git/sha "7cc218286c03f093996539b8195de56a0ec5df6a"}}
+
+ :tasks
+ {lint:rules
+  {:doc "Lint the Melange-owned Datalog rules"
+   :requires ([babashka.process :refer [shell]]
+              [clojure.edn :as edn]
+              [logseq.bb-tasks.lint.datalog :as datalog])
+   :task
+   (let [result (shell {:dir "bridge"
+                        :out :string}
+                       "pnpm"
+                       "exec"
+                       "nbb-logseq"
+                       "-cp"
+                       "script"
+                       "-m"
+                       "export-db-rules")
+         {:keys [rules lint-db-query-rules]}
+         (edn/read-string (:out result))]
+     (datalog/lint-rules
+      (set
+       (concat
+        (mapcat val (dissoc rules :self-ref))
+        lint-db-query-rules))))}}}

@@ -211,7 +211,10 @@ let make_entry ident title attribute schema queryable properties closed_values
   (println
    (if (= key :logseq-property-namespaces)
      (vector-expression ocaml-string (get oracle key))
-     (keyword-vector key))))
+     (keyword-vector key)))
+  (when (= key :schema-properties)
+    (println
+     "\nlet schema_entries ~ident_of entries =\n  Rrbvec.filter\n    (fun (key, _value) -> Rrbvec.mem (ident_of key) schema_properties)\n    entries")))
 
 (println "\nlet schema_properties_map =")
 (println

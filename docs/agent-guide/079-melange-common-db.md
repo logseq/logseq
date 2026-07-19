@@ -6,7 +6,7 @@ Architecture: OCaml domain modules in deps/melange/lib own behavior, deps/melang
 
 Tech Stack: OCaml, Melange, Dune, ClojureScript, shadow-cljs, NBB, JavaScript, Vite, pnpm, and Babashka.
 
-Related: docs/agent-guide/039-melange.md, docs/agent-guide/079-melange-common-db_inventory.md, docs/agent-guide/079-melange-common-db_inventory_common.json, and docs/agent-guide/079-melange-common-db_inventory_db.json.
+Related: deps/melange/README.md, docs/agent-guide/079-melange-common-db_inventory.md, docs/agent-guide/079-melange-common-db_inventory_common.json, and docs/agent-guide/079-melange-common-db_inventory_db.json.
 
 ## Problem statement
 

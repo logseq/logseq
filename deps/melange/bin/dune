@@ -1,4 +1,0 @@
-(executable
- (public_name melange-deps)
- (name main)
- (libraries melange_deps))

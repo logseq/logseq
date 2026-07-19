@@ -7,20 +7,24 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github logseq/logseq))
 
-(authors "Author Name <author@example.com>")
+(authors "Logseq contributors")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+(maintainers https://github.com/logseq/logseq/issues)
 
-(license LICENSE)
+(license AGPL-3.0-or-later)
 
-(documentation https://url/to/documentation)
+(homepage https://logseq.com)
+
+(documentation https://docs.logseq.com)
 
 (package
  (name melange-deps)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (allow_empty)
+ (synopsis "Internal Melange implementation of Logseq Common and DB behavior")
+ (description
+  "Typed OCaml and Melange implementations, ClojureScript adapters, and private JavaScript package for Logseq Common and DB behavior.")
  (depends
   ocaml
   melange
@@ -29,6 +33,6 @@
   (melange-fest (= 0.2.0))
   (rrbvec (= dev)))
  (tags
-  ("add topics" "to describe" your project)))
+  (logseq melange)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
