@@ -713,6 +713,7 @@
                                {:all? true
                                 :children? true
                                 :render-data? false
+                                :root-render-data? true
                                 :block-metadata? true
                                 :include-collapsed-children? true})
                               (db-async/<get-page-blocks-tree

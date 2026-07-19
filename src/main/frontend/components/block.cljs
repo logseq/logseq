@@ -3121,15 +3121,16 @@
              [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
 
 (defn- render-block-reactions?
-  [block]
-  (or (not (contains? block :block.temp/reactions))
-      (seq (:block.temp/reactions block))))
+  [config block]
+  (if (contains? block :block.temp/reactions)
+    (seq (:block.temp/reactions block))
+    (block-metadata-ready? config)))
 
 (hsx/defc block-reactions
   [block]
   (let [repo (state/get-current-repo)
         target-id (:db/id block)
-        [user-db-id set-user-db-id!] (hooks/use-state nil)
+        current-user-uuid (some-> (user-handler/user-uuid) uuid)
         reactions-payload? (contains? block :block.temp/reactions)
         reactions-result (db-hooks/use-query
                           (when-not reactions-payload?
@@ -3143,7 +3144,7 @@
         reactions (if reactions-payload?
                     (:block.temp/reactions block)
                     (map first (or reactions-result [])))
-        summary (reaction/summarize reactions user-db-id)
+        summary (reaction/summarize reactions current-user-uuid)
         read-only? config/publishing?
         on-pick (fn [popup-id emoji]
                   (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
@@ -3161,15 +3162,6 @@
                             :icon-value nil}))
                         {:align :start
 	                         :content-props {:class "ls-icon-picker"}}))]
-    (hooks/use-effect!
-     (fn []
-       (if-let [id-str (user-handler/user-uuid)]
-         (when-let [user-id (uuid id-str)]
-           (p/let [user (db-async/<get-block repo user-id {:children? false})]
-             (set-user-db-id! (:db/id user))))
-         (set-user-db-id! nil))
-       nil)
-     [repo])
     (when (seq summary)
       [:div.ls-block-reactions.flex.flex-row.flex-wrap.items-center.mt-1
        (for [{:keys [emoji-id count reacted-by-me? usernames]} summary]
@@ -4266,7 +4258,7 @@
      (block-positioned-properties config block :block-below))
 
    (when (and (not (or (:table? config) (:property? config)))
-              (render-block-reactions? block))
+              (render-block-reactions? config block))
      (block-reactions block))])
 
 (hsx/defc block-renderer-error-boundary
