@@ -569,9 +569,9 @@
   (cond
      journals?
      (let [journals (vec (ldb/get-latest-journals db))
-           ids (mapv :db/id journals)]
-       {:count (count ids)
-        :data ids})
+           index (mapv #(select-keys % [:db/id :block/journal-day]) journals)]
+       {:count (count index)
+        :data index})
      :else
      (let [view (d/entity db view-id)
            group-by-property (:logseq.property.view/group-by-property view)

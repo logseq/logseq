@@ -154,6 +154,14 @@
            :block.temp/reactions
            (block-reactions db (:db/id block)))))
 
+(defn- assoc-root-render-data
+  [db block block-map]
+  (assoc (assoc-render-property-data db block block-map)
+         :block.temp/page-display-properties
+         (property-handler/display-properties db block {:page-title? true} false)
+         :block.temp/bidirectional-properties
+         (vec (ldb/get-bidirectional-properties db (:db/id block)))))
+
 (defn get-block-and-children
   [db id-or-page-name {:keys [all? children? properties render-data? root-render-data?
                               include-collapsed-children?]
@@ -194,7 +202,10 @@
                            (assoc :block/properties
                                   (property-handler/display-properties-for-block db block)))
           block-map (cond
-                      (or render-data? root-render-data?)
+                      root-render-data?
+                      (assoc-root-render-data db block block-map-base)
+
+                      render-data?
                       (assoc-render-property-data db block block-map-base)
 
                       (false? render-data?)
