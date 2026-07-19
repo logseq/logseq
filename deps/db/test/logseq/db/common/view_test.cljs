@@ -15,7 +15,7 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
-(deftest get-view-data-journals-returns-ordered-ids-only-test
+(deftest get-view-data-journals-returns-ordered-compact-index-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                (mapv (fn [journal-day]
@@ -23,11 +23,16 @@
                         :blocks [{:block/title (str "Block " journal-day)}]})
                      [20260716 20260715 20260714 20260713 20260712])})
         result (db-view/get-view-data @conn nil {:journals? true})
-        days (mapv (fn [id] (:block/journal-day (d/entity @conn id))) (:data result))]
+        index (:data result)]
     (is (= 5 (:count result)))
-    (is (= [20260716 20260715 20260714 20260713 20260712] days))
+    (is (= [20260716 20260715 20260714 20260713 20260712]
+           (mapv :block/journal-day index)))
+    (is (every? map? index))
+    (when (every? map? index)
+      (is (every? #(= #{:db/id :block/journal-day} (set (keys %))) index)
+          "The journal index should include only the identity and placeholder title data."))
     (is (not (contains? result :selection-block-ids))
-        "The journal index should return ids only; blocks are loaded for visible journals.")))
+        "Blocks are loaded only for visible journals.")))
 
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test
   (let [conn (db-test/create-conn-with-blocks
