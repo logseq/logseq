@@ -77,9 +77,12 @@
 
 (deftest journal-secondary-data-is-merged-before-metadata-effects-render
   (let [source (page-source)]
-    (is (string/includes? source "render-blocks-new?")
-        "A new metadata batch must be detected during render, not in a later effect.")
-    (is (string/includes? source "(outliner-tree/reconcile-block-tree root render-blocks #{})")
+    (is (string/includes? source "root (hooks/use-memo")
+        "The render tree should be derived during render, not in a later effect.")
+    (is (string/includes? source "(if (some? render-blocks)")
+        "A settled metadata batch must participate in the current render.")
+    (is (string/includes? source
+                          "(outliner-tree/reconcile-block-tree root-from-tx render-blocks #{})")
         "The block tree must already contain the batch when metadata-ready components render.")))
 
 (deftest journal-page-reuses-bundled-root-reference-count
@@ -96,7 +99,7 @@
     (is (string/includes? source ":render-data? true")
         "The on-demand request must include positioned render data.")))
 
-(deftest journal-property-blocks-reuse-the-complete-loaded-tree
+(deftest journal-property-blocks-reuse-renderable-loaded-tree-nodes
   (let [page (page-source)
         block (block-source)
         property-value (.toString
@@ -111,8 +114,8 @@
     (is (string/includes? block "tree/loaded-node")
         "A property block already present in the page tree must be reused by ID.")
     (is (string/includes? block
-                          "= :full (:block.temp/load-status loaded-tree-block)")
-        "Only complete tree nodes may bypass worker hydration.")))
+                          "not= :index (:block.temp/load-status loaded-tree-block)")
+        "Only lightweight index nodes require worker hydration.")))
 
 (deftest old-journal-metadata-waits-until-scroll-settles
   (let [journal (journal-source)

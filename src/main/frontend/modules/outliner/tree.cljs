@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.util.entity :as entity]
-            [logseq.db.common.order :as db-order]
             [logseq.outliner.tree :as otree]))
 
 (defn- block-page
@@ -220,7 +219,9 @@
 
 (defn- merge-node-payload
   [node changed]
-  (merge node (dissoc changed :block/children :block/level)))
+  (cond-> (merge node (dissoc changed :block/children :block/level))
+    (= :full (:block.temp/load-status node))
+    (assoc :block.temp/load-status :full)))
 
 (defn- update-subtree-level
   [node level]
@@ -302,104 +303,6 @@
       (update-existing-node state key changed))
     (insert-node state changed)))
 
-(defn- optimistic-parent-ref
-  [parent]
-  (if-let [id (:db/id parent)]
-    {:db/id id}
-    {:block/uuid (:block/uuid parent)}))
-
-(defn- optimistic-insert-op?
-  [[op [blocks _target-id opts]]]
-  (and (= :insert-blocks op)
-       (= 1 (count blocks))
-       (:block/uuid (first blocks))
-       (true? (:keep-uuid? opts))
-       (boolean? (:sibling? opts))
-       (contains? #{nil :insert-blocks} (:outliner-op opts))
-       (not-any? #(true? (get opts %))
-                 [:bottom? :top? :replace-empty-target? :keep-block-order?
-                  :insert-template?])))
-
-(defn- optimistic-op?
-  [[op :as op-entry]]
-  (case op
-    :save-block true
-    :delete-blocks true
-    :insert-blocks (optimistic-insert-op? op-entry)
-    false))
-
-(defn optimistic-ops-supported?
-  [ops]
-  (and (seq ops)
-       (some #(contains? #{:insert-blocks :delete-blocks} (first %)) ops)
-       (every? optimistic-op? ops)))
-
-(defn- optimistic-op-resolvable?
-  [index [op args]]
-  (case op
-    :save-block
-    (some? (resolve-key index (:block/uuid (first args))))
-
-    :delete-blocks
-    (every? #(some? (resolve-key index %)) (first args))
-
-    :insert-blocks
-    (let [[blocks target-id] args]
-      (and (some? (resolve-key index target-id))
-           (nil? (resolve-key index (:block/uuid (first blocks))))))
-
-    false))
-
-(defn- optimistic-insert-node
-  [{:keys [root index] :as state} [blocks target-id opts]]
-  (let [target-key (resolve-key index target-id)
-        target (node-at root index target-key)
-        sibling? (:sibling? opts)
-        parent-key (if sibling?
-                     (get-in index [:parent-by-key target-key])
-                     target-key)
-        parent (node-at root index parent-key)
-        children (vec (:block/children parent))
-        target-position (when sibling?
-                          (child-position children target-key (:block/order target)))
-        start-order (when sibling? (:block/order target))
-        end-order (if sibling?
-                    (:block/order (get children (inc target-position)))
-                    (:block/order (first children)))
-        order (first (db-order/gen-n-keys 1 start-order end-order
-                                          :max-key-atom (atom nil)))
-        block (-> (first blocks)
-                  (assoc :block/parent (optimistic-parent-ref parent)
-                         :block/order order))]
-    (insert-node state block)))
-
-(defn- apply-optimistic-op
-  [state [op args]]
-  (case op
-    :save-block
-    (update-node state (first args))
-
-    :delete-blocks
-    (reduce delete-node state (first args))
-
-    :insert-blocks
-    (optimistic-insert-node state args)))
-
-(defn apply-optimistic-ops
-  "Apply a small editor transaction to a loaded tree before worker confirmation.
-
-  Returns nil when every operation cannot be reproduced exactly from the loaded
-  structure. Complex structural operations stay on the authoritative worker path."
-  [root ops]
-  (when (and root
-             (optimistic-ops-supported? ops))
-    (let [root (index-block-tree root)
-          index (tree-index root)]
-      (when (every? #(optimistic-op-resolvable? index %) ops)
-        (let [{:keys [root index]}
-              (reduce apply-optimistic-op {:root root :index index} ops)]
-          (with-meta root (assoc (meta root) tree-index-key index)))))))
-
 (defn reconcile-block-tree
   "Apply changed and deleted entities to a loaded block tree.
 
@@ -416,54 +319,6 @@
           (reduce update-node {:root root :index index} changed-entities)]
       (when root
         (with-meta root (assoc (meta root) tree-index-key index))))))
-
-(defn- replay-optimistic-ops
-  [base-root pending]
-  (reduce (fn [root {:keys [ops]}]
-            (or (apply-optimistic-ops root ops) root))
-          base-root
-          pending))
-
-(defn apply-loaded-tree-event
-  "Apply one renderer tree event and retain pending deltas for confirmation or rollback."
-  [root optimistic-state event]
-  (let [base-root (or (:base-root optimistic-state) root)
-        pending (vec (:pending optimistic-state))]
-    (cond
-      (:optimistic-ops event)
-      (let [current-root (replay-optimistic-ops base-root pending)
-            root' (apply-optimistic-ops current-root (:optimistic-ops event))]
-        (if root'
-          (let [pending' (conj pending {:tx-id (:optimistic-tx-id event)
-                                        :ops (:optimistic-ops event)})]
-            {:root root'
-             :optimistic-state {:base-root base-root
-                                :pending pending'}})
-          {:root root
-           :optimistic-state optimistic-state}))
-
-      (:rollback-optimistic-tx-id event)
-      (let [tx-id (:rollback-optimistic-tx-id event)
-            pending' (filterv #(not= tx-id (:tx-id %)) pending)
-            root' (replay-optimistic-ops base-root pending')]
-        {:root root'
-         :optimistic-state (when (seq pending')
-                             {:base-root base-root
-                              :pending pending'})})
-
-      :else
-      (let [base-root' (reconcile-block-tree base-root
-                                             (:updated-blocks event)
-                                             (:deleted-ids event))
-            confirmed-tx-id (:confirmed-optimistic-tx-id event)
-            pending' (if confirmed-tx-id
-                       (filterv #(not= confirmed-tx-id (:tx-id %)) pending)
-                       pending)
-            root' (replay-optimistic-ops base-root' pending')]
-        {:root root'
-         :optimistic-state (when (seq pending')
-                             {:base-root base-root'
-                              :pending pending'})}))))
 
 (defonce ^:private *resident-block-trees (atom {}))
 (defonce ^:private *resident-block-tree-order (atom []))

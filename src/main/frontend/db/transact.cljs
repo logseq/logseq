@@ -128,76 +128,27 @@
        (remove nil?)
        set))
 
-(defn- optimistic-editor-ops?
-  [ops tx-meta]
-  (and (:ui/page-id tx-meta)
-       (:editor/edit-block-fn tx-meta)
-       (outliner-tree/optimistic-ops-supported? ops)))
-
-(defn- optimistic-editor-rows
-  [ops]
-  (into []
-        (mapcat (fn [[op args]]
-                  (case op
-                    :insert-blocks (first args)
-                    :delete-blocks (map (fn [id] {:block/uuid id}) (first args))
-                    [])))
-        ops))
-
-(defn- publish-optimistic-editor-ops!
-  [ops tx-meta]
-  (let [started-at (now-ms)
-        page-id (:ui/page-id tx-meta)
-        optimistic-tx-id (:db-sync/tx-id tx-meta)
-        event-tx-id (random-uuid)
-        value {:updated-ids (op-block-uuids ops)
-               :deleted-ids #{}
-               :entity-tx-ids {page-id event-tx-id}
-               :tx-id event-tx-id
-               :page-id page-id
-               :optimistic-tx-id optimistic-tx-id
-               :optimistic-ops ops}]
-    (react-dom/flushSync
-     (fn []
-       (state/set-state! :db/latest-transacted-entity-uuids
-                         value
-                         :changed-paths (outliner-pipeline/refresh-state-paths #{page-id}))
-       (run-edit-block-fn! tx-meta {:rows (optimistic-editor-rows ops)})))
-    (- (now-ms) started-at)))
-
-(defn- publish-optimistic-rollback!
-  [ops tx-meta]
-  (let [page-id (:ui/page-id tx-meta)
-        optimistic-tx-id (:ui/optimistic-tx-id tx-meta)
-        event-tx-id (random-uuid)]
-    (react-dom/flushSync
-     (fn []
-       (state/set-state! :db/latest-transacted-entity-uuids
-                         {:updated-ids (op-block-uuids ops)
-                          :deleted-ids #{}
-                          :entity-tx-ids {page-id event-tx-id}
-                          :tx-id event-tx-id
-                          :page-id page-id
-                          :rollback-optimistic-tx-id optimistic-tx-id}
-                         :changed-paths (outliner-pipeline/refresh-state-paths #{page-id}))))))
-
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta updated-blocks deleted-block-uuids affected-page-uuids render-invalidated-block-uuids]
+  [_ops tx-meta updated-blocks entity-updated-block-uuids deleted-block-uuids
+   affected-page-uuids structural-parent-uuids]
   (let [started-at (now-ms)
         affected-page-uuids (set affected-page-uuids)
-        affected-ids (op-block-uuids ops)
         page-id (or (:ui/page-id tx-meta) (state/get-current-page))
         deleted-ids (set deleted-block-uuids)
-        updated-ids (into (into (apply disj affected-ids deleted-ids)
-                                render-invalidated-block-uuids)
-                          (keep :block/uuid)
-                          updated-blocks)
-        changed-ids (into (into updated-ids deleted-ids) affected-page-uuids)]
-    (if (seq changed-ids)
+        updated-ids (set entity-updated-block-uuids)
+        entity-ids (into updated-ids deleted-ids)
+        structural-parent-uuids (set structural-parent-uuids)]
+    (if (or (seq entity-ids)
+            (seq structural-parent-uuids)
+            (seq affected-page-uuids))
       (let [tx-id (:db-sync/tx-id tx-meta)
             value (cond-> {:updated-ids updated-ids
                            :deleted-ids deleted-ids
-                           :entity-tx-ids (zipmap changed-ids (repeat tx-id))
+                           :entity-tx-ids (zipmap entity-ids (repeat tx-id))
+                           :children-tx-ids (zipmap structural-parent-uuids
+                                                    (repeat tx-id))
+                           :tree-tx-ids (zipmap affected-page-uuids
+                                                (repeat tx-id))
                            :tx-id tx-id}
                     page-id
                     (assoc :page-id page-id)
@@ -206,11 +157,10 @@
                     (assoc :updated-blocks updated-blocks)
 
                     (seq affected-page-uuids)
-                    (assoc :affected-page-uuids affected-page-uuids)
-
-                    (:ui/optimistic-tx-id tx-meta)
-                    (assoc :confirmed-optimistic-tx-id (:ui/optimistic-tx-id tx-meta)))
-            changed-paths (outliner-pipeline/refresh-state-paths changed-ids)
+                    (assoc :affected-page-uuids affected-page-uuids))
+            changed-paths (outliner-pipeline/refresh-state-paths entity-ids
+                                                                 structural-parent-uuids
+                                                                 affected-page-uuids)
             prepared-at (now-ms)]
         (outliner-tree/reconcile-resident-block-trees! updated-blocks deleted-ids)
         (state/set-state! :db/latest-transacted-entity-uuids
@@ -222,18 +172,17 @@
        :publish-ms 0})))
 
 (defn- publish-worker-response!
-  [ops tx-meta updated-blocks deleted-block-uuids affected-page-uuids render-invalidated-block-uuids]
-  (if (:ui/optimistic-tx-id tx-meta)
-    (refresh-worker-op-blocks! ops tx-meta updated-blocks deleted-block-uuids
-                               affected-page-uuids render-invalidated-block-uuids)
-    (let [ui-refresh-perf (volatile! nil)]
-      (react-dom/flushSync
-       (fn []
-         (vreset! ui-refresh-perf
-                  (refresh-worker-op-blocks! ops tx-meta updated-blocks deleted-block-uuids
-                                             affected-page-uuids render-invalidated-block-uuids))
-         (run-edit-block-fn! tx-meta {:rows updated-blocks})))
-      @ui-refresh-perf)))
+  [ops tx-meta updated-blocks entity-updated-block-uuids deleted-block-uuids
+   affected-page-uuids structural-parent-uuids]
+  (let [ui-refresh-perf (volatile! nil)]
+    (react-dom/flushSync
+     (fn []
+       (vreset! ui-refresh-perf
+                (refresh-worker-op-blocks! ops tx-meta updated-blocks entity-updated-block-uuids
+                                           deleted-block-uuids affected-page-uuids
+                                           structural-parent-uuids))
+       (run-edit-block-fn! tx-meta {:rows updated-blocks})))
+    @ui-refresh-perf))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
@@ -265,13 +214,8 @@
                        :ui/perf-id perf-id
                        :ui/handled-by-response? true
                        :local-tx? true))
-            optimistic? (optimistic-editor-ops? ops opts')
-            opts' (cond-> opts'
-                    optimistic?
-                    (assoc :ui/optimistic-tx-id (:db-sync/tx-id opts')))
             affected-block-uuids (op-block-uuids ops)
-            worker-opts (cond-> (dissoc opts' :ui/page-id :ui/optimistic-tx-id
-                                       :editor/edit-block-fn)
+            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
                           (seq affected-block-uuids)
                           (assoc :affected-block-uuids affected-block-uuids))
             request #(p/do!
@@ -282,44 +226,32 @@
                        :thread-api/apply-outliner-ops
                        request-repo
                        ops
-                       worker-opts))
-            optimistic-ui-ms (when optimistic?
-                               (publish-optimistic-editor-ops! ops opts'))
-            result-promise
-            (p/let [response (enqueue-outliner-mutation! request-repo request)
-                    {:keys [result affected-page-uuids updated-blocks deleted-block-uuids
-                            render-invalidated-block-uuids perf]} response
-                    mutation-returned-at (now-ms)
-                    worker-returned-at (now-ms)]
-              (if-not (and (= request-repo (state/get-current-repo))
-                           (= request-route (state/get-route-match)))
-                nil
-                (let [ui-refresh-perf (publish-worker-response!
-                                       ops opts' updated-blocks deleted-block-uuids affected-page-uuids
-                                       render-invalidated-block-uuids)
-                      state-updated-at (now-ms)]
-                  (on-next-frame!
-                   (fn []
-                     (log-outliner-op-perf!
-                      {:stage :ui-updated
-                       :perf-id perf-id
-                       :op-names (mapv first ops)
-                       :op-count (count ops)
-                       :worker-apply-ms (:apply-ms perf)
-                       :worker-perf (dissoc perf :listener)
-                       :worker-listener (:listener perf)
-                       :worker-roundtrip-ms (- mutation-returned-at started-at)
-                       :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
-                       :ui-refresh ui-refresh-perf
-                       :state-update-ms (- state-updated-at worker-returned-at)
-                       :optimistic-ui-ms optimistic-ui-ms
-                       :total-to-next-frame-ms (- (now-ms) started-at)})))))
-              result)]
-        (if optimistic?
-          (p/catch result-promise
-                   (fn [error]
-                     (when (and (= request-repo (state/get-current-repo))
-                                (= request-route (state/get-route-match)))
-                       (publish-optimistic-rollback! ops opts'))
-                     (throw error)))
-          result-promise)))))
+                       worker-opts))]
+        (p/let [response (enqueue-outliner-mutation! request-repo request)
+                {:keys [result affected-page-uuids updated-blocks entity-updated-block-uuids
+                        deleted-block-uuids structural-parent-uuids perf]} response
+                mutation-returned-at (now-ms)
+                worker-returned-at (now-ms)]
+          (when (and (= request-repo (state/get-current-repo))
+                     (= request-route (state/get-route-match)))
+            (let [ui-refresh-perf (publish-worker-response!
+                                   ops opts' updated-blocks entity-updated-block-uuids
+                                   deleted-block-uuids affected-page-uuids
+                                   structural-parent-uuids)
+                  state-updated-at (now-ms)]
+              (on-next-frame!
+               (fn []
+                 (log-outliner-op-perf!
+                  {:stage :ui-updated
+                   :perf-id perf-id
+                   :op-names (mapv first ops)
+                   :op-count (count ops)
+                   :worker-apply-ms (:apply-ms perf)
+                   :worker-perf (dissoc perf :listener)
+                   :worker-listener (:listener perf)
+                   :worker-roundtrip-ms (- mutation-returned-at started-at)
+                   :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
+                   :ui-refresh ui-refresh-perf
+                   :state-update-ms (- state-updated-at worker-returned-at)
+                   :total-to-next-frame-ms (- (now-ms) started-at)})))))
+          result)))))
