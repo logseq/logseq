@@ -1205,20 +1205,30 @@
     (when class-data
       (select-node property opts' result))))
 
+(defn- compact-closed-values?
+  [property]
+  (let [closed-values (:property/closed-values property)]
+    (and (seq closed-values)
+         (not-every? :db/id closed-values))))
+
 (hsx/defc select
   [block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config? exit-edit?] :as opts}]
-  (let [*values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
+  (let [repo (state/get-current-repo)
+        load-closed-values? (compact-closed-values? property)
+        *values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
            [values] (hooks/use-atom *values)
            refresh-result-f (hooks/use-callback
                              (fn []
                                (p/let [property-ident (if (= :logseq.property/default-value (:db/ident property))
                                                         (:db/ident block)
                                                         (:db/ident property))
-                                       result (db-async/<get-property-values property-ident)]
+                                       result (if load-closed-values?
+                                                (db-async/<get-property-closed-values repo property-ident)
+                                                (db-async/<get-property-values property-ident))]
                                  (reset! *values result)))
-                             [(:db/ident block) (:db/ident property)])]
+                             [repo (:db/ident block) (:db/ident property) load-closed-values?])]
        (hooks/use-effect!
         (fn []
           (reset! *values :loading)
@@ -1231,7 +1241,11 @@
                        (let [date? (and
                                     (= (:db/ident property) :logseq.property.repeat/recur-unit)
                                     (= :date (:logseq.property/type (:property opts))))
-                             values (cond->> (db-property/scoped-closed-values property block)
+                             values (cond->> (db-property/scoped-closed-values
+                                              property block
+                                              {:values (if load-closed-values?
+                                                         values
+                                                         (:property/closed-values property))})
                                       date?
                                       (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                          (keep (fn [block]
