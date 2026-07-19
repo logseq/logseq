@@ -75,3 +75,14 @@
           (is (= #{page-uuid} (:affected-page-uuids value)))))
       (finally
         (reset! state/state original-state)))))
+
+(deftest structural-refresh-notifies-only-the-direct-parent-path
+  (let [block-id (random-uuid)
+        parent-id (random-uuid)
+        page-id (random-uuid)
+        paths (pipeline/refresh-state-paths #{block-id} #{parent-id} #{page-id})]
+    (is (some #{[:db/latest-transacted-entity-uuids :entity-tx-ids block-id]} paths))
+    (is (some #{[:db/latest-transacted-entity-uuids :children-tx-ids parent-id]} paths))
+    (is (some #{[:db/latest-transacted-entity-uuids :tree-tx-ids page-id]} paths))
+    (is (not (some #{[:db/latest-transacted-entity-uuids :entity-tx-ids parent-id]} paths))
+        "A structural change must not re-render the parent block row.")))
