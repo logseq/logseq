@@ -439,8 +439,13 @@
 
 (defn <get-views
   [graph class-id view-feature-type]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
+  (<q graph {:transact-db? false}
+      '[:find [(pull ?b
+                 [*
+                  {:logseq.property.view/type
+                   [:db/id :db/ident :logseq.property/icon]}
+                  {:logseq.property.view/group-by-property
+                   [:db/id :db/ident :logseq.property/icon]}]) ...]
         :in $ ?class-id ?view-feature-type
         :where
         [?b :logseq.property/view-for ?class-id]

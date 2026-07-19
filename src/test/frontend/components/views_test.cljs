@@ -36,6 +36,43 @@
             :view-parent view-parent}
            (#'views/gallery-property-value-opts {:view-parent view-parent})))))
 
+(deftest references-default-to-list-view
+  (is (= :logseq.property.view/type.list
+         (#'views/view-display-type {} :linked-references)))
+  (is (= :logseq.property.view/type.list
+         (#'views/view-display-type {} :unlinked-references)))
+  (is (= :logseq.property.view/type.gallery
+         (#'views/view-display-type
+          {:logseq.property.view/type
+           {:db/ident :logseq.property.view/type.gallery}}
+          :linked-references)))
+  (is (= :logseq.property.view/type.table
+         (#'views/view-display-type {} :all-pages))))
+
+(deftest refreshed-views-preserve-the-current-tab
+  (let [views [{:db/id 1 :block/title "First"}
+               {:db/id 2 :block/title "Updated second"}]]
+    (is (= (second views)
+           (#'views/current-view-from views {:db/id 2 :block/title "Stale second"})))
+    (is (= (first views)
+           (#'views/current-view-from views {:db/id 3})))
+    (is (nil? (#'views/current-view-from [] {:db/id 2})))))
+
+(deftest view-type-button-uses-the-contextual-display-type
+  (let [view {:db/id 1}
+        all-pages-view (#'views/view-with-display-type
+                        view :logseq.property.view/type.table)
+        references-view (#'views/view-with-display-type
+                         view :logseq.property.view/type.list)]
+    (is (= :logseq.property.view/type.table
+           (get-in all-pages-view [:logseq.property.view/type :db/ident])))
+    (is (= "table"
+           (get-in all-pages-view [:logseq.property.view/type :logseq.property/icon :id])))
+    (is (= :logseq.property.view/type.list
+           (get-in references-view [:logseq.property.view/type :db/ident])))
+    (is (= "list"
+           (get-in references-view [:logseq.property.view/type :logseq.property/icon :id])))))
+
 (defn- render-lazy-item
   [row]
   (let [previous-react (gobj/get js/globalThis "React")]
@@ -161,7 +198,13 @@
 
 (deftest loaded-views-use-the-worker-query-result
   (async done
-    (let [fetched-views [{:db/id 12
+    (let [view-parent {:db/id 151
+                       :logseq.property/views
+                       [{:db/id 10
+                         :block/order "local"
+                         :logseq.property.view/feature-type :all-pages
+                         :logseq.property.view/type {:db/id 114}}]}
+          fetched-views [{:db/id 12
                           :block/order "b"
                           :logseq.property.view/feature-type :all-pages}
                          {:db/id 11
@@ -172,10 +215,10 @@
                             (is (= ["repo" 151 :all-pages]
                                    [repo parent-id feature-type]))
                             (p/resolved fetched-views))]
-            (#'views/<get-or-load-views "repo" {:db/id 151} :all-pages))
+            (#'views/<get-or-load-views "repo" view-parent :all-pages))
           (p/then (fn [result]
                     (is (= [11 12] (mapv :db/id result))
-                        "The view returned by the worker must be reused instead of creating another one.")))
+                        "Compact parent data must not replace complete worker views.")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
