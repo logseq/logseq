@@ -4833,7 +4833,14 @@
 
 (hsx/defc block-container
   [config block* & {:as opts}]
-  (let [[local-block set-block!] (hooks/use-state block*)
+  (let [loaded-tree-block (when-not (= :full (:block.temp/load-status block*))
+                            (some-> (:block-tree/root* config)
+                                    hooks/deref
+                                    (tree/loaded-node block*)))
+        loaded-tree-block (when (= :full (:block.temp/load-status loaded-tree-block))
+                            loaded-tree-block)
+        block* (or loaded-tree-block block*)
+        [local-block set-block!] (hooks/use-state block*)
         complete-tree? (:block-tree/complete? config)
         index-node? (and (:block-tree/index? config)
                          (= :index (:block.temp/load-status block*)))

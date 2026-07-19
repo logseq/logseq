@@ -56,6 +56,24 @@
     (is (string/includes? source ":render-data? true")
         "The on-demand request must include positioned render data.")))
 
+(deftest journal-property-blocks-reuse-the-complete-loaded-tree
+  (let [page (page-source)
+        block (block-source)
+        property-value (.toString
+                        (fs/readFileSync
+                         (node-path/join (.cwd js/process)
+                                         "src/main/frontend/components/property/value.cljs")
+                         "utf8"))]
+    (is (string/includes? page ":block-tree/root*")
+        "A mounted page must expose its current loaded tree without copying it.")
+    (is (string/includes? property-value ":block-tree/root*")
+        "Property block containers must retain access to the page tree.")
+    (is (string/includes? block "tree/loaded-node")
+        "A property block already present in the page tree must be reused by ID.")
+    (is (string/includes? block
+                          "= :full (:block.temp/load-status loaded-tree-block)")
+        "Only complete tree nodes may bypass worker hydration.")))
+
 (deftest old-journal-metadata-waits-until-scroll-settles
   (let [journal (journal-source)
         block (block-source)

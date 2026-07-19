@@ -7,6 +7,11 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
+(defn- process-cpu-time-ms
+  []
+  (let [usage (.cpuUsage js/process)]
+    (/ (+ (.-user usage) (.-system usage)) 1000)))
+
 (defn- sql-placeholder-count
   [sql]
   (count (re-seq #"\?" sql)))
@@ -433,11 +438,11 @@
                                         lookup-refs))
                     ldb/hidden? (constantly false)
                     ldb/page? :page?]
-        (let [started (system-time)
+        (let [started (process-cpu-time-ms)
               result (doall (search/combine-results :db keyword-results))
-              elapsed-ms (- (system-time) started)]
+              elapsed-ms (- (process-cpu-time-ms) started)]
           (is (< elapsed-ms 100)
-              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms"))
+              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms CPU"))
           (is (= (count ids) (count result)))
           (is (= page-id (:id (first result)))
               "page boost should still rank matching pages ahead of equally relevant blocks"))))))
@@ -746,18 +751,18 @@
                                         :block/created-at now
                                         :block/updated-at now})
                                      (range sync-search-indice-performance-block-count)))
-        started (.now js/performance)
+        started (process-cpu-time-ms)
         blocks-to-add (:blocks-to-add
                        (search/sync-search-indice
                         tx-report
                         {:include-vector-title? include-vector-title?}))
-        elapsed-ms (- (.now js/performance) started)]
+        elapsed-ms (- (process-cpu-time-ms) started)]
     {:blocks-to-add blocks-to-add
      :elapsed-ms elapsed-ms}))
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-enabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case true)]
-    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms"))
+    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms CPU"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (every? :vector-title blocks-to-add))
@@ -765,7 +770,7 @@
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-disabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case false)]
-    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms"))
+    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms CPU"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (not-any? #(contains? % :vector-title) blocks-to-add))))

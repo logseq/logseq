@@ -1329,6 +1329,7 @@
                                                           (<create-new-block! block property (or (:block/title default-value) ""))))
                        :p-block (:db/id block)
                        :p-property (:db/id property)
+                       :block-tree/root* (:block-tree/root* opts)
                        :view? (:view? opts)}]
            (if (set? value-block)
              (blocks-container config (ldb/sort-by-order value-block))

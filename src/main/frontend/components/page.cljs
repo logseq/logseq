@@ -187,8 +187,10 @@
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
   (let [block (use-loaded-block-tree block*)
+        *block-tree (hooks/use-ref block)
         quick-add-page? (= (:block/title block) common-config/quick-add-page-name)
         [quick-add-children set-quick-add-children!] (hooks/use-state nil)]
+    (hooks/set-ref! *block-tree block)
     (hooks/use-effect!
      (fn []
        (if quick-add-page?
@@ -220,7 +222,8 @@
             block (assoc block :block/children full-children)
             config (cond-> (assoc config
                                   :library? (ldb/library? block)
-                                  :block-tree/complete? true)
+                                  :block-tree/complete? true
+                                  :block-tree/root* *block-tree)
                      (:block.temp/index-tree? block)
                      (assoc :block-tree/index? true))
             document-mode? (rfx/use-sub [:document/mode?])]
