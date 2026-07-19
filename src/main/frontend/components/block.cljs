@@ -979,6 +979,12 @@
                        {:children? false
                         :skip-refresh? true}))
 
+(defn- page-entity-refresh?
+  [config page-entity previous-tx-id latest-tx-id]
+  (and (not (or (:skip-async-load? config) (:table-view? config)))
+       (or (nil? page-entity)
+           (not= previous-tx-id latest-tx-id))))
+
 (hsx/defc page-cp-inner
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
                             Keys for `config`:
@@ -1002,7 +1008,8 @@
                          nil)
         *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
         [entity'] (hooks/use-atom *entity)
-        latest-tx-id (rfx/use-entity-tx-id page)]
+        latest-tx-id (rfx/use-entity-tx-id page)
+        *previous-tx-id (hooks/use-memo #(atom latest-tx-id) [page-id-or-name])]
     (hooks/use-effect!
      (fn []
        (when page-entity
@@ -1011,14 +1018,16 @@
      [page-entity])
     (hooks/use-effect!
      (fn []
-       (cond
-         (or (:skip-async-load? config) (:table-view? config))
-         nil
-
-         :else
+       (when (page-entity-refresh? config page-entity @*previous-tx-id latest-tx-id)
+         (reset! *previous-tx-id latest-tx-id)
          (p/let [result (<get-block page-id-or-name)]
-           (reset! *entity result))))
-     [page-id-or-name latest-tx-id])
+           (reset! *entity result)))
+       nil)
+     [page-id-or-name
+      latest-tx-id
+      (boolean page-entity)
+      (:skip-async-load? config)
+      (:table-view? config)])
     (let [entity entity'
           config (assoc config :block entity)]
       (cond

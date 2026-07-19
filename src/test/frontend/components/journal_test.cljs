@@ -38,6 +38,17 @@
     (is (not (string/includes? source "p/all (map #(db-async/<get-block"))
         "The journal list must not hydrate every journal in a separate fan-out.")))
 
+(deftest unloaded-journal-slots-render-their-indexed-date-title
+  (let [source (journal-source)]
+    (is (string/includes? source ":block/keys [journal-day]")
+        "The lightweight index must provide enough data to render a real title.")
+    (is (string/includes? source "journal-slot-placeholder"))
+    (is (string/includes? source ":div.ls-page-title-container.block-content.inline")
+        "The placeholder must use the exact page-title typography contract.")
+    (is (string/includes? source "(when-not loaded?"))
+    (is (string/includes? source "date-time-util/int->journal-title")
+        "The placeholder title must use the graph's journal date formatter.")))
+
 (deftest visible-journals-render-a-complete-base-tree-before-secondary-data
   (let [source (page-source)]
     (is (string/includes? source "db-async/<get-block-with-children")
@@ -116,7 +127,7 @@
     (is (string/includes? page ":block-metadata-ready? false")
         "Journal block trees must only consume the page-level metadata batch.")
     (is (string/includes? property
-                          "display-properties-payload? (:block.temp/display-properties block)")
+                          "(contains? block :block.temp/display-properties)")
         "A completed payload must render even while per-block requests stay disabled.")))
 
 (deftest two-most-recent-journal-trees-are-pinned-without-pinning-their-dom

@@ -6,6 +6,7 @@
             [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
@@ -154,8 +155,17 @@
      [mounted? loaded? recent?])
     metadata-ready?))
 
+(defn- journal-slot-placeholder
+  [journal-day]
+  [:div.journal-slot-placeholder.absolute.inset-x-0.top-0
+   {:style {:z-index 1
+            :background-color "var(--ls-primary-background-color)"}}
+   [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
+    [:div.ls-page-title-container.block-content.inline
+     (date-time-util/int->journal-title journal-day (state/get-date-formatter))]]])
+
 (hsx/defc journal-slot
-  [id last? recent?]
+  [{:db/keys [id] :block/keys [journal-day]} last? recent?]
   (let [cache-key (journal-item-cache-key id)
         [mounted? set-mounted!] (hooks/use-state recent?)
         [loaded? set-loaded!] (hooks/use-state false)
@@ -188,10 +198,12 @@
            (.observe observer node)
            #(.disconnect observer))))
      [cache-key mounted?])
-    [:div.journal-item.content
+    [:div.journal-item.content.relative
      (cond-> {:ref *item-ref}
        last? (assoc :class "journal-last-item")
        (or (not mounted?) (not loaded?)) (assoc :style {:min-height placeholder-height}))
+     (when-not loaded?
+       (journal-slot-placeholder journal-day))
      (when mounted?
        (page/page-cp {:db/id id
                       :journals? true
@@ -216,7 +228,7 @@
     (when (seq data)
       [:div#journals
        (map-indexed
-        (fn [idx id]
-          ^{:key (str "journal-" id)}
-          [journal-slot id (= (inc idx) (count data)) (< idx 2)])
+        (fn [idx journal]
+          ^{:key (str "journal-" (:db/id journal))}
+          [journal-slot journal (= (inc idx) (count data)) (< idx 2)])
         data)])))

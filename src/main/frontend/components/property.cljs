@@ -757,14 +757,24 @@
          :publishing? config/publishing?
          :state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))))
 
+(defn- bundled-display-properties
+  [block request-opts show-empty-and-hidden?]
+  (when-not show-empty-and-hidden?
+    (if (:page-title? request-opts)
+      (when (and (not-any? identity (vals (dissoc request-opts :page-title?)))
+                 (contains? block :block.temp/page-display-properties))
+        (:block.temp/page-display-properties block))
+      (when (and (not-any? identity (vals request-opts))
+                 (contains? block :block.temp/display-properties))
+        (:block.temp/display-properties block)))))
+
 (defn- use-display-properties
   [block opts enabled? show-empty-and-hidden?]
   (let [enabled? (and enabled? (not (false? (:block-metadata-ready? opts))))
         repo (state/get-current-repo)
         request-opts (display-properties-request-opts opts)
-        display-properties-payload? (and (contains? block :block.temp/display-properties)
-                                         (not show-empty-and-hidden?)
-                                         (not-any? identity (vals request-opts)))
+        display-properties-payload (bundled-display-properties block request-opts show-empty-and-hidden?)
+        display-properties-payload? (some? display-properties-payload)
         transaction-id (rfx/use-entity-tx-id block)
         [loaded-display-properties set-loaded-display-properties!] (hooks/use-state empty-display-properties)]
     (hooks/use-effect!
@@ -800,7 +810,7 @@
       (:publishing? request-opts)
       (:state-hide-empty-properties? request-opts)])
     (cond
-      display-properties-payload? (:block.temp/display-properties block)
+      display-properties-payload? display-properties-payload
       (not enabled?) empty-display-properties
       :else loaded-display-properties)))
 
@@ -863,21 +873,30 @@
   (when (and show-hidden-properties? (seq hidden-properties))
     (properties-section block hidden-properties opts)))
 
+(defn- bundled-bidirectional-properties
+  [block]
+  (if-let [entry (find block :block.temp/bidirectional-properties)]
+    [true (val entry)]
+    [false nil]))
+
 (hsx/defc load-bidirectional-properties
   [block root-block-or-page? set-bidirectional-properties!]
-  (hooks/use-effect!
-   (fn []
-     (when (and root-block-or-page? (:db/id block))
-       (p/let [result (db-async/<get-bidirectional-properties (:db/id block))]
-         (set-bidirectional-properties! result)))
-     (fn []))
-   [root-block-or-page? (:db/id block)]))
+  (let [[payload?] (bundled-bidirectional-properties block)]
+    (hooks/use-effect!
+     (fn []
+       (when (and root-block-or-page? (not payload?) (:db/id block))
+         (p/let [result (db-async/<get-bidirectional-properties (:db/id block))]
+           (set-bidirectional-properties! result)))
+       (fn []))
+     [root-block-or-page? payload? (:db/id block)])))
 
 (hsx/defc bidirectional-properties-area
   [target-block opts]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
-        [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
         block (resolve-linked-block-if-exists target-block)
+        [payload? payload] (bundled-bidirectional-properties block)
+        [loaded-bidirectional-properties] (hooks/use-atom *bidirectional-properties)
+        bidirectional-properties (if payload? payload loaded-bidirectional-properties)
         root-block? (and (= (str (:block/uuid block)) (:id opts))
                          (not (entity/page? block)))]
     [:<>
@@ -889,9 +908,14 @@
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
-        [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
         id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
+        [bidirectional-properties-payload? bidirectional-properties-payload]
+        (bundled-bidirectional-properties block)
+        [loaded-bidirectional-properties] (hooks/use-atom *bidirectional-properties)
+        bidirectional-properties (if bidirectional-properties-payload?
+                                   bidirectional-properties-payload
+                                   loaded-bidirectional-properties)
         show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
         show-properties? (or sidebar-properties? tag-dialog?)
         class? (entity/class? block)
