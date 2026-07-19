@@ -37,6 +37,21 @@
             (p/catch #(is false (str %)))
             (p/finally done))))))
 
+(deftest latest-journals-can-request-the-complete-index-test
+  (async done
+    (let [calls (atom [])]
+      (p/with-redefs [db-async/<invoke-db-worker
+                      (fn [& args]
+                        (swap! calls conj (vec args))
+                        (p/resolved []))]
+        (-> (p/let [_ (db-async/<get-latest-journals "graph")]
+              (is (= [[:thread-api/get-latest-journals
+                       "graph"
+                       js/Number.MAX_SAFE_INTEGER]]
+                     @calls)))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
+
 (deftest date-formatter-uses-worker-pull-with-ui-fallback-test
   (async done
     (let [calls (atom [])]
