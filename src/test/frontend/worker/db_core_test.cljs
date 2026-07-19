@@ -17,6 +17,7 @@
             [frontend.worker.handler.export :as worker-export-handler]
             [frontend.worker.handler.graph :as worker-graph-handler]
             [frontend.worker.handler.maintenance :as maintenance-handler]
+            [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
@@ -2482,6 +2483,19 @@
          (is (contains? block :block.temp/display-properties)
              "The journal root should carry full render data in its initial tree response.")
          (is (contains? block :block.temp/positioned-properties))
+         (is (= (property-handler/display-properties @conn
+                                                     (d/entity @conn journal-id)
+                                                     {:page-title? true}
+                                                     false)
+                (:block.temp/page-display-properties block))
+             "The journal root should carry the exact page-title property payload.")
+         (is (= (ldb/get-bidirectional-properties @conn journal-id)
+                (:block.temp/bidirectional-properties block))
+             "The journal root should carry its bidirectional properties without another request.")
+         (is (every? #(not (contains? % :block.temp/page-display-properties)) children)
+             "Root-only page metadata must not inflate every journal block.")
+         (is (every? #(not (contains? % :block.temp/bidirectional-properties)) children)
+             "Root-only bidirectional metadata must not inflate every journal block.")
          (is (every? #(contains? % :block.temp/positioned-properties) plain-results)
              "Plain blocks should carry cheap negative property markers.")
          (is (every? #(contains? % :block.temp/display-properties) plain-results))

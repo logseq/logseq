@@ -262,9 +262,11 @@
 
 (deftest default-display-properties-payload-does-not-refetch
   (let [source (source-for "src/main/frontend/components/property.cljs")
-        display-source (form-source source "(defn- use-display-properties")]
+        display-source (form-source source "(defn- use-display-properties")
+        payload-source (form-source source "(defn- bundled-display-properties")]
     (is (some? display-source))
-    (is (string/includes? display-source ":block.temp/display-properties"))
+    (is (string/includes? payload-source ":block.temp/display-properties"))
+    (is (string/includes? display-source "bundled-display-properties"))
     (is (string/includes? display-source "display-properties-payload?")
         "Default page rows should use display properties from the window payload.")
     (is (string/includes? display-source "rfx/use-entity-tx-id")
@@ -272,6 +274,30 @@
     (is (not (string/includes? display-source
                                "(rfx/use-sub [:db/latest-transacted-entity-uuids])"))
         "Display properties must not re-render on unrelated block transactions.")))
+
+(deftest supplied-page-entities-refresh-only-when-needed
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        refresh-source (form-source source "(defn- page-entity-refresh?")
+        page-source (form-source source "(hsx/defc page-cp-inner")]
+    (is (some? refresh-source))
+    (when refresh-source
+      (is (string/includes? refresh-source "(nil? page-entity)")
+          "A missing page entity still needs hydration.")
+      (is (string/includes? refresh-source "(not= previous-tx-id latest-tx-id)")
+          "A worker transaction affecting the page must refresh icon and property data.")
+      (is (string/includes? refresh-source ":skip-async-load?"))
+      (is (string/includes? refresh-source ":table-view?")))
+    (is (string/includes? page-source "page-entity-refresh?")
+        "A complete referenced page must render without a duplicate initial request.")))
+
+(deftest bundled-journal-root-properties-do-not-refetch
+  (let [source (source-for "src/main/frontend/components/property.cljs")
+        display-source (form-source source "(defn- use-display-properties")
+        bidirectional-source (form-source source "(hsx/defc load-bidirectional-properties")]
+    (is (string/includes? display-source "bundled-display-properties"))
+    (is (string/includes? bidirectional-source "bundled-bidirectional-properties"))
+    (is (string/includes? bidirectional-source "db-async/<get-bidirectional-properties")
+        "Missing or stale contexts must retain the existing request path.")))
 
 (deftest sync-conflict-payload-does-not-refetch
   (let [source (source-for "src/main/frontend/components/block.cljs")

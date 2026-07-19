@@ -66,3 +66,39 @@
        (#'property-component/show-property-panel-bullet?
         {:logseq.property/type :default}
         {:db/id 1}))))
+
+(deftest bundled-display-properties-match-the-render-context-test
+  (let [payload-fn (some-> (resolve 'frontend.components.property/bundled-display-properties) deref)
+        default-payload {:kind :default}
+        page-payload {}
+        block {:block.temp/display-properties default-payload
+               :block.temp/page-display-properties page-payload}]
+    (is (fn? payload-fn))
+    (when payload-fn
+      (is (= default-payload (payload-fn block {} false)))
+      (is (= default-payload
+             (payload-fn block {:page-title? false
+                                :publishing? false
+                                :state-hide-empty-properties? false}
+                         false)))
+      (is (= page-payload (payload-fn block {:page-title? true} false))
+          "An explicit empty page payload is complete.")
+      (is (nil? (payload-fn (dissoc block :block.temp/page-display-properties)
+                            {:page-title? true}
+                            false))
+          "Page-title rendering must not reuse the semantically different default payload.")
+      (is (nil? (payload-fn block {:page-title? true :publishing? true} false)))
+      (is (nil? (payload-fn block {:gallery-view? true} false)))
+      (is (nil? (payload-fn block {} true))
+          "Showing empty and hidden properties requires a fresh derivation."))))
+
+(deftest bundled-bidirectional-properties-preserve-empty-payloads-test
+  (let [payload-fn (some-> (resolve 'frontend.components.property/bundled-bidirectional-properties) deref)]
+    (is (fn? payload-fn))
+    (when payload-fn
+      (is (= [true []]
+             (payload-fn {:block.temp/bidirectional-properties []})))
+      (is (= [true nil]
+             (payload-fn {:block.temp/bidirectional-properties nil}))
+          "Presence, not truthiness, defines a complete worker payload.")
+      (is (= [false nil] (payload-fn {}))))))
