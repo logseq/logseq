@@ -277,8 +277,9 @@ let sort_entities_with capabilities sorting entities =
   let resolved = sorting |> Rrbvec.map (resolve_sorting capabilities) in
   let major = Rrbvec.nth resolved 0 in
   let major_sorted =
-    fast_major_sort capabilities major entities
-    |> Option.value ~default:(sort_with capabilities [| major |] entities)
+    (match fast_major_sort capabilities major entities with
+    | Some entities -> entities
+    | None -> sort_with capabilities [| major |] entities)
     |> distinct capabilities
   in
   if Rrbvec.length resolved = 1 then major_sorted

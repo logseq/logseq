@@ -13,6 +13,11 @@ type entity_fields = {
     (Support.Runtime_codec.cljs_value * Support.Runtime_codec.cljs_value) Rrbvec.t;
 }
 
+type entity_table = {
+  by_id : (int, entity_fields) Hashtbl.t;
+  mutable ordered_ids : int Rrbvec.t;
+}
+
 type encoded_entry = {
   index : int;
   entityId : int;
@@ -78,28 +83,20 @@ let assoc_field runtime fields attribute value =
   if found then fields else Rrbvec.push_back fields (attribute, value)
 
 let update_entity runtime entities entity_id attribute value =
-  let found, entities =
-    Rrbvec.fold_left
-      (fun (found, result) entity ->
-        if (not found) && entity.entity_id = entity_id then
-          ( true,
-            Rrbvec.push_back result
-              {
-                entity with
-                fields = assoc_field runtime entity.fields attribute value;
-              } )
-        else (found, Rrbvec.push_back result entity))
-      (false, Rrbvec.empty) entities
-  in
-  if found then entities
-  else
-    Rrbvec.push_back entities
-      { entity_id; fields = Rrbvec.singleton (attribute, value) }
+  match Hashtbl.find_opt entities.by_id entity_id with
+  | Some entity ->
+      Hashtbl.replace entities.by_id entity_id
+        {
+          entity with
+          fields = assoc_field runtime entity.fields attribute value;
+        }
+  | None ->
+      Hashtbl.add entities.by_id entity_id
+        { entity_id; fields = Rrbvec.singleton (attribute, value) };
+      entities.ordered_ids <- Rrbvec.push_back entities.ordered_ids entity_id
 
 let existing_field runtime entities entity_id attribute =
-  match
-    Rrbvec.find_opt (fun entity -> entity.entity_id = entity_id) entities
-  with
+  match Hashtbl.find_opt entities.by_id entity_id with
   | None -> None
   | Some entity -> field_value runtime attribute entity.fields
 
@@ -131,6 +128,11 @@ let apply_action runtime datoms entities index action =
         | None -> invalid_arg "add-set action requires an existing set")
   in
   update_entity runtime entities datom.entity_id datom.attribute value
+
+let entity_values entities =
+  Rrbvec.map
+    (fun entity_id -> Hashtbl.find entities.by_id entity_id)
+    entities.ordered_ids
 
 let resolve_default_property runtime entities ident =
   let db_ident =
@@ -229,13 +231,11 @@ let assemble runtime datascript datoms entity_fn =
           : Domain.entry))
     |> Rrbvec.of_array |> Domain.plan |> Rrbvec.to_array
   in
-  actions
-  |> Array.mapi (fun index action -> (index, action))
-  |> Array.fold_left
-       (fun entities (index, action) ->
-         apply_action runtime decoded entities index action)
-       Rrbvec.empty
-  |> fun entities ->
+  let entity_table =
+    { by_id = Hashtbl.create (Array.length decoded); ordered_ids = Rrbvec.empty }
+  in
+  Array.iteri (apply_action runtime decoded entity_table) actions;
+  let entities = entity_values entity_table in
   Rrbvec.map (normalize_entity runtime datascript entity_fn entities) entities
 
 let encode_entity runtime entity =

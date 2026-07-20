@@ -1643,12 +1643,8 @@ let buildBlocksExportWith runtime datascript database predicates blocks options
 
 let datoms_for_attribute runtime datascript database name =
   let attribute = keyword runtime name in
-  Support.Datascript.datoms datascript database (keyword runtime "eavt") [||]
-  |> Array.to_seq
-  |> Seq.filter (fun datom ->
-      Support.Datascript.datom_attribute datascript datom
-      |> Support.Runtime_codec.value_equals runtime attribute)
-  |> Array.of_seq
+  Support.Datascript.datoms datascript database (keyword runtime "avet")
+    [| attribute |]
 
 let graphContentRefUuidsWith runtime datascript database exclude_built_in_pages
     =

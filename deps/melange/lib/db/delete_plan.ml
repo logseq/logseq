@@ -34,8 +34,15 @@ type operation =
   | Add_title of { entity_id : int; title : string }
   | Retract_uuid of string
 
-let push_distinct value values =
-  if Rrbvec.mem value values then values else Rrbvec.push_back values value
+let stable_distinct values =
+  let seen = Hashtbl.create (Rrbvec.length values) in
+  Rrbvec.fold_left
+    (fun result value ->
+      if Hashtbl.mem seen value then result
+      else (
+        Hashtbl.add seen value ();
+        Rrbvec.push_back result value))
+    Rrbvec.empty values
 
 let expand_retract_ids ~root_ids nodes =
   let by_id = Hashtbl.create (Rrbvec.length nodes) in
@@ -63,33 +70,61 @@ let escape_regex value =
   Js.String.replaceByRe ~regexp:regex_special_characters ~replacement:"\\$&"
     value
 
-let replace_pattern value pattern replacement =
-  let regexp = Js.Re.fromStringWithFlags (escape_regex pattern) ~flags:"g" in
-  Js.String.replaceByRe ~regexp ~replacement value
+type prepared_block = {
+  block_id : int;
+  replacement : string option;
+  embed_regexp : Js.Re.t;
+  block_ref_regexp : Js.Re.t;
+  page_ref_regexp : Js.Re.t;
+}
+
+let prepare_block block =
+  let replacement =
+    if block.asset then Some "" else block.title
+  in
+  let uuid = escape_regex block.uuid in
+  {
+    block_id = block.id;
+    replacement;
+    embed_regexp =
+      Js.Re.fromStringWithFlags
+        ("\\{\\{embed \\(\\(" ^ uuid ^ "\\)\\)\\s?\\}\\}")
+        ~flags:"gi";
+    block_ref_regexp =
+      Js.Re.fromStringWithFlags ("\\(\\(" ^ uuid ^ "\\)\\)") ~flags:"g";
+    page_ref_regexp =
+      Js.Re.fromStringWithFlags ("\\[\\[" ^ uuid ^ "\\]\\]") ~flags:"g";
+  }
 
 let replace_block value block =
   let replacement =
-    if block.asset then ""
-    else
-      match block.title with
-      | Some title -> title
-      | None -> invalid_arg "DB delete planning: referenced block has no title"
+    match block.replacement with
+    | Some value -> value
+    | None -> invalid_arg "DB delete planning: referenced block has no title"
   in
-  let embed =
-    Js.Re.fromStringWithFlags
-      ("\\{\\{embed \\(\\(" ^ escape_regex block.uuid ^ "\\)\\)\\s?\\}\\}")
-      ~flags:"gi"
-  in
-  value |> Js.String.replaceByRe ~regexp:embed ~replacement |> fun value ->
-  replace_pattern value ("((" ^ block.uuid ^ "))") replacement |> fun value ->
-  replace_pattern value ("[[" ^ block.uuid ^ "]]") replacement
+  value
+  |> Js.String.replaceByRe ~regexp:block.embed_regexp
+       ~replacement
+  |> fun value ->
+  Js.String.replaceByRe ~regexp:block.block_ref_regexp
+    ~replacement value
+  |> fun value ->
+  Js.String.replaceByRe ~regexp:block.page_ref_regexp
+    ~replacement value
 
-let stable_distinct_operations operations =
+let stable_distinct_operations operations = stable_distinct operations
+
+type ref_group = {
+  referrer : referrer;
+  mutable blocks : prepared_block Rrbvec.t;
+  block_ids : (int, unit) Hashtbl.t;
+}
+
+let collect_entity_ids select entities =
   Rrbvec.fold_left
-    (fun result operation -> push_distinct operation result)
-    Rrbvec.empty operations
-
-type ref_group = { referrer : referrer; block_ids : int Rrbvec.t }
+    (fun result entity -> Rrbvec.append result (select entity))
+    Rrbvec.empty entities
+  |> stable_distinct
 
 let direct_cleanup entities =
   let blocks = Rrbvec.filter_map (fun entity -> entity.block) entities in
@@ -101,70 +136,48 @@ let direct_cleanup entities =
       (fun entity -> if entity.history then Some entity.id else None)
       entities
   in
-  let reactions =
-    Rrbvec.fold_left
-      (fun result entity ->
-        Rrbvec.fold_left
-          (fun result id -> push_distinct id result)
-          result entity.reactions)
-      Rrbvec.empty entities
-  in
-  let views =
-    Rrbvec.fold_left
-      (fun result entity ->
-        Rrbvec.fold_left
-          (fun result id -> push_distinct id result)
-          result entity.views)
-      Rrbvec.empty entities
-  in
-  let histories =
-    Rrbvec.fold_left
-      (fun result entity ->
-        Rrbvec.fold_left
-          (fun result id -> push_distinct id result)
-          result entity.histories)
-      Rrbvec.empty entities
-  in
-  let cleanup_ids =
-    Rrbvec.empty |> fun result ->
-    Rrbvec.fold_left
-      (fun result id -> push_distinct id result)
-      result self_history_ids
-    |> fun result ->
-    Rrbvec.fold_left (fun result id -> push_distinct id result) result reactions
-    |> fun result ->
-    Rrbvec.fold_left (fun result id -> push_distinct id result) result views
-    |> fun result ->
-    Rrbvec.fold_left (fun result id -> push_distinct id result) result histories
-  in
+  let reactions = collect_entity_ids (fun entity -> entity.reactions) entities in
+  let views = collect_entity_ids (fun entity -> entity.views) entities in
+  let histories = collect_entity_ids (fun entity -> entity.histories) entities in
   let skipped_referrers =
-    Rrbvec.fold_left
-      (fun result id -> push_distinct id result)
-      cleanup_ids retracted_block_ids
+    Hashtbl.create
+      (Rrbvec.length self_history_ids + Rrbvec.length reactions
+     + Rrbvec.length views + Rrbvec.length histories
+      + Rrbvec.length retracted_block_ids)
   in
+  let skip ids =
+    Rrbvec.iter (fun id -> Hashtbl.replace skipped_referrers id ()) ids
+  in
+  skip self_history_ids;
+  skip reactions;
+  skip views;
+  skip histories;
+  skip retracted_block_ids;
+  let groups_by_referrer = Hashtbl.create (Rrbvec.length blocks) in
   let ref_groups =
     Rrbvec.fold_left
       (fun groups (block : block) ->
+        let prepared_block = prepare_block block in
         Rrbvec.fold_left
           (fun groups (referrer : referrer) ->
-            match
-              Rrbvec.find_opt
-                (fun group -> group.referrer.id = referrer.id)
+            match Hashtbl.find_opt groups_by_referrer referrer.id with
+            | Some group ->
+                if not (Hashtbl.mem group.block_ids block.id) then (
+                  Hashtbl.add group.block_ids block.id ();
+                  group.blocks <- Rrbvec.push_back group.blocks prepared_block);
                 groups
-            with
-            | Some _ ->
-                Rrbvec.map
-                  (fun group ->
-                    if group.referrer.id = referrer.id then
-                      {
-                        group with
-                        block_ids = push_distinct block.id group.block_ids;
-                      }
-                    else group)
-                  groups
             | None ->
-                Rrbvec.push_back groups
-                  { referrer; block_ids = Rrbvec.singleton block.id })
+                let block_ids = Hashtbl.create 1 in
+                Hashtbl.add block_ids block.id ();
+                let group =
+                  {
+                    referrer;
+                    blocks = Rrbvec.singleton prepared_block;
+                    block_ids;
+                  }
+                in
+                Hashtbl.add groups_by_referrer referrer.id group;
+                Rrbvec.push_back groups group)
           groups block.referrers)
       Rrbvec.empty blocks
   in
@@ -173,15 +186,19 @@ let direct_cleanup entities =
       (fun operations group ->
         let operations =
           Rrbvec.fold_left
-            (fun operations block_id ->
+            (fun operations block ->
               Rrbvec.push_back operations
-                (Retract_ref { entity_id = group.referrer.id; block_id }))
-            operations retracted_block_ids
+                (Retract_ref
+                   {
+                     entity_id = group.referrer.id;
+                     block_id = block.block_id;
+                   }))
+            operations group.blocks
         in
         match group.referrer.raw_title with
         | Some raw_title
-          when not (Rrbvec.mem group.referrer.id skipped_referrers) ->
-            let title = Rrbvec.fold_left replace_block raw_title blocks in
+          when not (Hashtbl.mem skipped_referrers group.referrer.id) ->
+            let title = Rrbvec.fold_left replace_block raw_title group.blocks in
             Rrbvec.push_back operations
               (Add_title { entity_id = group.referrer.id; title })
         | Some _ | None -> operations)
@@ -198,7 +215,7 @@ let direct_cleanup entities =
   retract operations histories |> fun operations ->
   retract operations reactions |> stable_distinct_operations
 
-let references_id candidate retracted_ids =
+let references_id (candidate : history_candidate) retracted_ids =
   let matches = function
     | Some id -> Rrbvec.mem id retracted_ids
     | None -> false

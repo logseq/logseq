@@ -184,3 +184,33 @@ let () =
              };
            ])
         [ Number 1.; Number 2.; Number 3. ])
+  ;
+  Fest.test "DB view workflow fast sorting does not evaluate the fallback"
+    (fun () ->
+      let fallback_field_calls = ref 0 in
+      let fast_capabilities =
+        {
+          capabilities with
+          field =
+            (fun value name ->
+              if String.equal name "block/title" then (
+                incr fallback_field_calls;
+                Text "fallback")
+              else if String.equal name "db/id" then value
+              else Nil);
+          datom_entity_ids = (fun _ -> [||]);
+        }
+      in
+      let entities =
+        Array.init 10_001 (fun index -> Number (float_of_int index))
+        |> Rrbvec.of_array
+      in
+      ignore
+        (View_workflow.sort_entities_with fast_capabilities
+           (Rrbvec.singleton
+              {
+                View_workflow.id = keyword "block/title";
+                ascending = true;
+              })
+           entities);
+      expect_equal "fallback field calls" !fallback_field_calls 0)

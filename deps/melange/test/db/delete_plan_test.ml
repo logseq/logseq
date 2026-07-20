@@ -96,6 +96,36 @@ let () =
            (Rrbvec.of_list [ entity 2 (Some target) false [] [] [] ])
         |> operation_texts)
         [ "ref:9:2"; "title:9:" ]);
+  Fest.test "DB delete planning cleans only blocks referenced by each entity"
+    (fun () ->
+      let first =
+        block 1 "00000000-0000-0000-0000-000000000001" "First" false
+          [
+            referrer 9
+              (Some "((00000000-0000-0000-0000-000000000001))");
+          ]
+      in
+      let second =
+        block 2 "00000000-0000-0000-0000-000000000002" "Second" false
+          [
+            referrer 10
+              (Some "((00000000-0000-0000-0000-000000000002))");
+          ]
+      in
+      expect_string_list "per-referrer blocks"
+        (Delete_plan.direct_cleanup
+           (Rrbvec.of_list
+              [
+                entity 1 (Some first) false [] [] [];
+                entity 2 (Some second) false [] [] [];
+              ])
+        |> operation_texts)
+        [
+          "ref:9:1";
+          "title:9:First";
+          "ref:10:2";
+          "title:10:Second";
+        ]);
   Fest.test "DB delete planning removes new orphaned histories" (fun () ->
       let candidates : Delete_plan.history_candidate Rrbvec.t =
         Rrbvec.of_list

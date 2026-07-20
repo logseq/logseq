@@ -22,6 +22,92 @@ const bridgeContractRoot = path.join(
   'deps/melange/bridge/test/package_contract'
 )
 
+function mapFromEntries(entries) {
+  return new Map(Array.from(entries, ([key, value]) => [key, value]))
+}
+
+function runtimeAdapter() {
+  return {
+    keywordToString: value => value,
+    keywordFromString: value => value,
+    symbolFromString: value => value,
+    nilValue: () => null,
+    stringToValue: value => value,
+    stringFromValue: value => value,
+    stringLowercase: value => value.toLowerCase(),
+    stringIsUrl: () => false,
+    boolToValue: value => value,
+    boolFromValue: value => value,
+    intToValue: value => value,
+    intFromValue: value => value,
+    floatToValue: value => value,
+    floatFromValue: value => value,
+    valueEquals: (left, right) => left === right,
+    valueTruthy: value => Boolean(value),
+    valueToString: value => String(value),
+    valueIsNil: value => value == null,
+    valueIsString: value => typeof value === 'string',
+    valueIsBool: value => typeof value === 'boolean',
+    valueIsNumber: value => typeof value === 'number',
+    valueIsInteger: value => Number.isInteger(value),
+    valueIsKeyword: value => typeof value === 'string',
+    valueIsUuid: () => false,
+    valueIsInstant: value => value instanceof Date,
+    instantToMs: value => value.getTime(),
+    valueIsVector: value => Array.isArray(value),
+    valueIsSet: value => value instanceof Set,
+    valueIsMap: value => value instanceof Map,
+    valueIsSequential: value => Array.isArray(value),
+    uuidToString: value => String(value),
+    uuidFromString: value => value,
+    collectionToArray: value => Array.from(value),
+    arrayToList: values => Array.from(values),
+    vectorToArray: values => Array.from(values),
+    arrayToVector: values => Array.from(values),
+    setToArray: values => Array.from(values),
+    arrayToSet: values => new Set(values),
+    mapToEntries: value => Array.from(value, entry => Array.from(entry)),
+    entriesToMap: mapFromEntries,
+    mapGet: (value, key) => value.get(key) ?? null,
+    mapAssoc: (value, key, item) => new Map([...value, [key, item]]),
+    mapDissoc: (value, key) => {
+      const result = new Map(value)
+      result.delete(key)
+      return result
+    },
+    mapContains: (value, key) => value.has(key),
+    valueMeta: () => null,
+    valueWithMeta: value => value,
+    orderedMapToEntries: value => Array.from(value, entry => Array.from(entry)),
+    entriesToOrderedMap: mapFromEntries,
+    invokeCallback: (callback, value) => callback(value),
+  }
+}
+
+function emptyDatascriptAdapter(datomCalls = []) {
+  return {
+    databaseSchema: () => new Map(),
+    entity: () => null,
+    entityDb: () => null,
+    entityGet: (entity, attribute) => entity.get(attribute) ?? null,
+    entityIs: value => value instanceof Map,
+    datoms: (_database, index, components) => {
+      datomCalls.push([index, Array.from(components)])
+      return []
+    },
+    rseekDatoms: () => [],
+    query: () => [],
+    pull: () => null,
+    pullAll: () => null,
+    pullMany: () => [],
+    datomEntity: datom => datom.e,
+    datomAttribute: datom => datom.a,
+    datomValue: datom => datom.v,
+    datomAdded: datom => datom.added,
+    datomEquals: (left, right) => left === right,
+  }
+}
+
 const dbBridgeContract = {
   Asset: ['checksumValue', 'digestHex', 'nameTitle', 'pathType'],
   Bidirectional: ['getPropertiesWith'],
@@ -108,4 +194,62 @@ test('DB bridge is callable from static ClojureScript', () => {
   )
 
   assert.equal(result.status, 0, [result.stdout, result.stderr].filter(Boolean).join('\n'))
+})
+
+test('validation datom assembly scales linearly with entity count', () => {
+  const { ValidationDatom } = consumerRequire('@logseq/melange-js-api/db')
+  const runtime = runtimeAdapter()
+  const datascript = emptyDatascriptAdapter()
+  const measure = count => {
+    const datoms = Array.from({ length: count }, (_, index) => ({
+      e: index,
+      a: 'block/title',
+      v: `value-${index}`,
+    }))
+    const startedAt = performance.now()
+    const entities = ValidationDatom.entitiesWith(runtime, datascript, datoms, null)
+    const duration = performance.now() - startedAt
+    assert.equal(entities.length, count)
+    return duration
+  }
+  const medianDuration = count => {
+    const durations = [measure(count), measure(count), measure(count)]
+    return durations.sort((left, right) => left - right)[1]
+  }
+
+  measure(500)
+  const smallDuration = medianDuration(5_000)
+  const largeDuration = medianDuration(10_000)
+  assert.ok(
+    largeDuration < smallDuration * 3,
+    `doubling entities took ${largeDuration / smallDuration}x longer`
+  )
+})
+
+test('graph-human export uses the attribute index for attribute datoms', () => {
+  const { SqliteExportWorkflow } = consumerRequire('@logseq/melange-js-api/db')
+  const datomCalls = []
+  const options = new Map([
+    ['export-type', 'graph-human'],
+    ['graph-options', new Map([
+      ['catch-validation-errors?', true],
+      ['exclude-files?', true],
+    ])],
+  ])
+
+  SqliteExportWorkflow.buildExportWith(
+    runtimeAdapter(),
+    emptyDatascriptAdapter(datomCalls),
+    {},
+    { logValidationError: () => {} },
+    '1',
+    options
+  )
+
+  assert.ok(datomCalls.some(([index, components]) =>
+    index === 'avet' && components[0] === 'kv/value'))
+  assert.ok(datomCalls.some(([index, components]) =>
+    index === 'avet' && components[0] === 'logseq.property.history/block'))
+  assert.equal(datomCalls.some(([index, components]) =>
+    index === 'eavt' && components.length === 0), false)
 })
