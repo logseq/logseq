@@ -10,6 +10,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
+            [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
             [frontend.worker.graph-view :as graph-view]
@@ -81,7 +82,7 @@
      :thread-api/db-sync-stop-upload
      :thread-api/db-sync-resume-upload
      :thread-api/db-sync-upload-stopped?
-     :thread-api/db-sync-get-block-conflicts
+     :thread-api/db-sync-get-all-block-conflicts
      :thread-api/db-sync-clear-block-conflicts
      :thread-api/db-sync-download-graph-by-id}
 
@@ -191,6 +192,7 @@
 
    "src/main/frontend/worker/handler/query.cljs"
    #{:thread-api/q
+     :thread-api/query-custom
      :thread-api/query-dsl-query
      :thread-api/query-dsl-custom-query
      :thread-api/datoms
@@ -250,7 +252,8 @@
           :thread-api/db-sync-request-asset-download :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
           :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
-          :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
+          :thread-api/db-sync-get-all-block-conflicts :thread-api/db-sync-clear-block-conflicts
+          :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
@@ -277,7 +280,7 @@
           :thread-api/set-page-favorite
           :thread-api/reorder-favorites
           :thread-api/get-page-route-info :thread-api/get-block-by-page-name-and-block-route-name
-          :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
+          :thread-api/query-custom :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
           :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
           :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
@@ -654,6 +657,94 @@
         :close (fn []
                  (when close-calls
                    (swap! close-calls conj close-label)))}))
+
+(defn- fake-storage-db
+  []
+  (let [db (fake-db)]
+    (gobj/set db "transaction" (fn [f] (f db)))
+    db))
+
+(defn- bootstrap-datoms
+  []
+  (let [conn (d/create-conn db-schema/schema)
+        page-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        block-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id "bootstrap-page"
+                        :block/uuid page-uuid
+                        :block/name "bootstrap"
+                        :block/title "Bootstrap"
+                        :block/tags :logseq.class/Page}
+                       {:block/uuid block-uuid
+                        :block/page "bootstrap-page"
+                        :block/parent "bootstrap-page"
+                        :block/order "a0"
+                        :block/title "bootstrapped block"}])
+    (vec (d/datoms @conn :eavt))))
+
+(defn- canonical-entities
+  [db]
+  (mapv #(d/entity db (:e %)) (d/datoms db :avet :block/uuid)))
+
+(defn- <assert-bootstrap-is-canonical!
+  [repo opts]
+  (let [db (fake-storage-db)
+        search-db (fake-storage-db)
+        client-ops-db (fake-storage-db)
+        opened-dbs (atom [db search-db client-ops-db])
+        listener-snapshots (atom [])
+        broadcasts (atom [])
+        platform' (assoc-in (build-test-platform)
+                            [:sqlite :open-db]
+                            (fn [_opts]
+                              (let [opened-db (first @opened-dbs)]
+                                (swap! opened-dbs subvec 1)
+                                opened-db)))]
+    (platform/set-platform! platform')
+    (p/with-redefs
+      [shared-service/*master-client? (atom true)
+       db-sync/handle-local-tx! (fn [& _] nil)
+       shared-service/broadcast-to-clients! (fn [& args]
+                                              (swap! broadcasts conj args))
+       db-listener/listen-db-changes!
+       (fn [listener-repo conn & _]
+         (let [entities (canonical-entities @conn)]
+           (swap! listener-snapshots conj
+                  {:repo listener-repo
+                   :entities entities
+                   :missing-revisions
+                   (into #{}
+                         (keep (fn [entity]
+                                 (when-not (nat-int? (:block/tx-id entity))
+                                   (:block/uuid entity))))
+                         entities)})))]
+      (p/let [_ ((get-thread-api :thread-api/create-or-open-db) repo opts)
+              conn (worker-state/get-datascript-conn repo)
+              {:keys [entities missing-revisions]} (first @listener-snapshots)]
+        (is (= 1 (count @listener-snapshots)))
+        (is (= repo (:repo (first @listener-snapshots))))
+        (is (seq entities))
+        (is (empty? missing-revisions)
+            "Every UUID entity must have a local revision before the renderer listener is installed.")
+        (when (empty? missing-revisions)
+          (doseq [entity entities]
+            (is (= (:block/uuid entity)
+                   (:block/uuid (block-handler/canonical-block @conn entity))))))
+        (is (empty? @broadcasts)
+            "Bootstrap transactions must not publish incremental renderer deltas.")
+        (db-core/close-db! repo)))))
+
+(deftest new-graph-and-datom-bootstrap-are-canonical-before-listening-test
+  (async done
+         (-> (restoring-worker-state
+              (fn []
+                (p/let [_ (<assert-bootstrap-is-canonical! "bootstrap-new-graph" {})
+                        _ (<assert-bootstrap-is-canonical! "bootstrap-datoms"
+                                                          {:datoms (bootstrap-datoms)})]
+                  nil)))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
 
 (deftest db-core-registers-db-sync-thread-apis
   (let [api-map @thread-api/*thread-apis]
@@ -2808,6 +2899,8 @@
           (fn []
             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
                   conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  renderer-payloads (atom [])
                   config-file {:path "logseq/config.edn"
                                :file/content "{}"}
                   files [config-file
@@ -2816,22 +2909,44 @@
               (is (fn? import-file-graph!))
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (reset! worker-state/*datascript-conns {test-repo conn})
-              (->
-               (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
-                       page (some->> (d/q '[:find [?e ...]
-                                             :where [?e :block/name "home"]]
-                                           @conn)
-                                           first
-                                      (d/entity @conn))]
-                 (is (= #{"pages/Home.md" "logseq/config.edn"}
-                        (set (map :path (:files result)))))
-                 (is (= "Home" (:block/title page)))
-                 (is (some #(= "imported block" (:block/title (d/entity @conn (:e %))))
-                           (d/datoms @conn :avet :block/title "imported block"))))
-               (p/catch
-                (fn [error]
-                  (is false (str error))))
-               (p/finally done)))))))
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 shared-service/broadcast-to-clients!
+                 (fn [event payload]
+                   (when (= :sync-db-changes event)
+                     (swap! renderer-payloads conj payload)))]
+                (db-listener/listen-db-changes! test-repo conn
+                                                :handler-keys [:sync-db-to-main-thread])
+                (->
+                 (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                         page (some->> (d/q '[:find [?e ...]
+                                               :where [?e :block/name "home"]]
+                                             @conn)
+                                             first
+                                        (d/entity @conn))
+                         block (db-test/find-block-by-content @conn "imported block")
+                         published-block-uuids
+                         (into #{}
+                               (mapcat #(keys (get-in % [:delta :blocks])))
+                               @renderer-payloads)]
+                   (is (= #{"pages/Home.md" "logseq/config.edn"}
+                          (set (map :path (:files result)))))
+                   (is (= "Home" (:block/title page)))
+                   (is (= "imported block" (:block/title block)))
+                   (doseq [entity [page block]]
+                     (is (nat-int? (:block/tx-id entity)))
+                     (is (= (:block/uuid entity)
+                            (:block/uuid (block-handler/canonical-block @conn entity))))
+                     (is (contains? published-block-uuids (:block/uuid entity))
+                         "Live file imports must publish complete canonical replacements.")))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally (fn []
+                              (reset! ldb/*transact-pipeline-fn pipeline-before)
+                              (done))))))))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
@@ -3568,6 +3683,42 @@
     (is (empty? missing) (str "Missing thread apis: " missing))
     (is (empty? non-functions) (str "Non-function thread apis: " non-functions))))
 
+(deftest db-sync-get-all-block-conflicts-thread-api-is-explicit-and-fail-fast-test
+  (restoring-worker-state
+   (fn []
+     (let [repo "graph-a"
+           block-uuid (random-uuid)
+           conflicts [{:block-uuid block-uuid
+                       :value "remote"}]
+           api (get @thread-api/*thread-apis
+                    :thread-api/db-sync-get-all-block-conflicts)]
+       (is (nil? (get @thread-api/*thread-apis
+                      :thread-api/db-sync-get-block-conflicts))
+           "Per-block reads must not coexist with graph hydration.")
+       (is (fn? api)
+           "The restore path needs one explicit worker API for graph conflict hydration.")
+       (when (fn? api)
+         (let [calls (atom [])]
+           (with-redefs [client-op/get-all-sync-conflicts
+                         (fn [repo']
+                           (swap! calls conj repo')
+                           {block-uuid conflicts})]
+             (is (= {(str block-uuid) conflicts}
+                    (api repo))
+                 "The API returns a graph snapshot keyed for direct renderer-state replacement."))
+           (is (= [repo] @calls)))
+         (with-redefs [client-op/get-all-sync-conflicts (constantly nil)]
+           (let [error (try
+                         (api repo)
+                         nil
+                         (catch :default error
+                           error))]
+             (is (instance? js/Error error)
+                 "A missing client-op store must fail instead of looking like an empty graph.")
+             (is (= {:repo repo
+                     :conflicts nil}
+                    (ex-data error))))))))))
+
 (deftest db-core-db-sync-thread-apis-delegate-to-sync-modules-test
   (restoring-worker-state
    (fn []
@@ -3578,7 +3729,6 @@
            target-email "user@example.com"
            sync-status {:state :connected}
            remote-graphs [{:graph-id graph-id}]
-           conflicts [{:op :conflict}]
            import-prepare {:import-id "import-1"}]
        (with-redefs [db-sync/status (fn [repo]
                                       (swap! calls conj [:status repo])
@@ -3595,9 +3745,6 @@
                      db-sync/upload-stopped? (fn [repo]
                                                (swap! calls conj [:upload-stopped? repo])
                                                true)
-                     client-op/get-sync-conflicts (fn [repo block]
-                                                    (swap! calls conj [:get-sync-conflicts repo block])
-                                                    conflicts)
                      client-op/clear-sync-conflicts! (fn [repo block]
                                                        (swap! calls conj [:clear-sync-conflicts repo block])
                                                        nil)
@@ -3627,7 +3774,6 @@
          (is (= :stopped ((get-thread-api :thread-api/db-sync-stop-upload) request-repo)))
          (is (= :resumed ((get-thread-api :thread-api/db-sync-resume-upload) request-repo)))
          (is (true? ((get-thread-api :thread-api/db-sync-upload-stopped?) request-repo)))
-         (is (= conflicts ((get-thread-api :thread-api/db-sync-get-block-conflicts) request-repo block-uuid)))
          ((get-thread-api :thread-api/db-sync-clear-block-conflicts) request-repo block-uuid)
          (is (= :downloaded ((get-thread-api :thread-api/db-sync-download-graph-by-id) request-repo graph-id true)))
          (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) request-repo graph-id target-email)))
@@ -3811,10 +3957,61 @@
                   {})]
       (is (string/includes? result "Referenced block")))))
 
-;; When source and dest built-in eids differ, a :graph (datom) import would trip
-;; the pipeline's revert-disallowed-changes, which sees the moved :db/ident as a
-;; disallowed built-in edit and emits a conflicting revert. import-edn must
-;; short-circuit the pipeline (e.g. via :initial-db?) for datom imports.
+(deftest import-edn-datom-format-publishes-complete-canonical-delta-test
+  (restoring-worker-state
+   (fn []
+     (let [source-conn (sqlite-export/create-conn)
+           page-uuid #uuid "44444444-4444-4444-8444-444444444441"
+           block-uuid #uuid "44444444-4444-4444-8444-444444444442"
+           _ (d/transact! source-conn
+                          [{:db/id "imported-page"
+                            :block/uuid page-uuid
+                            :block/name "imported page"
+                            :block/title "Imported page"
+                            :block/tags :logseq.class/Page}
+                           {:block/uuid block-uuid
+                            :block/page "imported-page"
+                            :block/parent "imported-page"
+                           :block/order "a0"
+                            :block/title "No refs"}])
+           export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+           imported-uuids #{page-uuid block-uuid}
+           dest-conn (sqlite-export/create-conn)
+           pipeline-before @ldb/*transact-pipeline-fn
+           renderer-payloads (atom [])]
+       (assert (= :datoms (::sqlite-export/graph-format export-edn)))
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+       (try
+         (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                       db-sync/handle-local-tx! (fn [& _] nil)
+                       shared-service/broadcast-to-clients!
+                       (fn [event payload]
+                         (when (= :sync-db-changes event)
+                           (swap! renderer-payloads conj payload)))]
+           (db-listener/listen-db-changes! test-repo dest-conn
+                                           :handler-keys [:sync-db-to-main-thread])
+           ((get-thread-api :thread-api/import-edn) test-repo export-edn)
+           (let [published-uuids (into #{}
+                                       (mapcat #(keys (get-in % [:delta :blocks])))
+                                       @renderer-payloads)]
+             (is (= 1 (count @renderer-payloads))
+                 "A live datom import publishes one incremental renderer delta.")
+             (is (every? #(not (:initial-db? (:tx-meta %)))
+                         @renderer-payloads)
+                 "A live datom import must not use the bootstrap transaction path.")
+             (doseq [imported-uuid imported-uuids]
+               (let [entity (d/entity @dest-conn [:block/uuid imported-uuid])]
+                 (is (nat-int? (:block/tx-id entity)))
+                 (is (= imported-uuid
+                        (:block/uuid (block-handler/canonical-block @dest-conn entity))))
+                 (is (contains? published-uuids imported-uuid)
+                     "Every imported UUID entity must be published canonically.")))))
+         (finally
+           (reset! ldb/*transact-pipeline-fn pipeline-before)))))))
+
+;; Imported datoms can move built-in idents to different entity ids. The import
+;; pipeline must preserve those datoms instead of treating them as built-in edits.
 (deftest import-edn-datom-format-with-shifted-builtin-eids-test
   (restoring-worker-state
    (fn []

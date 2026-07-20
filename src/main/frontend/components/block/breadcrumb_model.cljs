@@ -194,6 +194,20 @@
     :math  :math
     nil))
 
+(defn with-breadcrumb-ref-titles
+  [entity ref-titles]
+  (if-let [refs (:block/refs entity)]
+    (assoc entity
+           :block/refs
+           (mapv (fn [ref]
+                   (if-let [ref-uuid (:block/uuid ref)]
+                     (if (contains? ref-titles ref-uuid)
+                       (assoc ref :block/title (get ref-titles ref-uuid))
+                       ref)
+                     ref))
+                 refs))
+    entity))
+
 (defn block->breadcrumb-segment
   "Converts a page or block entity map to a breadcrumb segment map.
 

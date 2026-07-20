@@ -1,6 +1,7 @@
 (ns frontend.db.transact-test
   (:require ["react-dom" :as react-dom]
-            [cljs.test :refer [async deftest is]]
+            [cljs.test :refer [async deftest is testing]]
+            [frontend.db.subs :as db-subs]
             [frontend.db.transact :as db-transact]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -14,99 +15,38 @@
                     (is (= result value))))
           (p/finally done)))))
 
-(deftest op-block-uuids-includes-move-ops-test
+(deftest operation-row-uuids-contains-only-changed-rows-in-order-test
   (let [block-a (random-uuid)
         block-b (random-uuid)
+        block-c (random-uuid)
+        deleted-block (random-uuid)
         target (random-uuid)]
-    (is (= #{block-a block-b target}
-           (#'db-transact/op-block-uuids
-            [[:move-blocks [[block-a block-b] target {}]]])))
-    (is (= #{block-a block-b}
-           (#'db-transact/op-block-uuids
-            [[:move-blocks-up-down [[block-a block-b] true]]
-             [:indent-outdent-blocks [[block-a block-b] true {}]]])))))
+    (testing "unchanged insertion and movement targets are excluded"
+      (is (= [block-b block-a block-c]
+             (#'db-transact/operation-row-uuids
+              [[:insert-blocks [[{:block/uuid block-b}
+                                  {:block/uuid block-a}]
+                                 target
+                                 {}]]
+               [:move-blocks [[block-c block-b] target {}]]]))))
+    (testing "deleted rows are excluded and changed-row order is stable"
+      (is (= [block-a block-b]
+             (#'db-transact/operation-row-uuids
+              [[:move-blocks-up-down [[block-a block-b] true]]
+               [:delete-blocks [[deleted-block] {}]]
+               [:indent-outdent-blocks [[block-a block-b] true {}]]]))))))
 
-(deftest op-block-uuids-includes-property-ops-test
+(deftest operation-row-uuids-deduplicates-property-op-rows-test
   (let [block-a (random-uuid)
         block-b (random-uuid)]
-    (is (= #{block-a block-b}
-           (#'db-transact/op-block-uuids
+    (is (= [block-a block-b]
+           (#'db-transact/operation-row-uuids
             [[:set-block-property [block-a :block/tags 4]]
              [:set-block-properties [block-a {:block/tags 4}]]
              [:class-add-property [block-b :user.property/foo]]
              [:class-remove-property [block-b :user.property/foo]]
              [:delete-closed-value [:logseq.property/status block-b]]
              [:batch-delete-property-value [[block-a block-b] :block/tags 4]]])))))
-
-(deftest refresh-worker-op-blocks-publishes-authoritative-delta-test
-  (let [block-id (random-uuid)
-        target-id (random-uuid)
-        deleted-id (random-uuid)
-        invalidated-id (random-uuid)
-        tx-id (random-uuid)
-        page-id (random-uuid)
-        updated-block {:block/uuid block-id :block/title "persisted"}]
-    (state/set-state! :db/latest-transacted-entity-uuids {})
-    (#'db-transact/refresh-worker-op-blocks!
-     [[:insert-blocks [[{:block/uuid block-id}] target-id {}]]]
-     {:db-sync/tx-id tx-id
-      :ui/page-id page-id}
-     [updated-block]
-     #{block-id invalidated-id}
-     [deleted-id]
-     [page-id]
-     [target-id])
-    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id invalidated-id} (:updated-ids latest)))
-      (is (= #{deleted-id} (:deleted-ids latest)))
-      (is (= [updated-block] (:updated-blocks latest)))
-      (is (= #{page-id} (:affected-page-uuids latest)))
-      (is (= page-id (:page-id latest)))
-      (is (= tx-id (:tx-id latest)))
-      (is (every? #(= tx-id (get-in latest [:entity-tx-ids %]))
-                  [block-id deleted-id invalidated-id]))
-      (is (nil? (get-in latest [:entity-tx-ids target-id])))
-      (is (nil? (get-in latest [:entity-tx-ids page-id])))
-      (is (= tx-id (get-in latest [:tree-tx-ids page-id])))
-      (is (= tx-id (get-in latest [:children-tx-ids target-id]))))))
-
-(deftest refresh-worker-op-blocks-does-not-mark-page-lookup-as-updated-test
-  (let [block-id (random-uuid)
-        page-db-id 10
-        tx-id (random-uuid)]
-    (state/set-state! :db/latest-transacted-entity-uuids {})
-    (#'db-transact/refresh-worker-op-blocks!
-     [[:save-block [{:block/uuid block-id} {}]]]
-     {:db-sync/tx-id tx-id
-      :ui/page-id page-db-id}
-     nil
-     #{block-id}
-     nil
-     nil
-     nil)
-    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id} (:updated-ids latest)))
-      (is (nil? (get-in latest [:entity-tx-ids page-db-id]))))))
-
-(deftest refresh-worker-op-blocks-keeps-cross-page-refresh-separate-test
-  (let [block-id (random-uuid)
-        current-page-id (random-uuid)
-        target-page-id (random-uuid)
-        tx-id (random-uuid)]
-    (state/set-state! :db/latest-transacted-entity-uuids {})
-    (#'db-transact/refresh-worker-op-blocks!
-     [[:indent-outdent-blocks [[block-id] true {}]]]
-     {:db-sync/tx-id tx-id}
-     nil
-     #{block-id}
-     nil
-     #{current-page-id target-page-id}
-     nil)
-    (let [latest (state/get-state :db/latest-transacted-entity-uuids)]
-      (is (= #{block-id} (:updated-ids latest)))
-      (is (= #{current-page-id target-page-id} (:affected-page-uuids latest)))
-      (is (nil? (get-in latest [:entity-tx-ids current-page-id])))
-      (is (nil? (get-in latest [:entity-tx-ids target-page-id]))))))
 
 (deftest editor-callback-runs-from-its-worker-response-test
   (let [calls (atom [])]
@@ -115,105 +55,115 @@
      nil)
     (is (= :called @calls))))
 
-(deftest apply-outliner-ops-refreshes-after-worker-persistence-test
+(deftest worker-response-resolves-editor-rows-through-the-canonical-store-test
   (async done
-    (let [block-id (random-uuid)
-          tx-id (random-uuid)
-          editor-info {:block-id block-id}
+    (let [block-a-uuid (random-uuid)
+          block-b-uuid (random-uuid)
+          block-a {:block/uuid block-a-uuid :block/tx-id 1}
+          block-b {:block/uuid block-b-uuid :block/tx-id 1}
+          row-uuids [block-b-uuid block-a-uuid]
+          delta {:graph-id "editor-row-resolution-test"
+                 :rev 1
+                 :blocks {}
+                 :deleted {}
+                 :children {}
+                 :affected-keys #{[:graph]}}
+          legacy-row {:block/uuid (random-uuid) :block/tx-id 1}
           calls (atom [])
-          worker-result (p/deferred)]
-      (state/set-state! :db/latest-transacted-entity-uuids {})
-      (-> (p/with-redefs [util/node-test? false
-                          state/get-current-repo (constantly "test-repo")
-                          state/get-editor-info (constantly editor-info)
-                          state/<invoke-db-worker
-                          (fn [api & args]
-                            (swap! calls conj [api (vec args)])
-                            (case api
-                              :thread-api/undo-redo-set-pending-editor-info
-                              (p/resolved nil)
-
-                              :thread-api/apply-outliner-ops
-                              worker-result
-
-                              (p/resolved nil)))]
-            (let [result (db-transact/apply-outliner-ops
-                          nil
-                          [[:save-block [{:block/uuid block-id} {}]]]
-                          {:db-sync/tx-id tx-id})]
-              (p/let [_ (p/delay 0)
-                      _ (is (= [:thread-api/undo-redo-set-pending-editor-info
-                                :thread-api/apply-outliner-ops]
-                               (mapv first @calls)))
-                      _ (is (= editor-info (get-in @calls [0 1 1]))
-                            "Editor history is sent through its dedicated worker API.")
-                      _ (is (not-any? #(contains? (get-in @calls [1 1 2]) %)
-                                      [:ui/page-id :ui/editor-info :virtual/offset
-                                       :editor/edit-block-fn])
-                            "The mutation worker must not receive renderer or editor state.")
-                      _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
-                            "UI refresh state must not change until the worker transaction resolves.")
-                      updated-block {:block/uuid block-id
-                                     :block/title "persisted"}
-                      _ (p/resolve! worker-result {:result ::persisted
-                                                   :updated-blocks [updated-block]
-                                                   :entity-updated-block-uuids #{block-id}})
-                      value result
-                      _ (p/delay 0)
-                      latest (state/get-state :db/latest-transacted-entity-uuids)]
-                (is (= ::persisted value))
-                (is (= #{block-id} (:updated-ids latest)))
-                (is (= [updated-block] (:updated-blocks latest)))
-                (is (= tx-id (:tx-id latest))))))
+          original-flush-sync (.-flushSync react-dom)]
+      (set! (.-flushSync react-dom) (fn [f] (f)))
+      (-> (p/with-redefs [db-subs/apply-delta!
+                          (fn [value]
+                            (swap! calls conj [:delta value])
+                            false)
+                          db-subs/block-snapshot
+                          (constantly {:status :ready :value legacy-row})
+                          db-subs/resolve-blocks!
+                          (fn [requested-uuids]
+                            (swap! calls conj [:resolve requested-uuids])
+                            (p/resolved [block-b block-a]))]
+            (p/let [_ (#'db-transact/publish-worker-response!
+                       {:editor/edit-block-fn
+                        (fn [rows]
+                          (swap! calls conj [:callback rows]))}
+                       delta
+                       row-uuids
+                       true)]
+              (is (= [[:delta delta]
+                      [:resolve row-uuids]
+                      [:callback [block-b block-a]]]
+                     @calls))
+              (is (identical? delta (second (first @calls)))
+                  "The response must apply the worker-owned delta untouched.")
+              (is (= :callback (first (last @calls)))
+                  "A matching broadcast may win, but the response-owned callback still runs once.")))
           (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
                        (done)))))))
 
-(deftest journal-insert-publishes-changed-blocks-without-reloading-the-page-test
+(deftest apply-outliner-ops-applies-the-exact-delta-once-before-editor-side-effects-test
   (async done
-    (let [page-id (random-uuid)
-          target-id (random-uuid)
-          inserted-id (random-uuid)
-          tx-id (random-uuid)
-          inserted-block {:block/uuid inserted-id
-                          :block/parent {:db/id page-id}
-                          :block/order "b"}
+    (let [repo "direct-render-delta-test"
+          block-id (random-uuid)
+          block {:block/uuid block-id
+                 :block/tx-id 1}
+          delta {:graph-id repo
+                 :rev 1
+                 :blocks {block-id block}
+                 :deleted {}
+                 :children {}
+                 :affected-keys #{[:graph]}}
+          original-flush-sync (.-flushSync react-dom)
           calls (atom [])]
+      (set! (.-flushSync react-dom)
+            (fn [f]
+              (swap! calls conj :commit-start)
+              (f)
+              (swap! calls conj :commit-end)))
       (-> (p/with-redefs [util/node-test? false
-                          state/get-current-repo (constantly "test-repo")
+                          db-subs/apply-delta!
+                          (fn [value]
+                            (swap! calls conj [:delta value])
+                            true)
+                          db-subs/resolve-blocks!
+                          (fn [row-uuids]
+                            (swap! calls conj [:resolve row-uuids])
+                            (p/resolved [block]))
+                          state/get-current-repo (constantly repo)
                           state/get-route-match (constantly nil)
                           state/get-editor-info (constantly nil)
                           state/<invoke-db-worker
-                          (fn [api & args]
-                            (swap! calls conj [api (vec args)])
+                          (fn [api & _args]
                             (case api
                               :thread-api/undo-redo-set-pending-editor-info
                               (p/resolved nil)
 
                               :thread-api/apply-outliner-ops
                               (p/resolved {:result ::persisted
-                                           :updated-blocks [inserted-block]
-                                           :entity-updated-block-uuids #{inserted-id}
-                                           :structural-parent-uuids #{page-id}})
+                                           :delta delta
+                                           :editor-row-uuids [block-id]})
 
                               (p/resolved nil)))]
             (p/let [value (db-transact/apply-outliner-ops
                            nil
-                           [[:insert-blocks [[{:block/uuid inserted-id}]
-                                             target-id
-                                             {:keep-uuid? true}]]]
-                           {:db-sync/tx-id tx-id
-                            :ui/page-id page-id
-                            :ui/all-page-blocks? true})
-                    latest (state/get-state :db/latest-transacted-entity-uuids)]
+                           [[:save-block [{:block/uuid block-id} {}]]]
+                           {:editor/edit-block-fn
+                            (fn [_rows]
+                              (swap! calls conj :editor-callback))})]
               (is (= ::persisted value))
-              (is (= [:thread-api/undo-redo-set-pending-editor-info
-                      :thread-api/apply-outliner-ops]
-                     (mapv first @calls)))
-              (is (= [inserted-block] (:updated-blocks latest)))
-              (is (= #{inserted-id} (:updated-ids latest)))
-              (is (= tx-id (get-in latest [:children-tx-ids page-id])))
-              (is (nil? (get-in latest [:entity-tx-ids target-id])))))
-          (p/finally done)))))
+              (is (= [:commit-start :delta :commit-end
+                      :resolve
+                      :commit-start :editor-callback :commit-end]
+                     (mapv #(if (vector? %) (first %) %) @calls)))
+              (let [applied-deltas (keep #(when (= :delta (first %))
+                                            (second %))
+                                         (filter vector? @calls))]
+                (is (= 1 (count applied-deltas)))
+                (is (identical? delta (first applied-deltas))
+                    "The direct response must pass the worker-owned delta through untouched."))))
+          (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
+                       (done)))))))
 
 (deftest apply-outliner-ops-runs-editor-callback-synchronously-test
   (async done
@@ -253,109 +203,6 @@
            (fn []
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
-
-(deftest structural-editor-ops-publish-authoritative-rows-after-worker-response-test
-  (async done
-    (let [page-id (random-uuid)
-          target-id (random-uuid)
-          inserted-id (random-uuid)
-          tx-id (random-uuid)
-          worker-result (p/deferred)
-          callback-rows (atom [])]
-      (state/set-state! :db/latest-transacted-entity-uuids {})
-      (-> (p/with-redefs [util/node-test? false
-                          state/get-current-repo (constantly "test-repo")
-                          state/get-current-page (constantly page-id)
-                          state/get-route-match (constantly nil)
-                          state/get-editor-info (constantly nil)
-                          state/<invoke-db-worker
-                          (fn [api & _args]
-                            (case api
-                              :thread-api/undo-redo-set-pending-editor-info
-                              (p/resolved nil)
-
-                              :thread-api/apply-outliner-ops
-                              worker-result
-
-                              (p/resolved nil)))]
-            (let [saved-block {:block/uuid target-id
-                               :block/title "typed before Enter"}
-                  inserted-block {:block/uuid inserted-id
-                                  :block/title ""}
-                  ops [[:save-block [saved-block nil]]
-                       [:insert-blocks [[inserted-block]
-                                        target-id
-                                        {:sibling? true
-                                         :keep-uuid? true
-                                         :outliner-op :insert-blocks}]]]
-                  result (db-transact/apply-outliner-ops
-                          nil
-                          ops
-                          {:db-sync/tx-id tx-id
-                           :ui/page-id page-id
-                           :editor/edit-block-fn #(reset! callback-rows %)})]
-              (p/let [_ (p/delay 0)
-                      _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids))
-                            "Enter must not publish an uncommitted tree delta.")
-                      _ (is (= [] @callback-rows)
-                            "The cursor must not target an uncommitted inserted block.")
-                      persisted-saved-block (assoc saved-block :db/id 1)
-                      persisted-inserted-block (assoc inserted-block
-                                                       :db/id 2
-                                                       :block/parent {:db/id 3}
-                                                       :block/order "a0")
-                      _ (p/resolve! worker-result {:result ::persisted
-                                                   :updated-blocks [persisted-saved-block
-                                                                    persisted-inserted-block]
-                                                   :entity-updated-block-uuids #{target-id inserted-id}
-                                                   :structural-parent-uuids #{page-id}})
-                      value result
-                      latest (state/get-state :db/latest-transacted-entity-uuids)]
-                (is (= ::persisted value))
-                (is (= tx-id (:tx-id latest)))
-                (is (= [persisted-saved-block persisted-inserted-block]
-                       (:updated-blocks latest)))
-                (is (= [persisted-saved-block persisted-inserted-block]
-                       @callback-rows)
-                    "Enter must update content and cursor from the same authoritative response."))))
-          (p/finally done)))))
-
-(deftest failed-delete-does-not-publish-an-uncommitted-tree-test
-  (async done
-    (let [page-id (random-uuid)
-          deleted-id (random-uuid)
-          worker-result (p/deferred)
-          callback-count (atom 0)]
-      (state/set-state! :db/latest-transacted-entity-uuids {})
-      (-> (p/with-redefs [util/node-test? false
-                          state/get-current-repo (constantly "test-repo")
-                          state/get-current-page (constantly page-id)
-                          state/get-route-match (constantly nil)
-                          state/get-editor-info (constantly nil)
-                          state/<invoke-db-worker
-                          (fn [api & _args]
-                            (case api
-                              :thread-api/undo-redo-set-pending-editor-info
-                              (p/resolved nil)
-
-                              :thread-api/apply-outliner-ops
-                              worker-result
-
-                              (p/resolved nil)))]
-            (let [result (db-transact/apply-outliner-ops
-                          nil
-                          [[:delete-blocks [[deleted-id] {}]]]
-                          {:ui/page-id page-id
-                           :editor/edit-block-fn (fn [_] (swap! callback-count inc))})]
-              (p/let [_ (p/delay 0)
-                      _ (is (= {} (state/get-state :db/latest-transacted-entity-uuids)))
-                      _ (is (zero? @callback-count))
-                      _ (p/reject! worker-result (js/Error. "worker failed"))
-                      _ (p/catch result identity)
-                      latest (state/get-state :db/latest-transacted-entity-uuids)]
-                (is (= {} latest))
-                (is (zero? @callback-count)))))
-          (p/finally done)))))
 
 (deftest dependent-outliner-mutations-reach-the-worker-in-call-order-test
   (async done
@@ -486,65 +333,24 @@
                 nil)))
           (p/finally done)))))
 
-(deftest structural-ops-publish-tree-and-editor-in-one-dom-commit-test
-  (async done
-    (let [page-id (random-uuid)
-          block-id (random-uuid)
-          original-flush-sync (.-flushSync react-dom)
-          original-set-state state/set-state!
-          calls (atom [])]
-      (set! (.-flushSync react-dom)
-            (fn [f]
-              (swap! calls conj :commit-start)
-              (f)
-              (swap! calls conj :commit-end)))
-      (-> (p/with-redefs [util/node-test? false
-                          state/get-current-repo (constantly "test-repo")
-                          state/get-current-page (constantly page-id)
-                          state/get-route-match (constantly nil)
-                          state/get-editor-info (constantly nil)
-                          state/set-state!
-                          (fn [path & args]
-                            (when (= :db/latest-transacted-entity-uuids path)
-                              (swap! calls conj :publish))
-                            (apply original-set-state path args))
-                          state/<invoke-db-worker
-                          (fn [api & _args]
-                            (case api
-                              :thread-api/apply-outliner-ops
-                              (p/resolved {:result ::persisted
-                                           :updated-blocks [{:block/uuid block-id}]
-                                           :entity-updated-block-uuids #{block-id}})
-
-                              (p/resolved nil)))]
-            (p/do!
-             (db-transact/apply-outliner-ops
-              nil
-              [[:insert-blocks [[{:block/uuid block-id}] page-id {}]]]
-              {:ui/page-id page-id
-               :editor/edit-block-fn #(swap! calls conj [:insert (:block/uuid (first %))])})
-             (db-transact/apply-outliner-ops
-              nil
-              [[:delete-blocks [[block-id] {}]]]
-              {:ui/page-id page-id
-               :editor/edit-block-fn #(swap! calls conj [:delete (:block/uuid (first %))])})))
-          (p/then (fn []
-                    (is (= [:commit-start :publish [:insert block-id] :commit-end
-                            :commit-start :publish [:delete block-id] :commit-end]
-                           @calls))))
-          (p/finally (fn []
-                       (set! (.-flushSync react-dom) original-flush-sync)
-                       (done)))))))
-
-(deftest apply-outliner-ops-ignores-response-after-graph-route-switch-test
+(deftest apply-outliner-ops-hands-a-late-response-to-the-graph-aware-delta-store-test
   (async done
     (let [repo (atom "old-repo")
           route (atom {:data {:name :page}
                        :path-params {:name "old-page"}})
           worker-result (p/deferred)
           callback-calls (atom 0)
-          new-context-state {:tx-id ::new-context}]
+          delta {:graph-id "old-repo"
+                 :rev 1
+                 :blocks {}
+                 :deleted {}
+                 :children {}
+                 :affected-keys #{[:graph]}}
+          applied-deltas (atom [])]
       (-> (p/with-redefs [util/node-test? false
+                          db-subs/apply-delta! (fn [value]
+                                                 (swap! applied-deltas conj value)
+                                                 false)
                           state/get-current-repo #(deref repo)
                           state/get-route-match #(deref route)
                           state/get-editor-info (constantly nil)
@@ -558,13 +364,14 @@
               (reset! repo "new-repo")
               (reset! route {:data {:name :page}
                              :path-params {:name "new-page"}})
-              (state/set-state! :db/latest-transacted-entity-uuids new-context-state)
-              (p/resolve! worker-result {:result ::persisted})
+              (p/resolve! worker-result {:result ::persisted
+                                         :delta delta})
               (p/let [value result
                       _ (p/delay 0)]
                 (is (= ::persisted value))
-                (is (= new-context-state
-                       (state/get-state :db/latest-transacted-entity-uuids)))
+                (is (= 1 (count @applied-deltas)))
+                (is (identical? delta (first @applied-deltas))
+                    "Graph staleness is decided by the subscription store, not by route state.")
                 (is (zero? @callback-calls)))))
           (p/finally
            done)))))

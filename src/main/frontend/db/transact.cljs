@@ -1,8 +1,7 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
   (:require ["react-dom" :as react-dom]
-            [frontend.modules.outliner.pipeline :as outliner-pipeline]
-            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.db.subs :as db-subs]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -69,14 +68,14 @@
   nil)
 
 (defn- run-edit-block-fn!
-  [tx-meta current-window]
+  [tx-meta rows]
   (when-let [edit-block-f (:editor/edit-block-fn tx-meta)]
     (try
-      (edit-block-f (:rows current-window))
+      (edit-block-f rows)
       (catch :default error
         (log/error :db/editor-callback-failed {:error error})))))
 
-(defn- op-block-uuids
+(defn- operation-row-uuids
   [ops]
   (->> ops
        (mapcat (fn [[op args]]
@@ -85,14 +84,10 @@
                    [(some-> args first :block/uuid)]
 
                    :insert-blocks
-                   (let [[blocks target-id] args]
-                     (cons (when (uuid? target-id) target-id)
-                           (map :block/uuid blocks)))
+                   (map :block/uuid (first args))
 
                    :move-blocks
-                   (let [[block-ids target-id] args]
-                     (cons (when (uuid? target-id) target-id)
-                           block-ids))
+                   (first args)
 
                    :move-blocks-up-down
                    (first args)
@@ -119,70 +114,35 @@
                    [(second args)]
 
                    :delete-blocks
-                   (first args)
+                   []
 
                    :collapse-expand-blocks
                    (map :block/uuid (first args))
 
                    [])))
        (remove nil?)
-       set))
+       distinct
+       vec))
 
-(defn- refresh-worker-op-blocks!
-  [_ops tx-meta updated-blocks entity-updated-block-uuids deleted-block-uuids
-   affected-page-uuids structural-parent-uuids]
-  (let [started-at (now-ms)
-        affected-page-uuids (set affected-page-uuids)
-        page-id (or (:ui/page-id tx-meta) (state/get-current-page))
-        deleted-ids (set deleted-block-uuids)
-        updated-ids (set entity-updated-block-uuids)
-        entity-ids (into updated-ids deleted-ids)
-        structural-parent-uuids (set structural-parent-uuids)]
-    (if (or (seq entity-ids)
-            (seq structural-parent-uuids)
-            (seq affected-page-uuids))
-      (let [tx-id (:db-sync/tx-id tx-meta)
-            value (cond-> {:updated-ids updated-ids
-                           :deleted-ids deleted-ids
-                           :entity-tx-ids (zipmap entity-ids (repeat tx-id))
-                           :children-tx-ids (zipmap structural-parent-uuids
-                                                    (repeat tx-id))
-                           :tree-tx-ids (zipmap affected-page-uuids
-                                                (repeat tx-id))
-                           :tx-id tx-id}
-                    page-id
-                    (assoc :page-id page-id)
-
-                    (seq updated-blocks)
-                    (assoc :updated-blocks updated-blocks)
-
-                    (seq affected-page-uuids)
-                    (assoc :affected-page-uuids affected-page-uuids))
-            changed-paths (outliner-pipeline/refresh-state-paths entity-ids
-                                                                 structural-parent-uuids
-                                                                 affected-page-uuids)
-            prepared-at (now-ms)]
-        (outliner-tree/reconcile-resident-block-trees! updated-blocks deleted-ids)
-        (state/set-state! :db/latest-transacted-entity-uuids
-                          value
-                          :changed-paths changed-paths)
-        {:prepare-ms (- prepared-at started-at)
-         :publish-ms (- (now-ms) prepared-at)})
-      {:prepare-ms (- (now-ms) started-at)
-       :publish-ms 0})))
+(defn- resolve-and-run-editor-callback!
+  [tx-meta row-uuids]
+  (-> (db-subs/resolve-blocks! (vec (or row-uuids [])))
+      (p/then (fn [rows]
+                (react-dom/flushSync
+                 #(run-edit-block-fn! tx-meta rows))))
+      (p/catch (fn [error]
+                 (log/error :db/editor-row-resolution-failed
+                            {:row-uuids row-uuids
+                             :error error})))))
 
 (defn- publish-worker-response!
-  [ops tx-meta updated-blocks entity-updated-block-uuids deleted-block-uuids
-   affected-page-uuids structural-parent-uuids]
-  (let [ui-refresh-perf (volatile! nil)]
-    (react-dom/flushSync
-     (fn []
-       (vreset! ui-refresh-perf
-                (refresh-worker-op-blocks! ops tx-meta updated-blocks entity-updated-block-uuids
-                                           deleted-block-uuids affected-page-uuids
-                                           structural-parent-uuids))
-       (run-edit-block-fn! tx-meta {:rows updated-blocks})))
-    @ui-refresh-perf))
+  [tx-meta delta row-uuids run-editor-callback?]
+  (let [started-at (now-ms)]
+    (when delta
+      (react-dom/flushSync #(db-subs/apply-delta! delta)))
+    (p/let [_ (when run-editor-callback?
+                (resolve-and-run-editor-callback! tx-meta row-uuids))]
+      {:total-ms (- (now-ms) started-at)})))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
@@ -212,12 +172,10 @@
                       (assoc
                        :client-id (:client-id @state/state)
                        :ui/perf-id perf-id
-                       :ui/handled-by-response? true
                        :local-tx? true))
-            affected-block-uuids (op-block-uuids ops)
             worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
-                          (seq affected-block-uuids)
-                          (assoc :affected-block-uuids affected-block-uuids))
+                          (:editor/edit-block-fn opts')
+                          (assoc :editor-row-uuids (operation-row-uuids ops)))
             request #(p/do!
                       (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                                request-repo
@@ -228,30 +186,32 @@
                        ops
                        worker-opts))]
         (p/let [response (enqueue-outliner-mutation! request-repo request)
-                {:keys [result affected-page-uuids updated-blocks entity-updated-block-uuids
-                        deleted-block-uuids structural-parent-uuids perf]} response
+                {:keys [result delta editor-row-uuids perf]} response
                 mutation-returned-at (now-ms)
-                worker-returned-at (now-ms)]
-          (when (and (= request-repo (state/get-current-repo))
-                     (= request-route (state/get-route-match)))
-            (let [ui-refresh-perf (publish-worker-response!
-                                   ops opts' updated-blocks entity-updated-block-uuids
-                                   deleted-block-uuids affected-page-uuids
-                                   structural-parent-uuids)
-                  state-updated-at (now-ms)]
-              (on-next-frame!
-               (fn []
-                 (log-outliner-op-perf!
-                  {:stage :ui-updated
-                   :perf-id perf-id
-                   :op-names (mapv first ops)
-                   :op-count (count ops)
-                   :worker-apply-ms (:apply-ms perf)
-                   :worker-perf (dissoc perf :listener)
-                   :worker-listener (:listener perf)
-                   :worker-roundtrip-ms (- mutation-returned-at started-at)
-                   :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
-                   :ui-refresh ui-refresh-perf
-                   :state-update-ms (- state-updated-at worker-returned-at)
-                   :total-to-next-frame-ms (- (now-ms) started-at)})))))
+                worker-returned-at (now-ms)
+                current-context? (and (= request-repo (state/get-current-repo))
+                                      (= request-route (state/get-route-match)))
+                publish? (or delta
+                             (and current-context?
+                                  (:editor/edit-block-fn opts')))
+                ui-refresh-perf (when publish?
+                                  (publish-worker-response!
+                                   opts' delta editor-row-uuids current-context?))
+                ui-updated-at (now-ms)]
+          (when publish?
+            (on-next-frame!
+             (fn []
+               (log-outliner-op-perf!
+                {:stage :ui-updated
+                 :perf-id perf-id
+                 :op-names (mapv first ops)
+                 :op-count (count ops)
+                 :worker-apply-ms (:apply-ms perf)
+                 :worker-perf (dissoc perf :listener)
+                 :worker-listener (:listener perf)
+                 :worker-roundtrip-ms (- mutation-returned-at started-at)
+                 :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
+                 :ui-refresh ui-refresh-perf
+                 :state-update-ms (- ui-updated-at worker-returned-at)
+                 :total-to-next-frame-ms (- (now-ms) started-at)}))))
           result)))))

@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
+            [frontend.db.hooks :as db-hooks]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.notification :as notification]
@@ -408,6 +409,12 @@
                         (comments-handler/delete-comment! comment-block))}
            (shui/tabler-icon "trash" {:size 14})))])]))
 
+(hsx/defc subscribed-comment-row
+  [config comment-uuid *hide-block-refs? *show-query? renderers]
+  (let [comment-block (db-hooks/use-block comment-uuid)]
+    (when comment-block
+      (comment-row-view config comment-block *hide-block-refs? *show-query? renderers))))
+
 (hsx/defc add-comment-button
   [config comments-block {:keys [focus-on-mount?]}]
   (let [placeholder (t :block.comments/placeholder)]
@@ -486,17 +493,17 @@
        (comments-model/comments-area-title block)])))
 
 (hsx/defc comments-area-view
-  [config block children collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
+  [config block comment-uuids collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
   (let [*comments-list-ref (hooks/use-ref nil)
         [targets-open? set-targets-open!] (hooks/use-state false)
         title-editing? (comments-area-title-editing? config block)
-        render-token (comments-model/comments-render-token children)
-        summary (comments-model/comments-summary children)
-        count (count children)]
+        summary (db-hooks/use-resource [:block-comment-summary (:block/uuid block)])
+        render-token (vec comment-uuids)
+        count (:count summary)]
     (hooks/use-effect!
      (fn []
        (when (and (not collapsed?)
-                  (seq children))
+                  (seq comment-uuids))
          (js/requestAnimationFrame
           #(some-> (hooks/deref *comments-list-ref)
                    (scroll-comments-list-to-bottom!))))
@@ -532,10 +539,10 @@
             (t :block.comments/on-those-blocks)])]
         (when (comments-model/show-comment-thread-targets? block targets-open?)
           (comment-thread-targets-view block))
-        (when (seq children)
+        (when (seq comment-uuids)
           [:div.ls-comments-list
            {:ref *comments-list-ref}
-           (for [comment-block children]
-             ^{:key (str (:block/uuid comment-block))}
-             [comment-row-view config comment-block *hide-block-refs? *show-query? renderers])])
+           (for [comment-uuid comment-uuids]
+             ^{:key (str comment-uuid)}
+             [subscribed-comment-row config comment-uuid *hide-block-refs? *show-query? renderers])])
         (add-comment-button config block {:focus-on-mount? focus-editor?})])]))

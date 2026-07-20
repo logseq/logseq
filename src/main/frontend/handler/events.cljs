@@ -13,7 +13,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
-            [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
@@ -125,7 +124,6 @@
 
 (defn- graph-switch
   [graph]
-  (react/clear-query-state!)
   (state/set-current-repo! graph)
   (page-handler/init-commands!)
   ;; load config

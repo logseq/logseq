@@ -15,6 +15,12 @@
 (deftest frontend-outliner-tree-reuses-shared-builder-test
   (let [source (source-for "src/main/frontend/modules/outliner/tree.cljs")]
     (is (string/includes? source "otree/blocks->vec-tree-data"))
+    (doseq [public-api ["(defn blocks->vec-tree"
+                        "(def filter-top-level-blocks"
+                        "(def non-consecutive-blocks->vec-tree"
+                        "(defn get-sorted-block-and-children"]]
+      (is (string/includes? source public-api)
+          (str "Keep the public full-tree adapter API: " public-api)))
     (is (not (string/includes? source "(group-by"))
         "The frontend adapter should not duplicate outliner tree construction.")))
 
@@ -55,6 +61,23 @@
                           :else
                           []))))))]
       (walk root))))
+
+(defn- matching-source-files-under
+  [relative-dir pattern]
+  (->> (cljs-source-files-under relative-dir)
+       (keep (fn [file]
+               (when (re-find pattern
+                              (.toString (fs/readFileSync file "utf8")))
+                 (node-path/relative (.cwd js/process) file))))
+       sort
+       vec))
+
+(defn- matching-source-files
+  [relative-files pattern]
+  (->> (existing-source-files relative-files)
+       (filter #(re-find pattern (source-for %)))
+       sort
+       vec))
 
 (def ^:private direct-ui-db-call-pattern
   #"\b(?:d/(?:entity|pull)|db/(?:entity|pull|get-page|get-block|get-db|q|datoms|entity-db|get-block-parents|get-block-and-children))\b")
@@ -599,57 +622,105 @@
     (is (not (string/includes? page-source ":editor/edit-block-fn"))
         "A later render must not consume a callback owned by another response.")))
 
-(deftest page-route-loads-complete-index-and-uses-bounded-tree-virtualization-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        page-aux-source (subs source
-                              (string/index-of source "(hsx/defc page-aux")
-                              (string/index-of source "(hsx/defc page-cp"))]
-    (is (string/includes? page-aux-source "db-async/<get-page-blocks-tree"))
-    (is (string/includes? page-aux-source ":initial-limit initial-tree-render-limit"))
-    (is (string/includes? page-aux-source "db-async/<get-block-with-children")
-        "Journals still load one complete tree per visible journal.")
-    (is (not (string/includes? source "<get-page-blocks-window")))
-    (is (not (string/includes? source ":virtual/flat-list?")))
-    (is (string/includes? source ":block-tree/index? true")
-        "A page keeps its complete lightweight tree while visible index nodes hydrate themselves.")
-    (is (not (string/includes? source "use-tree-render-window"))
-        "Page rendering must not grow an irreversible prefix as the user scrolls.")
-    (is (not (string/includes? source ":virtual/tree-prefix?")))
-    (is (not (string/includes? source "outliner-tree-spacer")))))
+(deftest page-and-journal-renderers-have-no-window-state-test
+  (let [page-source (source-for "src/main/frontend/components/page.cljs")
+        journal-source (source-for "src/main/frontend/components/journal.cljs")]
+    (doseq [forbidden ["<get-page-blocks-window"
+                       "<get-page-blocks-tree"
+                       "<get-block-with-children"
+                       "initial-tree-render-limit"
+                       "use-tree-render-window"
+                       ":virtual/tree-prefix?"
+                       "outliner-tree-spacer"]]
+      (is (not (string/includes? page-source forbidden))
+          (str "Page rendering must not retain window/tree state: " forbidden)))
+    (is (not (string/includes? journal-source "frontend.components.journal-state"))
+        "Journal rendering must not retain the obsolete visibility state owner.")
+    (is (not (string/includes? journal-source "journal-state/"))
+        "The outer journal virtualizer is the only journal visibility owner.")
+    (is (not (source-file-exists? "src/main/frontend/components/journal_state.cljs"))
+        "The obsolete journal-state namespace must stay deleted.")))
 
-(deftest page-tree-reconciles-worker-deltas-without-full-refresh-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        tree-source (source-for "src/main/frontend/modules/outliner/tree.cljs")
-        loaded-tree-source (subs source
-                                 (string/index-of source "(defn- use-loaded-block-tree")
-                                 (string/index-of source "(hsx/defc page-blocks-cp"))
-        page-root-source (subs source
-                               (string/index-of source "(hsx/defc page-root-body")
-                               (string/index-of source "(hsx/defc page-blocks-cp"))]
-    (is (string/includes? loaded-tree-source "outliner-tree/reconcile-block-tree")
-        "Journal render-data hydration should reconcile into the authoritative tree.")
-    (is (not (string/includes? loaded-tree-source "optimistic"))
-        "Enter and Delete must not maintain a second speculative tree state.")
-    (is (string/includes? tree-source "(defn reconcile-block-tree")
-        "The shared tree reconciler must apply authoritative worker deltas.")
-    (is (string/includes? loaded-tree-source "outliner-tree/resident-block-tree")
-        "A resident journal should render the already-reconciled authoritative tree.")
-    (is (string/includes? loaded-tree-source
-                          "#(or (outliner-tree/resident-block-tree")
-        "Stale hydration data must not be reapplied over a newer resident tree.")
-    (is (string/includes? loaded-tree-source "rfx/use-entity-tree-tx-id")
-        "The authoritative page tree needs its own revision, separate from the page entity.")
-    (is (not (string/includes? loaded-tree-source "rfx/use-entity-tx-id"))
-        "Saving a descendant's content must not wake the page block's entity renderer.")
-    (is (string/includes? loaded-tree-source
-                          "rfx/snapshot-sub [:db/latest-transacted-entity-uuids]")
-        "The tree revision and authoritative delta must come from the same snapshot.")
-    (is (string/includes? page-root-source "rfx/use-entity-children-tx-id page")
-        "Only a direct change to the root child list should wake the page root.")
-    (is (string/includes? loaded-tree-source
-                          "outliner-tree/keep-block-tree-resident! root")
-        "Every mounted page or block-root tree must accumulate worker deltas even when React skips an intermediate snapshot.")
-    (is (not (string/includes? loaded-tree-source "db-async/<get-block-with-children")))))
+(deftest legacy-renderer-transaction-revision-state-is-deleted-test
+  (let [pattern #":db/latest-transacted-entity-uuids|\b(?:rfx/)?use-entity-(?:tree-|children-)?tx-id\b|\b(?:entity|children|tree)-tx-ids\b"
+        matches (concat
+                 (matching-source-files-under "src/main/frontend" pattern)
+                 (matching-source-files ["src/test/frontend/rfx_test.cljs"] pattern))]
+    (is (empty? matches)
+        (str "Delete the renderer transaction-marker owner, hooks, callers, and legacy RFX tests: "
+             (pr-str (vec matches))))))
+
+(deftest renderer-origin-refresh-and-remote-latest-markers-are-deleted-test
+  (let [files ["src/main/frontend/state.cljs"
+               "src/main/frontend/rfx.cljs"
+               "src/main/frontend/db/transact.cljs"
+               "src/main/frontend/modules/outliner/pipeline.cljs"
+               "src/main/frontend/modules/outliner/tree.cljs"
+               "src/main/frontend/handler/events.cljs"
+               "src/main/frontend/worker/db_listener.cljs"]
+        pattern #":ui/handled-by-response\?|direct-response-affected-keys|:skip-refresh\?|\b(?:db-)?react/refresh!\b|take-outliner-op-result!|\*outliner-op-results|transit-safe-tx-meta|:request-id\s+\(:request-id tx-meta\)|latest-remote|remote-latest"
+        matches (matching-source-files files pattern)]
+    (is (empty? matches)
+        (str "Delete renderer origin markers, broad refreshes, and remote-latest state while retaining protocol cursors: "
+             (pr-str matches)))))
+
+(deftest renderer-reactive-query-registry-and-consumers-are-deleted-test
+  (let [pattern #"frontend\.db\.react|\b(?:db-react|react)/(?:q|clear-query-state!|refresh!|run-custom-queries-when-idle!|set-q-collapsed!|sync-query-result!|add-query-component!|remove-query-component!)(?=[\s\(\)\[\]\{\}])|\bdb-hooks/use-query\b|\*query-state\b|component->query-key|query-key->components"
+        matches (->> (matching-source-files-under "src/main/frontend" pattern)
+                     (remove #(string/includes? % "/worker/"))
+                     vec)
+        state-source (source-for "src/main/frontend/state.cljs")
+        rfx-source (source-for "src/main/frontend/rfx.cljs")
+        hooks-source (source-for "src/main/frontend/db/hooks.cljs")
+        query-custom-source (source-for "src/main/frontend/db/query_custom.cljs")
+        query-dsl-source (source-for "src/main/frontend/db/query_dsl.cljs")]
+    (is (empty? matches)
+        (str "Delete the renderer reactive-query registry and every q/use-query consumer: "
+             (pr-str matches)))
+    (is (not (source-file-exists? "src/main/frontend/db/react.cljs"))
+        "The obsolete frontend.db.react owner must be deleted.")
+    (is (not (source-file-exists? "src/test/frontend/db/react_test.cljs"))
+        "Tests owned only by the obsolete reactive-query registry must be deleted.")
+    (is (not (source-file-exists? "src/main/frontend/db/query_react.cljs"))
+        "Advanced one-shot queries must not retain a renderer registry adapter.")
+    (is (not (source-file-exists? "src/test/frontend/db/query_react_test.cljs"))
+        "Tests owned by the registry adapter must be replaced by direct API tests.")
+    (is (not (source-file-exists? "src/main/frontend/worker/react.cljs"))
+        "Generic query affected-key calculation is superseded by explicit resources.")
+    (is (not (source-file-exists? "src/test/frontend/worker/react_test.cljs"))
+        "The obsolete generic affected-key tests must be deleted.")
+    (doseq [forbidden [":db/query-results"
+                       ":reactive/custom-queries"
+                       "get-reactive-custom-queries-chan"]]
+      (is (not (string/includes? state-source forbidden))
+          (str "State retains an obsolete query registry owner: " forbidden)))
+    (is (not (string/includes? rfx-source ":db/query-results"))
+        "RFX must not special-case deleted query state.")
+    (is (not (string/includes? hooks-source "(defn use-query"))
+        "Exact renderer hooks must expose only block, children, and resource subscriptions.")
+    (is (not (string/includes? query-custom-source "frontend.db.query-react"))
+        "One-shot advanced queries must call worker APIs directly.")
+    (is (not (string/includes? query-dsl-source "frontend.db.react"))
+        "One-shot DSL queries must call worker APIs directly.")))
+
+(deftest renderer-resident-tree-and-load-status-owners-are-deleted-test
+  (let [pattern #"resident-block-tree|keep-block-tree-resident|reconcile-resident-block-trees!|reconcile-block-tree|\*resident-block-tree|:block\.temp/load-status"
+        matches (concat
+                 (matching-source-files-under "src/main/frontend" pattern)
+                 (matching-source-files ["src/test/frontend/modules/outliner/tree_test.cljs"] pattern))]
+    (is (empty? matches)
+        (str "Delete resident-tree mutation/reconciliation and renderer load-status payloads: "
+             (pr-str (vec matches))))
+    (is (not (source-file-exists? "src/test/frontend/modules/outliner/tree_test.cljs"))
+        "Tests owned only by the obsolete renderer tree cache must be deleted.")))
+
+(deftest renderer-components-do-not-consume-nested-block-children-test
+  (let [files ["src/main/frontend/components/block.cljs"
+               "src/main/frontend/components/page.cljs"]
+        matches (matching-source-files files #":block/children")]
+    (is (empty? matches)
+        (str "Canonical renderer blocks must not carry or inspect nested :block/children: "
+             (pr-str matches)))))
 
 (deftest indent-outdent-restores-the-editor-from-the-authoritative-commit-test
   (let [block-handler-source (source-for "src/main/frontend/handler/block.cljs")

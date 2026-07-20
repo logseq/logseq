@@ -100,7 +100,6 @@
      {:client-id                             (str (random-uuid))
       :route-match                           nil
       :today                                 nil
-      :reactive/custom-queries               (async/chan 1000)
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online?
@@ -108,7 +107,6 @@
       :me                      nil
       :git/current-repo        current-graph
       :db/restoring?           nil
-      :db/query-results                      {}
       :search/q                              ""
       :search/mode                           nil
       :search/args                           nil
@@ -355,8 +353,7 @@
                                                  3)
       :favorites/updated?                    0
       :db/async-queries                      {}
-      :sync-graph/init?                      nil
-      :db/latest-transacted-entity-uuids     {}})))
+      :sync-graph/init?                      nil})))
 
 (rfx/init! {:initial-value @state
             :registry (atom {})})
@@ -391,10 +388,23 @@
   (set-state! :db/async-queries {}))
 
 (defn set-sync-block-conflicts!
-  [repo block-id conflicts]
-  (set-state! :sync/block-conflicts
-              (or conflicts [])
-              :nested-path [repo (str block-id)]))
+  ([repo conflicts-by-block]
+   (when-not (map? conflicts-by-block)
+     (throw (ex-info "Expected sync conflicts grouped by block"
+                     {:repo repo
+                      :conflicts conflicts-by-block})))
+   (set-state! :sync/block-conflicts
+               conflicts-by-block
+               :nested-path [repo]))
+  ([repo block-id conflicts]
+   (when-not (vector? conflicts)
+     (throw (ex-info "Expected block sync conflicts"
+                     {:repo repo
+                      :block-id block-id
+                      :conflicts conflicts})))
+   (set-state! :sync/block-conflicts
+               conflicts
+               :nested-path [repo (str block-id)])))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -898,14 +908,18 @@ should be done through this fn in order to get global config and config defaults
 
 (defn delete-repo!
   [repo]
-  (swap-state! update-in [:me :repos]
-         (fn [repos]
-           (->> (remove #(or (= (:url repo) (:url %))
-                             (and
-                              (:GraphUUID repo)
-                              (:GraphUUID %)
-                              (= (:GraphUUID repo) (:GraphUUID %)))) repos)
-                (util/distinct-by :url)))))
+  (swap-state!
+   (fn [db]
+     (-> db
+         (update-in [:me :repos]
+                    (fn [repos]
+                      (->> (remove #(or (= (:url repo) (:url %))
+                                        (and
+                                         (:GraphUUID repo)
+                                         (:GraphUUID %)
+                                         (= (:GraphUUID repo) (:GraphUUID %)))) repos)
+                           (util/distinct-by :url))))
+         (update :sync/block-conflicts dissoc (:url repo))))))
 
 (defn set-timestamp-block!
   [value]
@@ -1440,10 +1454,6 @@ should be done through this fn in order to get global config and config defaults
 
 (defn close-dialog! []
   (shui/dialog-close!))
-
-(defn get-reactive-custom-queries-chan
-  []
-  (:reactive/custom-queries @state))
 
 (defn get-left-sidebar-open?
   []

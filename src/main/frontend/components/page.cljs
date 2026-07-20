@@ -1,9 +1,8 @@
 (ns frontend.components.page
   (:require [clojure.string :as string]
             [dommy.core :as dom]
-            [frontend.components.block :as component-block]
+            [frontend.components.block :as block]
             [frontend.components.class :as class-component]
-            [frontend.components.content :as content]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.graph-actions :as graph-actions]
@@ -20,12 +19,13 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.extensions.graph :as graph]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.handler.user :as user-handler]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -50,42 +50,18 @@
   (when util/web-platform?
     (get-in route-match [:parameters :path :block-route-name])))
 
-(defn- open-root-block!
-  [block sidebar? preview?]
-  (when (and
-         (or preview?
-             (not (contains? #{:home :all-journals} (state/get-current-route))))
-         (not sidebar?))
-    (when (and (string/blank? (:block/title block))
-               (not preview?)
-               (not= (:block/uuid block)
-                     (:block/uuid (state/get-edit-block))))
-      (editor-handler/edit-block! block :max))))
-
-(hsx/defc page-blocks-inner
-  [page-e blocks config sidebar? _preview? _block-uuid]
-  (hooks/use-effect! #(open-root-block! page-e sidebar? _preview?) [])
-  (when page-e
-    (let [hiccup (component-block/->hiccup blocks config {})]
-      [:div.page-blocks-inner {:style {:min-height 29}}
-       ^{:key (str (:block/uuid page-e) "-hiccup")}
-       [content/content (str (:block/uuid page-e))
-        {:hiccup   hiccup
-         :sidebar? sidebar?}]])))
-
-(declare page-cp)
+(declare page-cp page-inner)
 
 (hsx/defc add-button-inner
-  [block {:keys [container-id editing? block?] :as config*}]
+  [block child-uuids {:keys [container-id editing? block?] :as config*}]
   (let [*ref (hooks/use-ref nil)
-        children (:block/children block)
-        has-children? (seq children)
+        has-children? (seq child-uuids)
         page? (entity/page? block)
         opacity-class (cond
                         (and editing? has-children?) "opacity-0"
                         (and (util/mobile?)
-                             (or (some-> (:block/title (last (ldb/sort-by-order children))) string/blank?)
-                                 (and (not has-children?) (string/blank? (:block/title block)))))
+                             (not has-children?)
+                             (string/blank? (:block/title block)))
                         "opacity-0"
                         (util/mobile?) "opacity-50"
                         has-children? "opacity-0"
@@ -134,196 +110,114 @@
           [:span.bullet]]]]])))
 
 (hsx/defc add-button
-  [block config]
+  [block child-uuids config]
   (let [editing? (rfx/use-sub [:editor/editing?])]
-    (add-button-inner block (assoc config :editing? editing?))))
+    (add-button-inner block child-uuids (assoc config :editing? editing?))))
 
-(defn- page-children->tree
-  [block children]
-  (let [tree (outliner-tree/blocks->vec-tree (cons block children) (:block/uuid block))]
-    (if (entity/page? block)
-      tree
-      (:block/children (first tree)))))
+(defn page-membership-resource-key
+  [page-uuid membership-kind user-uuid]
+  (case membership-kind
+    :normal nil
+    :class [:page-membership page-uuid :class]
+    :property [:page-membership page-uuid :property]
+    :quick-add (when (uuid? user-uuid)
+                 [:page-membership page-uuid :quick-add user-uuid])
+    (throw (ex-info "Unsupported page membership kind"
+                    {:membership-kind membership-kind}))))
 
-(defn- blocks-missing-render-data
-  [root]
-  (->> (tree-seq (comp seq :block/children) :block/children root)
-       (remove #(contains? % :block.temp/display-properties))
-       (keep :db/id)
-       vec))
-
-(defn- use-journal-render-blocks
-  [{:keys [journals? page hydration-ready? keep-tree-resident?
-           page-id-uuid-or-name]}]
-  (let [*render-blocks (hooks/use-memo #(atom nil) [])
-        [render-blocks] (hooks/use-atom *render-blocks)]
-    (hooks/use-effect!
-     (fn []
-       (let [cancelled? (atom false)]
-         (when (and journals? page hydration-ready? (nil? render-blocks))
-           (let [ids (blocks-missing-render-data page)]
-             (p/let [results (if (seq ids)
-                               (db-async/<get-blocks
-                                (state/get-current-repo)
-                                ids
-                                {:render-data? true
-                                 :block-metadata? true})
-                               [])]
-               (when-not @cancelled?
-                 (let [blocks (mapv :block results)]
-                   (reset! *render-blocks blocks)
-                   (when keep-tree-resident?
-                     (when-let [resident-root (or (outliner-tree/resident-block-tree
-                                                   page-id-uuid-or-name)
-                                                  page)]
-                       (outliner-tree/keep-block-tree-resident!
-                        (outliner-tree/reconcile-block-tree resident-root blocks #{})))))))))
-         #(reset! cancelled? true)))
-     [journals? (:db/id page) hydration-ready? render-blocks
-      keep-tree-resident? page-id-uuid-or-name])
-    [render-blocks *render-blocks]))
-
-(defn- use-loaded-block-tree
-  [block* render-blocks]
-  (let [[stored-root set-stored-root!] (hooks/use-state block*)
-        tree-owner (or (:block/page block*) block*)
-        root-tx-id (rfx/use-entity-tree-tx-id tree-owner)
-        latest-tx (when root-tx-id
-                    (rfx/snapshot-sub [:db/latest-transacted-entity-uuids]))
-        root-from-tx (hooks/use-memo
-                      #(if (= root-tx-id (:tx-id latest-tx))
-                         (outliner-tree/reconcile-block-tree stored-root
-                                                             (:updated-blocks latest-tx)
-                                                             (:deleted-ids latest-tx))
-                         stored-root)
-                      [(:block/uuid block*) root-tx-id])
-        root (hooks/use-memo
-              #(or (outliner-tree/resident-block-tree (:block/uuid block*))
-                   (if (some? render-blocks)
-                     (outliner-tree/reconcile-block-tree root-from-tx render-blocks #{})
-                     root-from-tx))
-              [root-from-tx render-blocks])]
-    (hooks/use-layout-effect!
-     (fn []
-       (outliner-tree/keep-block-tree-resident! root)
-       nil)
-     [root])
-    (hooks/use-effect!
-     (fn []
-       (set-stored-root! (outliner-tree/index-block-tree block*))
-       nil)
-     [(:block/uuid block*)])
-    (hooks/use-effect!
-     (fn []
-       (set-stored-root! root)
-       nil)
-     [root-tx-id render-blocks])
-    root))
-
-(def ^:private initial-tree-render-limit 25)
-
-(defn- visible-page-children
-  [page children quick-add-children]
+(defn- page-membership-kind
+  [page user-uuid]
   (cond
-    (= (:block/title page) common-config/quick-add-page-name)
-    (or quick-add-children children)
+    (entity/class? page) :class
+    (entity/property? page) :property
+    (and (= (:block/title page) common-config/quick-add-page-name)
+         (uuid? user-uuid)) :quick-add
+    :else :normal))
 
-    (entity/class? page)
-    (remove (fn [block]
-              (contains? (set (map :db/id (:block/tags block))) (:db/id page)))
-            children)
+(defn- page-render-config
+  [page option document-mode?]
+  (merge {:id (str (:block/uuid page))
+          :db/id (:db/id page)
+          :block? (not (entity/page? page))
+          :editor-box editor/box
+          :document/mode? document-mode?
+          :library? (ldb/library? page)}
+         option))
 
-    (entity/property? page)
-    (remove (fn [block]
-              (some? (get block (:db/ident page))))
-            children)
-
-    :else
-    children))
-
-(hsx/defc page-root-body
-  [page initial-children config sidebar? hide-add-button? journals? quick-add-children]
-  (let [_children-tx-id (rfx/use-entity-children-tx-id page)
-        page (or (outliner-tree/resident-block-tree (:block/uuid page)) page)
-        full-children (:block/children page)
-        total-count (count full-children)
-        mobile-length-limit 50
-        [children more?] (if (and (> total-count mobile-length-limit)
-                                 (util/mobile?)
-                                 journals?)
-                           [(take mobile-length-limit full-children) true]
-                           [full-children false])
-        children (visible-page-children page (or children initial-children)
-                                        quick-add-children)]
-    (if (and (not config/publishing?)
-             (zero? total-count))
-      (add-button page config)
+(hsx/defc normal-page-root
+  [page-uuid config hide-add-button?]
+  (let [page (db-hooks/use-block page-uuid)
+        child-uuids (db-hooks/use-children page-uuid)]
+    (when page
       [:div.relative
-       (page-blocks-inner page children config sidebar? false (:block/uuid page))
-       (when more?
-         (shui/button {:variant :ghost
-                       :class "text-muted-foreground w-full"
-                       :on-click (fn []
-                                   (route-handler/redirect-to-page! (:block/uuid page)))}
-                      (t :ui/load-more)))
-       (when (and (not more?)
-                  (not hide-add-button?))
-         (add-button page config))])))
+       (when (seq child-uuids)
+         (block/page-root-virtual-list config child-uuids))
+       (when (and (not config/publishing?)
+                  (or (empty? child-uuids)
+                      (not hide-add-button?)))
+         (add-button page child-uuids config))])))
+
+(hsx/defc special-page-root
+  [page-uuid membership-kind user-uuid config hide-add-button?]
+  (let [page (db-hooks/use-block page-uuid)
+        membership-key (page-membership-resource-key page-uuid membership-kind user-uuid)
+        child-uuids (db-hooks/use-resource membership-key)]
+    (when page
+      [:div.relative
+       (when (seq child-uuids)
+         (block/page-root-virtual-list config child-uuids))
+       (when (and (not config/publishing?)
+                  (or (empty? child-uuids)
+                      (not hide-add-button?)))
+         (add-button page child-uuids config))])))
+
+(hsx/defc block-route-root
+  [block-uuid block config hide-add-button?]
+  (let [child-uuids (db-hooks/use-children block-uuid)]
+    [:div.relative
+     (block/plain-block-list config [block-uuid])
+     (when-not hide-add-button?
+       (add-button block child-uuids config))]))
 
 (hsx/defc page-blocks-cp
-  [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
+  [page {:keys [hide-add-button? on-page-blocks-rendered] :as option}]
   (hooks/use-effect!
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [block (use-loaded-block-tree block* (:journal/render-blocks config))
-        *block-tree (hooks/use-ref block)
-        quick-add-page? (= (:block/title block) common-config/quick-add-page-name)
-        [quick-add-children set-quick-add-children!] (hooks/use-state nil)]
-    (hooks/set-ref! *block-tree block)
-    (hooks/use-effect!
-     (fn []
-       (if quick-add-page?
-         (p/let [blocks (editor-handler/<get-user-quick-add-blocks)]
-           (set-quick-add-children! blocks))
-         (set-quick-add-children! nil)))
-     [quick-add-page? (:db/id block)])
-    (when block
-      (let [block-id (:block/uuid block)
-            block? (not (entity/page? block))
-            config (cond-> (assoc config
-                                  :library? (ldb/library? block)
-                                  :block-tree/complete? true
-                                  :block-tree/root* *block-tree)
-                     (:block.temp/index-tree? block)
-                     (assoc :block-tree/index? true))
-            document-mode? (rfx/use-sub [:document/mode?])]
-        (if block?
-          (let [hiccup-config (merge
-                               {:id (str (:block/uuid block))
-                                :db/id (:db/id block)
-                                :block? block?
-                                :editor-box editor/box
-                                :document/mode? document-mode?}
-                               config)
-                config hiccup-config
-                blocks [block]]
+  (let [document-mode? (rfx/use-sub [:document/mode?])
+        config (page-render-config page option document-mode?)
+        page-uuid (:block/uuid page)
+        user-uuid-string (user-handler/user-uuid)
+        user-uuid (when (util/uuid-string? user-uuid-string)
+                    (uuid user-uuid-string))
+        membership-kind (page-membership-kind page user-uuid)]
+    (if (entity/page? page)
+      (if (= :normal membership-kind)
+        (normal-page-root page-uuid config hide-add-button?)
+        (special-page-root page-uuid membership-kind user-uuid config
+                           hide-add-button?))
+      (block-route-root page-uuid page config hide-add-button?))))
+
+(hsx/defc journal-page
+  [journal-uuid option]
+  (let [page (db-hooks/use-block journal-uuid)
+        child-uuids (db-hooks/use-children journal-uuid)
+        document-mode? (rfx/use-sub [:document/mode?])]
+    (when page
+      (let [config (page-render-config page option document-mode?)
+            page-blocks-content
             [:div.relative
-             (page-blocks-inner block blocks config sidebar? false block-id)
-             (when-not hide-add-button?
-               (add-button block config))])
-          (let [hiccup-config (merge
-                               {:id (str (:block/uuid block))
-                                :db/id (:db/id block)
-                                :block? false
-                                :editor-box editor/box
-                                :document/mode? document-mode?}
-                               config)]
-            (page-root-body block (:block/children block) hiccup-config sidebar?
-                            hide-add-button? journals? quick-add-children)))))))
+             (block/plain-block-list config child-uuids)
+             (when-not (:hide-add-button? option)
+               (add-button page child-uuids config))]]
+        (page-inner (assoc option
+                           :page page
+                           :journals? true
+                           :page-blocks-content page-blocks-content))))))
 
 (hsx/defc today-queries
-  [repo today? sidebar?]
+  [repo page today? sidebar?]
   (when (and today? (not sidebar?))
     (let [queries (get-in (state/config-for-repo (rfx/use-sub [:config]) repo)
                           [:default-queries :journals])]
@@ -335,11 +229,13 @@
                [:<>
                 (ui/catch-error
                  (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
-                 (query/custom-query (component-block/wrap-query-components
+                 (query/custom-query (block/wrap-query-components
                                       {:editor-box editor/box
                                        :page page-cp
                                        :built-in-query? true
-                                       :today-query? true})
+                                       :today-query? true
+                                       :current-page-title (:block/title page)
+                                       :today-day (date/today-journal-day)})
                                      query'))]
                {:key (str repo "-custom-query-" (:query query'))})))]))))
 
@@ -396,7 +292,7 @@
                                                                   :page-entity page})))}
 
      [:div.w-full.relative
-      (component-block/block-container
+      (block/block-container
        {:id (str (:block/uuid page))
         :page-title? true
         :page-title-actions-cp (when (and with-actions?
@@ -437,14 +333,6 @@
   [route-match page-name route-block-uuid]
   (when-let [path-page-name (get-path-page-name route-match page-name route-block-uuid)]
     (util/page-name-sanity-lc path-page-name)))
-
-(hsx/defc on-mounted
-  [child on-mounted-fn]
-  (hooks/use-effect!
-   (fn []
-     (when on-mounted-fn
-       (on-mounted-fn))))
-  child)
 
 (hsx/defc lsp-pagebar-slot
   []
@@ -490,13 +378,11 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (on-mounted (objects/class-objects page opts)
-                     (:on-tagged-nodes-rendered opts))))
+         (objects/class-objects page opts)))
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (on-mounted (objects/property-related-objects page opts)
-                     (:on-tagged-nodes-rendered opts)))))]))
+         (objects/property-related-objects page opts))))]))
 
 (hsx/defc sidebar-page-properties
   [config page]
@@ -512,22 +398,16 @@
 
      (when-not collapsed?
        [:<>
-        (component-block/db-properties-cp config page {:sidebar-properties? true})
+        (block/db-properties-cp config page {:sidebar-properties? true})
         [:hr.my-4]])]))
 
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (rfx/use-sub [:git/current-repo])
-        linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
-        linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
-        [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
-        [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
-        outer-blocks-rendered (:on-page-blocks-rendered option)
         container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         container-id (or (:container-id option) (state/get-container-id container-key))
         repo (or repo current-repo)
-        page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
         block? (some? (:block/page page))
@@ -546,14 +426,7 @@
         page-display-title (when (entity/page? page)
                              (or (route-handler/built-in-page-title (:block/title page))
                                  (:block/title page)))
-        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
-        blocks-ready? (or journals?
-                          (= page-id linked-refs-blocks-ready-page-id))
-        tagged-ready? (or (not show-tabs?)
-                          (= page-id linked-refs-tagged-ready-page-id)
-                          ;; Fallback to avoid blocking refs forever when tab content is reused.
-                          (= page-id linked-refs-blocks-ready-page-id))
-        linked-refs-ready? (and blocks-ready? tagged-ready?)]
+        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))]
     (if page
       (when (or title block?)
         (if recycled?
@@ -593,7 +466,7 @@
                  (property-component/bidirectional-properties-area page config))])
 
             (when (and block? (not sidebar?))
-              (component-block/breadcrumb {} repo (:block/uuid page) {}))
+              (block/breadcrumb {} repo (:block/uuid page) {}))
 
             (when (ldb/library? page)
               (library/add-pages page))
@@ -604,9 +477,7 @@
 
             (when show-tabs?
               (tabs page {:current-page? option
-                          :sidebar? sidebar?
-                          :on-tagged-nodes-rendered #(when-not (= linked-refs-tagged-ready-page-id page-id)
-                                                       (reset! linked-refs-tagged-ready-page-id* page-id))}))
+                          :sidebar? sidebar?}))
 
             (when (not tag-dialog?)
               (if recycle-page?
@@ -614,19 +485,19 @@
                 [:div.ls-page-blocks
                  {:style {:margin-left (if (util/mobile?) 0 -20)}
                   :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
-                 (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                     :on-page-blocks-rendered #(do
-                                                                                (when-not (= linked-refs-blocks-ready-page-id page-id)
-                                                                                  (reset! linked-refs-blocks-ready-page-id* page-id))
-                                                                                (when outer-blocks-rendered
-                                                                                  (outer-blocks-rendered)))
-                                                     :container-id container-id}))]))]
+                 (or (:page-blocks-content option)
+                     (page-blocks-cp
+                      page
+                      (merge option
+                             {:sidebar? sidebar?
+                              :on-page-blocks-rendered (:on-page-blocks-rendered option)
+                              :container-id container-id})))]))]
 
            (when-not (or preview? recycle-page?)
              [:div.flex.flex-col.gap-8
               {:class (when-not (util/mobile?) "ml-1")}
               (when today?
-                (today-queries repo today? sidebar?))
+                (today-queries repo page today? sidebar?))
 
               (when today?
                 (scheduled/scheduled-and-deadlines title))
@@ -635,12 +506,11 @@
                 (class-component/class-children page))
 
               ;; referenced blocks
-              (when (and linked-refs-ready?
-                         (not tag-dialog?)
+              (when (and (not tag-dialog?)
                          (not linked-refs?))
                 [:div.fade-in.delay {:key "page-references"}
                  ^{:key (str title "-refs")}
-                 [reference/references page {:sidebar? sidebar?
+                 [reference/references (:block/uuid page) {:sidebar? sidebar?
                                              :journals? journals?
                                              :refs-count (:refs-count option)
                                              :linked-refs-section? true}]])
@@ -651,132 +521,44 @@
                             home?
                             class-page? property-page?)
                 [:div.fade-in.delay {:key "page-unlinked-references"}
-                 (reference/unlinked-references page {:sidebar? sidebar?})])])]))
+                 (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])])]))
       [:div.opacity-75 (t :page/not-found)])))
 
-(defn- render-loaded-page
-  [option page refs-count journals? journal-render-blocks]
-  (let [rendered-page (some #(when (= (:db/id page) (:db/id %)) %)
-                            journal-render-blocks)
-        page' (if rendered-page (merge page rendered-page) page)]
-    (page-inner (cond-> (assoc option
-                               :page page'
-                               :selection/block-ids (mapv :block/uuid (:block/children page'))
-                               :refs-count refs-count)
-                  journals?
-                  (assoc :block-metadata-ready? false
-                         :journal/render-data-ready? (some? journal-render-blocks)
-                         :journal/render-blocks journal-render-blocks)))))
+(defn- page-resource-key
+  [option]
+  (let [route-page-name (get-page-name option)
+        block-route-name (get-block-route-name option)
+        page-lookup (or (:block/uuid option)
+                        (some-> (:page option) :block/uuid)
+                        (get-sanity-page-name option (:page-name option) nil))]
+    (cond
+      (and route-page-name block-route-name)
+      [:route-block route-page-name block-route-name]
 
-(defn- use-route-block-uuid
-  [route-page-name block-route-name]
-  (let [[route-block-uuid set-route-block-uuid!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (if (and block-route-name route-page-name)
-         (p/let [block (db-async/<get-block-by-page-name-and-block-route-name
-                        (state/get-current-repo)
-                        route-page-name
-                        block-route-name)]
-           (set-route-block-uuid! (some-> block :block/uuid str)))
-         (set-route-block-uuid! nil))
-       nil)
-     [route-page-name block-route-name])
-    route-block-uuid))
+      (or (uuid? page-lookup)
+          (and (string? page-lookup) (not (string/blank? page-lookup))))
+      [:page-identity page-lookup]
+
+      :else nil)))
+
+(hsx/defc loaded-page
+  [option page-uuid]
+  (let [page (db-hooks/use-block page-uuid)
+        refs-count (db-hooks/use-resource [:block-ref-count page-uuid])]
+    (when page
+      (page-inner (assoc option
+                         :page page
+                         :refs-count refs-count)))))
+
+(hsx/defc page-resource
+  [option resource-key]
+  (when-let [page-uuid (db-hooks/use-resource resource-key)]
+    (loaded-page option page-uuid)))
 
 (hsx/defc page-aux
   [option]
-  (let [page-name (:page-name option)
-        provided-page (:page option)
-        route-page-name (get-page-name option)
-        block-route-name (get-block-route-name option)
-        route-block-uuid (use-route-block-uuid route-page-name block-route-name)
-        page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
-                                 (get-sanity-page-name option page-name route-block-uuid))
-        journals? (:journals? option)
-        journal-hydration-ready? (:block-metadata-ready? option)
-        keep-tree-resident? (:keep-tree-resident? option)
-        resident-page (when keep-tree-resident?
-                        (outliner-tree/resident-block-tree page-id-uuid-or-name))
-        preview-or-sidebar? (or (:preview? option) (:sidebar? option))
-        page-uuid? (when page-name (util/uuid-string? page-name))
-        *loading? (hooks/use-memo #(atom (nil? resident-page)) [])
-        *page (hooks/use-memo #(atom resident-page) [])
-        *refs-count (hooks/use-memo #(atom nil) [])
-        [loading?] (hooks/use-atom *loading?)
-        [page] (hooks/use-atom *page)
-        [refs-count] (hooks/use-atom *refs-count)
-        page (or provided-page page)
-        loading? (if provided-page false loading?)
-        [journal-render-blocks *journal-render-blocks]
-        (use-journal-render-blocks
-         {:journals? journals?
-          :page page
-          :hydration-ready? journal-hydration-ready?
-          :keep-tree-resident? keep-tree-resident?
-          :page-id-uuid-or-name page-id-uuid-or-name})]
-    (hooks/use-effect!
-     (fn []
-       (when-not provided-page
-         (if resident-page
-           (do
-             (reset! *loading? false)
-             (reset! *page resident-page))
-           (do
-             (reset! *loading? true)
-             (reset! *journal-render-blocks nil)
-             (p/let [repo (state/get-current-repo)
-                     result (if journals?
-                              (db-async/<get-block-with-children
-                               repo
-                               page-id-uuid-or-name
-                               {:all? true
-                                :children? true
-                                :render-data? false
-                                :root-render-data? true
-                                :block-metadata? true
-                                :include-collapsed-children? true})
-                              (db-async/<get-page-blocks-tree
-                               repo
-                               page-id-uuid-or-name
-                               {:initial-limit initial-tree-render-limit}))
-                     {:keys [block children index blocks]} result
-                     page-block (when block
-                                  (let [children (page-children->tree block (or index children))
-                                        root (cond-> (assoc block :block/children children)
-                                               index (assoc :block.temp/index-tree? true))
-                                        root (if (seq blocks)
-                                               (outliner-tree/reconcile-block-tree
-                                                (outliner-tree/index-block-tree root)
-                                                blocks
-                                                #{})
-                                               root)]
-                                    (outliner-tree/index-block-tree root)))
-                     refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
-                                  (if (contains? page-block :block.temp/refs-count)
-                                    (:block.temp/refs-count page-block)
-                                    (db-async/<get-block-refs-count repo (:db/id page-block))))
-                     page-block (cond-> page-block
-                                  (some? refs-count)
-                                  (assoc :block.temp/refs-count refs-count))]
-               (when (and journals? keep-tree-resident?)
-                 (outliner-tree/keep-block-tree-resident! page-block))
-               (reset! *loading? false)
-               (reset! *page page-block)
-               (reset! *refs-count refs-count)
-               (when page-block
-                 (when-not (or preview-or-sidebar? (:tag-dialog? option))
-                   (if-let [page-uuid (and (not (:db/id option))
-                                           page-name
-                                           (not page-uuid?)
-                                           (:block/uuid page-block))]
-                     (route-handler/redirect-to-page! (str page-uuid) {:push false})
-                     (route-handler/update-page-title-and-label! (state/get-route-match)))))))))
-       #(state/set-state! :editor/virtualized-scroll-fn nil))
-     [provided-page page-id-uuid-or-name preview-or-sidebar? (:tag-dialog? option)
-      journals? keep-tree-resident? resident-page])
-    (when (and page (not loading?))
-      (render-loaded-page option page refs-count journals? journal-render-blocks))))
+  (when-let [resource-key (page-resource-key option)]
+    (page-resource option resource-key)))
 
 (hsx/defc page-cp
   [option]
@@ -785,7 +567,7 @@
     ^{:key (str
             (state/get-current-repo)
             "-"
-            (or (:db/id option) page-name))}
+            (or (:block/uuid option) (:db/id option) page-name))}
     [page-aux (assoc option :page-name page-name)]))
 
 (hsx/defc page-container
@@ -864,7 +646,7 @@
       (for [page-item pages]
         [:li
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}
-          (component-block/page-cp {} page-item)]])]
+          (block/page-cp {} page-item)]])]
 
      [:p.px-2.opacity-50 [:small (t :page.delete/total (count pages))]]
 

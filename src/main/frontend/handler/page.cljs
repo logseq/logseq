@@ -6,7 +6,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
-            [frontend.db.react :as react]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -347,7 +346,6 @@
           (p/let [result (<create! title {:redirect? false
                                           :split-namespace? false
                                           :today-journal? true})]
-            (react/refresh! (state/get-current-repo) [[:frontend.worker.react/journals]])
             (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
             result))))))
 

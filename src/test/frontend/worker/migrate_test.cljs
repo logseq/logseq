@@ -3,8 +3,10 @@
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
+            [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- entities-with
   [db attr]
@@ -113,6 +115,21 @@
     (is (= graph-created-at
            (:kv/value (d/entity @conn :logseq.kv/graph-created-at)))
         "Graph created at not changed by fn")))
+
+(deftest ensure-built-in-data-live-repair-assigns-canonical-revision
+  (let [conn (d/create-conn db-schema/schema)
+        pipeline-before @ldb/*transact-pipeline-fn]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [[:db/retractEntity :logseq.property/icon]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (db-migrate/ensure-built-in-data-exists! conn)
+      (let [icon-property (d/entity @conn :logseq.property/icon)]
+        (is (some? icon-property))
+        (is (nat-int? (:block/tx-id icon-property))
+            "A recreated built-in is immediately readable through the canonical API."))
+      (finally
+        (reset! ldb/*transact-pipeline-fn pipeline-before)))))
 
 (deftest migrate-65-25-deletes-legacy-properties
   (let [conn (d/create-conn legacy-65-24-schema)

@@ -35,7 +35,6 @@
 
 (use-fixtures :each
   disable-browser-fns
-  test-helper/react-components
   #(test-helper/start-and-destroy-db
     %
     {:build-init-data? false

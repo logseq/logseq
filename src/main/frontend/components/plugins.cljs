@@ -1574,7 +1574,7 @@
                (#(if editor-active?
                    (.add % "is-active")
                    (.remove % "is-active"))))
-       (when-let [cm (hooks/deref *cm)]
+       (when-let [^js cm (hooks/deref *cm)]
          (.refresh cm)
          (.focus cm)
          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
@@ -1583,14 +1583,14 @@
     (hooks/use-effect!
      (fn []
        (let [t (js/setTimeout
-                #(when-let [^js cm (some-> (hooks/deref *el)
-                                           (.closest ".ui-fenced-code-wrap")
-                                           (.querySelector ".CodeMirror")
-                                           (.-CodeMirror))]
-                   (hooks/set-ref! *cm cm)
-                   (doto cm
-                     (.on "change" (fn []
-                                     (some-> cm (.getDoc) (.getValue) (set-content1!))))))
+                #(let [^js el (hooks/deref *el)
+                       ^js wrapper (when el (.closest el ".ui-fenced-code-wrap"))
+                       ^js cm-element (when wrapper (.querySelector wrapper ".CodeMirror"))
+                       ^js cm (when cm-element (.-CodeMirror cm-element))]
+                   (when cm
+                     (hooks/set-ref! *cm cm)
+                     (.on cm "change" (fn []
+                                        (some-> cm (.getDoc) (.getValue) (set-content1!))))))
                   ;; wait for the cm loaded
                 1000)]
          #(js/clearTimeout t)))

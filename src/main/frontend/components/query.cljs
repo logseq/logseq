@@ -3,14 +3,13 @@
             [frontend.components.query.result :as query-result]
             [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.react :as react]
+            [frontend.date :as date]
             [frontend.extensions.sci :as sci]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))
@@ -31,37 +30,16 @@
    (or built-in-query?
        (built-in-custom-query? repo-config q))))
 
-(defn- grouped-by-page-result?
-  [result group-by-page?]
-  (let [first-group (first result)
-        first-page (first first-group)
-        first-block (first (second first-group))]
-    (boolean
-     (and group-by-page?
-          (seq result)
-          (coll? first-group)
-          (or (:block/name first-page)
-              (:db/id first-page))
-          (:block/uuid first-block)))))
-
 (hsx/defc custom-query-inner
   [{:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
-   {:keys [query-error-atom
-           current-block
+   {:keys [current-block
            view-f
            result
            group-by-page?]}]
   (let [{:keys [->hiccup]} config
-        *query-error query-error-atom
-        only-blocks? (:block/uuid (first result))
-        blocks-grouped-by-page? (grouped-by-page-result? result group-by-page?)]
-    (if @*query-error
-      (do
-        (log/error :exception @*query-error)
-        [:div.warning.my-1 (t :query/error)
-         [:p (.-message @*query-error)]])
-      [:div.custom-query-results
-       (cond
+        only-blocks? (and (seq result) (every? uuid? result))]
+    [:div.custom-query-results
+     (cond
          (and (seq result) view-f)
          (let [result (try
                         (sci/call-fn view-f result)
@@ -71,7 +49,7 @@
                           [:div (t :query/custom-view-error (str error))]))]
            (util/hiccup-keywordize result))
 
-        (not (:built-in-query? config))
+        (and (not (:built-in-query? config)) only-blocks?)
         (when-not (string/blank? query)
           (query-view/query-result (assoc config
                                           :id (str (:block/uuid current-block))
@@ -79,17 +57,17 @@
                                    current-block result))
 
          ;; Normally displays built-in-query results
-         (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+         only-blocks?
          (->hiccup result
                    (assoc config
                           :custom-query? true
-                          :current-block (:db/id current-block)
+                          :current-block (:block/uuid current-block)
                           :dsl-query? dsl-query?
                           :query query
                           :breadcrumb-show? (if (some? breadcrumb-show?)
                                               breadcrumb-show?
                                               true)
-                          :group-by-page? blocks-grouped-by-page?
+                          :group-by-page? group-by-page?
                           :ref? true)
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
@@ -110,8 +88,8 @@
              (= query "(and)"))
          nil
 
-         :else
-         [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])])))
+       :else
+       [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])]))
 
 (hsx/defc query-title
   [config {:keys [title title-key title-icon]} {:keys [result-count]}]
@@ -148,38 +126,32 @@
     collapsed?'))
 
 (hsx/defc custom-query*
-  [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
+  [{:keys [dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
-  (let [*result (hooks/use-memo #(atom nil) [])
-        repo-config (state/config-for-repo (rfx/use-sub [:config])
+  (let [repo-config (state/config-for-repo (rfx/use-sub [:config])
                                            (state/get-current-repo))
+        result-transform (:result-transform q)
+        q (if (keyword? result-transform)
+            (if-let [transform (get-in repo-config
+                                       [:query/result-transforms result-transform])]
+              (assoc q :result-transform transform)
+              (throw (ex-info "Missing query result transform"
+                              {:result-transform result-transform})))
+            q)
+        config (if (some #{:today} (:inputs q))
+                 (assoc config :today-day (date/today-journal-day))
+                 config)
         *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
         [collapsed?] (hooks/use-atom *collapsed?)
-        [k result] (query-result/run-custom-query config q *result *query-error)
-        result (some->> result
-                        (query-result/transform-query-result config q))
-        _ (when k
-            (react/set-q-collapsed! k collapsed?))
-        ;; Remove hidden pages from result
-        result (if (and (coll? result) (not (map? result)))
-                 (->> result
-                      (remove (fn [b]
-                                (when (and (map? b) (:block/title b))
-                                  (ldb/hidden? b))))
-                      (remove (fn [b]
-                                (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
-                 result)
+        result (query-result/use-query-result config q)
         ;; Args for displaying query header and results
         view-fn (if (keyword? view) (get-in repo-config [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
-        page-list? (and (seq result) (some? (:block/name (first result))))
-        opts {:query-error-atom *query-error
-              :current-block current-block
+        opts {:current-block current-block
               :table? table?
               :view-f view-f
-              :page-list? page-list?
               :result result
-              :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
+              :group-by-page? false}]
        (if (:custom-query? config)
          ;; Don't display recursive results when query blocks are a query result
          [:code (if dsl-query?
@@ -207,8 +179,7 @@
    {:keys [collapsed?] :as q}]
   (ui/catch-error
    (ui/block-error (t :query/error) {:content (:query q)})
-   (let [*query-error (hooks/use-memo #(atom nil) [])
-         repo-config (state/config-for-repo (rfx/use-sub [:config])
+   (let [repo-config (state/config-for-repo (rfx/use-sub [:config])
                                             (state/get-current-repo))
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
@@ -226,7 +197,6 @@
                         :current-block current-block
                         :current-block-uuid current-block-uuid
                         :collapsed? collapsed?'
-                        :built-in-query? (resolve-built-in-query? repo-config built-in-query? q)
-                        :*query-error *query-error)]
+                        :built-in-query? (resolve-built-in-query? repo-config built-in-query? q))]
      (when (or built-in-collapsed? (not collapsed?'))
        (custom-query* config' q)))))

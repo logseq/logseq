@@ -50,7 +50,7 @@
    {:file "src/main/frontend/rfx.cljs"
     :vars ["use-sub"]}
    {:file "src/main/frontend/db/hooks.cljs"
-    :vars ["use-query"]}])
+    :vars ["use-block" "use-children" "use-resource"]}])
 
 (defn- repo-root
   []
@@ -185,26 +185,17 @@
         (is (string/includes? source "(rfx/provider (page/current-page))")
             (str file " should wrap current-page with rfx/provider"))))))
 
-(deftest db-query-hook-uses-rfx-subscriptions
-  (let [hooks-source (source-for "src/main/frontend/db/hooks.cljs")
-        react-source (source-for "src/main/frontend/db/react.cljs")]
-    (testing "UI-facing DB query hook subscribes through RFX"
-      (is (string/includes? hooks-source "[frontend.rfx :as rfx]"))
-      (is (string/includes? hooks-source "(rfx/use-sub [:db/query-results query-key])"))
-      (is (not (string/includes? hooks-source "hooks/use-state")))
-      (is (not (string/includes? hooks-source "add-watch"))))
-
-    (testing "DB query refresh writes query results into RFX state"
-      (is (string/includes? react-source "[frontend.state :as state]"))
-      (is (string/includes? react-source "sync-query-result!"))
-      (is (string/includes? react-source "(state/set-state! :db/query-results"))
-      (is (string/includes? react-source ":nested-path [k]")))
-
-    (testing "DB query render path does not write RFX state"
-      (is (not (string/includes? react-source "(doto (set-query-key! result-atom k)"))
-          "Cached react/q calls should only tag the atom during render.")
-      (is (not (re-find #"set! \(\.-state result-atom\) result'\s+\(sync-query-result!" react-source))
-          "Synchronous react/q calls should let use-query sync from an effect."))))
+(deftest db-hooks-expose-only-exact-renderer-subscriptions
+  (let [hooks-source (source-for "src/main/frontend/db/hooks.cljs")]
+    (doseq [hook ["use-block" "use-children" "use-resource"]]
+      (is (string/includes? hooks-source (str "(defn " hook))))
+    (doseq [forbidden ["frontend.rfx"
+                       "frontend.db.react"
+                       "use-query"
+                       ":db/query-results"
+                       "hooks/use-effect"]]
+      (is (not (string/includes? hooks-source forbidden))
+          (str "Exact DB hooks retain a query registry path: " forbidden)))))
 
 (deftest frontend-state-flows-derive-from-rfx
   (let [flows-source (source-for "src/main/frontend/flows.cljs")

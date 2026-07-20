@@ -1,6 +1,7 @@
 (ns logseq.e2e.rtc-extra-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures run-test]]
+   [clojure.test :refer [deftest testing use-fixtures]]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.const :refer [*page1 *page2]]
@@ -12,8 +13,7 @@
    [logseq.e2e.property-basic-test :as property-basic-test]
    [logseq.e2e.rtc :as rtc :refer [validate-graphs-in-2-pw-pages]]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once
   fixtures/open-2-pages
@@ -149,6 +149,38 @@
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-graphs-in-2-pw-pages)))))
+
+(deftest rtc-property-update-rerenders-mounted-block
+  (testing "a remote property transaction rerenders the mounted block"
+    (let [title "rtc live property block"
+          property-name "rtc-live-property"
+          property-value "rtc remote property value"
+          *block-uuid (atom nil)
+          {:keys [remote-tx]}
+          (w/with-page @*page1
+            (rtc/with-wait-tx-updated
+              (let [block (ls-api-call! :editor.appendBlockInPage title)]
+                (reset! *block-uuid (get block "uuid")))))]
+      (w/with-page @*page2
+        (rtc/wait-tx-update-to remote-tx)
+        (w/wait-for
+         (format "#ls-block-%s .block-title-wrap:text('%s')"
+                 @*block-uuid title)))
+
+      (let [{:keys [remote-tx]}
+            (w/with-page @*page2
+              (rtc/with-wait-tx-updated
+                (ls-api-call! :editor.upsertBlockProperty
+                              @*block-uuid property-name property-value)))]
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to remote-tx)
+          (w/wait-for
+           (format "#ls-block-%s .property-k:text('%s')"
+                   @*block-uuid property-name))
+          (assert/assert-is-visible
+           (format "#ls-block-%s .property-value :text('%s')"
+                   @*block-uuid property-value))))
+      (validate-graphs-in-2-pw-pages))))
 
 (deftest rtc-outliner-test
   (doseq [test-fn [outliner-basic-test/create-test-page-and-insert-blocks

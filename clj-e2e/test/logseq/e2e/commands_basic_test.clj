@@ -3,14 +3,14 @@
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [jsonista.core :as json]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -304,6 +304,39 @@
       (w/click "a.menu-link:has-text('page reference')")
       (w/click (first (w/query "a.menu-link:has-text('foo')")))
       (assert/assert-is-visible "div:text('Live query (2)')"))))
+
+(deftest query-view-membership-updates-live
+  (testing "a mounted query view inserts and removes matching rows"
+    (let [tag "live-query-membership"
+          candidate-title "query membership candidate"]
+      (b/new-blocks [(format "[[%s]] query seed" tag)
+                     candidate-title
+                     ""])
+      (let [candidate-uuid (.getAttribute
+                            (.first
+                             (w/-query
+                              (format ".ls-block[data-block-title='%s']"
+                                      candidate-title)))
+                            "blockid")
+            candidate-row (format ".custom-query-results #ls-block-%s"
+                                  candidate-uuid)]
+        (is (string? candidate-uuid))
+        (util/input-command "query")
+        (w/click (util/-query-last "button:text('filter')"))
+        (util/input "page reference")
+        (w/click "a.menu-link:has-text('page reference')")
+        (w/click (first (w/query (format "a.menu-link:has-text('%s')" tag))))
+        (w/wait-for "div:text('Live query (1)')")
+
+        (ls-api-call! :editor.updateBlock
+                      candidate-uuid
+                      (format "[[%s]] %s" tag candidate-title))
+        (w/wait-for "div:text('Live query (2)')")
+        (w/wait-for candidate-row)
+
+        (ls-api-call! :editor.updateBlock candidate-uuid candidate-title)
+        (w/wait-for "div:text('Live query (1)')")
+        (w/wait-for-not-visible candidate-row)))))
 
 (deftest advanced-query-test
   (testing "query"

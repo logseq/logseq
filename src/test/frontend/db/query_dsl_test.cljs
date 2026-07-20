@@ -3,7 +3,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.test.helper :as test-helper :include-macros true]
             [frontend.util :as util]
@@ -121,13 +120,11 @@
 
 (defn- dsl-query
   [s]
-  (react/clear-query-state!)
   (when-let [result (dsl-query* test-helper/test-db s)]
     (map first result)))
 
 (defn- custom-query
   [query]
-  (react/clear-query-state!)
   (with-redefs [query-dsl/db-block-attrs db-block-attrs]
     (when-let [result (query-dsl/execute-custom-query query
                                                       (conn/get-db test-helper/test-db)

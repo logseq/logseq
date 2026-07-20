@@ -23,6 +23,7 @@
 (def snapshot-upload-max-bytes 1000000)
 (def snapshot-frame-header-bytes 4)
 (def ignored-oversized-upload-attrs #{:logseq.property.tldraw/page})
+(def snapshot-local-only-attrs #{:block/tx-id})
 (def snapshot-content-type "application/transit+json")
 (def snapshot-content-encoding "gzip")
 (def snapshot-text-encoder (js/TextEncoder.))
@@ -178,7 +179,8 @@
 (defn <prepare-upload-temp-sqlite!
   [repo graph-id source-conn aes-key update-progress]
   (p/let [temp (sync-temp-sqlite/<create-temp-sqlite-conn (d/schema @source-conn) [])
-          datoms (d/datoms @source-conn :eavt)
+          datoms (remove #(contains? snapshot-local-only-attrs (:a %))
+                         (d/datoms @source-conn :eavt))
           large-title-eids (into #{}
                                  (keep (fn [datom]
                                          (when (sync-large-title/large-title-datom? datom)

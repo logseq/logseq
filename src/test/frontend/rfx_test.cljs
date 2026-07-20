@@ -29,52 +29,54 @@
 
 (deftest dispatch-sync-preserves-fast-state
   (rfx/init! {:initial-value {:counter 0
-                              :db/query-results {["repo" :frontend.worker.react/other] [:stale]}}
+                              :db/async-queries {"query" :stale}}
               :registry (atom {})})
   (rfx/reg-event-db! ::increment
     (fn [db _]
       (update db :counter inc)))
-  (rfx/replace-state! (assoc (rfx/snapshot) :db/query-results
-                             {["repo" :frontend.worker.react/other] [:fresh]})
-                      [:db/query-results])
+  (rfx/replace-state! (assoc (rfx/snapshot) :db/async-queries
+                             {"query" :fresh})
+                      [:db/async-queries])
 
   (rfx/dispatch-sync! [::increment])
 
   (is (= 1 (:counter (rfx/snapshot))))
-  (is (= {["repo" :frontend.worker.react/other] [:fresh]}
-         (:db/query-results (rfx/snapshot)))))
+  (is (= {"query" :fresh}
+         (:db/async-queries (rfx/snapshot)))))
 
-(deftest outliner-refresh-bypasses-the-general-rfx-store
-  (rfx/init! {:initial-value {:db/latest-transacted-entity-uuids {}}
+(deftest fast-state-replacement-bypasses-the-general-rfx-store
+  (rfx/init! {:initial-value {:sync/block-conflicts {}}
               :registry (atom {})})
   (let [store-writes (atom 0)
-        refresh {:updated-ids #{(random-uuid)}}]
+        refresh {"repo" {(random-uuid) [{:title "conflict"}]}}]
     (with-redefs [store/next-state! (fn [_ db]
                                       (swap! store-writes inc)
                                       db)]
       (rfx/replace-state! (assoc (rfx/snapshot)
-                                 :db/latest-transacted-entity-uuids refresh)
-                          [:db/latest-transacted-entity-uuids]))
+                                 :sync/block-conflicts refresh)
+                          [:sync/block-conflicts]))
     (is (zero? @store-writes)
-        "The hot outliner refresh path should notify only precise state-path listeners.")
-    (is (= refresh (:db/latest-transacted-entity-uuids (rfx/snapshot))))))
+        "Fast state should notify only precise state-path listeners.")
+    (is (= refresh (:sync/block-conflicts (rfx/snapshot))))))
 
 (deftest replace-state-paths-updates-fast-state-once
-  (rfx/init! {:initial-value {:db/latest-transacted-entity-uuids {}}
+  (rfx/init! {:initial-value {:sync/block-conflicts {}}
               :registry (atom {})})
-  (let [refresh {:tx-id (random-uuid)
-                 :entity-tx-ids {(random-uuid) (random-uuid)}}
-        paths [[:db/latest-transacted-entity-uuids :tx-id]
-               [:db/latest-transacted-entity-uuids :entity-tx-ids]]
+  (let [block-a (random-uuid)
+        block-b (random-uuid)
+        refresh {"repo" {block-a [{:title "a"}]
+                         block-b [{:title "b"}]}}
+        paths [[:sync/block-conflicts "repo" block-a]
+               [:sync/block-conflicts "repo" block-b]]
         store-writes (atom 0)]
     (with-redefs [store/next-state! (fn [_ db]
                                       (swap! store-writes inc)
                                       db)]
       (rfx/replace-state-paths! (assoc (rfx/snapshot)
-                                       :db/latest-transacted-entity-uuids refresh)
+                                       :sync/block-conflicts refresh)
                                 paths))
     (is (zero? @store-writes))
-    (is (= refresh (:db/latest-transacted-entity-uuids (rfx/snapshot))))))
+    (is (= refresh (:sync/block-conflicts (rfx/snapshot))))))
 
 (deftest pub-event-resolves-handler-result
   (async done

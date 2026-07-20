@@ -2,13 +2,6 @@
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.query :as query]))
 
-(deftest grouped-by-page-result-detection-supports-partial-page-refs
-  (let [result [[{:db/id 42}
-                 [{:block/uuid (random-uuid)}]]]]
-    (is (true? (#'query/grouped-by-page-result? result true))
-        "Grouped query results with page refs that only include :db/id should still be recognized")
-    (is (false? (#'query/grouped-by-page-result? result false)))))
-
 (deftest built-in-custom-query-detection-requires-stable-title-key
   (let [repo-config {:default-queries
                      {:journals [{:title-key :journal.default-query/doing

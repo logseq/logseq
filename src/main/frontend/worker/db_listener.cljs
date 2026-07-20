@@ -2,9 +2,11 @@
   "Db listeners for worker-db."
   (:require [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
+            [frontend.worker.render-delta :as render-delta]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -22,7 +24,7 @@
     (js/Date.now)))
 
 (defonce ^:private *outliner-op-perf (atom {}))
-(defonce ^:private *outliner-op-results (atom {}))
+(defonce ^:private *outliner-op-deltas (atom {}))
 
 (defn take-outliner-op-perf!
   [perf-id]
@@ -30,11 +32,11 @@
     (swap! *outliner-op-perf dissoc perf-id)
     result))
 
-(defn take-outliner-op-result!
+(defn take-outliner-op-delta!
   [perf-id]
-  (let [result (get @*outliner-op-results perf-id)]
-    (swap! *outliner-op-results dissoc perf-id)
-    result))
+  (let [delta (get @*outliner-op-deltas perf-id)]
+    (swap! *outliner-op-deltas dissoc perf-id)
+    delta))
 
 (defn- log-outliner-op-perf!
   [data]
@@ -42,62 +44,85 @@
     (swap! *outliner-op-perf update perf-id (fnil conj []) data)
     (log/info :db-worker/outliner-op-perf data)))
 
-(defn- transit-safe-tx-meta
+(def ^:private renderer-tx-meta-keys
+  [:initial-pages?
+   :end?
+   :client-id
+   :outliner-op
+   :deleted-page
+   :data])
+
+(defn- renderer-tx-meta
   [tx-meta]
-  (when (map? tx-meta)
-    (->> tx-meta
-         (remove (fn [[k v]]
-                   (or (= :error-handler k)
-                       (fn? v))))
-         (into {}))))
+  (select-keys tx-meta renderer-tx-meta-keys))
+
+(defn- publish-render-delta?
+  [tx-meta]
+  (not (or (:rtc-download-graph? tx-meta)
+           (:sync-download-graph? tx-meta)
+           (:skip-validate-db? tx-meta))))
+
+(defn- canonical-replacements
+  [{:keys [db-after tx-data]}]
+  (into {}
+        (comp
+         (filter (fn [datom]
+                   (and (:added datom)
+                        (= :block/tx-id (:a datom)))))
+         (map (fn [datom]
+                (let [block (block-handler/canonical-block
+                             db-after
+                             (d/entity db-after (:e datom)))]
+                  [(:block/uuid block) block]))))
+        tx-data))
+
+(defn- build-render-delta
+  [repo {:keys [db-after tx-meta] :as tx-report}
+   {:keys [affected-keys deleted-block-uuids]}]
+  (render-delta/build
+   {:graph-id repo
+    :rev (:max-tx db-after)
+    :op-id (:db-sync/tx-id tx-meta)
+    :blocks (canonical-replacements tx-report)
+    :deleted-block-uuids deleted-block-uuids
+    :affected-keys (set affected-keys)
+    :tx-report tx-report}))
 
 (defn- main-thread-sync-result
-  "Return the processed tx-report and deferred main-thread broadcast data."
+  "Build the renderer delta and deferred broadcast data."
   [repo conn {:keys [tx-meta] :as tx-report}]
   (when repo (worker-state/set-db-latest-tx-time! repo))
-  (when-not (:rtc-download-graph? tx-meta)
+  (when (publish-render-delta? tx-meta)
     (let [started-at (perf-time-ms)
-          result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
+          render-result (worker-pipeline/invoke-hooks
+                         conn tx-report (worker-state/get-context))
           pipeline-at (perf-time-ms)
-          tx-report' (:tx-report result)
-          data (when result
-                 (merge {:repo repo
-                         :request-id (:request-id tx-meta)
-                         :tx-meta (transit-safe-tx-meta tx-meta)
-                         :tx-data (:tx-data tx-report')}
-                        (dissoc result :tx-report)))]
-      (when-let [perf-id (:ui/perf-id tx-meta)]
-        (swap! *outliner-op-results assoc perf-id data))
-      (when result
-        {:tx-report tx-report'
+          processed-tx-report (:tx-report render-result)
+          delta (when render-result
+                  (build-render-delta repo processed-tx-report render-result))
+          payload (when delta
+                    {:repo repo
+                     :tx-meta (renderer-tx-meta tx-meta)
+                     :delta delta})]
+      (when (and delta (:ui/perf-id tx-meta))
+        (swap! *outliner-op-deltas assoc (:ui/perf-id tx-meta) delta))
+      (when payload
+        {:tx-report processed-tx-report
          :started-at started-at
          :pipeline-at pipeline-at
-         :data data}))))
+         :payload payload}))))
 
 (defn- broadcast-main-thread-sync!
-  [repo {:keys [tx-meta]} {:keys [tx-report started-at pipeline-at data]}]
-  (when data
-    (shared-service/broadcast-to-clients! :sync-db-changes data)
+  [{:keys [tx-meta]} {:keys [tx-report started-at pipeline-at payload]}]
+  (when payload
+    (shared-service/broadcast-to-clients! :sync-db-changes payload)
     (log-outliner-op-perf!
      {:stage :sync-db-to-main-thread
       :perf-id (:ui/perf-id tx-meta)
       :outliner-op (:outliner-op tx-meta)
       :tx-count (count (:tx-data tx-report))
       :pipeline-ms (- pipeline-at started-at)
-      :broadcast-ms (- (perf-time-ms) pipeline-at)})
-    (when-not (:from-disk? tx-meta)
-      (p/do!
-       (let [{:keys [blocks-to-remove-set blocks-to-add]}
-             (search/sync-search-indice tx-report
-                                        {:include-vector-title? (some? (worker-state/get-vector-index repo))})]
-         (when (seq blocks-to-remove-set)
-           ((@thread-api/*thread-apis :thread-api/search-delete-blocks)
-            repo
-            blocks-to-remove-set))
-         (when (seq blocks-to-add)
-           ((@thread-api/*thread-apis :thread-api/search-upsert-blocks)
-            repo
-            blocks-to-add)))))))
+      :broadcast-ms (- (perf-time-ms) pipeline-at)})))
 
 (comment
   (defmethod listen-db-changes :debug-listen-db-changes
@@ -113,6 +138,22 @@
 (defmethod listen-db-changes :markdown-mirror
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
+
+(defmethod listen-db-changes :search
+  [_ {:keys [repo]} {:keys [tx-meta] :as tx-report}]
+  (when-not (:from-disk? tx-meta)
+    (p/do!
+     (let [{:keys [blocks-to-remove-set blocks-to-add]}
+           (search/sync-search-indice tx-report
+                                      {:include-vector-title? (some? (worker-state/get-vector-index repo))})]
+       (when (seq blocks-to-remove-set)
+         ((@thread-api/*thread-apis :thread-api/search-delete-blocks)
+          repo
+          blocks-to-remove-set))
+       (when (seq blocks-to-add)
+         ((@thread-api/*thread-apis :thread-api/search-upsert-blocks)
+          repo
+          blocks-to-add))))))
 
 (defn- invoke-listener-handler!
   [handler-timings k handler-fn opt tx-report]
@@ -183,15 +224,14 @@
                            (let [persist-at (perf-time-ms)
                                  sync-result (when sync-db-to-main-thread?
                                                (main-thread-sync-result repo conn tx-report))
-                                 tx-report' (if sync-db-to-main-thread?
-                                              (:tx-report sync-result)
-                                              tx-report)
+                                 tx-report' (or (:tx-report sync-result)
+                                                tx-report)
                                  sync-main-at (perf-time-ms)]
                              (when tx-report'
                                (doseq [[k handler-fn] deferred-handlers]
                                  (invoke-listener-handler! handler-timings k handler-fn opt tx-report')))
                              (when sync-result
-                               (broadcast-main-thread-sync! repo tx-report sync-result))
+                               (broadcast-main-thread-sync! tx-report sync-result))
                              (log-outliner-op-perf!
                               {:stage :db-listener-complete
                                :perf-id (:ui/perf-id tx-meta)

@@ -3,7 +3,7 @@
             ["path" :as node-path]
             [cljs.test :refer [deftest is]]
             [clojure.string :as string]
-            [frontend.db.react :as react]
+            [frontend.db.subs :as db-subs]
             [frontend.modules.outliner.pipeline :as pipeline]
             [frontend.state :as state]))
 
@@ -17,72 +17,52 @@
         "The direct worker response replaces UI publication, not transaction hooks.")
     (is (string/includes? source "(pipeline/invoke-hooks data)"))))
 
-(deftest handled-local-response-skips-only-direct-response-work
+(deftest compact-worker-broadcast-applies-the-exact-delta-once-and-keeps-page-events-test
   (let [original-state @state/state
         state-calls (atom [])
-        refresh-calls (atom [])
-        affected-keys [[:frontend.worker.react/block 1]
-                       [:frontend.worker.react/journals]
-                       [:frontend.worker.react/refs 2]
-                       [:custom :query]]
-        repo "test"
+        applied-deltas (atom [])
+        published-events (atom [])
+        repo "broadcast-render-delta-test"
+        delta {:graph-id repo
+               :rev 7
+               :blocks {}
+               :deleted {}
+               :children {}
+               :affected-keys #{[:graph]}}
+        rename-data {:old-name "before" :new-name "after"}
         tx-meta {:client-id "client"
-                 :ui/handled-by-response? true}]
+                 :outliner-op :rename-page
+                 :data rename-data}]
     (try
       (reset! state/state {:client-id "client"})
-      (with-redefs [state/get-current-repo (constantly repo)
+      (with-redefs [db-subs/apply-delta! (fn [value]
+                                           (swap! applied-deltas conj value)
+                                           true)
+                    state/get-current-repo (constantly repo)
                     state/get-current-page (constantly nil)
                     state/set-state! (fn [& args]
                                        (swap! state-calls conj args))
-                    react/refresh! (fn [& args]
-                                     (swap! refresh-calls conj args))]
+                    state/pub-event! (fn [event]
+                                       (swap! published-events conj event))]
         (pipeline/invoke-hooks {:repo repo
                                 :tx-meta tx-meta
-                                :affected-keys affected-keys
-                                :blocks []})
+                                :delta delta})
+        (is (= 1 (count @applied-deltas)))
+        (is (identical? delta (first @applied-deltas))
+            "The broadcast entry point must pass the worker-owned delta through untouched.")
         (is (not-any? #(= :db/latest-transacted-entity-uuids (first %))
                       @state-calls))
-        (is (some #(= :editor/start-pos (first %)) @state-calls))
-        (is (= [[repo [[:frontend.worker.react/refs 2]
-                       [:custom :query]]]]
-               @refresh-calls)))
+        (is (= [[:page/renamed repo rename-data]] @published-events)
+            "Page lifecycle events remain a narrow non-renderer side effect."))
       (finally
         (reset! state/state original-state)))))
 
-(deftest structural-change-from-another-tab-publishes-affected-pages
-  (let [original-state @state/state
-        state-calls (atom [])
-        repo "test"
-        page-uuid (random-uuid)]
-    (try
-      (reset! state/state {:client-id "other-client"})
-      (with-redefs [state/get-current-repo (constantly repo)
-                    state/get-current-page (constantly nil)
-                    state/set-state! (fn [& args]
-                                       (swap! state-calls conj args))
-                    react/refresh! (fn [& _])]
-        (pipeline/invoke-hooks {:repo repo
-                                :tx-meta {:client-id "source-client"
-                                          :ui/handled-by-response? true
-                                          :outliner-op :insert-blocks
-                                          :db-sync/tx-id 1}
-                                :blocks [{:block/uuid (random-uuid)
-                                          :block/page {:block/uuid page-uuid}}]})
-        (let [[_ value] (some #(when (= :db/latest-transacted-entity-uuids
-                                        (first %))
-                                %)
-                              @state-calls)]
-          (is (= #{page-uuid} (:affected-page-uuids value)))))
-      (finally
-        (reset! state/state original-state)))))
-
-(deftest structural-refresh-notifies-only-the-direct-parent-path
-  (let [block-id (random-uuid)
-        parent-id (random-uuid)
-        page-id (random-uuid)
-        paths (pipeline/refresh-state-paths #{block-id} #{parent-id} #{page-id})]
-    (is (some #{[:db/latest-transacted-entity-uuids :entity-tx-ids block-id]} paths))
-    (is (some #{[:db/latest-transacted-entity-uuids :children-tx-ids parent-id]} paths))
-    (is (some #{[:db/latest-transacted-entity-uuids :tree-tx-ids page-id]} paths))
-    (is (not (some #{[:db/latest-transacted-entity-uuids :entity-tx-ids parent-id]} paths))
-        "A structural change must not re-render the parent block row.")))
+(deftest renderer-delta-entry-points-do-not-reference-the-legacy-transaction-marker-test
+  (doseq [relative-path ["src/main/frontend/db/transact.cljs"
+                         "src/main/frontend/modules/outliner/pipeline.cljs"]]
+    (let [source (.toString
+                  (fs/readFileSync
+                   (node-path/join (.cwd js/process) relative-path)
+                   "utf8"))]
+      (is (not (string/includes? source ":db/latest-transacted-entity-uuids"))
+          (str relative-path " must not read or write the removed renderer marker.")))))

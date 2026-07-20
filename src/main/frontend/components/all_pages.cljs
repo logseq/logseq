@@ -3,11 +3,8 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.async :as db-async]
-            [frontend.state :as state]
+            [frontend.db.hooks :as db-hooks]
             [logseq.common.config :as common-config]
-            [logseq.shui.hooks :as hooks]
-            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (defn- columns
@@ -29,19 +26,13 @@
 
 (hsx/defc all-pages
   []
-  (let [[view-parent set-view-parent!] (hooks/use-state nil)
+  (let [view-parent-uuid (db-hooks/use-resource [:page-identity common-config/views-page-name])
         columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
                                        :with-id? false})]
-    (hooks/use-effect!
-     (fn []
-       (p/let [page (db-async/<get-block (state/get-current-repo) common-config/views-page-name {:children? false})]
-         (set-view-parent! page))
-       nil)
-     [])
     [:div.ls-all-pages.w-full.mx-auto
-     (when view-parent
-       (views/view {:view-parent view-parent
+     (when view-parent-uuid
+       (views/view {:view-parent-uuid view-parent-uuid
                     :view-feature-type :all-pages
                     :show-items-count? true
                     :columns columns'}))]))

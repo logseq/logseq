@@ -35,7 +35,8 @@
           :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
           :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
-          :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
+          :thread-api/db-sync-get-all-block-conflicts :thread-api/db-sync-clear-block-conflicts
+          :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
@@ -61,7 +62,7 @@
           :thread-api/convert-page-to-tag
           :thread-api/set-page-favorite
           :thread-api/reorder-favorites
-          :thread-api/get-page-route-info :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
+          :thread-api/get-page-route-info :thread-api/query-custom :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
           :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
           :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
@@ -578,6 +579,26 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest imported-snapshot-blocks-receive-local-revisions-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               block-uuid (random-uuid)
+               datoms [{:e 100 :a :block/uuid :v block-uuid}
+                       {:e 100 :a :block/title :v "downloaded"}
+                       {:e 100 :a :block/tx-id :v 42}]]
+           (-> (#'sync-download/import-datoms-batch! conn nil false datoms)
+               (p/then (fn [_]
+                         (let [block (d/entity @conn [:block/uuid block-uuid])]
+                           (is (= "downloaded" (:block/title block)))
+                           (is (not= 42 (:block/tx-id block))
+                               "A remote snapshot cannot supply a renderer revision.")
+                           (is (= (:max-tx @conn) (:block/tx-id block))
+                               "Snapshot import stamps the local DataScript transaction."))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest thread-api-validate-db-passes-sync-diagnostics-test
   (restoring-worker-state
    (fn []
@@ -750,7 +771,6 @@
                  :ensure-keys {:ok true}
                  :list-graphs [{:graph-id "g1"}]
                  :upload-stopped? true
-                 :conflicts [{:op :conflict}]
                  :download-missing-assets {:total 2 :downloaded 2 :skipped-existing 0}}]
     (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
                                                 (swap! calls conj [:db-sync-dbs-open? repo])
@@ -797,9 +817,6 @@
                   db-sync/upload-stopped? (fn [repo]
                                             (swap! calls conj [:upload-stopped? repo])
                                             (:upload-stopped? results))
-                  client-op/get-sync-conflicts (fn [repo block-uuid]
-                                                 (swap! calls conj [:get-sync-conflicts repo block-uuid])
-                                                 (:conflicts results))
                   client-op/clear-sync-conflicts! (fn [repo block-uuid]
                                                     (swap! calls conj [:clear-sync-conflicts repo block-uuid])
                                                     nil)
@@ -827,7 +844,6 @@
     (is (= :stopped-upload ((get-thread-api :thread-api/db-sync-stop-upload) repo)))
     (is (= :resumed-upload ((get-thread-api :thread-api/db-sync-resume-upload) repo)))
     (is (= (:upload-stopped? results) ((get-thread-api :thread-api/db-sync-upload-stopped?) repo)))
-    (is (= (:conflicts results) ((get-thread-api :thread-api/db-sync-get-block-conflicts) repo block)))
     ((get-thread-api :thread-api/db-sync-clear-block-conflicts) repo block)
     (is (some #(= [:broadcast
                    :sync-conflicts-updated

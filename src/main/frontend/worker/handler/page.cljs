@@ -83,27 +83,45 @@
            second
            string/lower-case))
 
-(defn- block-by-page-name-and-block-route-name
+(defn- heading-route-candidates
+  [db page-id]
+  (mapv #(d/entity db %)
+        (d/q '[:find [?block ...]
+               :in $ ?page-id
+               :where
+               [?block :block/page ?page-id]
+               [?block :logseq.property/heading]
+               [?block :block/title]]
+             db
+             page-id)))
+
+(defn- heading-route-name
+  [block]
+  (let [ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
+    (-> (:block/title block)
+        (db-content/id-ref->title-ref ref-tags)
+        (db-content/content-id-ref->page ref-tags)
+        heading-content->route-name)))
+
+(defn block-route-resolution
+  "Resolve a named heading route together with its page and candidate headings."
   [db page-id-name-or-uuid route-name]
   (when-let [page (ldb/get-page db page-id-name-or-uuid)]
-    (->> (d/q '[:find (pull ?b [:block/uuid])
-                :in $ ?page-id ?route-name ?content-matches
-                :where
-                [?b :block/page ?page-id]
-                [?b :logseq.property/heading]
-                [?b :block/title ?content]
-                [(?content-matches ?content ?route-name ?b)]]
-              db
-              (:db/id page)
-              route-name
-              (fn content-matches? [block-content external-content block-id]
-                (let [block (d/entity db block-id)
-                      ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
-                  (= (-> (db-content/id-ref->title-ref block-content ref-tags)
-                         (db-content/content-id-ref->page ref-tags)
-                         heading-content->route-name)
-                     (string/lower-case external-content)))))
-         ffirst)))
+    (let [candidates (heading-route-candidates db (:db/id page))
+          normalized-route-name (string/lower-case route-name)]
+      {:page page
+       :candidates candidates
+       :block (some (fn [block]
+                      (when (= normalized-route-name
+                               (heading-route-name block))
+                        block))
+                    candidates)})))
+
+(defn- block-by-page-name-and-block-route-name
+  [db page-id-name-or-uuid route-name]
+  (some-> (block-route-resolution db page-id-name-or-uuid route-name)
+          :block
+          (select-keys [:block/uuid])))
 
 (def-thread-api :thread-api/get-block-by-page-name-and-block-route-name
   [repo page-id-name-or-uuid route-name]
@@ -215,8 +233,7 @@
    :block/order (:block/order block)
    :block/collapsed? (boolean (:block/collapsed? block))
    :block/level level
-   :block.temp/has-children? (contains? parent-ids (:db/id block))
-   :block.temp/load-status :index})
+   :block.temp/has-children? (contains? parent-ids (:db/id block))})
 
 (defn- visible-index-entries
   [index]

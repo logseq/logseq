@@ -1,11 +1,14 @@
 (ns frontend.handler.repo-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.db.persist :as db-persist]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.persist-db :as persist-db]
+            [frontend.search :as search]
             [frontend.state :as state]
             [promesa.core :as p]))
 
@@ -53,3 +56,49 @@
              (fn [error]
                (is false (str error))))
             (p/finally done))))))
+
+(deftest removing-current-repo-pauses-renderer-subscriptions-test
+  (async done
+         (let [repo {:url "logseq_db_current"}
+               repos (atom [repo])
+               calls (atom [])]
+           (p/with-redefs [state/get-repos (fn [] @repos)
+                           state/get-current-repo (fn [] (:url repo))
+                           persist-db/<close-db
+                           (fn [graph-id]
+                             (swap! calls conj [:close graph-id])
+                             (p/resolved nil))
+                           db-persist/delete-graph!
+                           (fn [graph-id]
+                             (swap! calls conj [:delete-db graph-id])
+                             (p/resolved nil))
+                           search/remove-db!
+                           (fn [graph-id]
+                             (swap! calls conj [:remove-search graph-id])
+                             nil)
+                           state/delete-repo!
+                           (fn [removed-repo]
+                             (swap! calls conj [:delete-repo removed-repo])
+                             (reset! repos []))
+                           state/set-current-repo!
+                           (fn [graph-id]
+                             (swap! calls conj [:set-current graph-id])
+                             nil)
+                           db-subs/reset-graph!
+                           (fn [graph-id]
+                             (swap! calls conj [:reset-subscriptions graph-id])
+                             nil)]
+             (-> (repo-handler/remove-repo! repo)
+                 (p/then
+                  (fn []
+                    (is (= [[:close (:url repo)]
+                            [:delete-db (:url repo)]
+                            [:remove-search (:url repo)]
+                            [:delete-repo repo]
+                            [:set-current nil]
+                            [:reset-subscriptions nil]]
+                           @calls))))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
