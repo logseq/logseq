@@ -10,6 +10,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -391,7 +392,7 @@
        (property-key-title block property class-schema?))]))
 
 (hsx/defc bidirectional-values-cp
-  [entities]
+  [entity-uuids]
   (let [blocks-container (state/get-component :block/blocks-container)
         container-id (state/use-container-id)
         config {:id (str "bidirectional-" container-id)
@@ -403,9 +404,9 @@
                 :ref? true
                 :hide-block-tags? true
                 :hide-block-icon? true}]
-    (if (and blocks-container (seq entities))
+    (if (and blocks-container (seq entity-uuids))
       [:div.ls-bidirectional-block-container.w-full
-       (blocks-container config entities)]
+       (blocks-container config entity-uuids)]
       [:span.opacity-60 (t :view.filter/empty)])))
 
 (defn- icon-id
@@ -423,39 +424,41 @@
       [:span.inline-flex.items-center.shrink-0
        (icon-component/icon icon {:size 16 :color? true})])))
 
+(hsx/defc bidirectional-property-group
+  [value class-uuid entity-uuids]
+  (let [class (db-hooks/use-block class-uuid)]
+    (when class
+      (shui/tabs-trigger
+       {:key (str "bidirectional-tab-" value)
+        :value value
+        :variant :line
+        :class "px-0 py-1 text-base text-foreground"
+        :data-entity-count (count entity-uuids)}
+       [:span.inline-flex.items-center.gap-1.5
+        (bidirectional-tab-icon class)
+        [:span (:block/title class)]]))))
+
 (hsx/defc bidirectional-properties-section
-  [bidirectional-properties]
-  (when (seq bidirectional-properties)
-    (let [normalized-items (map-indexed
-                            (fn [idx {:keys [class title entities]}]
-                              (let [value (str (or (:db/id class) (str "idx-" idx)))]
-                                {:value value
-                                 :class class
-                                 :title title
-                                 :entities entities}))
-                            bidirectional-properties)
-          default-value (:value (first normalized-items))]
+  [groups]
+  (when (seq groups)
+    (let [groups (mapv (fn [{:keys [class-uuid] :as group}]
+                         (assoc group :value (str class-uuid)))
+                       groups)
+          default-value (:value (first groups))]
       [:div.w-full.ls-bidirectional-properties.mt-8
-        (shui/tabs
+       (shui/tabs
         {:defaultValue default-value
          :class "w-full"}
         (shui/tabs-list
          {:variant :line
           :class "h-8 gap-3"}
-         (for [{:keys [value class title]} normalized-items]
-           (shui/tabs-trigger
-            {:key (str "bidirectional-tab-" value)
-             :value value
-             :variant :line
-             :class "px-0 py-1 text-base text-foreground"}
-            [:span.inline-flex.items-center.gap-1.5
-             (bidirectional-tab-icon class)
-             [:span title]])))
-        (for [{:keys [value entities]} normalized-items]
+         (for [{:keys [value class-uuid entity-uuids]} groups]
+           (bidirectional-property-group value class-uuid entity-uuids)))
+        (for [{:keys [value entity-uuids]} groups]
           (shui/tabs-content
            {:key (str "bidirectional-tab-content-" value)
             :value value}
-           (bidirectional-values-cp entities))))])))
+           (bidirectional-values-cp entity-uuids))))])))
 
 (hsx/defc ^:large-vars/cleanup-todo property-input
   [block *property-key {:keys [class-schema?]
@@ -614,68 +617,102 @@
         (not (contains? #{:default :url} type))
         (empty-panel-property-value? value))))
 
+(defn- entity-values-by-uuid
+  [value]
+  (cond
+    (map? value)
+    (cond-> (reduce merge {} (map entity-values-by-uuid (vals value)))
+      (uuid? (:block/uuid value)) (assoc (:block/uuid value) value))
+
+    (coll? value)
+    (reduce merge {} (map entity-values-by-uuid value))
+
+    :else
+    {}))
+
+(defn- restore-resource-entity-values
+  [block property value]
+  (let [entities (entity-values-by-uuid [block property])]
+    (letfn [(restore [item]
+              (cond
+                (uuid? item) (get entities item item)
+                (set? item) (into #{} (map restore) item)
+                (vector? item) (mapv restore item)
+                (sequential? item) (map restore item)
+                :else item))]
+      (restore value))))
+
+(hsx/defc class-schema-property-value
+  [property description-property-uuid opts]
+  (let [description-property (db-hooks/use-block description-property-uuid)]
+    (when description-property
+      (pv/property-value property description-property opts))))
+
 (hsx/defc property-cp
-  [block {:keys [property-id property value]} {:keys [sortable-opts description-property] :as opts}]
-  (when (and (keyword? property-id) property)
-    (let [type (get property :logseq.property/type :default)
+  [block {:keys [property-uuid property-ident value]} {:keys [sortable-opts description-property-uuid] :as opts}]
+  (let [property (db-hooks/use-block property-uuid)]
+    (when (and (keyword? property-ident) property)
+      (let [value (restore-resource-entity-values block property value)
+            type (get property :logseq.property/type :default)
           empty-value? (empty-panel-property-value? value)
           show-panel-bullet? (show-property-panel-bullet? property value)
           property-key-cp' (property-key-cp block property (select-keys opts [:class-schema?]))]
-      [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
-             :class (util/classnames ["property-pair property-panel-row"
-                                      {:property-panel-row-empty empty-value?}])
-             :data-property-title (:block/title property)
-             :data-property-type (name type)}
-       (if (seq sortable-opts)
-         (dnd/sortable-item
-          (assoc sortable-opts :class "property-key-panel")
-          property-key-cp')
-         [:div.property-key-panel
-          property-key-cp'])
+        [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
+               :class (util/classnames ["property-pair property-panel-row"
+                                        {:property-panel-row-empty empty-value?}])
+               :data-property-title (:block/title property)
+               :data-property-type (name type)}
+         (if (seq sortable-opts)
+           (dnd/sortable-item
+            (assoc sortable-opts :class "property-key-panel")
+            property-key-cp')
+           [:div.property-key-panel
+            property-key-cp'])
 
-       (let [block' (assoc block (:db/ident property) value)]
-         [:div.ls-block.property-value-container.property-value-panel
-          (when show-panel-bullet?
-            [:div.property-panel-bullet {:aria-hidden true}
-             [:span.bullet-container
-              [:span.bullet]]])
-          [:div.property-value.property-value-panel-inner.flex.flex-1
-           (if (:class-schema? opts)
-             (pv/property-value property description-property opts)
-             (pv/property-value block' property (assoc opts :suppress-inline-edit-icon? true)))]
-          (when (show-property-panel-edit-button? property opts)
-            [:button.property-panel-edit-btn.select-none
-             {:type "button"
-              :on-click (fn [e]
-                          (util/stop e)
-                          (when-let [trigger
-                                     (some-> (.-currentTarget e)
-                                             (.closest ".property-value-panel")
-                                             (.querySelector ".jtrigger"))]
-                            (.click trigger)
-                            (some-> trigger .focus)))}
-             (ui/icon "edit" {:size 15})])])])))
+         (let [block' (assoc block property-ident value)]
+           [:div.ls-block.property-value-container.property-value-panel
+            (when show-panel-bullet?
+              [:div.property-panel-bullet {:aria-hidden true}
+               [:span.bullet-container
+                [:span.bullet]]])
+            [:div.property-value.property-value-panel-inner.flex.flex-1
+             (if (:class-schema? opts)
+               (when description-property-uuid
+                 (class-schema-property-value property description-property-uuid opts))
+               (pv/property-value block' property (assoc opts :suppress-inline-edit-icon? true)))]
+            (when (show-property-panel-edit-button? property opts)
+              [:button.property-panel-edit-btn.select-none
+               {:type "button"
+                :on-click (fn [e]
+                            (util/stop e)
+                            (when-let [trigger
+                                       (some-> (.-currentTarget e)
+                                               (.closest ".property-value-panel")
+                                               (.querySelector ".jtrigger"))]
+                              (.click trigger)
+                              (some-> trigger .focus)))}
+               (ui/icon "edit" {:size 15})])])]))))
 
 (hsx/defc ordered-properties
   [block properties* opts]
   (let [[properties set-properties!] (hooks/use-state properties*)
-        [properties-order set-properties-order!] (hooks/use-state (mapv :property-id properties))
-        properties-by-id (zipmap (map :property-id properties*) properties*)
+        [properties-order set-properties-order!] (hooks/use-state (mapv :property-ident properties))
+        properties-by-id (zipmap (map :property-ident properties*) properties*)
         properties (vec (keep properties-by-id properties-order))
-        choices (map (fn [{:keys [property-id] :as row}]
-                       (let [id (subs (str property-id) 1)
+        choices (map (fn [{:keys [property-ident] :as row}]
+                       (let [id (subs (str property-ident) 1)
                              opts (assoc opts :sortable-opts {:id id})]
                          {:id id
-                          :value property-id
+                          :value property-ident
                           :content (property-cp block row opts)})) properties)]
     (hooks/use-effect!
      (fn []
        (when (not= properties properties*)
          (set-properties! properties*))
 
-       (when (not= (set (map :property-id properties*))
-                   (set (map :property-id properties)))
-         (set-properties-order! (mapv :property-id properties*))))
+       (when (not= (set (map :property-ident properties*))
+                   (set (map :property-ident properties)))
+         (set-properties-order! (mapv :property-ident properties*))))
      [properties*])
     (dnd/items choices
                {:sort-by-inner-element? true
@@ -687,7 +724,7 @@
                                 active-id
                                 over-id
                                 direction
-                                (mapv :property-id properties)))})))
+                                (mapv :property-ident properties)))})))
 
 (hsx/defc properties-section
   [block properties opts]
@@ -740,8 +777,8 @@
 (def ^:private empty-display-properties
   {:full-properties []
    :hidden-properties []
-   :description-property nil
-   :class-properties-property nil})
+   :description-property-uuid nil
+   :class-properties-property-uuid nil})
 
 (defn- show-empty-and-hidden-properties-enabled?
   [block]
@@ -751,68 +788,28 @@
          (or (= mode :global)
              (and (set? ids) (contains? ids (:block/uuid block)))))))
 
-(defn- display-properties-request-opts
-  [opts]
-  (assoc (select-keys opts [:gallery-view? :page-title? :sidebar-properties? :tag-dialog?])
-         :publishing? config/publishing?
-         :state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))))
-
-(defn- bundled-display-properties
-  [block request-opts show-empty-and-hidden?]
-  (when-not show-empty-and-hidden?
-    (if (:page-title? request-opts)
-      (when (and (not-any? identity (vals (dissoc request-opts :page-title?)))
-                 (contains? block :block.temp/page-display-properties))
-        (:block.temp/page-display-properties block))
-      (when (and (not-any? identity (vals request-opts))
-                 (contains? block :block.temp/display-properties))
-        (:block.temp/display-properties block)))))
+(defn- display-properties-resource-key
+  [block-uuid opts show-empty-and-hidden-properties?]
+  [:block-display-properties
+   block-uuid
+   {:gallery-view? (boolean (:gallery-view? opts))
+    :page-title? (boolean (:page-title? opts))
+    :sidebar-properties? (boolean (:sidebar-properties? opts))
+    :tag-dialog? (boolean (:tag-dialog? opts))
+    :publishing? (boolean config/publishing?)
+    :state-hide-empty-properties? (boolean (:ui/hide-empty-properties? (state/get-config)))
+    :show-empty-and-hidden-properties? (boolean show-empty-and-hidden-properties?)}])
 
 (defn- use-display-properties
   [block opts enabled? show-empty-and-hidden?]
-  (let [enabled? (and enabled? (not (false? (:block-metadata-ready? opts))))
-        repo (state/get-current-repo)
-        request-opts (display-properties-request-opts opts)
-        display-properties-payload (bundled-display-properties block request-opts show-empty-and-hidden?)
-        display-properties-payload? (some? display-properties-payload)
-        transaction-id (rfx/use-entity-tx-id block)
-        [loaded-display-properties set-loaded-display-properties!] (hooks/use-state empty-display-properties)]
-    (hooks/use-effect!
-     (fn []
-       (let [cancelled? (atom false)]
-         (cond
-           (not enabled?)
-           (set-loaded-display-properties! empty-display-properties)
-
-           display-properties-payload?
-           nil
-
-           (and repo (:db/id block))
-           (p/let [result (db-async/<get-display-properties repo block request-opts show-empty-and-hidden?)]
-             (when-not @cancelled?
-               (set-loaded-display-properties! (or result empty-display-properties))))
-
-           :else
-           (set-loaded-display-properties! empty-display-properties))
-         (fn []
-           (reset! cancelled? true))))
-     [enabled?
-      display-properties-payload?
-      repo
-      (:db/id block)
-      (:block/properties block)
-      transaction-id
-      show-empty-and-hidden?
-      (:gallery-view? request-opts)
-      (:page-title? request-opts)
-      (:sidebar-properties? request-opts)
-      (:tag-dialog? request-opts)
-      (:publishing? request-opts)
-      (:state-hide-empty-properties? request-opts)])
-    (cond
-      display-properties-payload? display-properties-payload
-      (not enabled?) empty-display-properties
-      :else loaded-display-properties)))
+  (let [result (db-hooks/use-resource
+                (display-properties-resource-key
+                 (:block/uuid block)
+                 opts
+                 show-empty-and-hidden?))]
+    (if (and enabled? (not (false? (:block-metadata-ready? opts))))
+      (or result empty-display-properties)
+      empty-display-properties)))
 
 (defn use-has-hidden-properties
   [block opts enabled?]
@@ -873,49 +870,30 @@
   (when (and show-hidden-properties? (seq hidden-properties))
     (properties-section block hidden-properties opts)))
 
-(defn- bundled-bidirectional-properties
-  [block]
-  (if-let [entry (find block :block.temp/bidirectional-properties)]
-    [true (val entry)]
-    [false nil]))
-
-(hsx/defc load-bidirectional-properties
-  [block root-block-or-page? set-bidirectional-properties!]
-  (let [[payload?] (bundled-bidirectional-properties block)]
-    (hooks/use-effect!
-     (fn []
-       (when (and root-block-or-page? (not payload?) (:db/id block))
-         (p/let [result (db-async/<get-bidirectional-properties (:db/id block))]
-           (set-bidirectional-properties! result)))
-       (fn []))
-     [root-block-or-page? payload? (:db/id block)])))
-
 (hsx/defc bidirectional-properties-area
   [target-block opts]
-  (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
-        block (resolve-linked-block-if-exists target-block)
-        [payload? payload] (bundled-bidirectional-properties block)
-        [loaded-bidirectional-properties] (hooks/use-atom *bidirectional-properties)
-        bidirectional-properties (if payload? payload loaded-bidirectional-properties)
+  (let [block (resolve-linked-block-if-exists target-block)
+        block-uuid (:block/uuid block)
+        bidirectional-properties
+        (db-hooks/use-resource [:block-bidirectional-properties block-uuid])
         root-block? (and (= (str (:block/uuid block)) (:id opts))
                          (not (entity/page? block)))]
-    [:<>
-     (load-bidirectional-properties block
-                                    (or root-block? (entity/page? block))
-                                    #(reset! *bidirectional-properties %))
-     (bidirectional-properties-section bidirectional-properties)]))
+    (when (or root-block? (entity/page? block))
+      (bidirectional-properties-section bidirectional-properties))))
+
+(hsx/defc class-properties-key
+  [block class-properties-property-uuid]
+  (let [property (db-hooks/use-block class-properties-property-uuid)]
+    (when property
+      (property-key-cp block property {}))))
 
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
-  (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
-        id (hooks/use-memo #(str (random-uuid)) [])
+  (let [id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
-        [bidirectional-properties-payload? bidirectional-properties-payload]
-        (bundled-bidirectional-properties block)
-        [loaded-bidirectional-properties] (hooks/use-atom *bidirectional-properties)
-        bidirectional-properties (if bidirectional-properties-payload?
-                                   bidirectional-properties-payload
-                                   loaded-bidirectional-properties)
+        block-uuid (:block/uuid block)
+        root-block? (and (= (str block-uuid) (:id opts))
+                         (not (entity/page? block)))
         show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
         show-properties? (or sidebar-properties? tag-dialog?)
         class? (entity/class? block)
@@ -923,37 +901,32 @@
                                  (and show?
                                       (or (= mode :global)
                                           (and (set? ids) (contains? ids (:block/uuid block))))))
-        {:keys [full-properties hidden-properties description-property class-properties-property]}
+        {:keys [full-properties hidden-properties description-property-uuid
+                class-properties-property-uuid]}
         (use-display-properties block opts true show-empty-and-hidden?)
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
-        root-block? (and (= (str (:block/uuid block)) (:id opts))
-                         (not (entity/page? block)))
         show-hidden-properties-toggle-button? (and (seq hidden-properties)
                                                    (or current-route-page?
                                                        root-block?))]
     [:<>
-     (when-not skip-bidirectional-properties?
-       (load-bidirectional-properties block
-                                      root-block?
-                                      #(reset! *bidirectional-properties %)))
-     (let [has-bidirectional-properties? (seq bidirectional-properties)]
-       (cond
-         (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
-              (not class?)
-              (not show-hidden-properties?)
-              (not has-bidirectional-properties?))
+     (cond
+       (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+            (not class?)
+            (not show-hidden-properties?))
          nil
 
-         (and (empty? full-properties) (empty? hidden-properties) (not class?) (not has-bidirectional-properties?))
-         (when show-properties?
-           ^{:key (str id "-add-property")}
-           [new-property block opts])
+       (and (empty? full-properties) (empty? hidden-properties) (not class?))
+       (when show-properties?
+         ^{:key (str id "-add-property")}
+         [new-property block opts])
 
-         :else
-         (let [remove-properties #{:logseq.property/icon :logseq.property/query}
-               properties' (->> (remove (fn [{:keys [property-id]}] (contains? remove-properties property-id))
+       :else
+       (let [remove-properties #{:logseq.property/icon :logseq.property/query}
+               properties' (->> (remove (fn [{:keys [property-ident]}]
+                                          (contains? remove-properties property-ident))
                                         full-properties)
-                                (remove (fn [{:keys [property-id]}] (= property-id :logseq.property.class/properties))))
+                                (remove (fn [{:keys [property-ident]}]
+                                          (= property-ident :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity/page? block)
                page-properties-area? (and page?
@@ -962,8 +935,10 @@
                                               tag-dialog?))
                opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
-                                      (remove (fn [{:keys [property-id]}] (= property-id :logseq.property.class/properties)))
-                                      (map (fn [{:keys [property-id value]}] [property-id value]))
+                                      (remove (fn [{:keys [property-ident]}]
+                                                (= property-ident :logseq.property.class/properties)))
+                                      (map (fn [{:keys [property-ident value]}]
+                                             [property-ident value]))
                                       (into {}))
                props-for-plugin (when (enable-block-properties-renderers? opts' class?)
                                   (clj->js {:blockId (str (:block/uuid block))
@@ -991,8 +966,7 @@
                                          (seq append-renderers)
                                          show-class-properties-area?)]
 
-           [:<>
-            (when show-properties-area?
+         (when show-properties-area?
               [:div.ls-properties-area
                {:id id
                 :class (util/classnames [{:ls-page-properties page?
@@ -1011,7 +985,10 @@
                     [:> (:render replace-renderer) props-for-plugin])
                   (when show-properties-panel?
                     [:div.properties-panel
-                     (properties-section block properties' (assoc opts' :description-property description-property))]))
+                     (properties-section block properties'
+                                         (assoc opts'
+                                                :description-property-uuid
+                                                description-property-uuid))]))
 
                 (when-not class?
                   [:<>
@@ -1022,7 +999,8 @@
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts'
                                                    :show-hidden-properties? true
-                                                   :description-property description-property))])])
+                                                   :description-property-uuid
+                                                   description-property-uuid))])])
 
                 (when (and page? (not class?))
                   ^{:key (str id "-add-property")}
@@ -1037,16 +1015,17 @@
                 (when class?
                   (let [properties (->> (:logseq.property.class/properties block)
                                         (map (fn [property]
-                                               {:property-id (:db/ident property)
-                                                :property property
+                                               {:property-uuid (:block/uuid property)
+                                                :property-ident (:db/ident property)
                                                 :value nil})))
                         opts' (assoc opts
                                      :class-schema? true
-                                     :description-property description-property)]
+                                     :description-property-uuid description-property-uuid)]
                     [:div.flex.flex-col.gap-1.mt-2
                      [:div {:style {:font-size 15}}
                       [:div.property-key.text-sm
-                       (property-key-cp block class-properties-property {})]
+                       (when class-properties-property-uuid
+                         (class-properties-key block class-properties-property-uuid))]
                       [:div.text-muted-foreground.ml-5
                        (t :class/tag-properties-desc)]]
                      [:div.gap-1.flex.flex-col
@@ -1054,8 +1033,10 @@
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts
                                                    :show-hidden-properties? show-hidden-properties?
-                                                   :description-property description-property))
+                                                   :description-property-uuid
+                                                   description-property-uuid))
                       ^{:key (str id "-class-add-property")}
-                      [:div.ml-5 [new-property block opts']]]]))]])
-            (when-not skip-bidirectional-properties?
-              (bidirectional-properties-section bidirectional-properties))])))]))
+                      [:div.ml-5 [new-property block opts']]]]))]])))
+     (when (and (or root-block? (entity/page? block))
+                (not skip-bidirectional-properties?))
+       (bidirectional-properties-area block opts))]))

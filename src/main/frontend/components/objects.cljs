@@ -4,7 +4,6 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
-            [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
@@ -72,17 +71,6 @@
          (.click title-node)))
      100)))
 
-(defn- refresh-view-data!
-  [view-parent view table ids]
-  (let [list-view? (= :logseq.property.view/type.list (:logseq.property.view/type-ident view))]
-    (when-let [repo (state/get-current-repo)]
-      (if list-view?
-        (when-let [result (:result (get @react/*query-state [repo :frontend.worker.react/objects (:db/id view-parent)]))]
-          (swap! result inc))
-        (let [set-data! (get-in table [:data-fns :set-data!])
-              full-data (:full-data table)]
-          (set-data! (vec (concat full-data ids))))))))
-
 (hsx/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
@@ -91,7 +79,7 @@
         config' (assoc config :view-parent class)
         columns (build-class-object-columns config' class properties)
         add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
-                          (fn [view table {:keys [properties]}]
+                          (fn [_view _table {:keys [properties]}]
                             (if (= :logseq.class/Asset (:db/ident class))
                               (shui/dialog-open!
                                (fn []
@@ -99,18 +87,15 @@
                                   [:div.font-medium (t :asset/add-assets)]
                                   (filepicker/picker
                                    {:on-change (fn [_e files]
-                                                 (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
-                                                   (shui/dialog-close!)
-                                                   (when (seq entities)
-                                                     (refresh-view-data! class view table (map :db/id entities)))))})]))
+                                                 (p/let [_ (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                   (shui/dialog-close!)))})]))
                               (p/let [block (add-new-class-object! class properties)]
                                 (when (:db/id block)
-                                  (refresh-view-data! class view table [(:db/id block)])
                                   (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
 
     [:div {:ref *ref}
      (views/view {:config config'
-                  :view-parent class
+                  :view-parent-uuid (:block/uuid class)
                   :view-feature-type :class-objects
                   :columns columns
                   :add-new-object! add-new-object!
@@ -163,39 +148,21 @@
   [config property properties]
   (let [columns (build-property-object-columns config property properties)]
     (views/view {:config config
-                 :view-parent property
+                 :view-parent-uuid (:block/uuid property)
                  :view-feature-type :property-objects
                  :columns columns
-                 :add-new-object! (fn [view table {:keys [properties]}]
+                 :add-new-object! (fn [_view _table {:keys [properties]}]
                                     (p/let [block (add-new-property-object! property properties)]
                                       (when (:db/id block)
-                                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
-                                        (refresh-view-data! property view table [(:db/id block)]))))
+                                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))
                  ;; TODO: Add support for adding column
                  :show-add-property? false})))
 
 ;; Show all nodes containing the given property
 (hsx/defc property-related-objects
   [property config]
-  (let [property' property
-        [tags-property set-tags-property!] (hooks/use-state nil)
-        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+  (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
-        ;; Show tags to help differentiate property rows
-        properties (if (= (:db/ident property) :block/tags)
-                     [property']
-                     (cond-> [property']
-                       tags-property
-                       (conj tags-property)))]
-    (hooks/use-effect!
-     (fn []
-       (when-not (= (:db/ident property) :block/tags)
-         (p/let [property (state/<invoke-db-worker :thread-api/pull
-                                                   (state/get-current-repo)
-                                                   '[* {:property/closed-values [*]}]
-                                                   :block/tags)]
-           (set-tags-property! property)))
-       nil)
-     [(:db/ident property)])
+        properties [property]]
     [:div.ml-1
-     (property-related-objects-inner config property' properties)]))
+     (property-related-objects-inner config property properties)]))

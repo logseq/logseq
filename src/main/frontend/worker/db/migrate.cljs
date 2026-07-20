@@ -246,8 +246,8 @@
                 data)
                (map (fn [m] (dissoc m :db/id))))
 
-        r (d/transact! conn data' {:fix-db? true
-                                   :db-migrate? true})]
+        r (ldb/transact! conn data' {:fix-db? true
+                                     :db-migrate? true})]
     (assoc r :migrate-updates
            ;; fake it as a normal :fix type migration
            {:fix (constantly :ensure-built-in-data-exists!)})))

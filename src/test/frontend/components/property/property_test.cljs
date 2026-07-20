@@ -1,11 +1,56 @@
 (ns frontend.components.property.property-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
             [frontend.handler.property :as property-handler]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- property-source
+  []
+  (.toString
+   (fs/readFileSync
+    (node-path/join (.cwd js/process)
+                    "src/main/frontend/components/property.cljs")
+    "utf8")))
+
+(defn- form-source
+  [source marker]
+  (let [start (string/index-of source marker)
+        end (when start
+              (or (some->> ["\n(hsx/defc "
+                            "\n(defn"
+                            "\n(def "]
+                           (keep #(string/index-of source % (inc start)))
+                           seq
+                           (apply min))
+                  (count source)))]
+    (when (and start end)
+      (subs source start end))))
+
+(def ^:private local-derived-read-markers
+  ["block.temp/"
+   "db-async/"
+   "react/q"
+   "db-hooks/use-query"
+   "rfx/use-entity"
+   "hooks/use-effect"
+   "hooks/use-state"
+   "hooks/use-atom"])
+
+(defn- hook-names
+  [source]
+  (set (re-seq #"db-hooks/[a-z-]+" source)))
+
+(defn- assert-no-local-derived-read!
+  [source]
+  (doseq [marker local-derived-read-markers]
+    (is (not (string/includes? source marker))
+        (str "Unexpected local graph read: " marker))))
 
 (deftest removing-status-from-task-view-preserves-task-tag-test
   (async done
@@ -67,38 +112,69 @@
         {:logseq.property/type :default}
         {:db/id 1}))))
 
-(deftest bundled-display-properties-match-the-render-context-test
-  (let [payload-fn (some-> (resolve 'frontend.components.property/bundled-display-properties) deref)
-        default-payload {:kind :default}
-        page-payload {}
-        block {:block.temp/display-properties default-payload
-               :block.temp/page-display-properties page-payload}]
-    (is (fn? payload-fn))
-    (when payload-fn
-      (is (= default-payload (payload-fn block {} false)))
-      (is (= default-payload
-             (payload-fn block {:page-title? false
-                                :publishing? false
-                                :state-hide-empty-properties? false}
-                         false)))
-      (is (= page-payload (payload-fn block {:page-title? true} false))
-          "An explicit empty page payload is complete.")
-      (is (nil? (payload-fn (dissoc block :block.temp/page-display-properties)
-                            {:page-title? true}
-                            false))
-          "Page-title rendering must not reuse the semantically different default payload.")
-      (is (nil? (payload-fn block {:page-title? true :publishing? true} false)))
-      (is (nil? (payload-fn block {:gallery-view? true} false)))
-      (is (nil? (payload-fn block {} true))
-          "Showing empty and hidden properties requires a fresh derivation."))))
+(deftest display-properties-use-one-complete-explicit-resource-key-test
+  (let [source (property-source)
+        key-source (form-source source "(defn- display-properties-resource-key")
+        consumer-source (form-source source "(defn- use-display-properties")]
+    (is (some? key-source)
+        "Display properties expose one serializable resource-key builder.")
+    (when key-source
+      (is (string/includes? key-source ":block-display-properties"))
+      (is (string/includes? key-source "block-uuid"))
+      (doseq [context-key [":gallery-view?"
+                           ":page-title?"
+                           ":sidebar-properties?"
+                           ":tag-dialog?"
+                           ":publishing?"
+                           ":state-hide-empty-properties?"
+                           ":show-empty-and-hidden-properties?"]]
+        (is (string/includes? key-source context-key)
+            (str "Missing display context: " context-key))))
+    (is (some? consumer-source))
+    (when consumer-source
+      (is (= #{"db-hooks/use-resource"} (hook-names consumer-source)))
+      (is (string/includes? consumer-source "display-properties-resource-key"))
+      (assert-no-local-derived-read! consumer-source))))
 
-(deftest bundled-bidirectional-properties-preserve-empty-payloads-test
-  (let [payload-fn (some-> (resolve 'frontend.components.property/bundled-bidirectional-properties) deref)]
-    (is (fn? payload-fn))
-    (when payload-fn
-      (is (= [true []]
-             (payload-fn {:block.temp/bidirectional-properties []})))
-      (is (= [true nil]
-             (payload-fn {:block.temp/bidirectional-properties nil}))
-          "Presence, not truthiness, defines a complete worker payload.")
-      (is (= [false nil] (payload-fn {}))))))
+(deftest display-property-rows-hydrate-only-their-property-uuid-test
+  (let [source (property-source)
+        row-source (form-source source "(hsx/defc property-cp")]
+    (is (some? row-source))
+    (when row-source
+      (is (string/includes? row-source "property-uuid"))
+      (is (string/includes? row-source
+                            "(db-hooks/use-block property-uuid)"))
+      (is (= #{"db-hooks/use-block"} (hook-names row-source)))
+      (assert-no-local-derived-read! row-source))))
+
+(deftest bidirectional-properties-use-one-explicit-resource-test
+  (let [source (property-source)
+        area-source (form-source source "(hsx/defc bidirectional-properties-area")]
+    (is (some? area-source))
+    (when area-source
+      (is (string/includes? area-source ":block-bidirectional-properties"))
+      (is (string/includes? area-source "block-uuid"))
+      (is (= #{"db-hooks/use-resource"} (hook-names area-source)))
+      (is (not (string/includes? area-source "load-bidirectional-properties")))
+      (is (not (string/includes? area-source "bundled-bidirectional-properties")))
+      (assert-no-local-derived-read! area-source))))
+
+(deftest bidirectional-groups-hydrate-class-and-entity-uuids-at-row-boundaries-test
+  (let [source (property-source)
+        group-source (form-source source "(hsx/defc bidirectional-property-group")
+        values-source (form-source source "(hsx/defc bidirectional-values-cp")]
+    (is (some? group-source)
+        "Each class tab owns one canonical class subscription.")
+    (when group-source
+      (is (string/includes? group-source "class-uuid"))
+      (is (string/includes? group-source "entity-uuids"))
+      (is (string/includes? group-source "(db-hooks/use-block class-uuid)"))
+      (is (= #{"db-hooks/use-block"} (hook-names group-source)))
+      (assert-no-local-derived-read! group-source))
+    (is (some? values-source))
+    (when values-source
+      (is (string/includes? values-source "entity-uuids"))
+      (is (string/includes? values-source
+                            "blocks-container config entity-uuids"))
+      (is (not (string/includes? values-source "[entities]"))
+          "Bidirectional values cross the UI boundary only as UUIDs."))))

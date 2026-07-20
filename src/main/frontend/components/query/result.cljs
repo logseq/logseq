@@ -1,105 +1,40 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
-  (:require [clojure.string :as string]
-            [frontend.db.query-custom :as query-custom]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.hooks :as db-hooks]
-            [frontend.db.query-react :as query-react]
-            [frontend.modules.outliner.tree :as tree]
-            [frontend.search :as search]
-            [frontend.state :as state]
-            [frontend.template :as template]
-            [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+  (:require [frontend.db.hooks :as db-hooks]))
 
-(defn run-custom-query
-  [config query *result *query-error]
-  (let [repo (state/get-current-repo)
-        current-block-uuid (or (:block/uuid (:block config))
-                               (:block/uuid config))
-        _ (reset! *query-error nil)]
-    (try
-      (cond
-        (:dsl-query? config)
-        (let [direct-result (volatile! ::none)
-              result-ref (let [q (:query query)
-                               form (common-util/safe-read-string {:log-error? false} q)]
-                           (cond
-                             (and (symbol? form)
-                                  ;; Queries only containing template should trigger a query
-                                  (not (re-matches template/template-re (string/trim q))))
-                             nil
+(defn- query-spec
+  [config query]
+  (let [kind (if (:dsl-query? config) :dsl :datalog)
+        current-block-uuid (or (:current-block-uuid config)
+                               (:block/uuid (:block config))
+                               (:block/uuid config))]
+    (cond-> {:kind kind
+             :query (:query query)}
+      (and (= :dsl kind) (contains? config :cards?))
+      (assoc :cards? (boolean (:cards? config)))
 
-                             (re-matches #"^\".*\"$" q) ; full-text search
-                             (do
-                               (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
-                                 (when (seq blocks)
-                                   (let [result (->> blocks
-                                                     (keep (fn [b]
-                                                             (when-not (= (:block/uuid b) current-block-uuid)
-                                                               (when-not (ldb/hidden? b)
-                                                                 b)))))]
-                                     (reset! *result result))))
-                               *result)
+      (and (= :datalog kind) (contains? query :inputs))
+      (assoc :inputs (vec (:inputs query)))
 
-                             :else
-                             (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
-                               (if (util/atom? result)
-                                 result
-                                 (do
-                                   (vreset! direct-result result)
-                                   nil)))))
-              result (db-hooks/use-query result-ref)]
-          [nil (if (= ::none @direct-result)
-                 result
-                 @direct-result)])
+      (and (= :datalog kind) (contains? query :rules))
+      (assoc :rules (vec (:rules query)))
 
-        :else
-        (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                           :built-in-query? (:built-in-query? config)
-                                                           :today-query? (:today-query? config)})]
-          [k (db-hooks/use-query result)]))
-      (catch :default e
-        (js/console.error e)
-        (reset! *query-error e)
-        [nil nil]))))
+      current-block-uuid
+      (assoc :current-block-uuid current-block-uuid)
 
-(defn get-group-by-page [{:keys [result-transform query] :as query-m}
-                         {:keys [table? db-graph?]}]
-  (if (or table? db-graph?)
-    false ;; Immediately return false as table view can't handle grouping
-    (get query-m :group-by-page?
-         (and (not result-transform)
-	              (not (and (string? query) (string/includes? query "(by-page false)")))))))
+      (:current-page-title config)
+      (assoc :current-page-title (:current-page-title config))
 
-(defn- group-blocks-by-page
-  [blocks]
-  (if (:block/page (first blocks))
-    (some->> blocks
-             (group-by :block/page))
-    blocks))
+      (:today-day config)
+      (assoc :today-day (:today-day config))
 
-(defn transform-query-result
-  "Transforms a query result if query conditions and config indicate a transformation"
-  [{:keys [current-block-uuid] :as config} query-m query-result]
-  (let [;; exclude the current one, otherwise it'll loop forever
-        remove-blocks (if current-block-uuid [current-block-uuid] nil)
-        transformed-query-result (when query-result
-                                   (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
-                                     (if (and query-result (coll? result) (:block/uuid (first result)))
-                                       (cond-> result
-                                         (and (not (:db-graph? config)) (get query-m :remove-block-children? true))
-                                         tree/filter-top-level-blocks)
-                                       result)))
-        group-by-page? (get-group-by-page query-m config)
-        result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
-                 (let [result (group-blocks-by-page transformed-query-result)]
-                   (if (map? result)
-                     (dissoc result nil)
-                     result))
-                 transformed-query-result)]
-    (when-let [query-result (:query-result config)]
-      (reset! query-result result))
-    result))
+      (contains? query :remove-block-children?)
+      (assoc :remove-block-children? (boolean (:remove-block-children? query)))
+
+      (:result-transform query)
+      (assoc :result-transform-edn (pr-str (:result-transform query))))))
+
+(defn use-query-result
+  [config query]
+  (let [resource (db-hooks/use-resource [:query (query-spec config query)])]
+    (:rows resource)))

@@ -189,7 +189,7 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (let [tx-report (d/transact! conn tx-data {:fix-db? true})]
+      (let [tx-report (ldb/transact! conn tx-data {:fix-db? true})]
         (seq (:tx-data tx-report))))))
 
 (defn- fix-num-prefix-db-idents!
@@ -246,7 +246,7 @@
                  properties)]
     (when (seq tx-data)
       (prn :debug :fix-non-closed-values tx-data)
-      (d/transact! conn tx-data {:fix-db? true}))))
+      (ldb/transact! conn tx-data {:fix-db? true}))))
 
 (defn- fix-icon-wrong-type!
   [conn]
@@ -256,16 +256,16 @@
             tx-data (cons
                      [:db/retract (:db/id icon) :db/valueType]
                      (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))]
-        (d/transact! conn tx-data {:fix-db? true})))))
+        (ldb/transact! conn tx-data {:fix-db? true})))))
 
 (defn- fix-extends-cardinality!
   [conn]
   (when (not= :db.cardinality/many (:db/cardinality (d/entity @conn :logseq.property.class/extends)))
-    (d/transact! conn
-                 [{:db/ident :logseq.property.class/extends
-                   :db/cardinality :db.cardinality/many
-                   :db/index true}]
-                 {:fix-db? true})))
+    (ldb/transact! conn
+                   [{:db/ident :logseq.property.class/extends
+                     :db/cardinality :db.cardinality/many
+                     :db/index true}]
+                   {:fix-db? true})))
 
 (defn- validate-db-result
   [db]

@@ -22,6 +22,7 @@
    [frontend.worker.handler.page]
    [frontend.worker.handler.property]
    [frontend.worker.handler.query]
+   [frontend.worker.handler.render-resource]
    [frontend.worker.handler.search :as search-handler]
    [frontend.worker.handler.sync]
    [frontend.worker.handler.transaction :as transaction-handler]
@@ -541,6 +542,23 @@
       (vec (d/datoms db-or-datoms :eavt))
       db-or-datoms)))
 
+(defn- bootstrap-transact!
+  [conn tx-data]
+  (when (seq tx-data)
+    (d/transact! conn tx-data {:initial-db? true})))
+
+(defn- ensure-canonical-revisions!
+  [conn]
+  (let [db @conn
+        tx-id (inc (:max-tx db))
+        tx-data (keep (fn [datom]
+                        (let [entity (d/entity db (:e datom))]
+                          (when-not (nat-int? (:block/tx-id entity))
+                            {:db/id (:db/id entity)
+                             :block/tx-id tx-id})))
+                      (d/datoms db :avet :block/uuid))]
+    (bootstrap-transact! conn tx-data)))
+
 (defn- <create-or-open-db!
   [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
   (let [datoms (or datoms
@@ -582,13 +600,13 @@
                                            (map to-tx)
                                            (partition-all batch-size))
                         _ (doseq [batch ident-batches]
-                            (d/transact! conn batch {:initial-db? true}))
+                            (bootstrap-transact! conn batch))
                         non-ident-batches (->> datoms
                                                (remove #(contains? ident-eids (:e %)))
                                                (map to-tx)
                                                (partition-all batch-size))]
                     (doseq [batch non-ident-batches]
-                      (d/transact! conn batch {:initial-db? true}))))
+                      (bootstrap-transact! conn batch))))
               client-ops-conn (when-not @*publishing? client-ops-db)
               initial-data-exists? (when (nil? datoms)
                                      (and (d/entity @conn :logseq.class/Root)
@@ -607,8 +625,7 @@
                                     (let [config (resolve-initial-config config)
                                           initial-data (sqlite-create-graph/build-db-initial-data
                                                         config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
-                                      (ldb/transact! conn initial-data
-                                                     {:initial-db? true})))]
+                                      (bootstrap-transact! conn initial-data)))]
             (when-not sync-download-graph?
               (let [migrate-result (db-migrate/migrate conn)]
                 (if migrate-result
@@ -616,10 +633,12 @@
                   (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
               (transaction-handler/maybe-run-recycle-gc! conn))
 
+            (ensure-canonical-revisions! conn)
+
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
 
-            (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
+            (db-listener/listen-db-changes! repo conn)
 
             nil))))))
 

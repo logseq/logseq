@@ -5,7 +5,6 @@
             [frontend.background-tasks]
             [frontend.config :as config]
             [frontend.db.conn :as conn]
-            [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
@@ -13,13 +12,6 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
-
-(defn react-components
-  [f]
-  (reset! react/*query-state {})
-  (let [r (f)]
-    (reset! react/*query-state {})
-    r))
 
 (def bare-marker-pattern
   #"(TODO|DOING|DONE|WAIT|CANCELED|CANCELLED){1}\s+")

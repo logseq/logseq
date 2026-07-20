@@ -1,13 +1,114 @@
 (ns frontend.components.views-test
-  (:require ["react" :as react]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [async deftest is testing]]
+            [cljs.test :refer [async deftest is testing use-fixtures]]
+            [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
-            [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
+            [frontend.db.subs :as subs]
+            [frontend.rfx :as rfx]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
+
+(def ^:private test-graph-id "view-resource-test")
+
+(defn- source-for
+  [relative-file]
+  (.toString
+   (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
+
+(defn- form-source
+  [source marker]
+  (let [start (string/index-of source marker)
+        end (when start
+              (or (some->> ["\n(hsx/defc "
+                            "\n(defn"
+                            "\n(def "
+                            "\n(declare "]
+                           (keep #(string/index-of source % (inc start)))
+                           seq
+                           (apply min))
+                  (count source)))]
+    (when (and start end)
+      (subs source start end))))
+
+(defn- hook-names
+  [source]
+  (set (re-seq #"db-hooks/[a-z-]+" source)))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
+
+(defn- with-use-sync-external-store
+  [replacement f]
+  (let [original (gobj/get react "useSyncExternalStore")]
+    (gobj/set react "useSyncExternalStore" replacement)
+    (try
+      (f)
+      (finally
+        (gobj/set react "useSyncExternalStore" original)))))
+
+(defn- mount-resource!
+  [resource-key]
+  (let [*mounted? (atom true)
+        *unsubscribe (atom nil)
+        value (atom nil)]
+    (letfn [(listener! []
+              (when @*mounted?
+                (render!)))
+            (render! []
+              (when @*mounted?
+                (with-use-sync-external-store
+                  (fn [subscribe get-snapshot _get-server-snapshot]
+                    (when-not @*unsubscribe
+                      (reset! *unsubscribe (subscribe listener!)))
+                    (get-snapshot))
+                  #(reset! value (db-hooks/use-resource resource-key)))))]
+      (render!)
+      {:value value
+       :unmount! (fn []
+                   (reset! *mounted? false)
+                   (when-let [unsubscribe @*unsubscribe]
+                     (unsubscribe)
+                     (reset! *unsubscribe nil)))})))
+
+(defn- unmount!
+  [mounted]
+  ((:unmount! mounted)))
+
+(defn- finish-async!
+  [done promise]
+  (-> promise
+      (p/catch (fn [error]
+                 (is false (str error))))
+      (p/finally done)))
+
+(defn- delta
+  [rev affected-keys]
+  {:graph-id test-graph-id
+   :rev rev
+   :op-id (str "view-operation-" rev)
+   :blocks {}
+   :deleted {}
+   :children {}
+   :affected-keys affected-keys})
+
+(use-fixtures :each
+  {:before #(subs/reset-graph! test-graph-id)
+   :after #(subs/reset-graph! test-graph-id)})
 
 (deftest table-property-value-receives-view-parent
   (let [view-parent {:db/ident :logseq.class/Task}
@@ -49,15 +150,6 @@
   (is (= :logseq.property.view/type.table
          (#'views/view-display-type {} :all-pages))))
 
-(deftest refreshed-views-preserve-the-current-tab
-  (let [views [{:db/id 1 :block/title "First"}
-               {:db/id 2 :block/title "Updated second"}]]
-    (is (= (second views)
-           (#'views/current-view-from views {:db/id 2 :block/title "Stale second"})))
-    (is (= (first views)
-           (#'views/current-view-from views {:db/id 3})))
-    (is (nil? (#'views/current-view-from [] {:db/id 2})))))
-
 (deftest view-type-button-uses-the-contextual-display-type
   (let [view {:db/id 1}
         all-pages-view (#'views/view-with-display-type
@@ -72,24 +164,6 @@
            (get-in references-view [:logseq.property.view/type :db/ident])))
     (is (= "list"
            (get-in references-view [:logseq.property.view/type :logseq.property/icon :id])))))
-
-(defn- render-lazy-item
-  [row]
-  (let [previous-react (gobj/get js/globalThis "React")]
-    (gobj/set js/globalThis "React" react)
-    (try
-      (.renderToStaticMarkup
-       react-dom-server
-       (views/lazy-item [row] 0 {}
-                        (fn [item]
-                          (.createElement react "span" nil
-                                          (if (contains? item :block/title)
-                                            (:block/title item)
-                                            "unloaded")))))
-      (finally
-        (if (some? previous-react)
-          (gobj/set js/globalThis "React" previous-react)
-          (js-delete js/globalThis "React"))))))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
   "When with-object-name? is false, the user property 'Name' should be kept"
@@ -148,80 +222,277 @@
     (is (= block
            (views/gallery-card-asset-block block :block/uuid)))))
 
-(deftest view-row-ids-should-flatten-grouped-rows
-  (is (= [1 2 3 4]
-         (#'views/view-row-ids
-          [[:group-a [1 2]]
-           [:group-b [3 4]]]))))
+(deftest view-row-ids-flatten-only-typed-uuid-payloads-test
+  (let [row-a (random-uuid)
+        row-b (random-uuid)
+        row-c (random-uuid)
+        row-d (random-uuid)]
+    (is (= [row-a row-b]
+           (vec (views/view-row-ids
+                 {:partition :flat
+                  :count 2
+                  :rows [row-a row-b]}))))
+    (is (= [row-a row-b row-c]
+           (vec (views/view-row-ids
+                 {:partition :grouped
+                  :count 3
+                  :groups [{:value {:kind :scalar :value "A"}
+                            :rows [row-a row-b]}
+                           {:value {:kind :empty}
+                            :rows [row-c]}]}))))
+    (is (= [row-a row-b row-c row-d]
+           (vec (views/view-row-ids
+                 {:partition :grouped-list
+                  :count 4
+                  :groups [{:value {:kind :entity :uuid (random-uuid)}
+                            :partitions [{:breadcrumb-uuid row-a
+                                          :rows [row-a row-b]}
+                                         {:breadcrumb-uuid row-c
+                                          :rows [row-c row-d]}]}]}))))
+    (is (= [row-a row-b row-c]
+           (views/grouped-gallery-row-ids
+            {:partition :grouped
+             :count 4
+             :groups [{:value {:kind :scalar :value "A"}
+                       :rows [row-a row-b]}
+                      {:value {:kind :scalar :value "B"}
+                       :rows [row-b row-c]}]})))))
 
-(deftest grouped-gallery-row-ids-should-deduplicate-grouped-rows
-  (is (= [1 2 3]
-         (#'views/grouped-gallery-row-ids
-          [[:group-a [1 2]]
-           [:group-b [{:db/id 2} 3]]]))))
+(deftest view-row-hydrates-only-its-uuid-through-use-block-test
+  (let [row-uuid (random-uuid)
+        block {:block/uuid row-uuid
+               :block/tx-id 9
+               :block/title "Loaded from the UUID slot"}
+        calls (atom [])]
+    (with-redefs [db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! calls conj requested-uuid)
+                    block)]
+      (is (= "<span>Loaded from the UUID slot</span>"
+             (render-static
+              (views/lazy-item
+               [row-uuid]
+               0
+               {}
+               (fn [item]
+                 (.createElement react "span" nil (:block/title item)))))))
+      (is (= [row-uuid] @calls)
+          "A mounted row supplies one UUID and owns no loader closure."))))
 
-(deftest lazy-item-does-not-render-unloaded-row-values
-  (testing "All Pages ids stay hidden until their row data is loaded"
-    (is (= "<div style=\"min-height:24px\"></div>" (render-lazy-item 42))))
-  (testing "Compact linked-reference rows stay hidden until they are hydrated"
-    (is (= "<div style=\"min-height:24px\"></div>"
-           (render-lazy-item {:db/id 42
-                              :block/parent #uuid "11111111-1111-1111-1111-111111111111"})))))
+(deftest typed-group-values-keep-scalars-plain-and-hydrate-entities-test
+  (let [entity-uuid (random-uuid)
+        entity {:block/uuid entity-uuid
+                :block/tx-id 4
+                :block/title "Entity group"}
+        block-calls (atom [])
+        render-group
+        (fn [value readable-property-value]
+          (render-static
+           (views/group-item
+            {:block/uuid (random-uuid)}
+            {}
+            []
+            {:block/title "Status"}
+            value
+            {}
+            {}
+            {:list-view? true
+             :gallery? false
+             :group-by-page? false
+             :readable-property-value readable-property-value})))]
+    (with-redefs [db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! block-calls conj requested-uuid)
+                    entity)
+                  util/mobile? (constantly true)
+                  views/view-cp (fn [& _] nil)]
+      (let [markup (render-group {:kind :scalar :value "Ready"}
+                                 (fn [value]
+                                   (if (= "Ready" value)
+                                     value
+                                     (str "wrapped:" (pr-str value)))))]
+        (is (string/includes? markup "Ready"))
+        (is (not (string/includes? markup "wrapped:")))
+        (is (empty? @block-calls)
+            "Plain scalar group metadata never opens a block subscription."))
+      (let [markup (render-group {:kind :entity :uuid entity-uuid}
+                                 :block/title)]
+        (is (string/includes? markup "Entity group"))
+        (is (= [entity-uuid] @block-calls)
+            "Entity-valued group metadata hydrates at its UUID boundary.")))))
 
-(deftest lazy-item-renders-loaded-rows-including-empty-titles
-  (is (= "<span>Loaded</span>"
-         (render-lazy-item {:db/id 42 :block/title "Loaded"})))
-  (is (= "<span></span>"
-         (render-lazy-item {:db/id 43 :block/title ""}))))
+(deftest views-use-only-definition-and-data-resources-test
+  (let [source (source-for "src/main/frontend/components/views.cljs")
+        view-source (form-source source "(hsx/defc view\n")
+        selected-view-source (form-source source "(hsx/defc selected-view")
+        view-data-source (form-source source "(hsx/defc view-aux")
+        row-source (form-source source "(hsx/defc lazy-item")]
+    (is (some? view-source))
+    (is (some? selected-view-source))
+    (is (some? view-data-source))
+    (is (some? row-source))
+    (when view-source
+      (is (string/includes? view-source ":views"))
+      (is (string/includes? view-source "view-parent-uuid"))
+      (is (= #{"db-hooks/use-resource"}
+             (hook-names view-source)))
+      (doseq [forbidden ["hooks/use-state"
+                         "hooks/use-effect"
+                         "rfx/use-entity-tx-id"
+                         "<get-or-load-views"
+                         "create-view!"]]
+        (is (not (string/includes? view-source forbidden))
+            (str "View definitions retain an imperative owner: " forbidden))))
+    (when selected-view-source
+      (is (= #{"db-hooks/use-block"}
+             (hook-names selected-view-source)))
+      (doseq [forbidden ["hooks/use-effect"
+                         "rfx/use-entity-tx-id"
+                         "<get-or-load-views"
+                         ":db/id"
+                         "db-async/"
+                         "react/q"
+                         "db-hooks/use-query"]]
+        (is (not (string/includes? selected-view-source forbidden))
+            (str "Selected view retains an imperative definition loader: " forbidden))))
+    (when view-data-source
+      (is (string/includes? view-data-source ":view-data"))
+      (is (= #{"db-hooks/use-resource"}
+             (hook-names view-data-source)))
+      (doseq [forbidden ["load-view-data"
+                         "hooks/use-effect"
+                         "db-async/"
+                         "react/q"
+                         "db-hooks/use-query"
+                         ":query-fn"]]
+        (is (not (string/includes? view-data-source forbidden))
+            (str "View data retains a local loader: " forbidden))))
+    (when row-source
+      (is (= #{"db-hooks/use-block"} (hook-names row-source)))
+      (doseq [forbidden [":db/id"
+                         "db-async/"
+                         "hooks/use-effect"
+                         "hooks/use-state"
+                         "loading-db-id"]]
+        (is (not (string/includes? row-source forbidden))
+            (str "A UUID row retains local hydration state: " forbidden))))
+    (is (not (string/includes? source "(defn sub-view-data-changes")))
+    (is (not (string/includes? source "[frontend.db.react :as react]")))))
 
-(deftest lazy-item-loads-all-pages-rows-during-scroll
-  (is (not (#'views/lazy-item-ready-to-load? 42 nil nil true false false)))
-  (is (#'views/lazy-item-ready-to-load? 42 nil nil true true true))
-  (is (#'views/lazy-item-ready-to-load? 42 nil nil false false false))
-  (is (not (#'views/lazy-item-ready-to-load? 42 nil nil false false true)))
-  (is (not (#'views/lazy-item-ready-to-load? 42 {:db/id 42} nil false true true)))
-  (is (not (#'views/lazy-item-ready-to-load? 42 nil 42 true true true))))
+(deftest persisted-table-columns-derive-from-the-subscribed-view-test
+  (let [source (source-for "src/main/frontend/components/views.cljs")
+        view-inner-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo view-inner")
+        setters-source (form-source source "(defn- db-set-table-state!")]
+    (is (some? view-inner-source))
+    (is (some? setters-source))
+    (when view-inner-source
+      (is (not (string/includes?
+                view-inner-source
+                "(if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]"))
+          "Adding :id before testing persisted hidden columns makes the imported-table fallback unreachable.")
+      (is (string/includes?
+           view-inner-source
+           "(if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]")
+          "Imported tables without hidden-columns must derive visibility from ordered-columns.")
+      (doseq [local-state-binding ["[visible-columns set-visible-columns!] (hooks/use-state"
+                                   "[ordered-columns set-ordered-columns!] (hooks/use-state"
+                                   "[sized-columns set-sized-columns!] (hooks/use-state"]]
+        (is (not (string/includes? view-inner-source local-state-binding))
+            (str "Persisted table state still has a local mirror: " local-state-binding)))
+      (doseq [property [":logseq.property.table/hidden-columns view-entity"
+                        ":logseq.property.table/ordered-columns view-entity"
+                        ":logseq.property.table/sized-columns view-entity"]]
+        (is (string/includes? view-inner-source property)
+            (str "Subscribed view entity no longer owns table state: " property))))
+    (when setters-source
+      (doseq [local-write ["(set-visible-columns! columns)"
+                           "(set-ordered-columns! ordered-columns)"
+                           "(set-sized-columns! sized-columns)"]]
+        (is (not (string/includes? setters-source local-write))
+            (str "Persisted table setter still writes a local mirror: " local-write))))))
 
-(deftest table-row-loads-only-from-the-latest-all-pages-range
-  (is (#'views/table-row-load-while-scrolling? :all-pages [10 20] 15))
-  (is (not (#'views/table-row-load-while-scrolling? :all-pages [10 20] 21)))
-  (is (not (#'views/table-row-load-while-scrolling? :all-pages nil 15)))
-  (is (not (#'views/table-row-load-while-scrolling? :query-result [10 20] 15))))
+(deftest view-partition-readers-do-not-shadow-core-partition-test
+  (let [source (source-for "src/main/frontend/components/views.cljs")]
+    (is (not (string/includes? source "{:keys [partition rows groups]"))
+        "View payload destructuring must give :partition an intent-revealing local name.")))
 
-(deftest all-pages-table-cells-render-with-the-virtualized-row
-  (is (#'views/eager-table-cells? :all-pages))
-  (is (not (#'views/eager-table-cells? :query-result))))
+(deftest view-definition-uuids-hydrate-through-use-block-test
+  (let [owner-uuid (random-uuid)
+        view-uuid (random-uuid)
+        view-entity {:block/uuid view-uuid
+                     :block/tx-id 3
+                     :logseq.property.view/feature-type :class-objects}
+        resource-calls (atom [])
+        block-calls (atom [])
+        rendered (atom nil)]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-calls conj resource-key)
+                    [view-uuid])
+                  db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! block-calls conj requested-uuid)
+                    view-entity)
+                  views/sub-view
+                  (fn [view option]
+                    (reset! rendered [view option])
+                    [:span "view"])]
+      (render-static
+       (views/view {:view-parent-uuid owner-uuid
+                    :view-feature-type :class-objects}))
+      (is (= [[:views owner-uuid :class-objects]] @resource-calls))
+      (is (= [view-uuid] @block-calls))
+      (is (= view-entity (first @rendered)))
+      (is (= owner-uuid (get-in @rendered [1 :view-parent-uuid]))))))
 
-(deftest table-row-placeholder-matches-the-rendered-row-height
-  (is (= 33 (#'views/lazy-item-placeholder-height true)))
-  (is (= 24 (#'views/lazy-item-placeholder-height false))))
-
-(deftest loaded-views-use-the-worker-query-result
+(deftest view-and-reaction-membership-reloads-only-while-mounted-test
   (async done
-    (let [view-parent {:db/id 151
-                       :logseq.property/views
-                       [{:db/id 10
-                         :block/order "local"
-                         :logseq.property.view/feature-type :all-pages
-                         :logseq.property.view/type {:db/id 114}}]}
-          fetched-views [{:db/id 12
-                          :block/order "b"
-                          :logseq.property.view/feature-type :all-pages}
-                         {:db/id 11
-                          :block/order "a"
-                          :logseq.property.view/feature-type :all-pages}]]
-      (-> (p/with-redefs [db-async/<get-views
-                          (fn [repo parent-id feature-type]
-                            (is (= ["repo" 151 :all-pages]
-                                   [repo parent-id feature-type]))
-                            (p/resolved fetched-views))]
-            (#'views/<get-or-load-views "repo" view-parent :all-pages))
-          (p/then (fn [result]
-                    (is (= [11 12] (mapv :db/id result))
-                        "Compact parent data must not replace complete worker views.")))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally done)))))
+         (let [owner-uuid (random-uuid)
+               view-uuid (random-uuid)
+               target-uuid (random-uuid)
+               user-uuid (random-uuid)
+               view-key [:view-data view-uuid
+                         {:feature-type :class-objects}]
+               reaction-key [:block-reactions target-uuid user-uuid]
+               view-watch [:class-membership owner-uuid]
+               reaction-watch [:reactions target-uuid]
+               calls (atom [])
+               load-counts (atom {})]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id resource-key]
+                              (swap! calls conj resource-key)
+                              (let [load-number
+                                    (get (swap! load-counts update resource-key
+                                                (fnil inc 0))
+                                         resource-key)
+                                    [watch-key value]
+                                    (if (= view-key resource-key)
+                                      [view-watch
+                                       {:partition :flat
+                                        :count 0
+                                        :rows []}]
+                                      [reaction-watch []])]
+                                (p/resolved
+                                 {:basis-rev (dec load-number)
+                                  :key resource-key
+                                  :watch-keys #{watch-key}
+                                  :value value})))]
+              (let [mounted-view (mount-resource! view-key)
+                    mounted-reactions (mount-resource! reaction-key)]
+                (p/let [_ (p/delay 0)
+                        _ (is (= {:partition :flat :count 0 :rows []}
+                                 @(:value mounted-view)))
+                        _ (unmount! mounted-reactions)
+                        _ (subs/apply-delta!
+                           (delta 1 #{view-watch reaction-watch}))
+                        _ (p/delay 0)]
+                  (is (= 2 (count (filter #{view-key} @calls)))
+                      "One invalidation starts one mounted view reload.")
+                  (is (= 1 (count (filter #{reaction-key} @calls)))
+                      "An unmounted reaction resource starts no reload.")
+                  (unmount! mounted-view))))))))
 
 (deftest group-by-column-should-exclude-name-and-include-many-properties
   (is (views/group-by-column? {:id :block/page}))

@@ -224,11 +224,8 @@
     (if (or error (:error validation))
       (reset! *result {:error (or error (:error validation))})
       (try
-        ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
         (ldb/transact! conn (:tx-data validation)
-                       (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
-                         (= :datoms (::sqlite-export/graph-format export-map))
-                         (assoc :initial-db? true)))
+                       (merge {::sqlite-export/imported-data? true} tx-meta))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
@@ -426,11 +423,6 @@
   [[op _args]]
   (= :batch-import-edn op))
 
-(defn- datom-import-op?
-  [[op args]]
-  (and (= :batch-import-edn op)
-       (= :datoms (::sqlite-export/graph-format (first args)))))
-
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
@@ -447,10 +439,7 @@
                 (assoc :outliner-op single-op-outliner-op)
 
                 (some import-edn-op? ops)
-                (assoc ::sqlite-export/imported-data? true)
-
-                (some datom-import-op? ops)
-                (assoc :initial-db? true))
+                (assoc ::sqlite-export/imported-data? true))
         *result (atom nil)]
 
     (outliner-tx/transact!

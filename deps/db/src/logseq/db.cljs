@@ -110,7 +110,7 @@
                  (or @*debounce-fn d/store))]
          (f @conn))))))
 
-(defn- should-validate-tx?
+(defn- should-run-transact-pipeline?
   [conn db tx-meta]
   (and (entity-plus/db-based-graph? db)
        (not
@@ -119,8 +119,11 @@
             (:initial-db? tx-meta)
             (:skip-validate-db? tx-meta false)
             ;; used by `batch-transact-with-temp-conn!`
-            (:skip-validate-db? @conn)
-            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+            (:skip-validate-db? @conn)))))
+
+(defn- should-validate-pipeline-result?
+  [tx-meta]
+  (not (:fix-db? tx-meta)))
 
 (defn- tx-report-pipeline-data
   [tx-report]
@@ -150,13 +153,15 @@
   (try
     (loop []
       (let [db @conn
-            validate? (should-validate-tx? conn db tx-meta)]
-        (if validate?
+            run-pipeline? (should-run-transact-pipeline? conn db tx-meta)]
+        (if run-pipeline?
           (let [tx-report* (d/with db tx-data tx-meta)
                 pipeline-f @*transact-pipeline-fn
                 tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
                 _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-                [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
+                [validate-result errors] (if (should-validate-pipeline-result? tx-meta)
+                                           (db-validate/validate-tx-report tx-report nil)
+                                           [true nil])]
             (cond
               (not validate-result)
               (if (identical? db @conn)

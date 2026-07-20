@@ -15,9 +15,7 @@
 (defn q
   [query-string]
   (when-let [repo (state/get-current-repo)]
-    (p/let [result (query-dsl/query repo query-string
-                                    {:disable-reactive? true
-                                     :return-promise? true})]
+    (p/let [result (query-dsl/query repo query-string)]
       (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result))))))
 
 (defn datascript_query
@@ -49,9 +47,7 @@
 (defn custom_query
   [query-string]
   (p/let [result (let [query (cljs.reader/read-string query-string)]
-                   (query-custom/custom-query {:query query
-                                               :disable-reactive? true
-                                               :return-promise? true}))]
+                   (query-custom/custom-query {:query query}))]
     (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result)))))
 
 (defn set_file_content

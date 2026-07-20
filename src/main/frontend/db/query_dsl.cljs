@@ -7,7 +7,6 @@
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.db.async :as db-async]
-            [frontend.db.react :as react]
             [frontend.template :as template]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -89,48 +88,37 @@
   "Block fields needed to render query results without a renderer DB."
   [:db/id :block/uuid :block/title :block/raw-title])
 
-(defn- query-key
-  [query-string query-opts]
-  [:custom
-   query-string
-   (:today-query? query-opts)
-   {:dsl-query? true
-    :cards? (:cards? query-opts)
-    :block-attrs db-block-attrs}])
+(defn- require-query-string!
+  [query-string]
+  (when-not (and (string? query-string)
+                 (not (string/blank? query-string))
+                 (not= "\"\"" query-string))
+    (throw (ex-info "Invalid DSL query" {:query query-string})))
+  query-string)
+
+(defn- require-custom-query!
+  [query-m]
+  (when-not (and (map? query-m) (seq (:query query-m)))
+    (throw (ex-info "Invalid custom query" {:query query-m})))
+  query-m)
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '/query' or '{{query }}'."
   ([repo query-string]
    (query repo query-string {}))
   ([repo query-string query-opts]
-   (when (and (string? query-string) (not= "\"\"" query-string))
-     (react/q repo
-              (query-key query-string query-opts)
-              (assoc query-opts
-                     :query-fn
-                     (fn [_ _]
-                       (db-async/<invoke-db-worker :thread-api/query-dsl-query
-                                                   repo
-                                                   query-string
-                                                   {:cards? (:cards? query-opts)
-                                                    :block-attrs db-block-attrs})))
-              nil))))
+   (require-query-string! query-string)
+   (db-async/<invoke-db-worker :thread-api/query-dsl-query
+                               repo
+                               query-string
+                               {:cards? (:cards? query-opts)
+                                :block-attrs db-block-attrs})))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query."
-  [repo query-m query-opts]
-  (when (seq (:query query-m))
-    (react/q repo
-             [:custom
-              (or (:query-string query-m) (dissoc query-m :title))
-              (:today-query? query-opts)
-              {:dsl-query? true
-               :block-attrs db-block-attrs}]
-             (assoc query-opts
-                    :query-fn
-                    (fn [_ _]
-                      (db-async/<invoke-db-worker :thread-api/query-dsl-custom-query
-                                                  repo
-                                                  query-m
-                                                  {:block-attrs db-block-attrs})))
-             nil)))
+  [repo query-m _query-opts]
+  (require-custom-query! query-m)
+  (db-async/<invoke-db-worker :thread-api/query-dsl-custom-query
+                              repo
+                              query-m
+                              {:block-attrs db-block-attrs}))
