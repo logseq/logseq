@@ -740,9 +740,9 @@
                    :html html
                    :blocks (when (and graph (seq blocks))
                              (pr-str
-                              {:graph graph
+                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
+                               :blocks (vec blocks)}))}))]
        (if owner-window
          (write-clipboard data owner-window)
          (write-clipboard data)))))

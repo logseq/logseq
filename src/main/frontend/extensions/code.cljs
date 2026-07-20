@@ -129,6 +129,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
             [frontend.db.async :as db-async]
             [frontend.extensions.calc :as calc]
@@ -636,6 +637,8 @@
                          :default-value code} attr)]
       (when calc?
         (calc/results calc-lines))]]))
+
+(lazy-editor/register-editor! editor)
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

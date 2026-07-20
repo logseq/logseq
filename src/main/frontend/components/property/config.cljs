@@ -587,18 +587,15 @@
 
 (defn- maybe-show-add-choice-popup!
   [^js e property owner-block values']
-  (p/do!
-   (when (seq values')
-     (db-async/<get-blocks (state/get-current-repo) (map (fn [{:keys [value]}] (:db/id value)) values')))
-   (shui/popup-show! (.-target e)
-                     (fn [{:keys [id]}]
-                       (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
-                         (if (seq values')
-                           (add-existing-values property values' opts)
-                           (choice-base-edit-form property {:create? true} owner-block))))
-                     {:id :ls-base-edit-form
-                      :force-popover? true
-                      :align "start"})))
+  (shui/popup-show! (.-target e)
+                    (fn [{:keys [id]}]
+                      (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                        (if (seq values')
+                          (add-existing-values property values' opts)
+                          (choice-base-edit-form property {:create? true} owner-block))))
+                    {:id :ls-base-edit-form
+                     :force-popover? true
+                     :align "start"}))
 
 (defn- add-choice-menuitem
   [property owner-block]

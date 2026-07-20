@@ -177,6 +177,73 @@
                     :registry (atom {})})
         (state/register-rfx-state-subs!)))))
 
+(deftest sync-block-conflicts-bulk-state-replaces-one-repo-test
+  (let [original-state @state/state
+        repo-a "graph-a"
+        repo-b "graph-b"
+        block-a (str (random-uuid))
+        block-b (str (random-uuid))
+        old-conflicts [{:value "old"}]
+        new-conflicts [{:value "new"}]
+        initial-state (assoc original-state
+                             :sync/block-conflicts
+                             {repo-a {block-a old-conflicts}
+                              repo-b {block-b old-conflicts}})]
+    (try
+      (reset! state/state initial-state)
+      (rfx/init! {:initial-value initial-state
+                  :registry (atom {})})
+      (let [result (try
+                     (apply state/set-sync-block-conflicts!
+                            [repo-a {block-b new-conflicts}])
+                     :ok
+                     (catch :default _error
+                       :unsupported))]
+        (is (= :ok result)
+            "Sync conflict hydration must support one bulk replacement per graph.")
+        (when (= :ok result)
+          (is (= {repo-a {block-b new-conflicts}
+                  repo-b {block-b old-conflicts}}
+                 (state/get-state :sync/block-conflicts))
+              "Hydration replaces stale entries for one graph and preserves other graphs.")
+          (apply state/set-sync-block-conflicts! [repo-a {}])
+          (is (= {}
+                 (state/get-state [:sync/block-conflicts repo-a]))
+              "An empty hydration result clears stale conflicts after graph reset.")
+          (is (thrown? js/Error
+                       (apply state/set-sync-block-conflicts! [repo-a nil]))
+              "Missing worker data must fail instead of silently clearing state.")))
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})))))
+
+(deftest delete-repo-clears-only-that-repos-sync-conflicts-test
+  (let [original-state @state/state
+        repo-a {:url "graph-a"}
+        repo-b {:url "graph-b"}
+        block-id (str (random-uuid))
+        conflicts [{:value "conflict"}]
+        initial-state (assoc original-state
+                             :me {:repos [repo-a repo-b]}
+                             :sync/block-conflicts
+                             {(:url repo-a) {block-id conflicts}
+                              (:url repo-b) {block-id conflicts}})]
+    (try
+      (reset! state/state initial-state)
+      (rfx/init! {:initial-value initial-state
+                  :registry (atom {})})
+      (state/delete-repo! repo-a)
+      (is (= [repo-b]
+             (state/get-state [:me :repos])))
+      (is (= {(:url repo-b) {block-id conflicts}}
+             (state/get-state :sync/block-conflicts))
+          "Removing a graph must remove its hydrated conflicts without touching another graph.")
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})))))
+
 (deftest get-editor-info-includes-selection-when-not-editing-test
   (let [selected-ids [(random-uuid) (random-uuid)]]
     (with-redefs [state/get-edit-block (constantly nil)

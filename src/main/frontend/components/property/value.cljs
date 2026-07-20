@@ -311,11 +311,7 @@
     (p/let [current-block (db-async/<get-block repo current-block-ref {:children? false})
             selected? (if many?
                         (not (property-value-selected? (get current-block (:db/ident property)) value))
-                        selected?)
-            _ (when (and selected?
-                         (= :db.type/ref (:db/valueType property))
-                         (number? value))
-                (db-async/<get-block repo value {:children? false}))]
+                        selected?)]
      (if selected?
        (if many?
          (db-property-handler/batch-set-property! (map :block/uuid blocks)

@@ -1,4 +1,4 @@
-(ns frontend.util.datalog
+(ns logseq.db.frontend.datalog
   "Utility fns related to datalog queries and rules")
 
 (defn find-rules-in-where

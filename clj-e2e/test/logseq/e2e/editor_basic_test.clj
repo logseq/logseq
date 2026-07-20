@@ -10,8 +10,7 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -327,6 +326,65 @@
     })();"
     (json/write-value-as-string blocks))))
 
+(defn- scroll-page-to-block!
+  [title-prefix block-count target-index]
+  (let [target-title (format "%s%05d" title-prefix target-index)]
+    (w/eval-js
+     (format
+      "(async () => {
+        const titlePrefix = %s;
+        const targetTitle = %s;
+        const totalCount = %d;
+        const targetIndex = %d;
+        const scrollContainer = document.querySelector('#main-content-container');
+        const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        if (!scrollContainer) {
+          throw new Error('Expected main content scroller');
+        }
+
+        const mountedBlocks = () => Array.from(
+          document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]')
+        ).filter((block) => block.dataset.blockTitle.startsWith(titlePrefix));
+        const findTarget = () => mountedBlocks()
+          .find((block) => block.dataset.blockTitle === targetTitle);
+        const maxScrollTop = () => Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        const clampScrollTop = (value) => Math.max(0, Math.min(maxScrollTop(), value));
+
+        scrollContainer.scrollTop = clampScrollTop(
+          maxScrollTop() * (targetIndex / Math.max(1, totalCount - 1))
+        );
+
+        for (let attempt = 0; attempt < 120; attempt++) {
+          await nextFrame();
+          const target = findTarget();
+          if (target) {
+            target.scrollIntoView({ block: 'center' });
+            await nextFrame();
+            return target.dataset.blockTitle;
+          }
+
+          const blocks = mountedBlocks();
+          if (blocks.length > 0) {
+            const middle = blocks[Math.floor(blocks.length / 2)];
+            const middleIndex = Number.parseInt(
+              middle.dataset.blockTitle.slice(titlePrefix.length),
+              10
+            );
+            const estimatedRowHeight = Math.max(1, maxScrollTop() / totalCount);
+            scrollContainer.scrollTop = clampScrollTop(
+              scrollContainer.scrollTop + ((targetIndex - middleIndex) * estimatedRowHeight)
+            );
+          }
+        }
+
+        throw new Error(`Could not mount page block ${targetTitle}`);
+      })();"
+      (json/write-value-as-string title-prefix)
+      (json/write-value-as-string target-title)
+      block-count
+      target-index))))
+
 (deftest click-rendered-block-focuses-editor
   (testing "clicking a rendered block leaves the editor textarea focused"
     (let [title "click rendered block focuses editor"]
@@ -558,81 +616,33 @@
       });
     })();"))
 
-(defn- journals-long-remount-metrics
-  [long-block-title]
-  (js-json
+(defn- set-journals-scroll-position!
+  [position]
+  (w/eval-js
    (format
-    "(async () => {
-      const longBlockTitle = %s;
-      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    "(() => {
       const scrollContainer = document.querySelector('#main-content-container');
-
-      const findLongJournal = () => Array.from(document.querySelectorAll('#journals .journal-item'))
-        .find((item) => item.textContent.includes(longBlockTitle));
-
-      const waitForLongJournal = async () => {
-        for (let i = 0; i < 80; i++) {
-          const journal = findLongJournal();
-          if (journal) {
-            return journal;
-          }
-          await delay(100);
-        }
-        throw new Error('Expected long journal item');
-      };
-
-      const stableLongJournalHeight = async () => {
-        let previous = null;
-        let stableCount = 0;
-        for (let i = 0; i < 80; i++) {
-          const journal = await waitForLongJournal();
-          const height = Math.round(journal.getBoundingClientRect().height);
-          if (previous !== null && Math.abs(height - previous) <= 1) {
-            stableCount += 1;
-          } else {
-            stableCount = 0;
-          }
-          previous = height;
-          if (stableCount >= 3) {
-            return height;
-          }
-          await delay(100);
-        }
-        return previous;
-      };
-
-      const snapshot = async (label) => {
-        const journal = await waitForLongJournal();
-        return {
-          label,
-          'scroll-top': Math.round(scrollContainer.scrollTop),
-          'scroll-height': Math.round(scrollContainer.scrollHeight),
-          'long-journal-height': Math.round(journal.getBoundingClientRect().height)
-        };
-      };
-
-      const initialLongJournalHeight = await stableLongJournalHeight();
-      const initial = await snapshot('initial');
-
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      await delay(500);
-      scrollContainer.scrollTop = 0;
-      await nextFrame();
-      const afterReturn = await snapshot('after-return');
-      await delay(800);
-      const afterSettle = await snapshot('after-settle');
-      await delay(5500);
-      const afterFallback = await snapshot('after-fallback');
-
-      return JSON.stringify({
-        'initial': { ...initial, 'long-journal-height': initialLongJournalHeight },
-        'after-return': afterReturn,
-        'after-settle': afterSettle,
-        'after-fallback': afterFallback
-      });
+      if (!scrollContainer) {
+        throw new Error('Expected main content scroller');
+      }
+      scrollContainer.scrollTop = %s;
     })();"
-    (json/write-value-as-string long-block-title))))
+    (case position
+      :start "0"
+      :end "scrollContainer.scrollHeight"))))
+
+(defn- mounted-journal-height
+  [block-title]
+  (w/eval-js
+   "title => {
+      const journal = Array.from(document.querySelectorAll('#journals .journal-item'))
+        .find((item) => item.textContent.includes(title));
+      if (!journal) {
+        throw new Error(`Expected mounted journal containing ${title}`);
+      }
+      return Math.round(journal.getBoundingClientRect().height);
+    }"
+   block-title))
 
 (defn- multiline-heading-bullet-alignment
   [title]
@@ -720,6 +730,24 @@
         (doseq [block blocks]
           (is (string/includes? clipboard block)))))))
 
+(deftest page-virtualization-renders-top-middle-and-bottom-of-10k-membership
+  (testing "one real 10k top-level membership remains navigable across the full page"
+    (let [block-count 10000
+          title-prefix "large page membership block "
+          blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
+      (insert-current-page-blocks! blocks)
+      (enable-virtualized-rendering!)
+      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
+        (let [target-title (format "%s%05d" title-prefix target-index)]
+          (is (= target-title
+                 (scroll-page-to-block!
+                  title-prefix block-count target-index))
+              (str {:target-index target-index}))
+          (assert/assert-is-visible
+           (format ".ls-page-blocks .ls-block[data-block-title='%s']"
+                   target-title)))))))
+
 (deftest journals-list-uses-measured-spacing-without-item-margins
   (testing "journals list spacing does not use item margins that destabilize Virtuoso measurement"
     (seed-journals!
@@ -744,9 +772,10 @@
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
 
-(deftest journals-list-keeps-long-journal-height-after-remount
-  (testing "long journals do not restart progressive rendering from a low measured height after remount"
-    (let [long-block-title "journals remount stable block 001"
+(deftest journals-list-remounts-complete-long-journal-with-one-scroller
+  (testing "an outer journal remount restores all content without a nested virtualizer"
+    (let [first-block-title "journals remount stable block 001"
+          last-block-title "journals remount stable block 080"
           long-blocks (mapv #(format "journals remount stable block %03d %s"
                                       %
                                       (string/join " " (repeat 24 "wrapped-content")))
@@ -760,16 +789,27 @@
                :blocks long-blocks}]
              older-journals))
       (enable-virtualized-rendering!)
-      (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" long-block-title))
-      (let [{:keys [initial after-return after-settle after-fallback] :as metrics} (journals-long-remount-metrics long-block-title)
-            initial-height (:long-journal-height initial)
-            initial-scroll-height (:scroll-height initial)]
-        (is (>= (:long-journal-height after-return) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-return) (dec initial-scroll-height)) metrics)
-        (is (>= (:long-journal-height after-settle) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-settle) (dec initial-scroll-height)) metrics)
-        (is (>= (:long-journal-height after-fallback) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-fallback) (dec initial-scroll-height)) metrics)))))
+      (let [journal-selector (format "#journals .journal-item:has-text('%s')"
+                                     first-block-title)
+            last-block-selector (format "%s .ls-block:has-text('%s')"
+                                        journal-selector last-block-title)]
+        (w/wait-for last-block-selector)
+        (let [initial-height (mounted-journal-height first-block-title)]
+          (set-journals-scroll-position! :end)
+          (w/wait-for-not-visible journal-selector)
+          (set-journals-scroll-position! :start)
+          (w/wait-for last-block-selector)
+          (let [{:keys [journals-scroller-count] :as metrics}
+                (journals-layout-metrics)
+                remounted-height (mounted-journal-height first-block-title)]
+            (is (>= remounted-height (dec initial-height))
+                (str (assoc metrics
+                            :initial-height initial-height
+                            :remounted-height remounted-height)))
+            (is (= 1 journals-scroller-count) metrics)
+            (assert/assert-have-count
+             (format "%s [data-virtuoso-scroller]" journal-selector)
+             0)))))))
 
 (deftest journals-list-keeps-single-scroller-with-iframe-embeds
   (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"

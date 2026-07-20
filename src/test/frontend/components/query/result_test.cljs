@@ -1,77 +1,123 @@
 (ns frontend.components.query.result-test
-  (:require [clojure.test :refer [deftest are testing is]]
-            [frontend.components.query.result :as query-result]))
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
+            [frontend.components.query.result :as query-result]
+            [frontend.db.hooks :as db-hooks]))
 
-(defn- transform-query-result
-  [config query-m result]
-  (query-result/transform-query-result config query-m result))
+(defn- source-for
+  [relative-file]
+  (.toString
+   (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
 
-(deftest transform-query-result-with-transforms-and-grouping
-  (let [result (mapv
-                #(assoc % :block/page {:db/id 1} :block/parent {:db/id 2})
-                [{:block/uuid (random-uuid) :logseq.property/scheduled 20230418}
-                 {:block/uuid (random-uuid) :logseq.property/scheduled 20230415}
-                 {:block/uuid (random-uuid) :logseq.property/scheduled 20230417}])
-        sorted-result (sort-by :logseq.property/scheduled result)]
-    (testing "For list view"
-      (are [query-m expected]
-           (= expected (transform-query-result {:table? false} query-m result))
+(defn- form-source
+  [source marker]
+  (let [start (string/index-of source marker)
+        end (when start
+              (or (some->> ["\n(hsx/defc "
+                            "\n(defn"
+                            "\n(def "
+                            "\n(declare "]
+                           (keep #(string/index-of source % (inc start)))
+                           seq
+                           (apply min))
+                  (count source)))]
+    (when (and start end)
+      (subs source start end))))
 
-        ;; Default list behavior is to group result
-        {}
-        {{:db/id 1} result}
+(deftest custom-query-subscribes-to-serialized-worker-resources-test
+  (let [current-block-uuid (random-uuid)
+        dsl-row-uuid (random-uuid)
+        datalog-row-uuid (random-uuid)
+        resource-keys (atom [])
+        dsl-query {:query "(task TODO)"
+                   :remove-block-children? false
+                   :result-transform '(partial sort-by :block/title)}
+        datalog-form '[:find (pull ?block [:block/uuid])
+                       :in $ ?day %
+                       :where
+                       [?block :block/journal-day ?day]
+                       (journal-block ?block)]
+        rules '[[(journal-block ?block)
+                 [?block :block/journal-day]]]
+        datalog-query {:query datalog-form
+                       :inputs [:today]
+                       :rules rules}]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-keys conj resource-key)
+                    {:rows [(if (= :dsl (get-in resource-key [1 :kind]))
+                              dsl-row-uuid
+                              datalog-row-uuid)]})]
+      (is (= [dsl-row-uuid]
+             (query-result/use-query-result
+              {:dsl-query? true
+               :cards? true
+               :current-block-uuid current-block-uuid
+               :block/uuid current-block-uuid}
+              dsl-query)))
+      (is (= [datalog-row-uuid]
+             (query-result/use-query-result
+              {:dsl-query? false
+               :today-day 20260721
+               :current-block-uuid current-block-uuid
+               :block/uuid current-block-uuid}
+              datalog-query)))
+      (is (= [[:query
+               {:kind :dsl
+                :query "(task TODO)"
+                :cards? true
+                :current-block-uuid current-block-uuid
+                :remove-block-children? false
+                :result-transform-edn
+                "(partial sort-by :block/title)"}]
+              [:query
+               {:kind :datalog
+                :query datalog-form
+                :inputs [:today]
+                :rules rules
+                :today-day 20260721
+                :current-block-uuid current-block-uuid}]]
+             @resource-keys)))))
 
-        ;; User overrides default behavior to return result
-        {:group-by-page? false}
-        result
-
-        ;; Return transformed result for list view
-        {:result-transform '(partial sort-by :logseq.property/scheduled)}
-        sorted-result
-
-        ; User overrides transform to return grouped result
-        {:result-transform '(partial sort-by :logseq.property/scheduled) :group-by-page? true}
-        {{:db/id 1} sorted-result})
-
-      (testing "For table view"
-        (are [query expected]
-             (= expected (transform-query-result {:table? true} query result))
-
-          ;; Default table behavior is to return result
-          {}
-          result
-
-          ;; Return transformed result
-          {:result-transform '(partial sort-by :logseq.property/scheduled)}
-          sorted-result
-
-          ;; Ignore override and return normal result
-          {:group-by-page? true}
-          result))
-
-      (testing "current block in results"
-        (is (= result
-               (let [current-block {:block/uuid (random-uuid) :logseq.property/scheduled 20230420 :block/page {:db/id 1}}]
-                 (transform-query-result {:table? false
-                                          :current-block-uuid (:block/uuid current-block)}
-                                         {:group-by-page? false}
-                                         (conj result current-block))))
-            "Current block is not included in results")))))
-
-(deftest transform-query-result-with-remove-block-children-option
-  (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}
-                {:db/id 2 :block/title "child" :block/uuid 2 :block/parent {:db/id 1}}]]
-    (is (= [{:db/id 1 :block/title "parent" :block/uuid 1}]
-           (transform-query-result {:table? true} {:remove-block-children? true} result))
-        "Removes children when :remove-block-children? is true")
-    (is (= result
-           (transform-query-result {:table? true} {:remove-block-children? false} result))
-        "Doesn't remove children when :remove-block-children? is false")))
-
-(deftest transform-query-result-sets-result-in-config
-  (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}]
-        config {:query-result (atom nil) :table? true}]
-    (is (= result
-           (transform-query-result config {} result)))
-    (is (= result @(:query-result config))
-        "Result is set in config for downstream use e.g. query table fn")))
+(deftest query-rendering-owns-no-query-execution-or-result-transform-test
+  (let [result-source
+        (source-for "src/main/frontend/components/query/result.cljs")
+        query-source
+        (source-for "src/main/frontend/components/query.cljs")
+        run-source (form-source result-source "(defn use-query-result")
+        custom-query-source (form-source query-source "(hsx/defc custom-query*")]
+    (is (some? run-source))
+    (is (some? custom-query-source))
+    (when run-source
+      (is (string/includes? run-source "[:query"))
+      (is (string/includes? run-source "db-hooks/use-resource")))
+    (testing "query execution and transformation stay in the worker"
+      (doseq [forbidden ["[frontend.db.query-custom"
+                         "[frontend.db.query-dsl"
+                         "[frontend.db.query-react"
+                         "[frontend.modules.outliner.tree"
+                         "[frontend.search"
+                         "db-hooks/use-query"
+                         "query-custom/custom-query"
+                         "query-dsl/query"
+                         "query-react/custom-query-result-transform"
+                         "search/block-search"
+                         "tree/filter-top-level-blocks"
+                         "(defn transform-query-result"]]
+        (is (not (string/includes? result-source forbidden))
+            (str "Renderer query execution remains: " forbidden))))
+    (when custom-query-source
+      (doseq [forbidden ["query-result/transform-query-result"
+                         "react/set-q-collapsed!"
+                         "ldb/hidden?"
+                         ":db/id"]]
+        (is (not (string/includes? custom-query-source forbidden))
+            (str "Query rendering retains a local result copy: " forbidden))))
+    (doseq [source [result-source query-source]
+            forbidden ["query-error" "*query-error"]]
+      (is (not (string/includes? source forbidden))
+          (str "Query rendering retains dead error compatibility state: " forbidden)))
+    (is (not (string/includes? query-source
+                               "[frontend.db.react :as react]")))))

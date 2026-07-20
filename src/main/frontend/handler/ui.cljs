@@ -3,7 +3,6 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db.react :as react]
             [frontend.handler.assets :as assets-handler]
             [frontend.loader :refer [load]]
             [frontend.state :as state]
@@ -78,15 +77,8 @@
 
 (defn re-render-root!
   ([]
-   (re-render-root! {}))
-  ([{:keys [clear-query-state?]
-     :or {clear-query-state? true}}]
-   {:post [(nil? %)]}
-   (when clear-query-state?
-     (react/clear-query-state!))
-   (doseq [component (keys @react/component->query-key)]
-     (when (fn? component)
-       (component)))
+   nil)
+  ([_opts]
    nil))
 
 (defn highlight-element!
@@ -298,7 +290,7 @@
                                   (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [^js ref blocks gallery?]
+  [^js ref rows gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))
@@ -306,7 +298,9 @@
                         (when (util/uuid-string? id)
                           (uuid id))))]
       (when (and ref anchor-id)
-        (let [block-ids (map :block/uuid blocks)
+        (let [block-ids (mapv (fn [row]
+                                (if (uuid? row) row (:block/uuid row)))
+                              rows)
               find-idx (fn [anchor-id]
                          (let [idx (.indexOf block-ids anchor-id)]
                            (when (pos? idx) idx)))
