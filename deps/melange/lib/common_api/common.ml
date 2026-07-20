@@ -218,10 +218,10 @@ module Util = struct
   type now_callback = (unit -> float[@u])
 
   type compare_callback =
-    (Runtime_codec.value -> Runtime_codec.value -> int[@u])
+    (Runtime_codec.cljs_value -> Runtime_codec.cljs_value -> int[@u])
 
   type read_callback =
-    (Runtime_codec.value -> string -> Runtime_codec.value[@u])
+    (Runtime_codec.cljs_value -> string -> Runtime_codec.cljs_value[@u])
 
   type read_error_callback = (Js.Exn.t -> unit[@u])
 
@@ -334,8 +334,8 @@ module Util = struct
              Runtime_codec.invoke_callback runtime criterion.getValue;
            ascending = criterion.ascending;
          }
-          : ( Runtime_codec.value,
-              Runtime_codec.value )
+          : ( Runtime_codec.cljs_value,
+              Runtime_codec.cljs_value )
             Common_util.sort_criterion))
     |> Rrbvec.of_array
     |> fun criteria ->

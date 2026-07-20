@@ -78,9 +78,9 @@ let graphDatomsWith runtime datascript database schema_version =
   in
   let capabilities :
       ( Support.Datascript.database,
-        Support.Runtime_codec.value,
+        Support.Runtime_codec.cljs_value,
         Support.Datascript.datom,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.datom_capabilities =
     {
       excluded_entity = (fun _ ident -> ident |> keyword |> resolve_entity);
@@ -142,7 +142,7 @@ let datomImportWith runtime datascript database export_map =
   in
   let capabilities :
       ( Support.Datascript.database,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.import_capabilities =
     {
       current_entity_ids =

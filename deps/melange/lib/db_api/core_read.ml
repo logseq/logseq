@@ -39,7 +39,7 @@ let pageInLibraryWith runtime datascript database page =
   in
   let capabilities :
       ( Support.Datascript.entity,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.library_capabilities =
     {
       library_page =
@@ -88,7 +88,7 @@ let libraryPageWith runtime datascript database =
 
 let page_lookup_capabilities runtime datascript database :
     ( Support.Datascript.entity,
-      Support.Runtime_codec.value )
+      Support.Runtime_codec.cljs_value )
     Domain.page_lookup_capabilities =
   let keyword name =
     Support.Runtime_codec.keyword_from_string runtime name
@@ -223,7 +223,7 @@ let casePageByReferenceWith runtime datascript
 
 let direct_child_capabilities runtime datascript database :
     ( Support.Datascript.entity,
-      Support.Runtime_codec.value )
+      Support.Runtime_codec.cljs_value )
     Domain.direct_child_capabilities =
   let field entity name =
     Entity_read.field runtime datascript entity name
@@ -311,7 +311,7 @@ let pageBlocksWith runtime datascript database page_id pattern =
     ~attribute ~pattern page_id
 
 let pageBlocksByPageWith runtime datascript database
-    (page_id : Support.Runtime_codec.value Js.Nullable.t) pattern =
+    (page_id : Support.Runtime_codec.cljs_value Js.Nullable.t) pattern =
   match Js.Nullable.toOption page_id with
   | None -> Js.Nullable.undefined
   | Some page_id ->
@@ -347,7 +347,7 @@ let journalPageByDayWith runtime datascript database day =
 
 let journalPageByDayInputWith runtime datascript
     (database : Support.Datascript.database Js.Nullable.t)
-    (day : Support.Runtime_codec.value Js.Nullable.t) =
+    (day : Support.Runtime_codec.cljs_value Js.Nullable.t) =
   match (Js.Nullable.toOption database, Js.Nullable.toOption day) with
   | Some database, Some day ->
       journalPageByDayWith runtime datascript database day
@@ -395,7 +395,7 @@ let pageExistsWith runtime datascript database page_name tags =
     ~tags
 
 let pageExistsInputWith runtime datascript database
-    (page_name : Support.Runtime_codec.value Js.Nullable.t) tags =
+    (page_name : Support.Runtime_codec.cljs_value Js.Nullable.t) tags =
   match Js.Nullable.toOption page_name with
   | None -> Js.Nullable.undefined
   | Some page_name ->
@@ -464,7 +464,7 @@ let orphanedPagesWith runtime datascript database pages built_in_pages_names
   let empty_ref_callback = Js.Nullable.toOption empty_ref_callback in
   let capabilities :
       ( Support.Datascript.entity,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.orphan_capabilities =
     {
       orphan_default_pages =
@@ -570,7 +570,7 @@ let hiddenOrInternalTagWith runtime datascript entity =
 
 let page_order_capabilities runtime datascript database :
     ( Support.Datascript.entity,
-      Support.Runtime_codec.value )
+      Support.Runtime_codec.cljs_value )
     Domain.page_order_capabilities =
   let field entity name =
     Entity_read.field runtime datascript entity name

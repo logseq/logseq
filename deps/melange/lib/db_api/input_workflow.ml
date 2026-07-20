@@ -1,6 +1,6 @@
 module Domain = Melange_db.Input_plan
 
-type value = Support.Runtime_codec.value
+type value = Support.Runtime_codec.cljs_value
 type current_page = (unit -> string Js.Nullable.t[@u])
 type date_source = (unit -> value[@u])
 type date_offset = (value -> int -> value[@u])

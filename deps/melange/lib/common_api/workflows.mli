@@ -102,20 +102,20 @@ module GraphRegistry : sig
 
   val normalizeValueWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     encoded_value_result
 
   val resolveTargetValueWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val upsertValueWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     encoded_value_result
 end
 
@@ -183,9 +183,9 @@ module StringUtil : sig
   val safeReFindValueWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     Js.Re.t ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     trace_callback ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val safeSubstring : string -> int -> string
   val safeSubstringRange : string -> int -> int -> string
@@ -200,15 +200,15 @@ module Util : sig
   type now_callback = (unit -> float[@u])
 
   type compare_callback =
-    (Melange_cljs_runtime_spec.Value_codec.value ->
-     Melange_cljs_runtime_spec.Value_codec.value ->
+    (Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+     Melange_cljs_runtime_spec.Value_codec.cljs_value ->
      int
     [@u])
 
   type read_callback =
-    (Melange_cljs_runtime_spec.Value_codec.value ->
+    (Melange_cljs_runtime_spec.Value_codec.cljs_value ->
      string ->
-     Melange_cljs_runtime_spec.Value_codec.value
+     Melange_cljs_runtime_spec.Value_codec.cljs_value
     [@u])
 
   type read_error_callback = (Js.Exn.t -> unit[@u])
@@ -221,15 +221,15 @@ module Util : sig
   val blockWithTimestampsWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     now_callback ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val compareByWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     compare_callback ->
     encoded_sort_criterion array ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     int
 
   val concatPresentValues : 'a Js.Nullable.t array array -> 'a array
@@ -237,19 +237,19 @@ module Util : sig
   val distinctByLastWinsWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     Melange_cljs_runtime_spec.Value_codec.callback ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val distinctLazyWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     Melange_cljs_runtime_spec.Value_codec.callback ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val fastRemoveNilsWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val pageTitle :
     string Js.Nullable.t -> string Js.Nullable.t -> string Js.Nullable.t
@@ -260,18 +260,18 @@ module Util : sig
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     read_callback ->
     read_error_callback ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     string ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 
   val safeReadStringWith :
     Melange_cljs_runtime_spec.Value_codec.adapter ->
     read_callback ->
     read_error_callback ->
-    Melange_cljs_runtime_spec.Value_codec.value ->
+    Melange_cljs_runtime_spec.Value_codec.cljs_value ->
     string ->
     bool ->
-    Melange_cljs_runtime_spec.Value_codec.value
+    Melange_cljs_runtime_spec.Value_codec.cljs_value
 end
 
 module Uuid : sig

@@ -1,31 +1,31 @@
 module Selection = Melange_db.View_entity_selection
 module Domain = Melange_db.View_data_workflow
 
-type encoded_sorting = { id : Support.Runtime_codec.value; asc : bool }
+type encoded_sorting = { id : Support.Runtime_codec.cljs_value; asc : bool }
 
 type encoded_options = {
   journals : bool;
-  viewForId : Support.Runtime_codec.value Js.Nullable.t;
+  viewForId : Support.Runtime_codec.cljs_value Js.Nullable.t;
   feature : string Js.Nullable.t;
-  groupByPropertyIdent : Support.Runtime_codec.value Js.Nullable.t;
+  groupByPropertyIdent : Support.Runtime_codec.cljs_value Js.Nullable.t;
   input : string Js.Nullable.t;
-  queryEntityIds : Support.Runtime_codec.value array;
-  query : Support.Runtime_codec.value Js.Nullable.t;
-  filters : Support.Runtime_codec.value Js.Nullable.t;
+  queryEntityIds : Support.Runtime_codec.cljs_value array;
+  query : Support.Runtime_codec.cljs_value Js.Nullable.t;
+  filters : Support.Runtime_codec.cljs_value Js.Nullable.t;
   sorting : encoded_sorting array;
 }
 
 type encoded_page_count = {
-  label : Support.Runtime_codec.value;
+  label : Support.Runtime_codec.cljs_value;
   count : int;
 }
 
 type encoded_result = {
   count : int;
-  data : Support.Runtime_codec.value;
+  data : Support.Runtime_codec.cljs_value;
   refPageCounts : encoded_page_count array Js.Nullable.t;
-  refMatchedChildrenIds : Support.Runtime_codec.value array Js.Nullable.t;
-  properties : Support.Runtime_codec.value array Js.Nullable.t;
+  refMatchedChildrenIds : Support.Runtime_codec.cljs_value array Js.Nullable.t;
+  properties : Support.Runtime_codec.cljs_value array Js.Nullable.t;
 }
 
 let ident_text runtime value =
@@ -54,10 +54,10 @@ let property_rules runtime =
   |> Support.encode_datalog_form runtime
 
 let selection_capabilities runtime datascript database :
-    ( Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value )
+    ( Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value )
     Selection.capabilities =
   let keyword = Support.Runtime_codec.keyword_from_string runtime in
   let field = Entity_read.field runtime datascript in
@@ -141,15 +141,15 @@ let selection_capabilities runtime datascript database :
                       (fun
                         (count : Reference_workflow.encoded_page_count) ->
                         ({ label = count.label; count = count.count }
-                          : Support.Runtime_codec.value Selection.page_count))
+                          : Support.Runtime_codec.cljs_value Selection.page_count))
                  |> Rrbvec.of_array);
            matched_children_ids =
              result.refMatchedChildrenIds |> Js.Nullable.toOption
              |> Option.map Rrbvec.of_array;
          }
-          : ( Support.Runtime_codec.value,
-              Support.Runtime_codec.value,
-              Support.Runtime_codec.value )
+          : ( Support.Runtime_codec.cljs_value,
+              Support.Runtime_codec.cljs_value,
+              Support.Runtime_codec.cljs_value )
             Selection.reference_result));
     unlinked_references =
       (fun id ->
@@ -210,9 +210,9 @@ let view_config runtime datascript database view_id feature_override journals =
        group_sort_ident = "block/journal-day";
        group_descending = false;
      }
-      : ( Support.Runtime_codec.value,
-          Support.Runtime_codec.value,
-          Support.Runtime_codec.value )
+      : ( Support.Runtime_codec.cljs_value,
+          Support.Runtime_codec.cljs_value,
+          Support.Runtime_codec.cljs_value )
         Domain.view)
   else
     let field = Entity_read.field runtime datascript in
@@ -331,11 +331,11 @@ let sort_by_order runtime datascript entities =
   Melange_db.Tree_read.sort_ids candidates |> Rrbvec.map (Rrbvec.nth entities)
 
 let data_capabilities runtime datascript database selection_capabilities :
-    ( Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value )
+    ( Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value )
     Domain.capabilities =
   let optional entity name = optional_field runtime datascript entity name in
   let sort_entities ~sorting entities =
@@ -503,7 +503,7 @@ let propertyValuesWith runtime datascript database property_ident empty_id
   |> View_property_values.encode_entries
 
 let getPropertyValuesWith runtime datascript database property_ident
-    (view_id : Support.Runtime_codec.value Js.Nullable.t) query_entity_ids =
+    (view_id : Support.Runtime_codec.cljs_value Js.Nullable.t) query_entity_ids =
   match Js.Nullable.toOption view_id with
   | Some view_id ->
       let empty_id =
@@ -556,8 +556,8 @@ let getWith runtime datascript database view_id (options : encoded_options) =
     data_capabilities runtime datascript database selection_capabilities
   in
   let options :
-      ( Support.Runtime_codec.value,
-        Support.Runtime_codec.value )
+      ( Support.Runtime_codec.cljs_value,
+        Support.Runtime_codec.cljs_value )
       Domain.options =
     {
       journals = options.journals;
@@ -592,7 +592,7 @@ let getWith runtime datascript database view_id (options : encoded_options) =
           counts
           |> Rrbvec.map
                (fun
-                 (count : Support.Runtime_codec.value Selection.page_count)
+                 (count : Support.Runtime_codec.cljs_value Selection.page_count)
                ->
                  ({ label = count.label; count = count.count }
                    : encoded_page_count))

@@ -92,7 +92,7 @@ let projection_capabilities runtime datascript =
      keyword;
    }
     : ( Support.Datascript.database,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Projection.capabilities)
 
 let projection_properties runtime properties =
@@ -151,7 +151,7 @@ let getWith runtime datascript database =
       ( Support.Datascript.database,
         Support.Datascript.schema,
         Support.Datascript.entity,
-        Support.Runtime_codec.value,
+        Support.Runtime_codec.cljs_value,
         Support.Datascript.datom )
       Domain.capabilities =
     {

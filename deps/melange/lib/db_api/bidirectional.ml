@@ -117,7 +117,7 @@ let getPropertiesWith runtime datascript database target_id =
       in
       let capabilities :
           ( Support.Datascript.entity,
-            Support.Runtime_codec.value )
+            Support.Runtime_codec.cljs_value )
           Domain.workflow_capabilities =
         {
           query_property_attrs =

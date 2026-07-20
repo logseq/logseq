@@ -1,6 +1,6 @@
 module Domain = Melange_db.View_workflow
 
-type encoded_sorting = { id : Support.Runtime_codec.value; asc : bool }
+type encoded_sorting = { id : Support.Runtime_codec.cljs_value; asc : bool }
 
 let ident_text runtime value =
   if Support.Runtime_codec.value_is_keyword runtime value then
@@ -10,7 +10,7 @@ let ident_text runtime value =
   else Support.Runtime_codec.value_to_string runtime value
 
 let capabilities_with runtime datascript ~resolve_entity ~datom_entity_ids :
-    Support.Runtime_codec.value Domain.capabilities =
+    Support.Runtime_codec.cljs_value Domain.capabilities =
   {
     field = Entity_read.field runtime datascript;
     resolve_entity;
@@ -44,7 +44,7 @@ let sortEntitiesWith runtime datascript database sorting entities =
     sorting
     |> Array.map (fun (sorting : encoded_sorting) ->
         ({ id = sorting.id; ascending = sorting.asc }
-          : Support.Runtime_codec.value Domain.sorting))
+          : Support.Runtime_codec.cljs_value Domain.sorting))
     |> Rrbvec.of_array
   in
   let capabilities =

@@ -1,19 +1,19 @@
 module Domain = Melange_db.Reference_workflow
 
 type encoded_page_count = {
-  label : Support.Runtime_codec.value;
+  label : Support.Runtime_codec.cljs_value;
   count : int;
 }
 
 type encoded_filters = {
-  included : Support.Runtime_codec.value array;
-  excluded : Support.Runtime_codec.value array;
+  included : Support.Runtime_codec.cljs_value array;
+  excluded : Support.Runtime_codec.cljs_value array;
 }
 
 type encoded_result = {
-  refBlocks : Support.Runtime_codec.value array;
+  refBlocks : Support.Runtime_codec.cljs_value array;
   refPageCounts : encoded_page_count array Js.Nullable.t;
-  refMatchedChildrenIds : Support.Runtime_codec.value array Js.Nullable.t;
+  refMatchedChildrenIds : Support.Runtime_codec.cljs_value array Js.Nullable.t;
 }
 
 let filtersWith runtime datascript value =
@@ -26,7 +26,7 @@ let filtersWith runtime datascript value =
     ~included:(collection "logseq.property.linked-references/includes")
     ~excluded:(collection "logseq.property.linked-references/excludes")
   |> Option.map
-       (fun (filters : Support.Runtime_codec.value Domain.filters) ->
+       (fun (filters : Support.Runtime_codec.cljs_value Domain.filters) ->
          ({
             included = Rrbvec.to_array filters.included;
             excluded = Rrbvec.to_array filters.excluded;
@@ -35,9 +35,9 @@ let filtersWith runtime datascript value =
   |> Js.Nullable.fromOption
 
 let capabilities runtime datascript database :
-    ( Support.Runtime_codec.value,
-      Support.Runtime_codec.value,
-      Support.Runtime_codec.value )
+    ( Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value,
+      Support.Runtime_codec.cljs_value )
     Domain.capabilities =
   let field entity name =
     Entity_read.field runtime datascript entity name
@@ -138,7 +138,7 @@ let linkedWith runtime datascript database target_id =
           values
           |> Rrbvec.map
                (fun
-                 (entry : Support.Runtime_codec.value Domain.page_count) ->
+                 (entry : Support.Runtime_codec.cljs_value Domain.page_count) ->
                  ({ label = entry.label; count = entry.count }
                    : encoded_page_count))
           |> Rrbvec.to_array)

@@ -2,15 +2,15 @@ module Domain = Melange_db.Validation_datom
 
 type decoded_datom = {
   entity_id : int;
-  attribute : Support.Runtime_codec.value;
+  attribute : Support.Runtime_codec.cljs_value;
   attribute_text : string;
-  value : Support.Runtime_codec.value;
+  value : Support.Runtime_codec.cljs_value;
 }
 
 type entity_fields = {
   entity_id : int;
   fields :
-    (Support.Runtime_codec.value * Support.Runtime_codec.value) Rrbvec.t;
+    (Support.Runtime_codec.cljs_value * Support.Runtime_codec.cljs_value) Rrbvec.t;
 }
 
 type encoded_entry = {

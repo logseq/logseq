@@ -1,12 +1,12 @@
 module Domain = Melange_db.Sqlite_export
 
 type diff_callback =
-  (Support.Runtime_codec.value ->
-   Support.Runtime_codec.value ->
-   Support.Runtime_codec.value
+  (Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value
   [@u])
 
-type value_predicate = (Support.Runtime_codec.value -> bool[@u])
+type value_predicate = (Support.Runtime_codec.cljs_value -> bool[@u])
 
 type export_predicates = {
   includeUuid : value_predicate;
@@ -17,14 +17,14 @@ type export_capabilities = { logValidationError : (exn -> unit[@u]) }
 type diff_capabilities = { diffValues : diff_callback }
 
 type runtime_page_group = {
-  title : Support.Runtime_codec.value;
-  journal : Support.Runtime_codec.value;
-  entries : Support.Runtime_codec.value Rrbvec.t ref;
+  title : Support.Runtime_codec.cljs_value;
+  journal : Support.Runtime_codec.cljs_value;
+  entries : Support.Runtime_codec.cljs_value Rrbvec.t ref;
 }
 
 type encoded_import_validation_result = {
   database : Support.Datascript.database Js.Nullable.t;
-  transactionData : Support.Runtime_codec.value;
+  transactionData : Support.Runtime_codec.cljs_value;
   error : string Js.Nullable.t;
 }
 
@@ -3810,8 +3810,8 @@ let validateImportTransactionsWith runtime datascript transactions database
       let db_add = keyword runtime "db/add" in
       let validation_capabilities :
           ( Support.Datascript.database,
-            Support.Runtime_codec.value,
-            Support.Runtime_codec.value )
+            Support.Runtime_codec.cljs_value,
+            Support.Runtime_codec.cljs_value )
           Domain.import_validation_capabilities =
         {
           dry_run =
@@ -3854,7 +3854,7 @@ let validateImportTransactionsWith runtime datascript transactions database
                                   }
                                    : Domain.validation_error_group));
                       }
-                       : Support.Runtime_codec.value
+                       : Support.Runtime_codec.cljs_value
                          Domain.entity_validation_error)));
           added_attribute =
             (fun transaction ->

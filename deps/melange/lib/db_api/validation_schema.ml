@@ -36,7 +36,7 @@ type encoded_workflow_result = {
 }
 
 type encoded_entity_error = {
-  entity : Support.Runtime_codec.value;
+  entity : Support.Runtime_codec.cljs_value;
   dispatchKey : string Js.Nullable.t;
   errors : encoded_error_group array;
   errorDetails : encoded_error array;
@@ -49,12 +49,12 @@ type encoded_transaction_result = {
 
 type encoded_transaction_value_result = {
   valid : bool;
-  errors : Support.Runtime_codec.value;
+  errors : Support.Runtime_codec.cljs_value;
 }
 
 type encoded_database_result = {
   datomCount : int;
-  entities : Support.Runtime_codec.value array;
+  entities : Support.Runtime_codec.cljs_value array;
   errors : encoded_entity_error array;
 }
 
@@ -198,7 +198,7 @@ let workflow_capabilities runtime datascript database
      property_tuple_error_message =
        property_tuple_error_message runtime datascript;
    }
-    : Support.Runtime_codec.value Domain.workflow_capabilities)
+    : Support.Runtime_codec.cljs_value Domain.workflow_capabilities)
 
 let encode_result (result : Domain.validation_result) =
   ({
@@ -217,7 +217,7 @@ let encode_result (result : Domain.validation_result) =
     : encoded_workflow_result)
 
 let encode_entity_error
-    (error : Support.Runtime_codec.value Domain.entity_error) =
+    (error : Support.Runtime_codec.cljs_value Domain.entity_error) =
   let validation = encode_result error.validation in
   ({
      entity = error.entity;
@@ -280,7 +280,7 @@ let validateDatabaseWith runtime datascript database
      }
       : ( Support.Datascript.database,
           Support.Datascript.datom,
-          Support.Runtime_codec.value )
+          Support.Runtime_codec.cljs_value )
         Domain.database_capabilities)
   in
   let result = Domain.validate_database_with capabilities database in
@@ -358,7 +358,7 @@ let log_transaction_errors runtime changed_ids tx_metadata errors =
       tx_metadata;
     |];
   Rrbvec.iter
-    (fun (error : Support.Runtime_codec.value Domain.entity_error) ->
+    (fun (error : Support.Runtime_codec.cljs_value Domain.entity_error) ->
       let diagnostic =
         Support.Runtime_codec.entries_to_map runtime
           [|
@@ -414,7 +414,7 @@ let validateTransactionWith runtime datascript report
       : ( Support.Datascript.transaction_report,
           Support.Datascript.database,
           Support.Datascript.datom,
-          Support.Runtime_codec.value )
+          Support.Runtime_codec.cljs_value )
         Domain.transaction_capabilities)
   in
   let result = Domain.validate_transaction_with capabilities report in

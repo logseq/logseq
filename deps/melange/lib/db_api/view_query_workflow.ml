@@ -15,7 +15,7 @@ let map_keys runtime value =
       else entry.(0))
 
 let capabilities runtime datascript database :
-    Support.Runtime_codec.value Domain.capabilities =
+    Support.Runtime_codec.cljs_value Domain.capabilities =
   let keyword = Support.Runtime_codec.keyword_from_string runtime in
   {
     field = Entity_read.field runtime datascript;

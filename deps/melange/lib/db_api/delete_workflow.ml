@@ -29,7 +29,7 @@ let page runtime datascript value =
   | None -> false
 
 let snapshot runtime datascript value :
-    Support.Runtime_codec.value Domain.snapshot =
+    Support.Runtime_codec.cljs_value Domain.snapshot =
   let histories =
     Rrbvec.empty
     |> Rrbvec.append
@@ -80,7 +80,7 @@ let keyword_text runtime value =
   else None
 
 let decode_transaction runtime source :
-    Support.Runtime_codec.value Domain.transaction =
+    Support.Runtime_codec.cljs_value Domain.transaction =
   let kind =
     if Support.Runtime_codec.value_is_map runtime source then
       Domain.Map_tx source
@@ -120,7 +120,7 @@ let decode_transaction runtime source :
 
 let capabilities runtime datascript :
     ( Support.Datascript.database,
-      Support.Runtime_codec.value )
+      Support.Runtime_codec.cljs_value )
     Domain.capabilities =
   {
     entity =

@@ -2,7 +2,7 @@ module Runtime = Melange_cljs_runtime_spec.Value_codec
 module Datascript = Melange_datascript_spec.Api
 
 module Bridge = struct
-  type value = Runtime.value
+  type value = Runtime.cljs_value
   type runtime_adapter = Runtime.adapter
   type callback = Runtime.callback
 

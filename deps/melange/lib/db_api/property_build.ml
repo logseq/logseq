@@ -1,17 +1,17 @@
 module Domain = Melange_db.Property_build
 module Property_type = Melange_db.Property_type
 
-type value_callback = (unit -> Support.Runtime_codec.value[@u])
+type value_callback = (unit -> Support.Runtime_codec.cljs_value[@u])
 type float_callback = (unit -> float[@u])
 
 type encoded_value_block_options = {
-  blockUuid : Support.Runtime_codec.value Js.Nullable.t;
-  properties : Support.Runtime_codec.value Js.Nullable.t;
+  blockUuid : Support.Runtime_codec.cljs_value Js.Nullable.t;
+  properties : Support.Runtime_codec.cljs_value Js.Nullable.t;
 }
 
 type encoded_closed_value_options = {
-  dbIdent : Support.Runtime_codec.value Js.Nullable.t;
-  icon : Support.Runtime_codec.value Js.Nullable.t;
+  dbIdent : Support.Runtime_codec.cljs_value Js.Nullable.t;
+  icon : Support.Runtime_codec.cljs_value Js.Nullable.t;
 }
 
 type encoded_property_values_options = { pure : bool; pvalueMap : bool }

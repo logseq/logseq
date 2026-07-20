@@ -12,36 +12,36 @@ type open_callback = (string -> sqlite[@u])
 type sqlite_unit_callback = (sqlite -> unit[@u])
 type storage_callback = (sqlite -> storage[@u])
 type connection_callback = (storage -> connection[@u])
-type value_string_callback = (Support.Runtime_codec.value -> string[@u])
-type string_value_callback = (string -> Support.Runtime_codec.value[@u])
+type value_string_callback = (Support.Runtime_codec.cljs_value -> string[@u])
+type string_value_callback = (string -> Support.Runtime_codec.cljs_value[@u])
 
 type make_row_callback =
-  (Support.Runtime_codec.value ->
+  (Support.Runtime_codec.cljs_value ->
    string ->
    string Js.Nullable.t ->
-   Support.Runtime_codec.value
+   Support.Runtime_codec.cljs_value
   [@u])
 
 type upsert_rows_callback =
-  (sqlite -> Support.Runtime_codec.value array -> unit[@u])
+  (sqlite -> Support.Runtime_codec.cljs_value array -> unit[@u])
 
 type load_row_callback =
   (sqlite ->
-   Support.Runtime_codec.value ->
-   Support.Runtime_codec.value Js.Nullable.t
+   Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value Js.Nullable.t
   [@u])
 
-type row_content_callback = (Support.Runtime_codec.value -> string[@u])
+type row_content_callback = (Support.Runtime_codec.cljs_value -> string[@u])
 
 type row_addresses_callback =
-  (Support.Runtime_codec.value -> string Js.Nullable.t[@u])
+  (Support.Runtime_codec.cljs_value -> string Js.Nullable.t[@u])
 
 type store_callback =
-  (Support.Runtime_codec.value -> Support.Runtime_codec.value -> unit
+  (Support.Runtime_codec.cljs_value -> Support.Runtime_codec.cljs_value -> unit
   [@u])
 
 type restore_callback =
-  (Support.Runtime_codec.value -> Support.Runtime_codec.value[@u])
+  (Support.Runtime_codec.cljs_value -> Support.Runtime_codec.cljs_value[@u])
 
 type create_datascript_storage_callback =
   (store_callback -> restore_callback -> storage[@u])

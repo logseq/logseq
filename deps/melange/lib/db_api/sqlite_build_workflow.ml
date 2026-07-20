@@ -1,4 +1,4 @@
-type value_callback = (unit -> Support.Runtime_codec.value[@u])
+type value_callback = (unit -> Support.Runtime_codec.cljs_value[@u])
 type float_callback = (unit -> float[@u])
 
 type capabilities = {

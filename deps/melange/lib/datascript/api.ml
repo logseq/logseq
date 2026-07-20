@@ -1,4 +1,4 @@
-type value = Melange_cljs_runtime_spec.Value_codec.value
+type value = Melange_cljs_runtime_spec.Value_codec.cljs_value
 type adapter
 type schema
 type connection_options

@@ -1,7 +1,7 @@
 module Domain = Melange_db.Transaction_workflow
 
 let capabilities runtime datascript :
-    Support.Runtime_codec.value Domain.capabilities =
+    Support.Runtime_codec.cljs_value Domain.capabilities =
   {
     entity_id =
       (fun value ->

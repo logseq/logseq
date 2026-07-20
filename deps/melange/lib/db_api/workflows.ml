@@ -1,6 +1,6 @@
 open Melange_db_api_internal
 
-type runtime_codec_value = Melange_cljs_runtime_spec.Value_codec.value
+type runtime_codec_value = Melange_cljs_runtime_spec.Value_codec.cljs_value
 type runtime_codec_adapter = Melange_cljs_runtime_spec.Value_codec.adapter
 type runtime_codec_callback = Melange_cljs_runtime_spec.Value_codec.callback
 type datascript_value = Melange_datascript_spec.Api.value

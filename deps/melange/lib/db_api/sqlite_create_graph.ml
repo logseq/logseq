@@ -308,8 +308,8 @@ let buildInitialClassesWith runtime (now_ms : float_callback) built_in_classes
   |> Support.Runtime_codec.array_to_list runtime
 
 type encoded_initial_options = {
-  importType : Support.Runtime_codec.value Js.Nullable.t;
-  graphGitSha : Support.Runtime_codec.value Js.Nullable.t;
+  importType : Support.Runtime_codec.cljs_value Js.Nullable.t;
+  graphGitSha : Support.Runtime_codec.cljs_value Js.Nullable.t;
   creatingRemoteGraph : bool;
 }
 

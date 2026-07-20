@@ -1,6 +1,6 @@
 module Domain = Melange_db.Entity_lookup
 
-type value = Support.Runtime_codec.value
+type value = Support.Runtime_codec.cljs_value
 type entity_database = (value -> Support.Datascript.database[@u])
 type entity_eid = (value -> value[@u])
 type kv_get = (value -> value -> value Js.Nullable.t[@u])

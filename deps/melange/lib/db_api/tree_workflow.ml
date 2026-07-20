@@ -23,7 +23,7 @@ let blockAndChildrenWith runtime datascript database block_uuid
   in
   let capabilities :
       ( Support.Datascript.entity,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.capabilities =
     {
       id = (fun entity -> field runtime datascript entity "db/id");
@@ -65,7 +65,7 @@ let siblingWith runtime datascript block direction =
   in
   let capabilities :
       ( Support.Datascript.entity,
-        Support.Runtime_codec.value )
+        Support.Runtime_codec.cljs_value )
       Domain.sibling_capabilities =
     {
       sibling_id = (fun entity -> field runtime datascript entity "db/id");
@@ -99,7 +99,7 @@ let child_entities runtime datascript entity =
 
 let child_capabilities runtime datascript database :
     ( Support.Datascript.entity,
-      Support.Runtime_codec.value )
+      Support.Runtime_codec.cljs_value )
     Domain.child_capabilities =
   let lookup value =
     Support.Datascript.entity datascript database value

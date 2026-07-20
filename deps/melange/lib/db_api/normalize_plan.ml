@@ -1,19 +1,19 @@
 module Domain = Melange_db.Normalize_plan
 
 type runtime_conflict_group = {
-  key : Support.Runtime_codec.value array;
+  key : Support.Runtime_codec.cljs_value array;
   indices : int Rrbvec.t ref;
   tx : int option;
 }
 
 type runtime_replacement_group = {
-  entity : Support.Runtime_codec.value;
-  replacement : Support.Runtime_codec.value ref;
+  entity : Support.Runtime_codec.cljs_value;
+  replacement : Support.Runtime_codec.cljs_value ref;
 }
 
 type runtime_resolution_values = {
-  before_lookup : Support.Runtime_codec.value option;
-  after_tempid : Support.Runtime_codec.value option;
+  before_lookup : Support.Runtime_codec.cljs_value option;
+  after_tempid : Support.Runtime_codec.cljs_value option;
 }
 
 type encoded_group = { indices : int array; tx : int Js.Nullable.t }

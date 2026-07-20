@@ -176,7 +176,7 @@ let namespace_of_ident ident =
 let valueValidWith runtime datascript database property property_value
     (options : encoded_validation_options) =
   let capabilities :
-      Support.Runtime_codec.value Domain.validation_capabilities =
+      Support.Runtime_codec.cljs_value Domain.validation_capabilities =
     {
       field = field runtime datascript;
       entity =

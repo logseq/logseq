@@ -1,8 +1,8 @@
 module Domain = Melange_db.View_grouping
 
 type encoded_group = {
-  key : Support.Runtime_codec.value;
-  rows : Support.Runtime_codec.value array;
+  key : Support.Runtime_codec.cljs_value;
+  rows : Support.Runtime_codec.cljs_value array;
 }
 
 let ident_text runtime value =
@@ -13,7 +13,7 @@ let ident_text runtime value =
   else Support.Runtime_codec.value_to_string runtime value
 
 let capabilities runtime datascript :
-    Support.Runtime_codec.value Domain.capabilities =
+    Support.Runtime_codec.cljs_value Domain.capabilities =
   {
     field = Entity_read.field runtime datascript;
     is_nil = Support.Runtime_codec.value_is_nil runtime;
@@ -43,7 +43,7 @@ let groupEntitiesWith runtime datascript property group_ident sort_ident
     ~group_ident:(ident_text runtime group_ident)
     ~sort_ident:(ident_text runtime sort_ident)
     ~descending (Rrbvec.of_array entities)
-  |> Rrbvec.map (fun (group : Support.Runtime_codec.value Domain.group) ->
+  |> Rrbvec.map (fun (group : Support.Runtime_codec.cljs_value Domain.group) ->
       ({ key = group.key; rows = Rrbvec.to_array group.entities }
         : encoded_group))
   |> Rrbvec.to_array

@@ -4,21 +4,21 @@ type execution_adapter
 type collector
 
 type invalid_error_callback =
-  (Support.Runtime_codec.value ->
-   Support.Runtime_codec.value ->
-   Support.Runtime_codec.value ->
+  (Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value ->
    Support.Datascript.transaction_report ->
    exn
   [@u])
 
-type parent_error_callback = (Support.Runtime_codec.value -> exn[@u])
+type parent_error_callback = (Support.Runtime_codec.cljs_value -> exn[@u])
 type error_code_callback = (exn -> string Js.Nullable.t[@u])
 type rethrow_error_callback = (exn -> unit[@u])
 
 type log_failure_callback =
   (exn ->
-   Support.Runtime_codec.value ->
-   Support.Runtime_codec.value ->
+   Support.Runtime_codec.cljs_value ->
+   Support.Runtime_codec.cljs_value ->
    unit
   [@u])
 
@@ -28,7 +28,7 @@ type append_collector_callback =
   (collector -> Support.Datascript.datom array -> unit[@u])
 
 type collector_value_callback =
-  (collector -> Support.Runtime_codec.value[@u])
+  (collector -> Support.Runtime_codec.cljs_value[@u])
 
 type clear_collector_callback = (collector -> unit[@u])
 
@@ -43,23 +43,23 @@ type commit_callback =
   (Support.Datascript.connection ->
    Support.Datascript.transaction_data ->
    Support.Datascript.transaction_metadata ->
-   Support.Runtime_codec.value
+   Support.Runtime_codec.cljs_value
   [@u])
 
-type nested_error_callback = (Support.Runtime_codec.value -> exn[@u])
+type nested_error_callback = (Support.Runtime_codec.cljs_value -> exn[@u])
 type log_batch_error_callback = (exn -> unit[@u])
 
 type local_connection_callback =
-  (Support.Runtime_codec.value ->
+  (Support.Runtime_codec.cljs_value ->
    Support.Datascript.connection Js.Nullable.t
   [@u])
 
 type local_result_callback =
-  (Support.Datascript.transaction_report -> Support.Runtime_codec.value
+  (Support.Datascript.transaction_report -> Support.Runtime_codec.cljs_value
   [@u])
 
 type missing_target_error_callback =
-  (Support.Runtime_codec.value -> exn[@u])
+  (Support.Runtime_codec.cljs_value -> exn[@u])
 
 external invalid_error_fn : execution_adapter -> invalid_error_callback
   = "makeInvalidError"
@@ -233,7 +233,7 @@ let batchWithTemp runtime datascript execution connection metadata
           Support.Datascript.transaction_report,
           Support.Datascript.transaction_data,
           collector,
-          Support.Runtime_codec.value )
+          Support.Runtime_codec.cljs_value )
         Domain.temp_batch_capabilities)
   in
   Domain.batch_with_temp capabilities connection metadata
@@ -385,7 +385,7 @@ let syncOwnedWith runtime datascript execution connection transaction_data
           Support.Datascript.transaction_data,
           Support.Datascript.transaction_metadata,
           Support.Datascript.transaction_report,
-          Support.Runtime_codec.value )
+          Support.Runtime_codec.cljs_value )
         Domain.sync_capabilities)
   in
   try Domain.transact_sync capabilities connection transaction_data metadata
@@ -456,11 +456,11 @@ let transactOwnedWith runtime datascript execution target transaction_data
        missing_target_error =
          (fun target -> (make_missing_target_error target [@u]));
      }
-      : ( Support.Runtime_codec.value,
+      : ( Support.Runtime_codec.cljs_value,
           Support.Datascript.connection,
-          Support.Runtime_codec.value,
-          Support.Runtime_codec.value,
-          Support.Runtime_codec.value )
+          Support.Runtime_codec.cljs_value,
+          Support.Runtime_codec.cljs_value,
+          Support.Runtime_codec.cljs_value )
         Domain.transact_capabilities)
   in
   try

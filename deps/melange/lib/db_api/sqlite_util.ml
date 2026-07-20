@@ -2,7 +2,7 @@ module Domain = Melange_db.Sqlite_policy
 module Db_ident_domain = Melange_db.Db_ident
 module Property_type = Melange_db.Property_type
 
-type value_callback = (unit -> Support.Runtime_codec.value[@u])
+type value_callback = (unit -> Support.Runtime_codec.cljs_value[@u])
 type float_callback = (unit -> float[@u])
 
 let field = Property_build.field

@@ -139,6 +139,46 @@ test('the JavaScript package has no unexported compatibility wrappers', () => {
   }
 })
 
+test('the ClojureScript runtime boundary names opaque values explicitly', () => {
+  const valueCodecSpec = fs.readFileSync(
+    path.join(melangeRoot, 'spec/cljs_runtime/value_codec.mli'),
+    'utf8'
+  )
+  assert.match(valueCodecSpec, /^type cljs_value$/m)
+  assert.doesNotMatch(valueCodecSpec, /^type value$/m)
+
+  const oldQualifiedType = spawnSync(
+    'git',
+    [
+      'grep',
+      '-n',
+      '-E',
+      'Value_codec\\.value($|[^A-Za-z0-9_])|Runtime_codec\\.value($|[^A-Za-z0-9_])|Runtime\\.value($|[^A-Za-z0-9_])',
+      '--',
+      'deps/melange',
+    ],
+    { cwd: repoRoot, encoding: 'utf8' }
+  )
+  assert.equal(oldQualifiedType.status, 1, commandFailure(oldQualifiedType))
+
+  const renamedValueOperation = spawnSync(
+    'git',
+    [
+      'grep',
+      '-n',
+      'Runtime_codec\\.cljs_value_',
+      '--',
+      'deps/melange/lib',
+    ],
+    { cwd: repoRoot, encoding: 'utf8' }
+  )
+  assert.equal(
+    renamedValueOperation.status,
+    1,
+    commandFailure(renamedValueOperation)
+  )
+})
+
 test('Melange documentation describes only files that exist', () => {
   assert.equal(fs.existsSync(path.join(melangeRoot, 'README.md')), true)
 

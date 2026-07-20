@@ -1,8 +1,8 @@
 module Domain = Melange_db.View_property_values
 
 type encoded_entry = {
-  label : Support.Runtime_codec.value;
-  value : Support.Runtime_codec.value;
+  label : Support.Runtime_codec.cljs_value;
+  value : Support.Runtime_codec.cljs_value;
 }
 
 let ident_text runtime value =
@@ -13,7 +13,7 @@ let ident_text runtime value =
   else Support.Runtime_codec.value_to_string runtime value
 
 let capabilities runtime datascript database :
-    Support.Runtime_codec.value Domain.capabilities =
+    Support.Runtime_codec.cljs_value Domain.capabilities =
   let keyword = Support.Runtime_codec.keyword_from_string runtime in
   let field = Entity_read.field runtime datascript in
   {
@@ -52,7 +52,7 @@ let capabilities runtime datascript database :
 
 let encode_entries entries =
   entries
-  |> Rrbvec.map (fun (entry : Support.Runtime_codec.value Domain.entry) ->
+  |> Rrbvec.map (fun (entry : Support.Runtime_codec.cljs_value Domain.entry) ->
       ({ label = entry.label; value = entry.value } : encoded_entry))
   |> Rrbvec.to_array
 

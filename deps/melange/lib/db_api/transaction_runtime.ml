@@ -1,4 +1,4 @@
-type value = Support.Runtime_codec.value
+type value = Support.Runtime_codec.cljs_value
 type transact_callback = (value -> value -> value -> value[@u])
 
 type pipeline_callback =

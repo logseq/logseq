@@ -4,7 +4,7 @@ module Runtime_codec = Melange_cljs_runtime_spec.Value_codec
 module Registry = Melange_common.Graph_registry
 
 type encoded_value_result = {
-  value : Runtime_codec.value;
+  value : Runtime_codec.cljs_value;
   error : string Js.Nullable.t;
 }
 
