@@ -365,7 +365,7 @@ Expected result: Boundary tests pass for the skeleton, while behavior tests rema
 Files:
 
 - Modify deps/melange/lib/common/*.ml.
-- Modify deps/melange/lib/common/*.mli.
+- Modify deps/melange/spec/common/*.mli.
 - Modify deps/melange/js_api/common*.ml.
 - Modify deps/melange/js_api/common*.js and CommonJS wrappers when required.
 - Reduce deps/melange/bridge/src/logseq/melange/bridge/common/*.cljs.
@@ -393,7 +393,7 @@ Expected result: No Common business logic remains in ClojureScript.
 Files:
 
 - Modify deps/melange/lib/db/*.ml.
-- Modify deps/melange/lib/db/*.mli.
+- Modify deps/melange/spec/db/*.mli.
 - Modify deps/melange/js_api/db*.ml.
 - Modify deps/melange/js_api/db*.js and CommonJS wrappers when required.
 - Reduce deps/melange/bridge/src/logseq/melange/bridge/db/*.cljs.

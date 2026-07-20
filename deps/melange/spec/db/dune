@@ -1,8 +1,8 @@
 (library
- (name melange_db_impl)
+ (name melange_db)
  (modes melange)
- (implements melange_db)
- (modules
+ (libraries melange.js rrbvec)
+ (virtual_modules
   Asset
   Block_title
   Bidirectional
@@ -17,10 +17,10 @@
   Entity_read
   Entity_lookup
   Frontend_read
-  Input_plan
   Initial_data_workflow
   Initial_projection
   Initial_read
+  Input_plan
   Kv_entity
   Normalize_plan
   Order
@@ -60,6 +60,5 @@
   View_property_values
   View_workflow
   View_query_workflow)
- (libraries melange.js rrbvec)
  (preprocess
   (pps melange.ppx)))

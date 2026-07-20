@@ -15,12 +15,12 @@
   Entry_db_domain
   Entry_bridge)
  (libraries
-  melange_common
-  melange_common_api
+  melange_common_impl
+  melange_common_api_impl
   melange_cljs_runtime
   melange_datascript
-  melange_db
-  melange_db_api
+  melange_db_impl
+  melange_db_api_impl
   melange_db_worker
   melange.node)
  (preprocess
@@ -30,7 +30,7 @@
  (name melange_graph_fs_api)
  (modes melange)
  (modules Entry_graph_fs)
- (libraries melange_common melange.node rrbvec)
+ (libraries melange_common_impl melange.node rrbvec)
  (preprocess
   (pps melange.ppx)))
 

@@ -18,6 +18,14 @@ function findRepoRoot(start) {
 const repoRoot = findRepoRoot(__dirname)
 const melangeRoot = path.join(repoRoot, 'deps/melange')
 
+function moduleNames(directory, extension) {
+  return fs
+    .readdirSync(directory)
+    .filter((file) => path.extname(file) === extension)
+    .map((file) => path.basename(file, extension))
+    .sort()
+}
+
 function commandFailure(result) {
   return [result.stdout, result.stderr].filter(Boolean).join('\n')
 }
@@ -177,6 +185,33 @@ test('the ClojureScript runtime boundary names opaque values explicitly', () => 
     1,
     commandFailure(renamedValueOperation)
   )
+})
+
+test('Common and DB interfaces are owned by spec libraries', () => {
+  for (const library of ['common', 'db']) {
+    const implementationDirectory = path.join(melangeRoot, 'lib', library)
+    const specificationDirectory = path.join(melangeRoot, 'spec', library)
+    const implementationModules = moduleNames(implementationDirectory, '.ml')
+    const specificationModules = moduleNames(specificationDirectory, '.mli')
+
+    assert.deepEqual(moduleNames(implementationDirectory, '.mli'), [])
+    assert.notEqual(specificationModules.length, 0)
+    assert.deepEqual(specificationModules, implementationModules)
+  }
+})
+
+test('Common and DB API workflow interfaces are owned by spec libraries', () => {
+  for (const library of ['common_api', 'db_api']) {
+    const implementationDirectory = path.join(melangeRoot, 'lib', library)
+    const specificationDirectory = path.join(melangeRoot, 'spec', library)
+
+    assert.deepEqual(moduleNames(implementationDirectory, '.mli'), [])
+    assert.deepEqual(moduleNames(specificationDirectory, '.mli'), ['workflows'])
+    assert.equal(
+      fs.existsSync(path.join(implementationDirectory, 'workflows.ml')),
+      true
+    )
+  }
 })
 
 test('Melange documentation describes only files that exist', () => {

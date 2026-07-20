@@ -4,23 +4,24 @@
  (modules
   (:standard \ Workflows))
  (libraries
-  melange_common
+  melange_common_impl
   melange_cljs_runtime
   melange_datascript
-  melange_db
+  melange_db_impl
   melange_runtime)
  (preprocess
   (pps melange.ppx)))
 
 (library
- (name melange_db_api)
+ (name melange_db_api_impl)
  (modes melange)
+ (implements melange_db_api)
  (modules Workflows)
  (libraries
-  melange_common
+  melange_common_impl
   melange_cljs_runtime
   melange_datascript
-  melange_db
+  melange_db_impl
   melange_db_api_internal
   melange_runtime)
  (preprocess

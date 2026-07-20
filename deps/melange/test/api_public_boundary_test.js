@@ -16,10 +16,13 @@ function findRepoRoot(start) {
 }
 
 const repoRoot = findRepoRoot(__dirname)
-const melangeBuildRoot = path.join(repoRoot, 'deps/melange/_build/default/lib')
+const melangeSpecBuildRoot = path.join(
+  repoRoot,
+  'deps/melange/_build/default/spec'
+)
 
 function assertAggregateOnly(directory, library) {
-  const buildRoot = path.join(melangeBuildRoot, directory)
+  const buildRoot = path.join(melangeSpecBuildRoot, directory)
   const publicInterfaces = fs
     .readdirSync(path.join(buildRoot, `.${library}.objs/melange`))
     .filter((file) => file.endsWith('.cmi'))
@@ -32,7 +35,7 @@ function assertAggregateOnly(directory, library) {
 }
 
 function assertAggregateDoesNotImportInternals(directory, library, modulePrefix) {
-  const buildRoot = path.join(melangeBuildRoot, directory)
+  const buildRoot = path.join(melangeSpecBuildRoot, directory)
   const cmi = path.join(
     buildRoot,
     `.${library}.objs/melange/${library}__Workflows.cmi`

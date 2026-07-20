@@ -15,7 +15,7 @@
   uuid_test
   version_test)
  (module_systems commonjs)
- (libraries melange_common melange-fest melange.node)
+ (libraries melange_common_impl melange-fest melange.node)
  (preprocess
   (pps melange.ppx)))
 

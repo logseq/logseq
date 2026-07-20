@@ -1,8 +1,8 @@
 (library
- (name melange_common_impl)
+ (name melange_common)
  (modes melange)
- (implements melange_common)
- (modules
+ (libraries melange.js rrbvec)
+ (virtual_modules
   Url_support
   Authorization
   Namespace
@@ -21,10 +21,5 @@
   Util
   Uuid
   Version)
- (libraries
-  melange-edn-melange
-  melange.js
-  melange_runtime
-  rrbvec)
  (preprocess
   (pps melange.ppx)))
