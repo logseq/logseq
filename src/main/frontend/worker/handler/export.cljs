@@ -84,11 +84,7 @@
       (if-let [error (:error validation)]
         {:error error}
         (let [tx-data (:tx-data validation)
-              tx-meta (cond-> {::sqlite-export/imported-data? true}
-                        ;; Datom imports include built-ins, so the pipeline must not
-                        ;; revert those changes as edits to existing built-ins.
-                        (= :datoms (::sqlite-export/graph-format export-edn))
-                        (assoc :initial-db? true))]
+              tx-meta {::sqlite-export/imported-data? true}]
           (ldb/transact! conn tx-data tx-meta)
           {:tx-count (count tx-data)})))))
 

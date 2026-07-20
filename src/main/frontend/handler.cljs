@@ -12,7 +12,6 @@
             [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
@@ -158,8 +157,6 @@
 
       (i18n/start)
       (instrument/init)
-
-      (react/run-custom-queries-when-idle!)
 
       (events/run!)
 

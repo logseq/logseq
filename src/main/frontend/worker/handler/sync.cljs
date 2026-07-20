@@ -74,9 +74,21 @@
   [repo]
   (db-sync/upload-stopped? repo))
 
-(def-thread-api :thread-api/db-sync-get-block-conflicts
-  [repo block-uuid]
-  (client-op/get-sync-conflicts repo block-uuid))
+(def-thread-api :thread-api/db-sync-get-all-block-conflicts
+  [repo]
+  (let [conflicts (client-op/get-all-sync-conflicts repo)]
+    (when-not (map? conflicts)
+      (throw (ex-info "Expected sync conflicts grouped by block"
+                      {:repo repo
+                       :conflicts conflicts})))
+    (into {}
+          (map (fn [[block-uuid block-conflicts]]
+                 (when-not (uuid? block-uuid)
+                   (throw (ex-info "Expected sync conflict block UUID"
+                                   {:repo repo
+                                    :block-uuid block-uuid})))
+                 [(str block-uuid) block-conflicts]))
+          conflicts)))
 
 (def-thread-api :thread-api/db-sync-clear-block-conflicts
   [repo block-uuid]

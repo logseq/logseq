@@ -8,6 +8,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
             [frontend.db.restore :as db-restore]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -62,6 +63,7 @@
          (if (= current-repo url)
            (do
              (state/set-current-repo! nil)
+             (db-subs/reset-graph! nil)
              (when-let [graph (:url (first (state/get-repos)))]
                (notification/show! (t :graph/removed-and-redirecting
                                       (text-util/get-graph-name-from-path url)

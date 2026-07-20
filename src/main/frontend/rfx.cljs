@@ -28,9 +28,7 @@
   (volatile! {:last-log-ms 0}))
 
 (def ^:private fast-state-sub-ids
-  #{:db/query-results
-    :db/async-queries
-    :db/latest-transacted-entity-uuids
+  #{:db/async-queries
     :sync/block-conflicts
     :ui/container-id
     :ui/cached-key->container-id
@@ -321,27 +319,6 @@
 
     :else
     (rfx/use-sub sub)))
-
-(defn use-entity-tx-id
-  [entity]
-  (let [tx-ids-path [:db/latest-transacted-entity-uuids :entity-tx-ids]
-        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
-        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
-    (or uuid-tx-id db-tx-id)))
-
-(defn use-entity-children-tx-id
-  [entity]
-  (let [tx-ids-path [:db/latest-transacted-entity-uuids :children-tx-ids]
-        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
-        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
-    (or uuid-tx-id db-tx-id)))
-
-(defn use-entity-tree-tx-id
-  [entity]
-  (let [tx-ids-path [:db/latest-transacted-entity-uuids :tree-tx-ids]
-        uuid-tx-id (use-sub (conj tx-ids-path (:block/uuid entity)))
-        db-tx-id (use-sub (conj tx-ids-path (:db/id entity)))]
-    (or uuid-tx-id db-tx-id)))
 
 (defn register-state-sub-id!
   [sub-id]

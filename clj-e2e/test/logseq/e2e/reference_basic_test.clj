@@ -1,12 +1,13 @@
 (ns logseq.e2e.reference-basic-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures]]
+   [clojure.test :refer [deftest testing use-fixtures]]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.util :as util]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -85,3 +86,23 @@
     (b/assert-blocks-visible ["b1[[b3[[b2]]]]" "b2[[b1[[b3]]]]" "b3[[b2[[b1]]]]"])))
 
 ;; TODO: page references
+
+(deftest linked-reference-membership-updates-live
+  (testing "a mounted page inserts and removes linked-reference rows"
+    (let [target-page (ls-api-call! :editor.getCurrentPage)
+          target-name (get target-page "name")
+          source-page "linked reference live source"
+          source-title "linked reference membership candidate"
+          _ (ls-api-call! :editor.createPage source-page)
+          source-block (ls-api-call! :editor.insertBlock source-page source-title)
+          source-uuid (get source-block "uuid")
+          reference-row (format ".references #ls-block-%s" source-uuid)]
+      (ls-api-call! :editor.updateBlock
+                    source-uuid
+                    (format "%s [[%s]]" source-title target-name))
+      (w/wait-for reference-row)
+      (assert/assert-is-visible
+       (format "%s .block-title-wrap:text('%s')" reference-row source-title))
+
+      (ls-api-call! :editor.updateBlock source-uuid source-title)
+      (w/wait-for-not-visible reference-row))))
