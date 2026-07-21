@@ -1362,7 +1362,7 @@
     (some #(contains? export-map %) [::block :pages-and-blocks :properties :classes]) :partial
     :else :unsupported))
 
-(defn build-import
+(defn ^:large-vars/cleanup-todo build-import
   "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
@@ -1379,7 +1379,7 @@
    This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
-  * :misc-tx - Txs to transact unrelated to other txs"
+   * :misc-tx - Txs to transact unrelated to other txs"
   [export-map* db {:keys [current-block] :as import-options}]
   (cond
     (and (:import-edn-data? import-options)
@@ -1388,15 +1388,13 @@
 
     (and (:import-edn-data? import-options)
          (seq (unsupported-export-metadata-keys export-map*)))
-    {:error (str "The imported EDN contains unsupported field(s): "
-                 (pr-str (unsupported-export-metadata-keys export-map*)))}
+    {:error (str "The imported EDN contains unsupported field(s): " (pr-str (unsupported-export-metadata-keys export-map*)))}
 
     (datom-export? export-map*)
     (build-datom-import export-map* db)
 
     :else
-    (let [import-options' (merge (dissoc (::import-options export-map*) :import-edn-data?)
-                                 import-options)
+    (let [import-options' (merge (dissoc (::import-options export-map*) :import-edn-data?) import-options)
           export-map (if (and (::block export-map*) current-block)
                        (build-block-import-options current-block export-map*)
                        export-map*)
