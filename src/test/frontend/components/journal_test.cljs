@@ -260,9 +260,15 @@
         journal-page-source (form-source source "(hsx/defc journal-page")]
     (is (some? journal-page-source))
     (when journal-page-source
-      (is (= #{"db-hooks/use-block" "db-hooks/use-children"}
+      (is (= #{"db-hooks/use-block-projection" "db-hooks/use-children"}
              (set (re-seq #"db-hooks/[a-z-]+" journal-page-source))))
       (is (string/includes? journal-page-source "block/plain-block-list"))
+      (is (string/includes? journal-page-source
+                            "(state/get-container-id [:journal-page journal-uuid])"))
+      (is (string/includes? journal-page-source
+                            "config (assoc (page-render-config page option document-mode?)"))
+      (is (string/includes? journal-page-source
+                            ":container-id container-id"))
       (is (not (string/includes? journal-page-source
                                  "block/page-root-virtual-list")))
       (is (zero? (occurrence-count journal-page-source

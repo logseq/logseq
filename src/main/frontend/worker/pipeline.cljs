@@ -587,15 +587,82 @@
                         :block/uuid)))
         (structural-parent-ids tx-report)))
 
+(defn- projected-reference-content-datom?
+  [datom]
+  (not (contains? #{:block/tx-id :block/updated-at} (:a datom))))
+
+(defn- reference-attrs
+  [db]
+  (let [schema (d/schema db)
+        property-class-id (d/entid db :logseq.class/Property)
+        private-property-ids (into #{}
+                                   (map :e)
+                                   (d/datoms db :avet :logseq.property/public? false))]
+    (into #{:block/refs}
+          (keep (fn [datom]
+                  (let [property-id (:e datom)
+                        ident (some-> (first (d/datoms db :eavt property-id :db/ident))
+                                      :v)]
+                    (when (and ident
+                               (not (contains? private-property-ids property-id))
+                               (= :db.type/ref
+                                  (get-in schema [ident :db/valueType])))
+                      ident))))
+          (if property-class-id
+            (d/datoms db :avet :block/tags property-class-id)
+            []))))
+
+(def ^:private reference-attr-definition-attrs
+  #{:db/ident
+    :db/valueType
+    :block/tags
+    :logseq.property/public?})
+
+(defn- reference-owner-ids-at
+  [db reference-attrs' target-id]
+  (into #{}
+        (mapcat (fn [attr]
+                  (map :e (d/datoms db :avet attr target-id))))
+        reference-attrs'))
+
+(defn- projected-reference-owner-ids
+  [{:keys [db-before db-after tx-data]}]
+  (let [target-ids (into #{}
+                         (comp
+                          (filter projected-reference-content-datom?)
+                          (map :e)
+                          (filter #(d/entity db-before %)))
+                         tx-data)]
+    (if (empty? target-ids)
+      #{}
+      (let [reference-attrs-changed?
+            (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
+            before-reference-attrs (reference-attrs db-before)
+            after-reference-attrs (if reference-attrs-changed?
+                                    (reference-attrs db-after)
+                                    before-reference-attrs)]
+        (into #{}
+              (mapcat (fn [target-id]
+                        (concat
+                         (reference-owner-ids-at db-before before-reference-attrs target-id)
+                         (reference-owner-ids-at db-after after-reference-attrs target-id)
+                         (map :db/id
+                              (keep #(some-> (d/entity % target-id)
+                                             :block/closed-value-property)
+                                    [db-before db-after])))))
+              target-ids)))))
+
 (defn- revision-owner-ids
   [tx-report]
-  (into (structural-parent-ids tx-report)
-        (map :e)
+  (into (projected-reference-owner-ids tx-report)
+        (comp
+         (filter projected-reference-content-datom?)
+         (map :e))
         (:tx-data tx-report)))
 
 (defn transact-pipeline
   "Compute extra tx-data and block refs, then stamp changed block entities and
-  their direct structural owners. This function must stay pure and must not call
+  projected reference owners. This function must stay pure and must not call
   `d/transact!` or `ldb/transact!`."
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
   (let [derive-extra-data? (not (or (:sync-download-graph? tx-meta)
@@ -622,14 +689,16 @@
                                   (imported-data? tx-meta))
                               (seq surviving-blocks))
                      (rebuild-block-refs tx-report* surviving-blocks))
+        revision-owner-ids' (revision-owner-ids tx-report*)
         tx-id-data (let [db-after (:db-after tx-report*)
                          tx-id (inc (:max-tx db-after))]
-                     (keep (fn [db-id]
-                             (when (and (not (contains? deleted-block-ids db-id))
-                                        (:block/uuid (d/entity db-after db-id)))
-                               {:db/id db-id
-                                :block/tx-id tx-id}))
-                           (revision-owner-ids tx-report*)))
+                     (into []
+                           (keep (fn [db-id]
+                                   (when (and (not (contains? deleted-block-ids db-id))
+                                              (:block/uuid (d/entity db-after db-id)))
+                                     {:db/id db-id
+                                      :block/tx-id tx-id})))
+                           revision-owner-ids'))
         block-refs-tx-id-data (concat block-refs tx-id-data)
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))

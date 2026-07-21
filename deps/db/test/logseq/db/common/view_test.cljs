@@ -140,6 +140,36 @@
     (is (= #{"Movie A" "Movie B"} (get group->titles "Sci-Fi")))
     (is (= #{"Movie A"} (get group->titles "Drama")))))
 
+(deftest get-view-data-list-view-keeps-one-row-shape-for-pages-and-blocks-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "Tagged page"
+                        :build/tags [:Topic]}}
+                {:page {:block/title "Block page"}
+                 :blocks [{:block/title "Tagged block"
+                           :build/tags [:Topic]}]}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id
+                              :logseq.property.view/group-by-property
+                              :block/page]
+                             [:db/add view-id
+                              :logseq.property.view/type
+                              :logseq.property.view/type.list]])
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :class-objects
+                                       :view-for-id class-id})]
+    (is (= 2 (:count result)))
+    (is (every? (fn [[_group partitions]]
+                  (every? (fn [[breadcrumb-uuid rows]]
+                            (and (uuid? breadcrumb-uuid)
+                                 (sequential? rows)
+                                 (every? map? rows)))
+                          partitions))
+                (:data result))
+        "A list view must not mix flat row IDs with nested partitions.")))
+
 (deftest get-view-data-linked-references-page-view-does-not-crash-on-missing-db-ident-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

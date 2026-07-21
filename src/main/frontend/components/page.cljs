@@ -144,12 +144,16 @@
           :library? (ldb/library? page)}
          option))
 
+(defn- render-stable-page
+  [page]
+  (dissoc page :block/tx-id :block/updated-at))
+
 (hsx/defc normal-page-root
   [page-uuid config hide-add-button?]
-  (let [page (db-hooks/use-block page-uuid)
+  (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
-      [:div.relative
+      [:div.page-blocks-inner.relative
        (when (seq child-uuids)
          (block/page-root-virtual-list config child-uuids))
        (when (and (not config/publishing?)
@@ -159,11 +163,11 @@
 
 (hsx/defc special-page-root
   [page-uuid membership-kind user-uuid config hide-add-button?]
-  (let [page (db-hooks/use-block page-uuid)
+  (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         membership-key (page-membership-resource-key page-uuid membership-kind user-uuid)
         child-uuids (db-hooks/use-resource membership-key)]
     (when page
-      [:div.relative
+      [:div.page-blocks-inner.relative
        (when (seq child-uuids)
          (block/page-root-virtual-list config child-uuids))
        (when (and (not config/publishing?)
@@ -174,7 +178,7 @@
 (hsx/defc block-route-root
   [block-uuid block config hide-add-button?]
   (let [child-uuids (db-hooks/use-children block-uuid)]
-    [:div.relative
+    [:div.page-blocks-inner.relative
      (block/plain-block-list config [block-uuid])
      (when-not hide-add-button?
        (add-button block child-uuids config))]))
@@ -189,7 +193,8 @@
         config (page-render-config page option document-mode?)
         page-uuid (:block/uuid page)
         user-uuid-string (user-handler/user-uuid)
-        user-uuid (when (util/uuid-string? user-uuid-string)
+        user-uuid (when (and (string? user-uuid-string)
+                             (util/uuid-string? user-uuid-string))
                     (uuid user-uuid-string))
         membership-kind (page-membership-kind page user-uuid)]
     (if (entity/page? page)
@@ -201,19 +206,23 @@
 
 (hsx/defc journal-page
   [journal-uuid option]
-  (let [page (db-hooks/use-block journal-uuid)
+  (let [page (db-hooks/use-block-projection journal-uuid render-stable-page)
         child-uuids (db-hooks/use-children journal-uuid)
         document-mode? (rfx/use-sub [:document/mode?])]
     (when page
-      (let [config (page-render-config page option document-mode?)
+      (let [container-id (or (:container-id option)
+                             (state/get-container-id [:journal-page journal-uuid]))
+            config (assoc (page-render-config page option document-mode?)
+                          :container-id container-id)
             page-blocks-content
-            [:div.relative
+            [:div.page-blocks-inner.relative
              (block/plain-block-list config child-uuids)
              (when-not (:hide-add-button? option)
                (add-button page child-uuids config))]]
         (page-inner (assoc option
                            :page page
                            :journals? true
+                           :container-id container-id
                            :page-blocks-content page-blocks-content))))))
 
 (hsx/defc today-queries
@@ -543,7 +552,7 @@
 
 (hsx/defc loaded-page
   [option page-uuid]
-  (let [page (db-hooks/use-block page-uuid)
+  (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         refs-count (db-hooks/use-resource [:block-ref-count page-uuid])]
     (when page
       (page-inner (assoc option
@@ -552,8 +561,9 @@
 
 (hsx/defc page-resource
   [option resource-key]
-  (when-let [page-uuid (db-hooks/use-resource resource-key)]
-    (loaded-page option page-uuid)))
+  (let [page-uuid (db-hooks/use-resource resource-key)]
+    (when page-uuid
+      (loaded-page option page-uuid))))
 
 (hsx/defc page-aux
   [option]

@@ -6,11 +6,14 @@
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
             [frontend.worker.render-delta :as render-delta]
-            [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.sync :as db-sync]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
+
+(defmethod db-listener/listen-db-changes ::capture-report
+  [_ {:keys [repo]} tx-report]
+  (swap! repo conj tx-report))
 
 (def ^:private forbidden-renderer-payload-keys
   #{:affected-keys
@@ -63,7 +66,7 @@
            @calls))))
 
 (deftest db-listener-persists-local-tx-before-broadcasting-ui-refresh-test
-  (let [conn (d/create-conn)
+  (let [conn (db-test/create-conn)
         calls (atom [])]
     (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
                   db-sync/handle-local-tx! (fn [& _]
@@ -83,7 +86,7 @@
 
 (deftest db-listener-builds-one-render-delta-for-origin-and-broadcast-test
   (let [repo "repo"
-        conn (d/create-conn)
+        conn (db-test/create-conn)
         block-uuid #uuid "11111111-1111-1111-1111-111111111111"
         perf-id #uuid "22222222-2222-2222-2222-222222222222"
         deleted-block-uuid #uuid "33333333-3333-3333-3333-333333333333"
@@ -177,7 +180,7 @@
 (deftest db-listener-does-not-publish-graph-download-render-deltas-test
   (doseq [tx-meta [{:rtc-download-graph? true}
                    {:sync-download-graph? true}]]
-    (let [conn (d/create-conn)
+    (let [conn (db-test/create-conn)
           build-inputs (atom [])
           broadcast-payloads (atom [])]
       (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
@@ -202,7 +205,8 @@
       (is (empty? @broadcast-payloads) (str tx-meta)))))
 
 (deftest db-listener-does-not-publish-skip-validation-render-deltas-test
-  (let [conn (db-test/create-conn-with-blocks
+  (let [deferred-reports (atom [])
+        conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "before"}]}])
         block (db-test/find-block-by-content @conn "before")
@@ -212,8 +216,7 @@
         formal-pipeline-calls (atom [])
         build-inputs (atom [])
         broadcast-payloads (atom [])
-        mirrored-reports (atom [])
-        search-reports (atom [])]
+        mirrored-reports (atom [])]
     (try
       (ldb/register-transact-pipeline-fn!
        (fn [tx-report]
@@ -224,11 +227,6 @@
                     markdown-mirror/<handle-tx-report!
                     (fn [_repo _conn tx-report _opts]
                       (swap! mirrored-reports conj tx-report))
-                    search/sync-search-indice
-                    (fn [tx-report _opts]
-                      (swap! search-reports conj tx-report)
-                      {:blocks-to-remove-set #{}
-                       :blocks-to-add []})
                     worker-pipeline/invoke-hooks
                     (fn [& _]
                       (throw (js/Error. "skip-validation transactions must bypass renderer work")))
@@ -240,10 +238,10 @@
                     (fn [event payload]
                       (when (= :sync-db-changes event)
                         (swap! broadcast-payloads conj payload)))]
-        (db-listener/listen-db-changes! "repo" conn
+        (db-listener/listen-db-changes! deferred-reports conn
                                         :handler-keys [:sync-db-to-main-thread
                                                        :db-sync
-                                                       :search
+                                                       ::capture-report
                                                        :markdown-mirror])
         (ldb/transact! conn
                        [[:db/add block-id :block/title "after"]]
@@ -261,17 +259,17 @@
         "Transactions outside the formal pipeline cannot publish renderer deltas.")
     (is (= 1 (count @mirrored-reports))
         "Bypassing the renderer pipeline must not suppress unrelated post-commit handlers.")
-    (is (= 1 (count @search-reports))
-        "Bypassing renderer publication must not suppress worker-owned search indexing.")
+    (is (= 1 (count @deferred-reports))
+        "Bypassing renderer publication must not suppress deferred handlers.")
     (is (= {:skip-validate-db? true}
            (:tx-meta (first @mirrored-reports))))
     (is (identical? (first @mirrored-reports)
-                    (first @search-reports))
+                    (first @deferred-reports))
         "Auxiliary handlers must receive the same raw skipped transaction report.")))
 
 (deftest db-listener-reports-post-commit-failures-without-blocking-ui-sync-test
   (doseq [failed-stage [:checksum :persist]]
-    (let [conn (d/create-conn)
+    (let [conn (db-test/create-conn)
           calls (atom [])
           captured-errors (atom [])]
       (with-redefs [db-sync/update-local-sync-checksum!

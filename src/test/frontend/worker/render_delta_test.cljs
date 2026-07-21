@@ -38,6 +38,10 @@
            :tx-report report}
           overrides)))
 
+(defn- membership-operations
+  [children]
+  (update-vals children #(dissoc % :base-rev :rev)))
+
 (deftest complete-block-replacements-and-delta-invariants-test
   (let [block-uuid (random-uuid)
         replacement (block block-uuid 42 "new")
@@ -89,11 +93,11 @@
                             :deleted-block-uuids #{child-uuid}})]
     (is (= {child-uuid {:rev 202 :db/id 2}} (:deleted delta))
         "Tombstones carry the pre-deletion db id so the renderer can drop sidebar entries without a database.")
-    (is (= {parent-uuid {:base-tx-id 10
-                         :tx-id 11
-                         :remove [[child-uuid "a0"]]
+    (is (= {parent-uuid {:remove [[child-uuid "a0"]]
                          :upsert []}}
-           (:children delta)))))
+           (membership-operations (:children delta))))
+    (is (= 202 (get-in delta [:children parent-uuid :rev])))
+    (is (nat-int? (get-in delta [:children parent-uuid :base-rev])))))
 
 (deftest content-only-change-has-no-children-patch-test
   (let [parent-uuid (random-uuid)
@@ -145,16 +149,12 @@
             show-delta (build-delta
                         show-report
                         {:blocks {parent-uuid (block parent-uuid 12 "parent")}})]
-        (is (= {parent-uuid {:base-tx-id 10
-                             :tx-id 11
-                             :remove [[child-uuid "a0"]]
+        (is (= {parent-uuid {:remove [[child-uuid "a0"]]
                              :upsert []}}
-               (:children hide-delta)))
-        (is (= {parent-uuid {:base-tx-id 11
-                             :tx-id 12
-                             :remove []
+               (membership-operations (:children hide-delta))))
+        (is (= {parent-uuid {:remove []
                              :upsert [[child-uuid "a0"]]}}
-               (:children show-delta)))))))
+               (membership-operations (:children show-delta))))))))
 
 (deftest insert-builds-a-minimal-child-upsert-test
   (let [parent-uuid (random-uuid)
@@ -171,11 +171,9 @@
         delta (build-delta report
                            {:blocks {parent-uuid (block parent-uuid 11 "parent")
                                      child-uuid (block child-uuid 11 "child")}})]
-    (is (= {parent-uuid {:base-tx-id 10
-                         :tx-id 11
-                         :remove []
+    (is (= {parent-uuid {:remove []
                          :upsert [[child-uuid "a1"]]}}
-           (:children delta)))))
+           (membership-operations (:children delta))))))
 
 (deftest same-parent-order-change-removes-old-order-and-upserts-new-order-test
   (let [parent-uuid (random-uuid)
@@ -192,13 +190,12 @@
                                       :block/order "a2"]
                                      [:db/add [:block/uuid parent-uuid]
                                       :block/tx-id 11]])]
-    (is (= {parent-uuid {:base-tx-id 10
-                         :tx-id 11
-                         :remove [[child-uuid "a0"]]
+    (is (= {parent-uuid {:remove [[child-uuid "a0"]]
                          :upsert [[child-uuid "a2"]]}}
-           (:children (build-delta report
-                                   {:blocks {parent-uuid
-                                             (block parent-uuid 11 "parent")}}))))))
+           (membership-operations
+            (:children (build-delta report
+                                    {:blocks {parent-uuid
+                                              (block parent-uuid 11 "parent")}})))))))
 
 (deftest move-builds-old-parent-removal-and-new-parent-upsert-test
   (let [old-parent-uuid (random-uuid)
@@ -223,20 +220,17 @@
                                       :block/tx-id 20]
                                      [:db/add [:block/uuid new-parent-uuid]
                                       :block/tx-id 20]])]
-    (is (= {old-parent-uuid {:base-tx-id 17
-                             :tx-id 20
-                             :remove [[child-uuid "a0"]]
+    (is (= {old-parent-uuid {:remove [[child-uuid "a0"]]
                              :upsert []}
-            new-parent-uuid {:base-tx-id 18
-                             :tx-id 20
-                             :remove []
+            new-parent-uuid {:remove []
                              :upsert [[child-uuid "a3"]]}}
-           (:children (build-delta
-                       report
-                       {:blocks {old-parent-uuid
-                                 (block old-parent-uuid 20 "old parent")
-                                 new-parent-uuid
-                                 (block new-parent-uuid 20 "new parent")}}))))))
+           (membership-operations
+            (:children (build-delta
+                        report
+                        {:blocks {old-parent-uuid
+                                  (block old-parent-uuid 20 "old parent")
+                                  new-parent-uuid
+                                  (block new-parent-uuid 20 "new parent")}})))))))
 
 (defn- insertion-report
   [parent-uuid child-uuid unrelated-count]
@@ -314,7 +308,7 @@
                                          {:blocks {block-uuid valid-block}
                                           :deleted-block-uuids #{block-uuid}}))))))
 
-(deftest structural-owner-without-a-transaction-id-fails-fast-test
+(deftest structural-owner-does-not-require-a-new-transaction-id-test
   (let [parent-uuid (random-uuid)
         child-uuid (random-uuid)
         db-before (db-with-blocks [{:db/id 1
@@ -324,8 +318,10 @@
                                       :block/parent [:block/uuid parent-uuid]
                                       :block/order "a1"
                                       :block/tx-id 11}])]
-    (is (thrown-with-msg? js/Error
-                          #"Invalid parent transaction ID"
-                          (build-delta report
-                                       {:blocks {child-uuid
-                                                 (block child-uuid 11 "child")}})))))
+    (is (= {parent-uuid {:remove []
+                         :upsert [[child-uuid "a1"]]}}
+           (membership-operations
+            (:children
+             (build-delta report
+                          {:blocks {child-uuid
+                                    (block child-uuid 11 "child")}})))))))

@@ -14,6 +14,10 @@
                  :db/cardinality :db.cardinality/many}
    :block/parent {:db/valueType :db.type/ref}
    :block/page {:db/valueType :db.type/ref}
+   :logseq.property/status {:db/valueType :db.type/ref}
+   :logseq.property/default-value {:db/valueType :db.type/ref}
+   :logseq.property.class/properties {:db/valueType :db.type/ref
+                                      :db/cardinality :db.cardinality/many}
    :block/closed-value-property {:db/valueType :db.type/ref
                                  :db/cardinality :db.cardinality/many}
    :logseq.property.comments/blocks {:db/valueType :db.type/ref
@@ -301,6 +305,7 @@
              [:entity object-uuid]
              [:attr :block/tags]
              [:property-membership :block/tags]
+             [:display-properties object-uuid]
              [:class-membership class-before-uuid]
              [:class-membership class-after-uuid]}
            (affected-keys db [[:db/retract 12 :block/tags 10]
@@ -484,6 +489,91 @@
               (affected-keys
                db
                [[:db/add 16 :logseq.property.history/block 11]])))))))
+
+(deftest task-query-invalidation-is-semantic-test
+  (let [status-value-uuid (random-uuid)
+        default-status-value-uuid (random-uuid)
+        plain-block-uuid (random-uuid)
+        db (db-with [{:db/id 1
+                      :db/ident :logseq.property/status
+                      :logseq.property/default-value 5}
+                     {:db/id 2
+                      :block/uuid status-value-uuid
+                      :block/title "Doing"}
+                     {:db/id 3
+                      :block/uuid (random-uuid)
+                      :logseq.property/status 2}
+                     {:db/id 4
+                      :block/uuid plain-block-uuid
+                      :block/title "Plain"}
+                     {:db/id 5
+                      :block/uuid default-status-value-uuid
+                      :block/title "Todo"}
+                     {:db/id 10
+                      :block/uuid (random-uuid)
+                      :logseq.property.class/properties 1}])
+        task-keys #(keys-with-tag :tasks (affected-keys db %))]
+    (testing "ordinary block title edits do not rerun task queries"
+      (is (= #{} (task-keys [[:db/add 4 :block/title "Edited"]]))))
+    (testing "task status and status label edits rerun task queries"
+      (is (= #{[:tasks]}
+             (task-keys [[:db/retract 3 :logseq.property/status 2]])))
+      (is (= #{[:tasks]}
+             (task-keys [[:db/add 2 :block/title "In progress"]])))
+      (is (= #{[:tasks]}
+             (task-keys [[:db/add 5 :block/title "Not started"]]))))
+    (testing "class membership changes can change a default task status"
+      (is (= #{[:tasks]}
+             (task-keys [[:db/add 4 :block/tags 10]]))))))
+
+(deftest task-attribute-invalidation-only-follows-task-entities-test
+  (let [task-uuid (random-uuid)
+        default-task-uuid (random-uuid)
+        plain-block-uuid (random-uuid)
+        db (db-with [{:db/id 1
+                      :db/ident :logseq.property/status
+                      :logseq.property/default-value 2}
+                     {:db/id 2 :block/uuid (random-uuid) :block/title "Doing"}
+                     {:db/id 3
+                      :block/uuid task-uuid
+                      :logseq.property/status 2
+                      :block/page 10}
+                     {:db/id 4
+                      :block/uuid plain-block-uuid
+                      :block/page 10}
+                     {:db/id 5
+                      :block/uuid default-task-uuid
+                      :block/tags 12
+                      :block/page 10}
+                     {:db/id 10 :block/uuid (random-uuid)}
+                     {:db/id 11 :block/uuid (random-uuid)}
+                     {:db/id 12
+                      :block/uuid (random-uuid)
+                      :logseq.property.class/properties 1}])
+        task-attr-keys #(keys-with-tag :task-attr (affected-keys db %))]
+    (testing "ordinary block insertion and movement do not invalidate task attributes"
+      (is (= #{} (task-attr-keys [[:db/add 4 :block/page 11]]))))
+    (testing "moving a task invalidates its task-scoped page dependency"
+      (is (= #{[:task-attr :block/page]}
+             (task-attr-keys [[:db/add 3 :block/page 11]])))
+      (is (= #{[:task-attr :block/page]}
+             (task-attr-keys [[:db/add 5 :block/page 11]]))))))
+
+(deftest display-properties-ignore-title-and-timestamp-edits-test
+  (let [block-uuid (random-uuid)
+        property-uuid (random-uuid)
+        db (db-with [{:db/id 1
+                      :db/ident :user.property/display
+                      :block/uuid property-uuid}
+                     {:db/id 2
+                      :block/uuid block-uuid
+                      :block/title "Before"}])
+        display-keys #(keys-with-tag :display-properties
+                                     (affected-keys db %))]
+    (is (= #{} (display-keys [[:db/add 2 :block/title "After"]])))
+    (is (= #{} (display-keys [[:db/add 2 :block/updated-at 1000]])))
+    (is (= #{[:display-properties block-uuid]}
+           (display-keys [[:db/add 2 :user.property/display "value"]])))))
 
 (defn- bidirectional-db
   [property-ident]

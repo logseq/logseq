@@ -13,6 +13,7 @@
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.query-dsl :as query-dsl]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -320,7 +321,7 @@
         rows (concat (:full-properties result)
                      (:hidden-properties result))
         watch-keys (reduce into
-                           #{[:entity block-uuid]
+                           #{[:display-properties block-uuid]
                              [:property-membership :block/closed-value-property]}
                            (map display-row-watch-keys rows))]
     [watch-keys
@@ -406,12 +407,11 @@
     [#{[:task-time block-uuid]}
      {:history
       (mapv (fn [item]
-              (let [status-ident
-                    (:logseq.property.history/ref-value-ident item)
-                    status (d/entity db status-ident)]
-                {:created-at (:block/created-at item)
-                 :status-uuid
-                 (require-uuid! :status-uuid (:block/uuid status))}))
+              {:created-at (:block/created-at item)
+               :status-uuid
+               (require-uuid!
+                :status-uuid
+                (:logseq.property.history/ref-value-uuid item))})
             history)
       :seconds seconds}]))
 
@@ -886,7 +886,8 @@
         owner (require-view-owner! feature-type
                                    (:logseq.property/view-for view)
                                    view-uuid)]
-    (when-not (= stored-feature-type feature-type)
+    (when (and stored-feature-type
+               (not= stored-feature-type feature-type))
       (fail! "View resource feature does not match its definition"
              {:view-uuid view-uuid
               :feature-type feature-type
@@ -996,7 +997,6 @@
                    (case kind
                      :dsl
                      (and (string? (:query query-spec))
-                          (not (string/blank? (:query query-spec)))
                           (or (not (contains? query-spec :cards?))
                               (boolean? (:cards? query-spec))))
 
@@ -1024,23 +1024,30 @@
   [db query-spec {:keys [repo]}]
   (case (:kind query-spec)
     :dsl
-    (if-let [query-text (quoted-query-text (:query query-spec))]
-      (do
-        (when-not repo
-          (fail! "Full-text query resource requires repository" {}))
-        (mapv vector
-              (search-handler/search-blocks
-               repo query-text
-               {:limit 30
-                :feature/enable-semantic-search? false})))
-      (query-dsl/execute-query
-       (:query query-spec)
-       db
-       {:cards? (:cards? query-spec)
-        :current-page-title (:current-page-title query-spec)
-        :today-day (:today-day query-spec)
-        :block-attrs [:db/id :block/uuid
-                      {:block/parent [:db/id]}]}))
+    (let [query-string (:query query-spec)]
+      (cond
+        (string/blank? query-string)
+        []
+
+        (quoted-query-text query-string)
+        (let [query-text (quoted-query-text query-string)]
+          (when-not repo
+            (fail! "Full-text query resource requires repository" {}))
+          (mapv vector
+                (search-handler/search-blocks
+                 repo query-text
+                 {:limit 30
+                  :feature/enable-semantic-search? false})))
+
+        :else
+        (query-dsl/execute-query
+         query-string
+         db
+         {:cards? (:cards? query-spec)
+          :current-page-title (:current-page-title query-spec)
+          :today-day (:today-day query-spec)
+          :block-attrs [:db/id :block/uuid
+                        {:block/parent [:db/id]}]})))
 
     :datalog
     (query-handler/execute-custom-query
@@ -1102,8 +1109,19 @@
 (defn- query
   [db resource-key runtime]
   (require-shape! resource-key :query 2)
-  (let [query-spec (require-query-spec! (second resource-key))]
-    [#{[:graph]}
+  (let [query-spec (require-query-spec! (second resource-key))
+        watch-keys (if (= :datalog (:kind query-spec))
+                     (let [{:keys [attrs task-attrs tasks? opaque?]}
+                           (query-handler/custom-query-watch-dependencies query-spec)
+                           keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
+                                  (seq task-attrs)
+                                  (into (map (fn [attr] [:task-attr attr])) task-attrs)
+                                  tasks? (conj [:tasks]))]
+                       (if (or opaque? (empty? keys))
+                         #{[:graph]}
+                         keys))
+                     #{[:graph]})]
+    [watch-keys
      {:rows (query-result-rows (execute-query-spec db query-spec runtime)
                                query-spec)}]))
 
@@ -1172,8 +1190,13 @@
     :resources
     (into {}
           (map (fn [resource-key]
-                 (let [[watch-keys value]
-                       (resource-value db resource-key runtime)]
+                 (let [started-at (.now js/performance)
+                       [watch-keys value] (resource-value db resource-key runtime)
+                       completed-at (.now js/performance)]
+                   (when (and goog.DEBUG (> (- completed-at started-at) 10))
+                     (log/info :db-worker/render-resource-perf
+                               {:resource-key resource-key
+                                :elapsed-ms (- completed-at started-at)}))
                    [resource-key
                     {:watch-keys watch-keys
                      :value value}])))

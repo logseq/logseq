@@ -131,7 +131,7 @@
   [db entity]
   (:block/tx-id (d/entity db (:db/id entity))))
 
-(deftest nested-insert-revises-direct-parent-only-test
+(deftest nested-insert-keeps-parent-revision-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "ancestor"
@@ -152,15 +152,15 @@
         target
         {:sibling? true
          :keep-uuid? true}))
-    (is (not= (revision db-before parent) (revision @conn parent))
-        "Changing direct children revises their parent.")
+    (is (= (revision db-before parent) (revision @conn parent))
+        "Changing direct children is independent from the parent entity revision.")
     (is (some? (:block/tx-id (d/entity @conn [:block/uuid inserted-uuid]))))
     (is (= (revision db-before ancestor) (revision @conn ancestor))
         "Structural revisions do not propagate to ancestors.")
     (is (= (revision db-before page) (revision @conn page))
         "Nested structural revisions do not propagate to the page.")))
 
-(deftest top-level-insert-revises-page-test
+(deftest top-level-insert-keeps-page-revision-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "target"}]}])
@@ -177,10 +177,10 @@
         target
         {:sibling? true
          :keep-uuid? true}))
-    (is (not= (revision db-before page) (revision @conn page))
-        "A page owns its top-level child membership.")))
+    (is (= (revision db-before page) (revision @conn page))
+        "Top-level membership is independent from the page entity revision.")))
 
-(deftest sibling-reorder-revises-direct-parent-only-test
+(deftest sibling-reorder-keeps-parent-revision-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "ancestor"
@@ -194,12 +194,12 @@
         page (:block/page second-block)]
     (with-transact-pipeline
       #(outliner-core/move-blocks-up-down! conn [second-block] true))
-    (is (not= (revision db-before parent) (revision @conn parent))
-        "Reordering children revises their direct parent.")
+    (is (= (revision db-before parent) (revision @conn parent))
+        "Reordering children does not revise their direct parent.")
     (is (= (revision db-before ancestor) (revision @conn ancestor)))
     (is (= (revision db-before page) (revision @conn page)))))
 
-(deftest nested-move-revises-old-and-new-direct-parents-only-test
+(deftest nested-move-keeps-old-and-new-parent-revisions-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "ancestor"
@@ -215,14 +215,14 @@
         page (:block/page moved)]
     (with-transact-pipeline
       #(outliner-core/move-blocks! conn [moved] new-parent {:sibling? false}))
-    (is (not= (revision db-before old-parent) (revision @conn old-parent))
-        "Removing a child revises its old direct parent.")
-    (is (not= (revision db-before new-parent) (revision @conn new-parent))
-        "Adding a child revises its new direct parent.")
+    (is (= (revision db-before old-parent) (revision @conn old-parent))
+        "Removing a child does not revise its old direct parent.")
+    (is (= (revision db-before new-parent) (revision @conn new-parent))
+        "Adding a child does not revise its new direct parent.")
     (is (= (revision db-before ancestor) (revision @conn ancestor)))
     (is (= (revision db-before page) (revision @conn page)))))
 
-(deftest nested-delete-revises-surviving-direct-parent-only-test
+(deftest nested-delete-keeps-surviving-parent-revision-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "ancestor"
@@ -236,12 +236,12 @@
     (with-transact-pipeline
       #(outliner-core/delete-blocks! conn [deleted] {}))
     (is (nil? (d/entity @conn [:block/uuid (:block/uuid deleted)])))
-    (is (not= (revision db-before parent) (revision @conn parent))
-        "Deleting a child revises its surviving direct parent.")
+    (is (= (revision db-before parent) (revision @conn parent))
+        "Deleting a child does not revise its surviving direct parent.")
     (is (= (revision db-before ancestor) (revision @conn ancestor)))
     (is (= (revision db-before page) (revision @conn page)))))
 
-(deftest direct-child-visibility-revises-its-membership-owner-test
+(deftest direct-child-visibility-keeps-its-membership-owner-revision-test
   (doseq [[label attr value-for]
           [["recycled child"
             :logseq.property/deleted-at
@@ -287,8 +287,8 @@
           #(ldb/transact! conn [[:db/add (:db/id child) attr value]]))
         (let [hidden-db @conn
               hidden-parent-revision (revision hidden-db parent)]
-          (is (not= (revision db-before parent) hidden-parent-revision)
-              "Hiding a direct child revises the membership owner.")
+          (is (= (revision db-before parent) hidden-parent-revision)
+              "Hiding a direct child does not revise the membership owner.")
           (is (empty? (:items (block-handler/direct-children-membership
                                hidden-db
                                (:block/uuid parent)))))
@@ -297,8 +297,8 @@
 
           (with-transact-pipeline
             #(ldb/transact! conn [[:db/retract (:db/id child) attr value]]))
-          (is (not= hidden-parent-revision (revision @conn parent))
-              "Showing a direct child revises the membership owner again.")
+          (is (= hidden-parent-revision (revision @conn parent))
+              "Showing a direct child does not revise the membership owner.")
           (is (= [[child-uuid (:block/order child)]]
                  (:items (block-handler/direct-children-membership
                           @conn
@@ -322,6 +322,55 @@
              [:unlinked-index]}
            (:affected-keys result)))))
 
+(deftest referenced-entity-content-change-invalidates-owning-block-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "ordered"}]}])
+        block (db-test/find-block-by-content @conn "ordered")
+        value-uuid (random-uuid)
+        value-report (d/with @conn [{:block/uuid value-uuid
+                                     :block/title "before"
+                                     :logseq.property/created-from-property
+                                     :logseq.property/order-list-type}])
+        db-with-value (:db-after value-report)
+        value (d/entity db-with-value [:block/uuid value-uuid])
+        reference-report (d/with db-with-value
+                                 [[:db/add (:db/id block)
+                                   :logseq.property/order-list-type
+                                   (:db/id value)]])
+        db-before (:db-after reference-report)
+        tx-report (assoc (d/with db-before
+                                 [[:db/add (:db/id value)
+                                   :block/title
+                                   "number"]])
+                         :tx-meta {})
+        result (worker-pipeline/transact-pipeline tx-report)]
+    (is (not= (revision db-before block)
+              (revision (:db-after result) block))
+        "Changing projected reference content must revise every owning block.")))
+
+(deftest referenced-entity-timestamp-change-does-not-revise-rendered-blocks-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "owner"}]}])
+        page (ldb/get-page @conn "page1")
+        owner (db-test/find-block-by-content @conn "owner")
+        _ (d/transact! conn [[:db/add (:db/id owner) :block/refs (:db/id page)]
+                             [:db/add (:db/id page) :block/tx-id 10]
+                             [:db/add (:db/id owner) :block/tx-id 10]])
+        db-before @conn
+        tx-report (assoc (d/with db-before
+                                 [[:db/add (:db/id page)
+                                   :block/updated-at
+                                   (js/Date.now)]])
+                         :tx-meta {})
+        result (worker-pipeline/transact-pipeline tx-report)]
+    (is (= (revision db-before page)
+           (revision (:db-after result) page)))
+    (is (= (revision db-before owner)
+           (revision (:db-after result) owner))
+        "A non-rendered timestamp must not fan out revisions to reference owners.")))
+
 (deftest property-assignment-revises-block-only-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -339,6 +388,17 @@
         "Assigning a property revises the owning block.")
     (is (= (revision db-before parent) (revision @conn parent)))
     (is (= (revision db-before page) (revision @conn page)))))
+
+(deftest collapsed-state-revises-parent-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"}]}])
+        db-before @conn
+        parent (db-test/find-block-by-content db-before "parent")]
+    (with-transact-pipeline
+      #(ldb/transact! conn [[:db/add (:db/id parent) :block/collapsed? true]]))
+    (is (not= (revision db-before parent) (revision @conn parent))
+        "Collapsed state belongs to the parent entity revision.")))
 
 (deftest direct-page-update-revises-page-test
   (let [conn (db-test/create-conn-with-blocks
