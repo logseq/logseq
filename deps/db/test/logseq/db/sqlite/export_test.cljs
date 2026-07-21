@@ -656,7 +656,7 @@
     (is (not-any? #(contains? % :public?) (:tx-data legacy-result)))
     (is (string/includes? (:error invalid-result) "Unsupported attribute"))
     (is (string/includes? (:error invalid-result) (str unsupported-attr)))
-    (is (= "The imported EDN has 1 validation error(s)" (:error shared-result)))))
+    (is (= "The Imported EDN has 1 validation error(s)" (:error shared-result)))))
 
 (deftest import-edn-data-rejects-unsupported-export-metadata
   (let [unsupported-key :logseq.db.sqlite.export/unsupported
