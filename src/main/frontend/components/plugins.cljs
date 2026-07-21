@@ -1776,10 +1776,13 @@
         {:data-id focused}
         (when-let [^js pl (and focused (= cache focused)
                                (plugin-handler/get-plugin-inst focused))]
-          (ui/catch-error
-            [:p.warning.text-lg.mt-5 (t :plugin/settings-schema-error)]
-           (plugins-settings/settings-container
-            (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
+          (let [error-view [:p.warning.text-lg.mt-5 (t :plugin/settings-schema-error)]]
+            (if (some? (.-settings pl))
+              (ui/catch-error
+               error-view
+               (plugins-settings/settings-container
+                (bean/->clj (.-settingsSchema pl)) pl))
+              error-view)))]]]]))
 
 (hsx/defc custom-js-installer
   [{:keys [t current-repo db-restoring?]}]
