@@ -6,6 +6,7 @@
    [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
+   [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
@@ -188,7 +189,9 @@
   []
   (w/eval-js
    "() => {
-      history.replaceState(null, '', location.pathname + location.hash);
+      const url = new URL(location.href);
+      url.searchParams.set('virtualized', 'true');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
     }")
   (w/refresh)
   (assert/assert-graph-loaded?))
@@ -207,8 +210,8 @@
       const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const scrollContainer = document.querySelector('#main-content-container');
 
-      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
-        .find((block) => block.textContent.includes(title));
+      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]'))
+        .find((block) => block.dataset.blockTitle === title);
 
       const scrollToBlock = async (title) => {
         for (let i = 0; i < 80; i++) {
@@ -218,39 +221,25 @@
             await nextFrame();
             return block;
           }
-          scrollContainer.scrollTop += 260;
+          if (title === blockTitles[0]) {
+            scrollContainer.scrollTop = 0;
+          } else {
+            scrollContainer.scrollTop += 260;
+          }
           await nextFrame();
+          await delay(50);
         }
         throw new Error(`Could not find mounted block ${title}`);
       };
 
-      if (!document.querySelector('[data-virtuoso-scroller]')) {
-        throw new Error('Expected virtualized list scroller');
+      if (document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)').length >= blockTitles.length) {
+        throw new Error('Expected virtualized block window');
       }
 
       if (!blockByTitle(blockTitles[0])) {
         scrollContainer.scrollTop = 0;
         await delay(500);
       }
-
-      const appWrapper = document.querySelector('#app-container-wrapper');
-      appWrapper?.dispatchEvent(new PointerEvent('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX: 1,
-        clientY: 1
-      }));
-      appWrapper?.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 0,
-        clientX: 1,
-        clientY: 1
-      }));
-      await nextFrame();
 
       const firstBlock = await scrollToBlock(blockTitles[0]);
       const firstContent = firstBlock.querySelector('.block-content');
@@ -829,6 +818,58 @@
       (is (false? collapsed) metrics)
       (is (true? body-mounted) metrics)
       (is (pos? body-height) metrics))))
+
+(defn- console-logs
+  []
+  (->> (some-> custom-report/*pw-page->console-logs* deref vals)
+       (mapcat identity)
+       vec))
+
+(defn- worker-apply-times
+  [logs op-names]
+  (->> logs
+       (filter #(string/includes? % (str ":op-names " op-names)))
+       (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
+                       second
+                       Double/parseDouble))))
+
+(deftest consecutive-enter-and-delete-ops-stay-within-render-budget
+  (util/wait-timeout 500)
+  (let [old-logs (set (console-logs))]
+    (doseq [idx (range 3)]
+      (b/new-block (str "render budget " idx))
+      (b/delete-blocks))
+    (util/wait-timeout 800)
+    (let [logs (remove old-logs (console-logs))
+          enter-times (concat
+                       (worker-apply-times logs "[:insert-blocks]")
+                       (worker-apply-times logs "[:save-block :insert-blocks]"))
+          delete-times (worker-apply-times logs "[:delete-blocks]")
+          all-op-times (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
+                                      second
+                                      Double/parseDouble)
+                             logs)]
+      (is (<= 3 (count enter-times)) (pr-str enter-times))
+      (is (<= 3 (count delete-times)) (pr-str delete-times))
+      (is (every? #(<= % 60.0) enter-times) (pr-str enter-times))
+      (is (every? #(<= % 60.0) delete-times) (pr-str delete-times))
+      (is (every? #(<= % 60.0) all-op-times) (pr-str all-op-times))
+      (is (not-any? #(some (fn [message] (string/includes? % message))
+                            ["DB worker API failed"
+                             "Missing renderer resource entity"
+                             "Unsupported view resource row"
+                             "Invalid renderer resource UUID"])
+                    logs)))))
+
+(deftest today-queries-render-without-resource-errors
+  (w/eval-js
+   "(async () => {
+      const page = await window.logseq.api.create_journal_page(new Date().toISOString());
+      window.logseq.api.push_state('page', { name: page.uuid }, null);
+    })();")
+  (util/wait-timeout 1500)
+  (assert/assert-have-count "#today-queries" 1)
+  (assert/assert-have-count "#today-queries .block-content-fallback-ui" 0))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"

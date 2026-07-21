@@ -415,7 +415,7 @@
        (sort-by :block/order)
        (mapv #(entity-direct-map db % display-property-value-keys))))
 
-(defn- display-property-map
+(defn display-property-map
   [db property-id]
   (when-let [entity (d/entity db property-id)]
     (let [description (display-property-description db entity)

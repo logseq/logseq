@@ -124,25 +124,41 @@
        distinct
        vec))
 
-(defn- resolve-and-run-editor-callback!
-  [tx-meta row-uuids]
-  (-> (db-subs/resolve-blocks! (vec (or row-uuids [])))
-      (p/then (fn [rows]
-                (react-dom/flushSync
-                 #(run-edit-block-fn! tx-meta rows))))
-      (p/catch (fn [error]
-                 (log/error :db/editor-row-resolution-failed
-                            {:row-uuids row-uuids
-                             :error error})))))
+(defn- canonical-editor-rows!
+  [delta row-uuids]
+  (let [blocks (:blocks delta)]
+    (mapv (fn [block-uuid]
+            (when-not (contains? blocks block-uuid)
+              (throw (ex-info "Missing canonical editor row in worker response"
+                              {:block-uuid block-uuid
+                               :row-uuids row-uuids})))
+            (get blocks block-uuid))
+          row-uuids)))
+
+(defn- run-response-editor-callback!
+  [tx-meta delta row-uuids]
+  (let [started-at (now-ms)
+        rows (canonical-editor-rows! delta (vec (or row-uuids [])))
+        rows-ready-at (now-ms)]
+    (react-dom/flushSync
+     #(run-edit-block-fn! tx-meta rows))
+    {:canonical-rows-ms (- rows-ready-at started-at)
+     :edit-block-flush-ms (- (now-ms) rows-ready-at)}))
 
 (defn- publish-worker-response!
   [tx-meta delta row-uuids run-editor-callback?]
   (let [started-at (now-ms)]
     (when delta
       (react-dom/flushSync #(db-subs/apply-delta! delta)))
-    (p/let [_ (when run-editor-callback?
-                (resolve-and-run-editor-callback! tx-meta row-uuids))]
-      {:total-ms (- (now-ms) started-at)})))
+    (let [delta-flushed-at (now-ms)]
+      (p/let [editor-callback-perf (when run-editor-callback?
+                                     (run-response-editor-callback!
+                                      tx-meta delta row-uuids))]
+        (let [completed-at (now-ms)]
+          {:delta-flush-ms (- delta-flushed-at started-at)
+           :editor-callback-ms (- completed-at delta-flushed-at)
+           :editor-callback editor-callback-perf
+           :total-ms (- completed-at started-at)})))))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta

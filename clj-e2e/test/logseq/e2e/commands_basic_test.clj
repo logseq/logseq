@@ -318,8 +318,8 @@
                               (format ".ls-block[data-block-title='%s']"
                                       candidate-title)))
                             "blockid")
-            candidate-row (format ".custom-query-results #ls-block-%s"
-                                  candidate-uuid)]
+            candidate-row (format ".custom-query-results :text('%s')"
+                                  candidate-title)]
         (is (string? candidate-uuid))
         (util/input-command "query")
         (w/click (util/-query-last "button:text('filter')"))
@@ -343,7 +343,7 @@
     (b/new-blocks ["[[bar]] block" "[[bar]] another" ""])
     (util/input-command "advanced query")
     (w/click ".ls-query-setting")
-    (w/click "pre.CodeMirror-line")
+    (w/click (.first (w/-query "pre.CodeMirror-line")))
     (util/input "{:query [:find (pull ?b [*])
 :where [?b :block/refs ?r]
 [?r :block/title \"bar\"]]}")
@@ -361,7 +361,7 @@
 (deftest template-test
   (testing "template"
     (b/new-block "template 1")
-    (util/set-tag "Template")
+    (util/set-tag "Template" :hidden? true)
     (b/new-blocks ["block 1" "block 2" "block 3" "test"])
     (k/arrow-up)
     (w/wait-for "textarea:text('block 3')")

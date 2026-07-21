@@ -279,22 +279,33 @@
         special-source (form-source source "(hsx/defc special-page-root")]
     (is (some? normal-source))
     (when normal-source
-      (is (= #{"db-hooks/use-block" "db-hooks/use-children"}
+      (is (= #{"db-hooks/use-block-projection" "db-hooks/use-children"}
              (set (re-seq #"db-hooks/[a-z-]+" normal-source))))
       (is (string/includes? normal-source "block/page-root-virtual-list"))
+      (is (string/includes? normal-source ":div.page-blocks-inner.relative"))
       (doseq [forbidden [":block/children"
                          "db-async/"
                          "resident-block-tree"
                          "initial-tree-render-limit"
                          "use-entity-children-tx-id"]]
-        (is (not (string/includes? normal-source forbidden)))))
+      (is (not (string/includes? normal-source forbidden)))))
     (is (some? special-source))
     (when special-source
       (is (string/includes? special-source "db-hooks/use-resource"))
       (is (string/includes? special-source
                             "page-membership-resource-key"))
       (is (string/includes? special-source
-                            "block/page-root-virtual-list")))))
+                            "block/page-root-virtual-list"))
+      (is (string/includes? special-source ":div.page-blocks-inner.relative")))))
+
+(deftest page-shell-ignores-render-timestamp-only-updates-test
+  (let [source (source-for "src/main/frontend/components/page.cljs")
+        projection-source (form-source source "(defn- render-stable-page")
+        loaded-page-source (form-source source "(hsx/defc loaded-page")]
+    (is (string/includes? projection-source
+                          "(dissoc page :block/tx-id :block/updated-at)"))
+    (is (string/includes? loaded-page-source
+                          "db-hooks/use-block-projection page-uuid render-stable-page"))))
 
 (deftest special-pages-use-one-explicit-membership-resource-key-test
   (let [source (source-for "src/main/frontend/components/page.cljs")
@@ -337,6 +348,8 @@
 (deftest page-reference-and-preview-render-from-canonical-subscriptions-test
   (let [source (source-for "src/main/frontend/components/block.cljs")
         reference-source (form-source source "(hsx/defc page-reference")
+        looked-up-reference-source
+        (form-source source "(hsx/defc looked-up-page-reference")
         reference-content-source (form-source source "(defn- page-reference-content")
         subscribed-reference-source (form-source source "(hsx/defc subscribed-page-reference")
         preview-source (form-source source "(hsx/defc page-preview-trigger")
@@ -344,15 +357,18 @@
     (is (some? reference-source))
     (is (some? reference-content-source))
     (is (some? subscribed-reference-source))
+    (is (some? looked-up-reference-source))
     (is (some? preview-source))
     (is (some? preview-content-source))
     (when reference-source
-      (is (string/includes? reference-source
-                            "db-hooks/use-resource [:page-identity uuid-or-title]"))
+      (is (string/includes? reference-source "referenced-block-uuid"))
+      (is (not (string/includes? reference-source "db-hooks/use-resource")))
       (doseq [forbidden ["set-block!"
-                         "referenced-block"
                          "db-async/<get-block"]]
         (is (not (string/includes? reference-source forbidden)))))
+    (when looked-up-reference-source
+      (is (string/includes? looked-up-reference-source
+                            "db-hooks/use-resource [:page-identity uuid-or-title]")))
     (when subscribed-reference-source
       (is (= 1 (count (re-seq #"db-hooks/use-block"
                               subscribed-reference-source)))))

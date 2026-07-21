@@ -63,6 +63,7 @@
                  :block/created-at created-at
                  :logseq.property.history/property-ident :logseq.property/status
                  :logseq.property.history/ref-value-ident (:db/ident status)
+                 :logseq.property.history/ref-value-uuid (:block/uuid status)
                  :logseq.property.history/ref-value-title (:block/title status)})))
        (sort-by :block/created-at)))
 
@@ -191,6 +192,43 @@
            :query query-with-rules
            :rules-input (when rules-required? rules-input)
            :rules-required? (boolean rules-required?))))
+
+(defn custom-query-watch-dependencies
+  [query-m]
+  (let [{:keys [where]} (datalog-util/query-vec->map (:query query-m))
+        built-in-rules (set (keys rules/db-query-dsl-rules))
+        rules-found (set (datalog-util/find-rules-in-where where built-in-rules))
+        opaque-rules (disj rules-found :task)
+        forms (tree-seq coll? seq [(:query query-m) (:rules query-m)])
+        task-vars (into #{}
+                        (keep (fn [form]
+                                (when (and (sequential? form)
+                                           (= 'task (first form))
+                                           (symbol? (second form)))
+                                  (second form))))
+                        forms)
+        datom-clauses (filterv (fn [form]
+                                 (and (vector? form)
+                                      (<= 2 (count form))
+                                      (qualified-keyword? (second form))))
+                               forms)
+        task-attrs (into #{}
+                         (comp
+                          (filter #(contains? task-vars (first %)))
+                          (map second))
+                         datom-clauses)
+        regular-clause-attrs (into #{}
+                                   (comp
+                                    (remove #(contains? task-vars (first %)))
+                                    (map second))
+                                   datom-clauses)
+        clause-attrs (into #{} (map second) datom-clauses)
+        all-attrs (into #{} (filter qualified-keyword?) forms)
+        attrs (into regular-clause-attrs (remove clause-attrs) all-attrs)]
+    {:attrs attrs
+     :task-attrs task-attrs
+     :tasks? (contains? rules-found :task)
+     :opaque? (boolean (seq opaque-rules))}))
 
 (defn execute-custom-query
   [db query-m context]

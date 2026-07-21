@@ -285,6 +285,94 @@
                    [:task-time block-uuid]))))
         entity-ids))
 
+(defn- status-property?
+  [db entity-id]
+  (= :logseq.property/status (:db/ident (entity-at db entity-id))))
+
+(defn- status-value?
+  [db entity-id]
+  (when db
+    (or (seq (d/datoms db :avet :logseq.property/status entity-id))
+        (= entity-id
+           (some-> (d/entity db :logseq.property/status)
+                   :logseq.property/default-value
+                   :db/id)))))
+
+(defn- class-has-status-property?
+  [db class-id]
+  (let [status-property-id (:db/id (d/entity db :logseq.property/status))]
+    (loop [classes (keep #(entity-at db %) [class-id])
+           seen #{}]
+      (when-let [class (first classes)]
+        (let [class-id (:db/id class)]
+          (if (contains? seen class-id)
+            (recur (rest classes) seen)
+            (or (some #(= status-property-id (:db/id %))
+                      (values (:logseq.property.class/properties class)))
+                (recur (concat (rest classes)
+                               (values (:logseq.property.class/extends class)))
+                       (conj seen class-id)))))))))
+
+(defn- task-query-changed?
+  [db-before db-after datoms]
+  (some (fn [{:keys [e a v]}]
+          (or (= :logseq.property/status a)
+              (and (= :block/tags a)
+                   (or (class-has-status-property? db-before v)
+                       (class-has-status-property? db-after v)))
+              (and (= :logseq.property.class/extends a)
+                   (or (class-has-status-property? db-before e)
+                       (class-has-status-property? db-after e)
+                       (class-has-status-property? db-before v)
+                       (class-has-status-property? db-after v)))
+              (and (= :logseq.property.class/properties a)
+                   (or (status-property? db-before v)
+                       (status-property? db-after v)))
+              (and (contains? #{:db/ident
+                                :logseq.property/default-value
+                                :logseq.property/public?}
+                              a)
+                   (or (status-property? db-before e)
+                       (status-property? db-after e)
+                       (status-property? db-before v)
+                       (status-property? db-after v)))
+              (and (contains? #{:block/title :logseq.property/value} a)
+                   (or (status-value? db-before e)
+                       (status-value? db-after e)))))
+        datoms))
+
+(defn- task-entity?
+  [db entity-id]
+  (when db
+    (or (seq (d/datoms db :eavt entity-id :logseq.property/status))
+        (some #(class-has-status-property? db (:db/id %))
+              (values (:block/tags (entity-at db entity-id)))))))
+
+(defn- task-attribute-keys
+  [db-before db-after datoms]
+  (reduce-kv
+   (fn [keys entity-id entity-datoms]
+     (if (or (task-entity? db-before entity-id)
+             (task-entity? db-after entity-id))
+       (into keys (map (fn [datom] [:task-attr (:a datom)])) entity-datoms)
+       keys))
+   #{}
+   (group-by :e datoms)))
+
+(defn- display-property-keys
+  [db-before db-after datoms]
+  (into #{}
+        (keep (fn [{:keys [e a]}]
+                (when (or (contains? #{:block/tags
+                                       :block/closed-value-property}
+                                     a)
+                          (property-entity? (entity-at db-before a))
+                          (property-entity? (entity-at db-after a)))
+                  (when-let [block-uuid (or (entity-uuid-at db-after e)
+                                            (entity-uuid-at db-before e))]
+                    [:display-properties block-uuid]))))
+        datoms))
+
 (defn- enabled-bidirectional-class-ids
   [source]
   (into #{}
@@ -450,6 +538,9 @@
            (reaction-keys db-before db-after touched-entity-ids)
            (comments-keys db-before db-after datoms)
            (task-time-keys db-before db-after touched-entity-ids)
+           (when (task-query-changed? db-before db-after datoms) [[:tasks]])
+           (task-attribute-keys db-before db-after datoms)
+           (display-property-keys db-before db-after datoms)
            (bidirectional-keys db-before db-after datoms touched-entity-ids)
            (view-keys db-before db-after touched-entity-ids)
            (class-membership-keys db-before db-after datoms)

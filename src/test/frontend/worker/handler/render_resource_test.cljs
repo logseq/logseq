@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.handler.render-resource :as render-resource]
+            [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.query-dsl :as query-dsl]
             [frontend.worker.render-affected-keys :as render-affected-keys]
@@ -14,6 +15,34 @@
             [logseq.db.test.helper :as db-test]))
 
 (def ^:private test-repo "render-resource-test")
+
+(defn- datalog-query-watch-keys
+  [resource-key]
+  (let [{:keys [attrs task-attrs tasks? opaque?]}
+        (query-handler/custom-query-watch-dependencies (second resource-key))
+        keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
+               (seq task-attrs) (into (map (fn [attr] [:task-attr attr])) task-attrs)
+               tasks? (conj [:tasks]))]
+    (if (or opaque? (empty? keys)) #{[:graph]} keys)))
+
+(deftest task-query-uses-semantic-watch-key-test
+  (let [query-spec {:kind :datalog
+                    :query '[:find (pull ?b [*])
+                             :in $ ?start ?today
+                             :where
+                             (task ?b #{"Doing"})
+                             [?b :block/page ?page]
+                             [?page :block/journal-day ?day]
+                             [(>= ?day ?start)]
+                             [(<= ?day ?today)]]
+                    :inputs [20260718 :today]}
+        watch-keys (datalog-query-watch-keys [:query query-spec])]
+    (is (contains? watch-keys [:tasks]))
+    (is (contains? watch-keys [:task-attr :block/page]))
+    (is (not (contains? watch-keys [:attr :block/page])))
+    (is (contains? watch-keys [:attr :block/journal-day]))
+    (is (not (contains? watch-keys [:graph])))
+    (is (not (contains? watch-keys [:attr :block/title])))))
 
 (defn- fixture-uuids
   []
@@ -481,14 +510,17 @@
   (is (not (contains? block :block/children)))
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
-  (is (not-any? #(= "block.temp" (namespace %)) (keys block)))
+  (is (every? #{:block.temp/positioned-properties
+                :block.temp/refs-count
+                :block.temp/order-list-index}
+              (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
                             (:block/tags block))]
     (when (map? reference)
-      (is (every? #{:db/id :db/ident :block/uuid}
-                  (keys reference)))
-      (is (not (contains? reference :block/title))))))
+      (is (every? #{:db/id :db/ident :block/uuid :block/title :block/name
+                    :logseq.property/value :logseq.property/icon}
+                  (keys reference))))))
 
 (def ^:private default-display-context
   {:gallery-view? false
@@ -894,7 +926,7 @@
       (assert-resource-envelope
        @conn
        resource-key
-       #{[:entity resource-block]
+       #{[:display-properties resource-block]
          [:entity display-property]
          [:entity hidden-property]
          [:entity property-value]
@@ -1131,6 +1163,29 @@
             :seconds 3}
            response))))))
 
+(deftest block-task-time-resource-preserves-custom-status-uuid-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn task-block]} (render-resource-fixture)
+          custom-status-uuid (random-uuid)
+          custom-history-uuid (random-uuid)
+          custom-status-id -1001]
+      (d/transact! conn
+                   [{:db/id custom-status-id
+                     :block/uuid custom-status-uuid
+                     :block/tx-id 21
+                     :block/title "Paused"
+                     :logseq.property/created-from-property
+                     :logseq.property/status}
+                    {:block/uuid custom-history-uuid
+                     :block/tx-id 21
+                     :block/created-at 7000
+                     :logseq.property.history/block [:block/uuid task-block]
+                     :logseq.property.history/property :logseq.property/status
+                     :logseq.property.history/ref-value custom-status-id}])
+      (let [response (call-resource api conn [:block-task-time task-block])]
+        (is (= custom-status-uuid
+               (get-in response [:value :history 2 :status-uuid])))))))
+
 (deftest block-task-time-resource-has-an-authoritative-empty-value-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-child-b]} (render-resource-fixture)
@@ -1347,6 +1402,23 @@
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
 
+(deftest query-view-resource-supports-transient-missing-feature-type-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row]} (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          query-view-id (entity-id @conn query-view)
+          _ (d/transact! conn
+                         [[:db/retract query-view-id
+                           :logseq.property.view/feature-type
+                           :query-result]])
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids [view-row]}]
+          response (call-resource api conn resource-key)]
+      (is (= [view-row] (get-in response [:value :rows])))
+      (is (contains? (:watch-keys response) [:entity query-view])))))
+
 (deftest view-data-resource-normalizes-grouped-and-grouped-list-partitions-test
   (when-let [api (render-resource-api)]
     (testing "grouped scalar rows"
@@ -1426,6 +1498,35 @@
                       (mapcat :rows (:partitions group)))
             "Nested view rows cross the boundary only as UUIDs.")))))
 
+(deftest unlinked-references-resource-normalizes-list-partitions-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-owner view-a view-row]} (render-resource-fixture)
+          view-id (entity-id @conn view-a)
+          _ (d/transact! conn
+                         [[:db/add view-id
+                           :logseq.property.view/feature-type
+                           :unlinked-references]])
+          resource-key [:view-data view-a
+                        {:feature-type :unlinked-references
+                         :sorting [{:id :block/updated-at :asc? false}]
+                         :input ""
+                         :group-by-property-ident :block/page}]]
+      (with-redefs [db-view/get-view-data
+                    (fn [_db _view-id _option]
+                      {:count 1
+                       :data [[{:db/id (entity-id @conn view-owner)
+                                :block/uuid view-owner}
+                               [[view-row
+                                 (list {:db/id (entity-id @conn view-row)
+                                        :block/parent view-owner})]]]]})]
+        (let [response (call-resource api conn resource-key)]
+          (is (= {:partition :grouped-list
+                  :count 1
+                  :groups [{:value {:kind :entity :uuid view-owner}
+                            :partitions [{:breadcrumb-uuid view-row
+                                          :rows [view-row]}]}]}
+                 (:value response))))))))
+
 (deftest view-data-resource-watches-effective-persisted-configuration-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-owner view-a]} (render-resource-fixture)
@@ -1503,6 +1604,24 @@
                                     {:rows [view-row]}
                                     response))))))
 
+(deftest blank-dsl-query-resource-renders-an-empty-result-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          resource-key [:query {:kind :dsl :query ""}]
+          calls (atom 0)]
+      (with-redefs [query-dsl/execute-query
+                    (fn [& _args]
+                      (swap! calls inc)
+                      [])]
+        (let [response (call-resource api conn resource-key)]
+          (is (zero? @calls)
+              "A blank query is an editable transient state, not an executable query.")
+          (assert-resource-envelope @conn
+                                    resource-key
+                                    #{[:graph]}
+                                    {:rows []}
+                                    response))))))
+
 (deftest query-resource-resolves-advanced-page-block-and-today-inputs-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-child-a journal-grandchild]}
@@ -1526,7 +1645,7 @@
           response (call-resource api conn resource-key)]
       (assert-resource-envelope @conn
                                 resource-key
-                                #{[:graph]}
+                                (datalog-query-watch-keys resource-key)
                                 {:rows [journal-grandchild]}
                                 response))))
 
@@ -1561,7 +1680,7 @@
               response (call-resource api conn resource-key)]
           (assert-resource-envelope @conn
                                     resource-key
-                                    #{[:graph]}
+                                    (datalog-query-watch-keys resource-key)
                                     {:rows [reference-block]}
                                     response))))))
 
@@ -1579,7 +1698,7 @@
           response (call-resource api conn resource-key)]
       (assert-resource-envelope @conn
                                 resource-key
-                                #{[:graph]}
+                                (datalog-query-watch-keys resource-key)
                                 {:rows [["Jan 1st, 2020" 20200101]]}
                                 response))))
 

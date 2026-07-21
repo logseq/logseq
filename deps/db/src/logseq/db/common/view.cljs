@@ -611,6 +611,8 @@
                                                          (fn [row] (row-matched? db row filters input)))]
                                      (into [] (filter filter-pred) entities))
                                    entities)
+               nested-list-view? (and list-view?
+                                       (some :block/page filtered-entities))
                group-by-page? (= group-by-property-ident :block/page)
                linked-references-page-list-fast-path?
                (and (= feat-type :linked-references)
@@ -691,8 +693,7 @@
                            (let [by-value' (if (de/entity? by-value)
                                              (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
                                              by-value)
-                                 pages? (not (some :block/page entities))
-                                 group (if (and list-view? (not pages?))
+                                 group (if nested-list-view?
                                          (let [parent-groups (->> entities
                                                                   (group-by :block/parent)
                                                                   (sort-by (fn [[parent _]] (:block/order parent))))]

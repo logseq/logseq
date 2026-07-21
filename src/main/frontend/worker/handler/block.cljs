@@ -82,7 +82,14 @@
   [db ref-id]
   (let [ref (d/entity db ref-id)
         ref-uuid (:block/uuid ref)
-        ref-ident (:db/ident ref)]
+        ref-ident (:db/ident ref)
+        ref-title (:block/title ref)
+        ref-name (:block/name ref)
+        property-value (:logseq.property/value ref)
+        property-icon (:logseq.property/icon ref)
+        property-value-title (when (or (:block/closed-value-property ref)
+                                       (:logseq.property/created-from-property ref))
+                               (:block/title ref))]
     (when-not ref
       (fail-render-read! "Missing canonical block reference"
                          {:ref-id ref-id}))
@@ -94,13 +101,35 @@
                          {:ref-id ref-id :db-ident ref-ident}))
     (cond-> {:db/id ref-id}
       ref-uuid (assoc :block/uuid ref-uuid)
-      ref-ident (assoc :db/ident ref-ident))))
+      ref-ident (assoc :db/ident ref-ident)
+      (string? ref-title) (assoc :block/title ref-title)
+      (string? ref-name) (assoc :block/name ref-name)
+      (some? property-value) (assoc :logseq.property/value property-value)
+      (some? property-icon) (assoc :logseq.property/icon property-icon)
+      (some? property-value-title) (assoc :block/title property-value-title))))
+
+(defn- canonical-positioned-properties-map
+  [db block]
+  (if (seq (property-handler/direct-block-property-ids db (:db/id block)))
+    (->> property-handler/render-property-positions
+         (keep (fn [position]
+                 (let [property-uuids
+                       (mapv :block/uuid
+                             (property-handler/block-positioned-properties
+                              db (:db/id block) position))]
+                   (when (seq property-uuids)
+                     [position property-uuids]))))
+         (into {}))
+    {}))
+
+(declare block-refs-count)
 
 (defn canonical-block
   [db entity]
   (let [entity-id (:db/id entity)
         block-uuid (:block/uuid entity)
-        block-tx-id (:block/tx-id entity)]
+        block-tx-id (:block/tx-id entity)
+        order-list-type (worker-plain/order-list-type entity)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"
                          {:db-id entity-id}))
@@ -110,33 +139,50 @@
     (when-not (valid-revision? block-tx-id)
       (fail-render-read! "Invalid canonical block transaction ID"
                          {:block-uuid block-uuid :block-tx-id block-tx-id}))
-    (reduce
-     (fn [result {:keys [a v]}]
-       (if (canonical-attr? a)
-         (let [{value-type :db/valueType
-                cardinality :db/cardinality} (render-attr-schema db a)
-               value (if (= :db.type/ref value-type)
-                       (shallow-ref-identity db v)
-                       v)]
-           (if (= :db.cardinality/many cardinality)
-             (update result a (fnil conj []) value)
-             (assoc result a value)))
-         result))
-     {:db/id entity-id}
-     (d/datoms db :eavt entity-id))))
+    (let [block
+          (reduce
+           (fn [result {:keys [a v]}]
+             (if (canonical-attr? a)
+               (let [{value-type :db/valueType
+                      cardinality :db/cardinality} (render-attr-schema db a)
+                     value (if (= :db.type/ref value-type)
+                             (shallow-ref-identity db v)
+                             v)]
+                 (if (= :db.cardinality/many cardinality)
+                   (update result a (fnil conj []) value)
+                   (assoc result a value)))
+               result))
+           {:db/id entity-id}
+           (d/datoms db :eavt entity-id))
+          block (if (ldb/property? entity)
+                  (merge block
+                         (property-handler/display-property-map db entity-id))
+                  block)]
+      (cond-> (assoc block
+                     :block.temp/positioned-properties
+                     (canonical-positioned-properties-map db entity)
+                     :block.temp/refs-count
+                     (block-refs-count db entity-id))
+        order-list-type
+        (assoc :block.temp/order-list-index
+               (worker-plain/order-list-index entity order-list-type))))))
 
 (defn canonical-blocks
   [db block-uuids]
-  {:basis-rev (render-basis-rev db)
-   :blocks
-   (into {}
-         (keep (fn [block-uuid]
-                 (when-not (uuid? block-uuid)
-                   (fail-render-read! "Invalid canonical block UUID"
-                                      {:block-uuid block-uuid}))
-                 (when-let [entity (d/entity db [:block/uuid block-uuid])]
-                   [block-uuid (canonical-block db entity)])))
-         block-uuids)})
+  (doseq [block-uuid block-uuids]
+    (when-not (uuid? block-uuid)
+      (fail-render-read! "Invalid canonical block UUID"
+                         {:block-uuid block-uuid})))
+  (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
+        referenced (mapcat :block/refs requested)
+        entities (distinct (concat requested referenced))]
+    {:basis-rev (render-basis-rev db)
+     :blocks
+     (into {}
+           (map (fn [entity]
+                  (let [block (canonical-block db entity)]
+                    [(:block/uuid block) block])))
+           entities)}))
 
 (defn direct-children-membership
   [db parent-uuid]

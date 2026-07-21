@@ -31,9 +31,46 @@
       (throw (ex-info "Invalid renderer subscription snapshot"
                       {:key key :snapshot result})))))
 
+(defn- use-external-store-projection
+  [subscribe! snapshot key project]
+  (let [key (use-stable-key key)
+        projection-ref (react/useRef nil)
+        subscribe (react/useCallback
+                   (fn [listener] (subscribe! key listener))
+                   #js [subscribe! key])
+        get-snapshot (react/useCallback
+                      (fn []
+                        (let [source (snapshot key)
+                              cached (.-current projection-ref)]
+                          (if (identical? source (:source cached))
+                            (:snapshot cached)
+                            (let [projected (if (= :ready (:status source))
+                                              (update source :value project)
+                                              source)
+                                  projected (if (= projected (:snapshot cached))
+                                              (:snapshot cached)
+                                              projected)]
+                              (set! (.-current projection-ref)
+                                    {:source source :snapshot projected})
+                              projected))))
+                      #js [snapshot key project])
+        {:keys [status value error] :as result}
+        (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
+    (case status
+      :ready value
+      (:loading :missing) nil
+      :error (throw error)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))))
+
 (defn use-block
   [block-uuid]
   (use-external-store subs/subscribe-block! subs/block-snapshot block-uuid))
+
+(defn use-block-projection
+  [block-uuid project]
+  (use-external-store-projection subs/subscribe-block! subs/block-snapshot
+                                 block-uuid project))
 
 (defn use-children
   [parent-uuid]

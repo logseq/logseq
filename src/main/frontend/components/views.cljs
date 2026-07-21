@@ -84,7 +84,11 @@
              :block/title title
              :logseq.property/type (:type schema)}
       (:cardinality schema)
-      (assoc :db/cardinality (:cardinality schema))
+      (assoc :db/cardinality
+             (case (:cardinality schema)
+               :many :db.cardinality/many
+               :one :db.cardinality/one
+               (:cardinality schema)))
 
       (seq closed-values)
       (assoc :property/closed-values closed-values))
@@ -2725,9 +2729,10 @@
 
 (hsx/defc entity-group-item
   [view-entity table' group group-by-property entity-uuid option view-opts opts]
-  (when-let [entity (db-hooks/use-block entity-uuid)]
+  (if-let [entity (db-hooks/use-block entity-uuid)]
     (group-item-content view-entity table' group group-by-property entity
-                        option view-opts opts)))
+                        option view-opts opts)
+    [:div {:style {:min-height 1}}]))
 
 (hsx/defc group-item
   [view-entity table' group group-by-property group-value option view-opts opts]
@@ -2976,8 +2981,9 @@
     (= :query-result view-feature-type)
     (assoc :query-row-uuids query-row-uuids)))
 
-(hsx/defc view-aux
-  [view-entity {:keys [config view-feature-type query-row-uuids] :as option}]
+(hsx/defc loaded-view-aux
+  [view-entity {:keys [config view-feature-type query-row-uuids
+                       deactivate-deferred-view!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         group-by-property (:logseq.property.view/group-by-property view-entity)
         display-type (view-display-type view-entity view-feature-type)
@@ -2999,7 +3005,15 @@
         option (cond-> (assoc option
                               :view-parent (:logseq.property/view-for view-entity))
                  query?
-                 (assoc :columns (get-query-columns config view-entity properties)))]
+                 (assoc :columns (get-query-columns config view-entity properties))
+
+                 deactivate-deferred-view!
+                 (assoc :foldable-options
+                        {:default-collapsed? false
+                         :on-pointer-down
+                         (fn [collapsed?]
+                           (when collapsed?
+                             (deactivate-deferred-view!)))}))]
     (if (nil? view-data)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
@@ -3026,6 +3040,38 @@
                                             (:matched-child-uuids view-data)
                                             :display-type display-type))]))))
 
+(hsx/defc deferred-view-placeholder
+  [view-entity {:keys [view-uuids set-current-view-uuid! view-feature-type]
+                :as option}
+   activate!]
+  (ui/foldable
+   (views-tab (:logseq.property/view-for view-entity)
+              (:block/uuid view-entity)
+              (assoc option
+                     :view-uuids view-uuids
+                     :set-current-view-uuid! set-current-view-uuid!
+                     :view-feature-type view-feature-type
+                     :references? true
+                     :data []
+                     :items-count 0))
+   (fn [] nil)
+   {:title-trigger? false
+    :default-collapsed? true
+    :on-pointer-down (fn [collapsed?]
+                       (when-not collapsed?
+                         (activate!)))}))
+
+(hsx/defc view-aux
+  [view-entity {:keys [defer-resource?] :as option}]
+  (let [[active? set-active!] (hooks/use-state (not defer-resource?))]
+    (if active?
+      (loaded-view-aux view-entity
+                       (cond-> option
+                         defer-resource?
+                         (assoc :deactivate-deferred-view!
+                                #(set-active! false))))
+      (deferred-view-placeholder view-entity option #(set-active! true)))))
+
 (hsx/defc sub-view
   [view-entity option]
   (view-aux view-entity option))
@@ -3044,6 +3090,27 @@
               :view-uuids view-uuids
               :set-current-view-uuid! set-requested-view-uuid!)])))
 
+(hsx/defc missing-view
+  [view-parent-uuid view-feature-type]
+  (let [view-parent (db-hooks/use-block view-parent-uuid)
+        [error set-error!] (hooks/use-state nil)
+        *started? (hooks/use-ref false)]
+    (hooks/use-effect!
+     (fn []
+       (when (and view-parent (not (.-current *started?)))
+         (set! (.-current *started?) true)
+         (-> (create-view! view-parent view-feature-type {:auto-triggered? true})
+             (p/then (fn [view]
+                       (when-not view
+                         (throw (ex-info "Default view creation returned no view"
+                                         {:view-parent-uuid view-parent-uuid
+                                          :view-feature-type view-feature-type})))))
+             (p/catch set-error!)))
+       js/undefined)
+     [view-parent view-parent-uuid view-feature-type])
+    (when error
+      (throw error))))
+
 (hsx/defc view
   [{:keys [view-parent-uuid view-feature-type view-uuid] :as option}]
   (let [query-result? (= :query-result view-feature-type)
@@ -3051,5 +3118,9 @@
                      (db-hooks/use-resource
                       [:views view-parent-uuid view-feature-type]))
         selected-view-uuids (if query-result? [view-uuid] view-uuids)]
-    (when (seq selected-view-uuids)
-      (selected-view selected-view-uuids option))))
+    (cond
+      (seq selected-view-uuids)
+      (selected-view selected-view-uuids option)
+
+      (and (not query-result?) (some? view-uuids))
+      (missing-view view-parent-uuid view-feature-type))))

@@ -55,7 +55,7 @@
      nil)
     (is (= :called @calls))))
 
-(deftest worker-response-resolves-editor-rows-through-the-canonical-store-test
+(deftest worker-response-uses-its-canonical-delta-for-editor-rows-test
   (async done
     (let [block-a-uuid (random-uuid)
           block-b-uuid (random-uuid)
@@ -64,11 +64,11 @@
           row-uuids [block-b-uuid block-a-uuid]
           delta {:graph-id "editor-row-resolution-test"
                  :rev 1
-                 :blocks {}
+                 :blocks {block-a-uuid block-a
+                          block-b-uuid block-b}
                  :deleted {}
                  :children {}
                  :affected-keys #{[:graph]}}
-          legacy-row {:block/uuid (random-uuid) :block/tx-id 1}
           calls (atom [])
           original-flush-sync (.-flushSync react-dom)]
       (set! (.-flushSync react-dom) (fn [f] (f)))
@@ -76,12 +76,10 @@
                           (fn [value]
                             (swap! calls conj [:delta value])
                             false)
-                          db-subs/block-snapshot
-                          (constantly {:status :ready :value legacy-row})
                           db-subs/resolve-blocks!
-                          (fn [requested-uuids]
-                            (swap! calls conj [:resolve requested-uuids])
-                            (p/resolved [block-b block-a]))]
+                          (fn [_requested-uuids]
+                            (p/rejected
+                             (js/Error. "Editor rows must not be fetched again.")))]
             (p/let [_ (#'db-transact/publish-worker-response!
                        {:editor/edit-block-fn
                         (fn [rows]
@@ -90,7 +88,6 @@
                        row-uuids
                        true)]
               (is (= [[:delta delta]
-                      [:resolve row-uuids]
                       [:callback [block-b block-a]]]
                      @calls))
               (is (identical? delta (second (first @calls)))
@@ -126,9 +123,9 @@
                             (swap! calls conj [:delta value])
                             true)
                           db-subs/resolve-blocks!
-                          (fn [row-uuids]
-                            (swap! calls conj [:resolve row-uuids])
-                            (p/resolved [block]))
+                          (fn [_row-uuids]
+                            (p/rejected
+                             (js/Error. "Editor rows must not be fetched again.")))
                           state/get-current-repo (constantly repo)
                           state/get-route-match (constantly nil)
                           state/get-editor-info (constantly nil)
@@ -152,7 +149,6 @@
                               (swap! calls conj :editor-callback))})]
               (is (= ::persisted value))
               (is (= [:commit-start :delta :commit-end
-                      :resolve
                       :commit-start :editor-callback :commit-end]
                      (mapv #(if (vector? %) (first %) %) @calls)))
               (let [applied-deltas (keep #(when (= :delta (first %))

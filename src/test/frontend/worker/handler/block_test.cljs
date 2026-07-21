@@ -57,6 +57,11 @@
                    :block/uuid tag-uuid
                    :block/tx-id 10
                    :block/title "Referenced tag title must not be copied"}
+                  {:db/id -6
+                   :block/uuid #uuid "10000000-0000-0000-0000-000000000006"
+                   :block/tx-id 10
+                   :block/title "number"
+                   :logseq.property/created-from-property :logseq.property/order-list-type}
                   {:db/id -5
                    :block/uuid target-uuid
                    :block/tx-id 10
@@ -68,6 +73,7 @@
                    :block/refs [-3]
                    :block/tags [-4]
                    :block/collapsed? true
+                   :logseq.property/order-list-type -6
                    :block/created-at 1000
                    :user.property/priority "high"
                    :block/children "legacy tree"
@@ -76,6 +82,7 @@
     {:conn conn
      :page-uuid page-uuid
      :parent-uuid parent-uuid
+     :ref-uuid ref-uuid
      :target-uuid target-uuid}))
 
 (defn- assert-shallow-identity-ref
@@ -84,8 +91,9 @@
   (is (contains? reference :db/id))
   (is (or (uuid? (:block/uuid reference))
           (keyword? (:db/ident reference))))
-  (is (every? #{:db/id :block/uuid :db/ident} (keys reference)))
-  (is (not (contains? reference :block/title))))
+  (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
+                :logseq.property/value :logseq.property/icon}
+              (keys reference))))
 
 (deftest canonical-block-keeps-own-attributes-and-only-shallow-references-test
   (when-let [canonical-block (canonical-block-api)]
@@ -111,11 +119,23 @@
       (is (= 5 (count references)))
       (doseq [reference references]
         (assert-shallow-identity-ref reference))
+      (is (= "number"
+             (get-in block
+                     [:logseq.property/order-list-type
+                      :block/title]))
+          "Property references retain the scalar content required to render their value.")
+      (is (= 1 (:block.temp/order-list-index block))
+          "Canonical blocks retain worker-derived ordered-list indexes.")
+      (is (map? (:block.temp/positioned-properties block)))
+      (is (integer? (:block.temp/refs-count block)))
       (is (not (contains? block :block/children)))
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
-                    (keys block))))))
+                    (remove #{:block.temp/order-list-index
+                              :block.temp/positioned-properties
+                              :block.temp/refs-count}
+                            (keys block)))))))
 
 (deftest canonical-block-full-replacement-drops-retracted-attributes-test
   (when-let [canonical-block (canonical-block-api)]
@@ -130,6 +150,16 @@
         (is (true? (:block/collapsed? before)))
         (is (= 11 (:block/tx-id after)))
         (is (not (contains? after :block/collapsed?)))))))
+
+(deftest canonical-property-includes-derived-closed-values-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [{:keys [conn]} (canonical-block-fixture)
+          property-id (:db/id (d/entity @conn :logseq.property/priority))
+          _ (d/transact! conn [[:db/add property-id :block/tx-id 10]])
+          property (d/entity @conn property-id)
+          canonical-property (canonical-block @conn property)]
+      (is (seq (:property/closed-values canonical-property)))
+      (is (every? :block/uuid (:property/closed-values canonical-property))))))
 
 (deftest canonical-block-allows-db-id-only-reference-identities-test
   (when-let [canonical-block (canonical-block-api)]
@@ -195,11 +225,11 @@
   (let [canonical-block (canonical-block-api)
         canonical-blocks (canonical-blocks-api)]
     (when (and canonical-block canonical-blocks)
-      (let [{:keys [conn page-uuid target-uuid]} (canonical-block-fixture)
+      (let [{:keys [conn page-uuid ref-uuid target-uuid]} (canonical-block-fixture)
             db @conn
             response (canonical-blocks db [target-uuid page-uuid])]
         (is (= (:max-tx db) (:basis-rev response)))
-        (is (= #{target-uuid page-uuid}
+        (is (= #{target-uuid page-uuid ref-uuid}
                (set (keys (:blocks response)))))
         (doseq [[block-uuid block] (:blocks response)]
           (is (= block-uuid (:block/uuid block)))
@@ -209,12 +239,12 @@
 
 (deftest canonical-blocks-omits-absent-requested-uuids-at-the-same-basis-test
   (when-let [canonical-blocks (canonical-blocks-api)]
-    (let [{:keys [conn target-uuid]} (canonical-block-fixture)
+    (let [{:keys [conn target-uuid ref-uuid]} (canonical-block-fixture)
           missing-uuid (random-uuid)
           db @conn
           response (canonical-blocks db [target-uuid missing-uuid])]
       (is (= (:max-tx db) (:basis-rev response)))
-      (is (= #{target-uuid} (set (keys (:blocks response)))))
+      (is (= #{target-uuid ref-uuid} (set (keys (:blocks response)))))
       (is (= target-uuid
              (get-in response [:blocks target-uuid :block/uuid]))))))
 

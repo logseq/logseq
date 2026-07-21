@@ -70,5 +70,5 @@
         {:view-parent-uuid page-uuid
          :view-feature-type :unlinked-references
          :columns (views/build-columns config [] {:add-page-column? true})
-         :foldable-options {:default-collapsed? true}
+         :defer-resource? true
          :config config})])))

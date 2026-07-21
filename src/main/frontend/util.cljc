@@ -1360,6 +1360,12 @@
      (string/includes? js/window.location.search "?rtc-test=true")))
 
 #?(:cljs
+   (defn rtc-test-without-virtualization?
+     []
+     (and (rtc-test?)
+          (not (string/includes? js/window.location.search "virtualized=true")))))
+
+#?(:cljs
    (defn sanitize-port-input
      "Strips all non-digit characters from a port input string."
      [value]

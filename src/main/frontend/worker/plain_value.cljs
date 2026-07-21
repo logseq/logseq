@@ -96,7 +96,7 @@
           (>= n value) (recur (- n value) pairs (str result numeral))
           :else (recur n more result))))))
 
-(defn- order-list-type
+(defn order-list-type
   [block]
   (some-> (:logseq.property/order-list-type block)
           str
@@ -106,7 +106,7 @@
   #{:block/properties
     :block/properties-text-values})
 
-(defn- order-list-index
+(defn order-list-index
   [block target-order-list-type]
   (let [order-block? (fn [block]
                        (= target-order-list-type (order-list-type block)))
