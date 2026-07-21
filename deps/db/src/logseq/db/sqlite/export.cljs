@@ -1520,8 +1520,7 @@
      {:error error}
      (try
        (let [tx-data (import-tx-data txs)
-             result (when (seq tx-data)
-                      (validate-import-tx-data txs db edn-label import-edn-data?))]
+             result (validate-import-tx-data txs db edn-label import-edn-data?)]
          (cond
            (and import-edn-data? (empty? tx-data))
            {:error "The imported EDN does not contain any importable data."}
