@@ -648,7 +648,8 @@
   (error-boundary
    {:fallback (fn [^js props]
                 (let [error (.-error props)]
-                  (if (fn? error-view) (error-view error) error-view)))
+                  (react-child
+                   (if (fn? error-view) (error-view error) error-view))))
     :onError (fn [error _component-stack _event-id]
                (log/error :exception error))}
    view))
@@ -656,7 +657,7 @@
 (hsx/defc catch-error-and-notify
   [error-view view]
   (error-boundary
-   {:fallback (constantly error-view)
+   {:fallback (fn [] (react-child error-view))
     :onError (fn [error _component-stack _event-id]
                (log/error :exception error)
                (notification/show!
