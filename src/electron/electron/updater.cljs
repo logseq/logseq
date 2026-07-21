@@ -1,16 +1,22 @@
 (ns electron.updater
-  (:require [cljs-bean.core :as bean]
+  (:require ["electron" :refer [ipcMain]]
+            ["electron-updater" :refer [autoUpdater]]
+            [cljs-bean.core :as bean]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [electron.utils :refer [*win prod?]]
-            [frontend.version :refer [version]]
-            ["electron" :refer [ipcMain]]
-            ["electron-updater" :refer [autoUpdater]]))
+            [frontend.version :refer [version]]))
 
 (def *update-pending (atom nil))
 (def *downloaded-update (atom nil))
 (def debug (partial logger/debug "[updater]"))
 (def electron-version version)
+
+(defn- replace-ipc-handler!
+  [channel listener]
+  (.removeHandler ipcMain channel)
+  (.handle ipcMain channel listener)
+  #(.removeHandler ipcMain channel))
 
 (defn- updater-channel
   []
@@ -138,6 +144,17 @@
   [{:keys [^js win] :as _opts}]
   (configure-auto-updater!)
   (let [dispose-listeners! (register-auto-updater-listeners! win)
+        dispose-ipc-fns (volatile! [])
+        add-dispose! (fn [f]
+                       (vswap! dispose-ipc-fns conj f)
+                       f)
+        cleanup! (fn []
+                   (let [fns @dispose-ipc-fns]
+                     (vreset! dispose-ipc-fns [])
+                     (dispose-listeners!)
+                     (doseq [dispose! (reverse fns)]
+                       (dispose!))
+                     (reset! *update-pending nil)))
         check-channel "check-for-updates"
         install-channel "install-updates"
         get-downloaded-channel "get-downloaded-update"
@@ -151,13 +168,12 @@
                            (.quitAndInstall autoUpdater false true))
         get-downloaded-listener (fn [_e]
                                   (some-> @*downloaded-update bean/->js))]
-    (init-auto-updater! win)
-    (.handle ipcMain check-channel check-listener)
-    (.handle ipcMain install-channel install-listener)
-    (.handle ipcMain get-downloaded-channel get-downloaded-listener)
-    #(do
-       (dispose-listeners!)
-       (.removeHandler ipcMain install-channel)
-       (.removeHandler ipcMain check-channel)
-       (.removeHandler ipcMain get-downloaded-channel)
-       (reset! *update-pending nil))))
+    (try
+      (init-auto-updater! win)
+      (add-dispose! (replace-ipc-handler! check-channel check-listener))
+      (add-dispose! (replace-ipc-handler! install-channel install-listener))
+      (add-dispose! (replace-ipc-handler! get-downloaded-channel get-downloaded-listener))
+      cleanup!
+      (catch :default e
+        (cleanup!)
+        (throw e)))))
