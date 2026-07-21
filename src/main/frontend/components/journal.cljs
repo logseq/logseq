@@ -18,12 +18,19 @@
   []
   (let [journal-uuids (db-hooks/use-resource [:journals])]
     (when (seq journal-uuids)
-      [:div#journals
-       (ui/virtualized-list
-        {:custom-scroll-parent (util/app-scroll-container-node)
-         :data (to-array journal-uuids)
-         :compute-item-key (fn [_idx journal-uuid]
-                             (str "journal-" journal-uuid))
-         :item-content (fn [idx journal-uuid]
-                         (journal-item journal-uuid
-                                       (= (inc idx) (count journal-uuids))))})])))
+      (if (util/rtc-test?)
+        [:div#journals
+         (map-indexed
+          (fn [idx journal-uuid]
+            ^{:key (str "journal-" journal-uuid)}
+            [journal-item journal-uuid (= (inc idx) (count journal-uuids))])
+          journal-uuids)]
+        [:div#journals
+         (ui/virtualized-list
+          {:custom-scroll-parent (util/app-scroll-container-node)
+           :data (to-array journal-uuids)
+           :compute-item-key (fn [_idx journal-uuid]
+                               (str "journal-" journal-uuid))
+           :item-content (fn [idx journal-uuid]
+                           (journal-item journal-uuid
+                                         (= (inc idx) (count journal-uuids))))})]))))

@@ -1715,7 +1715,6 @@
  :ui/image "imagem"
  :ui/label "Rótulo"
  :ui/link "Link"
- :ui/load-more "Carregar mais"
  :ui/loading "Carregando"
  :ui/login "Entrar"
  :ui/logout "Sair"

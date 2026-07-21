@@ -1715,7 +1715,6 @@
  :ui/image "bilde"
  :ui/label "Etikett"
  :ui/link "Lenke"
- :ui/load-more "Last inn mer"
  :ui/loading "Laster"
  :ui/login "Logg inn"
  :ui/logout "Logg ut"

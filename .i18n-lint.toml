@@ -336,6 +336,9 @@ always_used_key_patterns = [
   # Table view keys used dynamically via (for [[option-key _] options] (t option-key)).
   "^:view\\.table/group-journal-date",
   "^:view\\.table/group-page",
+  # Default view title keys resolved dynamically via default-view-title-key-by-feature-type.
+  "^:view/linked-references",
+  "^:view/unlinked-references",
 ]
 
 # Key namespace prefixes excluded from unused-key checking.

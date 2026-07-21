@@ -1881,7 +1881,6 @@
  :ui/image "图片"
  :ui/label "标签"
  :ui/link "链接"
- :ui/load-more "加载更多"
  :ui/loading "加载中..."
  :ui/login "登录"
  :ui/logout "退出登录"

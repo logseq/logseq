@@ -62,7 +62,6 @@
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.rfx :as rfx]
             [frontend.security :as security]
             [frontend.state :as state]
@@ -3015,12 +3014,12 @@
 
 (hsx/defc status-history-row
   [{:keys [created-at status-uuid]}]
-  (let [status (db-hooks/use-block status-uuid)]
+  (let [{status-title :block/title :as status} (db-hooks/use-block status-uuid)]
     (when status
       [:div.flex.flex-row.gap-1.items-center.text-sm.justify-between
        [:div.flex.flex-row.gap-1.items-center
         (icon-component/get-node-icon-cp status {:size 14 :color? true})
-        [:div (:block/title status)]]
+        [:div status-title]]
        [:div (date/int->local-time-2 created-at)]])))
 
 (hsx/defc status-history-cp
@@ -3583,16 +3582,16 @@
         config (assoc config
                       :breadcrumb? true
                       :disable-preview? true)
-        render-seg (fn [group idx block-uuid]
+        render-seg (fn [group block-uuid]
                      ^{:key (str group "-seg-" block-uuid)}
                      [:<> (breadcrumb-segment-row
                            config block-uuid ref-titles opts effective-variant)])
         render-segs (fn [group block-uuids]
                       (mapcat (fn [idx block-uuid]
                                 (if (zero? idx)
-                                  [(render-seg group idx block-uuid)]
+                                  [(render-seg group block-uuid)]
                                   [(breadcrumb-separator (str group "-sep-" idx))
-                                   (render-seg group idx block-uuid)]))
+                                   (render-seg group block-uuid)]))
                               (cljs.core/range)
                               block-uuids))]
     (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
@@ -4935,7 +4934,8 @@
 
 (hsx/defc page-root-virtual-list
   [config block-uuids]
-  (let [block-uuids (vec block-uuids)
+  (let [disable-virtualized? (util/rtc-test?)
+        block-uuids (vec block-uuids)
         blocks-count (count block-uuids)
         selection-block-ids (or (:selection/block-ids config) block-uuids)
         scroll-container (or (:scroll-container config)
@@ -4962,7 +4962,9 @@
                                         :bottom? (= (dec blocks-count) idx)}))}]
     (hooks/use-effect!
      (fn []
-       (when (and (seq block-uuids) (:current-page? config))
+       (when (and (not disable-virtualized?)
+                  (seq block-uuids)
+                  (:current-page? config))
          (let [ref (.-current *virtualized-ref)]
            (ui-handler/scroll-to-anchor-block ref block-uuids false)
            (state/set-state! :editor/virtualized-scroll-fn
@@ -4979,10 +4981,12 @@
          (fn [])))
      [scroll-container selection-block-ids])
     (when (seq block-uuids)
-      [:div.blocks-list-wrap
-       {:data-level (or (:level config) 0)
-        :data-virtuoso-scroller true}
-       (ui/virtualized-list virtual-opts)])))
+      (if disable-virtualized?
+        (plain-block-list config block-uuids)
+        [:div.blocks-list-wrap
+         {:data-level (or (:level config) 0)
+          :data-virtuoso-scroller true}
+         (ui/virtualized-list virtual-opts)]))))
 
 
 (defn- block-row-uuid

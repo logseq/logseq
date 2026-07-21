@@ -1715,7 +1715,6 @@
  :ui/image "تصویر"
  :ui/label "برچسب"
  :ui/link "پیوند"
- :ui/load-more "بارگذاری بیشتر"
  :ui/loading "در حال بارگذاری"
  :ui/login "ورود"
  :ui/logout "خروج"

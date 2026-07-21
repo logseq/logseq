@@ -1715,7 +1715,6 @@
  :ui/image "beeld"
  :ui/label "Etiket"
  :ui/link "Skakel"
- :ui/load-more "Laai meer"
  :ui/loading "Laai"
  :ui/login "Meld aan"
  :ui/logout "Meld af"

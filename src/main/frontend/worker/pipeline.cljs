@@ -60,13 +60,6 @@
                                    (set/difference refs old-refs))
                       retracted-refs (when (and (seq old-refs) (not= refs old-refs))
                                        (set/difference old-refs refs))]
-                  (prn :debug/imported-refs
-                       {:imported-data? (imported-data? tx-meta)
-                        :block-id (:db/id block)
-                        :block-title (:block/title block)
-                        :block-raw-title (:block/raw-title block)
-                        :refs refs
-                        :old-refs old-refs})
                   (concat
                    (map (fn [id]
                           [:db/retract (:db/id block) :block/refs id])

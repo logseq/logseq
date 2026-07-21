@@ -1715,7 +1715,6 @@
  :ui/image "image"
  :ui/label "Libellé"
  :ui/link "Lien"
- :ui/load-more "Charger plus"
  :ui/loading "Chargement"
  :ui/login "Connexion"
  :ui/logout "Déconnexion"

@@ -220,11 +220,6 @@
       (p/let [title (get-title data-name (:path-params route))]
         (set! (. js/document.body.dataset -page) title)))))
 
-(defn update-page-title-and-label!
-  [route]
-  (update-page-title! route)
-  (update-page-label! route))
-
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text

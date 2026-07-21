@@ -91,10 +91,6 @@
   ([graph n]
    (<invoke-db-worker :thread-api/get-latest-journals graph n)))
 
-(defn <get-block-by-page-name-and-block-route-name
-  [graph page-id-name-or-uuid route-name]
-  (<invoke-db-worker :thread-api/get-block-by-page-name-and-block-route-name graph page-id-name-or-uuid route-name))
-
 (defn <get-file-content
   [graph path]
   (<invoke-db-worker :thread-api/get-file-content graph path))
@@ -130,14 +126,6 @@
 (defn <get-block-sibling
   [graph block-id direction]
   (<invoke-db-worker :thread-api/get-block-sibling graph block-id direction))
-
-(defn <get-comment-threads-for-block
-  [graph block-uuid]
-  (<invoke-db-worker :thread-api/get-comment-threads-for-block graph block-uuid))
-
-(defn <get-comment-thread-block-uuids
-  [graph block-uuids]
-  (<invoke-db-worker :thread-api/get-comment-thread-block-uuids graph block-uuids))
 
 (defn <get-page-blocks-tree
   ([graph page-id-name-or-uuid]
@@ -205,12 +193,6 @@
                              (assoc opts
                                     :property property
                                     :property-ident (:db/ident property)))))
-
-(defn <get-bidirectional-properties
-  [target-id]
-  (when target-id
-    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
-                             {:target-id target-id})))
 
 (defn <get-display-properties
   [repo block opts show-empty-and-hidden-properties?]
@@ -472,7 +454,3 @@
                        [?b :logseq.property.history/block ?block-id]]
                      block-id)]
     (sort-by :block/created-at result)))
-
-(defn <task-spent-time
-  [graph block-id]
-  (<invoke-db-worker :thread-api/task-spent-time graph block-id))

@@ -9,23 +9,12 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
 
 (def test-db test-helper/test-db)
-
-(defn listen-db-fixture
-  [f]
-  (let [test-db-conn (conn/get-db test-db false)]
-    (assert (some? test-db-conn))
-    (worker-db-listener/listen-db-changes! test-db test-db-conn
-                                           {:handler-keys [:sync-db-to-main-thread]})
-
-    (f)
-    (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))
 
 (defn disable-browser-fns
   [f]
@@ -40,8 +29,7 @@
     {:build-init-data? false
      :schema {:logseq.property/deleted-at {:db/index true}
               :logseq.property/created-from-property {:db/index true}
-              }})
-  listen-db-fixture)
+              }}))
 
 (defn get-block
   ([id]

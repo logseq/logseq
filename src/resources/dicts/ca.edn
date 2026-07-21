@@ -1715,7 +1715,6 @@
  :ui/image "imatge"
  :ui/label "Etiqueta"
  :ui/link "Enllaç"
- :ui/load-more "Carrega'n més"
  :ui/loading "Carregant"
  :ui/login "Iniciar sessió"
  :ui/logout "Tancar sessió"

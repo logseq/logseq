@@ -57,11 +57,17 @@
 
 (defn- with-use-sync-external-store
   [replacement f]
-  (let [original (gobj/get react "useSyncExternalStore")]
+  (let [original-use-ref (gobj/get react "useRef")
+        original-use-callback (gobj/get react "useCallback")
+        original (gobj/get react "useSyncExternalStore")]
+    (gobj/set react "useRef" (fn [value] #js {:current value}))
+    (gobj/set react "useCallback" (fn [callback _deps] callback))
     (gobj/set react "useSyncExternalStore" replacement)
     (try
       (f)
       (finally
+        (gobj/set react "useRef" original-use-ref)
+        (gobj/set react "useCallback" original-use-callback)
         (gobj/set react "useSyncExternalStore" original)))))
 
 (defn- mount-normal-page!

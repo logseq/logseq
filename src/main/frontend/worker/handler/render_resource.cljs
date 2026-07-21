@@ -7,7 +7,7 @@
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.comments :as comments-handler]
-            [frontend.worker.handler.page :as page-handler]
+            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -18,7 +18,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
-            [logseq.outliner.tree :as outliner-tree]
+            [logseq.outliner.tree :as otree]
             [sci.core :as sci]))
 
 (defn- fail!
@@ -150,18 +150,18 @@
       (fail! "Invalid breadcrumb load depth" {:load-depth load-depth}))
     (let [parents (vec (ldb/get-block-parents db block-uuid {:depth load-depth}))
           page (:block/page block)
-          ancestors (if (and page
-                             (not= (:db/id page) (:db/id (first parents))))
-                      (into [page] parents)
-                      parents)
+          ancestor-blocks (if (and page
+                                   (not= (:db/id page) (:db/id (first parents))))
+                            (into [page] parents)
+                            parents)
           from-property (:logseq.property/created-from-property block)
-          ancestors (cond-> ancestors
-                           from-property
-                           (conj from-property))
+          ancestor-blocks (cond-> ancestor-blocks
+                                 from-property
+                                 (conj from-property))
           ancestor-uuids (mapv (fn [ancestor]
                                  (entity-uuid! db (:db/id ancestor)))
-                               ancestors)
-          ref-titles (breadcrumb-ref-titles (into [block] ancestors))
+                               ancestor-blocks)
+          ref-titles (breadcrumb-ref-titles (into [block] ancestor-blocks))
           watch-uuids (into (conj (set ancestor-uuids) block-uuid)
                             (keys ref-titles))
           watch-keys (into #{}
@@ -425,7 +425,7 @@
       (fail! "Invalid block route name" {:route-name route-name}))
     (let [normalized-page-lookup (common-util/page-name-sanity-lc page-lookup)
           {:keys [page candidates block]}
-          (page-handler/block-route-resolution db page-lookup route-name)
+          (worker-page/block-route-resolution db page-lookup route-name)
           page-uuid (when page
                       (require-uuid! :page-uuid (:block/uuid page)))
           block-uuid (when block
@@ -462,16 +462,16 @@
          (:block/tags entity))))
 
 (defn- comment-author-title
-  [comment]
-  (some-> comment
+  [comment-block]
+  (some-> comment-block
           :logseq.property/created-by-ref
           :block/title
           string/trim
           not-empty))
 
 (defn- comment-author-uuid
-  [comment]
-  (when-let [author (:logseq.property/created-by-ref comment)]
+  [comment-block]
+  (when-let [author (:logseq.property/created-by-ref comment-block)]
     (require-uuid! :comment-author-uuid (:block/uuid author))))
 
 (defn- block-comment-summary
@@ -483,12 +483,12 @@
       (fail! "Renderer resource entity is not a comment thread"
              {:thread-uuid thread-uuid}))
     (let [comments (direct-child-entities db thread-uuid)
-          _ (doseq [comment comments]
-              (when-not (or (nil? (:block/created-at comment))
-                            (number? (:block/created-at comment)))
+          _ (doseq [comment-block comments]
+              (when-not (or (nil? (:block/created-at comment-block))
+                            (number? (:block/created-at comment-block)))
                 (fail! "Invalid comment creation time"
-                       {:comment-uuid (:block/uuid comment)
-                        :created-at (:block/created-at comment)})))
+                       {:comment-uuid (:block/uuid comment-block)
+                        :created-at (:block/created-at comment-block)})))
           latest (last (sort-by #(or (:block/created-at %) 0) comments))
           watch-uuids (concat [thread-uuid]
                               (map :block/uuid comments)
@@ -690,12 +690,12 @@
 (defn- view-value-watch-keys
   [{:keys [sorting filters input group-by-property-ident
            group-sort-property-ident]}
-   partition]
+   view-partition]
   (cond-> (into #{}
                 (map (fn [{:keys [id]}] [:attr id]))
                 sorting)
     filters
-    (into (map (fn [property-ident] [:attr property-ident]))
+    (into (map (fn [filter-ident] [:attr filter-ident]))
           (filter-property-idents filters))
 
     (not (string/blank? input))
@@ -706,7 +706,7 @@
           [:attr group-sort-property-ident]
           [:attr :block/title])
 
-    (= :grouped-list partition)
+    (= :grouped-list view-partition)
     (conj [:attr :block/parent]
           [:attr :block/order])))
 
@@ -724,9 +724,9 @@
   owner)
 
 (defn- view-watch-keys
-  [db view-uuid owner feature-type config partition]
+  [db view-uuid owner feature-type config view-partition]
   (let [owner-uuid (:block/uuid owner)
-        base (cond-> (conj (view-value-watch-keys config partition)
+        base (cond-> (conj (view-value-watch-keys config view-partition)
                            [:entity view-uuid])
                owner-uuid (conj [:entity owner-uuid]))]
     (case feature-type
@@ -803,11 +803,11 @@
     {:kind :scalar :value value}))
 
 (defn- grouped-list-partition?
-  [partition]
-  (and (vector? partition)
-       (= 2 (count partition))
-       (uuid? (first partition))
-       (sequential? (second partition))))
+  [value]
+  (and (vector? value)
+       (= 2 (count value))
+       (uuid? (first value))
+       (sequential? (second value))))
 
 (defn- grouped-list-data?
   [data]
@@ -912,8 +912,8 @@
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))
-          partition (:partition value)]
-      [(view-watch-keys db view-uuid owner feature-type config partition)
+          value-partition (:partition value)]
+      [(view-watch-keys db view-uuid owner feature-type config value-partition)
        value])))
 
 (defn- normalize-query-cell
@@ -1074,7 +1074,7 @@
     (if (or (false? remove-block-children?)
             (not-every? #(integer? (:db/id %)) blocks))
       blocks
-      (outliner-tree/filter-top-level-blocks blocks))))
+      (otree/filter-top-level-blocks blocks))))
 
 (defn- apply-result-transform
   [rows result-transform-edn]
