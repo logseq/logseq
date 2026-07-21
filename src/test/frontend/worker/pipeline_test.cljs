@@ -194,6 +194,27 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest batch-import-edn-structured-import-ignores-unrelated-invalid-entity-test
+  (let [conn (sqlite-export/create-conn)
+        import-edn {::sqlite-export/export-type :page
+                    :pages-and-blocks [{:page {:block/title "Imported page"
+                                               :build/tags #{:user.class/Category}}
+                                        :blocks [{:block/title ""}
+                                                 {:block/title ""}]}]
+                    :classes {:user.class/Category {:block/title "Category"}}}]
+    (d/transact! conn [{:block/uuid (random-uuid)
+                        :block/title "Unrelated block"}])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (outliner-op/apply-ops!
+                    conn
+                    [[:batch-import-edn [import-edn {}]]]
+                    {})]
+        (is (nil? (:error result)))
+        (is (some? (ldb/get-page @conn "Imported page"))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest permanent-delete-recycled-page-with-transact-pipeline-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
