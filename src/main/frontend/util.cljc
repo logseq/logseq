@@ -1149,25 +1149,46 @@
               (or event-composing?
                   (= (gobj/get e "keyCode") 229)
                   (= (gobj/get e "key") "Process"))
-              event-composing?)))))))
+              event-composing?)))))
+
+     (defn keyboard-event-composing?
+       "Check if a keyboard event is part of an IME composition. Unlike
+        `goog-event-is-composing?`, this also works for raw DOM events (the
+        editor key listeners are registered with addEventListener, so they
+        receive raw events, for which the goog variant always returns nil).
+        macOS dead-key commits synthesize a keydown carrying the resolved char
+        as its key, with keyCode 229 and isComposing true."
+       [^js e include-process?]
+       (let [^js browser-event (if (goog-event? e) (.getBrowserEvent e) e)]
+         (boolean
+          (or (.-isComposing browser-event)
+              (when include-process?
+                (or (= (gobj/get browser-event "keyCode") 229)
+                    (= (gobj/get browser-event "key") "Process")))))))))
+
+#?(:cljs
+   (defn native-event
+     "Unwrap a goog or React synthetic event to the underlying DOM event."
+     [^js e]
+     (when e
+       (cond
+         (goog-event? e)
+         (.getBrowserEvent e)
+
+         (js-in "_reactName" e)
+         (.-nativeEvent e)
+
+         :else e))))
 
 #?(:cljs
    (defn native-event-is-composing?
      "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
      [^js e]
-     (when-let [^js native-event
-                (and e (cond
-                         (goog-event? e)
-                         (.getBrowserEvent e)
-
-                         (js-in "_reactName" e)
-                         (.-nativeEvent e)
-
-                         :else e))]
-       (or (.-isComposing native-event)
-           (= (gobj/get native-event "keyCode") 229)
-           (= (gobj/get native-event "key") "Process")))))
+     (when-let [^js native-event' (native-event e)]
+       (or (.-isComposing native-event')
+           (= (gobj/get native-event' "keyCode") 229)
+           (= (gobj/get native-event' "key") "Process")))))
 
 #?(:cljs
    (defn open-url
