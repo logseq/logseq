@@ -190,10 +190,10 @@
         db-before @conn
         ancestor (db-test/find-block-by-content db-before "ancestor")
         parent (db-test/find-block-by-content db-before "parent")
-        second (db-test/find-block-by-content db-before "second")
-        page (:block/page second)]
+        second-block (db-test/find-block-by-content db-before "second")
+        page (:block/page second-block)]
     (with-transact-pipeline
-      #(outliner-core/move-blocks-up-down! conn [second] true))
+      #(outliner-core/move-blocks-up-down! conn [second-block] true))
     (is (not= (revision db-before parent) (revision @conn parent))
         "Reordering children revises their direct parent.")
     (is (= (revision db-before ancestor) (revision @conn ancestor)))
@@ -541,7 +541,7 @@
     (try
       (ldb/transact! conn
                      [{:block/uuid block-uuid
-                       :block/title "[[target]]"
+                       :block/title (page-ref/->page-ref (:block/uuid target))
                        :block/created-at 1000
                        :block/updated-at 1000
                        :block/page (:db/id page)

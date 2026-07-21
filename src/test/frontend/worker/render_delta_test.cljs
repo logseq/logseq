@@ -87,7 +87,8 @@
                            {:rev 202
                             :blocks {parent-uuid parent}
                             :deleted-block-uuids #{child-uuid}})]
-    (is (= {child-uuid {:rev 202}} (:deleted delta)))
+    (is (= {child-uuid {:rev 202 :db/id 2}} (:deleted delta))
+        "Tombstones carry the pre-deletion db id so the renderer can drop sidebar entries without a database.")
     (is (= {parent-uuid {:base-tx-id 10
                          :tx-id 11
                          :remove [[child-uuid "a0"]]

@@ -3,14 +3,13 @@
             ["path" :as node-path]
             ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [async deftest is testing use-fixtures]]
+            [cljs.test :refer [async deftest is use-fixtures]]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
-            [frontend.rfx :as rfx]
             [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -54,11 +53,17 @@
 
 (defn- with-use-sync-external-store
   [replacement f]
-  (let [original (gobj/get react "useSyncExternalStore")]
+  (let [original-use-ref (gobj/get react "useRef")
+        original-use-callback (gobj/get react "useCallback")
+        original (gobj/get react "useSyncExternalStore")]
+    (gobj/set react "useRef" (fn [value] #js {:current value}))
+    (gobj/set react "useCallback" (fn [callback _deps] callback))
     (gobj/set react "useSyncExternalStore" replacement)
     (try
       (f)
       (finally
+        (gobj/set react "useRef" original-use-ref)
+        (gobj/set react "useCallback" original-use-callback)
         (gobj/set react "useSyncExternalStore" original)))))
 
 (defn- mount-resource!
@@ -433,7 +438,7 @@
                   (fn [requested-uuid]
                     (swap! block-calls conj requested-uuid)
                     view-entity)
-                  views/sub-view
+                  views/view-aux
                   (fn [view option]
                     (reset! rendered [view option])
                     [:span "view"])]

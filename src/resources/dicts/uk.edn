@@ -1715,7 +1715,6 @@
  :ui/image "зображення"
  :ui/label "Мітка"
  :ui/link "Посилання"
- :ui/load-more "Завантажити ще"
  :ui/loading "Завантаження"
  :ui/login "Увійти"
  :ui/logout "Вийти"

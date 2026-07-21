@@ -1,4 +1,6 @@
 (ns frontend.worker.render-delta
+  "Builds the incremental render delta (block replacements, tombstones, and
+   children patches) published to the renderer after each transaction."
   (:require [clojure.set :as set]
             [datascript.core :as d]))
 
@@ -167,7 +169,10 @@
    :blocks blocks
    :deleted (into {}
                   (map (fn [block-uuid]
-                         [block-uuid {:rev rev}]))
+                          (let [db-id (:e (first (d/datoms (:db-before tx-report)
+                                                           :avet :block/uuid block-uuid)))]
+                            [block-uuid (cond-> {:rev rev}
+                                          db-id (assoc :db/id db-id))])))
                   deleted-block-uuids)
    :children (build-children-patches tx-report)
    :affected-keys affected-keys})

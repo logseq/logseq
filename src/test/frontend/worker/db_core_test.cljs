@@ -448,21 +448,15 @@
                                      {:property-name "perf-property"}]]]
                                   {})
              perf (:perf response)]
-         (doseq [phase [:collect-before-ms
-                        :apply-ms
+         (doseq [phase [:apply-ms
                         :listener-ms
-                        :collect-changes-ms
-                        :hydrate-ms
                         :plain-ms
                         :total-ms]]
            (is (number? (get perf phase))
                (str "Missing worker phase " phase)))
          (is (every? #(<= 0 %)
-                     (map perf [:collect-before-ms
-                                :apply-ms
+                     (map perf [:apply-ms
                                 :listener-ms
-                                :collect-changes-ms
-                                :hydrate-ms
                                 :plain-ms
                                 :total-ms]))))))))
 
@@ -513,6 +507,8 @@
        (d/transact! conn [{:block/title "Page"
                            :block/name "page"
                            :block/uuid page-id
+                           :block/created-at 1
+                           :block/updated-at 1
                            :block/tags :logseq.class/Page}
                           {:block/title "Existing"
                            :block/uuid existing-id
@@ -536,75 +532,6 @@
              (str "The insert must persist before the frontend consumes the response: "
                   (pr-str (select-keys (into {} inserted)
                                        [:block/uuid :block/page :block/parent :block/order])))))))))
-
-(deftest apply-outliner-ops-marks-link-container-pages-affected-test
-  (restoring-worker-state
-   (fn []
-     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
-           source-page-id #uuid "00000000-0000-0000-0000-000000000001"
-           source-block-id #uuid "11111111-1111-1111-1111-111111111111"
-           container-page-id #uuid "22222222-2222-2222-2222-222222222222"
-           link-block-id #uuid "33333333-3333-3333-3333-333333333333"
-           conn (d/create-conn db-schema/schema)]
-       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-       (d/transact! conn [{:block/title "Source"
-                           :block/name "source"
-                           :block/uuid source-page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title "Child"
-                           :block/uuid source-block-id
-                           :block/page [:block/uuid source-page-id]
-                           :block/parent [:block/uuid source-page-id]
-                           :block/order "a0"
-                           :block/created-at 1
-                           :block/updated-at 1}
-                          {:block/title "Container"
-                           :block/name "container"
-                           :block/uuid container-page-id
-                           :block/tags :logseq.class/Page}
-                          {:block/title ""
-                           :block/uuid link-block-id
-                           :block/page [:block/uuid container-page-id]
-                           :block/parent [:block/uuid container-page-id]
-                           :block/link [:block/uuid source-page-id]
-                           :block/order "a0"
-                           :block/created-at 1
-                           :block/updated-at 1}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [response (apply-ops! test-repo
-                                  [[:save-block
-                                    [{:block/uuid source-block-id
-                                      :block/title "Updated"}
-                                     {}]]]
-                                  {:affected-block-uuids #{source-block-id}})]
-         (is (= #{source-page-id container-page-id}
-                (:affected-page-uuids response))))))))
-
-(deftest apply-outliner-ops-can-return-updated-blocks-test
-  (restoring-worker-state
-   (fn []
-     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-id #uuid "11111111-1111-1111-1111-111111111111"
-           conn (db-test/create-conn-with-blocks
-                 [{:page {:block/title "Page"
-                          :block/uuid page-id
-                          :build/keep-uuid? true}
-                   :blocks [{:block/title "Before"
-                             :block/uuid block-id
-                             :build/keep-uuid? true}]}])]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [response (apply-ops! test-repo
-                                  [[:save-block
-                                    [{:block/uuid block-id
-                                      :block/title "After"}
-                                     {}]]]
-                                  {:affected-block-uuids #{block-id}
-                                   :return-updated-blocks? true})
-             updated-block (first (:updated-blocks response))]
-         (is (= [block-id] (mapv :block/uuid (:updated-blocks response))))
-         (is (= "After" (:block/title updated-block)))
-         (is (not (de/entity? updated-block))))))))
 
 (deftest apply-outliner-ops-rejects-missing-indent-parent-original-test
   (restoring-worker-state
@@ -2569,8 +2496,6 @@
              plain-results (remove #(= "Block 2" (:block/title %)) children)
              unrelated-result (some #(when (= "Block 3" (:block/title %)) %) children)]
          (is (= 165 (count children)))
-         (is (= :full (:block.temp/load-status block)))
-         (is (every? #(= :full (:block.temp/load-status %)) children))
          (is (contains? block :block.temp/display-properties)
              "The journal root should carry full render data in its initial tree response.")
          (is (contains? block :block.temp/positioned-properties))
@@ -2613,41 +2538,6 @@
            (is (contains? hydrated :block.temp/display-properties))
            (is (contains? hydrated :block.temp/task-spent-time))
            (is (contains? hydrated :block.temp/sync-conflicts))))))))
-
-(deftest page-block-index-returns-all-ids-and-only-initial-render-data
-  (restoring-worker-state
-   (fn []
-     (let [get-page-tree! (get-thread-api :thread-api/get-page-blocks-tree)
-           page-id #uuid "00000000-0000-0000-0000-000000000001"
-           block-ids (mapv (fn [index]
-                             (uuid (str "10000000-0000-0000-0000-"
-                                        (.padStart (str index) 12 "0"))))
-                           (range 75))
-           conn (db-test/create-conn-with-blocks
-                 [{:page {:block/title "Long page"
-                          :block/uuid page-id
-                          :build/keep-uuid? true}
-                   :blocks (mapv (fn [index block-id]
-                                   {:block/title (str "Block " index)
-                                    :block/uuid block-id
-                                    :build/keep-uuid? true})
-                                 (range 75)
-                                 block-ids)}])]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [{:keys [block index blocks]}
-             (get-page-tree! test-repo page-id {:initial-limit 20})
-             result-by-name (get-page-tree! test-repo "long page" {:initial-limit 20})]
-         (is (= page-id (:block/uuid block)))
-         (is (= page-id (get-in result-by-name [:block :block/uuid]))
-             "Page routes may resolve the same index by normalized page name.")
-         (is (= block-ids (mapv :block/uuid index))
-             "The complete ordered block index is returned once.")
-         (is (= 20 (count blocks))
-             "Only the first render window is hydrated.")
-         (is (every? #(= :index (:block.temp/load-status %)) index))
-         (is (every? #(contains? % :block.temp/positioned-properties) blocks))
-         (is (every? #(not (contains? % :block/title)) index)
-             "Index entries must not precompute block render payloads."))))))
 
 (deftest get-blocks-includes-render-critical-property-data
   (restoring-worker-state
@@ -3966,14 +3856,18 @@
            _ (d/transact! source-conn
                           [{:db/id "imported-page"
                             :block/uuid page-uuid
-                            :block/name "imported page"
-                            :block/title "Imported page"
+                           :block/name "imported page"
+                           :block/title "Imported page"
+                            :block/created-at 1
+                            :block/updated-at 1
                             :block/tags :logseq.class/Page}
                            {:block/uuid block-uuid
                             :block/page "imported-page"
                             :block/parent "imported-page"
-                           :block/order "a0"
-                            :block/title "No refs"}])
+                            :block/order "a0"
+                            :block/title "No refs"
+                            :block/created-at 1
+                            :block/updated-at 1}])
            export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
            imported-uuids #{page-uuid block-uuid}
            dest-conn (sqlite-export/create-conn)

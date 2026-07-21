@@ -1715,7 +1715,6 @@
  :ui/image "obrázok"
  :ui/label "Štítok"
  :ui/link "Odkaz"
- :ui/load-more "Načítať viac"
  :ui/loading "Načítavanie"
  :ui/login "Prihlásiť sa"
  :ui/logout "Odhlásiť sa"

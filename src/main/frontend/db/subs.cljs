@@ -770,7 +770,7 @@
          vec)))
 
 (defn- apply-child-patch
-  [store parent-uuid {:keys [base-tx-id tx-id remove upsert]}
+  [store parent-uuid {removed :remove :keys [base-tx-id tx-id upsert]}
    changed-children stale-children]
   (require-uuid! :block/uuid parent-uuid)
   (when (some? base-tx-id)
@@ -793,7 +793,7 @@
       store
 
       (= base-tx-id (:tx-id current))
-      (let [items (child-patch-items parent-uuid (:items current) remove upsert)]
+      (let [items (child-patch-items parent-uuid (:items current) removed upsert)]
         (vswap! changed-children conj parent-uuid)
         (assoc-in store [:children parent-uuid]
                   (ready-children-slot (:rev store) tx-id items)))
