@@ -1513,22 +1513,33 @@
   "Dry-runs import txs against db and validates the resulting local DB.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
-   (validate-import-txs txs db {:edn-label "imported EDN"}))
+   (validate-import-txs txs db {:edn-label "Imported EDN"}))
   ([txs db {:keys [edn-label import-edn-data?]
-            :or {edn-label "imported EDN"}}]
+            :or {edn-label "Imported EDN"}}]
    (if-let [error (:error txs)]
      {:error error}
      (try
        (let [tx-data (import-tx-data txs)
-             result (validate-import-tx-data txs db edn-label import-edn-data?)]
+             result (validate-import-tx-data txs db edn-label import-edn-data?)
+             errors (seq (:errors result))]
          (cond
            (and import-edn-data? (empty? tx-data))
            {:error "The imported EDN does not contain any importable data."}
 
-           (seq (:errors result))
+           errors
            (do
-             (js/console.error (str (string/capitalize edn-label) " has validation errors:"))
-             (pprint/pprint (:errors result))
+             (js/console.error (str edn-label " has " (count errors) " validation error(s)"))
+             (pprint/pprint
+              (mapv
+               (fn [{:keys [entity dispatch-key] entity-errors :errors}]
+                 {:entity (select-keys entity
+                                       [:db/id
+                                        :db/ident
+                                        :block/uuid
+                                        :block/title])
+                  :dispatch-key dispatch-key
+                  :errors entity-errors})
+               errors))
              (dissoc result :errors))
 
            :else
@@ -1552,7 +1563,7 @@
   (try
     (let [import-conn (create-conn)
           txs (build-import export-edn @import-conn {})]
-      (validate-import-txs txs @import-conn {:edn-label "exported EDN"}))
+      (validate-import-txs txs @import-conn {:edn-label "Exported EDN"}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
