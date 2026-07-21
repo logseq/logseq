@@ -1129,24 +1129,73 @@
 
 ;; Import fns
 ;; ==========
+(def ^:private existing-page-protected-attributes
+  #{:block/uuid :block/title :block/name :block/journal-day
+    :block/created-at :block/updated-at :block/collapsed? :build/keep-uuid?})
+
+(def ^:private existing-page-preserved-attributes
+  (disj existing-page-protected-attributes :block/updated-at :build/keep-uuid?))
+
+(defn- existing-page-entity
+  [db page import-edn-data?]
+  (or (if-let [journal-day (:build/journal page)]
+        (some->> journal-day
+                 (d/datoms db :avet :block/journal-day)
+                 first
+                 :e
+                 (d/entity db))
+        (some->> (:block/title page) (ldb/get-case-page db)))
+      (when (and import-edn-data?
+                 (nil? (:block/title page))
+                 (nil? (:build/journal page)))
+        (some-> (:block/uuid page)
+                (#(d/entity db [:block/uuid %]))
+                (#(when (entity-util/page? %) %))))))
+
+(defn- record-page-uuid!
+  [import-to-existing-page-uuids source-uuid target-uuid]
+  (when source-uuid
+    (swap! import-to-existing-page-uuids assoc source-uuid target-uuid)))
+
 (defn- add-uuid-to-page-if-exists
-  [db import-to-existing-page-uuids {:keys [existing-pages-keep-properties?]} m]
-  (if-let [ent (if (:build/journal m)
-                 (some->> (:build/journal m)
-                          (d/datoms db :avet :block/journal-day)
-                          first
-                          :e
-                          (d/entity db))
-                 ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-                 (some->> (:block/title m) (ldb/get-case-page db)))]
+  [db import-to-existing-page-uuids
+   {:keys [existing-pages-keep-properties? import-edn-data?]} m]
+  (if-let [ent (existing-page-entity db m import-edn-data?)]
     (do
-      (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-      (cond-> (assoc m :block/uuid (:block/uuid ent))
-        (and (:build/properties m) existing-pages-keep-properties?)
-        (update :build/properties (fn [props]
-                                    (->> props
-                                         (remove (fn [[k _v]] (get ent k)))
-                                         (into {}))))))
+      (record-page-uuid! import-to-existing-page-uuids (:block/uuid m) (:block/uuid ent))
+      (let [existing-tag-idents (set (keep :db/ident (:block/tags ent)))
+            existing-alias-uuids (set (map :block/uuid (:block/alias ent)))
+            page (if import-edn-data?
+                   (-> (apply dissoc m existing-page-protected-attributes)
+                       (merge (select-keys ent existing-page-preserved-attributes))
+                       (assoc :block/uuid (:block/uuid ent)))
+                   (assoc m :block/uuid (:block/uuid ent)))
+            page' (cond-> page
+                    (and (:build/properties page) existing-pages-keep-properties?)
+                    (update :build/properties (fn [props]
+                                                (->> props
+                                                     (remove (fn [[k _v]]
+                                                               (contains? ent k)))
+                                                     (into {}))))
+                    (and (:build/tags page) import-edn-data?)
+                    (update :build/tags
+                            #(set (remove (fn [tag]
+                                            (contains? existing-tag-idents tag)) %)))
+                    (and (:block/alias page) import-edn-data?)
+                    (update :block/alias
+                            #(set (remove (fn [[attr page-uuid]]
+                                            (and (= :block/uuid attr)
+                                                 (contains? existing-alias-uuids
+                                                            (get @import-to-existing-page-uuids
+                                                                 page-uuid page-uuid))))
+                                          %))))
+            page'' (cond-> page'
+                     (and import-edn-data? (empty? (:build/properties page'))) (dissoc :build/properties)
+                     (and import-edn-data? (empty? (:build/tags page'))) (dissoc :build/tags)
+                     (and import-edn-data? (empty? (:block/alias page'))) (dissoc :block/alias))]
+        (cond-> page''
+          (and import-edn-data? (:block/alias page''))
+          (vary-meta assoc ::sqlite-build/merge-existing-aliases? true))))
     m))
 
 (defn- update-existing-properties
@@ -1170,7 +1219,8 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map}
+   property-conflicts import-options]
   (let [import-to-existing-page-uuids (atom {})
         export-map
         (cond-> {:build-existing-tx? true
@@ -1178,7 +1228,9 @@
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options)))
+                         (update m :page (partial add-uuid-to-page-if-exists
+                                                  db import-to-existing-page-uuids
+                                                  import-options)))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -1201,7 +1253,8 @@
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
                                          [:build/page
-                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options (second f))]
+                                          (add-uuid-to-page-if-exists
+                                           db import-to-existing-page-uuids import-options (second f))]
                                          f))
                                      export-map))
         ;; Update uuid references of all pages that had their uuids updated to reference an existing page
@@ -1282,7 +1335,34 @@
    :block-props-tx []
    :misc-tx []})
 
-(defn build-import
+(def ^:private supported-export-metadata-keys
+  #{::auto-include-namespaces ::block ::export-type ::graph-files ::graph-format
+    ::import-options ::kv-values ::property-history ::schema-version})
+
+(defn- unsupported-export-metadata-keys
+  [export-map]
+  (->> (keys export-map)
+       (filter #(= "logseq.db.sqlite.export" (namespace %)))
+       (remove supported-export-metadata-keys)
+       sort
+       vec))
+
+(defn- full-graph-import?
+  [export-map]
+  (or (datom-export? export-map)
+      (contains? #{:graph :graph-human} (::export-type export-map))
+      (some #(contains? export-map %)
+            [::auto-include-namespaces ::graph-files ::kv-values ::property-history ::schema-version])))
+
+(defn import-edn-data-shape
+  "Classifies EDN accepted by the Import EDN Data dialog."
+  [export-map]
+  (cond
+    (full-graph-import? export-map) :full-graph
+    (some #(contains? export-map %) [::block :pages-and-blocks :properties :classes]) :partial
+    :else :unsupported))
+
+(defn ^:large-vars/cleanup-todo build-import
   "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
@@ -1300,13 +1380,22 @@
    * :init-tx - Txs that must be transacted first, usually because they define new properties
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
    * :misc-tx - Txs to transact unrelated to other txs"
-  [export-map* db {:keys [current-block]}]
+  [export-map* db {:keys [current-block] :as import-options}]
   (cond
+    (and (:import-edn-data? import-options)
+         (= :full-graph (import-edn-data-shape export-map*)))
+    {:error "Full-graph EDN is not supported by Import EDN Data."}
+
+    (and (:import-edn-data? import-options)
+         (seq (unsupported-export-metadata-keys export-map*)))
+    {:error (str "The imported EDN contains unsupported field(s): " (pr-str (unsupported-export-metadata-keys export-map*)))}
+
     (datom-export? export-map*)
     (build-datom-import export-map* db)
 
     :else
-    (let [export-map (if (and (::block export-map*) current-block)
+    (let [import-options' (merge (dissoc (::import-options export-map*) :import-edn-data?) import-options)
+          export-map (if (and (::block export-map*) current-block)
                        (build-block-import-options current-block export-map*)
                        export-map*)
           export-map' (if (and (#{:graph :graph-human} (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
@@ -1314,7 +1403,7 @@
                                (add-ontology-for-include-namespaces db export-map))
                         export-map)
           property-conflicts (atom [])
-          export-map'' (check-for-existing-entities db export-map' property-conflicts)]
+          export-map'' (check-for-existing-entities db export-map' property-conflicts import-options')]
       (if (seq @property-conflicts)
         (do
           (js/console.error :property-conflicts @property-conflicts)
@@ -1364,40 +1453,85 @@
                  (contains? (get eid->attrs (second tx)) (nth tx 2))))
           tx-data))
 
+(def ^:private legacy-disallowed-attributes
+  #{:hide? :public?})
+
+(defn- remove-legacy-disallowed-attributes
+  [tx-data]
+  (into []
+        (keep (fn [tx]
+                (cond
+                  (map? tx)
+                  (apply dissoc tx legacy-disallowed-attributes)
+
+                  (and (vector? tx)
+                       (= :db/add (first tx))
+                       (contains? legacy-disallowed-attributes (nth tx 2 nil)))
+                  nil
+
+                  :else
+                  tx)))
+        tx-data))
+
+(defn- validation-error-details
+  [errors]
+  (->> errors
+       (mapcat (fn [{:keys [entity] entity-errors :errors}]
+                 (map (fn [[attr error]]
+                        (str (pr-str (or (:block/title entity) (:db/ident entity) (:db/id entity)))
+                             " " (pr-str attr) ": "
+                             (string/join ", " (filter string? (tree-seq coll? seq error)))))
+                      entity-errors)))
+       (string/join "; ")))
+
 (defn- validate-import-tx-data
-  [txs db edn-label]
-  (loop [tx-data (import-tx-data txs)]
-    (let [db-after (:db-after (d/with db tx-data))
+  [txs db edn-label import-edn-data?]
+  (loop [tx-data (cond-> (import-tx-data txs)
+                   import-edn-data? remove-legacy-disallowed-attributes)]
+    (let [tx-report (d/with db tx-data)
+          db-after (:db-after tx-report)
           validation (db-validate/validate-local-db! db-after)]
       (if-let [errors (seq (:errors validation))]
-        (let [eid->attrs (disallowed-key-attrs errors)
-              tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
-          (if (and (all-disallowed-key-errors? errors)
-                   (seq eid->attrs)
-                   (not= (count tx-data) (count tx-data')))
-            (recur (vec tx-data'))
-            {:error (str "The " edn-label " has " (count errors) " validation error(s)")
-             :errors errors}))
-        {:db db-after
-         :tx-data tx-data}))))
+        (if import-edn-data?
+          {:error (str "The " edn-label " has " (count errors) " validation error(s): "
+                       (validation-error-details errors))
+           :errors errors}
+          (let [eid->attrs (disallowed-key-attrs errors)
+                tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
+            (if (and (all-disallowed-key-errors? errors)
+                     (seq eid->attrs)
+                     (not= (count tx-data) (count tx-data')))
+              (recur (vec tx-data'))
+              {:error (str "The " edn-label " has " (count errors) " validation error(s)")
+               :errors errors})))
+        (if (and import-edn-data? (empty? (:tx-data tx-report)))
+          {:error "The imported EDN does not contain any importable data."}
+          {:db db-after
+           :tx-data tx-data})))))
 
 (defn validate-import-txs
   "Dry-runs import txs against db and validates the resulting local DB.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
    (validate-import-txs txs db {:edn-label "Imported EDN"}))
-  ([txs db {:keys [edn-label]
+  ([txs db {:keys [edn-label import-edn-data?]
             :or {edn-label "Imported EDN"}}]
    (if-let [error (:error txs)]
      {:error error}
      (try
-       (let [result (validate-import-tx-data txs db edn-label)]
-         (if-let [errors (seq (:errors result))]
+       (let [tx-data (import-tx-data txs)
+             result (validate-import-tx-data txs db edn-label import-edn-data?)
+             errors (seq (:errors result))]
+         (cond
+           (and import-edn-data? (empty? tx-data))
+           {:error "The imported EDN does not contain any importable data."}
+
+           errors
            (do
              (js/console.error (str edn-label " has " (count errors) " validation error(s)"))
              (pprint/pprint
               (mapv
-                (fn [{:keys [entity dispatch-key] entity-errors :errors}]
+               (fn [{:keys [entity dispatch-key] entity-errors :errors}]
                  {:entity (select-keys entity
                                        [:db/id
                                         :db/ident
@@ -1407,6 +1541,8 @@
                   :errors entity-errors})
                errors))
              (dissoc result :errors))
+
+           :else
            result))
        (catch :default e
          (js/console.error (str "Unexpected " edn-label " validation error:") e)

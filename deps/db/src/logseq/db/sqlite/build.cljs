@@ -726,7 +726,10 @@
                           page-id-fn)]
         (into
          ;; page tx
-         (if (and build-existing-tx?' (not (:build/properties page')) (not (:build/tags page')))
+         (if (and build-existing-tx?'
+                  (not (:build/properties page'))
+                  (not (:build/tags page'))
+                  (not (::merge-existing-aliases? (meta page'))))
            ;; Minimally update existing unless there is useful data to update e.g. properties and tags
            [(select-keys page [:block/uuid :block/created-at :block/updated-at])]
            (build-page-tx page' all-idents page-uuids properties (assoc options :build-existing-tx? build-existing-tx?')))

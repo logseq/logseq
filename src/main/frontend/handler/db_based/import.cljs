@@ -227,39 +227,81 @@
                                    :error)
                (finished-error-handler))))))))
 
-(defn- import-edn-data-from-form [import-inputs _e]
-  (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
-        import-block? (::sqlite-export/block export-map)
-        block (when import-block?
-                (if-let [eid (:block-id (first (state/get-editor-args)))]
-                  (let [ent (db/entity [:block/uuid eid])]
-                    (if-not (:block/page ent)
-                      {:error (t :import/cannot-import-block-into-non-block-entity)}
-                      (merge (select-keys ent [:block/uuid])
-                             {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                  (notification/show! (t :block/not-found-warning) :warning)))]
-    (cond (or (= ::invalid-import export-map) (not (map? export-map)))
-          (notification/show! (t :import/submitted-edn-invalid) :warning)
-          (:error block)
-          (do
-            (notification/show! (:error block) :error)
-            (shui/dialog-close-all!))
-          :else
-          (p/let [{:keys [error]}
-                  (ui-outliner-tx/transact!
-                   {:outliner-op :batch-import-edn}
-                   (outliner-op/batch-import-edn! export-map (when block {:current-block block})))]
-            ;; Also close cmd-k
-            (shui/dialog-close-all!)
-            (ui-handler/re-render-root!)
-            (if error
-              (notification/show! error :error)
-              (notification/show! (t :import/successful) :success))))))
+(defn- set-import-submitting!
+  [import-inputs ^js submit-button submitting?]
+  (swap! import-inputs assoc :submitting? submitting?)
+  (when submit-button
+    (set! (.-disabled submit-button) submitting?)))
+
+(defn- close-import-dialog!
+  []
+  (shui/dialog-close! :ls-dialog-import-edn-data))
+
+(defn- import-edn-data-from-form [import-inputs ^js e]
+  (when-not (:submitting? @import-inputs)
+    (let [submit-button (.-currentTarget e)
+          export-map (try
+                       (edn/read-string (:import-data @import-inputs))
+                       (catch :default _error ::invalid-import))
+          import-shape (when (map? export-map)
+                         (sqlite-export/import-edn-data-shape export-map))
+          import-block? (::sqlite-export/block export-map)
+          block (when import-block?
+                  (if-let [eid (:target-block-id @import-inputs)]
+                    (let [ent (db/entity [:block/uuid eid])]
+                      (if-not (:block/page ent)
+                        {:error (t :import/cannot-import-block-into-non-block-entity)}
+                        (merge (select-keys ent [:block/uuid])
+                               {:block/page (select-keys (:block/page ent) [:block/uuid])})))
+                    {:error (t :import/block-target-required-warning)
+                     :status :warning
+                     :clear? false}))]
+      (cond
+        (or (= ::invalid-import export-map) (not (map? export-map)))
+        (notification/show! (t :import/submitted-edn-invalid) :warning)
+
+        (= :full-graph import-shape)
+        (do
+          (notification/show! (t :import/full-graph-not-supported) :error)
+          (close-import-dialog!))
+
+        (= :unsupported import-shape)
+        (notification/show! (t :import/unsupported-edn-data) :warning)
+
+        (:error block)
+        (do
+          (notification/show! (:error block) (or (:status block) :error) (:clear? block))
+          (close-import-dialog!))
+
+        :else
+        (do
+          (set-import-submitting! import-inputs submit-button true)
+          (-> (p/let [{:keys [error]}
+                      (ui-outliner-tx/transact!
+                       {:outliner-op :batch-import-edn}
+                       (outliner-op/batch-import-edn!
+                        export-map
+                        (cond-> {:existing-pages-keep-properties? true
+                                 :import-edn-data? true}
+                          block (assoc :current-block block))))]
+                (if error
+                  (notification/show! error :error)
+                  (do
+                    (close-import-dialog!)
+                    (ui-handler/re-render-root!)
+                    (notification/show! (t :import/successful) :success))))
+              (p/catch (fn [error]
+                         (notification/show! (or (ex-message error) (str error)) :error)))
+              (p/finally (fn []
+                           (set-import-submitting! import-inputs submit-button false)))))))))
 
 (defn ^:export import-edn-data-dialog
   "Displays dialog which allows users to paste and import sqlite.build EDN Data"
   []
-  (let [import-inputs (atom {:import-data "" :import-block? false})]
+  (let [target-block-id (or (:block-id (first (state/get-editor-args)))
+                            (get-in @state/state [:search/args :editor-info :block-uuid]))
+        import-inputs (atom {:import-data ""
+                             :target-block-id target-block-id})]
     (shui/dialog-open!
      [:div
       [:label.flex.my-2.text-lg (t :command.misc/import-edn-data)]
@@ -277,4 +319,6 @@
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}
-                   (t :import/title))])))
+                   (t :import/title))]
+     {:id :ls-dialog-import-edn-data})
+    (shui/dialog-close! :ls-dialog-cmdk)))
