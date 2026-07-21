@@ -1,0 +1,50 @@
+services:
+  sync:
+    build:
+      context: ${LOGSEQ_SYNC_SOURCE_DIR:?Set by logseq-sync}
+      dockerfile: deps/db-sync/deploy/Dockerfile
+    environment:
+      DB_SYNC_PORT: "8080"
+      DB_SYNC_BASE_URL: ${DB_SYNC_BASE_URL:?Set by logseq-sync}
+      DB_SYNC_DATA_DIR: /var/lib/logseq-sync
+      DB_SYNC_STORAGE_DRIVER: sqlite
+      DB_SYNC_ASSETS_DRIVER: filesystem
+      DB_SYNC_LOG_LEVEL: ${DB_SYNC_LOG_LEVEL:-info}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:?Set by logseq-sync}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:?Set by logseq-sync}
+      COGNITO_JWKS_URL: ${COGNITO_JWKS_URL:?Set by logseq-sync}
+    user: "${LOGSEQ_SYNC_UID:?Set by logseq-sync}:${LOGSEQ_SYNC_GID:?Set by logseq-sync}"
+    volumes:
+      - ${LOGSEQ_SYNC_DATA_DIR:?Set by logseq-sync}:/var/lib/logseq-sync
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["https"]
+    depends_on:
+      sync:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${LOGSEQ_SYNC_INSTALL_DIR:?Set by logseq-sync}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

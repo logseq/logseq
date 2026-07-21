@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly source_dir="$(cd -- "$script_dir/../../.." && pwd)"
+readonly docker_install_url="https://docs.docker.com/engine/install/"
+readonly default_install_dir="${HOME}/.local/share/logseq-sync"
+readonly default_data_dir="${HOME}/.local/share/logseq-sync-data"
+readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
+readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
+
+die() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    printf 'Docker Engine with Docker Compose is required. Install it first:\n%s\n' "$docker_install_url" >&2
+    exit 1
+  fi
+}
+
+require_linux() {
+  [[ "$(uname -s)" == "Linux" ]] || die "logseq-sync must run on a Linux host."
+}
+
+read_value() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local value
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$prompt [$default_value]: " value
+    printf '%s' "${value:-$default_value}"
+  else
+    read -r -p "$prompt: " value
+    printf '%s' "$value"
+  fi
+}
+
+confirm() {
+  local prompt="$1"
+  local value
+  read -r -p "$prompt [y/N]: " value
+  [[ "$value" == "y" || "$value" == "Y" ]]
+}
+
+compose() {
+  local install_dir="$1"
+  local endpoint_mode
+  local -a files=(-f "$install_dir/compose.yaml")
+  shift
+  endpoint_mode="$(sed -n 's/^LOGSEQ_SYNC_ENDPOINT_MODE=//p' "$install_dir/.env")"
+  case "$endpoint_mode" in
+    http) files+=(-f "$install_dir/compose.http.yaml") ;;
+    https) ;;
+    *) die "Deployment configuration has an invalid endpoint mode." ;;
+  esac
+  docker compose --env-file "$install_dir/.env" "${files[@]}" "$@"
+}
+
+write_file() {
+  local path="$1"
+  shift
+  umask 077
+  printf '%s' "$*" > "$path"
+}
+
+valid_env_value() {
+  [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* \
+     && "$1" != *'$'* && "$1" != *'#'* && "$1" != *[[:space:]]* ]]
+}
+
+valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
+valid_domain() {
+  [[ ${#1} -le 253 \
+     && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+confirm_existing() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    if ! confirm "${path} exists. Create a timestamped backup before replacement?"; then
+      die "Existing file was not changed."
+    fi
+  fi
+}
+
+backup_existing() {
+  local path="$1"
+  local timestamp backup suffix=0
+  [[ -e "$path" ]] || return 0
+  timestamp="$(date +%Y%m%d%H%M%S)"
+  backup="${path}.backup-${timestamp}"
+  while [[ -e "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="${path}.backup-${timestamp}-${suffix}"
+  done
+  cp -a -- "$path" "$backup"
+}
+
+wait_for_service_health() {
+  local install_dir="$1"
+  local service="$2"
+  local attempts=30
+  local status
+  while (( attempts > 0 )); do
+    status="$(compose "$install_dir" ps --format json "$service" 2>/dev/null || true)"
+    if grep -q 'healthy' <<<"$status"; then
+      printf '%s is healthy.\n' "$service"
+      return 0
+    fi
+    sleep 2
+    attempts=$((attempts - 1))
+  done
+  printf '%s did not become healthy. Inspect logs with:\n  %s/logseq-sync logs --follow %s\n' "$service" "$script_dir" "$install_dir" >&2
+  return 1
+}
+
+wait_for_https_endpoint() {
+  local public_url="$1"
+  local attempts=12
+  while (( attempts > 0 )); do
+    if curl --fail --silent --show-error --max-time 5 "$public_url/health" >/dev/null; then
+      printf 'Public HTTPS endpoint is reachable.\n'
+      return 0
+    fi
+    sleep 5
+    attempts=$((attempts - 1))
+  done
+  printf 'Public HTTPS endpoint did not become reachable: %s/health\n' "$public_url" >&2
+  return 1
+}
+
+setup() {
+  require_linux
+  require_docker
+  local install_dir data_dir endpoint_mode public_url bind_address public_port domain
+  local issuer client_id jwks_url auth_mode
+  local -a profile_args=()
+
+  install_dir="$(read_value 'Deployment directory' "$default_install_dir")"
+  data_dir="$(read_value 'Persistent data directory' "$default_data_dir")"
+  valid_env_value "$source_dir" && valid_env_value "$install_dir" && valid_env_value "$data_dir" \
+    || die "Paths must not be empty or contain whitespace, $, #, or newlines."
+  endpoint_mode="$(read_value 'Endpoint mode (https/http)' 'https')"
+  [[ "$endpoint_mode" == "https" || "$endpoint_mode" == "http" ]] || die "Endpoint mode must be https or http."
+
+  if [[ "$endpoint_mode" == "https" ]]; then
+    command -v curl >/dev/null 2>&1 || die "HTTPS setup requires curl to verify the public endpoint."
+    domain="$(read_value 'Public domain name')"
+    valid_domain "$domain" || die "HTTPS requires a valid DNS domain name, not an IP address."
+    public_url="https://${domain}"
+    bind_address="127.0.0.1"
+    public_port="8080"
+    profile_args=(--profile https)
+  else
+    public_url="$(read_value 'Public HTTP URL (for example http://203.0.113.10:8080)')"
+    [[ "$public_url" =~ ^http://[A-Za-z0-9.-]+:[0-9]+$ ]] || die "HTTP URL must include a hostname or IPv4 address and numeric port."
+    printf 'Warning: HTTP exposes Logseq bearer tokens in transit.\n' >&2
+    [[ "$(read_value 'Type I_ACCEPT_HTTP to continue')" == "I_ACCEPT_HTTP" ]] || die "HTTP risk acknowledgement was not accepted."
+    bind_address="0.0.0.0"
+    public_port="${public_url##*:}"
+    valid_port "$public_port" || die "HTTP URL port must be between 1 and 65535."
+  fi
+
+  auth_mode="$(read_value 'Authentication (logseq-client/custom-client)' 'logseq-client')"
+  case "$auth_mode" in
+    logseq-client)
+      issuer="$default_cognito_issuer"
+      client_id="$default_cognito_client_id"
+      jwks_url="$default_cognito_jwks_url"
+      ;;
+    custom-client)
+      printf 'Custom JWT settings require a Logseq client built to issue matching tokens.\n' >&2
+      issuer="$(read_value 'Cognito issuer URL')"
+      client_id="$(read_value 'Cognito client ID')"
+      jwks_url="$(read_value 'Cognito JWKS URL')"
+      [[ "$issuer" =~ ^https://[^[:space:]]+$ ]] || die "Cognito issuer must be an HTTPS URL."
+      [[ "$client_id" =~ ^[A-Za-z0-9._-]+$ ]] || die "Cognito client ID contains unsupported characters."
+      [[ "$jwks_url" =~ ^https://[^[:space:]]+$ ]] || die "Cognito JWKS URL must be an HTTPS URL."
+      ;;
+    *) die "Authentication must be logseq-client or custom-client." ;;
+  esac
+  valid_env_value "$issuer" && valid_env_value "$client_id" && valid_env_value "$jwks_url" \
+    || die "JWT settings must not contain newlines."
+
+  printf '\nDeployment plan:\n  URL: %s\n  Install: %s\n  Data: %s\n  Authentication: %s JWT over %s\n' "$public_url" "$install_dir" "$data_dir" "$auth_mode" "$endpoint_mode"
+  confirm 'Write deployment configuration and start Sync?' || die "Cancelled before writing configuration."
+
+  confirm_existing "$install_dir/compose.yaml"
+  confirm_existing "$install_dir/compose.http.yaml"
+  confirm_existing "$install_dir/.env"
+  if [[ "$endpoint_mode" == "https" ]]; then
+    confirm_existing "$install_dir/Caddyfile"
+  fi
+
+  mkdir -p -- "$install_dir" "$data_dir"
+  backup_existing "$install_dir/compose.yaml"
+  backup_existing "$install_dir/compose.http.yaml"
+  backup_existing "$install_dir/.env"
+  if [[ "$endpoint_mode" == "https" ]]; then
+    backup_existing "$install_dir/Caddyfile"
+  fi
+
+  cp -- "$script_dir/compose.yaml" "$install_dir/compose.yaml"
+  cp -- "$script_dir/compose.http.yaml" "$install_dir/compose.http.yaml"
+  write_file "$install_dir/.env" "LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
+LOGSEQ_SYNC_INSTALL_DIR=${install_dir}
+LOGSEQ_SYNC_DATA_DIR=${data_dir}
+LOGSEQ_SYNC_UID=$(id -u)
+LOGSEQ_SYNC_GID=$(id -g)
+LOGSEQ_SYNC_ENDPOINT_MODE=${endpoint_mode}
+DB_SYNC_BASE_URL=${public_url}
+DB_SYNC_BIND_ADDRESS=${bind_address}
+DB_SYNC_PUBLIC_PORT=${public_port}
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=${issuer}
+COGNITO_CLIENT_ID=${client_id}
+COGNITO_JWKS_URL=${jwks_url}
+"
+  if [[ "$endpoint_mode" == "https" ]]; then
+    sed "s/{DOMAIN}/${domain}/g" "$script_dir/Caddyfile.template" > "$install_dir/Caddyfile"
+  fi
+
+  if ! compose "$install_dir" "${profile_args[@]}" up -d --build; then
+    printf 'Sync startup failed. Inspect logs with:\n  %s/logseq-sync logs --follow %s\n' "$script_dir" "$install_dir" >&2
+    return 1
+  fi
+  wait_for_service_health "$install_dir" sync
+  if [[ "$endpoint_mode" == "https" ]]; then
+    wait_for_service_health "$install_dir" caddy
+    wait_for_https_endpoint "$public_url"
+  fi
+  printf 'Logseq Sync is ready. In Logseq, set Sync Server URL to:\n  %s\n' "$public_url"
+  printf 'Status: %s/logseq-sync status %s\n' "$script_dir" "$install_dir"
+}
+
+status() {
+  local install_dir="${1:-$default_install_dir}"
+  [[ -f "$install_dir/.env" ]] || die "No deployment configuration at $install_dir."
+  require_docker
+  compose "$install_dir" ps
+  printf 'Sync Server URL: %s\n' "$(sed -n 's/^DB_SYNC_BASE_URL=//p' "$install_dir/.env")"
+  if wait_for_service_health "$install_dir" sync; then
+    printf 'Health endpoint: ok\n'
+  else
+    printf 'Health endpoint: unavailable\n' >&2
+    return 1
+  fi
+  if [[ "$(sed -n 's/^LOGSEQ_SYNC_ENDPOINT_MODE=//p' "$install_dir/.env")" == "https" ]]; then
+    if ! wait_for_service_health "$install_dir" caddy; then
+      printf 'HTTPS proxy health: unavailable\n' >&2
+      return 1
+    fi
+    if ! wait_for_https_endpoint "$(sed -n 's/^DB_SYNC_BASE_URL=//p' "$install_dir/.env")"; then
+      printf 'Public HTTPS endpoint: unavailable\n' >&2
+      return 1
+    fi
+  fi
+}
+
+logs() {
+  local install_dir="$default_install_dir"
+  local follow=""
+  local service=""
+  while (( $# > 0 )); do
+    case "$1" in
+      --follow) follow="--follow" ;;
+      sync|proxy) service="$1" ;;
+      *) install_dir="$1" ;;
+    esac
+    shift
+  done
+  [[ -f "$install_dir/.env" ]] || die "No deployment configuration at $install_dir."
+  require_docker
+  if [[ "$service" == "proxy" ]] \
+     && [[ "$(sed -n 's/^LOGSEQ_SYNC_ENDPOINT_MODE=//p' "$install_dir/.env")" != "https" ]]; then
+    die "Proxy logging is unavailable because this deployment uses HTTP mode."
+  fi
+  local -a args=(logs --tail 200)
+  if [[ -n "$follow" ]]; then
+    args+=(--follow)
+  fi
+  if [[ -n "$service" ]]; then
+    args+=("$service")
+  fi
+  compose "$install_dir" "${args[@]}"
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  logseq-sync setup
+  logseq-sync status [deployment-directory]
+  logseq-sync logs [--follow] [sync|proxy] [deployment-directory]
+  logseq-sync help
+EOF
+}
+
+case "${1:-help}" in
+  setup) setup ;;
+  status) shift; status "$@" ;;
+  logs) shift; logs "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac
