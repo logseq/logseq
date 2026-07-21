@@ -886,6 +886,7 @@
  :import/assets-imported "Imported {1} assets."
  :import/assets-skipped "Skipped {1} assets. See console for details."
  :import/block-icons-cannot-be-imported "Block icons can't be imported. Manually import it at the block: {1}"
+ :import/block-target-required-warning "Edit a block before importing block EDN data."
  :import/cannot-import-block-into-non-block-entity "Can't import block into a non-block entity. Please import block elsewhere."
  :import/db-edn-desc "Import a DB graph's EDN export into a new DB graph"
  :import/db-edn-title "EDN to DB graph"

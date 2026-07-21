@@ -253,7 +253,7 @@
                         {:error (t :import/cannot-import-block-into-non-block-entity)}
                         (merge (select-keys ent [:block/uuid])
                                {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                    {:error "Edit a block before importing block EDN data."
+                    {:error (t :import/block-target-required-warning)
                      :status :warning
                      :clear? false}))]
       (cond

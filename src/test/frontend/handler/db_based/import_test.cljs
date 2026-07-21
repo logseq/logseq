@@ -41,12 +41,11 @@
         (submit-dialog! dialog-content
                         {::sqlite-export/graph-format :datoms :datoms []}
                         #js {:disabled false})
-        (is (= ["Full-graph EDN is not supported here. Use graph restore instead."
-                :error nil]
+        (is (= [:import/full-graph-not-supported :error nil]
                (last @notifications))))
       (testing "empty input stays editable"
         (submit-dialog! dialog-content {} #js {:disabled false})
-        (is (= ["The EDN does not contain supported import data." :warning nil]
+        (is (= [:import/unsupported-edn-data :warning nil]
                (last @notifications))))
       (testing "block import requires an editing target"
         (let [original-search-args (:search/args @state/state)]
@@ -55,7 +54,7 @@
             (submit-dialog! dialog-content
                             {::sqlite-export/block {:block/title "Imported block"}}
                             #js {:disabled false})
-            (is (= ["Edit a block before importing block EDN data." :warning false]
+            (is (= [:import/block-target-required-warning :warning false]
                    (last @notifications)))
             (finally
               (state/set-state! :search/args original-search-args)))))
