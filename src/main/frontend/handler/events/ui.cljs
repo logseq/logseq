@@ -56,7 +56,12 @@
      (config/get-repo-dir (state/get-current-repo))
      (path/path-join common-config/local-assets-dir file-name))))
 
-(defmethod events/handle :go/search [_]
+(defmethod events/handle :go/search [[_ context]]
+  (when (contains? context :editor-info)
+    (state/update-state! :search/args
+                         #(cond-> (or % {})
+                            (:editor-info context) (assoc :editor-info (:editor-info context))
+                            (nil? (:editor-info context)) (dissoc :editor-info))))
   (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
     (shui/dialog-open!
      cmdk/cmdk-modal

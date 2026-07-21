@@ -897,6 +897,7 @@
  :import/file-finished "Import finished!"
  :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"
+ :import/full-graph-not-supported "Full-graph EDN is not supported here. Use graph restore instead."
  :import/graph-name-conflict "Please specify another name as another graph with this name already exists!"
  :import/graph-name-placeholder "Graph name"
  :import/ignored-assets (fn [count] (str "Import ignored " count " " (if (= 1 count) "asset" "assets") ". See the javascript console for more details."))
@@ -929,6 +930,7 @@
  :import/tags-case-insensitive "Tags are case insensitive"
  :import/title "Import"
  :import/unexpected-error "Unexpected error: {1}"
+ :import/unsupported-edn-data "The EDN does not contain supported import data."
  :import/zip-import-error "Zip import failed: {1}"
  :import/zip-missing-db-sqlite "Zip missing db.sqlite. Please check the archive structure."
 

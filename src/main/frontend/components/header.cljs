@@ -433,6 +433,7 @@
 (hsx/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
+        *search-editor-info (hooks/use-ref nil)
         rtc-graphs (state/use-sub :rtc/graphs)
         rtc-state (state/use-sub :rtc/state)
         db-rtc-uuid (ldb/get-graph-rtc-uuid (db/get-db))
@@ -472,10 +473,13 @@
           (ui/with-shortcut :go/search "right"
             [:button.button.icon#search-button
              {:data-keep-selection true
-              :on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
+              :on-pointer-down #(hooks/set-ref! *search-editor-info (state/get-editor-info))
+              :on-click #(let [editor-info (hooks/deref *search-editor-info)]
+                           (hooks/set-ref! *search-editor-info nil)
+                           (when (or (mobile-util/native-android?)
+                                     (mobile-util/native-iphone?))
+                             (state/set-left-sidebar-open! false))
+                           (state/pub-event! [:go/search {:editor-info editor-info}]))}
              (ui/icon "search" {:size ui/icon-size})]
             (t :nav/search))))]
 

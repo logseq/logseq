@@ -211,7 +211,8 @@
                (js/console.error "Import EDN error: " e)
                {:error "An unexpected error occurred building the import. See the javascript console for details."}))
         validation (when-not error
-                     (sqlite-export/validate-import-txs txs @conn))]
+                     (sqlite-export/validate-import-txs
+                      txs @conn {:import-edn-data? (:import-edn-data? import-options)}))]
     ;; (cljs.pprint/pprint txs)
     (if (or error (:error validation))
       (reset! *result {:error (or error (:error validation))})
