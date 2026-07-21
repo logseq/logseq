@@ -1715,7 +1715,6 @@
  :ui/image "이미지"
  :ui/label "라벨"
  :ui/link "링크"
- :ui/load-more "더 불러오기"
  :ui/loading "로딩 중"
  :ui/login "로그인"
  :ui/logout "로그아웃"

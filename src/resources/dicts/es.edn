@@ -1715,7 +1715,6 @@
  :ui/image "imagen"
  :ui/label "Etiqueta"
  :ui/link "Enlace"
- :ui/load-more "Cargar más"
  :ui/loading "Cargando"
  :ui/login "Iniciar sesión"
  :ui/logout "Cerrar sesión"

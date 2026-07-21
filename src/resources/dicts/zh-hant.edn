@@ -1728,7 +1728,6 @@
  :ui/image "圖片"
  :ui/label "標籤"
  :ui/link "連結"
- :ui/load-more "載入更多"
  :ui/loading "載入中..."
  :ui/login "登入"
  :ui/logout "登出"

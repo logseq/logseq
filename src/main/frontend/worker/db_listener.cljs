@@ -12,6 +12,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [lambdaisland.glogi :as log]
+            [logseq.db.sqlite.export :as sqlite-export]
             [promesa.core :as p]))
 
 (defmulti listen-db-changes
@@ -79,14 +80,17 @@
 (defn- build-render-delta
   [repo {:keys [db-after tx-meta] :as tx-report}
    {:keys [affected-keys deleted-block-uuids]}]
-  (render-delta/build
-   {:graph-id repo
-    :rev (:max-tx db-after)
-    :op-id (:db-sync/tx-id tx-meta)
-    :blocks (canonical-replacements tx-report)
-    :deleted-block-uuids deleted-block-uuids
-    :affected-keys (set affected-keys)
-    :tx-report tx-report}))
+  (let [delta-tx-report (if (::sqlite-export/imported-data? tx-meta)
+                          (assoc tx-report :tx-data [])
+                          tx-report)]
+    (render-delta/build
+     {:graph-id repo
+      :rev (:max-tx db-after)
+      :op-id (:db-sync/tx-id tx-meta)
+      :blocks (canonical-replacements tx-report)
+      :deleted-block-uuids deleted-block-uuids
+      :affected-keys (set affected-keys)
+      :tx-report delta-tx-report})))
 
 (defn- main-thread-sync-result
   "Build the renderer delta and deferred broadcast data."

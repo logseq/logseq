@@ -1715,7 +1715,6 @@
  :ui/image "görsel"
  :ui/label "Etiket"
  :ui/link "Bağlantı"
- :ui/load-more "Daha fazla yükle"
  :ui/loading "Yükleniyor"
  :ui/login "Giriş yap"
  :ui/logout "Çıkış yap"

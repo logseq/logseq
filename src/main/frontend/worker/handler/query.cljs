@@ -124,11 +124,11 @@
                 (= 3 (count form))
                 (some page-ref? (rest form)))
          (let [[left right] (rest form)
-               [page-reference symbol] (if (page-ref? left)
-                                         [left right]
-                                         [right left])]
+               [page-reference sym] (if (page-ref? left)
+                                      [left right]
+                                      [right left])]
            (list 'contains?
-                 symbol
+                 sym
                  (page-ref/get-page-name
                   (string/lower-case page-reference))))
          form))

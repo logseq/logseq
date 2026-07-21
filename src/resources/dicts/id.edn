@@ -1715,7 +1715,6 @@
  :ui/image "gambar"
  :ui/label "Label"
  :ui/link "Tautan"
- :ui/load-more "Muat lebih banyak"
  :ui/loading "Memuat"
  :ui/login "Masuk"
  :ui/logout "Keluar"

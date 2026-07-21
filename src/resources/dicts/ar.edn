@@ -1715,7 +1715,6 @@
  :ui/image "صورة"
  :ui/label "تسمية"
  :ui/link "رابط"
- :ui/load-more "تحميل المزيد"
  :ui/loading "جارٍ التحميل"
  :ui/login "تسجيل الدخول"
  :ui/logout "تسجيل الخروج"
