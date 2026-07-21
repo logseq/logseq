@@ -36,30 +36,6 @@
     (map? block-ref) (or (:block/uuid block-ref) (:db/id block-ref))
     :else block-ref))
 
-(defn <get-comment-threads-for-block
-  [block-uuid]
-  (when-let [repo (and block-uuid (state/get-current-repo))]
-    (db-async/<get-comment-threads-for-block repo block-uuid)))
-
-(defn <get-comment-thread-block-uuids
-  ([block-uuids]
-   (<get-comment-thread-block-uuids (state/get-current-repo) block-uuids))
-  ([repo block-uuids]
-   (let [block-uuids (->> block-uuids
-                          (keep (fn [block-uuid]
-                                  (cond
-                                    (uuid? block-uuid)
-                                    block-uuid
-
-                                    (and (string? block-uuid) (util/uuid-string? block-uuid))
-                                    (uuid block-uuid)
-
-                                    :else
-                                    nil)))
-                          vec)]
-     (when (and repo (seq block-uuids))
-       (db-async/<get-comment-thread-block-uuids repo block-uuids)))))
-
 (defn- <comments-area-block
   [comments-area]
   (if-let [repo (state/get-current-repo)]

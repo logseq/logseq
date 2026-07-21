@@ -2914,10 +2914,11 @@
 
 (defn- view-display-type
   [view-entity view-feature-type]
-  (or (:db/ident (:logseq.property.view/type view-entity))
+  (let [view-type (:logseq.property.view/type view-entity)]
+    (or (:db/ident view-type)
       (when (contains? #{:linked-references :unlinked-references} view-feature-type)
         :logseq.property.view/type.list)
-      :logseq.property.view/type.table))
+        :logseq.property.view/type.table)))
 
 (def ^:private default-view-sorting
   [{:id :block/updated-at :asc? false}])

@@ -1881,7 +1881,6 @@
  :ui/image "image"
  :ui/label "Label"
  :ui/link "Link"
- :ui/load-more "Load more"
  :ui/loading "Loading..."
  :ui/login "Login"
  :ui/logout "Logout"

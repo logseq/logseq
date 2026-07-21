@@ -1777,7 +1777,7 @@
   (let [source (source-for "src/main/frontend/handler/route.cljs")
         title-source (subs source
                            (string/index-of source "(defn built-in-page-title")
-                           (string/index-of source "(defn update-page-title-and-label!"))]
+                           (string/index-of source "(defn jump-to-anchor!"))]
     (is (not (string/includes? title-source "db/get-page"))
         "route title and label updates must not resolve pages through renderer DB.")
     (is (not (string/includes? title-source "db/entity"))
@@ -1807,12 +1807,10 @@
     (is (string/includes? source "db-async/<get-block")
         "new-property should resolve block refs through worker-backed block loading.")))
 
-(deftest comments-handler-thread-loading-uses-worker-blocks-test
+(deftest comments-handler-does-not-rehydrate-threads-through-renderer-db-test
   (let [source (source-for "src/main/frontend/handler/comments.cljs")]
     (is (not (string/includes? source "db/entity [:block/uuid (:block/uuid thread)]"))
-        "comment thread loading must not rehydrate worker query rows through renderer DB entities.")
-    (is (string/includes? source "db-async/<get-comment-threads-for-block repo")
-        "comment thread loading should use the dedicated worker comment API.")))
+        "comment thread loading must not rehydrate worker query rows through renderer DB entities.")))
 
 (deftest comments-handler-area-actions-use-passed-area-test
   (let [source (source-for "src/main/frontend/handler/comments.cljs")]
