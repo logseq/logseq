@@ -727,6 +727,7 @@
     (ui-handler/close-left-sidebar!)))
 
 (declare block-title)
+(declare tag-color-style)
 
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   "The inner div of page reference component
@@ -743,6 +744,7 @@
   (let [*mouse-down? (hooks/use-memo #(atom false) [])
         [mouse-down?] (hooks/use-atom *mouse-down?)
         tag? (:tag? config)
+        show-tags-in-tag-color? (true? (:ui/show-tags-in-tag-color? (state/use-sub-config)))
         recycled? (ldb/recycled? page-entity)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
@@ -759,6 +761,9 @@
                 (:property? config) (str " page-property-key block-property")
                 recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
+       :style (or (:link-style config)
+                  (when (and tag? show-tags-in-tag-color?)
+                    (tag-color-style page-entity)))
        :data-ref page-name
        :title (when recycled? (t :ui/deleted))
        :draggable true
@@ -837,6 +842,13 @@
 
           :else
           (block-title (assoc config :page-ref? true) page-entity {})))]]))
+
+(defn tag-color-style
+  [tag]
+  (when-let [color (some-> (:logseq.property/icon tag) :color)]
+    (when-not (string/blank? color)
+      {:color color
+       :opacity 0.95})))
 
 (hsx/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
@@ -2426,7 +2438,8 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)})
+      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)
+       :style (:title-style config)})
 
      ;; children
      (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
@@ -2748,7 +2761,10 @@
         *hover-container? (hooks/use-memo #(atom false) [])
         [hover?] (hooks/use-atom *hover?)
         [_hover-container?] (hooks/use-atom *hover-container?)
-        private-tag? (ldb/private-tags (:db/ident tag))]
+        private-tag? (ldb/private-tags (:db/ident tag))
+        show-tags-in-tag-color? (true? (:ui/show-tags-in-tag-color? (state/use-sub-config)))
+        link-style (when show-tags-in-tag-color?
+                     (tag-color-style tag))]
     [:div.block-tag
      {:key (str "tag-" (:db/id tag))
       :class (str (when private-tag? "private-tag ")
@@ -2759,7 +2775,8 @@
      (if (util/mobile?)
        (page-cp (assoc config
                        :disable-preview? true
-                       :tag? true)
+                       :tag? true
+                       :link-style link-style)
                 tag)
        [:div.flex.items-center
         {:on-mouse-over #(reset! *hover? true)
@@ -2798,10 +2815,12 @@
               (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
            (ui/icon "x" {:size 13})]
           [:a.hash-symbol.select-none.flex
+           {:style link-style}
            "#"])
         (page-cp (assoc config
                         :disable-preview? true
                         :tag? true
+                        :link-style link-style
                         :hide-tag-symbol? true)
                  tag)])]))
 
@@ -2809,7 +2828,8 @@
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
-    (let [hidden-internal-tags (cond-> ldb/internal-tags
+    (let [show-tags-in-tag-color? (true? (:ui/show-tags-in-tag-color? (state/use-sub-config)))
+          hidden-internal-tags (cond-> ldb/internal-tags
                                  (:show-tag-and-property-classes? config)
                                  (set/difference #{:logseq.class/Tag :logseq.class/Property}))
           block-tags (->>
@@ -2845,7 +2865,10 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
-                                                                      :disable-preview? true) tag)]))
+                                                                      :disable-preview? true
+                                                                      :link-style (when show-tags-in-tag-color?
+                                                                                    (tag-color-style tag)))
+                                                               tag)]))
                                                  popup-opts))}
            (for [tag (take 2 block-tags)]
              [:div.block-tag.pl-2
@@ -2853,6 +2876,8 @@
               (page-cp (assoc config
                               :tag? true
                               :disable-preview? true
+                              :link-style (when show-tags-in-tag-color?
+                                            (tag-color-style tag))
                               :disable-click? true) tag)])
           [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
@@ -4753,6 +4778,9 @@
 (hsx/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
+        reactive-block (when (and (:page-title? config) (:db/id block*))
+                         (db/sub-block (:db/id block*)))
+        block (or reactive-block block)
         id (or (:db/id block*) (:block/uuid block*))
         temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
                                                              (:container-id config))

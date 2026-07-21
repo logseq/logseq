@@ -20,6 +20,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
@@ -37,7 +38,7 @@
         (dissoc default-home :page)))))
 
 (hsx/defc page-title-content
-  [page-id display-title tooltip-title untitled? left-sidebar-resized-at]
+  [page-id display-title tooltip-title untitled? left-sidebar-resized-at title-style]
   (let [*title-ref (hooks/use-ref nil)
         [truncated? set-truncated?!] (hooks/use-state false)
         sync-truncated! (fn []
@@ -46,7 +47,8 @@
                                                 (+ (.-clientWidth el) 1)))
                             (set-truncated?! false)))
         title-el [:span.page-title {:ref *title-ref
-                                    :class (when untitled? "opacity-50")}
+                                    :class (when untitled? "opacity-50")
+                                    :style title-style}
                   display-title]]
     (hooks/use-effect!
      (fn []
@@ -72,10 +74,14 @@
   [page recent?]
   (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)
         id (:db/id page)
-        page (db/sub-block id)]
+        page (db/sub-block id)
+        show-tags-in-tag-color? (state/show-tags-in-tag-color?)]
     (when id
       (let [icon (icon/get-node-icon-cp page {:size 16})
             title (:block/title page)
+            tag-page? (and (ldb/class? page) (not (ldb/property? page)))
+            title-style (when (and show-tags-in-tag-color? tag-page?)
+                          (block/tag-color-style page))
             untitled? (db-model/untitled-page? title)
             display-title (cond
                             (not (db/page? page))
@@ -122,7 +128,7 @@
                                                                   :class "w-60"}})
                                (util/stop e))})
          [:span.page-icon {:key "page-icon"} icon]
-         (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at)
+         (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at title-style)
          (shui/button
            {:key "more actions"
             :size :sm

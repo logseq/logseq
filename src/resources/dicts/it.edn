@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Quando abilitata, incollare un'immagine da internet scaricherà e inserirà l'immagine. Quando disabilitata, incollerà il link all'immagine."
  :settings.editor/show-brackets "Mostra parentesi"
  :settings.editor/show-full-blocks "Mostra tutte le righe del riferimento ad un blocco"
+ :settings.editor/show-tags-in-tag-color "Mostra i tag nel colore del tag"
  :settings.editor/spell-checker "Correttore ortografico"
  :settings.editor/wide-mode "Modalità ampia"
 

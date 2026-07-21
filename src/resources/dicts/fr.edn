@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Lorsqu'elle est activée, coller une image depuis Internet la téléchargera et l'insérera. Sinon, seul son lien sera collé."
  :settings.editor/show-brackets "Afficher les parenthèses, crochets et accolades"
  :settings.editor/show-full-blocks "Afficher toutes les lignes d'une référence de bloc"
+ :settings.editor/show-tags-in-tag-color "Afficher les tags dans leur couleur"
  :settings.editor/spell-checker "Vérification orthographique"
  :settings.editor/wide-mode "Mode large"
 

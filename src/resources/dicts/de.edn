@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Wenn aktiviert, werden eingefügte Bilder aus dem Internet heruntergeladen und in assets/ gespeichert. Wenn deaktiviert, wird ein Weblink zum Bild eingefügt."
  :settings.editor/show-brackets "Klammern anzeigen"
  :settings.editor/show-full-blocks "Alle Zeilen einer Blockreferenz anzeigen"
+ :settings.editor/show-tags-in-tag-color "Tags in Tag-Farbe anzeigen"
  :settings.editor/spell-checker "Rechtschreibprüfung"
  :settings.editor/wide-mode "Breitbildmodus"
 

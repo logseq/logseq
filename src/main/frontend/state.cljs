@@ -733,6 +733,10 @@ should be done through this fn in order to get global config and config defaults
   []
   (not (false? (:ui/show-brackets? (get-config)))))
 
+(defn show-tags-in-tag-color?
+  []
+  (true? (:ui/show-tags-in-tag-color? (get-config))))
+
 (defn use-sub-default-home-page
   []
   (get-in (use-sub-config) [:default-home :page] ""))

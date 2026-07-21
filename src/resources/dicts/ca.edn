@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Consell d'enganxat de fitxers"
  :settings.editor/show-brackets "Mostrar claudàtors"
  :settings.editor/show-full-blocks "Mostrar totes les línies de una referència a bloc"
+ :settings.editor/show-tags-in-tag-color "Mostra les etiquetes amb el color de l'etiqueta"
  :settings.editor/spell-checker "Corrector ortogràfic"
  :settings.editor/wide-mode "Mode ample"
 

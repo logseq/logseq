@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Ketika diaktifkan, menempelkan gambar dari internet akan mengunduh dan menyisipkan gambar. Ketika dinonaktifkan, akan menempelkan tautan ke gambar."
  :settings.editor/show-brackets "Tampilkan tanda kurung"
  :settings.editor/show-full-blocks "Tampilkan semua baris referensi blok"
+ :settings.editor/show-tags-in-tag-color "Tampilkan tag dengan warna tag"
  :settings.editor/spell-checker "Pemeriksa ejaan"
  :settings.editor/wide-mode "Mode lebar"
 
