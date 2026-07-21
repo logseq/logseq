@@ -19,6 +19,42 @@
 
 (documentation https://docs.logseq.com)
 
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-core)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-melange)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-ppx)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-transit.git#main")
+ (package
+  (name melange-transit-core)
+  (version 0.1.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-transit.git#main")
+ (package
+  (name melange-transit-melange)
+  (version 0.1.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/rrbvec.git#main")
+ (package
+  (name rrbvec)
+  (version dev)))
+
 (package
  (name melange-deps)
  (allow_empty)
@@ -29,6 +65,7 @@
   ocaml
   melange
   (melange-edn-melange (= 0.5.0))
+  (melange-edn-ppx (= 0.5.0))
   (melange-transit-melange (= 0.1.0))
   (melange-fest (= 0.2.0))
   (rrbvec (= dev)))

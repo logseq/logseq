@@ -2,9 +2,9 @@
  (target node)
  (modules runtime_test)
  (module_systems commonjs)
- (libraries melange_runtime melange-fest melange.node)
+ (libraries melange_runtime melange-edn-melange melange-fest melange.node)
  (preprocess
-  (pps melange.ppx)))
+  (pps melange.ppx melange-edn-ppx)))
 
 (rule
  (alias runtest)

@@ -1,6 +1,6 @@
 type transit_mode = Normal | Verbose
 
-module Edn = Melange_edn_melange
+module Edn = Melange_edn
 module Transit = Transit_melange.Transit.Json
 module Vector = Persistent_vector
 
@@ -160,7 +160,7 @@ and edn_entries entries =
   Ok (Array.to_list (Vector.to_array entries))
 
 and edn_of_value = function
-  | Value.Nil -> Ok (Edn.any Edn.nil)
+  | Value.Nil -> Ok [%edn "nil"]
   | Bool value -> Ok (Edn.any (Edn.bool value))
   | String value -> Ok (Edn.any (Edn.string value))
   | Char value -> Ok (Edn.any (Edn.char value))

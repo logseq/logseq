@@ -15,6 +15,7 @@ depends: [
   "ocaml"
   "melange"
   "melange-edn-melange" {= "0.5.0"}
+  "melange-edn-ppx" {= "0.5.0"}
   "melange-transit-melange" {= "0.1.0"}
   "melange-fest" {= "0.2.0"}
   "rrbvec" {= "dev"}
@@ -36,10 +37,3 @@ build: [
 ]
 dev-repo: "git+https://github.com/logseq/logseq.git"
 x-maintenance-intent: ["(latest)"]
-pin-depends: [
-  ["melange-edn-core.0.5.0" "git+https://github.com/RCmerci/melange-edn.git#a1410a31b57b5e42f152357d0303635685501bc6"]
-  ["melange-edn-melange.0.5.0" "git+https://github.com/RCmerci/melange-edn.git#a1410a31b57b5e42f152357d0303635685501bc6"]
-  ["melange-transit-core.0.1.0" "git+https://github.com/RCmerci/melange-transit.git#99fb9f1c5bebf4ba5fa6d2378cfc97dbf14b5378"]
-  ["melange-transit-melange.0.1.0" "git+https://github.com/RCmerci/melange-transit.git#99fb9f1c5bebf4ba5fa6d2378cfc97dbf14b5378"]
-  ["rrbvec.dev" "git+https://github.com/RCmerci/rrbvec.git#dd5ce904f91d53235b5136f7a771f3f074c3971d"]
-]

@@ -13,4 +13,4 @@
  (modules Keyword Uuid Date_time Persistent_vector Value Codec)
  (libraries melange-edn-melange melange-transit-melange rrbvec)
  (preprocess
-  (pps melange.ppx)))
+  (pps melange.ppx melange-edn-ppx)))
