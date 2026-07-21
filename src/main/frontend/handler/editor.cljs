@@ -3636,7 +3636,8 @@
 (defn- block-has-children?
   [block node]
   (or (worker-has-children? block)
-      (= "true" (node-attr node "haschild"))))
+      (= "true" (node-attr node "haschild"))
+      (some? (some-> node (.querySelector "[data-has-children='true']")))))
 
 (defn- block-node-for-id
   [block-id]

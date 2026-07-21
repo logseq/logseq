@@ -104,6 +104,7 @@
           processed-tx-report (:tx-report render-result)
           delta (when render-result
                   (build-render-delta repo processed-tx-report render-result))
+          delta-at (perf-time-ms)
           payload (when delta
                     {:repo repo
                      :tx-meta (renderer-tx-meta tx-meta)
@@ -114,19 +115,22 @@
         {:tx-report processed-tx-report
          :started-at started-at
          :pipeline-at pipeline-at
+         :delta-at delta-at
          :payload payload}))))
 
 (defn- broadcast-main-thread-sync!
-  [{:keys [tx-meta]} {:keys [tx-report started-at pipeline-at payload]}]
+  [{:keys [tx-meta]} {:keys [tx-report started-at pipeline-at delta-at payload]}]
   (when payload
-    (shared-service/broadcast-to-clients! :sync-db-changes payload)
-    (log-outliner-op-perf!
-     {:stage :sync-db-to-main-thread
-      :perf-id (:ui/perf-id tx-meta)
-      :outliner-op (:outliner-op tx-meta)
-      :tx-count (count (:tx-data tx-report))
-      :pipeline-ms (- pipeline-at started-at)
-      :broadcast-ms (- (perf-time-ms) pipeline-at)})))
+    (let [broadcast-at (perf-time-ms)]
+      (shared-service/broadcast-to-clients! :sync-db-changes payload)
+      (log-outliner-op-perf!
+       {:stage :sync-db-to-main-thread
+        :perf-id (:ui/perf-id tx-meta)
+        :outliner-op (:outliner-op tx-meta)
+        :tx-count (count (:tx-data tx-report))
+        :pipeline-ms (- pipeline-at started-at)
+        :delta-ms (- delta-at pipeline-at)
+        :broadcast-ms (- (perf-time-ms) broadcast-at)}))))
 
 (comment
   (defmethod listen-db-changes :debug-listen-db-changes

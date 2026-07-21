@@ -68,6 +68,28 @@
       (is (not (string/includes? list-source ":block/uuid"))
           "The list receives UUIDs instead of extracting UUIDs from entity maps."))))
 
+(deftest loaded-block-row-rerenders-only-for-a-new-block-revision-test
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        comparator-source (form-source source "(defn- same-block-revision?")
+        row-source (form-source source "(defn- render-loaded-block-row")
+        container-source (form-source source "(hsx/defc block-container-inner")]
+    (is (string/includes? comparator-source ":block/uuid"))
+    (is (string/includes? comparator-source ":block/tx-id"))
+    (is (not (string/includes? comparator-source "config")))
+    (is (string/includes? row-source "memoized-loaded-block-row"))
+    (is (not (string/includes? container-source
+                               "memoized-block-container-inner-aux")))
+    (is (= 1 (occurrence-count source "react-core/memo"))
+        "Block rendering has one revision memo boundary.")))
+
+(deftest cyclic-linked-page-keeps-a-real-virtuoso-row-test
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        row-source (form-source source "(hsx/defc linked-block-row")]
+    (is (string/includes? row-source "loop-linked?"))
+    (is (string/includes? row-source "render-loaded-block-row"))
+    (is (not (string/includes? row-source
+                               "(when-not (and loop-linked? (:block/name linked-block))")))))
+
 (deftest nested-list-api-cannot-create-a-virtuoso-test
   (let [source (source-for "src/main/frontend/components/block.cljs")
         list-source (form-source source "(hsx/defc plain-block-list")]
@@ -92,6 +114,9 @@
                             ":compute-item-key (fn [_idx block-uuid]"))
       (is (string/includes? root-source
                             ":item-content (fn [idx block-uuid]"))
+      (is (string/includes? root-source ":range-changed"))
+      (is (string/includes? root-source
+                            "(select-block-under-pointer! selection-block-ids direction)"))
       (is (not (string/includes? root-source ":total-count"))
           "A separate row count cannot race the UUID data.")
       (testing "the root API never accepts or reconstructs entity rows"
@@ -137,14 +162,34 @@
 
 (deftest recursive-block-children-keep-the-left-border-dom
   (let [source (source-for "src/main/frontend/components/block.cljs")
-        children-source (form-source source "(hsx/defc block-children\n")]
+        children-source (form-source source "(hsx/defc block-children\n")
+        subscribed-source (form-source source "(hsx/defc subscribed-block-children")
+        container-source
+        (form-source
+         source
+         "(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux")]
     (is (some? children-source))
     (when children-source
       (is (string/includes? children-source
                             ":div.block-children-container.flex"))
       (is (string/includes? children-source
                             ":div.block-children-left-border"))
-      (is (string/includes? children-source ":div.block-children.w-full")))))
+      (is (string/includes? children-source ":div.block-children.w-full")))
+    (is (string/includes? subscribed-source "db-hooks/use-children"))
+    (is (string/includes? subscribed-source "block-children"))
+    (is (string/includes? container-source "subscribed-block-children"))))
+
+(deftest block-control-owns-its-membership-subscription
+  (let [source (source-for "src/main/frontend/components/block.cljs")
+        control-source (form-source source "(hsx/defc subscribed-block-control")
+        container-source
+        (form-source
+         source
+         "(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux")]
+    (is (string/includes? control-source "db-hooks/use-children"))
+    (is (string/includes? control-source ":block.temp/has-children?"))
+    (is (string/includes? control-source "block-control"))
+    (is (string/includes? container-source "subscribed-block-control"))))
 
 (deftest normal-block-collapse-uses-reactive-ui-state
   (let [source (source-for "src/main/frontend/components/block.cljs")

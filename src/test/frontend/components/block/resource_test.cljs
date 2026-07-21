@@ -55,16 +55,15 @@
     (is (not (string/includes? source marker))
         (str "Unexpected local graph read: " marker))))
 
-(deftest positioned-properties-subscribe-by-block-uuid-and-position-test
+(deftest positioned-properties-render-from-the-canonical-block-revision-test
   (let [source (block-source)
         positioned-source (form-source source "(hsx/defc block-positioned-properties")]
     (is (some? positioned-source))
     (when positioned-source
-      (is (string/includes? positioned-source ":block-positioned-properties"))
-      (is (string/includes? positioned-source ":block/uuid"))
+      (is (string/includes? positioned-source
+                            ":block.temp/positioned-properties"))
       (is (string/includes? positioned-source "position"))
-      (is (= #{"db-hooks/use-resource"} (hook-names positioned-source)))
-      (assert-no-local-derived-read! positioned-source))))
+      (is (empty? (hook-names positioned-source))))))
 
 (deftest positioned-property-rows-hydrate-only-their-property-uuid-test
   (let [source (block-source)
@@ -80,7 +79,8 @@
 
 (deftest reactions-subscribe-to-a-final-summary-resource-test
   (let [source (block-source)
-        reactions-source (form-source source "(hsx/defc block-reactions")]
+        reactions-source (form-source source "(hsx/defc loaded-block-reactions")
+        wrapper-source (form-source source "(defn block-reactions")]
     (is (some? reactions-source))
     (when reactions-source
       (is (string/includes? reactions-source ":block-reactions"))
@@ -89,17 +89,18 @@
       (is (= #{"db-hooks/use-resource"} (hook-names reactions-source)))
       (is (not (string/includes? reactions-source "reaction/summarize"))
           "The worker resource returns the final render summary.")
-      (assert-no-local-derived-read! reactions-source))))
+      (assert-no-local-derived-read! reactions-source))
+    (is (some? wrapper-source))
+    (is (string/includes? wrapper-source "(uuid? (:block/uuid block))"))
+    (is (not (string/includes? wrapper-source "db-hooks/use-resource")))))
 
-(deftest reference-count-subscribes-by-block-uuid-test
+(deftest reference-count-renders-from-the-canonical-block-revision-test
   (let [source (block-source)
         refs-source (form-source source "(hsx/defc block-refs-count")]
     (is (some? refs-source))
     (when refs-source
-      (is (string/includes? refs-source ":block-ref-count"))
-      (is (string/includes? refs-source ":block/uuid"))
-      (is (= #{"db-hooks/use-resource"} (hook-names refs-source)))
-      (assert-no-local-derived-read! refs-source))))
+      (is (string/includes? refs-source ":block.temp/refs-count"))
+      (is (empty? (hook-names refs-source))))))
 
 (deftest comment-thread-button-subscribes-to-thread-uuids-test
   (let [source (block-source)

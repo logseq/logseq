@@ -155,6 +155,19 @@
   (is (= :logseq.property.view/type.table
          (#'views/view-display-type {} :all-pages))))
 
+(deftest built-in-many-properties-use-datascript-cardinality
+  (is (= :db.cardinality/many
+         (:db/cardinality (#'views/built-in-property :block/tags)))))
+
+(deftest journal-virtualized-items-keep-a-nonzero-loading-shell
+  (let [source (source-for "src/main/frontend/components/journal.cljs")
+        journal-item-source (form-source source "(hsx/defc journal-item")]
+    (is (some? journal-item-source))
+    (is (string/includes? journal-item-source
+                          "[:div.journal-item.content.relative"))
+    (is (string/includes? journal-item-source
+                          ":min-height 1"))))
+
 (deftest view-type-button-uses-the-contextual-display-type
   (let [view {:db/id 1}
         all-pages-view (#'views/view-with-display-type
@@ -326,13 +339,37 @@
         (is (= [entity-uuid] @block-calls)
             "Entity-valued group metadata hydrates at its UUID boundary.")))))
 
+(deftest entity-group-items-keep-a-nonzero-shell-while-loading-test
+  (let [entity-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-block (constantly nil)
+                  util/mobile? (constantly true)
+                  views/view-cp (fn [& _] nil)]
+      (let [markup
+            (render-static
+             (views/group-item
+              {:block/uuid (random-uuid)}
+              {}
+              []
+              {:block/title "Page"}
+              {:kind :entity :uuid entity-uuid}
+              {}
+              {}
+              {:list-view? true
+               :gallery? false
+               :group-by-page? true
+               :readable-property-value :block/title}))]
+        (is (string/includes? markup "min-height:1px")
+            "A virtualized entity group must remain measurable until its page entity loads.")))))
+
 (deftest views-use-only-definition-and-data-resources-test
   (let [source (source-for "src/main/frontend/components/views.cljs")
         view-source (form-source source "(hsx/defc view\n")
+        missing-view-source (form-source source "(hsx/defc missing-view")
         selected-view-source (form-source source "(hsx/defc selected-view")
-        view-data-source (form-source source "(hsx/defc view-aux")
+        view-data-source (form-source source "(hsx/defc loaded-view-aux")
         row-source (form-source source "(hsx/defc lazy-item")]
     (is (some? view-source))
+    (is (some? missing-view-source))
     (is (some? selected-view-source))
     (is (some? view-data-source))
     (is (some? row-source))
@@ -341,6 +378,8 @@
       (is (string/includes? view-source "view-parent-uuid"))
       (is (= #{"db-hooks/use-resource"}
              (hook-names view-source)))
+      (is (string/includes? view-source
+                            "(missing-view view-parent-uuid view-feature-type)"))
       (doseq [forbidden ["hooks/use-state"
                          "hooks/use-effect"
                          "rfx/use-entity-tx-id"
@@ -348,6 +387,11 @@
                          "create-view!"]]
         (is (not (string/includes? view-source forbidden))
             (str "View definitions retain an imperative owner: " forbidden))))
+    (when missing-view-source
+      (is (= #{"db-hooks/use-block"}
+             (hook-names missing-view-source)))
+      (is (string/includes? missing-view-source "hooks/use-effect!"))
+      (is (string/includes? missing-view-source "create-view!")))
     (when selected-view-source
       (is (= #{"db-hooks/use-block"}
              (hook-names selected-view-source)))
@@ -383,6 +427,16 @@
             (str "A UUID row retains local hydration state: " forbidden))))
     (is (not (string/includes? source "(defn sub-view-data-changes")))
     (is (not (string/includes? source "[frontend.db.react :as react]")))))
+
+(deftest deferred-view-does-not-mount-its-data-resource-while-collapsed-test
+  (let [source (source-for "src/main/frontend/components/views.cljs")
+        deferred-source (form-source source "(hsx/defc view-aux")
+        placeholder-source (form-source source "(hsx/defc deferred-view-placeholder")]
+    (is (string/includes? deferred-source "defer-resource?"))
+    (is (string/includes? deferred-source "loaded-view-aux"))
+    (is (not (string/includes? deferred-source "db-hooks/use-resource")))
+    (is (string/includes? placeholder-source ":default-collapsed? true"))
+    (is (string/includes? placeholder-source "activate!"))))
 
 (deftest persisted-table-columns-derive-from-the-subscribed-view-test
   (let [source (source-for "src/main/frontend/components/views.cljs")
