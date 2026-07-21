@@ -1590,8 +1590,21 @@ html.is-mac {
     @apply h-6;
   }
 
+  .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-truncate {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .bottom-properties-row[data-expanded="false"] .bottom-properties-pills-strip:not([data-measuring="true"]) .bottom-property-pill.bottom-property-pill-after-truncate {
+    display: none;
+  }
+
   .bottom-properties-row[data-expanded="true"] .bottom-property-pill {
-    @apply h-auto max-w-full items-start;
+    @apply h-auto max-w-full items-start rounded-lg;
+  }
+
+  .bottom-properties-row[data-expanded="true"] .bottom-property-pill::after {
+    border-radius: 8px;
   }
 
   .bottom-properties-row[data-expanded="true"] .bottom-property-content {

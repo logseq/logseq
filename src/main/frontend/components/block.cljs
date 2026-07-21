@@ -13,6 +13,7 @@
             [frontend.components.avatar :as avatar]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.asset :as block-asset]
+            [frontend.components.block.bottom-properties-layout :as bottom-properties-layout]
             [frontend.components.block.comments :as block-comments]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.drop :as block-drop]
@@ -2860,6 +2861,8 @@
 (defn- bottom-row-focus-elements
   [^js row]
   (->> (array-seq (.querySelectorAll row "[data-bottom-row-nav='true']"))
+       (filter (fn [^js el]
+                 (pos? (.-length (.getClientRects el)))))
        vec))
 
 (defn- focus-bottom-row-item!
@@ -2963,7 +2966,7 @@
       nil)))
 
 (defn- bottom-property-pill-cp
-  [block property opts]
+  [block property opts bottom-property-index truncate-index]
   (let [many-node? (and (= :node (:logseq.property/type property))
                         (= :db.cardinality/many (:db/cardinality property)))
         property-value (get block (:db/ident property))
@@ -2971,7 +2974,11 @@
         has-value? (and (some? property-value) (not empty-placeholder?))]
     [:div.bottom-property-pill.bottom-property-pill-focusable
      {:key (str (:db/id block) "-" (:db/id property))
-      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :class (util/classnames [{:bottom-property-pill-wrap many-node?
+                                :bottom-property-pill-truncate (= bottom-property-index truncate-index)
+                                :bottom-property-pill-after-truncate (and (some? truncate-index)
+                                                                          (> bottom-property-index truncate-index))}])
+      :data-bottom-property-pill true
       :data-bottom-pill-focusable true
       :data-bottom-row-nav true
       :tab-index -1
@@ -2996,17 +3003,54 @@
        (ui/icon "edit" {:size 15})])]]))
 
 (defn- bottom-property-pill-items
-  [block properties opts]
-  (mapv (fn [property]
-          (bottom-property-pill-cp block property opts))
-        properties))
+  [block properties opts truncate-index]
+  (->> properties
+       (map-indexed (fn [idx property]
+                      (bottom-property-pill-cp block property opts idx truncate-index)))
+       vec))
 
 (defn- measure-bottom-pills-overflow!
-  [^js el *overflow?]
+  [^js el *overflow-state expanded?]
   (when el
-    (let [overflow? (> (.-scrollWidth el) (inc (.-clientWidth el)))]
-      (when (not= overflow? @*overflow?)
-        (reset! *overflow? overflow?)))))
+    (.setAttribute el "data-measuring" "true")
+    (let [state
+          (try
+            (let [max-scroll-width
+                  (fn [elements]
+                    (reduce (fn [acc ^js element]
+                              (max acc (.-scrollWidth element)))
+                            0
+                            (array-seq elements)))
+                  pill-natural-width
+                  (fn [^js pill]
+                    (let [^js content (.querySelector pill ".bottom-property-content")
+                          ^js pill-rect (.getBoundingClientRect pill)
+                          content-rect (when content (.getBoundingClientRect content))
+                          content-width (if content-rect (.-width content-rect) 0)
+                          ;; Nested node refs can hide their natural width behind local overflow styles.
+                          content-scroll (if content
+                                           (max (.-scrollWidth content)
+                                                (max-scroll-width
+                                                 (.querySelectorAll content ".page-ref > span, .block-title-wrap, .multi-values.jtrigger")))
+                                           0)
+                          pill-chrome (max 0 (- (.-width pill-rect) content-width))]
+                      (+ pill-chrome content-scroll)))
+                  pills (array-seq (.querySelectorAll el "[data-bottom-property-pill='true']"))
+                  gap' (js/parseFloat (.-columnGap (js/getComputedStyle el)))
+                  gap (if (js/isNaN gap') 0 gap')
+                  available-width (.-clientWidth el)
+                  pill-widths (mapv (fn [^js pill]
+                                      (js/Math.ceil (pill-natural-width pill)))
+                                    pills)
+                  natural-truncate-index (bottom-properties-layout/first-overflow-index pill-widths gap available-width)
+                  overflow? (or (some? natural-truncate-index)
+                                (> (.-scrollWidth el) (inc available-width)))]
+              {:overflow? overflow?
+               :truncate-index (when-not expanded? natural-truncate-index)})
+            (finally
+              (.removeAttribute el "data-measuring")))]
+      (when (not= state @*overflow-state)
+        (reset! *overflow-state state)))))
 
 (hsx/defc bottom-properties-expand-button
   [expanded? set-expanded!]
@@ -3031,24 +3075,26 @@
 (defn- block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
-        [overflow?] (hooks/use-atom *overflow?)
+        *overflow-state (hooks/use-memo #(atom {:overflow? false
+                                                :truncate-index nil})
+                                        [(:block/uuid block) (count properties)])
+        [{:keys [overflow? truncate-index]}] (hooks/use-atom *overflow-state)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
        (let [^js el (.-current *pills-el)
-             measure! #(measure-bottom-pills-overflow! el *overflow?)
+             measure! #(measure-bottom-pills-overflow! el *overflow-state expanded?)
              observer (when (and el (exists? js/ResizeObserver))
                         (js/ResizeObserver. measure!))]
          (measure!)
-         (when observer
-           (.observe observer el))
-         (.addEventListener js/window "resize" measure!)
+         (if observer
+           (.observe observer el)
+           (.addEventListener js/window "resize" measure!))
          (fn []
-           (when observer
-             (.disconnect observer))
-           (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+           (if observer
+             (.disconnect observer)
+             (.removeEventListener js/window "resize" measure!)))))
+     [(:block/uuid block) (:block/updated-at block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3065,7 +3111,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?) truncate-index)
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
