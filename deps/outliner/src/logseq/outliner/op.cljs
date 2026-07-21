@@ -210,16 +210,20 @@
              (catch :default e
                (js/console.error "Import EDN error: " e)
                {:error "An unexpected error occurred building the import. See the javascript console for details."}))
-        validation (when-not error
-                     (sqlite-export/validate-import-txs txs @conn))]
+        datom-import? (= :datoms (::sqlite-export/graph-format export-map))
+        validation (when (and (not error) datom-import?)
+                     (sqlite-export/validate-import-txs txs @conn))
+        tx-data (if datom-import?
+                  (:tx-data validation)
+                  (sqlite-export/import-tx-data txs))]
     ;; (cljs.pprint/pprint txs)
     (if (or error (:error validation))
       (reset! *result {:error (or error (:error validation))})
       (try
         ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
-        (ldb/transact! conn (:tx-data validation)
+        (ldb/transact! conn tx-data
                        (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
-                         (= :datoms (::sqlite-export/graph-format export-map))
+                         datom-import?
                          (assoc :initial-db? true)))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)

@@ -1565,14 +1565,18 @@
     (when-not conn
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
     (let [txs (sqlite-export/build-import export-edn @conn {})
-          validation (sqlite-export/validate-import-txs txs @conn)]
-      (if-let [error (:error validation)]
+          datom-import? (= :datoms (::sqlite-export/graph-format export-edn))
+          validation (when (and (not (:error txs)) datom-import?)
+                       (sqlite-export/validate-import-txs txs @conn))]
+      (if-let [error (or (:error txs) (:error validation))]
         {:error error}
-        (let [tx-data (:tx-data validation)
+        (let [tx-data (if datom-import?
+                        (:tx-data validation)
+                        (sqlite-export/import-tx-data txs))
               tx-meta (cond-> {::sqlite-export/imported-data? true}
                         ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
                         ;; to keep pipeline from reverting their import
-                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        datom-import?
                         (assoc :initial-db? true))]
           (ldb/transact! conn tx-data tx-meta)
           {:tx-count (count tx-data)})))))

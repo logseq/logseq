@@ -2150,3 +2150,39 @@
          (is (string? (:error result)))
          (is (= page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page)))
              "Invalid datom import should not replace the existing graph"))))))
+
+(deftest import-edn-structured-import-uses-normal-transaction-validation-test
+  (restoring-worker-state
+   (fn []
+     (let [dest-conn (sqlite-export/create-conn)
+           import-edn
+           {:properties
+            {:test.property/status
+             {:block/title "Status"
+              :logseq.property/type :default
+              :db/cardinality :db.cardinality/one
+              :build/closed-values [{:value "Open"}
+                                    {:value "Done"}]}}
+            :pages-and-blocks
+            [{:page {:block/title "Closed Value"
+                     :build/properties {:test.property/status "Pending"}}}]}]
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+       (try
+         (let [result (silence-stderr
+                       #((get-thread-api :thread-api/import-edn) test-repo import-edn))]
+           (is (nil? (:error result)))
+           (is (some? (ldb/get-page @dest-conn "Closed Value"))))
+         (finally
+           (ldb/register-transact-pipeline-fn! identity)))))))
+
+(deftest import-edn-structured-import-returns-build-error-test
+  (restoring-worker-state
+   (fn []
+     (let [dest-conn (sqlite-export/create-conn)
+           import-error "The imported property conflicts with the current graph"]
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (with-redefs [sqlite-export/build-import (fn [& _] {:error import-error})]
+         (is (= {:error import-error}
+                ((get-thread-api :thread-api/import-edn) test-repo
+                 {:pages-and-blocks []}))))))))

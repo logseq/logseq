@@ -194,6 +194,56 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest batch-import-edn-structured-import-ignores-unrelated-invalid-existing-entities-test
+  (let [conn (sqlite-export/create-conn)
+        invalid-existing-uuid (random-uuid)
+        import-edn {:pages-and-blocks
+                    [{:page {:build/tags #{:user.class/Company}
+                             :block/title "Apple"}
+                      :blocks [{:block/title ""}
+                               {:block/title ""}]}]
+                    :classes {:user.class/Company {:block/title "Company"}}
+                    ::sqlite-export/export-type :page}]
+    ;; An unrelated legacy entity must not make validation cost or outcome depend on the whole graph.
+    (d/transact! conn [{:block/uuid invalid-existing-uuid
+                        :block/title 42}])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (silence-stderr
+                    #(outliner-op/apply-ops!
+                      conn
+                      [[:batch-import-edn [import-edn {}]]]
+                      {}))]
+        (is (nil? (:error result)))
+        (is (some? (ldb/get-page @conn "Apple"))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest batch-import-edn-structured-import-uses-normal-transaction-validation-test
+  (let [conn (sqlite-export/create-conn)
+        import-edn
+        {:properties
+         {:test.property/status
+          {:block/title "Status"
+           :logseq.property/type :default
+           :db/cardinality :db.cardinality/one
+           :build/closed-values [{:value "Open"}
+                                 {:value "Done"}]}}
+         :pages-and-blocks
+         [{:page {:block/title "Closed Value"
+                  :build/properties {:test.property/status "Pending"}}}]}]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (silence-stderr
+                    #(outliner-op/apply-ops!
+                      conn
+                      [[:batch-import-edn [import-edn {}]]]
+                      {}))]
+        (is (nil? (:error result)))
+        (is (some? (ldb/get-page @conn "Closed Value"))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest permanent-delete-recycled-page-with-transact-pipeline-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
