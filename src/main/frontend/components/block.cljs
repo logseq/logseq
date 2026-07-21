@@ -2019,6 +2019,10 @@
                              ref-matched-children-ids
                              ;; Block children will not be rendered if the filters do not match them
                              (filter (fn [b] (ref-matched-children-ids (:db/id b))))
+
+                             (and (ldb/page? block) (not (:embed? config)) (not library?))
+                             (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b))))))
+
                              library?
                              (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b))))))))))
         children-count (count children)
@@ -2085,7 +2089,9 @@
                         true
                         (assoc :block-children? true)
                         (integer? (:block-level config))
-                        (update :block-level inc))]
+                        (update :block-level inc)
+                        (and (ldb/page? block) (not (:embed? config)) (not library?))
+                        (assoc :library? true))]
           (when render-children?
             (block-list config' children')))]])))
 
