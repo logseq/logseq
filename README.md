@@ -119,6 +119,9 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
 
    # For user-specific installation (no root required)
    curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- --user
+
+   # Install the latest nightly version
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- nightly --user
    ```
 
 ## 📚 Learn more
