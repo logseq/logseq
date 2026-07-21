@@ -50,11 +50,13 @@
     (catch :default _e
       nil)))
 
+(def ^:private default-video-width 560)
+(def ^:private default-video-height 315)
+
 (hsx/defc youtube-video
-  [id {:keys [width height start] :as _opts}]
-  (let [width  (or width (min (- (util/get-width) 96)
-                              560))
-        height (or height (int (* width (/ 315 560))))
+  [id {:keys [width height start bare-frame?] :as _opts}]
+  (let [width (or width default-video-width)
+        height (or height default-video-height)
         origin (.. js/window -location -origin)
         origin-valid? (and (string? origin)
                            (re-matches #"^https?://.+" origin))
@@ -79,17 +81,21 @@
            (<! (load-youtube-api))
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
-    [:iframe.aspect-video
-     {:id                (str "youtube-player-" id)
-      :ref               *iframe-ref
-      :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      :referrer-policy   "strict-origin-when-cross-origin"
-      :referer           "https://logseq.com"
-      :frame-border      "0"
-      :src               url
-      :height            height
-      :width             width}]))
+    (let [frame [:div.video-embed-frame
+                 {:style {:width width
+                          :height height}}
+                 [:iframe
+                  {:id                (str "youtube-player-" id)
+                   :ref               *iframe-ref
+                   :allow-full-screen "allowfullscreen"
+                   :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                   :referrer-policy   "strict-origin-when-cross-origin"
+                   :referer           "https://logseq.com"
+                   :frame-border      "0"
+                   :src               url}]]]
+      (if bare-frame?
+        frame
+        [:div.video-embed-shell frame]))))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
@@ -138,7 +144,7 @@
 
 (hsx/defc timestamp
   [seconds]
-  [:a.svg-small.youtube-timestamp
+  [:a.youtube-timestamp
    {:on-click (fn [e]
                 (util/stop e)
                 (if (use-youtube-wrapper?)
