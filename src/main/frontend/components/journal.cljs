@@ -8,17 +8,18 @@
 (hsx/defc journal-item
   [journal-uuid last?]
   (let [bundle (db-hooks/use-resource [:journal-bundle journal-uuid])]
-    (when bundle
-      [:div.journal-item.content.relative
-       (cond-> {}
-         last? (assoc :class "journal-last-item"))
-       (page/journal-page journal-uuid {:journals? true})])))
+    [:div.journal-item.content.relative
+     (cond-> {}
+       last? (assoc :class "journal-last-item")
+       (nil? bundle) (assoc :style {:min-height 1}))
+     (when bundle
+       (page/journal-page journal-uuid {:journals? true}))]))
 
 (hsx/defc all-journals
   []
   (let [journal-uuids (db-hooks/use-resource [:journals])]
     (when (seq journal-uuids)
-      (if (util/rtc-test?)
+      (if (util/rtc-test-without-virtualization?)
         [:div#journals
          (map-indexed
           (fn [idx journal-uuid]

@@ -346,8 +346,8 @@
                                   {:blocks {parent-uuid parent-after}
                                    :children
                                    {parent-uuid
-                                    {:base-tx-id 10
-                                     :tx-id 11
+                                    {:base-rev 1
+                                     :rev 2
                                      :remove [[child-a "a"]]
                                      :upsert [[child-c "b"]]}}}))]
                   (is (= {:status :ready :value [child-c child-b]}
@@ -360,15 +360,15 @@
                       "Initial hydration and the matching patch each notify once.")
                   (reset! children-notifications 0)
                   (subs/apply-delta!
-                   (delta 3
+                   (delta 2
                           {:children
                            {parent-uuid
-                            {:base-tx-id 10
-                             :tx-id 11
+                            {:base-rev 1
+                             :rev 2
                              :remove [[child-a "a"]]
                              :upsert [[child-c "b"]]}}}))
                   (is (zero? @children-notifications)
-                      "An equal child transaction ID is a duplicate no-op.")
+                      "An equal renderer revision is a duplicate no-op.")
                   (is (= [[test-graph-id parent-uuid]] @loader-calls)
                       "A matching incremental patch does not reload the parent membership.")
                   (unsubscribe-block)
@@ -392,7 +392,7 @@
                               (cond
                                 (= parent-uuid requested-parent)
                                 (if (= 1 (count (filter #(= parent-uuid (second %))
-                                                       @loader-calls)))
+                                                        @loader-calls)))
                                   parent-initial-request
                                   (p/resolved {:basis-rev 2
                                                :parent-tx-id 11
@@ -419,8 +419,8 @@
                                     (block parent-uuid 11 "parent changed")}
                                    :children
                                    {parent-uuid
-                                    {:base-tx-id 10
-                                     :tx-id 11
+                                    {:base-rev 1
+                                     :rev 2
                                      :remove [[old-child-uuid "a"]]
                                      :upsert [[new-child-uuid "b"]]}}}))
                         _ (is (= {:status :loading}
@@ -478,8 +478,8 @@
                                             (block parent-uuid 11 "parent")}
                                    :children
                                    {parent-uuid
-                                    {:base-tx-id 9
-                                     :tx-id 11
+                                    {:base-rev 0
+                                     :rev 2
                                      :remove [[child-a "a"]]
                                      :upsert [[child-b "b"]]}}}))
                         _ (p/delay 0)
@@ -490,8 +490,8 @@
                            (delta 3
                                   {:children
                                    {parent-uuid
-                                    {:base-tx-id 9
-                                     :tx-id 11
+                                    {:base-rev 1
+                                     :rev 3
                                      :remove [[child-a "a"]]
                                      :upsert [[child-b "b"]]}}}))
                         _ (p/delay 0)
@@ -506,25 +506,19 @@
                          (subs/children-snapshot parent-uuid)))
                   (unsubscribe))))))))
 
-(deftest parent-revision-without-child-patch-reloads-mounted-children-once-test
+(deftest parent-content-revision-without-child-patch-keeps-membership-test
   (async done
          (let [parent-uuid (random-uuid)
                child-before (random-uuid)
-               child-after (random-uuid)
-               reload-request (p/deferred)
                loader-calls (atom [])]
            (finish-async!
             done
             (p/with-redefs [subs/<load-children
                             (fn [graph-id requested-parent]
                               (swap! loader-calls conj [graph-id requested-parent])
-                              (case (count @loader-calls)
-                                1 (p/resolved {:basis-rev 1
-                                               :parent-tx-id 10
-                                               :items [[child-before "a"]]})
-                                2 reload-request
-                                (p/rejected
-                                 (js/Error. "unexpected extra children reload"))))]
+                              (p/resolved {:basis-rev 1
+                                           :parent-tx-id 10
+                                           :items [[child-before "a"]]}))]
               (let [unsubscribe-first
                     (subs/subscribe-children! parent-uuid (fn []))
                     unsubscribe-second
@@ -538,17 +532,9 @@
                                    {parent-uuid
                                     (block parent-uuid 11 "parent changed")}}))
                         _ (p/delay 0)
-                        _ (is (= [[test-graph-id parent-uuid]
-                                  [test-graph-id parent-uuid]]
-                                 @loader-calls)
-                              "All mounted subscribers share one membership reload.")
-                        _ (p/resolve! reload-request
-                                      {:basis-rev 2
-                                       :parent-tx-id 11
-                                       :items [[child-after "b"]]})
-                        _ (p/delay 0)]
-                  (is (= 2 (count @loader-calls)))
-                  (is (= {:status :ready :value [child-after]}
+                        _ (is (= [[test-graph-id parent-uuid]] @loader-calls)
+                              "A block-only revision cannot change membership.")]
+                  (is (= {:status :ready :value [child-before]}
                          (subs/children-snapshot parent-uuid)))
                   (unsubscribe-second)
                   (unsubscribe-first))))))))
@@ -739,6 +725,106 @@
                           _ (p/delay 0)]
                     (is (= calls-before @calls)
                         "Invalidated unmounted resources never start requests.")))))))))
+
+(deftest custom-query-reload-waits-for-two-seconds-of-idle-test
+  (async done
+         (let [resource-key [:query {:kind :datalog :query [:find '?b]}]
+               watch-key [:tasks]
+               calls (atom [])
+               timers (atom [])
+               cleared (atom [])]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id requested-key]
+                              (swap! calls conj requested-key)
+                              (p/resolved {:basis-rev (if (= 1 (count @calls)) 1 3)
+                                           :key requested-key
+                                           :watch-keys #{watch-key}
+                                           :value :result}))
+                            subs/set-query-reload-timeout!
+                            (fn [callback delay-ms]
+                              (let [timer-id (count @timers)]
+                                (swap! timers conj {:callback callback
+                                                    :delay-ms delay-ms})
+                                timer-id))
+                            subs/clear-query-reload-timeout!
+                            (fn [timer-id]
+                              (swap! cleared conj timer-id))]
+              (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (reset! calls [])
+                        _ (subs/apply-delta!
+                           (delta 2 {:affected-keys #{watch-key}}))
+                        _ (p/delay 0)
+                        _ (is (= [] @calls))
+                        _ (is (= 2000 (:delay-ms (first @timers))))
+                        _ (subs/apply-delta!
+                           (delta 3 {:affected-keys #{watch-key}}))
+                        _ (p/delay 0)
+                        _ (is (= [0] @cleared))
+                        _ (is (= [] @calls))
+                        _ ((:callback (last @timers)))
+                        _ (p/delay 0)]
+                  (is (= [resource-key] @calls))
+                  (unsubscribe))))))))
+
+(deftest deleted-resource-owner-becomes-missing-without-reload-test
+  (async done
+         (let [block-uuid (random-uuid)
+               resource-key [:block-positioned-properties block-uuid :block-left]
+               watch-key [:entity block-uuid]
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id requested-key]
+                              (swap! calls inc)
+                              (p/resolved {:basis-rev 1
+                                           :key requested-key
+                                           :watch-keys #{watch-key}
+                                           :value []}))]
+              (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (subs/apply-delta!
+                           (delta 2 {:deleted {block-uuid {:rev 2}}
+                                     :affected-keys #{watch-key}}))
+                        _ (p/delay 0)]
+                  (is (= 1 @calls)
+                      "Deleting a resource owner must not query the missing entity.")
+                  (is (= {:status :missing}
+                         (subs/resource-snapshot resource-key)))
+                  (unsubscribe))))))))
+
+(deftest canonical-block-load-seeds-direct-reference-blocks-test
+  (async done
+         (let [source-uuid (random-uuid)
+               reference-uuid (random-uuid)
+               calls (atom [])]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-block
+                            (fn [_graph-id requested-uuid]
+                              (swap! calls conj requested-uuid)
+                              (p/resolved
+                               {:basis-rev 1
+                                :blocks
+                                {source-uuid (block source-uuid 1 "Source")
+                                 reference-uuid
+                                 (block reference-uuid 1 "Reference")}}))]
+              (let [unsubscribe-source
+                    (subs/subscribe-block! source-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        unsubscribe-reference
+                        (subs/subscribe-block! reference-uuid (fn []))
+                        _ (p/delay 0)]
+                  (is (= [source-uuid] @calls)
+                      "A direct reference seeded with its source is synchronous.")
+                  (is (= {:status :ready
+                          :value (block reference-uuid 1 "Reference")}
+                         (subs/block-snapshot reference-uuid)))
+                  (unsubscribe-reference)
+                  (unsubscribe-source))))))))
 
 (deftest invalidation-during-an-in-flight-request-schedules-one-follow-up-test
   (async done
@@ -1111,6 +1197,36 @@
                   (unsubscribe-changed)
                   (unsubscribe-deleted))))))))
 
+(deftest inserted-child-delta-seeds-canonical-block-before-row-mount-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               inserted-uuid (random-uuid)
+               inserted-block (block inserted-uuid 2 "inserted")
+               calls (atom [])]
+           (subs/apply-delta!
+            (delta 2
+                   {:blocks {inserted-uuid inserted-block}
+                    :children {parent-uuid
+                               {:base-rev 1
+                                :rev 2
+                                :remove []
+                                :upsert [[inserted-uuid "a"]]}}}))
+           (finish-async!
+            done
+            (p/with-redefs [subs/set-seeded-block-gc-timeout! (fn [_callback _delay-ms])
+                            subs/<load-block
+                            (fn [graph-id requested-uuid]
+                              (swap! calls conj [graph-id requested-uuid])
+                              (p/resolved {:basis-rev 2 :blocks {}}))]
+              (let [unsubscribe
+                    (subs/subscribe-block! inserted-uuid (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (empty? @calls)
+                      "The row consumes the canonical block already carried by its insert delta.")
+                  (is (= {:status :ready :value inserted-block}
+                         (subs/block-snapshot inserted-uuid)))
+                  (unsubscribe))))))))
+
 (deftest last-unsubscribe-gc-is-deferred-for-a-same-tick-remount-test
   (async done
          (let [block-uuid (random-uuid)
@@ -1327,8 +1443,7 @@
                child (block child-uuid 10 "Child")
                malformed-bundle
                {:root-uuid journal-uuid
-                :blocks {journal-uuid journal
-                         child-uuid child}
+                :blocks {journal-uuid journal}
                 :children
                 {journal-uuid {:parent-tx-id 10
                                :items [[child-uuid "a"]]}}}
@@ -1426,8 +1541,8 @@
                            (delta 2
                                   {:children
                                    {journal-uuid
-                                    {:base-tx-id 9
-                                     :tx-id 11
+                                    {:base-rev 0
+                                     :rev 2
                                      :remove [[old-child-uuid "a"]]
                                      :upsert [[new-child-uuid "b"]]}}}))
                         _ (is (empty? @children-calls)

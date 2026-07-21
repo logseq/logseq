@@ -117,14 +117,6 @@
    {}
    (structural-entity-ids tx-data)))
 
-(defn- require-parent-tx-id
-  [parent parent-uuid]
-  (let [tx-id (:block/tx-id parent)]
-    (when-not (valid-tx-id? tx-id)
-      (fail! "Invalid parent transaction ID"
-             {:parent-uuid parent-uuid :block-tx-id tx-id}))
-    tx-id))
-
 (defn- ordered-operations
   [operations]
   (->> operations
@@ -132,31 +124,23 @@
        vec))
 
 (defn- parent-patch
-  [db-before db-after parent-uuid operations]
+  [base-rev rev db-after parent-uuid operations]
   (when-let [parent-after (d/entity db-after [:block/uuid parent-uuid])]
-    (let [parent-before (d/entity db-before [:block/uuid parent-uuid])
-          base-tx-id (when parent-before
-                       (require-parent-tx-id parent-before parent-uuid))
-          tx-id (require-parent-tx-id parent-after parent-uuid)]
-      (when (= base-tx-id tx-id)
-        (fail! "Invalid parent transaction ID"
-               {:parent-uuid parent-uuid
-                :base-tx-id base-tx-id
-                :block-tx-id tx-id}))
-      {:base-tx-id base-tx-id
-       :tx-id tx-id
-       :remove (ordered-operations (:remove operations))
-       :upsert (ordered-operations (:upsert operations))})))
+    {:base-rev base-rev
+     :rev rev
+     :remove (ordered-operations (:remove operations))
+     :upsert (ordered-operations (:upsert operations))}))
 
 (defn- build-children-patches
-  [{:keys [db-before db-after] :as tx-report}]
-  (reduce-kv
-   (fn [patches parent-uuid operations]
-     (if-let [patch (parent-patch db-before db-after parent-uuid operations)]
-       (assoc patches parent-uuid patch)
-       patches))
-   {}
-   (membership-operations tx-report)))
+  [rev {:keys [db-before db-after] :as tx-report}]
+  (let [base-rev (:max-tx db-before)]
+    (reduce-kv
+     (fn [patches parent-uuid operations]
+       (if-let [patch (parent-patch base-rev rev db-after parent-uuid operations)]
+         (assoc patches parent-uuid patch)
+         patches))
+     {}
+     (membership-operations tx-report))))
 
 (defn build
   "Build one renderer delta from complete block replacements and a transaction report."
@@ -174,5 +158,5 @@
                             [block-uuid (cond-> {:rev rev}
                                           db-id (assoc :db/id db-id))])))
                   deleted-block-uuids)
-   :children (build-children-patches tx-report)
+   :children (build-children-patches rev tx-report)
    :affected-keys affected-keys})
