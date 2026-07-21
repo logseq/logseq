@@ -240,3 +240,46 @@
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))))
         (p/finally (fn [] (done))))))
+
+(deftest test-build-action-login-with-user-and-pass-includes-credentials
+  (let [result (auth-command/build-action :login {:user "user@example.com" :pass "secret"})]
+    (is (true? (:ok? result)))
+    (is (= :login (get-in result [:action :type])))
+    (is (= "user@example.com" (get-in result [:action :user])))
+    (is (= "secret" (get-in result [:action :pass])))))
+
+(deftest test-build-action-login-without-credentials-uses-browser-flow
+  (let [result (auth-command/build-action :login {})]
+    (is (true? (:ok? result)))
+    (is (= {:type :login} (:action result)))))
+
+(deftest test-build-action-login-rejects-user-without-pass
+  (let [result (auth-command/build-action :login {:user "user@example.com"})]
+    (is (false? (:ok? result)))
+    (is (= :invalid-options (get-in result [:error :code])))))
+
+(deftest test-build-action-login-rejects-pass-without-user
+  (let [result (auth-command/build-action :login {:pass "secret"})]
+    (is (false? (:ok? result)))
+    (is (= :invalid-options (get-in result [:error :code])))))
+
+(deftest test-command-execute-login-passes-credentials-to-login!
+  (async done
+    (let [login-calls (atom [])]
+      (-> (p/with-redefs [cli-auth/login! (fn [config]
+                                            (swap! login-calls conj config)
+                                            (p/resolved {:auth-path "/tmp/auth.json"
+                                                         :email "user@example.com"
+                                                         :sub "user-123"}))]
+            (p/let [result (auth-command/execute {:type :login
+                                                  :user "user@example.com"
+                                                  :pass "secret"}
+                                                 {:auth-path "/tmp/auth.json"})]
+              (is (= :ok (:status result)))
+              (is (= "user@example.com" (get-in result [:data :email])))
+              (let [config (first @login-calls)]
+                (is (= "user@example.com" (:user config)))
+                (is (= "secret" (:pass config))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
