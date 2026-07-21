@@ -997,7 +997,7 @@
         (if (util/electron?)
           (p/let [_ (fs/create-if-not-exists repo nil filepath (js/JSON.stringify default))
                   json (fs/read-file nil filepath)]
-            [filepath (if (string/blank? json) default (js/JSON.parse json))])
+            [filepath (js/JSON.parse (if (string/blank? json) (js/JSON.stringify default) json))]
           (p/let [data (idb/get-item filepath)]
             [filepath (or data default)]))))))
 
