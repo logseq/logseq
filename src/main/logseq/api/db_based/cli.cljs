@@ -33,8 +33,8 @@
 
 (defn get-page-data
   "Like get_page_blocks_tree but for API clients."
-  [page-title]
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
+  [page-title opts]
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title (js->clj opts :keywordize-keys true))]
     (if resp
       (clj->js resp)
       #js {:error (str "Page " (pr-str page-title) " not found")})))

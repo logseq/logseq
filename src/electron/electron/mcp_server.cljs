@@ -94,7 +94,13 @@
 
 (defn- api-get-page
   [call-api-fn args]
-  (call-api-fn "logseq.cli.getPageData" [(aget args "pageName")]))
+  (let [page-name (aget args "pageName")
+        opts (js-obj)]
+    (when (aget args "includeChildren")
+      (aset opts "includeChildren" (aget args "includeChildren")))
+    (when (aget args "depth")
+      (aset opts "depth" (aget args "depth")))
+    (call-api-fn "logseq.cli.getPageData" #js [page-name opts])))
 
 (defn- api-list-pages
   [call-api-fn args]
@@ -128,7 +134,10 @@
    {:fn api-get-page
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks. A property and a tag are pages."
-                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
+                 :inputSchema
+                 #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))
+                      :includeChildren (-> (z/boolean) .optional (.describe "Include nested child blocks recursively"))
+                      :depth (-> (z/number) .optional (.describe "Maximum nesting depth (default 50, max 100)"))}}}
    :upsertNodes
    {:fn api-upsert-nodes
     :config
