@@ -219,6 +219,23 @@
         (is (empty? (:deleted-block-uuids delta))
             "A canonical import replacement must win over its old tombstone.")))))
 
+(deftest remote-replacements-override-same-uuid-tombstones-test
+  (let [conn (db-test/create-conn)
+        block-uuid (random-uuid)
+        report (d/transact! conn [{:block/uuid block-uuid
+                                   :block/title "remote"
+                                   :block/tx-id 1}])
+        report (assoc report :tx-meta {:transact-remote? true})]
+    (with-redefs [render-delta/build identity]
+      (let [delta (#'db-listener/build-render-delta
+                   "repo"
+                   report
+                   {:affected-keys #{}
+                    :deleted-block-uuids #{block-uuid}})]
+        (is (= #{block-uuid} (set (keys (:blocks delta)))))
+        (is (empty? (:deleted-block-uuids delta))
+            "A canonical remote replacement must win over an earlier tombstone.")))))
+
 (deftest db-listener-does-not-publish-incomplete-graph-render-deltas-test
   (doseq [tx-meta [{:rtc-download-graph? true}
                    {:sync-download-graph? true}
