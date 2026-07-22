@@ -790,10 +790,10 @@
   [store block-uuid block seed-block-uuids changed-blocks seeded-blocks]
   (let [block (require-block! block-uuid block)
         current (get-in store [:blocks block-uuid])
-        mounted? (mounted? :blocks block-uuid)
+        mounted-block? (mounted? :blocks block-uuid)
         seed? (contains? seed-block-uuids block-uuid)]
     (if (or (and (nil? current)
-                 (not mounted?)
+                 (not mounted-block?)
                  (not seed?))
             (> (slot-revision current) (:rev store))
             (and (= :ready (:kind current))
@@ -801,11 +801,11 @@
       store
       (do
         (vswap! changed-blocks conj block-uuid)
-        (when (and seed? (not mounted?))
+        (when (and seed? (not mounted-block?))
           (vswap! seeded-blocks conj block-uuid))
         (assoc-in store [:blocks block-uuid]
                   (cond-> (ready-block-slot (:rev store) block)
-                    (and seed? (not mounted?))
+                    (and seed? (not mounted-block?))
                     (assoc :seeded? true)))))))
 
 (defn- inserted-child-uuids

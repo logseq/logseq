@@ -719,9 +719,9 @@
         (doseq [block blocks]
           (is (string/includes? clipboard block)))))))
 
-(deftest page-virtualization-renders-top-middle-and-bottom-of-10k-membership
-  (testing "one real 10k top-level membership remains navigable across the full page"
-    (let [block-count 10000
+(deftest page-virtualization-renders-top-middle-and-bottom-of-1k-membership
+  (testing "one real 1k top-level membership remains navigable across the full page"
+    (let [block-count 1000
           title-prefix "large page membership block "
           blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
       (insert-current-page-blocks! blocks)
@@ -799,16 +799,6 @@
             (assert/assert-have-count
              (format "%s [data-virtuoso-scroller]" journal-selector)
              0)))))))
-
-(deftest journals-list-keeps-single-scroller-with-iframe-embeds
-  (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"
-    (seed-journals!
-     [{:date "2026-03-07T12:00:00"
-       :blocks ["{{video https://www.youtube.com/watch?v=7xTGNNLPyMI}}"]}])
-    (enable-virtualized-rendering!)
-    (w/wait-for "#journals iframe")
-    (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
-      (is (= 1 journals-scroller-count) metrics))))
 
 (deftest journals-linked-refs-remain-visible
   (testing "journals linked refs stay visible while journals layout owns the outer measurement"

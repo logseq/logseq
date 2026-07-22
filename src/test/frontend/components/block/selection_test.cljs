@@ -22,6 +22,17 @@
          :editing-same-block? false
          :active-selection? true}))))
 
+(deftest select-on-hover-ignores-scroll-induced-hover-in-virtualized-list
+  (let [opts {:last-client-y 320
+              :client-y 300
+              :dragging? false
+              :editing-same-block? false
+              :active-selection? true
+              :virtualized? true}]
+    (is (false? (selection/select-on-hover? opts)))
+    (is (true? (selection/select-on-hover?
+                (assoc opts :pointer-moved? true))))))
+
 (deftest select-on-hover-preserves-existing-guards
   (are [expected opts] (= expected (selection/select-on-hover? opts))
     true  {:last-client-y 320

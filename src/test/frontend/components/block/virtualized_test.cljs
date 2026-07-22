@@ -117,6 +117,9 @@
       (is (string/includes? root-source ":range-changed"))
       (is (string/includes? root-source
                             "block-selection/virtual-range-boundary-id"))
+      (is (not (string/includes? root-source
+                                 ".addEventListener scroll-container \"scroll\""))
+          "The virtualizer range must be the only scroll-selection source of truth.")
       (is (not (string/includes? root-source ":total-count"))
           "A separate row count cannot race the UUID data.")
       (testing "the root API never accepts or reconstructs entity rows"
@@ -155,10 +158,8 @@
   (let [source (source-for "src/main/frontend/components/block.cljs")
         selection-source
         (form-source source "(defn- select-block-under-pointer-after-scroll!")]
-    (is (some? selection-source))
-    (when selection-source
-      (is (string/includes? selection-source "block-selection/pointer-down?")
-          "Only pointer selection should update selection while scrolling."))))
+    (is (nil? selection-source)
+        "Virtuoso range changes are the only virtualized scroll-selection path.")))
 
 (deftest recursive-block-children-keep-the-left-border-dom
   (let [source (source-for "src/main/frontend/components/block.cljs")
