@@ -252,6 +252,24 @@
                                      :asset-type asset-type
                                      :payload payload}))))))
 
+(defn- finalize-import-render-revisions!
+  [conn]
+  (let [db @conn
+        entity-ids (d/q '[:find [?e ...]
+                          :where
+                          [?e :block/uuid]
+                          [?e :block/title]
+                          [(missing? $ ?e :block/tx-id)]]
+                        db)]
+    (when (seq entity-ids)
+      (let [tx-id (inc (:max-tx db))]
+        (ldb/transact! conn
+                       (mapv (fn [entity-id]
+                               {:db/id entity-id
+                                :block/tx-id tx-id})
+                             entity-ids)
+                       {::gp-exporter/imported-data? true})))))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -267,6 +285,7 @@
                                                      (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
                       (dissoc :set-ui-state))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+              _ (finalize-import-render-revisions! conn)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
          :import-state (import-state-summary (:import-state result))
