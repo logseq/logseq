@@ -519,8 +519,11 @@
                             (:block/tags block))]
     (when (map? reference)
       (is (every? #{:db/id :db/ident :block/uuid :block/title :block/name
-                    :logseq.property/value :logseq.property/icon}
-                  (keys reference))))))
+                    :block/tags :logseq.property/value :logseq.property/icon}
+                  (keys reference)))
+      (doseq [tag (:block/tags reference)]
+        (is (every? #{:db/id :db/ident :block/uuid}
+                    (keys tag)))))))
 
 (def ^:private default-display-context
   {:gallery-view? false

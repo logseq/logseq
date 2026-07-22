@@ -48,6 +48,22 @@
               :data {:old-name "before" :new-name "after"}}
              (#'db-listener/renderer-tx-meta tx-meta))))))
 
+(deftest renderer-route-candidates-summarize-changed-task-and-comment-blocks-test
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [{:db/ident :logseq.class/Task}
+                             {:db/ident :logseq.class/Comment}])
+        report (d/transact! conn [{:block/uuid (random-uuid)
+                                   :block/tags [:logseq.class/Task]}
+                                  {:block/uuid (random-uuid)
+                                   :block/tags [:logseq.class/Comment]}
+                                  {:block/uuid (random-uuid)}])
+        block-ids (->> (:tx-data report) (map :e) distinct vec)
+        blocks (mapv #(d/pull @conn '[*] %) block-ids)
+        [task-id comment-id _ordinary-id] block-ids]
+    (is (= {:task-route-candidate-ids [task-id]
+            :comment-route-candidate-ids [comment-id]}
+           (#'db-listener/renderer-route-candidates @conn blocks)))))
+
 (deftest markdown-mirror-listener-enqueues-worker-mirror-work-test
   (let [calls (atom [])
         tx-report {:tx-data [:tx]}]
@@ -172,6 +188,19 @@
       (is (not-any? #(contains? broadcast-payload %)
                     forbidden-renderer-payload-keys)
           "Renderer broadcasts must not expose transaction datoms or legacy marker fields."))))
+
+(deftest canonical-replacements-omit-entities-deleted-in-the-same-transaction-test
+  (let [conn (db-test/create-conn)
+        block-uuid (random-uuid)
+        _ (d/transact! conn [{:db/id -1
+                              :block/uuid block-uuid
+                              :block/title "temporary"}])
+        block-id (:db/id (d/entity @conn [:block/uuid block-uuid]))
+        report (d/transact! conn [[:db/add block-id :block/tx-id 1]
+                                  [:db.fn/retractEntity block-id]])]
+    (is (= {}
+           (#'db-listener/canonical-replacements report))
+        "A tx-id datom must not publish an entity absent from db-after.")))
 
 (deftest db-listener-does-not-publish-graph-download-render-deltas-test
   (doseq [tx-meta [{:rtc-download-graph? true}

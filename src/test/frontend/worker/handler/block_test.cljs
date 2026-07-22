@@ -27,6 +27,13 @@
     (is (fn? api) "Missing worker block API: direct-children-membership")
     api))
 
+(defn- open-block-tree-api
+  []
+  (let [api (some-> (resolve 'frontend.worker.handler.block/open-block-tree)
+                    deref)]
+    (is (fn? api) "Missing worker block API: open-block-tree")
+    api))
+
 (defn- canonical-block-fixture
   []
   (let [conn (db-test/create-conn)
@@ -449,6 +456,60 @@
                 [second-child-uuid "b0"]]
                (:items response)))))))
 
+(deftest open-block-tree-includes-open-descendants-and-stops-at-collapsed-blocks-test
+  (when-let [open-block-tree (open-block-tree-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          open-child-uuid (random-uuid)
+          open-grandchild-uuid (random-uuid)
+          collapsed-child-uuid (random-uuid)
+          hidden-grandchild-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 30
+                     :block/title "Page"
+                     :block/name "page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid open-child-uuid
+                     :block/tx-id 30
+                     :block/title "Open child"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -3
+                     :block/uuid open-grandchild-uuid
+                     :block/tx-id 30
+                     :block/title "Open grandchild"
+                     :block/page -1
+                     :block/parent -2
+                     :block/order "a0"}
+                    {:db/id -4
+                     :block/uuid collapsed-child-uuid
+                     :block/tx-id 30
+                     :block/title "Collapsed child"
+                     :block/collapsed? true
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "b0"}
+                    {:block/uuid hidden-grandchild-uuid
+                     :block/tx-id 30
+                     :block/title "Hidden grandchild"
+                     :block/page -1
+                     :block/parent -4
+                     :block/order "a0"}])
+      (let [{:keys [blocks children]} (open-block-tree @conn page-uuid)]
+        (is (= #{page-uuid open-child-uuid open-grandchild-uuid
+                 collapsed-child-uuid}
+               (set (keys blocks))))
+        (is (= #{page-uuid open-child-uuid open-grandchild-uuid}
+               (set (keys children))))
+        (is (= [[open-child-uuid "a0"] [collapsed-child-uuid "b0"]]
+               (get-in children [page-uuid :items])))
+        (is (= [[open-grandchild-uuid "a0"]]
+               (get-in children [open-child-uuid :items])))))))
+
 (deftest direct-children-membership-requires-parent-transaction-id-test
   (when-let [direct-children-membership
              (direct-children-membership-api)]
@@ -472,6 +533,7 @@
 (deftest canonical-block-thread-apis-return-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
         direct-children-membership (direct-children-membership-api)
+        open-block-tree (open-block-tree-api)
         get-canonical-blocks (get @thread-api/*thread-apis
                                   :thread-api/get-canonical-blocks)
         get-direct-children (get @thread-api/*thread-apis
@@ -482,6 +544,7 @@
         "Missing thread API: get-direct-children")
     (when (and canonical-blocks
                direct-children-membership
+               open-block-tree
                get-canonical-blocks
                get-direct-children)
       (let [{:keys [conn target-uuid parent-uuid]}
@@ -489,10 +552,10 @@
             repo "canonical-block-thread-api-test"
             block-uuids [target-uuid]
             expected-blocks (canonical-blocks @conn block-uuids)
-            membership (direct-children-membership @conn parent-uuid)
+            tree (open-block-tree @conn parent-uuid)
             expected-children
-            {:basis-rev (:basis-rev membership)
-             :children {parent-uuid (dissoc membership :basis-rev)}}]
+            {:basis-rev (:max-tx @conn)
+             :children {parent-uuid tree}}]
         (with-redefs [worker-state/get-datascript-conn
                       (fn [requested-repo]
                         (is (= repo requested-repo))

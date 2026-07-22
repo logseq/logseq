@@ -63,6 +63,20 @@
            (:sync-download-graph? tx-meta)
            (:skip-validate-db? tx-meta))))
 
+(defn- tagged-with-ident?
+  [db block ident]
+  (some #(= ident (:db/ident (d/entity db (:v %))))
+        (d/datoms db :eavt (:db/id block) :block/tags)))
+
+(defn- renderer-route-candidates
+  [db blocks]
+  {:task-route-candidate-ids
+   (into [] (keep #(when (tagged-with-ident? db % :logseq.class/Task)
+                          (:db/id %))) blocks)
+   :comment-route-candidate-ids
+   (into [] (keep #(when (tagged-with-ident? db % :logseq.class/Comment)
+                          (:db/id %))) blocks)})
+
 (defn- canonical-replacements
   [{:keys [db-after tx-data]}]
   (into {}
@@ -70,11 +84,10 @@
          (filter (fn [datom]
                    (and (:added datom)
                         (= :block/tx-id (:a datom)))))
-         (map (fn [datom]
-                (let [block (block-handler/canonical-block
-                             db-after
-                             (d/entity db-after (:e datom)))]
-                  [(:block/uuid block) block]))))
+         (keep (fn [datom]
+                 (when-let [entity (d/entity db-after (:e datom))]
+                   (let [block (block-handler/canonical-block db-after entity)]
+                     [(:block/uuid block) block])))))
         tx-data))
 
 (defn- build-render-delta
@@ -105,10 +118,13 @@
           delta (when render-result
                   (build-render-delta repo processed-tx-report render-result))
           delta-at (perf-time-ms)
+          route-candidates (renderer-route-candidates (:db-after processed-tx-report)
+                                                       (:blocks render-result))
           payload (when delta
-                    {:repo repo
-                     :tx-meta (renderer-tx-meta tx-meta)
-                     :delta delta})]
+                    (merge {:repo repo
+                            :tx-meta (renderer-tx-meta tx-meta)
+                            :delta delta}
+                           (into {} (filter (comp seq val)) route-candidates)))]
       (when (and delta (:ui/perf-id tx-meta))
         (swap! *outliner-op-deltas assoc (:ui/perf-id tx-meta) delta))
       (when payload

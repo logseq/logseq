@@ -98,6 +98,12 @@
 
 (defn new-logseq-page
   [f]
+  (w/eval-js
+   "() => {
+      const url = new URL(location.href);
+      url.searchParams.delete('virtualized');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }")
   (create-page)
   (f))
 
