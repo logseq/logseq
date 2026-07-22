@@ -2465,7 +2465,13 @@
           (.addRange selection range)
           (util/caret-range node))))))
 
-(defonce *block-last-scroll-top (atom nil))
+(defonce *block-last-mouse-event (atom nil))
+
+(defn- remember-block-pointer!
+  [^js e]
+  (reset! *block-last-mouse-event
+          {:client-x (.-clientX e)
+           :client-y (.-clientY e)}))
 
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
@@ -2500,9 +2506,7 @@
                 mobile-range (when mobile? (get-cursor-range))]
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
               (when (= 1 button)
-                (reset! *block-last-scroll-top
-                        (some-> (util/app-scroll-container-node block-dom-element)
-                                .-scrollTop))
+                (remember-block-pointer! e)
                 (block-selection/set-pointer-down!))
               (cond
                 (and meta? shift?)
@@ -3739,72 +3743,26 @@
           (block-drop/handle-data-transfer-drop! event uuid target-block move-to))))
     (block-drag-end event *move-to')))
 
-(defonce *block-last-mouse-event (atom nil))
-
-(defn- remember-block-pointer!
-  [^js e]
-  (reset! *block-last-mouse-event
-          {:client-x (.-clientX e)
-           :client-y (.-clientY e)}))
-
-(defn- visible-selection-boundary-block
-  [selection-block-ids scroll-direction]
-  (let [selection-block-id-set (set (map str selection-block-ids))
-        blocks (->> (dom/sel ".ls-page-blocks .page-blocks-inner .ls-block[blockid]")
-                    (filter #(contains? selection-block-id-set (dom/attr % "blockid"))))]
-    (case scroll-direction
-      :down (last blocks)
-      :up (first blocks)
-      nil)))
-
-(defn- block-under-pointer
-  []
-  (when-let [{:keys [client-x client-y]} @*block-last-mouse-event]
-    (when-let [target (.elementFromPoint js/document client-x client-y)]
-      (util/rec-get-node target "ls-block"))))
-
-(defn- select-block-under-pointer!
-  [selection-block-ids scroll-direction]
-  (when (and (seq selection-block-ids)
-             (block-selection/pointer-down?)
-             (or (state/get-selection-start-block)
-                 (seq (state/get-selection-blocks))))
-    (when-let [block-dom-node (or (visible-selection-boundary-block selection-block-ids scroll-direction)
-                                  (block-under-pointer))]
-      (when-let [block-id (.-id block-dom-node)]
-        (when-not (string/blank? block-id)
-          (editor-handler/highlight-selection-area! block-id block-dom-node
-                                                    {:append? true
-                                                     :block-ids selection-block-ids}))))))
-
-(defn- select-block-under-pointer-after-scroll!
-  [selection-block-ids scroll-container]
-  (when (and (seq selection-block-ids)
-             (block-selection/pointer-down?))
-    (let [scroll-top (some-> scroll-container .-scrollTop)
-          last-scroll-top @*block-last-scroll-top
-          direction (cond
-                      (and scroll-top last-scroll-top (> scroll-top last-scroll-top)) :down
-                      (and scroll-top last-scroll-top (< scroll-top last-scroll-top)) :up
-                      :else (state/get-selection-direction))]
-      (reset! *block-last-scroll-top scroll-top)
-      (select-block-under-pointer! selection-block-ids direction))))
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode? selection-block-ids]
   (let [last-client-y (:client-y @*block-last-mouse-event)
         client-y (.-clientY e)
         target (.-target e)
-        block-dom-node (util/rec-get-node target "ls-block")]
+        block-dom-node (util/rec-get-node target "ls-block")
+        active-selection? (boolean (seq (state/get-selection-blocks)))
+        select? (block-selection/select-on-hover?
+                 {:last-client-y last-client-y
+                  :client-y client-y
+                  :dragging? @*dragging?
+                  :editing-same-block? (= (:block/uuid block)
+                                          (:block/uuid (state/get-edit-block)))
+                  :active-selection? active-selection?
+                  :virtualized? (some? selection-block-ids)
+                  :pointer-moved? (= "mousemove" (.-type e))})]
     (remember-block-pointer! e)
     (reset! *control-show? true)
     (when (and (not (comments-area-target? target))
-               (block-selection/select-on-hover?
-                {:last-client-y last-client-y
-                 :client-y client-y
-                 :dragging? @*dragging?
-                 :editing-same-block? (= (:block/uuid block)
-                                         (:block/uuid (state/get-edit-block)))
-                 :active-selection? (boolean (seq (state/get-selection-blocks)))}))
+               select?)
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
@@ -4216,14 +4174,14 @@
         :data-block-format (name (get block :block/format :markdown))
         :data-db-collapsable (boolean (editor-handler/db-collapsable? block))
         :ref #(when (nil? @*ref) (reset! *ref %))
-        :data-collapsed (and collapsed? (boolean has-child?))
+        :data-collapsed (and collapsed? has-child?)
         :class (str (when selected? "selected")
                     (when (ldb/recycled? block) " line-through opacity-70")
                     (when order-list? " is-order-list")
                     (when comments-area? " is-comments-area")
                     (when (string/blank? title) " is-blank")
                     (when original-block " embed-block"))
-        :haschild (str (boolean has-child?))
+        :haschild (str has-child?)
         :on-touch-start (fn [event uuid]
                           (when-not (or @*dragging? (state/editing?))
                             (block-handler/on-touch-start event uuid)))
@@ -4303,7 +4261,10 @@
                            (block-mouse-over e block *control-show? block-id doc-mode?
                                              (:selection/block-ids config)))
          :on-mouse-move (fn [e]
-                          (remember-block-pointer! e))
+                          (if (some? (:selection/block-ids config))
+                            (block-mouse-over e block *control-show? block-id doc-mode?
+                                              (:selection/block-ids config))
+                            (remember-block-pointer! e)))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
@@ -5049,22 +5010,15 @@
                              #(ui-handler/scroll-to-anchor-block ref block-uuids false))))
        (fn []))
      [block-uuids])
-    (hooks/use-effect!
-     (fn []
-       (if (and scroll-container (seq selection-block-ids))
-         (let [handler #(select-block-under-pointer-after-scroll!
-                         selection-block-ids scroll-container)]
-           (.addEventListener scroll-container "scroll" handler #js {:passive true})
-           #(.removeEventListener scroll-container "scroll" handler))
-         (fn [])))
-     [scroll-container selection-block-ids])
     (when (seq block-uuids)
-      (if disable-virtualized?
-        (plain-block-list config block-uuids)
-        [:div.blocks-list-wrap
-         {:data-level (or (:level config) 0)
-          :data-virtuoso-scroller true}
-         (ui/virtualized-list virtual-opts)]))))
+      [:div.blocks-container.flex-1
+       {:containerid (:container-id config)}
+       (if disable-virtualized?
+         (plain-block-list config block-uuids)
+         [:div.blocks-list-wrap
+          {:data-level (or (:level config) 0)
+           :data-virtuoso-scroller true}
+          (ui/virtualized-list virtual-opts)])])))
 
 
 (defn- block-row-uuid
