@@ -20,6 +20,11 @@
 
 (goog-define OUTLINER-PERF-LOGGING false)
 
+(def ^:private e2e-perf-op-names
+  #{[:insert-blocks]
+    [:save-block :insert-blocks]
+    [:delete-blocks]})
+
 (defn maybe-run-recycle-gc!
   [conn]
   (let [now (common-util/time-ms)
@@ -73,10 +78,17 @@
 
 (defn- log-outliner-op-perf!
   [data]
-  (when (and (or goog.DEBUG OUTLINER-PERF-LOGGING)
-             (:perf-id data))
-    (log/info :db-worker/outliner-op-perf
-              (assoc data :worker-apply-ms (:apply-ms data)))))
+  (when (:perf-id data)
+    (cond
+      goog.DEBUG
+      (log/info :db-worker/outliner-op-perf
+                (assoc data :worker-apply-ms (:apply-ms data)))
+
+      (and OUTLINER-PERF-LOGGING
+           (contains? e2e-perf-op-names (:op-names data)))
+      (log/info :db-worker/outliner-op-perf
+                (select-keys (assoc data :worker-apply-ms (:apply-ms data))
+                             [:op-names :worker-apply-ms])))))
 
 (def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
