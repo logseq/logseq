@@ -388,6 +388,24 @@
                                                                         :keep-uuid? true})]
     [result sibling? next-block]))
 
+(defn insert-new-block-after-block-aux!
+  [config
+   {:block/keys [uuid]
+    :as block}
+   value]
+  (let [block-self? (block-self-alone-when-insert? config uuid)
+        current-block (assoc block :block/title value)
+        current-block (apply dissoc current-block retract-attributes)
+        new-m {:block/uuid (db/new-block-id)
+               :block/title ""}
+        next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                              new-m)
+                       (wrap-parse-block))
+        sibling? (or (:block/collapsed? (:block/link block)) (when block-self? false))
+        result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                        :keep-uuid? true})]
+    [result sibling? next-block]))
+
 (defn clear-when-saved!
   []
   (commands/restore-state))
@@ -2297,6 +2315,54 @@
           (do
             (when e (.preventDefault e))
             (keydown-new-block state)))))))
+
+(defn insert-new-block-before!
+  []
+  (->
+   (when (not config/publishing?)
+     (when-let [{:keys [block value config]} (get-state)]
+       (start-pending-new-block!)
+       (let [[result-promise sibling? next-block]
+             (insert-new-block-before-block-aux! config block value)
+             edit-block-f #(edit-pending-new-block! next-block sibling?)]
+         (p/do!
+          (state/set-state! :editor/edit-block-fn edit-block-f)
+          result-promise
+          (clear-when-saved!)))))
+   (p/catch (fn [e] (clear-pending-new-block!) (throw e)))))
+
+(defn keydown-new-block-before-handler [^js e]
+  (let [state (get-state)
+        target (when e (.-target e))]
+    (when (and (or (nil? target) (inside-of-editor-block target))
+               (not (auto-complete?))
+               (not (inside-of-single-block (rum/dom-node state))))
+      (when e (.preventDefault e))
+      (insert-new-block-before!))))
+
+(defn insert-new-block-after!
+  []
+  (->
+   (when (not config/publishing?)
+     (when-let [{:keys [block value config]} (get-state)]
+       (start-pending-new-block!)
+       (let [[result-promise sibling? next-block]
+             (insert-new-block-after-block-aux! config block value)
+             edit-block-f #(edit-pending-new-block! next-block sibling?)]
+         (p/do!
+          (state/set-state! :editor/edit-block-fn edit-block-f)
+          result-promise
+          (clear-when-saved!)))))
+   (p/catch (fn [e] (clear-pending-new-block!) (throw e)))))
+
+(defn keydown-new-block-after-handler [^js e]
+  (let [state (get-state)
+        target (when e (.-target e))]
+    (when (and (or (nil? target) (inside-of-editor-block target))
+               (not (auto-complete?))
+               (not (inside-of-single-block (rum/dom-node state))))
+      (when e (.preventDefault e))
+      (insert-new-block-after!))))
 
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
