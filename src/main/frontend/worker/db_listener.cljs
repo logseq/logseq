@@ -94,14 +94,19 @@
 (defn- build-render-delta
   [repo {:keys [db-after tx-meta] :as tx-report}
    {:keys [affected-keys deleted-block-uuids]}]
-  (let [delta-tx-report (if (::sqlite-export/imported-data? tx-meta)
+  (let [imported-data? (::sqlite-export/imported-data? tx-meta)
+        blocks (canonical-replacements tx-report)
+        deleted-block-uuids (if imported-data?
+                              (reduce disj deleted-block-uuids (keys blocks))
+                              deleted-block-uuids)
+        delta-tx-report (if imported-data?
                           (assoc tx-report :tx-data [])
                           tx-report)]
     (render-delta/build
      {:graph-id repo
       :rev (:max-tx db-after)
       :op-id (:db-sync/tx-id tx-meta)
-      :blocks (canonical-replacements tx-report)
+      :blocks blocks
       :deleted-block-uuids deleted-block-uuids
       :affected-keys (set affected-keys)
       :tx-report delta-tx-report})))
