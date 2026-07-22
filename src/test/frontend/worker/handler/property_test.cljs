@@ -15,7 +15,8 @@
                           :db/ident :user.class/Topic
                           :block/title "Topic"
                           :block/name "topic"
-                          :block/tags :logseq.class/Tag}
+                          :block/tags :logseq.class/Tag
+                          :logseq.property.class/extends :logseq.class/Tag}
                          {:block/title "Page A"
                           :block/name "page-a"
                           :block/uuid page-uuid
@@ -34,6 +35,8 @@
          (is (some #(= :user.class/Topic (:db/ident %)) (:all-classes data)))
          (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:class-options data)))
          (is (contains? (:structured-children-by-class-id data) topic-class-id))
+         (is (some #(= :logseq.class/Tag (:db/ident %))
+                   (get (:extends-by-class-id data) topic-class-id)))
          (is (= ["Page A"] (map :block/title (:initial-choices data)))))
        (p/catch
         (fn [error]

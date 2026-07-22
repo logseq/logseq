@@ -37,3 +37,11 @@
       (journal? entity)
       (class? entity)
       (property? entity)))
+
+(defn get-entity-types
+  [entity]
+  (cond-> #{}
+    (internal-page? entity) (conj :page)
+    (journal? entity) (conj :journal)
+    (class? entity) (conj :class)
+    (property? entity) (conj :property)))

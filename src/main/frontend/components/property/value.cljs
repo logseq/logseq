@@ -3,7 +3,6 @@
             [cljs-time.core :as t]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [dommy.core :as d]
             [frontend.components.icon :as icon-component]
             [frontend.components.select :as select]
@@ -49,12 +48,6 @@
        (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
 (def ^:private editor-navigation-trigger-class "jtrigger")
-
-(defn- class-extends
-  [class]
-  (if (de/entity? class)
-    (ldb/get-class-extends class)
-    [class]))
 
 (defn- property-value-block-container-class
   []
@@ -720,7 +713,7 @@
                                       (shui/popup-hide!))}))))
 
 (defn- <create-page-if-not-exists!
-  [block property classes page]
+  [block property classes extends-by-class-id page]
   (p/let [repo (state/get-current-repo)
           page* (string/trim page)
           ;; inline-class is only for input from :transform-fn
@@ -740,7 +733,7 @@
                                        (= :logseq.class/Tag (:db/ident class))
                                        (some (fn [e]
                                                (= :logseq.class/Tag (:db/ident e)))
-                                             (class-extends class))))
+                                             (get extends-by-class-id (:db/id class)))))
                                     classes))))
           ;; Note: property and other types shouldn't be converted to class
           page? (entity/internal-page? page-entity)]
@@ -900,7 +893,8 @@
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
   result]
   (let [[*input set-input!] (hooks/use-state nil)
-        {:keys [all-classes class-options extends-class-options structured-children-by-class-id]} (:class-data opts)
+        {:keys [all-classes class-options extends-class-options structured-children-by-class-id
+                extends-by-class-id]} (:class-data opts)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
         page-class (some (fn [class]
@@ -928,7 +922,8 @@
         property-type (:logseq.property/type property)
         nodes (cond
                 extends-property?
-                (let [extends (->> (mapcat class-extends (:logseq.property.class/extends block))
+                (let [extends (->> (mapcat #(get extends-by-class-id (:db/id %))
+                                           (:logseq.property.class/extends block))
                                    distinct)
                       ;; Disallows cyclic hierarchies
                       exclude-ids (-> (set children-pages)
@@ -986,7 +981,7 @@
                                     (and property-type (not= property-type :node))
                                     (if (= property-type :page)
                                       (not (entity/page? node))
-                                      (not (contains? (ldb/get-entity-types node) property-type)))
+                                      (not (contains? (entity/get-entity-types node) property-type)))
 
                                     :else
                                     false))))
@@ -1073,7 +1068,8 @@
                                                                                           :class-schema? true
                                                                                           :property-key chosen
                                                                                           :target target}]))
-                                               (<create-page-if-not-exists! block property classes' chosen))))
+                                               (<create-page-if-not-exists! block property classes'
+                                                                            extends-by-class-id chosen))))
                                       entity (when (integer? id)
                                                (db-async/<get-block (state/get-current-repo) id {:children? false}))]
                                 (if id
