@@ -105,7 +105,8 @@
         (is (empty? (:errors result)))
         (doseq [entity [journal property class]]
           (is (not= 1 (:block/tx-id entity))
-              "Every canonical entity changed by a live repair receives a new revision."))
+              (str "Every canonical entity changed by a live repair receives a new revision: "
+                   (select-keys entity [:db/id :db/ident :block/uuid :block/title]))))
         (is (= 1 (:block/updated-at journal)))
         (is (= [:logseq.class/Property] (mapv :db/ident (:block/tags property))))
         (is (nil? (:logseq.property.class/extends property)))

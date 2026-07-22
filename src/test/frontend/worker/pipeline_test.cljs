@@ -246,8 +246,8 @@
           [["recycled child"
             :logseq.property/deleted-at
             (constantly 1000)]
-           ["closed property value"
-            :block/closed-value-property
+           ["text property value"
+            :logseq.property/created-from-property
             (fn [{:keys [property]}]
               (:db/id property))]]]
     (testing label
@@ -264,15 +264,10 @@
             property (d/entity initial-db :logseq.property/query)
             _ (d/transact!
                conn
-               (cond-> [[:db/add (:db/id initial-page) :block/tx-id 10]
-                        [:db/add (:db/id initial-ancestor) :block/tx-id 10]
-                        [:db/add (:db/id initial-parent) :block/tx-id 10]
-                        [:db/add (:db/id initial-child) :block/tx-id 10]]
-                 (= :block/closed-value-property attr)
-                 (conj [:db/add
-                        (:db/id initial-child)
-                        :logseq.property/created-from-property
-                        (:db/id property)])))
+               [[:db/add (:db/id initial-page) :block/tx-id 10]
+                [:db/add (:db/id initial-ancestor) :block/tx-id 10]
+                [:db/add (:db/id initial-parent) :block/tx-id 10]
+                [:db/add (:db/id initial-child) :block/tx-id 10]])
             db-before @conn
             ancestor (d/entity db-before (:db/id initial-ancestor))
             parent (d/entity db-before (:db/id initial-parent))

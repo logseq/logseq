@@ -523,6 +523,31 @@
           (is (not (contains? result :logseq.property/icon)))
           (is (not (contains? result :alias))))))))
 
+(deftest search-result-keeps-tag-identities-for-ui-entity-predicates
+  (let [page-id #uuid "00000000-0000-0000-0000-000000000124"
+        page-tag {:db/id 2
+                  :db/ident :logseq.class/Page
+                  :block/title "Page"}
+        page {:db/id 1
+              :block/uuid page-id
+              :block/title "Foo"
+              :block/tags [page-tag]}]
+    (with-redefs [d/entity (fn [_db [_attr id]]
+                             (when (= id page-id)
+                               page))
+                  ldb/page? (constantly true)
+                  ldb/built-in? (constantly false)
+                  ldb/hidden? (constantly false)]
+      (let [result (#'search/search-result->block-result
+                    (atom :db)
+                    "Foo"
+                    nil
+                    {:enable-snippet? false}
+                    {:id (str page-id)
+                     :page (str page-id)
+                     :title "Foo"})]
+        (is (= [page-tag] (:block/tags result)))))))
+
 (deftest block-index-includes-page-alias-titles
   (testing "page aliases can be matched by page-ref autocomplete search"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000234"
