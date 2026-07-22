@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.util.entity :as entity]
             [frontend.worker.handler.block]
             [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
@@ -92,8 +93,59 @@
   (is (or (uuid? (:block/uuid reference))
           (keyword? (:db/ident reference))))
   (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
-                :logseq.property/value :logseq.property/icon}
+                :block/tags :logseq.property/value :logseq.property/icon}
               (keys reference))))
+
+(deftest canonical-property-reference-values-keep-type-tags-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          block-uuid (random-uuid)
+          cases [{:property-ident :user.property/Page
+                  :target-id -11
+                  :tag-ident :logseq.class/Page
+                  :predicate entity/page?}
+                 {:property-ident :user.property/Class
+                  :target-id -12
+                  :tag-ident :logseq.class/Tag
+                  :predicate entity/class?}
+                 {:property-ident :user.property/Property
+                  :target-id -13
+                  :tag-ident :logseq.class/Property
+                  :predicate entity/property?}
+                 {:property-ident :user.property/Journal
+                  :target-id -14
+                  :tag-ident :logseq.class/Journal
+                  :predicate entity/journal?}]]
+      (d/transact! conn
+                   (concat
+                    (map-indexed (fn [index {:keys [property-ident]}]
+                                   {:db/id (- -20 index)
+                                    :db/ident property-ident
+                                    :db/valueType :db.type/ref
+                                    :db/cardinality :db.cardinality/one})
+                                 cases)
+                    (map (fn [{:keys [target-id tag-ident]}]
+                           {:db/id target-id
+                            :block/uuid (random-uuid)
+                            :block/tx-id 1
+                            :block/title (name tag-ident)
+                            :block/name (name tag-ident)
+                            :block/tags tag-ident})
+                         cases)
+                    [(reduce (fn [block {:keys [property-ident target-id]}]
+                               (assoc block property-ident target-id))
+                             {:db/id -2
+                              :block/uuid block-uuid
+                              :block/tx-id 1
+                              :block/title "Block"}
+                             cases)]))
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid block-uuid]))]
+        (doseq [{:keys [property-ident tag-ident predicate]} cases]
+          (let [value (get block property-ident)]
+            (is (= tag-ident (get-in value [:block/tags 0 :db/ident])))
+            (is (predicate value)
+                "Reference-valued properties retain their renderer type identity")))))))
 
 (deftest canonical-block-keeps-own-attributes-and-only-shallow-references-test
   (when-let [canonical-block (canonical-block-api)]
