@@ -119,7 +119,8 @@
             (:initial-db? tx-meta)
             (:skip-validate-db? tx-meta false)
             ;; used by `batch-transact-with-temp-conn!`
-            (:skip-validate-db? @conn)))))
+            (:skip-validate-db? @conn)
+            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
 
 (defn- should-validate-pipeline-result?
   [tx-meta]

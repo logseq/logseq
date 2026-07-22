@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
@@ -27,41 +26,11 @@
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
 
-(defn get-idx-of-order-list-block
-  [block order-list-type]
-  (when (de/entity? block)
-    (let [order-block-fn? (fn [block]
-                            (let [type (pu/lookup block :logseq.property/order-list-type)]
-                              (= type order-list-type)))
-          prev-block-fn   ldb/get-left-sibling
-          prev-block      (prev-block-fn block)]
-      (letfn [(order-sibling-list [b]
-                (lazy-seq
-                 (when (order-block-fn? b)
-                   (cons b (order-sibling-list (prev-block-fn b))))))
-              (order-parent-list [b]
-                (lazy-seq
-                 (when (order-block-fn? b)
-                   (cons b (order-parent-list (:block/parent b))))))]
-        (let [idx           (if prev-block
-                              (count (order-sibling-list block)) 1)
-              order-parents-count (dec (count (order-parent-list block)))
-              delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
-          (cond
-            (zero? delta) idx
-
-            (= delta 1)
-            (some-> (util/convert-to-letters idx) util/safe-lower-case)
-
-            :else
-            (util/convert-to-roman idx)))))))
-
 (defn attach-order-list-state
   [config block]
   (let [type (pu/lookup block :logseq.property/order-list-type)
         own-order-list-type  (some-> type str string/lower-case)
-        own-order-list-index (or (:block.temp/order-list-index block)
-                                 (some->> own-order-list-type (get-idx-of-order-list-block block)))]
+        own-order-list-index (:block.temp/order-list-index block)]
     (assoc config :own-order-list-type own-order-list-type
            :own-order-list-index own-order-list-index
            :own-order-number-list? (= own-order-list-type "number"))))
@@ -211,13 +180,6 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
-(defn- indent-target-allowed?
-  [block indent?]
-  (or (not indent?)
-      (let [left (when (de/entity? block)
-                   (ldb/get-left-sibling block))]
-        (not (comments-model/comments-area? left)))))
-
 (defn outliner-tx-meta
   ([block]
    (outliner-tx-meta block nil))
@@ -240,19 +202,18 @@
              blocks' (remove comments-model/protected-comment-block?
                              (get-top-level-blocks blocks))]
          (p/do!
-          (let [blocks' (filter #(indent-target-allowed? % indent?) blocks')]
-            (when (seq blocks')
-              (ui-outliner-tx/transact!
-               (cond-> (merge {:outliner-op :move-blocks
-                               :source-outliner-op :indent-outdent}
-                              (outliner-tx-meta (first blocks')))
-                 edit-block-fn
-                 (assoc :editor/edit-block-fn edit-block-fn))
-               (when save-current-block (save-current-block))
-               (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
-                                                   indent?
-                                                   {:parent-original (get-first-block-original)
-                                                    :logical-outdenting? (state/logical-outdenting?)}))))
+          (when (seq blocks')
+            (ui-outliner-tx/transact!
+             (cond-> (merge {:outliner-op :move-blocks
+                             :source-outliner-op :indent-outdent}
+                            (outliner-tx-meta (first blocks')))
+               edit-block-fn
+               (assoc :editor/edit-block-fn edit-block-fn))
+             (when save-current-block (save-current-block))
+             (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                                 indent?
+                                                 {:parent-original (get-first-block-original)
+                                                  :logical-outdenting? (state/logical-outdenting?)})))
           (when blocks-container
             ;; Update selection nodes to be the new ones
             (reset! *timeout
