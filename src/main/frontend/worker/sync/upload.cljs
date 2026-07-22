@@ -215,9 +215,15 @@
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
-  (if (nil? graph-e2ee?)
-    true
-    (true? graph-e2ee?)))
+  (cond
+    (some? graph-e2ee?) (true? graph-e2ee?)
+    ;; local-mode fix: an imported/legacy graph has no :logseq.kv/graph-rtc-e2ee?
+    ;; datom, so this arrives nil. Upstream defaults nil->true, but a self-hosted
+    ;; (static-token) server has no Cognito/RSA identity to support e2ee, so an
+    ;; e2ee upload fails with :missing-field :user-rsa-key-pair. Default nil->false
+    ;; when talking to a local server; unchanged (nil->true) for the cloud service.
+    (sync-util/static-sync-token) false
+    :else true))
 
 (defn- graph-id->uuid
   [repo graph-id]
