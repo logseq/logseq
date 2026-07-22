@@ -1,14 +1,13 @@
 (ns logseq.outliner.op.construct
   "Construct canonical forward and reverse outliner ops for history actions."
-  (:require [clojure.string :as string]
+  (:require #?(:org.babashka/nbb [logseq.melange.bridge.common.api :as melange-common]
+               :cljs [logseq.melange.bridge.common.api :as melange-common])
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.content :as db-content]
+            [logseq.melange.bridge.db.property :as melange-property]))
 
 (def ^:api semantic-outliner-ops
   #{:save-block
@@ -151,7 +150,7 @@
 
 (defn- get-missing-ref-by-lookup
   [missing-refs tag-lookups]
-  (let [now (common-util/time-ms)]
+  (let [now (melange-common/now-ms)]
     (->> missing-refs
          (keep (fn [{:block/keys [title] :as block :keys [db/ident]}]
                  (when-let [block-id (:block/uuid block)]
@@ -163,7 +162,7 @@
                                          :block/updated-at now
                                          :block/tags (if tag-ref? :logseq.class/Tag :logseq.class/Page)}
                                   (string? title)
-                                  (assoc :block/name (common-util/page-name-sanity-lc title))
+                                  (assoc :block/name (melange-common/page-name-sanity-lower title))
                                   tag-ref?
                                   (assoc :logseq.property.class/extends :logseq.class/Root)
                                   ident
@@ -759,7 +758,7 @@
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
           today-page? (when-let [day (:block/journal-day page)]
-                        (= (date-time-util/ms->journal-day (common-util/time-ms)) day))
+                        (= (melange-common/journal-day-of-ms (melange-common/now-ms)) day))
           root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
       (cond
         class-or-property?
@@ -776,7 +775,7 @@
                                 (assoc :class-ident-namespace class-ident-namespace))]])
                           [:upsert-property
                            [(:db/ident page)
-                            (db-property/get-property-schema (into {} page))
+                            (melange-property/get-property-schema (into {} page))
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
                                  (mapv #(to-insert-op db-before %) root-plans))]
@@ -889,9 +888,11 @@
                                  [property-id
                                   (sanitize-upsert-property-schema
                                    db-before
-                                   (db-property/get-property-schema (into {} property)))
+                                   (melange-property/get-property-schema (into {} property)))
                                   {:property-name (:block/title property)}]]
-                                [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
+                                [:delete-page [(uuid (melange-common/db-ident-block
+                                                      (namespace property-id)
+                                                      (name property-id))) {}]])))
 
                           nil)]
                     (if (and (sequential? inverse-entry)

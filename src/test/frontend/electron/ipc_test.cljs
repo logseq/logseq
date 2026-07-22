@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [electron.ipc :as ipc]
             [frontend.util :as util]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (deftest ipc-uses-transit-json-for-main-channel

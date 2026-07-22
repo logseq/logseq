@@ -1,6 +1,6 @@
 {:paths ["src"]
  :deps
- {logseq/db {:local/root "../db"}}
+ {logseq/melange-bridge {:local/root "../melange/bridge"}}
 
  :aliases
  {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}

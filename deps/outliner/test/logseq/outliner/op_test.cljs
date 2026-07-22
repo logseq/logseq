@@ -2,9 +2,9 @@
   (:require [clojure.string :as string]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.property :as outliner-property]))
 
@@ -170,7 +170,7 @@
                                     {})
           page-var-block (db-test/find-block-by-content
                           @conn
-                          (str "page is " (page-ref/->page-ref (:block/uuid target-page))))
+                          (str "page is " (melange-common/to-page-ref (:block/uuid target-page))))
           time-block (some->> (d/q '[:find [?b ...]
                                      :in $ ?title ?page-title
                                      :where

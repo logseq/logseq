@@ -4,7 +4,7 @@
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private debug-pull-spec

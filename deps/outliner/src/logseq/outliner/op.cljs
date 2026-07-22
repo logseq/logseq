@@ -1,11 +1,10 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.template :as outliner-template]
             [logseq.outliner.page :as outliner-page]
@@ -192,7 +191,7 @@
           (ldb/transact! conn [[:db/retractEntity (:db/id existing)]]
                          {:outliner-op :toggle-reaction})
           true)
-        (let [now (common-util/time-ms)
+        (let [now (melange-common/now-ms)
               reaction-tx (cond-> {:block/uuid (d/squuid)
                                    :block/created-at now
                                    :logseq.property.reaction/emoji-id emoji-id
@@ -218,8 +217,8 @@
       (try
         ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
         (ldb/transact! conn (:tx-data validation)
-                       (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
-                         (= :datoms (::sqlite-export/graph-format export-map))
+                       (cond-> (merge {:logseq.db.sqlite.export/imported-data? true} tx-meta)
+                         (= :datoms (:logseq.db.sqlite.export/graph-format export-map))
                          (assoc :initial-db? true)))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)
@@ -247,7 +246,7 @@
 
 (defn- journal-title
   [db journal-day]
-  (date-time-util/int->journal-title
+  (melange-common/format-journal-day
    journal-day
    (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
 
@@ -406,7 +405,7 @@
 (defn- datom-import-op?
   [[op args]]
   (and (= :batch-import-edn op)
-       (= :datoms (::sqlite-export/graph-format (first args)))))
+       (= :datoms (:logseq.db.sqlite.export/graph-format (first args)))))
 
 (defn apply-ops!
   [conn ops opts]
@@ -424,7 +423,7 @@
                 (assoc :outliner-op single-op-outliner-op)
 
                 (some import-edn-op? ops)
-                (assoc ::sqlite-export/imported-data? true)
+                (assoc :logseq.db.sqlite.export/imported-data? true)
 
                 (some datom-import-op? ops)
                 (assoc :initial-db? true))

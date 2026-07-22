@@ -1,6 +1,7 @@
 (ns frontend.worker.db-core
   "Core db-worker logic without host-specific bootstrap."
   (:require
+   [logseq.melange.bridge.common.api :as melange-common]
    [cljs-bean.core :as bean]
    [cljs.cache :as cache]
    [clojure.set]
@@ -30,26 +31,26 @@
    [frontend.worker.sync.download :as sync-download]
    [frontend.worker.thread-atom]
    [frontend.worker.undo-redo :as worker-undo-redo]
-   [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
    [logseq.api.db-based.tools :as api-tools]
    [logseq.cli.common.db-worker :as cli-db-worker]
-   [logseq.common.graph-dir :as graph-dir]
-   [logseq.common.util :as common-util]
-   [logseq.db :as ldb]
-   [logseq.db.common.initial-data :as common-initial-data]
-   [logseq.db.common.order :as db-order]
-   [logseq.db.common.reference :as db-reference]
-   [logseq.db.common.sqlite :as common-sqlite]
-   [logseq.db.common.view :as db-view]
-   [logseq.db.frontend.class :as db-class]
-   [logseq.db.frontend.entity-util :as entity-util]
-   [logseq.db.frontend.property :as db-property]
-   [logseq.db.frontend.schema :as db-schema]
-   [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-   [logseq.db.sqlite.export :as sqlite-export]
-   [logseq.db.sqlite.gc :as sqlite-gc]
-   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.melange.bridge.common.collection :as melange-collection]
+   [logseq.melange.bridge.db.core :as ldb]
+   [logseq.melange.bridge.db.initial-data :as common-initial-data]
+   [logseq.melange.bridge.db.order :as db-order]
+   [logseq.melange.bridge.db.reference :as db-reference]
+   [logseq.melange.bridge.db.sqlite :as common-sqlite]
+   [logseq.melange.bridge.db.view :as db-view]
+   [logseq.melange.bridge.db.class :as db-class]
+   [logseq.melange.bridge.db.class-catalog :as class-catalog]
+   [logseq.melange.bridge.db.entity :as entity-util]
+   [logseq.melange.bridge.db.property-catalog :as property-catalog]
+   [logseq.melange.bridge.db.schema :as db-schema]
+   [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+   [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
+   [logseq.melange.bridge.db.sqlite.gc :as sqlite-gc]
+   [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+   [logseq.melange.bridge.runtime :as melange-keyword]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.recycle :as outliner-recycle]
    [logseq.publishing.html :as publish-html]
@@ -102,7 +103,7 @@
 (defn- storage-pool-name
   [graph]
   (if (node-runtime?)
-    (graph-dir/repo->graph-dir-key graph)
+    (melange-common/repo-to-graph-dir-key graph)
     (worker-util/get-pool-name graph)))
 
 (defn- get-storage-pool
@@ -294,7 +295,7 @@
 (defn- close-other-dbs!
   [repo]
   (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
-    (when-not (graph-dir/same-repo? repo r)
+    (when-not (melange-common/same-repo? repo r)
       (close-db-aux! r db search client-ops))))
 
 (defn close-db!
@@ -392,12 +393,12 @@
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
-              (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
+              (> (- (melange-common/now-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
       (log/info :gc-sqlite-dbs "gc current graph")
       (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? full-gc?})
       (.exec sqlite-db "VACUUM")
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                       :kv/value (common-util/time-ms)}]
+                                       :kv/value (melange-common/now-ms)}]
                      {:skip-validate-db? true
                       :persist-op? false}))))
 
@@ -420,7 +421,7 @@
 
 (defn- maybe-run-recycle-gc!
   [conn]
-  (let [now (common-util/time-ms)
+  (let [now (melange-common/now-ms)
         last-gc-at (:kv/value (d/entity @conn recycle-gc-kv))]
     (when (or (not (number? last-gc-at))
               (> (- now last-gc-at) outliner-recycle/gc-interval-ms))
@@ -466,10 +467,10 @@
 (defn- built-in-sync-repair-tx-data
   []
   (let [properties built-in-sync-repair-properties
-        new-properties (->> (select-keys db-property/built-in-properties properties)
+        new-properties (->> (select-keys property-catalog/built-in-properties properties)
                             sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
-        new-classes (->> (select-keys db-class/built-in-classes built-in-sync-repair-classes)
+        new-classes (->> (select-keys class-catalog/built-in-classes built-in-sync-repair-classes)
                          (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                          (map (fn [b] (assoc b :logseq.property/built-in? true))))
         new-class-idents (keep (fn [class]
@@ -538,7 +539,6 @@
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
@@ -846,7 +846,7 @@
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
+  (when-not (melange-common/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
@@ -877,10 +877,10 @@
   [result]
   (cond-> result
     (:block result)
-    (update :block common-util/remove-nils-non-nested)
+    (update :block melange-collection/remove-nils-non-nested)
 
     (:children result)
-    (update :children common-util/fast-remove-nils)))
+    (update :children melange-collection/fast-remove-nils)))
 
 (def ^:private get-blocks-with-cache
   (common.cache/cache-fn
@@ -893,7 +893,7 @@
      (when db
        (->> requests
             (mapv (fn [{:keys [id opts]}]
-                    (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                    (let [id' (if (and (string? id) (melange-common/uuid-string? id)) (uuid id) id)]
                       (-> (common-initial-data/get-block-and-children db id' opts)
                           sanitize-block-result
                           (assoc :id id)))))
@@ -1333,13 +1333,13 @@
 
 (defn- take-search-index-batch
   [items batch-size time-budget-ms]
-  (let [deadline (+ (common-util/time-ms) time-budget-ms)]
+  (let [deadline (+ (melange-common/now-ms) time-budget-ms)]
     (loop [batch (transient [])
            remaining (seq items)
            n 0]
       (if (or (nil? remaining)
               (>= n batch-size)
-              (and (pos? n) (>= (common-util/time-ms) deadline)))
+              (and (pos? n) (>= (melange-common/now-ms) deadline)))
         [(persistent! batch) remaining]
         (recur (conj! batch (first remaining))
                (next remaining)
@@ -1352,7 +1352,7 @@
     (let [status-map @(:thread-atom/search-input-idle-status @worker-state/*state)
           {:keys [idle? ts]} (get status-map repo)
           fresh? (and (number? ts)
-                      (<= (- (common-util/time-ms) ts)
+                      (<= (- (melange-common/now-ms) ts)
                           search-index-build-idle-status-ttl-ms))]
       (if (and fresh? (boolean? idle?))
         idle?
@@ -1569,10 +1569,10 @@
       (if-let [error (:error validation)]
         {:error error}
         (let [tx-data (:tx-data validation)
-              tx-meta (cond-> {::sqlite-export/imported-data? true}
+              tx-meta (cond-> {:logseq.db.sqlite.export/imported-data? true}
                         ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
                         ;; to keep pipeline from reverting their import
-                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        (= :datoms (:logseq.db.sqlite.export/graph-format export-edn))
                         (assoc :initial-db? true))]
           (ldb/transact! conn tx-data tx-meta)
           {:tx-count (count tx-data)})))))
@@ -1714,7 +1714,7 @@
 
 (def broadcast-data-types
   (set (map
-        common-util/keyword->string
+        melange-keyword/to-string
         [:sync-db-changes
          :sync-conflicts-updated
          :notification

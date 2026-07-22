@@ -28,19 +28,19 @@
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.util :as sync-util]
    [frontend.worker.undo-redo :as undo-redo]
-   [logseq.common.config :as common-config]
-   [logseq.common.util :as common-util]
-   [logseq.common.util.page-ref :as page-ref]
-   [logseq.db :as ldb]
+   [logseq.melange.bridge.common.api :as melange-common]
+   [logseq.melange.bridge.common.util :as common-util]
+   [logseq.melange.bridge.db.normalize :as melange-normalize]
+
+   [logseq.melange.bridge.db.core :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db-sync.storage :as sync-storage]
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
-   [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.frontend.schema :as db-schema]
-   [logseq.db.frontend.validate :as db-validate]
-   [logseq.db.sqlite.util :as sqlite-util]
-   [logseq.db.test.helper :as db-test]
+   [logseq.melange.bridge.db.schema :as db-schema]
+   [logseq.melange.bridge.db.validation :as db-validate]
+   [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+   [logseq.melange.bridge.db.test-helper :as db-test]
    [logseq.outliner.core :as outliner-core]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.page :as outliner-page]
@@ -79,18 +79,18 @@
   {:before
    (fn []
      (reset! *logseq-db-hooks
-             {:transact-fn @ldb/*transact-fn
-              :transact-pipeline-fn @ldb/*transact-pipeline-fn
-              :transact-invalid-callback @ldb/*transact-invalid-callback})
-     (reset! ldb/*transact-fn nil)
-     (reset! ldb/*transact-pipeline-fn nil)
-     (reset! ldb/*transact-invalid-callback nil))
+             {:transact-fn (ldb/transact-fn)
+              :transact-pipeline-fn (ldb/transact-pipeline-fn)
+              :transact-invalid-callback (ldb/transact-invalid-callback)})
+     (ldb/register-transact-fn! nil)
+     (ldb/register-transact-pipeline-fn! nil)
+     (ldb/register-transact-invalid-callback-fn! nil))
    :after
    (fn []
      (let [{:keys [transact-fn transact-pipeline-fn transact-invalid-callback]} @*logseq-db-hooks]
-       (reset! ldb/*transact-fn transact-fn)
-       (reset! ldb/*transact-pipeline-fn transact-pipeline-fn)
-       (reset! ldb/*transact-invalid-callback transact-invalid-callback)
+       (ldb/register-transact-fn! transact-fn)
+       (ldb/register-transact-pipeline-fn! transact-pipeline-fn)
+       (ldb/register-transact-invalid-callback-fn! transact-invalid-callback)
        (reset! *logseq-db-hooks nil)))})
 
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
@@ -248,7 +248,7 @@
           first-block (db-test/find-block-by-content @conn "first")
           second-block (db-test/find-block-by-content @conn "second")
           injected? (atom false)]
-      (reset! ldb/*transact-pipeline-fn
+      (ldb/register-transact-pipeline-fn!
               (fn [tx-report]
                 (when (and (not @injected?)
                            (some (fn [datom]
@@ -1074,7 +1074,7 @@
                                             (swap! sent conj
                                                    (js->clj (js/JSON.parse raw)
                                                             :keywordize-keys true)))))}
-               test-platform (assoc-in (minimal-platform :browser)
+               test-platform (assoc-in (minimal-platform :electron)
                                        [:broadcast :post-message!]
                                        (fn [type payload]
                                          (swap! events conj [type payload])))]
@@ -1171,7 +1171,7 @@
                        :online-users (atom [])
                        :reconnect (atom {:attempt 0 :timer nil})
                        :stale-kill-timer (atom nil)
-                       :last-ws-message-ts (atom (common-util/time-ms))
+                       :last-ws-message-ts (atom (melange-common/now-ms))
                        :last-sync-error (atom nil)}
                client-atom (atom client)
                config-atom (atom {:ws-url "wss://sync.example.test/sync/%s"})]
@@ -1267,10 +1267,10 @@
        conn
        {}
        (fn [temp-conn]
-         (ldb/transact! temp-conn [[:db/add [:block/uuid child-uuid] :block/order "a-test"]])))
+         (ldb/transact! temp-conn [[:db/add [:block/uuid child-uuid] :block/order "b20"]])))
       (let [child-after (d/entity @conn [:block/uuid child-uuid])
             validation (db-validate/validate-local-db! @conn)]
-        (is (= "a-test" (:block/order child-after)))
+        (is (= "b20" (:block/order child-after)))
         (is (empty? (:errors validation))
             (str (:errors validation)))))))
 
@@ -2075,14 +2075,14 @@
                 [:db/add -1 :block/title "remote-a"]
                 [:db/add -1 :block/parent [:block/uuid page-uuid]]
                 [:db/add -1 :block/page [:block/uuid page-uuid]]
-                [:db/add -1 :block/order 1]
+                [:db/add -1 :block/order "a0"]
                 [:db/add -1 :block/updated-at now]
                 [:db/add -1 :block/created-at now]]
           tx-b [[:db/add -1 :block/uuid block-uuid-b]
                 [:db/add -1 :block/title "remote-b"]
                 [:db/add -1 :block/parent [:block/uuid page-uuid]]
                 [:db/add -1 :block/page [:block/uuid page-uuid]]
-                [:db/add -1 :block/order 2]
+                [:db/add -1 :block/order "a1"]
                 [:db/add -1 :block/updated-at now]
                 [:db/add -1 :block/created-at now]]]
       (with-datascript-conns conn client-ops-conn
@@ -2243,7 +2243,7 @@
       (d/listen! conn-b ::capture-remote-many-page-property
                  (fn [tx-report]
                    (swap! remote-txs conj
-                          {:tx-data (db-normalize/normalize-tx-data
+                          {:tx-data (melange-normalize/normalize-tx-data
                                      (:db-after tx-report)
                                      (:db-before tx-report)
                                      (:tx-data tx-report))
@@ -2335,7 +2335,8 @@
         (outliner-property/set-block-property! temp-conn block-id property-id "Page y")
         (outliner-property/set-block-property! temp-conn block-id property-id "Page z")
         (let [tx-data @*batch-tx-data
-              tx-data' (db-normalize/replace-attr-retract-with-retract-entity @temp-conn tx-data)
+              tx-data' (melange-normalize/replace-attr-retract-with-retract-entity
+                        @temp-conn tx-data)
               schema-index (first (keep-indexed
                                    (fn [idx d]
                                      (when (and (= :db/ident (:a d))
@@ -2561,7 +2562,7 @@
                                   (mapv (fn [{:keys [tx outliner-op]}]
                                           {:tx (sqlite-util/write-transit-str
                                                 (->> tx
-                                                     (db-normalize/remove-retract-entity-ref @conn)
+                                                     (melange-normalize/remove-retract-entity-ref @conn)
                                                      distinct
                                                      vec))
                                            :outliner-op outliner-op})))]
@@ -2590,7 +2591,7 @@
                                 (mapv (fn [{:keys [tx outliner-op]}]
                                         {:tx (sqlite-util/write-transit-str
                                               (->> tx
-                                                   (db-normalize/remove-retract-entity-ref @conn)
+                                                   (melange-normalize/remove-retract-entity-ref @conn)
                                                    distinct
                                                    vec))
                                          :outliner-op outliner-op})))]
@@ -2626,7 +2627,7 @@
                                          :keep-uuid? true})
           (let [sanitize-tx (fn [tx]
                               (->> tx
-                                   (db-normalize/remove-retract-entity-ref @local-conn)
+                                   (melange-normalize/remove-retract-entity-ref @local-conn)
                                    distinct
                                    vec))
                 tx-entries (mapv (fn [{:keys [tx outliner-op]}]
@@ -2800,11 +2801,11 @@
 (deftest indent-outdent-undo-enqueues-concrete-move-blocks-history-test
   (testing "indent-outdent outdent-path persists concrete semantic move history and undo/redo replays without invalid entities"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
-          prev-invalid-callback @ldb/*transact-invalid-callback
+          prev-invalid-callback (ldb/transact-invalid-callback)
           invalid-payload* (atom nil)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (reset! ldb/*transact-invalid-callback
+          (ldb/register-transact-invalid-callback-fn!
                   (fn [tx-report errors]
                     (reset! invalid-payload* {:tx-meta (:tx-meta tx-report)
                                               :errors errors})))
@@ -2823,7 +2824,7 @@
               (is (nil? @invalid-payload*))
               (is (= "child 2" (:block/title (d/entity @conn (:db/id child2))))))
             (finally
-              (reset! ldb/*transact-invalid-callback prev-invalid-callback))))))))
+              (ldb/register-transact-invalid-callback-fn! prev-invalid-callback))))))))
 
 (deftest enqueue-local-tx-preserves-existing-tx-id-test
   (testing "local tx persistence reuses tx-id already attached to tx-meta"
@@ -3506,7 +3507,7 @@
           page-uuid (:block/uuid page)
           ref-block (db-test/find-block-by-content @conn "seed")
           ref-block-uuid (:block/uuid ref-block)
-          node-ref-content (str "ref " (page-ref/->page-ref page-uuid))
+          node-ref-content (str "ref " (melange-common/to-page-ref page-uuid))
           title-content "ref Delete Me"]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -3591,7 +3592,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -4666,7 +4667,7 @@
           page-uuid (:block/uuid page)
           page-id (:db/id page)
           local-page-title "Jul 7th, 2026"
-          local-page-name (common-util/page-name-sanity-lc local-page-title)
+          local-page-name (melange-common/page-name-sanity-lower local-page-title)
           local-page-uuid (random-uuid)
           view-uuid (random-uuid)
           now 1760000000000
@@ -5080,7 +5081,7 @@
                  (fn [tx-report]
                    (when (seq (:tx-data tx-report))
                      (reset! *remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5239,7 +5240,7 @@
                  (fn [tx-report]
                    (when-not @*remote-tx
                      (reset! *remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5272,7 +5273,7 @@
                  (fn [tx-report]
                    (when (seq (:tx-data tx-report))
                      (swap! *remote-txs conj
-                            (db-normalize/normalize-tx-data
+                            (melange-normalize/normalize-tx-data
                              (:db-after tx-report)
                              (:db-before tx-report)
                              (:tx-data tx-report))))))
@@ -5351,7 +5352,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5388,7 +5389,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5423,7 +5424,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5467,7 +5468,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5520,7 +5521,7 @@
                  (fn [tx-report]
                    (when-not @remote-tx
                      (reset! remote-tx
-                             (db-normalize/normalize-tx-data
+                             (melange-normalize/normalize-tx-data
                               (:db-after tx-report)
                               (:db-before tx-report)
                               (:tx-data tx-report))))))
@@ -5623,7 +5624,7 @@
         (fn []
           (let [[_ page-uuid] (outliner-page/create! conn title {:today-journal? true})
                 page (d/entity @conn [:block/uuid page-uuid])
-                library-page (ldb/get-built-in-page @conn common-config/library-page-name)]
+                library-page (ldb/get-built-in-page @conn melange-common/library-page-name)]
             (d/transact! conn [[:db/add (:db/id page) :block/parent (:db/id library-page)]])
             (let [created-at-before (:block/created-at (d/entity @conn [:block/uuid page-uuid]))
                   updated-at-before (:block/updated-at (d/entity @conn [:block/uuid page-uuid]))]
@@ -6612,7 +6613,7 @@
                        [:db/add -1 :block/title "child 2 recreated"]
                        [:db/add -1 :block/parent [:block/uuid parent-uuid]]
                        [:db/add -1 :block/page [:block/uuid page-uuid]]
-                       [:db/add -1 :block/order "b2"]
+                       [:db/add -1 :block/order "b20"]
                        [:db/add -1 :block/created-at now]
                        [:db/add -1 :block/updated-at now]
                        [:db/add -2 :block/uuid recreated-child-uuid]
@@ -7578,7 +7579,7 @@
       (d/listen! conn-b ::capture-rebase-apply-template
                  (fn [tx-report]
                    (swap! remote-txs conj
-                          {:tx-data (db-normalize/normalize-tx-data
+                          {:tx-data (melange-normalize/normalize-tx-data
                                      (:db-after tx-report)
                                      (:db-before tx-report)
                                      (:tx-data tx-report))

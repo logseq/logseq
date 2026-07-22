@@ -1,6 +1,6 @@
 (ns frontend.common-keywords
   "There are some keywords scattered throughout the codebase."
-  (:require [logseq.common.defkeywords :refer [defkeywords]]))
+  (:require-macros [frontend.defkeywords :refer [defkeywords]]))
 
 (defkeywords
   :block/uuid      {:doc "block's uuid"}

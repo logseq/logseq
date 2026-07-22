@@ -1,0 +1,11 @@
+(rule
+ (alias runtest)
+ (deps
+  (source_tree .)
+  (:node_js_api ../js_api/melange-js-api-node.js)
+  (:browser_js_api ../js_api/melange-js-api-browser.js))
+ (action
+  (run
+   sh
+   -c
+   "cd \"$DUNE_SOURCEROOT/bridge\" && \"$DUNE_SOURCEROOT/../../node_modules/.bin/nbb-logseq\" -m nextjournal.test-runner -n logseq.melange.bridge-test && exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/nbb-logseq\" -m nextjournal.test-runner -n logseq.melange.bridge.db.view-test")))

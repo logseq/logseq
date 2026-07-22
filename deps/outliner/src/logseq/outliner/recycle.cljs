@@ -1,12 +1,12 @@
 (ns logseq.outliner.recycle
   "Recycle-based soft delete helpers for DB graphs"
-  (:require [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.delete-blocks :as delete-blocks]
-            [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.order :as db-order]))
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [datascript.core :as d]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.delete-blocks :as delete-blocks]
+            [logseq.melange.bridge.db.initial-data :as common-initial-data]
+            [logseq.melange.bridge.db.order :as db-order]))
 
 (def ^:private recycle-page-title "Recycle")
 (def ^:private retention-ms (* 30 24 3600 1000))
@@ -18,10 +18,10 @@
 
 (defn- build-recycle-page-tx
   [db-id]
-  (let [now (common-util/time-ms)]
+  (let [now (melange-common/now-ms)]
     {:db/id db-id
-     :block/uuid (common-uuid/gen-uuid :builtin-block-uuid recycle-page-title)
-     :block/name (common-util/page-name-sanity-lc recycle-page-title)
+     :block/uuid (uuid (melange-common/builtin-block recycle-page-title))
+     :block/name (melange-common/page-name-sanity-lower recycle-page-title)
      :block/title recycle-page-title
      :block/created-at now
      :block/updated-at now
@@ -117,7 +117,7 @@
   [db blocks {:keys [deleted-by-uuid now-ms]}]
   (let [{:keys [page page-id tx-data]} (ensure-recycle-page db)
         deleted-by-id' (deleted-by-id db deleted-by-uuid)
-        now-ms (or now-ms (common-util/time-ms))
+        now-ms (or now-ms (melange-common/now-ms))
         [recycle-tx _previous-order]
         (reduce
          (fn [[txs previous-order] block]
@@ -151,7 +151,7 @@
          recycle-page-init-tx-data :tx-data
          recycle-page-existing :page} (ensure-recycle-page db)
         deleted-by-db-id (deleted-by-id db deleted-by-uuid)
-        now-ms (or now-ms (common-util/time-ms))]
+        now-ms (or now-ms (melange-common/now-ms))]
     (concat recycle-page-init-tx-data
             [(cond-> {:db/id (:db/id page)
                       :block/parent recycle-page-id
@@ -260,7 +260,7 @@
       true)))
 
 (defn- gc-tx-data
-  [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
+  [db {:keys [now-ms] :or {now-ms (melange-common/now-ms)}}]
   (let [cutoff (- now-ms retention-ms)]
     (->>
      (d/q '[:find [?e ...]

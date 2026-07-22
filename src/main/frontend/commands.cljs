@@ -15,10 +15,8 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]))
 
@@ -155,7 +153,7 @@
                  (db-based-statuses)
                  (mapv (fn [status]
                          (let [command (:block/title status)
-                               label (db-property/built-in-display-title status t-fn)
+                               label (melange-property/built-in-display-title status t-fn)
                                icon (case command
                                       "Canceled" "Cancelled"
                                       "Doing" "InProgress50"
@@ -177,7 +175,7 @@
                  (db-based-priorities)
                  (mapv (fn [priority]
                          (let [value (:block/title priority)
-                               label (db-property/built-in-display-title priority t-fn)]
+                               label (melange-property/built-in-display-title priority t-fn)]
                            [(t-fn :editor.slash/priority-label label)
                             (->priority value)
                             (t-fn :editor.slash/priority-desc label)
@@ -220,7 +218,7 @@
       (concat
        ;; basic
        [[(t-fn :editor.slash/node-reference)
-         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
+         [[:editor/input melange-common/left-and-right-brackets {:backward-pos 2}]
           [:editor/search-page]]
          (t-fn :editor.slash/node-reference-desc)
          :icon/pageRef
@@ -412,7 +410,9 @@
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
-                         (when-let [i (string/index-of (common-util/safe-subs edit-content current-pos) end-pattern)]
+                         (when-let [i (string/index-of
+                                      (melange-common/safe-substring edit-content current-pos)
+                                      end-pattern)]
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
@@ -420,7 +420,8 @@
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           space? (let [space? (when (and last-pattern orig-prefix)
                                 (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                                          (common-util/safe-subs orig-prefix 0 last-index))]
+                                          (melange-common/safe-substring-range
+                                                               orig-prefix 0 last-index))]
                                   (not
                                    (or
                                     (and (= :page-ref command)
@@ -429,8 +430,8 @@
                                              (util/cjk-string? (str (first postfix)))))
                                     (and s
                                          (string/ends-with? s "(")
-                                         (or (string/starts-with? last-pattern block-ref/left-parens)
-                                             (string/starts-with? last-pattern page-ref/left-brackets)))
+                                         (or (string/starts-with? last-pattern melange-common/left-parens)
+                                             (string/starts-with? last-pattern melange-common/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
                                     (and s (= (last s) \#) (string/starts-with? last-pattern "[["))
                                     (and last-pattern
@@ -442,7 +443,9 @@
                      space?))
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
-                   (str (common-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                   (str (melange-common/safe-substring-range
+                                              orig-prefix 0
+                                              (- (count orig-prefix) backward-truncate-number))
                         (when-not (zero? backward-truncate-number)
                           value))
 
@@ -659,8 +662,6 @@
 
 (defmethod handle-step :editor/run-query-command [[_]]
   (state/pub-event! [:editor/run-query-command]))
-
-(def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]

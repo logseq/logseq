@@ -3,10 +3,10 @@
             [clojure.string :as string]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
-            [logseq.db.common.normalize :as db-normalize]
+            [logseq.melange.bridge.db.normalize :as melange-normalize]
             [logseq.db-sync.test-sql :as test-sql]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
@@ -205,8 +205,8 @@
         (storage/init-schema! sql)
         (let [conn (storage/open-conn sql)
               page-uuid (random-uuid)]
-          (with-redefs [db-normalize/normalize-tx-data (fn [_db-after _db-before _tx-data]
-                                                         [])]
+          (with-redefs [melange-normalize/normalize-tx-data (fn [_db-after _db-before _tx-data]
+                                                              [])]
             (d/transact! conn [{:block/uuid page-uuid
                                 :block/name "normalize-drop-repro"}]))
           (is (= 1 (storage/get-t sql)))

@@ -3,8 +3,8 @@
   (:require ["path" :as node-path]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.publishing :as publishing]
             [nbb.core :as nbb]))
 

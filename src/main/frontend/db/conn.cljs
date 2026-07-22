@@ -1,16 +1,16 @@
 (ns frontend.db.conn
   "Contains db connections."
-  (:require [datascript.core :as d]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.text :as text]))
+            [logseq.melange.bridge.common.log :as common-log]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (defonce conns db-conn-state/conns)
 (def get-repo-path db-conn-state/get-repo-path)
@@ -43,10 +43,12 @@
   [repo-name]
   (let [repo-name' (cond
                      (util/electron?)
-                     (text/get-file-basename repo-name)
+                     (melange-common/get-file-basename repo-name)
 
                      (mobile-util/native-platform?)
-                     (common-util/safe-decode-uri-component (text/get-file-basename repo-name))
+                     (melange-common/safe-decode-uri-component
+                      (melange-common/get-file-basename repo-name)
+                      #(common-log/error :decode-uri-component-failed %))
 
                      :else
                      repo-name)]

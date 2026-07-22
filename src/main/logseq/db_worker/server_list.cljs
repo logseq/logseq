@@ -3,7 +3,7 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
-            [logseq.common.path :as path]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (def ^:private write-lock-timeout-ms 2000)
 (def ^:private write-lock-poll-interval-ms 25)
@@ -12,13 +12,13 @@
   [root-dir-path]
   (when-not (seq root-dir-path)
     (throw (js/Error. "root-dir is required")))
-  (path/path-join root-dir-path "server-list"))
+  (melange-common/path-join root-dir-path (to-array ["server-list"])))
 
 (defn lock-path
   [file-path]
   (when-not (seq file-path)
     (throw (js/Error. "server-list file path is required")))
-  (path/path-join (node-path/dirname file-path) "server-list.lock"))
+  (melange-common/path-join (node-path/dirname file-path) (to-array ["server-list.lock"])))
 
 (defn- parse-int
   [value]

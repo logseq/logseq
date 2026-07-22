@@ -16,10 +16,11 @@
             [frontend.util.thingatpt :as thingatpt]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.db.frontend.content :as db-content]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.content :as melange-content]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.melange.bridge.common.regex :as melange-regex]
             [promesa.core :as p]))
 
 (defn- with-ref-ids
@@ -52,10 +53,11 @@
                                  (cond-> refs
                                    (assoc :block/refs refs))
                                  (cond-> (:logseq.property/heading block)
-                                   (update :block/title commands/clear-markdown-heading))
+                                   (update :block/title
+                                           #(melange-common/clear-markdown-heading %)))
                                  (update :block/title (fn [title]
-                                                        (let [title' (db-content/replace-tags-with-id-refs title refs)]
-                                                          (db-content/title-ref->id-ref title' refs)))))))))]
+                                                        (let [title' (melange-content/replace-tags-with-id-refs title refs)]
+                                                          (melange-content/title-ref->id-ref title' refs)))))))))]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true
                                             :outliner-real-op :paste-text}))))
 
@@ -66,7 +68,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (util/safe-re-find #"\s*-\s+" p)
+                                           (if (melange-regex/safe-re-find #"\s*-\s+" p)
                                              p
                                              (str "- " p))))))
                            paragraphs))]
@@ -122,9 +124,9 @@
 
 (defn- markdown-blocks?
   [text]
-  (boolean (or (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)
-               (util/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
-               (util/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
+  (boolean (or (melange-regex/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)
+               (melange-regex/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
+               (melange-regex/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
 
 (defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
@@ -144,8 +146,8 @@
         text (string/replace *text "\r\n" "\n") ;; Fix for Windows platform
         input-id (state/get-edit-input-id)
         {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-        text-url? (common-util/url? text)
-        selection-url? (common-util/url? selection)]
+        text-url? (melange-common/url? text)
+        selection-url? (melange-common/url? selection)]
     (cond
       ;; When a url is selected in a formatted link, replaces it with pasted text
       (or (and (or text-url? selection-url?)
@@ -159,9 +161,9 @@
       (editor-handler/html-link-format! text)
 
       ;; Pastes only block id when inside of '(())'
-      (and (block-ref/block-ref? text)
-           (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
-      (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
+      (and (melange-common/block-ref? text)
+           (editor-handler/wrapped-by? input melange-common/left-parens melange-common/right-parens))
+      (commands/simple-insert! input-id (melange-common/get-block-ref-id text) nil)
 
       :else
       ;; from external
@@ -174,7 +176,7 @@
                                          nil)))]
                         (if (string/blank? result) nil result))
             text' (or html-text
-                      (when (common-util/url? text)
+                      (when (melange-common/url? text)
                         (wrap-macro-url text))
                       text)
             blocks? (markdown-blocks? text')]
@@ -182,7 +184,7 @@
           blocks?
           (paste-text-parseable format text')
 
-          (util/safe-re-find #"(?:\r?\n){2,}" text')
+          (melange-regex/safe-re-find #"(?:\r?\n){2,}" text')
           (paste-segmented-text format text')
 
           :else
@@ -230,7 +232,7 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (if (common-util/url? clipboard-data)
+       (if (melange-common/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
            (editor-handler/html-link-format! clipboard-data))

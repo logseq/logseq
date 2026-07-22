@@ -1,0 +1,8 @@
+- Do not modify any files under `spec/` during development unless explicitly asked to modify the `.mli` files under `spec/`.
+- Do not modify any dune file during development unless explicitly asked.
+- If development is blocked because the `.mli` definitions under `spec/` are unclear or unreasonable, stop development immediately and report the specific spec issue, suggested changes, and rationale.
+- MUST not use magic methods to cast types.
+- Before adding a new external JavaScript function, first check whether a corresponding implementation already exists in `melange.js` or `melange.node`. Avoid adding new externals whenever possible.
+- MUST not disable compiler warnings
+- use rrbvec to replace List
+- Do not retain temporary test files that only validate intermediate migration or refactoring steps and provide no long-term regression value.

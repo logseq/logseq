@@ -1,10 +1,10 @@
 (ns frontend.handler.reaction-test
-  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is testing use-fixtures]]
             [frontend.db :as db]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.test.helper :as test-helper]
-            [logseq.common.util :as common-util]))
+            [frontend.test.helper :as test-helper]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -33,7 +33,7 @@
           target-uuid (:block/uuid block)
           user-uuid (random-uuid)
           repo test-helper/test-db]
-      (let [now (common-util/time-ms)]
+      (let [now (melange-common/now-ms)]
         (db/transact!
          repo
          [{:block/uuid user-uuid

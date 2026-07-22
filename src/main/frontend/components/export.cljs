@@ -1,5 +1,6 @@
 (ns frontend.components.export
-  (:require ["/frontend/utils" :as utils]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["/frontend/utils" :as utils]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.config :as config]
@@ -17,8 +18,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -413,7 +414,9 @@
                                 (reset! *copied? true)))
          (ui/button (t :export/save-to-file)
                     :on-click #(let [file-name (if (uuid? top-level-uuids)
-                                                 (-> (db/get-page top-level-uuids)
-                                                     (util/get-page-title))
+                                                 (let [page (db/get-page top-level-uuids)]
+                                                   (melange-common/page-title
+                                                               (:block/title page)
+                                                               (:block/name page)))
                                                  (t/now))]
                                  (utils/saveToFile (js/Blob. [content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

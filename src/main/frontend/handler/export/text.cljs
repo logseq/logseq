@@ -1,6 +1,7 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
@@ -11,7 +12,7 @@
             [goog.dom :as gdom]
             [frontend.handler.export.common-impl :as common-impl]
             [frontend.handler.export.text-impl :as text-impl]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 ;;; export fns
@@ -76,7 +77,7 @@
     (when (seq files*)
       (let [files (export-files-as-markdown files* nil)
             repo' (string/replace repo config/db-version-prefix "")
-            zip-file-name (str repo' "_markdown_" (quot (util/time-ms) 1000))]
+            zip-file-name (str repo' "_markdown_" (quot (melange-common/now-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo')]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))

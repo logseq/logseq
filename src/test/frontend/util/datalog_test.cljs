@@ -1,7 +1,7 @@
 (ns frontend.util.datalog-test
   (:require [cljs.test :refer [deftest is]]
             [frontend.util.datalog :as datalog-util]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.melange.bridge.db.rules :as rules]))
 
 (deftest add-to-end-of-query-in
   (is (= '[:find ?b

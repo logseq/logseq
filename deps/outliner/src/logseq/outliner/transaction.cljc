@@ -6,14 +6,14 @@
 (defmacro ^:api with-batch-tx
   [conn opts & body]
   (let [conn-sym (gensym "conn__")]
-    `(logseq.db/batch-transact-with-temp-conn!
+    `(logseq.melange.bridge.db.core/batch-transact-with-temp-conn!
       ~conn
       (dissoc ~opts :additional-tx :transact-opts :current-block)
       (fn [~conn-sym]
         (let [~conn ~conn-sym]
           ~@body
           (when (seq (:additional-tx ~opts))
-            (logseq.db/transact! ~conn-sym (:additional-tx ~opts) {})))))))
+            (logseq.melange.bridge.db.core/transact! ~conn-sym (:additional-tx ~opts) {})))))))
 
 (defmacro ^:api transact!
   "Batch all the transactions in `body` to a single transaction.

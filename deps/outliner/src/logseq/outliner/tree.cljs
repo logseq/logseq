@@ -2,7 +2,7 @@
   "Provides tree fns and INode protocol"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defprotocol INode
   (-save [this *txs-state conn opts])

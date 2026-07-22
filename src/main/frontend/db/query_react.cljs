@@ -10,8 +10,8 @@
             [frontend.state :as state]
             [frontend.util.datalog :as datalog-util]
             [lambdaisland.glogi :as log]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.inputs :as db-inputs]))
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.inputs :as db-inputs]))
 
 (defn resolve-input
   "Wrapper around db-inputs/resolve-input which provides editor-specific state"
@@ -58,7 +58,7 @@
 
 (defn- resolve-query
   [query]
-  (let [page-ref? #(and (string? %) (page-ref/page-ref? %))]
+  (let [page-ref? #(and (string? %) (melange-common/page-ref? %))]
     (walk/postwalk
      (fn [f]
        (cond
@@ -69,7 +69,7 @@
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
-           (list 'contains? sym (page-ref/get-page-name page-ref)))
+           (list 'contains? sym (melange-common/get-page-name page-ref)))
 
          :else
          f)) query)))

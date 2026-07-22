@@ -1,15 +1,11 @@
 (ns logseq.outliner.page-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.db :as db-db]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.frontend :as db-db]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
 
 (deftest create-class
@@ -38,7 +34,7 @@
             ;; Create a child page for a class
             [_ child-uuid3] (outliner-page/create! conn "c1/c2" {:split-namespace? true :class? true})
             child-page3 (d/entity @conn [:block/uuid child-uuid3])
-            library (ldb/get-built-in-page @conn common-config/library-page-name)
+            library (ldb/get-built-in-page @conn melange-common/library-page-name)
             bar (ldb/get-page @conn "bar")]
         (is (= ["foo"] (map :block/title (:block/_parent library)))
             "Namespace (non-class) pages are added to the Library page")
@@ -119,7 +115,7 @@
         d1 (ldb/get-page @conn "D1")
         b1 (db-test/find-block-by-content @conn "b1")]
     (ldb/transact! conn [{:db/id (:db/id b1)
-                          :block/title (str "b1 " (page-ref/->page-ref (:block/uuid d1)))
+                          :block/title (str "b1 " (melange-common/to-page-ref (:block/uuid d1)))
                           :block/refs #{(:db/id d1)}}])
     (is (contains? (set (map :db/id (:block/refs (d/entity @conn (:db/id b1)))))
                    (:db/id d1)))
@@ -181,8 +177,9 @@
         [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
         page (d/entity @conn [:block/uuid page-uuid])
         default-name (-> (:block/journal-day page)
-                         (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                         common-util/page-name-sanity-lc)]
+                         (melange-common/format-journal-day
+                          melange-common/default-journal-title-formatter)
+                         (melange-common/page-name-sanity-lower))]
     (is (= "2024-12-16 Monday" (:block/title page))
         "Journal title follows configured formatter")
     (is (= default-name (:block/name page))
@@ -196,7 +193,7 @@
         page (d/entity @conn [:block/uuid page-uuid])]
     (is (= "2026/05/18" (:block/title page))
         "Journal title follows slash title format")
-    (is (= (common-uuid/gen-uuid :journal-page-uuid 20260518) (:block/uuid page))
+    (is (= (uuid (melange-common/journal-page 20260518)) (:block/uuid page))
         "Journal page has the standard journal uuid")
     (is (nil? (ldb/get-page @conn "2026"))
         "Journal title is not split into a year namespace page")

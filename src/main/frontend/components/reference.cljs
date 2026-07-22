@@ -7,7 +7,7 @@
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db.common.reference :as db-reference]
+            [logseq.melange.bridge.db.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]

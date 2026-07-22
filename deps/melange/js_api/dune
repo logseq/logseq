@@ -1,0 +1,105 @@
+(library
+ (name melange_js_api)
+ (modes melange)
+ (implements melange_js_api_spec)
+ (modules
+  Entry_common
+  Entry_common_domain
+  Entry_db_domain
+  Entry_bridge
+  Entry_node
+  Entry_browser)
+ (private_modules
+  Entry_common
+  Entry_common_domain
+  Entry_db_domain
+  Entry_bridge)
+ (libraries
+  melange_common_impl
+  melange_common_api_impl
+  melange_cljs_runtime
+  melange_datascript
+  melange_db_impl
+  melange_db_api_impl
+  melange_db_worker
+  melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_graph_fs_api)
+ (modes melange)
+ (modules Entry_graph_fs)
+ (libraries melange_common_impl melange.node rrbvec)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (target bundle_emit.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (echo ""))))
+
+(melange.emit
+ (target js)
+ (modules bundle_emit)
+ (module_systems commonjs)
+ (libraries melange_js_api melange_graph_fs_api melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias bundle)
+ (targets
+  melange-js-api-node.js
+  melange-js-api-graph-fs.js
+  melange-js-api-browser.js
+  melange-js-api-common.js
+  melange-js-api-db.js)
+ (deps
+  (alias ./melange)
+  (:node_entry ./js/js_api/entry_node.js)
+  (:graph_fs_entry ./js/js_api/entry_graph_fs.js)
+  (:browser_entry ./js/js_api/entry_browser.js)
+  (:common_entry ./js/js_api/entry_common_domain.js)
+  (:db_entry ./js/js_api/entry_db_domain.js)
+  (glob_files_rec ./js/**)
+  vite.config.node.mjs
+  vite.config.graph-fs.mjs
+  vite.config.browser.mjs
+  vite.config.common.mjs
+  vite.config.db.mjs
+  vite.config.domain.mjs
+  shims/empty.js
+  shims/process.js)
+ (action
+  (progn
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.node.mjs} --outDir .vite-node --emptyOutDir true")
+   (run cp .vite-node/melange-js-api-node.js melange-js-api-node.js)
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.graph-fs.mjs} --outDir .vite-graph-fs --emptyOutDir true")
+   (run
+    cp
+    .vite-graph-fs/melange-js-api-graph-fs.js
+    melange-js-api-graph-fs.js)
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.browser.mjs} --outDir .vite-browser --emptyOutDir true")
+   (run cp .vite-browser/melange-js-api-browser.js melange-js-api-browser.js)
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.common.mjs} --outDir .vite-common --emptyOutDir true")
+   (run cp .vite-common/melange-js-api-common.js melange-js-api-common.js)
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.db.mjs} --outDir .vite-db --emptyOutDir true")
+   (run cp .vite-db/melange-js-api-db.js melange-js-api-db.js))))

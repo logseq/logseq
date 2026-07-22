@@ -4,7 +4,7 @@
             [clojure.string :as string]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
-            [logseq.common.config :as common-config]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (def ^:private global-spec*
   {:help {:alias :h
@@ -275,14 +275,13 @@
 
 (defn graph->repo
   [graph]
-  (some-> graph
-          string/trim
-          common-config/canonicalize-db-version-repo))
+  (when-let [graph (some-> graph string/trim)]
+    (melange-common/canonicalize-db-version-repo graph)))
 
 (defn repo->graph
   [repo]
   (when (seq repo)
-    (common-config/strip-leading-db-version-prefix repo)))
+    (melange-common/strip-leading-db-version-prefix repo)))
 
 (defn resolve-repo
   [graph]

@@ -3,8 +3,8 @@
   a good ns to be in yet"
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.util :as util]
-            [goog.string :as gstring]))
+            [goog.string :as gstring]
+            [logseq.melange.bridge.common.regex :as melange-regex]))
 
 (def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\?p=(\d+))?(\S+)?$")
 (def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
@@ -27,7 +27,7 @@
 
 (defn media-link?
   [media-formats s]
-  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
+  (some (fn [fmt] (melange-regex/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
 (defn get-current-line-by-pos
   [s pos]

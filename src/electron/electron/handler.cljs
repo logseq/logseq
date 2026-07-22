@@ -32,10 +32,10 @@
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common :as cli-common]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.graph-registry :as graph-registry]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
+            [logseq.melange.bridge.platform.node :as platform-node]
             [promesa.core :as p]))
 
 (defmethod handle :mkdir [_window [_ dir]]
@@ -45,7 +45,7 @@
   (fs/mkdirSync dir #js {:recursive true}))
 
 (defmethod handle :readdir [_window [_ dir]]
-  (common-graph/readdir dir))
+  (platform-node/readdir dir))
 
 (defmethod handle :listdir [_window [_ dir flat?]]
   (when (and dir (fs-extra/pathExistsSync dir))
@@ -136,7 +136,7 @@
 (defn- get-files
   "Returns vec of file-objs"
   [path]
-  (->> (common-graph/get-files path)
+  (->> (platform-node/get-files path)
        (map (fn [path]
               (let [stat (fs/statSync path)]
                 (when-not (.isDirectory stat)
@@ -196,11 +196,11 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (common-graph/get-db-based-graphs)))
+  (distinct (platform-node/get-db-based-graphs)))
 
 (defn- canonical-repo
   [graph]
-  (common-config/canonicalize-db-version-repo graph))
+  (melange-common/canonicalize-db-version-repo graph))
 
 ;; TODO support alias mechanism
 (defn get-graph-name
@@ -211,7 +211,7 @@
               (cfgs/read-graph-registry)
               {:graph-identifier graph-identifier}))
       (when-let [repo (canonical-repo graph-identifier)]
-        (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
+        (let [graph-name (melange-common/strip-leading-db-version-prefix repo)]
           (->> (get-graphs)
                (some #(when (or
                              (= (utils/normalize-lc %) (utils/normalize-lc repo))

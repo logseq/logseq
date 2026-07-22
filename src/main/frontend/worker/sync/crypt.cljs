@@ -10,7 +10,7 @@
             [frontend.worker.sync.const :as sync-const]
             [frontend.worker.ui-request :as ui-request]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]
             [frontend.worker.sync.util :refer [fail-fast fetch-json coerce-http-request] :as sync-util]))
 

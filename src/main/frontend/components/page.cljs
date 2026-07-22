@@ -33,10 +33,9 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.db :as db-db]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.frontend :as db-db]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -163,7 +162,7 @@
             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
                                [(take mobile-length-limit full-children) true]
                                [full-children false])
-            quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+            quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) melange-common/quick-add-page-name))
             children (cond
                        (and (= id quick-add-page-id)
                             (user-handler/user-uuid)
@@ -321,7 +320,7 @@
     (uuid? page-name)
     (db/entity [:block/uuid page-name])
 
-    (common-util/uuid-string? page-name)
+    (melange-common/uuid-string? page-name)
     (db/entity [:block/uuid (uuid page-name)])
 
     :else
@@ -330,7 +329,7 @@
 (defn- get-sanity-page-name
   [route-match page-name]
   (when-let [path-page-name (get-path-page-name route-match page-name)]
-    (util/page-name-sanity-lc path-page-name)))
+    (melange-common/page-name-sanity-lower path-page-name)))
 
 (hsx/defc on-mounted
   [child on-mounted-fn]
@@ -430,7 +429,7 @@
         title (:block/title page)
         journal? (db/journal-page? title)
         recycle-page? (and (ldb/page? page)
-                           (= title common-config/recycle-page-name))
+                           (= title melange-common/recycle-page-name))
         fmt-journal? (boolean (date/journal-title->int title))
         today? (model/today-journal-page? page)
         home? (= :home (state/get-current-route))
@@ -544,7 +543,7 @@
         page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
                                  (get-sanity-page-name option page-name))
         preview-or-sidebar? (or (:preview? option) (:sidebar? option))
-        page-uuid? (when page-name (util/uuid-string? page-name))
+        page-uuid? (when page-name (melange-common/uuid-string? page-name))
         *loading? (hooks/use-memo #(atom true) [])
         page-in-db (db/get-page page-id-uuid-or-name)
         *page (hooks/use-memo #(atom page-in-db) [])

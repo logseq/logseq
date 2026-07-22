@@ -9,18 +9,14 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph-registry :as graph-registry]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
 (def graph-registry-key
   "ls-graph-registry")
-
-(def normalize-registry-entry graph-registry/normalize-entry)
-
-(def resolve-registry-target graph-registry/resolve-target)
 
 (def set-tab-graph! graph-tab/set-tab-graph!)
 (def get-tab-graph graph-tab/get-tab-graph)
@@ -40,7 +36,7 @@
 (defn <upsert-graph-registry-entry!
   [entry]
   (let [entry' (-> entry
-                   normalize-registry-entry
+                   graph-registry/normalize-entry
                    (assoc :updated-at (js/Date.now)))]
     (if (util/electron?)
       (ipc/ipc "upsertGraphRegistryEntry" entry')
@@ -57,10 +53,10 @@
                             str)
           local-graph-id (some-> (:local-graph-id repo) str)]
       (when (or graph-id local-graph-id)
-        (normalize-registry-entry
+        (graph-registry/normalize-entry
          {:repo url
           :graph-name (or GraphName
-                          (common-config/strip-leading-db-version-prefix url))
+                          (melange-common/strip-leading-db-version-prefix url))
           :graph-id graph-id
           :local-graph-id local-graph-id})))))
 
@@ -75,13 +71,13 @@
         tab-graph-id (:graph-id tab-graph)
         repo-exists? (fn [repo]
                        (some #(= repo (:url %)) repos))
-        url-target-repo (:repo (resolve-registry-target registry' url-target))
+        url-target-repo (:repo (graph-registry/resolve-target registry' url-target))
         tab-target-repo (when (and (nil? url-target-repo)
                                    (string/blank? (:graph-id url-target)))
                           (or (when (and (not (string/blank? tab-repo))
                                          (repo-exists? tab-repo))
                                 tab-repo)
-                              (:repo (resolve-registry-target
+                              (:repo (graph-registry/resolve-target
                                       registry'
                                       {:graph-id tab-graph-id}))))]
     (or url-target-repo
@@ -99,7 +95,7 @@
 
 (defn- new-local-graph-uuid
   []
-  (uuid (str "00000000" (subs (str (common-uuid/gen-uuid)) 8))))
+  (uuid (str "00000000" (subs (str (melange-uuid/gen)) 8))))
 
 (defn- <ensure-local-graph-uuid!
   [repo db*]
@@ -127,7 +123,7 @@
                              local-graph-uuid)]
         (<upsert-graph-registry-entry!
          {:repo repo
-          :graph-name (common-config/strip-leading-db-version-prefix repo)
+          :graph-name (melange-common/strip-leading-db-version-prefix repo)
           :local-graph-id (str local-graph-uuid)
           :graph-id (some-> graph-uuid str)})))))
 

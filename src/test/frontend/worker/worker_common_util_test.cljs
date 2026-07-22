@@ -1,7 +1,7 @@
 (ns frontend.worker.worker-common-util-test
-  (:require [cljs.test :refer [deftest is]]
-            [clojure.string :as string]
-            [frontend.worker-common.util :as worker-util]))
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [deftest is]]
+            [clojure.string :as string]))
 
 (deftest encode-decode-graph-dir-name-roundtrip
   (let [cases [["Demo" "Demo"]
@@ -12,11 +12,11 @@
                ["til~x" "til~7Ex"]
                ["A B/C:D%~E" "A B~2FC~3AD~25~7EE"]]]
     (doseq [[name expected-encoded] cases]
-      (let [encoded (worker-util/encode-graph-dir-name name)]
+      (let [encoded (melange-common/encode-graph-dir-name name)]
         (is (= expected-encoded encoded))
-        (is (= name (worker-util/decode-graph-dir-name encoded)))
+        (is (= name (melange-common/decode-graph-dir-name encoded)))
         (is (not (string/includes? encoded "/")))
         (is (not (string/includes? encoded "\\")))))
-    (is (= "space name" (worker-util/decode-graph-dir-name "space~20name")))
-    (is (= "space name" (worker-util/decode-graph-dir-name "space%20name"))))
-  (is (nil? (worker-util/decode-graph-dir-name nil))))
+    (is (= "space name" (melange-common/decode-graph-dir-name "space~20name")))
+    (is (= "space name" (melange-common/decode-graph-dir-name "space%20name"))))
+  (is (nil? (melange-common/decode-graph-dir-name nil))))

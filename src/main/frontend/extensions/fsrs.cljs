@@ -18,8 +18,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.common.collection :as melange-collection]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -109,7 +110,7 @@
             [?b :block/uuid]]
         q' (if query
              (let [query* (:query result)]
-               (util/concat-without-nil
+               (melange-collection/concat-without-nil
                 q
                 (if (coll? (first query*)) query* [query*])))
              q)]

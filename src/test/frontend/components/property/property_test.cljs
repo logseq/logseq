@@ -5,8 +5,8 @@
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]))
 
@@ -84,7 +84,7 @@
                   db/entity (fn [id]
                               (when (= id property-id)
                                 property))
-                  db-property/get-class-ordered-properties (constantly [])
+                  melange-property/get-class-ordered-properties (constantly [])
                   entity-util/page? :page?
                   outliner-property/get-block-classes-properties (constantly {:all-classes []
                                                                               :classes-properties []})

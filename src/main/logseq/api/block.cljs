@@ -12,8 +12,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.db-ident :as db-ident]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.sdk.utils :as sdk-utils]))
 
 (def plugin-property-prefix "plugin.property.")

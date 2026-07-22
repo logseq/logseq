@@ -5,15 +5,16 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.collection :as melange-collection]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.tree :as otree]
@@ -67,7 +68,7 @@
 
 (defn ^:api block-with-timestamps
   [block]
-  (let [updated-at (common-util/time-ms)
+  (let [updated-at (melange-common/now-ms)
         block (cond->
                (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
@@ -76,7 +77,7 @@
 
 (defn ^:api block-with-updated-at
   [block]
-  (let [updated-at (common-util/time-ms)]
+  (let [updated-at (melange-common/now-ms)]
     (assoc block :block/updated-at updated-at)))
 
 (defn- filter-top-level-blocks
@@ -117,9 +118,9 @@
   [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
     (let [m' (cond-> {:db/id (:db/id e)
-                      :block/updated-at (common-util/time-ms)}
+                      :block/updated-at (melange-common/now-ms)}
                (not (:block/created-at e))
-               (assoc :block/created-at (common-util/time-ms)))
+               (assoc :block/created-at (melange-common/now-ms)))
           txs [m']]
       (swap! txs-state into txs))))
 
@@ -211,7 +212,7 @@
 (defn- inline-tag-disallowed?
   [db t]
   ;; both disallowed tags and built-in pages shouldn't be used as inline tags
-  (let [disallowed-idents (into db-class/disallowed-inline-tags
+  (let [disallowed-idents (into class-catalog/disallowed-inline-tags
                                 #{:logseq.property/query :logseq.property/asset})]
     (and (map? t)
          (or
@@ -245,7 +246,7 @@
           disallowed-tags (filter disallowed-tag? tags')]
       (if (and (seq disallowed-tags)
                (some (fn [tag]
-                       (string/includes? (:block/title block) (str "#" (page-ref/->page-ref (:block/uuid tag)))))
+                       (string/includes? (:block/title block) (str "#" (melange-common/to-page-ref (:block/uuid tag)))))
                      disallowed-tags))
         (-> block
             (update :block/tags
@@ -259,7 +260,7 @@
                                    (reduce
                                     (fn [title tag]
                                       (-> (string/replace title
-                                                          (str "#" (page-ref/->page-ref (:block/uuid tag)))
+                                                          (str "#" (melange-common/to-page-ref (:block/uuid tag)))
                                                           (str "#" (:block/title tag)))
                                           string/trim))
                                     title
@@ -292,7 +293,7 @@
           page? (ldb/page? block-entity)
           m* (if (and (:block/title m*)
                       (not (:logseq.property.node/display-type block-entity)))
-               (update m* :block/title common-util/clear-markdown-heading)
+               (update m* :block/title #(melange-common/clear-markdown-heading %))
                m*)
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
@@ -302,9 +303,11 @@
           m (if page-title-changed?
               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
                     page-name (if-let [journal-day (:block/journal-day block-entity)]
-                                (common-util/page-name-sanity-lc
-                                 (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
-                                (common-util/page-name-sanity-lc (:block/title m*)))]
+                                (melange-common/page-name-sanity-lower
+                                 (melange-common/format-journal-day
+                                  journal-day
+                                  melange-common/default-journal-title-formatter))
+                                (melange-common/page-name-sanity-lower (:block/title m*)))]
                 (assoc m* :block/name page-name))
               m*)
           _ (when (and ;; page or object changed?
@@ -575,8 +578,8 @@
                                                              (reduce
                                                               (fn [value id]
                                                                 (string/replace value
-                                                                                (page-ref/->page-ref id)
-                                                                                (page-ref/->page-ref (uuids id))))
+                                                                                (melange-common/to-page-ref id)
+                                                                                (melange-common/to-page-ref (uuids id))))
                                                               value
                                                               template-ref-block-ids)
                                                              value))))
@@ -599,7 +602,7 @@
         uuids (zipmap block-uuids
                       (if keep-uuid?
                         block-uuids
-                        (repeatedly common-uuid/gen-uuid)))
+                        (repeatedly melange-uuid/gen)))
         uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
@@ -802,9 +805,9 @@
                                                       (:db/id (:block/parent target-block))
                                                       (:db/ident (d/entity db (:db/id from-property)))
                                                       [:block/uuid new-id]]])) top-level-blocks)))
-                 full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
-                                                         tx
-                                                         property-values-tx)
+                 full-tx (melange-collection/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
+                                                                tx
+                                                                property-values-tx)
                 ;; Replace entities with eid because Datascript doesn't support entity transaction
                  full-tx' (walk/prewalk
                            (fn [f]
@@ -1010,7 +1013,7 @@
                                                 [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
                                                  [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
                           (concat retract-property-tx add-property-tx))]
-        (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
+        (melange-collection/concat-without-nil tx-data children-page-tx property-tx)))))
 
 (defn- transact-move-blocks!
   [conn blocks target-block sibling? opts outliner-op top-level-blocks]
@@ -1132,7 +1135,7 @@
             parent (:block/parent first-block)
             concat-tx-fn (fn [& results]
                            {:tx-data (->> (map :tx-data results)
-                                          (apply common-util/concat-without-nil))
+                                          (apply melange-collection/concat-without-nil))
                             :tx-meta (:tx-meta (first results))})
             opts {:outliner-op :indent-outdent-blocks}]
         (if indent?

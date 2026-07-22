@@ -4,8 +4,8 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as worker-platform]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [promesa.core :as p]))
 
 (def test-repo "logseq_db_graph-xxx")

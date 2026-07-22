@@ -4,7 +4,7 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]))
 
 (deftest block-unique-title-no-truncate-when-disabled
   (testing "disable truncate for cmdk path"

@@ -2,9 +2,9 @@
   "Cli fns for use with db-worker"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]))
 
 (defn- minimal-list-item
   [e]
@@ -40,7 +40,7 @@
                     (:logseq.property/classes e)
                     (update :logseq.property/classes #(mapv :db/ident %))
                     (:logseq.property/description e)
-                    (update :logseq.property/description db-property/property-value-content))
+                    (update :logseq.property/description melange-property/property-value-content))
                   ;; Keep property type and cardinality in default list output (without --expand).
                   (assoc (minimal-list-item e)
                          :logseq.property/type (:logseq.property/type e)
@@ -70,7 +70,7 @@
                     (:logseq.property.view/type e)
                     (assoc :logseq.property.view/type (:db/ident (:logseq.property.view/type e)))
                     (:logseq.property/description e)
-                    (update :logseq.property/description db-property/property-value-content))
+                    (update :logseq.property/description melange-property/property-value-content))
                   (minimal-list-item e)))))))
 
 (defn- ref->ident

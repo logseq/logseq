@@ -4,7 +4,7 @@
    [clojure.string :as string]
    [lambdaisland.glogi :as log]
    [logseq.db-sync.malli-schema :as db-sync-schema]
-   [logseq.db.sqlite.util :as sqlite-util]))
+   [logseq.melange.bridge.db.sqlite.util :as sqlite-util]))
 
 (def invalid-coerce ::invalid-coerce)
 

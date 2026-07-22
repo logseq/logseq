@@ -1,17 +1,17 @@
 (ns frontend.worker.db-worker-node
   "Node.js daemon entrypoint for db-worker."
-  (:require ["http" :as http]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["http" :as http]
             [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
-            [logseq.common.graph-dir :as graph-dir]
-            [logseq.common.version :as build-version]
+            [logseq.melange.bridge.common.version :as build-version]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-worker.log :as db-worker-log]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
@@ -254,7 +254,7 @@
            :error {:code :missing-repo
                    :message "repo is required"}}
 
-          (not (graph-dir/same-repo? repo bound-repo))
+          (not (melange-common/same-repo? repo bound-repo))
           {:status 409
            :error {:code :repo-mismatch
                    :message "repo does not match bound repo"
@@ -453,7 +453,7 @@
                               {:code :repo-locked
                                :repo target-repo})))
           _ (when (and (seq target-repo)
-                       (not (graph-dir/same-repo? target-repo (:repo lock))))
+                       (not (melange-common/same-repo? target-repo (:repo lock))))
               (throw (ex-info "graph lock repo mismatch"
                               {:code :repo-locked
                                :repo target-repo

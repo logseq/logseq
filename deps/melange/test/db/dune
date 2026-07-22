@@ -1,0 +1,178 @@
+(melange.emit
+ (target node)
+ (modules
+  asset_test
+  block_title_test
+  bidirectional_test
+  class_read_test
+  class_catalog_test
+  content_test
+  core_read_test
+  delete_plan_test
+  delete_workflow_test
+  db_ident_test
+  entity_read_test
+  entity_lookup_test
+  frontend_read_test
+  input_plan_test
+  initial_data_workflow_test
+  initial_projection_test
+  initial_read_test
+  kv_entity_test
+  order_test
+  normalize_plan_test
+  property_catalog_test
+  property_build_test
+  property_identity_test
+  property_order_test
+  property_scope_test
+  property_shape_test
+  property_workflow_test
+  property_type_test
+  reference_filter_test
+  reference_workflow_test
+  rules_test
+  schema_test
+  schema_version_test
+  sqlite_build_test
+  sqlite_export_test
+  sqlite_gc_workflow_test
+  sqlite_lifecycle_test
+  sqlite_policy_test
+  tree_read_test
+  tree_workflow_test
+  transaction_policy_test
+  validation_datom_test
+  validation_entity_test
+  validation_identity_test
+  validation_property_test
+  validation_schema_test
+  view_filter_test
+  view_entity_selection_test
+  view_data_workflow_test
+  view_grouping_test
+  view_order_test
+  view_property_values_test
+  view_workflow_test
+  view_query_workflow_test)
+ (module_systems commonjs)
+ (libraries melange_db_impl melange-fest rrbvec)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias ./melange)
+  (:asset_test ./node/test/db/asset_test.js)
+  (:block_title_test ./node/test/db/block_title_test.js)
+  (:bidirectional_test ./node/test/db/bidirectional_test.js)
+  (:class_read_test ./node/test/db/class_read_test.js)
+  (:class_catalog_test ./node/test/db/class_catalog_test.js)
+  (:content_test ./node/test/db/content_test.js)
+  (:core_read_test ./node/test/db/core_read_test.js)
+  (:delete_plan_test ./node/test/db/delete_plan_test.js)
+  (:delete_workflow_test ./node/test/db/delete_workflow_test.js)
+  (:db_ident_test ./node/test/db/db_ident_test.js)
+  (:entity_read_test ./node/test/db/entity_read_test.js)
+  (:entity_lookup_test ./node/test/db/entity_lookup_test.js)
+  (:frontend_read_test ./node/test/db/frontend_read_test.js)
+  (:input_plan_test ./node/test/db/input_plan_test.js)
+  (:initial_data_workflow_test ./node/test/db/initial_data_workflow_test.js)
+  (:initial_projection_test ./node/test/db/initial_projection_test.js)
+  (:initial_read_test ./node/test/db/initial_read_test.js)
+  (:kv_entity_test ./node/test/db/kv_entity_test.js)
+  (:order_test ./node/test/db/order_test.js)
+  (:normalize_plan_test ./node/test/db/normalize_plan_test.js)
+  (:property_catalog_test ./node/test/db/property_catalog_test.js)
+  (:property_build_test ./node/test/db/property_build_test.js)
+  (:property_identity_test ./node/test/db/property_identity_test.js)
+  (:property_order_test ./node/test/db/property_order_test.js)
+  (:property_scope_test ./node/test/db/property_scope_test.js)
+  (:property_shape_test ./node/test/db/property_shape_test.js)
+  (:property_workflow_test ./node/test/db/property_workflow_test.js)
+  (:property_type_test ./node/test/db/property_type_test.js)
+  (:reference_filter_test ./node/test/db/reference_filter_test.js)
+  (:reference_workflow_test ./node/test/db/reference_workflow_test.js)
+  (:rules_test ./node/test/db/rules_test.js)
+  (:schema_test ./node/test/db/schema_test.js)
+  (:schema_version_test ./node/test/db/schema_version_test.js)
+  (:sqlite_build_test ./node/test/db/sqlite_build_test.js)
+  (:sqlite_export_test ./node/test/db/sqlite_export_test.js)
+  (:sqlite_gc_workflow_test ./node/test/db/sqlite_gc_workflow_test.js)
+  (:sqlite_lifecycle_test ./node/test/db/sqlite_lifecycle_test.js)
+  (:sqlite_policy_test ./node/test/db/sqlite_policy_test.js)
+  (:tree_read_test ./node/test/db/tree_read_test.js)
+  (:tree_workflow_test ./node/test/db/tree_workflow_test.js)
+  (:transaction_policy_test ./node/test/db/transaction_policy_test.js)
+  (:validation_datom_test ./node/test/db/validation_datom_test.js)
+  (:validation_entity_test ./node/test/db/validation_entity_test.js)
+  (:validation_identity_test ./node/test/db/validation_identity_test.js)
+  (:validation_property_test ./node/test/db/validation_property_test.js)
+  (:validation_schema_test ./node/test/db/validation_schema_test.js)
+  (:view_filter_test ./node/test/db/view_filter_test.js)
+  (:view_entity_selection_test ./node/test/db/view_entity_selection_test.js)
+  (:view_data_workflow_test ./node/test/db/view_data_workflow_test.js)
+  (:view_grouping_test ./node/test/db/view_grouping_test.js)
+  (:view_order_test ./node/test/db/view_order_test.js)
+  (:view_property_values_test ./node/test/db/view_property_values_test.js)
+  (:view_workflow_test ./node/test/db/view_workflow_test.js)
+  (:view_query_workflow_test ./node/test/db/view_query_workflow_test.js))
+ (action
+  (run
+   node
+   --test
+   %{asset_test}
+   %{block_title_test}
+   %{bidirectional_test}
+   %{class_read_test}
+   %{class_catalog_test}
+   %{content_test}
+   %{core_read_test}
+   %{delete_plan_test}
+   %{delete_workflow_test}
+   %{db_ident_test}
+   %{entity_read_test}
+   %{entity_lookup_test}
+   %{frontend_read_test}
+   %{input_plan_test}
+   %{initial_data_workflow_test}
+   %{initial_projection_test}
+   %{initial_read_test}
+   %{kv_entity_test}
+   %{order_test}
+   %{normalize_plan_test}
+   %{property_catalog_test}
+   %{property_build_test}
+   %{property_identity_test}
+   %{property_order_test}
+   %{property_scope_test}
+   %{property_shape_test}
+   %{property_workflow_test}
+   %{property_type_test}
+   %{reference_filter_test}
+   %{reference_workflow_test}
+   %{rules_test}
+   %{schema_test}
+   %{schema_version_test}
+   %{sqlite_build_test}
+   %{sqlite_export_test}
+   %{sqlite_gc_workflow_test}
+   %{sqlite_lifecycle_test}
+   %{sqlite_policy_test}
+   %{tree_read_test}
+   %{tree_workflow_test}
+   %{transaction_policy_test}
+   %{validation_datom_test}
+   %{validation_entity_test}
+   %{validation_identity_test}
+   %{validation_property_test}
+   %{validation_schema_test}
+   %{view_filter_test}
+   %{view_entity_selection_test}
+   %{view_data_workflow_test}
+   %{view_grouping_test}
+   %{view_order_test}
+   %{view_property_values_test}
+   %{view_workflow_test}
+   %{view_query_workflow_test})))

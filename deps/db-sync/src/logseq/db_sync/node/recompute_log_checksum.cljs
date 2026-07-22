@@ -4,7 +4,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]))
 
 (defn- fail!

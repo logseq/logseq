@@ -225,7 +225,6 @@ jobs:
           cache-dependency-path: |
             pnpm-lock.yaml
             cli/pnpm-lock.yaml
-            deps/db/pnpm-lock.yaml
             scripts/pnpm-lock.yaml
 
       - name: Set up Java
@@ -266,9 +265,6 @@ jobs:
 
       - name: Create DB graph with classes
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
-
-      - name: Fetch deps/db pnpm deps
-        run: pnpm --dir deps/db install --frozen-lockfile --ignore-workspace
 
       - name: Build logseq CLI runtime
         run: |

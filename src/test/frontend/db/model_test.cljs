@@ -6,7 +6,7 @@
             [frontend.db.model :as model]
             [frontend.db.utils]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.property :as outliner-property]))
 

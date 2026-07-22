@@ -1,10 +1,10 @@
 (ns logseq.graph-parser.property
   "For file graphs, core vars and util fns for properties"
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [goog.string :as gstring]
-            [goog.string.format]
-            [logseq.common.util :as common-util]))
+            [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
 (defn colons-org
@@ -22,7 +22,7 @@
 (defn valid-property-name?
   [s]
   {:pre [(string? s)]}
-  (and (common-util/valid-edn-keyword? s)
+  (and (melange-common/valid-edn-keyword? s)
        (not (re-find #"[\"|^|(|)|{|}]+" s))
        ;; Disallow tags as property names
        (not (re-find #"^:#" s))))
@@ -117,7 +117,7 @@
         (let [before (subvec lines 0 start-idx)
               middle (->> (subvec lines (inc start-idx) end-idx)
                           (map (fn [text]
-                                 (let [[k v] (common-util/split-first ":" (subs text 1))]
+                                 (let [[k v] (melange-common/split-first ":" (subs text 1))]
                                    (if (and k v)
                                      (let [k (string/replace k "_" "-")
                                            compare-k (keyword (string/lower-case k))

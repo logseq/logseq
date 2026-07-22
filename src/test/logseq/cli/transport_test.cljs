@@ -4,7 +4,7 @@
             [logseq.cli.profile :as profile]
             [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def ^:private fs (js/require "fs"))

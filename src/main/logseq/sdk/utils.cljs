@@ -1,15 +1,15 @@
 (ns logseq.sdk.utils
-  (:require [camel-snake-kebab.core :as csk]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.api.db-based.tools :as api-tools]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.entity :as entity-util]))
 
 (defn- keep-json-keyword?
   [k]
@@ -65,7 +65,7 @@
             (-> a
                 (assoc :block/content (:block/title a)
                        :block/full-title (or (when-let [e (db/entity [:block/uuid (:block/uuid a)])]
-                                               (db-content/recur-replace-uuid-in-block-title e))
+                                               (melange-content/recur-replace-uuid-in-block-title e))
                                              (:block/title a)))
                 remove-hidden-properties)
 
@@ -77,7 +77,7 @@
     (uuid? s)
     s
 
-    (util/uuid-string? s)
+    (melange-common/uuid-string? s)
     (uuid s)
 
     :else

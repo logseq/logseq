@@ -11,13 +11,14 @@
             [frontend.db.conn :as db-conn]
             [frontend.db.query-react :as query-react]
             [frontend.template :as template]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.rules :as rules]
+            [logseq.melange.bridge.common.collection :as melange-collection]
+            [logseq.melange.bridge.common.regex :as melange-regex]))
 
 ;; Query fields:
 
@@ -45,16 +46,16 @@
   (let [input (string/lower-case (name input))]
     (cond
       (= "today" input)
-      (date-time-util/date->int (t/today))
+      (melange-common/journal-day-of-ms (.getTime (t/today)))
 
       (= "yesterday" input)
-      (date-time-util/date->int (t/yesterday))
+      (melange-common/journal-day-of-ms (.getTime (t/yesterday)))
 
       (= "tomorrow" input)
-      (date-time-util/date->int (t/plus (t/today) (t/days 1)))
+      (melange-common/journal-day-of-ms (.getTime (t/plus (t/today) (t/days 1))))
 
-      (page-ref/page-ref? input)
-      (let [input (-> (page-ref/get-page-name input)
+      (melange-common/page-ref? input)
+      (let [input (-> (melange-common/get-page-name input)
                       (string/replace ":" "")
                       (string/capitalize))]
         (when (date/valid-journal-title? input)
@@ -68,13 +69,13 @@
                  "m" t/months
                  "w" t/weeks
                  t/days)]
-        (date-time-util/date->int (t/plus (t/today) (tf duration)))))))
+        (melange-common/journal-day-of-ms (.getTime (t/plus (t/today) (tf duration))))))))
 
 (defn- ->timestamp [input]
   (let [input (string/lower-case (name input))]
     (cond
       (= "now" input)
-      (common-util/time-ms)
+      (melange-common/now-ms)
 
       (= "today" input)
       (tc/to-long (t/today))
@@ -85,8 +86,8 @@
       (= "tomorrow" input)
       (tc/to-long (t/plus (t/today) (t/days 1)))
 
-      (page-ref/page-ref? input)
-      (let [input (-> (page-ref/get-page-name input)
+      (melange-common/page-ref? input)
+      (let [input (-> (melange-common/get-page-name input)
                       (string/replace ":" "")
                       (string/capitalize))]
         (when (date/valid-journal-title? input)
@@ -228,7 +229,7 @@
                    (string/lower-case)
                    (string/replace "_" "-")
                    keyword)]
-        (if (db-property/property? k')
+        (if (melange-property/property? k')
           k'
           (case k'
             :created-at
@@ -287,7 +288,7 @@
     (cond (string? v')
           (if (string/starts-with? v' "#")
             (subs v' 1)
-            (or (page-ref/get-page-name v') v'))
+            (or (melange-common/get-page-name v') v'))
           ;; Convert number pages to string
           (and (double? v) (= :node (:logseq.property/type (d/entity *current-db* k))))
           (str v)
@@ -368,7 +369,7 @@
                   (first (rest e))
                   (rest e))]
     (when (seq markers)
-      (let [markers' (set (map (comp common-util/capitalize-all name) markers))]
+      (let [markers' (set (map (comp melange-common/capitalize-all name) markers))]
         {:query (list 'task '?b (set markers'))
          :rules [:task]}))))
 
@@ -389,12 +390,12 @@
                (rest e))
         tags (map name tags)]
     (when (seq tags)
-      (let [tags (set (map (comp page-ref/get-page-name!) tags))]
+      (let [tags (set (map (comp melange-common/get-page-name-or-self) tags))]
         {:query (list 'tags
                       '?b
                       (->> tags
                            (mapcat (fn [tag-name]
-                                     (when-let [tag-id (if (common-util/uuid-string? tag-name)
+                                     (when-let [tag-id (if (melange-common/uuid-string? tag-name)
                                                          [:block/uuid (uuid tag-name)]
                                                          (first (ldb/page-exists? *current-db* tag-name #{:logseq.class/Tag})))]
                                        (when-let [tag (d/entity *current-db* tag-id)]
@@ -413,15 +414,15 @@
 
 (defn- build-page
   [e]
-  (let [page-name (page-ref/get-page-name! (str (first (rest e))))
-        page-name (common-util/page-name-sanity-lc page-name)]
+  (let [page-name (melange-common/get-page-name-or-self (str (first (rest e))))
+        page-name (melange-common/page-name-sanity-lower page-name)]
     {:query (list 'page '?b page-name)
      :rules [:page]}))
 
 (defn- build-page-ref
   [e]
-  (let [page-name (-> (page-ref/get-page-name! e)
-                      (common-util/page-name-sanity-lc))
+  (let [page-name (-> (melange-common/get-page-name-or-self e)
+                      (melange-common/page-name-sanity-lower))
         page (ldb/get-page *current-db* page-name)]
     (when page
       {:query (list 'page-ref '?b (:db/id page))
@@ -429,8 +430,8 @@
 
 (defn- build-self-ref
   [e]
-  (let [page-name (-> (page-ref/get-page-name! e)
-                      (common-util/page-name-sanity-lc))
+  (let [page-name (-> (melange-common/get-page-name-or-self e)
+                      (melange-common/page-name-sanity-lower))
         page (ldb/get-page *current-db* page-name)]
     (when page
       {:query (list 'self-ref '?b (:db/id page))
@@ -475,7 +476,7 @@ Some bindings in this fn:
                 (symbol (string/lower-case (name fe)))
                 :else
                 (string/lower-case (str fe))))
-         page-ref? (page-ref/page-ref? e)]
+         page-ref? (melange-common/page-ref? e)]
      (when (or
             (contains? #{'between 'property 'private-property 'todo 'task 'priority 'page} fe)
             (and (not page-ref?) (string? e)))
@@ -488,7 +489,7 @@ Some bindings in this fn:
        {:query [e]
         :rules []}
 
-       (and (= fe 'and) (every? page-ref/page-ref? (rest e)))
+       (and (= fe 'and) (every? melange-common/page-ref? (rest e)))
        (build-query (concat e [(cons 'or (rest e))]) env level)
 
        page-ref?
@@ -536,11 +537,11 @@ Some bindings in this fn:
 (defonce tag-placeholder "~~~tag-placeholder~~~")
 (defn pre-transform
   [s]
-  (if (common-util/wrapped-by-quotes? s)
+  (if (melange-common/wrapped-by-quotes? s)
     s
     (let [quoted-page-ref (fn [matches]
                             (let [match' (string/replace (second matches) "#" tag-placeholder)]
-                              (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
+                              (str "\"" melange-common/left-brackets match' melange-common/right-brackets "\"")))]
       (some-> s
               (string/replace #"\"?\[\[(.*?)\]\]\"?" quoted-page-ref)
               (string/replace #"\(between ([^\)]+)\)"
@@ -549,7 +550,7 @@ Some bindings in this fn:
                                      (remove string/blank?)
                                      (map (fn [x]
                                             (if (or (contains? #{"+" "-"} (first x))
-                                                    (and (common-util/safe-re-find #"\d" (first x))
+                                                    (and (melange-regex/safe-re-find #"\d" (first x))
                                                          (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
                                               (keyword (name x))
                                               x)))
@@ -637,13 +638,13 @@ Some bindings in this fn:
          f))
      query)))
 
-(def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
+(def custom-readers {:readers {'tag (fn [x] (melange-common/to-page-ref x))}})
 (defn parse
   [s db {:keys [cards?]}]
   (when (and (string? s)
              (not (string/blank? s)))
     (binding [*current-db* db]
-      (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
+      (let [s (if (= \# (first s)) (melange-common/to-page-ref (subs s 1)) s)
             form (some->> s
                           (pre-transform)
                           (reader/read-string custom-readers))
@@ -719,7 +720,7 @@ Some bindings in this fn:
            {query* :query :keys [rules sample]} (parse-query query-string db {:cards? (:cards? query-opts)})
            query* (if (:cards? query-opts)
                     (let [card-id (:db/id (d/entity db :logseq.class/Card))]
-                      (common-util/concat-without-nil
+                      (melange-collection/concat-without-nil
                        [['?b :block/tags card-id]]
                        (if (coll? (first query*)) query* [query*])))
                     query*)

@@ -15,7 +15,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :as version]
-            [logseq.common.version :as build-version]
+            [logseq.melange.bridge.common.version :as build-version]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]

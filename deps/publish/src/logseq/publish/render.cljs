@@ -1,11 +1,12 @@
 (ns logseq.publish.render
   "Renders published content as HTML"
   (:require-macros [hiccups.core])
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [hiccups.runtime]
-            [logseq.common.util :as common-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
@@ -259,16 +260,16 @@
 (defn property-type
   [prop-key property-type-by-ident]
   (or (get property-type-by-ident prop-key)
-      (get-in db-property/built-in-properties [prop-key :schema :type])))
+      (get-in property-catalog/built-in-properties [prop-key :schema :type])))
 
 (defn property-hidden?
   [prop-key property-hidden-by-ident]
   (or (true? (get property-hidden-by-ident prop-key))
-      (true? (get-in db-property/built-in-properties [prop-key :schema :hide?]))))
+      (true? (get-in property-catalog/built-in-properties [prop-key :schema :hide?]))))
 
 (defn page-ref->uuid [name name->uuid]
   (or (get name->uuid name)
-      (get name->uuid (common-util/page-name-sanity-lc name))))
+      (get name->uuid (melange-common/page-name-sanity-lower name))))
 
 (defn- entity->link-node
   [entity ctx prop-key]
@@ -279,7 +280,7 @@
       (and uuid graph-uuid (publish-model/page-entity? entity))
       [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)}
         (str (when (= prop-key :block/tags) "#") title)]]
-      (common-util/url? title)
+      (melange-common/url? title)
       [[:a {:href title} title]]
       :else
       [title])))
@@ -308,7 +309,7 @@
       (map? value)
       (if-let [eid (:db/id value)]
         (property-value->nodes eid prop-key ctx entities)
-        (if-let [content (db-property/property-value-content value)]
+        (if-let [content (melange-property/property-value-content value)]
           (property-value->nodes content prop-key ctx entities)
           [(pr-str value)]))
 
@@ -355,7 +356,7 @@
 
 (defn entity-properties
   [entity ctx entities]
-  (let [props (db-property/properties entity)
+  (let [props (melange-property/properties entity)
         inline-props (:block/properties entity)
         props (if (map? inline-props)
                 (merge props inline-props)
@@ -509,7 +510,7 @@
 
 (defn- video-embed
   [url]
-  (when (common-util/url? url)
+  (when (melange-common/url? url)
     (let [matches (or (safe-match youtube-regex url)
                       (safe-match loom-regex url)
                       (safe-match vimeo-regex url)
@@ -652,7 +653,7 @@
                           :else [])
             page-uuid (when (= "Page_ref" link-type)
                         (or (page-ref->uuid link-value name->uuid)
-                            (when (common-util/uuid-string? link-value) link-value)))
+                            (when (melange-common/uuid-string? link-value) link-value)))
             page-title (when page-uuid
                          (get uuid->title page-uuid))
             label-nodes (cond
@@ -802,7 +803,7 @@
     (map? value)
     (if (:db/id value)
       (publish-model/entity->title value)
-      (if-let [content (db-property/property-value-content value)]
+      (if-let [content (melange-property/property-value-content value)]
         (str content)
         (str value)))
     (sequential? value)

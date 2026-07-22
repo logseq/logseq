@@ -1,0 +1,7 @@
+(library
+ (name melange_cljs_runtime_spec)
+ (modes melange)
+ (libraries melange.js)
+ (virtual_modules Value_codec)
+ (preprocess
+  (pps melange.ppx)))

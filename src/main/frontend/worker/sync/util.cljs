@@ -1,12 +1,12 @@
 (ns frontend.worker.sync.util
   "Helpers for sync"
-  (:require [lambdaisland.glogi :as log]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [lambdaisland.glogi :as log]
             [frontend.worker.platform :as platform]
             [frontend.worker.state :as worker-state]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [frontend.worker.sync.client-op :as client-op]
-            [logseq.common.util :as common-util]
-            [logseq.common.version :as build-version]
+            [logseq.melange.bridge.common.version :as build-version]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
@@ -56,7 +56,7 @@
                  :exception)]
     {:code code
      :message (or (ex-message error) (str error))
-     :at (common-util/time-ms)
+     :at (melange-common/now-ms)
      :data (when (seq data) data)}))
 
 (defn set-last-sync-error!

@@ -6,7 +6,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))

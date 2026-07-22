@@ -40,22 +40,20 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
-            [frontend.util.ref :as ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.db :as db-db]
-            [logseq.db.frontend.property :as db-property]
+
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.frontend :as db-db]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.utf8 :as utf8]
@@ -319,7 +317,7 @@
         new-block' (if library?
                      (-> new-block
                          (-> (assoc :block/tags #{:logseq.class/Page}
-                                    :block/name (util/page-name-sanity-lc (:block/title new-block)))
+                                    :block/name (melange-common/page-name-sanity-lower (:block/title new-block)))
                              (dissoc :block/page)))
                      new-block)]
     (ui-outliner-tx/transact!
@@ -1015,7 +1013,7 @@
                            blocks)
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
-                                   (str (string/join (repeat (dec level) "\t")) "- " (ref/->page-ref id))))
+                                   (str (string/join (repeat (dec level) "\t")) "- " (melange-common/to-page-ref id))))
                             (string/join "\n\n"))]
       (util/copy-to-clipboard! copy-str))))
 
@@ -1070,7 +1068,7 @@
         page-pattern #"\[\[([^\]]+)]]"
         tag-pattern #"#\S+"
         page-matches (util/re-pos page-pattern text)
-        block-matches (util/re-pos block-ref/block-ref-re text)
+        block-matches (util/re-pos melange-common/block-ref-re text)
         tag-matches (util/re-pos tag-pattern text)
         additional-matches (mapcat #(util/re-pos % text) additional-patterns)
         matches (->> (concat page-matches block-matches tag-matches additional-matches)
@@ -1123,7 +1121,7 @@
 (defn- <follow-page-link!
   [page]
   (state/clear-edit!)
-  (if (util/uuid-string? page)
+  (if (melange-common/uuid-string? page)
     (route-handler/redirect-to-page! page)
     (p/let [page-entity (or (db/get-page page)
                             (db-async/<get-block (state/get-current-repo) page {:children? false}))]
@@ -1146,7 +1144,7 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)
-          block? (util/uuid-string? page-name)]
+          block? (melange-common/uuid-string? page-name)]
       (when-let [page (db/get-page page-name)]
         (if block?
           (state/sidebar-add-block!
@@ -1218,7 +1216,7 @@
              (or (dom/attr node "blockid")
                  (some-> node (dom/attr "id") (string/replace #"^ls-block-" ""))))]
     (when (and (string? id)
-               (util/uuid-string? id))
+               (melange-common/uuid-string? id))
       (uuid id))))
 
 (defn- selection-node-for-block-id
@@ -1416,7 +1414,8 @@
                elem (and input-id (gdom/getElement input-id))
                db-content (:block/title db-block)
                db-content-without-heading (and db-content
-                                               (common-util/safe-subs db-content (:block/level db-block)))
+                                               (melange-common/safe-substring
+                                                               db-content (:block/level db-block)))
                value (if (= (:block/uuid current-block) (:block/uuid block))
                        (:block/title current-block)
                        (and elem (gobj/get elem "value")))]
@@ -1440,7 +1439,7 @@
                                     {:block-id block-id})))
         text (:block/title block)
         content (if asset-block
-                  (string/replace text (ref/->page-ref (:block/uuid asset-block)) "")
+                  (string/replace text (melange-common/to-page-ref (:block/uuid asset-block)) "")
                   (string/replace text full-text ""))]
     (save-block! repo block content)
     (when (and local? delete-local?)
@@ -1624,18 +1623,18 @@
                                                                    [(subs new-value prefix-pos (+ prefix-pos 2))
                                                                     (+ prefix-pos 2)]))})]
         (cond
-          (= prefix page-ref/left-brackets)
+          (= prefix melange-common/left-brackets)
           (do
             (commands/handle-step [:editor/search-page])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
                                             :selected selected}))
 
-          (= prefix block-ref/left-parens)
+          (= prefix melange-common/left-parens)
           (notification/show!
            (t :editor/reference-node-use-page-ref)
            :warning)
 
-          (= prefix block-ref/left-parens)
+          (= prefix melange-common/left-parens)
           (do
             (commands/handle-step [:editor/search-block :reference])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
@@ -1747,7 +1746,7 @@
 (defn- get-focused-root-block
   []
   (let [page (state/get-current-page)]
-    (when (and page (util/uuid-string? page))
+    (when (and page (melange-common/uuid-string? page))
       (db/entity [:block/uuid (parse-uuid page)]))))
 
 (defn- focused-root-block?
@@ -1886,8 +1885,8 @@
   [input]
   (when (and input
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
-             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
-             (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
+             (not (wrapped-by? input melange-common/left-brackets melange-common/right-brackets))
+             (not (wrapped-by? input melange-common/left-parens melange-common/right-parens))
              ;; wrapped-by? doesn't detect multiple beginnings when ending with "" so
              ;; use subs to correctly detect current hashtag
              (not (text-util/wrapped-by? (subs (.-value input) 0 (cursor/pos input)) (cursor/pos input) commands/hashtag ""))
@@ -1960,7 +1959,9 @@
              ;; Only trigger at beginning of a line, before whitespace or after a reference
            (or (re-find #"(?m)^#" (str (.-value input)))
                (start-of-new-word? input pos)
-               (= page-ref/right-brackets (common-util/safe-subs (str (.-value input)) (- pos 3) (dec pos)))))
+               (= melange-common/right-brackets
+                  (melange-common/safe-substring-range
+                                       (str (.-value input)) (- pos 3) (dec pos)))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -1983,11 +1984,11 @@
 
       ;; block reference
       (insert-command! id
-                       (ref/->block-ref uuid-string)
+                       (melange-common/to-page-ref uuid-string)
                        format
-                       {:last-pattern (str block-ref/left-parens (if selected-text "" q))
-                        :end-pattern block-ref/right-parens
-                        :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
+                       {:last-pattern (str melange-common/left-parens (if selected-text "" q))
+                        :end-pattern melange-common/right-parens
+                        :postfix-fn   (fn [s] (util/replace-first melange-common/right-parens s ""))
                         :forward-pos 3
                         :command :block-ref})
 
@@ -3101,13 +3102,13 @@
 (defn- fullwidth-block-ref-trigger-edit
   [value current-pos]
   (when-let [range (fullwidth-block-ref-trigger-range value current-pos)]
-    (replacement-edit value page-ref/left-and-right-brackets range)))
+    (replacement-edit value melange-common/left-and-right-brackets range)))
 
 (defn- block-ref-trigger-edit
   [value current-pos k]
   (or (fullwidth-block-ref-trigger-edit value current-pos)
       (when (contains? keycode/left-square-brackets-keys k)
-        (double-left-trigger-edit value current-pos "[" page-ref/left-and-right-brackets))))
+        (double-left-trigger-edit value current-pos "[" melange-common/left-and-right-brackets))))
 
 (defn- apply-bracket-trigger!
   [input {:keys [value pos]} command-step]
@@ -3131,15 +3132,15 @@
       (when-not editor-action
         (cond
           (and block-ref-edit
-               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+               (not (wrapped-by? input melange-common/left-brackets melange-common/right-brackets)))
           (apply-bracket-trigger! input block-ref-edit [:editor/search-page])
 
           ;; When you type text inside square brackets
           (and (not non-enter-processed?)
                (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
-               (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
+               (wrapped-by? input melange-common/left-brackets melange-common/right-brackets))
           (let [orig-pos (cursor/get-caret-pos input)
-                square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
+                square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) melange-common/left-brackets)
                 pos (+ square-pos 2)
                 _ (state/set-editor-last-pos! pos)
                 pos (assoc orig-pos :pos pos)
@@ -3277,11 +3278,11 @@
       (if (= format "embed")
         (p/do!
          (save-current-block!)
-         (util/copy-to-clipboard! (ref/->page-ref block-id)
+         (util/copy-to-clipboard! (melange-common/to-page-ref block-id)
                                   {:graph (state/get-current-repo)
                                    :blocks [{:block/uuid (:block/uuid current-block)}]
                                    :embed-block? true}))
-        (copy-block-ref! block-id ref/->page-ref)))))
+        (copy-block-ref! block-id melange-common/to-page-ref)))))
 
 (defn copy-current-block-embed []
   (copy-current-block-ref "embed"))
@@ -3501,7 +3502,7 @@
   [block & {:keys [page-title?]}]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
-        attributes (set (remove #{:block/alias} db-property/db-attribute-properties))
+        attributes (set (remove #{:block/alias} property-catalog/db-attribute-properties))
         bottom-positioned-property-idents (when-not page-title?
                                             (->> (outliner-property/get-block-positioned-properties db (:db/id block) :block-below)
                                                  (map :db/ident)
@@ -3913,12 +3914,12 @@
 (defn copy-current-ref
   [block-id]
   (when block-id
-    (util/copy-to-clipboard! (ref/->block-ref block-id))))
+    (util/copy-to-clipboard! (melange-common/to-page-ref block-id))))
 
 (defn delete-current-ref!
   [block ref-id]
   (when (and block ref-id)
-    (let [content (string/replace (:block/title block) (ref/->page-ref ref-id) "")]
+    (let [content (string/replace (:block/title block) (melange-common/to-page-ref ref-id) "")]
       (save-block! (state/get-current-repo)
                    (:block/uuid block)
                    content))))
@@ -3926,7 +3927,7 @@
 (defn replace-ref-with-text!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (ref/->block-ref ref-id)
+    (let [match (melange-common/to-page-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (or (:block/title ref-block) "")
           content (string/replace-first (:block/title block) match
@@ -3938,7 +3939,7 @@
 (defn replace-ref-with-embed!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (ref/->block-ref ref-id)
+    (let [match (melange-common/to-page-ref ref-id)
           content (string/replace-first (:block/title block) match
                                         (util/format "{{embed ((%s))}}"
                                                      (str ref-id)))]
@@ -4025,7 +4026,7 @@
   (let [graph (state/get-current-repo)]
     (p/do!
      (db-async/<get-block graph (date/today))
-     (p/let [add-page (db-async/<get-block graph (:db/id (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+     (p/let [add-page (db-async/<get-block graph (:db/id (ldb/get-built-in-page (db/get-db) melange-common/quick-add-page-name)))
              user-id (when-let [id-str (user-handler/user-uuid)] (uuid id-str))
              user-db-id (when user-id (:db/id (db/entity [:block/uuid user-id])))
              children (:block/_parent add-page)
@@ -4048,7 +4049,7 @@
 (defn quick-add-blocks!
   []
   (let [today (db-model/get-today-journal-page)
-        add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+        add-page (ldb/get-built-in-page (db/get-db) melange-common/quick-add-page-name)]
     (p/do!
      (save-current-block!)
      (when (and today add-page)
@@ -4074,7 +4075,7 @@
   []
   (let [db (db/get-db)
         user-id-str (user-handler/user-uuid)]
-    (if-let [page (db-db/get-built-in-page db common-config/quick-add-page-name)]
+    (if-let [page (db-db/get-built-in-page db melange-common/quick-add-page-name)]
       (let [children (:block/_parent page)]
         (if (and user-id-str (ldb/get-graph-rtc-uuid db))
           (let [user-id (uuid user-id-str)

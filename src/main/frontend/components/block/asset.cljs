@@ -5,8 +5,7 @@
   protocol URLs. These helpers normalize the display-facing parts of an asset
   without assuming that the URL itself contains a file extension."
   (:require [clojure.string :as string]
-            [frontend.util :as util]
-            [logseq.common.config :as common-config]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (defn- asset-type->keyword
   "Coerces `asset-type` from an asset entity into a lowercase keyword.
@@ -24,8 +23,8 @@
   `asset-block` is the asset entity. The URL-derived extension has priority;
   `:logseq.property.asset/type` is used when neither URL exposes an extension."
   [src href asset-block]
-  (or (some-> (util/get-file-ext src) keyword)
-      (some-> (util/get-file-ext href) keyword)
+  (or (some-> (melange-common/file-extension src) keyword)
+      (some-> (melange-common/file-extension href) keyword)
       (asset-type->keyword (:logseq.property.asset/type asset-block))))
 
 (defn link-file-name
@@ -40,7 +39,7 @@
 
 (defn asset-relative-path
   [asset-block]
-  (str common-config/local-assets-dir "/" (asset-file-name asset-block)))
+  (str melange-common/local-assets-dir "/" (asset-file-name asset-block)))
 
 (defn show-missing-file-warning?
   "Returns true when an asset points to a local graph file that should already
@@ -57,7 +56,7 @@
   (let [asset-type (some-> (:logseq.property.asset/type asset-block) keyword)]
     (and (not file-ready?)
          (not gallery-image?)
-         (contains? (common-config/img-formats) asset-type))))
+         (some-> asset-type name (->> (melange-common/image-format?))))))
 
 (def read-mode-title-attrs
   {:class "asset-title-slot text-xs opacity-60 mt-1 cursor-text"

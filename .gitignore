@@ -96,3 +96,5 @@ clj-e2e/.clj-kondo/imports
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root
+/deps/melange/_build/
+/deps/melange/js_api/dist/*.js

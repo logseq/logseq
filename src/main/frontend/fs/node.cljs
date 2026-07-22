@@ -7,12 +7,12 @@
             [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (defn- write-file-impl!
   [repo dir rpath content {:keys [ok-handler error-handler]} _stat]
-  (let [file-fpath (path/path-join dir rpath)]
+  (let [file-fpath (melange-common/path-join dir (to-array [rpath]))]
     (p/catch
         (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
           (when ok-handler
@@ -66,21 +66,21 @@
   (read-file [_this dir path _options]
     (let [path (if (nil? dir)
                  path
-                 (path/path-join dir path))]
+                 (melange-common/path-join dir (to-array [path])))]
       (wrap-throw-ex-info (ipc/ipc "readFile" path))))
 
   (read-file-raw [_this dir path _options]
     (let [path (if (nil? dir)
                  path
-                 (path/path-join dir path))]
+                 (melange-common/path-join dir (to-array [path])))]
       (wrap-throw-ex-info (ipc/ipc "readFileRaw" path))))
 
   (write-file! [this repo dir path content opts]
-    (p/let [fpath (path/path-join dir path)
+    (p/let [fpath (melange-common/path-join dir (to-array [path]))
             stat (p/catch
                   (protocol/stat this fpath)
                   (fn [_e] :not-found))
-            parent-dir (path/parent fpath)
+            parent-dir (melange-common/parent fpath)
             _ (protocol/mkdir-recur! this parent-dir)]
       (write-file-impl! repo dir path content opts stat)))
 

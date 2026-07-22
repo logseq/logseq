@@ -1,14 +1,15 @@
 (ns logseq.cli.command.list
   "List-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.cli.uuid-refs :as uuid-refs]
-            [logseq.common.util :as common-util]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.property :as melange-property]
             [promesa.core :as p]))
 
 ;; Common for all subcommands
@@ -150,7 +151,7 @@
    list-common-spec
    {:status {:desc "Filter by task status"
              :values (mapv (comp string/lower-case :value)
-                           (db-property/built-in-closed-values :logseq.property/status))}
+                           (melange-property/built-in-closed-values :logseq.property/status))}
     :priority {:desc "Filter by task priority"
                :validate {:pred available-task-priority-values-set
                           :ex-msg invalid-task-priority-message}}
@@ -390,8 +391,8 @@
     (cond
       (not (seq text)) nil
       (re-matches #"^-?\d+$" text) (js/parseInt text 10)
-      (common-util/uuid-string? text) (uuid text)
-      (common-util/valid-edn-keyword? text)
+      (melange-common/uuid-string? text) (uuid text)
+      (melange-common/valid-edn-keyword? text)
       (let [value (common-util/safe-read-string {:log-error? false} text)]
         (if (keyword? value) value text))
       :else text)))

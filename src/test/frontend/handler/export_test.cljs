@@ -1,5 +1,6 @@
 (ns frontend.handler.export-test
-  (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -182,7 +183,7 @@
           writes (atom [])
           notification-calls (atom [])
           original-electron? util/electron?
-          original-time-ms util/time-ms
+          original-time-ms melange-common/now-ms
           original-get-repo-dir config/get-repo-dir
           original-mkdir-if-not-exists fs/mkdir-if-not-exists
           original-apis (.-apis js/window)
@@ -191,7 +192,7 @@
           original-get-all-assets assets-handler/<get-all-assets
           original-notification-show! notification/show!]
       (set! util/electron? (constantly true))
-      (set! util/time-ms (constantly 123000))
+      (set! melange-common/now-ms (constantly 123000))
       (set! config/get-repo-dir (fn [repo]
                                   (is (= "logseq_db_big_graph" repo))
                                   "/tmp/logseq/graphs/logseq_db_big_graph"))
@@ -231,7 +232,7 @@
           (p/finally
            (fn []
              (set! util/electron? original-electron?)
-             (set! util/time-ms original-time-ms)
+             (set! melange-common/now-ms original-time-ms)
              (set! config/get-repo-dir original-get-repo-dir)
              (set! fs/mkdir-if-not-exists original-mkdir-if-not-exists)
              (set! (.-apis js/window) original-apis)

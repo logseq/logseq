@@ -7,7 +7,7 @@
             [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
-            [logseq.common.util :as common-util]
+            [logseq.melange.bridge.common.util :as common-util]
             ["string-width" :default string-width]))
 
 (defn- keyword->json-string

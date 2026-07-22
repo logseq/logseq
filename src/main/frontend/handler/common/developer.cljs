@@ -1,6 +1,7 @@
 (ns frontend.handler.common.developer
   "Common fns for developer related functionality"
   (:require ["/frontend/utils" :as utils]
+            [logseq.melange.bridge.common.api :as melange-common]
             [cljs.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -15,8 +16,8 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [logseq.shui.ui :as shui]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
             [promesa.core :as p]))
 
 ;; Fns used between menus and commands
@@ -32,9 +33,9 @@
                                     [k
                                      (cond
                                        (de/entity? v)
-                                       (db-property/property-value-content v)
+                                       (melange-property/property-value-content v)
                                        (and (set? v) (every? de/entity? v))
-                                       (set (map db-property/property-value-content v))
+                                       (set (map melange-property/property-value-content v))
                                        :else
                                        v)]))
                              (into {})))
@@ -96,14 +97,14 @@
   (-> (or repo "graph")
       (string/replace #"^/+" "")
       (string/replace #"[\\/]+" "_")
-      (str "_checksum_" (quot (util/time-ms) 1000))))
+      (str "_checksum_" (quot (melange-common/now-ms) 1000))))
 
 (defn- client-ops-export-file-name
   [repo]
   (-> (or repo "graph")
       (string/replace #"^/+" "")
       (string/replace #"[\\/]+" "_")
-      (str "_client_ops_" (quot (util/time-ms) 1000))))
+      (str "_client_ops_" (quot (melange-common/now-ms) 1000))))
 
 (defn- <fetch-server-checksum-diagnostics
   [repo]

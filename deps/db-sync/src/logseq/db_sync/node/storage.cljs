@@ -3,7 +3,7 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
-            [logseq.db.common.sqlite :as common-sqlite]))
+            [logseq.melange.bridge.db.sqlite :as common-sqlite]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 

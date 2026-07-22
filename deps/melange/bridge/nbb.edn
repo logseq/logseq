@@ -1,0 +1,7 @@
+{:paths ["." "src" "test" "test-support" "resources"]
+ :deps
+ {io.github.nextjournal/nbb-test-runner
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}
+  metosin/malli
+  {:git/url "https://github.com/metosin/malli"
+   :sha "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}}}

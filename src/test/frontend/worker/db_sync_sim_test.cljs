@@ -13,10 +13,10 @@
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.undo-redo :as undo-redo]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.normalize :as melange-normalize]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
@@ -86,7 +86,7 @@
 
 (defn- install-invalid-tx-repro!
   [seed history]
-  (let [prev @ldb/*transact-invalid-callback
+  (let [prev (ldb/transact-invalid-callback)
         repro (atom nil)
         handler (fn [tx-report errors]
                   (let [payload {:type :invalid-tx
@@ -95,9 +95,9 @@
                                  :errors errors}]
                     (reset! repro payload)
                     (report-history! seed history payload)))]
-    (reset! ldb/*transact-invalid-callback handler)
+    (ldb/register-transact-invalid-callback-fn! handler)
     {:repro repro
-     :restore (fn [] (reset! ldb/*transact-invalid-callback prev))}))
+     :restore (fn [] (ldb/register-transact-invalid-callback-fn! prev))}))
 
 (declare op-runs assert-synced-attrs! assert-no-invalid-tx! active-block-uuids block-attr-map checksum-entity-map run-ops!)
 
@@ -122,7 +122,7 @@
                    :errors {:block/page ["missing required key"]}}]
           {:keys [repro restore]} (install-invalid-tx-repro! seed history)]
       (try
-        ((deref ldb/*transact-invalid-callback) tx-report errors)
+        ((ldb/transact-invalid-callback) tx-report errors)
         (is (= {:type :invalid-tx
                 :tx-meta {:db-sync-sim true}
                 :tx-data [[:db/add 1 :block/title "oops"]]
@@ -406,7 +406,7 @@
                                                :tx-data tx-data}
                                               error)))))
                           normalized-data (->> tx-data
-                                               (db-normalize/normalize-tx-data db-after db-before))
+                                               (melange-normalize/normalize-tx-data db-after db-before))
                           next-t (inc t)]
                       (assoc state :t next-t :txs (conj txs {:t next-t :tx normalized-data}))))
                   state

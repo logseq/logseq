@@ -1,10 +1,10 @@
 (ns logseq.db-worker.graph-backup
   "Shared Node-only graph backup filesystem policy."
-  (:require ["fs" :as fs]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["fs" :as fs]
             ["path" :as node-path]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (def ^:private backup-root-dir-name "backup")
@@ -41,7 +41,7 @@
   (required! graphs-dir "graphs-dir")
   (required! repo "repo")
   (node-path/join (child-path! graphs-dir
-                               (required! (graph-dir/repo->encoded-graph-dir-name repo)
+                               (required! (melange-common/repo-to-encoded-graph-dir-name repo)
                                           "encoded graph directory")
                                "graph directory")
                   backup-root-dir-name))
@@ -49,7 +49,7 @@
 (defn backup-dir-name
   [backup-name]
   (required! backup-name "backup-name")
-  (required! (graph-dir/graph-dir-key->encoded-dir-name backup-name)
+  (required! (melange-common/graph-dir-key-to-encoded-dir-name backup-name)
              "encoded backup directory"))
 
 (defn backup-dir-path
@@ -94,7 +94,7 @@
   ([repo label]
    (build-backup-name repo label (utc-timestamp)))
   ([repo label timestamp]
-   (let [graph-name (required! (graph-dir/repo->graph-dir-key repo) "graph name")
+   (let [graph-name (required! (melange-common/repo-to-graph-dir-key repo) "graph name")
          label-part (trimmed-option label)]
      (if (seq label-part)
        (str graph-name "-" label-part "-" timestamp)
@@ -135,7 +135,7 @@
 (defn- backup-entry
   [root-path ^js dirent]
   (let [dir-name (.-name dirent)
-        backup-name (graph-dir/decode-graph-dir-name dir-name)
+        backup-name (melange-common/decode-graph-dir-name dir-name)
         dir-path (node-path/join root-path dir-name)
         db-path (node-path/join dir-path backup-db-file-name)]
     (when (seq backup-name)

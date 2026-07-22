@@ -1,7 +1,7 @@
 (ns frontend.worker.db.fix
   "fix db"
   (:require [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (defn check-and-fix-schema!
   [conn]

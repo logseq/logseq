@@ -1,6 +1,6 @@
 (ns frontend.worker.sync.presence
   "Presence and rtc state helpers for db sync."
-  (:require [logseq.common.util :as common-util]
+  (:require [logseq.melange.bridge.common.util :as common-util]
             [frontend.worker.state :as worker-state]))
 
 (defn current-client

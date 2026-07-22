@@ -12,7 +12,7 @@
             [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
             [logseq.cli.test-helper :as test-helper]
-            [logseq.common.version :as version]
+            [logseq.melange.bridge.common.version :as version]
             [logseq.db-worker.daemon :as daemon]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))

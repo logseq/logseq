@@ -12,7 +12,7 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
@@ -54,7 +54,7 @@ and handles unexpected failure."
     (try
       (let [blocks (gp-block/extract-blocks blocks content format
                                             {:user-config (state/get-config)
-                                             :block-pattern common-config/block-pattern
+                                             :block-pattern melange-common/block-pattern
                                              :db (db/get-db repo)
                                              :date-formatter (state/get-date-formatter)
                                              :page-name page-name
@@ -137,7 +137,7 @@ and handles unexpected failure."
   ([_block-uuid format content]
    (when-not (string/blank? content)
      (let [raw-content content
-           content (str common-config/block-pattern " " (string/triml content))]
+           content (str melange-common/block-pattern " " (string/triml content))]
        (cached-parse-title-and-body-helper format raw-content content)))))
 
 (defn break-line-paragraph?

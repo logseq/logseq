@@ -1,5 +1,6 @@
 (ns frontend.components.container
-  (:require [cljs-drag-n-drop.core :as dnd]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.components.block.selection :as block-selection]
@@ -30,7 +31,7 @@
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.version :as build-version]
+            [logseq.melange.bridge.common.version :as build-version]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -146,7 +147,9 @@
               (when-let [pages (->> (seq sidebar)
                                     (remove string/blank?))]
                 (doseq [page pages]
-                  (let [page (util/safe-page-name-sanity-lc page)
+                  (let [page (if (string? page)
+                               (melange-common/page-name-sanity-lower page)
+                               page)
                         [db-id block-type] (if (= page "contents")
                                              [(or (:db/id (db/get-page page)) "contents") :contents]
                                              [(:db/id (db/get-page page)) :page])]

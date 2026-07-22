@@ -26,10 +26,9 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.validate :as db-validate]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.validation :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
@@ -275,7 +274,7 @@
 
 (defn- validate-imported-data
   [db import-state files]
-  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
+  (when-let [org-files (seq (filter #(= "org" (melange-common/file-ext (:path %))) files))]
     (log/info :org-files (mapv :path org-files))
     (notification/show! (t :import/org-files-imported (count org-files))
                         :info false))
@@ -340,7 +339,7 @@
               checksum (db-asset/<get-file-array-buffer-checksum buffer)
               asset-id (d/squuid)
               asset-name (some-> (:path file) gp-exporter/asset-path->name)
-              assets-dir (path/path-join repo-dir common-config/local-assets-dir)
+              assets-dir (melange-common/path-join repo-dir (to-array [melange-common/local-assets-dir]))
               asset-type (db-asset/asset-path->type (:path file))
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler bytes-array)]
         (swap! assets assoc asset-name
@@ -378,7 +377,7 @@
                    :<read-file (fn <read-file [file] (.text (:file-object file)))
                    :<get-file-stat (fn <get-file-stat [path]
                                      ;; Ignore relative paths as we can't get their stats
-                                     (when (and (util/electron?) (path/absolute? path))
+                                     (when (and (util/electron?) (melange-common/absolute? path))
                                        (ipc/ipc :stat path)))
                    ;; config file options
                    :default-config config/config-default-content
@@ -416,13 +415,13 @@
                               "")
         import-graph-fn (or (:import-graph-fn opts)
                             (fn [user-inputs]
-                              (let [files (->> file-objs
-                                              (map #(hash-map :file-object %
-                                                               :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
-                                                               :fs-path (when (util/electron?)
-                                                                          (js/window.apis.getFilePath %))
-                                                               :last-modified-at (some-> (.-lastModified %) js/Date.)))
-                                               (remove #(and (not (string/starts-with? (:path %) "assets/"))
+                               (let [files (->> file-objs
+                                               (map #(hash-map :file-object %
+                                                               :path (melange-common/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
+                                                                :fs-path (when (util/electron?)
+                                                                           (js/window.apis.getFilePath %))
+                                                                :last-modified-at (some-> (.-lastModified %) js/Date.)))
+                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                              (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                                 (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]

@@ -5,7 +5,7 @@
    display-budget algorithm to determine which segments are visible and
    which are folded into an ellipsis."
   (:require [clojure.string :as string]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.melange.bridge.db.content :as melange-content]))
 
 ;; ---------------------------------------------------------------------------
 ;; Text normalization
@@ -83,8 +83,8 @@
   ;; Breadcrumb renderers hydrate title refs before displaying when possible.
   ;; Keep unresolved UUID refs unchanged for partial entities or fallback paths.
   (or (when (and (string? text)
-                 (re-find db-content/id-ref-pattern text))
-        (db-content/recur-replace-uuid-in-block-title
+                 (melange-content/contains-id-ref? text))
+        (melange-content/recur-replace-uuid-in-block-title
          (assoc entity :block/title text)
          10))
       text))
@@ -232,7 +232,7 @@
        :text text
        :full-text full-text
        :title-ref-ids (when (and (not page?) (string? title-line))
-                        (db-content/get-matched-ids title-line))
+                        (melange-content/get-matched-ids title-line))
        :icon icon
        :page? page?})))
 

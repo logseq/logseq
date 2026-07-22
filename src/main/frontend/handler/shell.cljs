@@ -1,10 +1,10 @@
 (ns frontend.handler.shell
   "Git related handler fns"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
-            [frontend.util :as util]
-            [logseq.common.util :as common-util]))
+            [frontend.util :as util]))
 
 (defn run-cli-command!
   [command args]
@@ -19,7 +19,7 @@
   [command]
   (let [[command args]
         (if (and (string? command) (string/includes? command " "))
-          (common-util/split-first " " command)
+          (melange-common/split-first " " command)
           [command ""])
         command (and command (string/lower-case command))
         args (-> args str string/trim)]

@@ -2,7 +2,7 @@
   "Handles routing and responses for worker"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [logseq.common.authorization :as authorization]
+            [logseq.melange.bridge.common.authorization :as authorization]
             [logseq.publish.assets :as publish-assets]
             [logseq.publish.common :as publish-common]
             [logseq.publish.index :as publish-index]

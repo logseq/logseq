@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.exporter
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
-  (:require ["path" :as node-path]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["path" :as node-path]
             ["sanitize-filename" :as sanitizeFilename]
             [borkdude.rewrite-edn :as rewrite]
             [cljs-time.coerce :as tc]
@@ -11,29 +12,24 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.macro :as macro-util]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.db-ident :as db-ident]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]
+            [logseq.melange.bridge.db.property-type :as property-type-catalog]
+            [logseq.melange.bridge.db.rules :as rules]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.text :as text]
@@ -45,7 +41,7 @@
   ([block]
    (add-missing-timestamps block nil))
   ([block {:keys [file-created-at file-updated-at]}]
-   (let [updated-at (or file-updated-at (common-util/time-ms))
+   (let [updated-at (or file-updated-at (melange-common/now-ms))
          created-at (or file-created-at updated-at)
          block (cond-> block
                  (nil? (:block/updated-at block))
@@ -55,11 +51,11 @@
      block)))
 
 (defn- build-new-namespace-page [block]
-  (let [new-title (ns-util/get-last-part (:block/title block))]
+  (let [new-title (melange-common/get-last-part (:block/title block))]
     (merge block
            {;; DB graphs only have child name of namespace
             :block/title new-title
-            :block/name (common-util/page-name-sanity-lc new-title)})))
+            :block/name (melange-common/page-name-sanity-lower new-title)})))
 
 (def template-file-property-names #{:template :template-including-parent})
 
@@ -125,7 +121,7 @@
                                            set)
         content-uuids-by-template (into {}
                                         (map (fn [template-uuid]
-                                               [template-uuid (common-uuid/gen-uuid)]))
+                                               [template-uuid (melange-uuid/gen)]))
                                         include-parent-template-uuids)]
     (reduce
      (fn [{:keys [blocks preserve-empty-properties-uuids]} block]
@@ -207,11 +203,11 @@
                (-> (db-class/build-new-class db (merge {:block/title (build-class-ident-name class-name)}
                                                        (select-keys class-block [:block/tags])))
                    (merge {:block/title class-name
-                           :block/name (common-util/page-name-sanity-lc class-name)})
+                           :block/name (melange-common/page-name-sanity-lower class-name)})
                    (build-new-namespace-page))
                (db-class/build-new-class db
                                          (assoc {:block/title class-name
-                                                 :block/name (common-util/page-name-sanity-lc class-name)}
+                                                 :block/name (melange-common/page-name-sanity-lower class-name)}
                                                 :block/tags (:block/tags class-block))))]
          (swap! all-idents assoc ident (:db/ident m))
          (with-meta m {:new-class? true}))))))
@@ -220,12 +216,14 @@
   (or (if temp-new-class?
         ;; First lookup by possible parent b/c page-names-to-uuids erroneously has the child name
         ;; and full name. To not guess at the parent name we would need to save all properties-from-classes
-        (or (some #(when (string/ends-with? (key %) (str ns-util/parent-char page-name))
+        (or (some #(when (string/ends-with? (key %) (str "/" page-name))
                      (val %))
                   @page-names-to-uuids)
             (get @page-names-to-uuids page-name))
         (get @page-names-to-uuids page-name))
-      (let [new-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)]
+      (let [new-uuid (uuid (melange-common/db-ident-block
+                            (namespace db-ident)
+                            (name db-ident)))]
         (swap! page-names-to-uuids assoc page-name new-uuid)
         new-uuid)))
 
@@ -246,7 +244,7 @@
                 :in $ ?name
                 :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
               db
-              (ns-util/get-last-part full-name))
+              (melange-common/get-last-part full-name))
          (map #(d/entity db %))
          (some #(let [parent (->> (ldb/get-class-extends %)
                                   (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
@@ -254,7 +252,7 @@
                       parent-ancestors (when parent (ldb/get-page-parents parent))
                       parents (cond-> (or parent-ancestors [])
                                 parent (conj parent))]
-                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
+                  (when (= full-name (string/join "/" (map :block/name (conj parents %))))
                     (:block/uuid %)))))
     (first
      (d/q '[:find [?uuid ...]
@@ -271,7 +269,7 @@
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
                           {:block/uuid
-                           (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m) {:temp-new-class? true})})]
+                           (find-or-gen-class-uuid page-names-to-uuids (melange-common/page-name-sanity-lower new-class) (:db/ident class-m) {:temp-new-class? true})})]
       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
@@ -288,7 +286,10 @@
           (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
                 class-m' (-> (merge tag-block class-m
                                     (if internal-tag-conflict?
-                                      {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}
+                                      (let [db-ident (:db/ident class-m)]
+                                        {:block/uuid (uuid (melange-common/db-ident-block
+                                                            (namespace db-ident)
+                                                            (name db-ident)))})
                                       (when-not (:block/uuid tag-block)
                                         (let [id (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))]
                                           {:block/uuid id}))))
@@ -341,7 +342,7 @@
                                 (conj :logseq.class/Page)
                                 ;; Remove Page if another Page-like class is already present
                                 (seq (set/intersection (disj (set tags) :logseq.class/Page)
-                                                       db-class/page-classes))
+                                                       class-catalog/page-classes))
                                 (disj :logseq.class/Page))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
@@ -357,9 +358,14 @@
   (->
    (reduce
     (fn [content tag]
-      (-> content
-          (common-util/replace-ignore-case (str "#" tag) "")
-          (common-util/replace-ignore-case (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
+      (let [content (melange-common/replace-ignore-case
+                     content
+                     (str "#" tag)
+                     "")]
+        (melange-common/replace-ignore-case
+         content
+         (str "#" melange-common/left-brackets tag melange-common/right-brackets)
+         "")))
     content
     (sort > tags))
    (string/trim)))
@@ -369,15 +375,16 @@
   (->>
    (reduce
     (fn [content tag]
-      (if (ns-util/namespace-page? (:block/name tag))
-        (let [id-ref (page-ref/->page-ref (:block/uuid tag))]
-          (-> content
-              (common-util/replace-ignore-case
-               (str "#" (:block/name tag))
-               (str "#" id-ref))
-              (common-util/replace-ignore-case
-               (str "#" (page-ref/->page-ref (:block/name tag)))
-               (str "#" id-ref))))
+      (if (melange-common/namespace-page? (:block/name tag))
+        (let [id-ref (melange-common/to-page-ref (:block/uuid tag))
+              content (melange-common/replace-ignore-case
+                       content
+                       (str "#" (:block/name tag))
+                       (str "#" id-ref))]
+          (melange-common/replace-ignore-case
+           content
+           (str "#" (melange-common/to-page-ref (:block/name tag)))
+           (str "#" id-ref)))
         content))
     content
     (sort-by (comp count :block/name) > tags))
@@ -405,7 +412,7 @@
                       (filter convert-tag?' original-tags))
               true
               (update :block/title
-                      db-content/replace-tags-with-id-refs
+                      melange-content/replace-tags-with-id-refs
                       (->> original-tags
                            (remove convert-tag?')
                            (map #(add-uuid-to-page-map % (:page-names-to-uuids per-file-state)))))
@@ -438,12 +445,12 @@
 
 (defn- find-status-choice-by-content
   [db marker]
-  (some #(when (= marker (db-property/closed-value-content %)) %)
-        (db-property/get-closed-property-values db :logseq.property/status)))
+  (some #(when (= marker (melange-property/closed-value-content %)) %)
+        (melange-property/get-closed-property-values db :logseq.property/status)))
 
 (defn- build-status-choice-tx
   [marker block-uuid]
-  (assoc (db-property-build/build-closed-value-block
+  (assoc (melange-property-build/build-closed-value-block
           block-uuid
           :default
           marker
@@ -456,7 +463,7 @@
   (or (get @(:custom-status-markers import-state) marker)
       (let [status-ref (if-let [status (find-status-choice-by-content db marker)]
                          (:db/id status)
-                         (let [block-uuid (common-uuid/gen-uuid)]
+                         (let [block-uuid (melange-uuid/gen)]
                            (swap! custom-status-tx conj (build-status-choice-tx marker block-uuid))
                            [:block/uuid block-uuid]))]
         (swap! (:custom-status-markers import-state) assoc marker status-ref)
@@ -528,7 +535,7 @@
 (defn- deadline-scheduled-time-ms
   [value]
   (let [date-int (deadline-scheduled-date-int value)
-        date (date-time-util/int->local-date date-int)
+        date (js/Date. (melange-common/local-date-ms-of-journal-day date-int))
         {:keys [hour] timestamp-min :min} (when (map? value) (:time value))]
     (when hour
       (.setHours date hour (or timestamp-min 0) 0 0))
@@ -568,7 +575,7 @@
   (let [pvalue-tx-m (->property-value-tx-m (dissoc block :block/page) properties (constantly nil) {})
         pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))]
     {:block-properties (merge properties
-                              (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                              (melange-property-build/build-properties-with-ref-values pvalue-tx-m))
      :properties-tx pvalues-tx}))
 
 (def ^:private fallback-repeat-type-property
@@ -577,13 +584,19 @@
             :public? false}
    :closed-values [{:db-ident :logseq.property.repeat/repeat-type.dotted-plus
                     :value "Advance from completion"
-                    :uuid (common-uuid/gen-uuid :db-ident-block-uuid :logseq.property.repeat/repeat-type.dotted-plus)}
+                    :uuid (uuid (melange-common/db-ident-block
+                                 "logseq.property.repeat"
+                                 "repeat-type.dotted-plus"))}
                    {:db-ident :logseq.property.repeat/repeat-type.plus
                     :value "Advance from scheduled"
-                    :uuid (common-uuid/gen-uuid :db-ident-block-uuid :logseq.property.repeat/repeat-type.plus)}
+                    :uuid (uuid (melange-common/db-ident-block
+                                 "logseq.property.repeat"
+                                 "repeat-type.plus"))}
                    {:db-ident :logseq.property.repeat/repeat-type.double-plus
                     :value "Advance from scheduled, skip to future"
-                    :uuid (common-uuid/gen-uuid :db-ident-block-uuid :logseq.property.repeat/repeat-type.double-plus)}]
+                    :uuid (uuid (melange-common/db-ident-block
+                                 "logseq.property.repeat"
+                                 "repeat-type.double-plus"))}]
    :properties {:logseq.property/hide-empty-value true
                 :logseq.property/default-value :logseq.property.repeat/repeat-type.double-plus}})
 
@@ -591,7 +604,7 @@
   [db repeat-property-values]
   (when (and (:logseq.property.repeat/repeat-type repeat-property-values)
              (nil? (d/entity db :logseq.property.repeat/repeat-type)))
-    (->> (or (not-empty (select-keys db-property/built-in-properties [:logseq.property.repeat/repeat-type]))
+    (->> (or (not-empty (select-keys property-catalog/built-in-properties [:logseq.property.repeat/repeat-type]))
              {:logseq.property.repeat/repeat-type fallback-repeat-type-property})
          sqlite-create-graph/build-properties
          (map #(assoc % :logseq.property/built-in? true)))))
@@ -601,15 +614,15 @@
    and any optional journal tx associated with that value"
   [value page-names-to-uuids user-config]
   (let [date-int (deadline-scheduled-date-int value)
-        title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
+        title (melange-common/format-journal-day date-int (get-date-formatter user-config))
         existing-journal-page (some->> title
-                                       common-util/page-name-sanity-lc
+                                       (melange-common/page-name-sanity-lower)
                                        (get @page-names-to-uuids)
                                        (hash-map :block/uuid))
         journal-page (-> (or existing-journal-page
                              (let [page-m (sqlite-util/build-new-page title)]
                                (assoc page-m
-                                      :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
+                                      :block/uuid (uuid (melange-common/journal-page date-int))
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
         time-long (deadline-scheduled-time-ms value)]
@@ -654,7 +667,10 @@
                             ;; Sorts ref names in descending order so that longer names
                             ;; come first. Order matters since (foo-bar|foo) correctly replaces
                             ;; "foo-bar" whereas (foo|foo-bar) does not
-                            (->> prop-vals (sort >) (map common-util/escape-regex-chars) (string/join "|"))
+                            (->> prop-vals
+                                 (sort >)
+                                 (map #(melange-common/escape-regex-chars %))
+                                 (string/join "|"))
                             ")"))
         remaining-text (string/replace val-text replace-regex "$1")
         non-ref-char (some #(if (or (string/blank? %) (#{"[" "]" "," "#"} %))
@@ -664,13 +680,13 @@
     (some? non-ref-char)))
 
 (defn- create-property-ident [db all-idents property-name]
-  (let [db-ident (->> (db-property/create-user-property-ident-from-name (name property-name))
+  (let [db-ident (->> (melange-property/create-user-property-ident-from-name (name property-name))
                       ;; TODO: Detect new ident conflicts within same page
                       (db-ident/ensure-unique-db-ident db))]
     (swap! all-idents assoc property-name db-ident)))
 
 (defn- get-ident [all-idents kw]
-  (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
+  (if (and (qualified-keyword? kw) (melange-property/logseq-property? kw))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
@@ -699,8 +715,12 @@
                         (coll? prop-val)
                         :node
                         :else
-                        (db-property-type/infer-property-type-from-value
-                         (macro-util/expand-value-if-macro prop-val macros)))
+                        (property-type-catalog/infer-property-type-from-value
+                         (if (string? prop-val)
+                           (melange-common/expand-value-if-macro
+                            prop-val
+                            #(get macros %))
+                           prop-val)))
         prev-type (get-in @property-schemas [prop :logseq.property/type])]
     ;; Create new property
     (when-not (get @property-schemas prop)
@@ -725,7 +745,7 @@
 
 (def built-in-property-file-to-db-idents
   "Map of built-in property file ids to their db graph idents"
-  (->> (keys db-property/built-in-properties)
+  (->> (keys property-catalog/built-in-properties)
        (map (fn [k]
               [(get-file-pid k) k]))
        (into {})))
@@ -742,10 +762,10 @@
   "All built-in properties and classes as a set of keywords"
   (set/union all-built-in-property-file-ids
              ;; This should list all new pages introduced with db graph
-             (set (->> db-class/built-in-classes
+             (set (->> class-catalog/built-in-classes
                        vals
                        (map :title)
-                       (concat [common-config/library-page-name])
+                       (concat [melange-common/library-page-name])
                        (map #(-> % string/lower-case keyword))))))
 
 (def file-built-in-property-names
@@ -841,7 +861,7 @@
                            [[:logseq.property/ls-type (keyword prop-value)]]
                            :hl-color
                            (let [color-text-idents
-                                 (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
+                                 (->> (get-in property-catalog/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
                                       (map (juxt :value :db-ident))
                                       (into {}))]
                              [[:logseq.property.pdf/hl-color (get color-text-idents prop-value)]])
@@ -939,20 +959,20 @@
   [new-block properties get-schema-fn all-idents]
   (->> properties
        (keep (fn [[k v]]
-               (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (when (and (db-property-type/value-ref-property-types built-in-type)
+               (if-let [built-in-type (get-in property-catalog/built-in-properties [k :schema :type])]
+                 (when (and (property-type-catalog/value-ref-property-types built-in-type)
                             ;; closed values are referenced by their :db/ident so no need to create values
-                            (not (get-in db-property/built-in-properties [k :closed-values])))
+                            (not (get-in property-catalog/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
                                        :logseq.property/type built-in-type}]
                      [property-map v]))
-                 (when (db-property-type/value-ref-property-types (:logseq.property/type (get-schema-fn k)))
+                 (when (property-type-catalog/value-ref-property-types (:logseq.property/type (get-schema-fn k)))
                    (let [property-map (merge
                                        {:db/ident (get-ident all-idents k)
                                         :original-property-id k}
                                        (get-schema-fn k))]
                      [property-map v])))))
-       (db-property-build/build-property-values-tx-m new-block)))
+       (melange-property-build/build-property-values-tx-m new-block)))
 
 (defn- build-properties-and-values
   "For given block properties, builds property values tx and returns a map with
@@ -979,7 +999,7 @@
                       (select-keys user-options [:property-classes]))
                      (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
           pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
-          block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+          block-properties (-> (merge props' (melange-property-build/build-properties-with-ref-values pvalue-tx-m))
                                (update-keys get-ident'))]
       {:block-properties block-properties
        :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))})))
@@ -1088,7 +1108,7 @@
                                     (let [new-class (first parent-classes-from-properties)
                                           class-m (find-or-create-class db new-class (:all-idents import-state))
                                           class-m' (merge class-m
-                                                          {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
+                                                          {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (melange-common/page-name-sanity-lower new-class) (:db/ident class-m))})]
                                       (when (> (count parent-classes-from-properties) 1)
                                         (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
                                       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
@@ -1216,7 +1236,7 @@
       (when (and link id label)
         (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
           {:link (str "zotero://" link)
-           :path (path/path-join zotero-data-dir "storage" id label)
+           :path (melange-common/path-join zotero-data-dir (to-array ["storage" id label]))
            :base label})))))
 
 (defn- file-link-map->url
@@ -1227,9 +1247,9 @@
 (defn- file-url->path
   [file-url]
   (try
-    (js/decodeURI (path/url-to-path file-url))
+    (js/decodeURI (melange-common/url-to-path file-url))
     (catch :default _
-      (path/url-to-path file-url))))
+      (melange-common/url-to-path file-url))))
 
 (defn- walk-ast-blocks
   "Walks each ast block in order to its full depth. Saves multiple ast types for
@@ -1249,12 +1269,12 @@
               (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
-                  (or (common-config/local-relative-asset? path-or-map)
+                  (or (melange-common/local-relative-asset? path-or-map)
                       (string/ends-with? path-or-map ".pdf"))
                   (and (map? path-or-map) (= "zotero" (:protocol path-or-map)) (string? (:link path-or-map)))
                   (:link (get-zotero-local-pdf-path config (second x)))
                   (file-link-map->url path-or-map)
-                  (= "pdf" (path/file-ext (file-link-map->url path-or-map)))
+                  (= "pdf" (melange-common/file-ext (file-link-map->url path-or-map)))
                   :else
                   nil)))
          (swap! results update :asset-links conj x)
@@ -1365,8 +1385,8 @@
   "Converts ((uuid)) block-ref syntax to [[uuid]] page-ref syntax in a title string.
   DB graphs use [[uuid]] for all node references."
   [title]
-  (string/replace title block-ref/block-ref-re
-                  (fn [[_ id]] (page-ref/->page-ref id))))
+  (string/replace title melange-common/block-ref-re
+                  (fn [[_ id]] (melange-common/to-page-ref id))))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -1392,9 +1412,9 @@
              (let [refs (->> (:block/refs block)
                              (remove #(or (and (vector? %) (= :block/uuid (first %)))
                                           ;; ignore deadline related refs that don't affect content
-                                          (and (keyword? %) (db-malli-schema/internal-ident? %))))
+                                          (and (keyword? %) (db-validation/internal-ident? %))))
                              (map #(add-uuid-to-page-map % page-names-to-uuids)))]
-               (-> (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false})
+               (-> (melange-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false})
                    convert-block-refs-to-page-refs))))
     block))
 
@@ -1417,7 +1437,9 @@
 
 (defn- pdf-file?
   [path]
-  (= "pdf" (some-> path path/file-ext string/lower-case)))
+  (= "pdf" (some-> path
+                    (#(melange-common/file-ext %))
+                    string/lower-case)))
 
 (defn asset-path->name
   "Given an asset's relative or full path, create a unique name for identifying an asset.
@@ -1433,9 +1455,9 @@
   (reduce (fn [acc [asset-name asset-uuid]]
             (let [new-title (string/replace acc
                                             (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
-                                                             (common-util/escape-regex-chars asset-name)
+                                                             (melange-common/escape-regex-chars asset-name)
                                                              "\\)(\\{[^}]*\\})?"))
-                                            (page-ref/->page-ref asset-uuid))]
+                                            (melange-common/to-page-ref asset-uuid))]
               (when (string/includes? new-title asset-name)
                 (swap! ignored-assets conj
                        {:reason "Some asset links were not updated to block references"
@@ -1503,7 +1525,7 @@
   "Creates annotations for a pdf asset given the asset's edn map and parsed markdown file"
   [asset-edn-map parsed-md parent-asset image-asset-name-to-uuids opts]
   (let [color-text-idents
-        (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
+        (->> (get-in property-catalog/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
              (map (juxt :value :db-ident))
              (into {}))
         md-blocks
@@ -1572,10 +1594,12 @@
 
 (defn- pdf-annotation-edn-path
   [parent-asset-path]
-  (path/path-join
-   common-config/local-assets-dir
-   (safe-sanitize-file-name
-    (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))))
+  (melange-common/path-join
+             melange-common/local-assets-dir
+             (to-array
+              [(safe-sanitize-file-name
+                (node-path/basename
+                 (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))])))
 
 (defn- pdf-annotation-md-name
   [parent-asset-path]
@@ -1624,7 +1648,7 @@
                                    zotero-asset? zotero-path-data
                                    file-url {:path (file-url->path file-url)
                                              :link file-url
-                                             :base (path/filename file-url)}
+                                             :base (melange-common/filename file-url)}
                                    :else {:path path*})
         asset-name (cond
                      linked-path base
@@ -1638,7 +1662,7 @@
         asset-path (when zotero-asset?
                      (if linked-path
                        (str "zotero-link://" linked-relative)
-                       (str "zotero-path://" (string/join ns-util/namespace-char [(last (string/split link #"/")) asset-name]))))]
+                       (str "zotero-path://" (string/join "/" [(last (string/split link #"/")) asset-name]))))]
     {:asset-link-or-name asset-link-or-name
      :asset-name asset-name
      :asset-path asset-path
@@ -1675,8 +1699,8 @@
                                   (not= asset-name asset-link-or-name))
         pdf-annotations-paths (if (and (or zotero-asset? external-file-asset?)
                                        (string? asset-name))
-                                [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
-                                 (path/path-join common-config/local-assets-dir asset-name)]
+                                [(melange-common/path-join melange-common/local-assets-dir (to-array [(node-path/basename asset-name)]))
+                                 (melange-common/path-join melange-common/local-assets-dir (to-array [asset-name]))]
                                 [(or asset-name asset-link-or-name)])
         pdf-annotations-tx (when (some pdf-file? pdf-annotations-paths)
                              (build-pdf-annotations-tx pdf-annotations-paths assets new-asset pdf-annotation-pages opts))
@@ -1894,16 +1918,16 @@
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
   (if-let [embed-node (first embeds)]
     (cond
-      (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
+      (melange-common/page-ref? (str (first (:arguments (second embed-node)))))
       (let [page-uuid (get-page-uuid page-names-to-uuids
                                      (some-> (text/get-page-name (first (:arguments (second embed-node))))
-                                             common-util/page-name-sanity-lc)
+                                             (melange-common/page-name-sanity-lower))
                                      {:block block})]
         (merge block
                {:block/title ""
                 :block/link [:block/uuid page-uuid]}))
-      (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
-      (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
+      (melange-common/block-ref? (str (first (:arguments (second embed-node)))))
+      (let [block-uuid (uuid (melange-common/get-block-ref-id (first (:arguments (second embed-node)))))]
         (merge block
                {:block/title ""
                 :block/link [:block/uuid block-uuid]}))
@@ -2054,7 +2078,7 @@
                                      (not (contains? classes-from-property-parents (:block/title p)))
                                      (get-page-parents p all-existing-page-uuids))]
                 ;; Build a :block/name for namespace pages that matches data from extract/extract
-                 (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
+                 (string/join "/" (map :block/name (conj (vec parents) p)))
                  (:block/name p))
                (or (:block/uuid p)
                    (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
@@ -2070,13 +2094,16 @@
 (defn- journal-page-name-uuid-entries
   [{:keys [path]}]
   (when-let [journal-title (journal-file-title path)]
-    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
-      (let [journal-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+    (when-let [journal-day (melange-common/parse-journal-title-day
+                            (melange-common/capitalize-all journal-title)
+                            #js ["yyyy_MM_dd"])]
+      (let [journal-uuid (uuid (melange-common/journal-page journal-day))
             canonical-page-name (-> journal-day
-                                    (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                                    common-util/page-name-sanity-lc)]
-        [[journal-title journal-uuid]
-         [canonical-page-name journal-uuid]]))))
+                                    (melange-common/format-journal-day
+                                     melange-common/default-journal-title-formatter)
+                                    melange-common/page-name-sanity-lower)]
+         [[journal-title journal-uuid]
+          [canonical-page-name journal-uuid]]))))
 
 (defn- index-journal-page-name-uuids!
   [doc-files import-state]
@@ -2090,7 +2117,7 @@
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
         allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                 (keep #(when (db-validation/user-property? (key %)) (key %))
                                        m))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
@@ -2256,7 +2283,7 @@
                                                                   (some-> (or (::original-title m) (:block/title m))
                                                                           build-class-ident-name
                                                                           keyword))
-                                                             db-malli-schema/class?))
+                                                             db-validation/class?))
                                                 ;; TODO: Enable this when it's valid for all test graphs because
                                                 ;; pages with properties must be built or else properties-tx is invalid
                                                 #_(seq properties-tx))
@@ -2296,7 +2323,7 @@
                                      (mapv #(vector :db/retractEntity (:db/id %))
                                            (if (sequential? prop-value) prop-value [prop-value])))
                         prop-value-content (get-pvalue-content (:block/uuid m) prop)
-                        new-value (db-property-build/build-property-value-block
+                        new-value (melange-property-build/build-property-value-block
                                    m {:db/ident property-ident} prop-value-content)]
                     (into retract-tx
                           [new-value
@@ -2437,7 +2464,7 @@
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
-                                            (when-let [page-properties (not-empty (db-property/properties b))]
+                                            (when-let [page-properties (not-empty (melange-property/properties b))]
                                               (merge page-properties {:block/uuid (:block/uuid b)
                                                                       :block/tags (-> (remove #(= :logseq.class/Page %) (:block/tags page-properties))
                                                                                       (conj :logseq.class/Property))})))
@@ -2489,7 +2516,7 @@
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
-  (let [format (common-util/get-format file)
+  (let [format (some-> (melange-common/file-format-name file) keyword)
         journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
@@ -2522,7 +2549,7 @@
                 (swap! (:ignored-files import-state) conj
                        {:path file :reason :unsupported-file-format})))]
     ;; Annotation markdown pages are saved for later as they are dependant on the asset being annotated
-    (if (string/starts-with? (str (path/basename file)) "hls__")
+    (if (string/starts-with? (str (melange-common/basename file)) "hls__")
       (do
         (swap! (:pdf-annotation-pages import-state) assoc (node-path/basename file) extracted)
         nil)
@@ -2533,7 +2560,7 @@
   [pages]
   (->> pages
        (map #(when-let [journal-day (:block/journal-day %)]
-               [(:block/name %) (date-time-util/journal-day->ms journal-day)]))
+               [(:block/name %) (melange-common/journal-day-to-utc-ms journal-day)]))
        (into {})))
 
 (defn- clean-extra-invalid-tags
@@ -2706,8 +2733,8 @@
   [title block-uuid]
   (when (string? title)
     (-> title
-        (string/replace (block-ref/->block-ref block-uuid) "")
-        (string/replace (page-ref/->page-ref block-uuid) "")
+        (string/replace (melange-common/to-block-ref block-uuid) "")
+        (string/replace (melange-common/to-page-ref block-uuid) "")
         (string/replace #" {2,}" " ")
         string/trim)))
 
@@ -2773,7 +2800,7 @@
           (let [entity (d/entity db (:e datom))
                 old-uuid (:block/uuid entity)
                 journal-day (:block/journal-day entity)
-                standard-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)]
+                standard-uuid (uuid (melange-common/journal-page journal-day))]
             (when (and old-uuid (not= old-uuid standard-uuid))
               (when-let [target (d/entity db [:block/uuid standard-uuid])]
                 (when (not= (:db/id target) (:db/id entity))
@@ -2795,10 +2822,10 @@
        (if (string? x)
          (reduce (fn [s [old-uuid standard-uuid]]
                    (-> s
-                       (string/replace (page-ref/->page-ref old-uuid)
-                                       (page-ref/->page-ref standard-uuid))
-                       (string/replace (block-ref/->block-ref old-uuid)
-                                       (block-ref/->block-ref standard-uuid))))
+                       (string/replace (melange-common/to-page-ref old-uuid)
+                                       (melange-common/to-page-ref standard-uuid))
+                       (string/replace (melange-common/to-block-ref old-uuid)
+                                       (melange-common/to-block-ref standard-uuid))))
                  x
                  uuid-replacements)
          x))
@@ -2894,7 +2921,7 @@
                    (node-path/dirname (node-path/dirname config-path)))
         to-abs (fn [p]
                  (if (and base-dir (string? p) (not (string/blank? p)) (not (node-path/isAbsolute p)))
-                   (path/path-join base-dir p)
+                   (melange-common/path-join base-dir (to-array [p]))
                    p))]
     (-> config
         (update-in [:zotero/settings-v2 "default" :zotero-data-directory] to-abs)
@@ -2909,9 +2936,12 @@
       (p/then #(p/do!
                 (<save-file repo-or-conn
                             "logseq/config.edn"
-                            ;; Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
-                            ;; manually dissoc deprecated keys for config to be valid
-                            (pretty-print-dissoc % (keys common-config/file-only-config)))
+                            ;; Remove file-only keys so the imported config is valid for DB graphs.
+                            (pretty-print-dissoc
+                             %
+                             (map keyword
+                                  (array-seq
+                                   (melange-common/file-only-config-keys)))))
                 (let [config (resolve-zotero-config-path (edn/read-string %) config-file)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
@@ -2929,7 +2959,7 @@
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
                                  :where [?b :block/tags :logseq.class/Tag]] @conn)
                           (map first)
-                          (remove #(db-class/built-in-classes (:db/ident %))))
+                          (remove #(class-catalog/built-in-classes (:db/ident %))))
         class-to-prop-uuids
         (->> (d/q '[:find ?t ?prop #_?class
                     :in $ ?user-classes
@@ -2981,7 +3011,7 @@
                               (-> (<read-and-copy-asset-file
                                    file assets
                                    (fn [buffer]
-                                     (let [edn? (= "edn" (path/file-ext path))
+                                     (let [edn? (= "edn" (melange-common/file-ext path))
                                            edn-content (when edn? (common-util/safe-read-map-string (utf8/decode buffer)))
                                            ;; Have to assume edn file with :highlights is annotation or
                                            ;; this import step becomes coupled to build-pdf-annotations-tx
@@ -3026,7 +3056,7 @@
                       (some-> (ldb/get-page @conn page-name)
                               :block/uuid))
                     favorites)]
-       (let [page-entity (ldb/get-page @conn common-config/favorites-page-name)]
+       (let [page-entity (ldb/get-page @conn melange-common/favorites-page-name)]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
 
@@ -3047,7 +3077,7 @@
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
   (let [db @conn
-        library-page (ldb/get-built-in-page db common-config/library-page-name)
+        library-page (ldb/get-built-in-page db melange-common/library-page-name)
         library-id (:block/uuid library-page)
         top-parent-pages (->> (d/datoms db :avet :block/parent)
                               (keep (fn [d]
@@ -3092,15 +3122,21 @@
                    repo-or-conn config-file <read-file
                    (-> (select-keys options [:notify-user :default-config :<save-config-file])
                        (set/rename-keys {:<save-config-file :<save-file})))]
-     (let [files (common-config/remove-hidden-files *files config rpath-key)
+     (let [files (if-let [patterns (seq (:hidden config))]
+                   (remove #(melange-common/hidden?
+                                       (get % rpath-key)
+                                       (to-array patterns))
+                           *files)
+                   *files)
            ;; Path normalization is needed just for windows
            normalized-rpath (fn [f]
-                              (some-> (get f rpath-key) path/path-normalize))
+                              (some-> (get f rpath-key)
+                                      (#(melange-common/path-normalize %))))
            logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
            asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
            doc-files (->> files
                           (remove #(or (logseq-file? %) (asset-file? %)))
-                          (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
+                          (filter #(contains? #{"md" "org" "markdown" "edn"} (melange-common/file-ext (:path %)))))
            asset-files (filter asset-file? files)
            doc-options (build-doc-options config options)]
        (log-fn "Importing" (count doc-files) "files ...")

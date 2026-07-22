@@ -1,12 +1,13 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
-  (:require [datascript.core :as d]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.content :as db-content]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
             [logseq.outliner.datascript-report :as ds-report]
             [clojure.set :as set]))
 
@@ -53,11 +54,11 @@
 (defn ^:api get-journal-day-from-long
   [db v]
   (when v
-    (let [day (date-time-util/ms->journal-day v)]
+    (let [day (melange-common/journal-day-of-ms v)]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
 (def ^:private private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
-                                                 db-property/built-in-properties)))
+                                                 property-catalog/built-in-properties)))
 
 (defn- build-journal-refs-for-datetime-properties
   "For a given property pair, builds a coll of journal refs for select built-in
@@ -67,10 +68,10 @@
         allowed-datetime? (and (= :datetime (:logseq.property/type property-ent))
                                ;; Only allow a few built-in properties as some built-in properties
                                ;; can create undesirable refs
-                               (if (db-property/internal-property? (:db/ident property-ent))
+                               (if (melange-property/internal-property? (:db/ident property-ent))
                                  (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident property-ent))
                                  ;; All user properties are allowed to create refs but not plugin properties
-                                 (not (db-property/plugin-property? (:db/ident property-ent)))))]
+                                 (not (melange-property/plugin-property? (:db/ident property-ent)))))]
     (cond
       (and allowed-datetime? (coll? v))
       (keep #(get-journal-day-from-long db %) v)

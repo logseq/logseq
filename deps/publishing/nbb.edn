@@ -1,6 +1,6 @@
-{:paths ["src"]
+{:paths ["src" "../melange/bridge/test-support"]
  :deps
- {logseq/db
-  {:local/root "../db"}
+ {logseq/melange-bridge
+  {:local/root "../melange/bridge"}
   io.github.nextjournal/nbb-test-runner
   {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}}}

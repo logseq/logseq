@@ -6,8 +6,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (defn- top-move-target
   [target-block]
@@ -49,7 +49,7 @@
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
       (editor-handler/api-insert-new-block!
-       (ref/->block-ref (:block/uuid first-block))
+       (melange-common/to-page-ref (:block/uuid first-block))
        {:block-uuid (:block/uuid target-block)
         :sibling? (not nested?)
         :before? top?})

@@ -50,7 +50,7 @@
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.api.plugin :as plugin-api]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 

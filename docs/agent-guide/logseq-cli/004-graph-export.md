@@ -89,7 +89,7 @@ The worker capabilities that already exist are:
   Exports SQLite as base64 for transport, but adds avoidable payload inflation for file export.
 ```
 
-The underlying EDN graph export options currently supported by `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/sqlite/export.cljs` are:
+The underlying EDN graph export options currently supported by `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/sqlite/export.cljs` are:
 
 | Option | Current backend support | Notes |
 | --- | --- | --- |

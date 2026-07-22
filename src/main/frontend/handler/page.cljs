@@ -1,6 +1,7 @@
 (ns frontend.handler.page
   "Provides util handler fns for pages"
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.commands :as commands]
@@ -25,14 +26,11 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.page :as page-util]
-            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.graph-parser.text :as text]
+
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.common.regex :as melange-regex]
             [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
@@ -41,7 +39,7 @@
 
 (defn get-recycle-page
   []
-  (db/get-page common-config/recycle-page-name))
+  (db/get-page melange-common/recycle-page-name))
 
 (defn open-recycle!
   []
@@ -88,7 +86,7 @@
   "return page-block entities"
   []
   (when-let [db (conn/get-db)]
-    (when-let [page (ldb/get-page db common-config/favorites-page-name)]
+    (when-let [page (ldb/get-page db melange-common/favorites-page-name)]
       (let [blocks (ldb/sort-by-order (:block/_parent page))]
         (->> blocks
              (keep (fn [block]
@@ -105,7 +103,7 @@
 
 (defn rename!
   [page-uuid new-name & {:as _opts}]
-  (let [page-uuid (if (util/uuid-string? page-uuid)
+  (let [page-uuid (if (melange-common/uuid-string? page-uuid)
                     (uuid page-uuid)
                     (throw (ex-info "Invalid page uuid"
                                     {:page-uuid page-uuid})))]
@@ -118,7 +116,7 @@
 (defn <reorder-favorites!
   [favorites]
   (let [conn (conn/get-db false)]
-    (when-let [favorites-page (db/get-page common-config/favorites-page-name)]
+    (when-let [favorites-page (db/get-page melange-common/favorites-page-name)]
       (let [favorite-page-block-db-id-coll
             (keep (fn [page-uuid]
                     (:db/id (db/get-page page-uuid)))
@@ -138,7 +136,7 @@
 
 (defn get-page-ref-text
   [page]
-  (ref/->page-ref page))
+  (melange-common/to-page-ref page))
 
 (defn init-commands!
   []
@@ -185,12 +183,14 @@
             chosen (-> chosen
                        (string/replace-first (str (t :editor/new-tag) " ") "")
                        (string/replace-first (str (t :editor/new-page) " ") ""))
-            wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
-            chosen-last-part (if (text/namespace-page? chosen)
-                               (text/get-namespace-last-part chosen)
+            wrapped? (= melange-common/left-brackets
+                        (melange-common/safe-substring-range
+                                             edit-content (- pos 2) pos))
+            chosen-last-part (if (melange-common/namespace-page? chosen)
+                               (melange-common/get-last-part chosen)
                                chosen)
-            wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
-                          (ref/->page-ref chosen-last-part)
+            wrapped-tag (if (and (melange-regex/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
+                          (melange-common/to-page-ref chosen-last-part)
                           chosen-last-part)
             q (if (editor-handler/get-selected-text) "" q)
             last-pattern (if wrapped?
@@ -198,14 +198,16 @@
                            (if (= \# (first q))
                              (subs q 1)
                              q))
-            last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
-            tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
+            last-pattern (str "#" (when wrapped? melange-common/left-brackets) last-pattern)
+            tag-in-page-auto-complete? (= melange-common/right-brackets
+                                          (melange-common/safe-substring-range
+                                                               edit-content current-pos (+ current-pos 2)))]
       (p/do!
        (editor-handler/insert-command! id
                                        (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
                                        format
                                        {:last-pattern last-pattern
-                                        :end-pattern (when wrapped? page-ref/right-brackets)
+                                        :end-pattern (when wrapped? melange-common/right-brackets)
                                         :command :page-ref})
        (when-not tag-in-page-auto-complete?
          (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
@@ -235,11 +237,11 @@
                                                   page (date/js-date->journal-title gd)]
                                               [page (db/get-page page)])))
                                         [chosen' chosen-result])
-            datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (util/page-name-sanity-lc chosen'))
+            datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (melange-common/page-name-sanity-lower chosen'))
             multiple-pages-same-name? (> (count datoms) 1)
             ref-text (if (and (de/entity? chosen-result)
                               (or multiple-pages-same-name? (not (ldb/page? chosen-result))))
-                       (ref/->page-ref (:block/uuid chosen-result))
+                       (melange-common/to-page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
             result (when-not (de/entity? chosen-result)
                      (<create! chosen'
@@ -247,15 +249,15 @@
                                 :split-namespace? true}))
             ref-text' (if result
                         (let [title (:block/title result)]
-                          (ref/->page-ref title))
+                          (melange-common/to-page-ref title))
                         ref-text)]
       (p/do!
        (editor-handler/insert-command! id
                                        ref-text'
                                        format
-                                       {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
-                                        :end-pattern page-ref/right-brackets
-                                        :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
+                                       {:last-pattern (str melange-common/left-brackets (if (editor-handler/get-selected-text) "" q))
+                                        :end-pattern melange-common/right-brackets
+                                        :postfix-fn   (fn [s] (util/replace-first melange-common/right-brackets s ""))
                                         :command :page-ref})
        (p/let [chosen-result (or result chosen-result)]
          (when (de/entity? chosen-result)
@@ -270,9 +272,11 @@
         q (or
            (editor-handler/get-selected-text)
            (when hashtag?
-             (common-util/safe-subs edit-content pos current-pos))
+             (melange-common/safe-substring-range
+                                  edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (common-util/safe-subs edit-content pos current-pos)))]
+             (melange-common/safe-substring-range
+                                  edit-content pos current-pos)))]
     (if hashtag?
       (tag-on-chosen-handler input id pos format current-pos edit-content q)
       (page-on-chosen-handler id format q))))
@@ -287,7 +291,7 @@
          (not config/publishing?))
     (when-let [title (date/today)]
       (state/set-today! title)
-      (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+      (p/let [today-page-lc-title (melange-common/page-name-sanity-lower title)
               page (db/get-today-journal-page)]
         (when-not page
           (p/let [result (<create! title {:redirect? false

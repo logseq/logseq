@@ -1,7 +1,7 @@
 (ns frontend.common.crypt
   "crypto utils"
   (:require [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defonce subtle (.. js/crypto -subtle))

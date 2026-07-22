@@ -1,23 +1,21 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.commands :as commands]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.property-build :as melange-property-build]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
@@ -65,7 +63,7 @@
 
 (defn- journal-title
   [db journal-day]
-  (date-time-util/int->journal-title
+  (melange-common/format-journal-day
    journal-day
    (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
 
@@ -113,9 +111,10 @@
                                              (assoc (into {} block) :db/id (:db/id block))
                                               (:journal template)
                                               (assoc :block/uuid
-                                                     (common-uuid/gen-journal-template-block
-                                                      (:block/uuid (:journal template))
-                                                      (:block/uuid block)))))))))
+                                                     (uuid
+                                                      (melange-common/journal-template
+                                                       (str (:block/uuid (:journal template)))
+                                                       (str (:block/uuid block)))))))))))
         tag-additions (->> (:tx-data tx-report)
                            (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
                            (group-by :e))
@@ -185,14 +184,14 @@
                                (remove #{:logseq.class/Page}))]
                  (when (and (seq tags)
                           ;; has other page-classes other than `:logseq.class/Page`
-                            (some db-class/page-classes tags))
+                            (some class-catalog/page-classes tags))
                    [[:db/retract (:e datom) :block/tags :logseq.class/Page]]))
 
              ;; Add other page classes to an existing page
              ;; Caused by invalid tags data from server
              ;; TODO: remove this case
              ;; DEADLINE: 2025-11-30
-               (and (contains? (disj db-class/page-classes :logseq.class/Page) (:db/ident v-entity))
+               (and (contains? (disj class-catalog/page-classes :logseq.class/Page) (:db/ident v-entity))
                     (ldb/internal-page? entity))
                [[:db/retract (:e datom) :block/tags :logseq.class/Page]]
 
@@ -203,13 +202,13 @@
 (defn- remove-inline-page-class-from-title
   "Remove inline page tag from title"
   [block page-tag]
-  (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+  (-> (string/replace (:block/raw-title block) (str "#" (melange-common/to-page-ref (:block/uuid page-tag))) "")
       string/trim))
 
 (defn- fix-inline-built-in-page-classes
   [{:keys [db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
-    (let [classes (->> (remove #{:logseq.class/Page} db-class/page-classes)
+    (let [classes (->> (remove #{:logseq.class/Page} class-catalog/page-classes)
                        (map #(d/entity db-after %)))
           class-ids (set (map :db/id classes))]
       (->>
@@ -254,7 +253,7 @@
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
                    [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                     :block/name (melange-common/page-name-sanity-lower (:block/title block-after))
                      :block/tags :logseq.class/Page}
                     [:db/retract id :block/page]]
 
@@ -266,7 +265,7 @@
                          page-title (remove-inline-page-class-from-title block page-tag)
                          ->page-tx (concat
                                     [{:db/id id
-                                      :block/name (common-util/page-name-sanity-lc page-title)
+                                      :block/name (melange-common/page-name-sanity-lower page-title)
                                       :block/title page-title}
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
@@ -351,11 +350,11 @@
                (let [query-entity (:logseq.property/query block)]
                  (when-not (and query-entity (:block/uuid query-entity))
                    (let [query-text (if (string? query-entity) query-entity "")
-                         value-block (db-property-build/build-property-value-block
+                         value-block (melange-property-build/build-property-value-block
                                       block
                                       query-property
                                       query-text
-                                      {:block-uuid (common-uuid/gen-uuid)})
+                                      {:block-uuid (melange-uuid/gen)})
                          value-uuid (:block/uuid value-block)]
                      [value-block
                       (outliner-core/block-with-updated-at
@@ -400,7 +399,7 @@
   (let [user-uuid (:sub decoded-id-token)
         user-name (:cognito:username decoded-id-token)
         email (:email decoded-id-token)
-        now (common-util/time-ms)]
+        now (melange-common/now-ms)]
     {:block/uuid (uuid user-uuid)
      :block/name user-name
      :block/title user-name
@@ -517,7 +516,7 @@
         commands-tx (when-not (or (:undo? tx-meta)
                                   (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta)
-                                  (::sqlite-export/imported-data? tx-meta))
+                                  (:logseq.db.sqlite.export/imported-data? tx-meta))
                       (commands/run-commands tx-report))
         before-template-tx-data (concat revert-tx-data
                                         toggle-page-and-block-tx-data
@@ -641,7 +640,7 @@
         ;; Ref rebuilding happens here because transact-pipeline doesn't rebuild refs
         ;; for these cases
         (or (::gp-exporter/new-graph? tx-meta)
-            (and (::sqlite-export/imported-data? tx-meta)
+            (and (:logseq.db.sqlite.export/imported-data? tx-meta)
                  ;; Undo and redo must be handled by default in order to work
                  (not (:undo? tx-meta)) (not (:redo? tx-meta))))
         (invoke-hooks-for-imported-graph conn tx-report)

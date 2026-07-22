@@ -16,11 +16,10 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -73,7 +72,7 @@
     (if (empty? assets)
       (p/resolved {:copied 0 :failed []})
       (p/let [repo-dir (config/get-repo-dir repo)
-              assets-dir (path/path-join repo-dir common-config/local-assets-dir)
+              assets-dir (melange-common/path-join repo-dir (to-array [melange-common/local-assets-dir]))
               _ (fs/mkdir-if-not-exists assets-dir)]
         (p/loop [remaining assets
                  count 0
@@ -229,7 +228,7 @@
 
 (defn- import-edn-data-from-form [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
-        import-block? (::sqlite-export/block export-map)
+        import-block? (:logseq.db.sqlite.export/block export-map)
         block (when import-block?
                 (if-let [eid (:block-id (first (state/get-editor-args)))]
                   (let [ent (db/entity [:block/uuid eid])]

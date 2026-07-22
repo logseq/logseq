@@ -1,14 +1,14 @@
 (ns frontend.handler.db-based.export
   "Handles DB graph exports and imports across graphs"
-  (:require [cljs.pprint :as pprint]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.pprint :as pprint]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.util.page :as page-util]
             [goog.dom :as gdom]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
             [promesa.core :as p]))
 
 (defn- <export-edn-helper
@@ -73,7 +73,7 @@
 (defn- file-name [repo extension]
   (-> repo
       (string/replace #"^/+" "")
-      (str "_" (quot (util/time-ms) 1000))
+      (str "_" (quot (melange-common/now-ms) 1000))
       (str "." (string/lower-case (name extension)))))
 
 (defn export-repo-as-db-edn!

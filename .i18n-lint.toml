@@ -336,6 +336,15 @@ always_used_key_patterns = [
   # Table view keys used dynamically via (for [[option-key _] options] (t option-key)).
   "^:view\\.table/group-journal-date",
   "^:view\\.table/group-page",
+  # Built-in schema keys derived at runtime from the Melange property and class catalogs.
+  "^:class\\.built-in/",
+  "^:property\\.built-in/",
+  "^:property\\.color/",
+  "^:property\\.priority/",
+  "^:property\\.repeat-recur-unit/",
+  "^:property\\.repeat-repeat-type/",
+  "^:property\\.status/",
+  "^:property\\.view-type/",
 ]
 
 # Key namespace prefixes excluded from unused-key checking.
@@ -361,14 +370,3 @@ ignore_key_namespaces = [
 # Map attribute keys whose keyword values are translation key references.
 # Combined with ui_attributes during check-keys analysis.
 translation_key_attributes = ["i18n-key", "prompt-key", "title-key"]
-
-# Built-in db-ident definition sources.
-# Each entry scopes keyword extraction to a specific named def/defonce form,
-# preventing false positives from other keyword literals in the same file.
-[[check-keys.db_ident_defs]]
-file = "deps/db/src/logseq/db/frontend/property.cljs"
-def  = "built-in-properties"
-
-[[check-keys.db_ident_defs]]
-file = "deps/db/src/logseq/db/frontend/class.cljs"
-def  = "built-in-classes"

@@ -17,7 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
@@ -106,7 +106,7 @@
 (defn- auth-file-path
   []
   (when-let [home-dir (get-in @state/state [:system/info :home-dir])]
-    (path/path-join home-dir "logseq" "auth.json")))
+    (melange-common/path-join home-dir (to-array ["logseq" "auth.json"]))))
 
 (defn- auth-file-payload
   []

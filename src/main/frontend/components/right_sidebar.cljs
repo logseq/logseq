@@ -22,7 +22,7 @@
             [frontend.ui :as ui]
             [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]

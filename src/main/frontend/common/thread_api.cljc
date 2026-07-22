@@ -1,7 +1,7 @@
 (ns frontend.common.thread-api
   "Macro for defining thread apis, which is invokeable by other threads"
   #?(:cljs (:require-macros [frontend.common.thread-api]))
-  #?(:cljs (:require [logseq.db :as ldb]
+  #?(:cljs (:require [logseq.melange.bridge.db.core :as ldb]
                      [promesa.core :as p]
                      [lambdaisland.glogi :as log])))
 

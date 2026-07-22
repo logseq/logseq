@@ -1,7 +1,7 @@
 (ns logseq.db-sync.checksum
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (def ^:private fnv-offset 2166136261)
 (def ^:private djb-offset 5381)
@@ -89,7 +89,7 @@
   (let [lookup-ref (fn [db value]
                      (when value
                        (try
-                         (d/entid db value)
+                         (:db/id (d/entity db value))
                          (catch :default _
                            nil))))
         uuid-value (cond

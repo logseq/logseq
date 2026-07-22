@@ -6,15 +6,16 @@
                                         :unresolved-symbol {:level :off}}}})
   (:require #?(:org.babashka/nbb ["mldoc$default" :refer [Mldoc]]
                :default ["mldoc" :refer [Mldoc]])
-            #?(:org.babashka/nbb [logseq.common.log :as log]
+            #?(:org.babashka/nbb [logseq.melange.bridge.common.log :as log]
                :default [lambdaisland.glogi :as log])
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.db.sqlite.util :as sqlite-util]
+            #?(:org.babashka/nbb [logseq.melange.bridge.common.api :as melange-common]
+               :cljs [logseq.melange.bridge.common.api :as melange-common])
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.utf8 :as utf8]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
@@ -97,9 +98,10 @@
                     ;; Check if the indentation area only contains white spaces
                     ;; Level = ast level + 1, 1-based indentation level
                     ;; For markdown in Logseq, the indentation area for the non-first line of multi-line block is (ast level - 1) * "\t" + 2 * "(space)"
-                    (if (string/blank? (common-util/safe-subs line 0 level))
+                    (if (string/blank? (melange-common/safe-substring-range
+                                                            line 0 level))
                       ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
-                      (common-util/safe-subs line level)
+                      (melange-common/safe-substring line level)
                       ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
                   (if remove-first-line? lines r))
@@ -397,7 +399,7 @@
           (not (contains? #{"Page_ref" "Block_ref"} ref-type))
 
           (and (contains? #{"Page_ref"} ref-type)
-               (boolean (common-config/local-relative-asset? ref-value)))))))
+               (boolean (melange-common/local-relative-asset? ref-value)))))))
 
 (defn mldoc-link?
   "Check whether s is a link (including page/block refs)."

@@ -6,7 +6,7 @@
             [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.server :as cli-server]
-            [logseq.common.version :as version]
+            [logseq.melange.bridge.common.version :as version]
             [promesa.core :as p]))
 
 (def entries

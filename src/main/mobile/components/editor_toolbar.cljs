@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [logseq.common.util.page-ref :as page-ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -44,8 +44,8 @@
         (if (and input selection)
           (do
             (editor-handler/delete-and-update input selection-start selection-end)
-            (editor-handler/insert (page-ref/->page-ref selection)))
-          (insert-text page-ref/left-and-right-brackets
+            (editor-handler/insert (melange-common/to-page-ref selection)))
+          (insert-text melange-common/left-and-right-brackets
                        {:backward-pos 2
                         :check-fn (fn [_ _ _]
                                     (let [input (state/get-input)

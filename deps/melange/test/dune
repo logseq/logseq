@@ -1,0 +1,47 @@
+(rule
+ (alias runtest)
+ (deps
+  (:node_js_api ../js_api/melange-js-api-node.js)
+  (:graph_fs_js_api ../js_api/melange-js-api-graph-fs.js)
+  (:browser_js_api ../js_api/melange-js-api-browser.js)
+  (:common_js_api ../js_api/melange-js-api-common.js)
+  (:db_js_api ../js_api/melange-js-api-db.js)
+  ../js_api/dist/melange-js-api-common.js
+  ../js_api/dist/melange-js-api-db.js
+  (:platform_js_test ./platform_js_test.js)
+  (:graph_fs_js_test ./graph_fs_js_test.js)
+  (:package_resolution_test ./package_resolution_test.js)
+  (:package_resolution_common
+   ../bridge/test/package_contract/package_resolution_common.cljs)
+  (:package_resolution_db
+   ../bridge/test/package_contract/package_resolution_db.cljs)
+  (:node_graph_package
+   ../bridge/test/package_contract/node_graph_package.cljs)
+  (:common_namespace_package
+   ../bridge/test/package_contract/common_namespace_package.cljs)
+  (:common_namespace_package_test ./common_namespace_package_test.js)
+  (:db_namespace_package
+   ../bridge/test/package_contract/db_namespace_package.cljs)
+  (:db_namespace_package_test ./db_namespace_package_test.js)
+  (:api_public_boundary_test ./api_public_boundary_test.js)
+  (:cljs_boundary_test ./cljs_boundary_test.js)
+  (:repository_contract_test ./repository_contract_test.js))
+ (action
+  (setenv
+   LOGSEQ_MELANGE_JS_API_NODE
+   %{node_js_api}
+   (setenv
+    LOGSEQ_MELANGE_JS_API_GRAPH_FS
+    %{graph_fs_js_api}
+    (setenv
+     LOGSEQ_MELANGE_JS_API_BROWSER
+     %{browser_js_api}
+     (progn
+      (run node --test %{platform_js_test})
+      (run node --test %{graph_fs_js_test})
+      (run node --test %{package_resolution_test})
+      (run node --test %{common_namespace_package_test})
+      (run node --test %{db_namespace_package_test})
+      (run node --test %{api_public_boundary_test})
+      (run node --test %{cljs_boundary_test})
+      (run node --test %{repository_contract_test})))))))

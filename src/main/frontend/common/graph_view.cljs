@@ -1,14 +1,15 @@
 (ns frontend.common.graph-view
   "Main namespace for graph view fns."
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- build-links
   [links]
@@ -118,8 +119,8 @@
   [entity]
   (let [title (:block/title entity)]
     (cond-> (if (and (string? title)
-                     (re-find db-content/id-ref-pattern title))
-              (or (db-content/recur-replace-uuid-in-block-title entity 10)
+                     (melange-content/contains-id-ref? title))
+              (or (melange-content/recur-replace-uuid-in-block-title entity 10)
                   title)
               title)
       (string? title)
@@ -137,9 +138,9 @@
                                   (string/includes? title "[["))
                title (if (and normalize-id-refs?
                               contains-ref?
-                              (re-find db-content/id-ref-pattern title))
+                              (melange-content/contains-id-ref? title))
                        (or (some-> (d/entity db id)
-                                   (db-content/recur-replace-uuid-in-block-title 10))
+                                   (melange-content/recur-replace-uuid-in-block-title 10))
                            title)
                        title)]
            (if (some? title)
@@ -748,7 +749,7 @@
 ;; slow
 (defn- uuid-or-asset?
   [label]
-  (or (common-util/uuid-string? label)
+  (or (melange-common/uuid-string? label)
       (string/starts-with? label "../assets/")
       (= label "..")
       (string/starts-with? label "assets/")
@@ -840,7 +841,7 @@
             ident-by-name-page-id (entity-value-map-by-id db :db/ident name-page-ids)
             name-datoms (vec (remove (fn [{page-id :e}]
                                        (or (contains? hidden-name-page-ids page-id)
-                                           (contains? db-class/internal-tags
+                                           (contains? class-catalog/internal-tags
                                                       (get ident-by-name-page-id page-id))))
                                      name-datoms))
             page-id-set (set (map :e name-datoms))

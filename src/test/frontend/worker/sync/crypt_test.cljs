@@ -9,7 +9,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.util :as sync-util]
             [frontend.worker.ui-request :as ui-request]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def ^:private decrypt-snapshot-datoms-batch-orig sync-crypt/<decrypt-snapshot-datoms-batch)

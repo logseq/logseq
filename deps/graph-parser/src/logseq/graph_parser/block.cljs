@@ -1,22 +1,18 @@
 (ns logseq.graph-parser.block
   "Given mldoc ast, prepares block data in preparation for db transaction.
    Used by file and DB graphs"
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
-            [logseq.common.date :as common-date]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.melange.bridge.common.collection :as melange-collection]
+            [logseq.melange.bridge.common.uuid :as melange-uuid]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.entity :as entity-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
@@ -27,6 +23,12 @@
   (and
    (vector? block)
    (= "Heading" (first block))))
+
+(defn- parse-journal-title-day
+  [title formatters]
+  (melange-common/parse-journal-title-day
+   (melange-common/capitalize-all title)
+   formatters))
 
 (defn get-tag
   [block]
@@ -53,17 +55,17 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (common-config/local-relative-asset? value)))
+                        (not (melange-common/local-relative-asset? value)))
                    value)
 
                   (and
                    (= url-type "Search")
-                   (page-ref/page-ref? value)
-                   (text/page-ref-un-brackets! value))
+                   (melange-common/page-ref? value)
+                   (melange-common/get-page-name-or-self value))
 
                   (and (= url-type "Search")
                        (= format :org)
-                       (not (common-config/local-relative-asset? value))
+                       (not (melange-common/local-relative-asset? value))
                        value)
 
                   (and
@@ -79,8 +81,8 @@
                (let [{:keys [name arguments]} (second block)
                      argument (string/join ", " arguments)]
                  (if (= name "embed")
-                   (when (page-ref/page-ref? argument)
-                     (text/page-ref-un-brackets! argument))
+                   (when (melange-common/page-ref? argument)
+                     (melange-common/get-page-name-or-self argument))
                    {:type "macro"
                     :name name
                     :arguments arguments}))
@@ -88,12 +90,12 @@
                (and (vector? block)
                     (= "Tag" (first block)))
                (let [text (get-tag block)]
-                 (text/page-ref-un-brackets! text))
+                 (melange-common/get-page-name-or-self text))
 
                :else
                nil)]
     (when page (or (when (string? page)
-                     (block-ref/get-block-ref-id page))
+                     (melange-common/get-block-ref-id page))
                    page))))
 
 (defn get-block-reference
@@ -114,8 +116,8 @@
                         (let [{:keys [name arguments]} (second block)]
                           (when (and (= name "embed")
                                      (string? (first arguments))
-                                     (block-ref/string-block-ref? (first arguments)))
-                            (block-ref/get-string-block-ref-id (first arguments))))
+                                     (melange-common/string-block-ref? (first arguments)))
+                            (melange-common/get-string-block-ref-id (first arguments))))
 
                         (and (vector? block)
                              (= "Link" (first block))
@@ -125,7 +127,7 @@
                           (let [id (second (:url (second block)))]
                             ;; these can be maps
                             (when (string? id)
-                              (or (block-ref/get-block-ref-id id) id))))
+                              (or (melange-common/get-block-ref-id id) id))))
 
                         :else
                         nil)]
@@ -269,7 +271,9 @@
 (defn- timestamp->scheduled-or-deadline-value
   [{:keys [date repetition] timestamp-time :time}]
   (let [{:keys [year month day]} date
-        day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
+        day (js/parseInt (str year
+                              (melange-common/zero-pad month)
+                              (melange-common/zero-pad day)))]
     (if (or timestamp-time repetition)
       (cond-> {:date-int day}
         timestamp-time
@@ -296,17 +300,21 @@
   "Convert journal file name to user' custom date format"
   [original-page-name date-formatter & {:keys [export-to-db-graph?]}]
   (when original-page-name
-    (let [page-name (common-util/page-name-sanity-lc original-page-name)
+    (let [page-name (melange-common/page-name-sanity-lower original-page-name)
           day (when date-formatter
-                (date-time-util/journal-title->int
+                (parse-journal-title-day
                  page-name
                  ;; When exporting, only use the configured date-formatter. Allowing for other date formatters allows
                  ;; for page names to change which breaks looking up journal refs for unconfigured journal pages
-                 (if export-to-db-graph? [date-formatter] (date-time-util/safe-journal-title-formatters date-formatter))))]
+                 (if export-to-db-graph?
+                   #js [date-formatter]
+                   (melange-common/safe-journal-title-formatters date-formatter))))]
       (if day
-        (let [original-page-name' (date-time-util/int->journal-title day date-formatter)
-              default-journal-page-name (date-time-util/int->journal-title day date-time-util/default-journal-title-formatter)]
-          [original-page-name' (common-util/page-name-sanity-lc default-journal-page-name) day])
+        (let [original-page-name' (melange-common/format-journal-day day date-formatter)
+              default-journal-page-name (melange-common/format-journal-day
+                                         day
+                                         melange-common/default-journal-title-formatter)]
+          [original-page-name' (melange-common/page-name-sanity-lower default-journal-page-name) day])
         [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
@@ -325,15 +333,15 @@
   [original-page-name db date-formatter
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
   (let [db-based? (entity-plus/db-based-graph? db)
-        original-page-name (common-util/remove-boundary-slashes original-page-name)
+        original-page-name (melange-common/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day]
         (if skip-journal?
-          [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
+          [original-page-name (melange-common/page-name-sanity-lower original-page-name) nil]
           (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not journal-day)
                         (not (boolean (text/get-nested-page-name original-page-name')))
-                        (text/namespace-page? original-page-name'))
+                        (melange-common/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
                       (if (and class? db-based?)
                         (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
@@ -355,8 +363,8 @@
                 (let [new-uuid* (if (uuid? page-uuid)
                                   page-uuid
                                   (if journal-day
-                                    (common-uuid/gen-uuid :journal-page-uuid journal-day)
-                                    (common-uuid/gen-uuid)))
+                                    (uuid (melange-common/journal-page journal-day))
+                                    (melange-uuid/gen)))
                       new-uuid (if skip-existing-page-check?
                                  new-uuid*
                                  (or
@@ -365,11 +373,11 @@
                                   new-uuid*))]
                   {:block/uuid new-uuid}))
               (when namespace?
-                (let [namespace' (first (common-util/split-last "/" original-page-name))]
+                (let [namespace' (first (melange-common/split-last "/" original-page-name))]
                   (when-not (string/blank? namespace')
-                    {:block/namespace {:block/name (string/trim (common-util/page-name-sanity-lc namespace'))}})))
+                    {:block/namespace {:block/name (string/trim (melange-common/page-name-sanity-lower namespace'))}})))
               (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
-                (let [current-ms (common-util/time-ms)]
+                (let [current-ms (melange-common/now-ms)]
                   {:block/created-at current-ms
                    :block/updated-at current-ms}))
               (if journal-day
@@ -382,7 +390,7 @@
     [page page-entity]))
 
 (defn sanitize-hashtag-name
-  "This must be kept in sync with its reverse operation in logseq.db.frontend.content"
+  "This must be kept in sync with its reverse operation in logseq.melange.bridge.db.content"
   [s]
   (string/replace s "#" "HashTag-"))
 
@@ -402,7 +410,7 @@
    `skip-existing-page-check?`: if true, allows pages to have the same name"
   [original-page-name db with-timestamp? date-formatter
    & {:keys [page-uuid class?] :as options}]
-  (when-not (and db (common-util/uuid-string? original-page-name)
+  (when-not (and db (melange-common/uuid-string? original-page-name)
                  (not (page-entity? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (entity-plus/db-based-graph? db)
           original-page-name (cond-> (string/trim original-page-name)
@@ -434,8 +442,8 @@
   "Namespace page that're not journal pages"
   [db-based? page]
   (and db-based?
-       (text/namespace-page? page)
-       (not (common-date/valid-journal-title-with-slash? page))))
+       (melange-common/namespace-page? page)
+       (not (melange-common/journal-title-with-slash? page))))
 
 (defn- ref->map
   [db *col {:keys [date-formatter *name->id tag? db-based? structured-tags]}]
@@ -446,10 +454,10 @@
                                                 p)]
                                         (when (string? p)
                                           (let [p (or (text/get-nested-page-name p) p)]
-                                            (if (and (text/namespace-page? p)
-                                                     (not (common-date/valid-journal-title-with-slash? p))
+                                            (if (and (melange-common/namespace-page? p)
+                                                     (not (melange-common/journal-title-with-slash? p))
                                                      (not tag?))
-                                              (common-util/split-namespace-pages p)
+                                              (melange-common/split-namespace-pages p)
                                               [p])))))
                                     col)
                             (remove string/blank?)
@@ -502,10 +510,10 @@
                               page)]
              (swap! *refs conj page')))
          (when-let [tag (get-tag form)]
-           (let [tag (text/page-ref-un-brackets! tag)]
+           (let [tag (melange-common/get-page-name-or-self tag)]
              (when-let [tag' (when-not (db-namespace-page? db-based? tag)
                                tag)]
-               (when (common-util/tag-valid? tag')
+               (when (melange-common/valid-tag? tag')
                  (swap! *refs conj tag')
                  (swap! *structured-tags conj tag')))))
          form))
@@ -547,7 +555,7 @@
   [blocks]
   (map (fn [block]
          (if (map? block)
-           (block-keywordize (common-util/remove-nils-non-nested block))
+           (block-keywordize (melange-collection/remove-nils-non-nested block))
            block))
        blocks))
 
@@ -594,7 +602,7 @@
 (defn- macro->block
   "macro: {:name \"\" arguments [\"\"]}"
   [macro]
-  {:block/uuid (common-uuid/gen-uuid)
+  {:block/uuid (melange-uuid/gen)
    :block/type "macro"
    :block/properties {:logseq.macro-name (:name macro)
                       :logseq.macro-arguments (:arguments macro)}})

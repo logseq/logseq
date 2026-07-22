@@ -4,8 +4,8 @@
             [frontend.worker.platform :as platform]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.runtime :as melange-keyword]
             [promesa.core :as p]))
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
@@ -388,6 +388,6 @@
       (do
         (when (exists? js/self) (.postMessage js/self transit-payload))
         (when-let [common-channel @*common-channel]
-          (let [str-type' (common-util/keyword->string type')]
+          (let [str-type' (melange-keyword/to-string type')]
             (.postMessage common-channel #js {:type str-type'
                                               :data transit-payload})))))))

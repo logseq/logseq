@@ -13,8 +13,8 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
-            [logseq.common.graph-dir :as graph-dir]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def db-worker-recovery-failure-threshold 1)
@@ -35,7 +35,7 @@
 
 (defn- same-remote-repo?
   [repo runtime-repo]
-  (graph-dir/same-repo? repo runtime-repo))
+  (melange-common/same-repo? repo runtime-repo))
 
 (defn- <stop-remote-if-current!
   [repo]

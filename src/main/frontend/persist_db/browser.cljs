@@ -2,7 +2,8 @@
   "Browser db persist support, using sqlite-wasm.
 
    This interface uses clj data format as input."
-  (:require ["comlink" :as Comlink]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["comlink" :as Comlink]
             [electron.ipc :as ipc]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
@@ -15,7 +16,7 @@
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def-thread-api :thread-api/input-idle?
@@ -215,7 +216,7 @@
                                                             (str (namespace qkw) "/" (name qkw))
                                                             (ldb/write-transit-str args))]
                                 (ldb/read-transit-str result))))
-           t1 (util/time-ms)]
+           t1 (melange-common/now-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
        (worker-handler/handle-message! worker wrapped-worker)
@@ -226,7 +227,7 @@
                                                :ws-url (config/db-sync-ws-url)
                                                :http-base (config/db-sync-http-base)})
                    _ (state/pub-event! [:rtc/sync-app-state])
-                   _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
+                   _ (log/info "init worker spent" (str (- (melange-common/now-ms) t1) "ms"))
                    _ (sync-ui-state!)
                    _ (ask-persist-permission!)
                    _ (state/pub-event! [:graph/sync-context])]

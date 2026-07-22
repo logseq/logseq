@@ -1,7 +1,7 @@
 (ns frontend.worker.sync.util-test
   (:require [cljs.test :refer [deftest is]]
             [frontend.worker.sync.util :as sync-util]
-            [logseq.common.version :as build-version]))
+            [logseq.melange.bridge.common.version :as build-version]))
 
 (deftest coerce-http-request-adds-client-revision-to-tx-batch-test
   (is (= (build-version/revision)

@@ -1,8 +1,8 @@
 (ns logseq.db-sync.tx-sanitize
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.kv-entity :as kv-entity]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.kv-entity :as kv-entity]))
 
 (def ^:private retract-entity-ops
   #{:db/retractEntity :db.fn/retractEntity})

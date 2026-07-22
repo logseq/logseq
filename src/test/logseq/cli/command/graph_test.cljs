@@ -1,5 +1,6 @@
 (ns logseq.cli.command.graph-test
-  (:require ["fs" :as fs]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["fs" :as fs]
             ["path" :as node-path]
             [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
@@ -10,7 +11,6 @@
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]))
 
@@ -336,14 +336,14 @@
                demo-backup "demo-nightly"
                other-backup "other-nightly"
                demo-db-path (node-path/join graphs-dir
-                                            (graph-dir/repo->encoded-graph-dir-name demo-repo)
+                                            (melange-common/repo-to-encoded-graph-dir-name demo-repo)
                                             "backup"
-                                            (graph-dir/graph-dir-key->encoded-dir-name demo-backup)
+                                            (melange-common/graph-dir-key-to-encoded-dir-name demo-backup)
                                             "db.sqlite")
                other-db-path (node-path/join graphs-dir
-                                             (graph-dir/repo->encoded-graph-dir-name other-repo)
+                                             (melange-common/repo-to-encoded-graph-dir-name other-repo)
                                              "backup"
-                                             (graph-dir/graph-dir-key->encoded-dir-name other-backup)
+                                             (melange-common/graph-dir-key-to-encoded-dir-name other-backup)
                                              "db.sqlite")]
            (fs/mkdirSync (node-path/dirname demo-db-path) #js {:recursive true})
            (fs/mkdirSync (node-path/dirname other-db-path) #js {:recursive true})
@@ -409,9 +409,9 @@
                graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
                sqlite-payload (js/Buffer.from "sqlite" "utf8")
                backup-db-path (node-path/join graphs-dir
-                                              (graph-dir/repo->encoded-graph-dir-name "logseq_db_demo")
+                                              (melange-common/repo-to-encoded-graph-dir-name "logseq_db_demo")
                                               "backup"
-                                              (graph-dir/graph-dir-key->encoded-dir-name "demo-nightly")
+                                              (melange-common/graph-dir-key-to-encoded-dir-name "demo-nightly")
                                               "db.sqlite")]
            (fs/mkdirSync (node-path/dirname backup-db-path) #js {:recursive true})
            (fs/writeFileSync backup-db-path "seed")
@@ -447,9 +447,9 @@
                    (is (= 1 (count @read-calls)))
                    (let [[read-format read-path] (first @read-calls)
                          expected-segment (node-path/join
-                                           (graph-dir/repo->encoded-graph-dir-name "logseq_db_demo")
+                                           (melange-common/repo-to-encoded-graph-dir-name "logseq_db_demo")
                                            "backup"
-                                           (graph-dir/graph-dir-key->encoded-dir-name "demo-nightly")
+                                           (melange-common/graph-dir-key-to-encoded-dir-name "demo-nightly")
                                            "db.sqlite")]
                      (is (= :sqlite read-format))
                      (is (and (string? read-path)

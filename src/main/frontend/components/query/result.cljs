@@ -12,8 +12,8 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn run-custom-query

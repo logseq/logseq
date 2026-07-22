@@ -352,7 +352,7 @@ point out:
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
 
   ```sh
-  bb dev:validate-repo-config-edn deps/common/resources/templates/config.edn
+  bb dev:validate-repo-config-edn deps/melange/bridge/resources/templates/config.edn
   ```
 
 
@@ -386,12 +386,12 @@ docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 
 #### DB Graph Tasks
 
-These tasks are specific to database graphs. For these tasks there is a one time setup:
+These tasks are specific to database graphs. Install the root workspace dependencies once:
 
 ```sh
-  $ cd deps/db && pnpm install && cd ../outliner && pnpm install && cd ../graph-parser && pnpm install && cd ../..
+  $ pnpm install
 ```
-* `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
+* `logseq` - Run the current CLI from the root workspace
 * `dev:query` - Query a DB graph
 
   ```sh
@@ -427,7 +427,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Then:
 
   ```sh
-  bb dev:create inferred deps/db/script/create_graph/inferred.edn
+  bb dev:create inferred scripts/src/logseq/tasks/db/fixtures/create_graph/inferred.edn
   Generating 11 pages and 0 blocks ...
   Created graph inferred!
   ```

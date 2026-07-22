@@ -7,7 +7,7 @@
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.melange.bridge.db.schema :as db-schema]))
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 

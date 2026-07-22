@@ -1,7 +1,7 @@
 (ns logseq.cli.command.id
   "Shared id parsing helpers for CLI commands."
   (:require [clojure.string :as string]
-            [logseq.common.util :as common-util]))
+            [logseq.melange.bridge.common.util :as common-util]))
 
 (defn valid-id?
   [value]

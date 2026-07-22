@@ -73,20 +73,18 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.ref :as ref]
+            [logseq.melange.bridge.common.api :as melange-common]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.melange.bridge.common.log :as common-log]
+            [logseq.melange.bridge.common.regex :as melange-regex]
+            [logseq.melange.bridge.common.util :as common-util]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
             [logseq.outliner.property :as outliner-property]
             [logseq.sdk.utils :as sdk-util]
             [logseq.shui.dialog.core :as shui-dialog]
@@ -274,8 +272,8 @@
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
                   (if (util/electron?)
-                    (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
-                          ;; Should support all exts in common-config/img-formats
+                    (let [ext (some-> (melange-common/file-extension image-src) string/lower-case)
+                          ;; Keep this list aligned with the shared image formats.
                           ext->mime {"png" "image/png"
                                      "jpg" "image/jpeg"
                                      "jpeg" "image/jpeg"
@@ -506,10 +504,10 @@
   (let [src* (hooks/use-memo #(atom nil) [href])
         [src] (hooks/use-atom src*)
         href (cond-> href
-               (common-config/local-relative-asset? href)
+               (melange-common/local-relative-asset? href)
                (config/get-local-asset-absolute-path))
         ^js js-url (or (:link-js-url config)
-                       (when (path/protocol-url? href)
+                       (when (melange-common/protocol-url? href)
                          (try
                            (js/URL. href)
                            (catch :default _ nil))))]
@@ -518,7 +516,10 @@
        (when (nil? @src*)
          (-> (assets-handler/<make-asset-url href js-url)
              (p/then (fn [url]
-                       (reset! src* (common-util/safe-decode-uri-component url))))
+                       (reset! src*
+                               (melange-common/safe-decode-uri-component
+                                url
+                                #(common-log/error :decode-uri-component-failed %)))))
              (p/catch #(js/console.log "Failed to load asset:" %)))))
      [href])
     (if (nil? src)
@@ -534,7 +535,7 @@
                          ;; incoming href format: "/assets/whatever.ext"
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
                                rel-dir (string/replace rel-dir #"^/+" "")
-                               asset-url (path/path-join repo-dir rel-dir basename)]
+                               asset-url (melange-common/path-join repo-dir (to-array [rel-dir basename]))]
                            (mobile-intent/open-or-share-file asset-url))))]
         (cond
           (or (contains? config/audio-formats ext)
@@ -545,7 +546,7 @@
           [:video {:src src
                    :controls true}]
 
-          (contains? (common-config/img-formats) ext)
+          (melange-common/image-format? (name ext))
           (resizable-image config title src metadata full_text true)
 
           (= ext :pdf)
@@ -579,14 +580,16 @@
                           (let [repo-dir (config/get-repo-dir repo)
                                  ext-url (:logseq.property.asset/external-url asset-block)
                                  remote-ext-url? (and (not (string/blank? ext-url))
-                                                      (path/protocol-url? ext-url)
-                                                      (not (common-config/local-protocol-asset? ext-url)))
+                                                      (melange-common/protocol-url? ext-url)
+                                                      (not (melange-common/local-protocol-asset? ext-url)))
                                  local-ext-url? (and (not (string/blank? ext-url))
-                                                     (common-config/local-relative-asset? ext-url))
+                                                     (melange-common/local-relative-asset? ext-url))
                                  file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
-                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
+                                              (melange-common/path-join
+                                                         repo-dir
+                                                         (to-array [(string/replace ext-url #"^[./]+" "")]))
+                                              (melange-common/path-join repo-dir (to-array [(str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))])))]
                              (if remote-ext-url?
                                (js/window.apis.openExternal ext-url)
                                (js/window.apis.openPath file-fpath))))}
@@ -604,7 +607,7 @@
         title (second (first label))]
     (ui/catch-error
      [:span.warning full_text]
-     (if (common-config/local-relative-asset? href)
+     (if (melange-common/local-relative-asset? href)
        (asset-link config title href metadata full_text)
        (let [href (cond
                     (util/starts-with? href "http")
@@ -745,7 +748,7 @@
         tag? (:tag? config)
         recycled? (ldb/recycled? page-entity)
         page-name (when (:block/title page-entity)
-                    (util/page-name-sanity-lc (:block/title page-entity)))
+                    (melange-common/page-name-sanity-lower (:block/title page-entity)))
         untitled? (when page-name
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
@@ -1007,7 +1010,7 @@
           config (assoc config :block entity)]
       (cond
         entity
-        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+        (let [page-name (some-> (:block/title entity) (melange-common/page-name-sanity-lower))
               inner (page-inner config entity children label)
               modal? (shui-dialog/has-modal?)]
           (if (and (not (util/mobile?))
@@ -1029,10 +1032,10 @@
         [:span
          (when tag? "#")
          (when-not tag?
-           [:span.text-gray-500.bracket page-ref/left-brackets])
+           [:span.text-gray-500.bracket melange-common/left-brackets])
          (or label (:block/name page))
          (when-not tag?
-           [:span.text-gray-500.bracket page-ref/right-brackets])]
+           [:span.text-gray-500.bracket melange-common/right-brackets])]
 
         :else
         nil))))
@@ -1047,15 +1050,15 @@
   [config title path]
   (let [repo (state/get-current-repo)
         real-path-url (cond
-                        (common-util/url? path)
+                        (melange-common/url? path)
                         path
 
-                        (path/absolute? path)
+                        (melange-common/absolute? path)
                         path
 
                         :else
                         (assets-handler/resolve-asset-real-path-url repo path))
-        ext-name (util/get-file-ext path)
+        ext-name (melange-common/file-extension path)
         title-or-path (cond
                         (string? title)
                         title
@@ -1135,7 +1138,7 @@
                          [:div.asset-transfer-progress-label (str label " " percent "%")]
                          [:div.asset-transfer-progress-bar
                           [:span {:style {:width (str percent "%")}}]]])
-        image? (contains? (common-config/img-formats) (keyword asset-type))
+        image? (melange-common/image-format? asset-type)
         gallery-image? (and (:gallery-view? config) image?)
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
@@ -1157,11 +1160,11 @@
         ;; resolve correctly; <make-asset-url handles both remote URLs
         ;; and graph-root-relative paths.
         href (or (:logseq.property.asset/external-url block)
-                 (path/path-join (str "../" common-config/local-assets-dir) file))
+                 (melange-common/path-join (str "../" melange-common/local-assets-dir) (to-array [file])))
         _ (hooks/use-effect!
            (fn []
              (let [external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
-                   path (path/path-join common-config/local-assets-dir file)]
+                   path (melange-common/path-join melange-common/local-assets-dir (to-array [file]))]
                (p/let [result (if (or external-url? config/publishing?)
                                 ;; publishing doesn't have window.pfs defined
                                 true
@@ -1196,7 +1199,8 @@
 (defn- img-audio-video?
   [block]
   (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
-    (or (contains? (common-config/img-formats) asset-type)
+    (or (and asset-type
+             (melange-common/image-format? (name asset-type)))
         (contains? config/audio-formats asset-type)
         (contains? config/video-formats asset-type))))
 
@@ -1208,7 +1212,7 @@
   (let [uuid-or-title (when uuid-or-title*
                         (if (string? uuid-or-title*)
                           (let [str-id (string/trim uuid-or-title*)]
-                            (if (util/uuid-string? str-id)
+                            (if (melange-common/uuid-string? str-id)
                               (parse-uuid str-id)
                               str-id))
                           uuid-or-title*))
@@ -1250,7 +1254,7 @@
                 [:span.page-reference
                  {:data-ref (str uuid-or-title)}
                  (when (and brackets? (not blank-title?))
-                   [:span.text-gray-500.bracket page-ref/left-brackets])
+                   [:span.text-gray-500.bracket melange-common/left-brackets])
                  (when (or (ldb/class-instance? (db/entity :logseq.class/Task) block)
                            (:logseq.property/status block)
                            (:logseq.property/priority block))
@@ -1265,7 +1269,7 @@
                                     {:block/uuid uuid-or-title}
                                     {:block/name uuid-or-title}))
                  (when (and brackets? (not blank-title?))
-                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
+                   [:span.text-gray-500.bracket melange-common/right-brackets])]))))))))
 
 (defn- latex-environment-content
   [name option content]
@@ -1284,7 +1288,9 @@
   [label]
   (when (and (= 1 (count label))
              (string? (last (first label))))
-    (common-util/safe-decode-uri-component (last (first label)))))
+    (melange-common/safe-decode-uri-component
+     (last (first label))
+     #(common-log/error :decode-uri-component-failed %))))
 
 (defn- macro->text
   [name arguments]
@@ -1341,7 +1347,7 @@
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
-       [:span.text-gray-500 page-ref/left-brackets])
+       [:span.text-gray-500 melange-common/left-brackets])
      (let [page-name (subs content 2 (- (count content) 2))]
        (page-cp (assoc config
                        :children children
@@ -1349,7 +1355,7 @@
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
-       [:span.text-gray-500 page-ref/right-brackets])]))
+       [:span.text-gray-500 melange-common/right-brackets])]))
 
 (defn- show-link?
   [s full-text]
@@ -1365,9 +1371,9 @@
 
 (defn- relative-assets-path->absolute-path
   [path]
-  (when (path/protocol-url? path)
+  (when (melange-common/protocol-url? path)
     (js/console.error "BUG: relative-assets-path->absolute-path called with protocol url" path))
-  (if (or (path/absolute? path) (path/protocol-url? path))
+  (if (or (melange-common/absolute? path) (melange-common/protocol-url? path))
     path
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
@@ -1375,20 +1381,20 @@
 
 (defn- file-link-path->open-path
   [file-path]
-  (let [file-path (path/file-url-or-path->path file-path)
+  (let [file-path (melange-common/file-url-or-path-to-path file-path)
         file-path (if (and util/win32?
                            (string? file-path)
                            (re-find #"^/[A-Za-z]:(?:[/\\]|$)" file-path))
                     (subs file-path 1)
                     file-path)]
-    (if (or (path/absolute? file-path)
-            (path/protocol-url? file-path))
+    (if (or (melange-common/absolute? file-path)
+            (melange-common/protocol-url? file-path))
       file-path
       (relative-assets-path->absolute-path file-path))))
 
 (hsx/defc audio-link
   [config url href _label metadata full_text]
-  (if (common-config/local-relative-asset? href)
+  (if (melange-common/local-relative-asset? href)
     (asset-link config nil href metadata full_text)
     (let [href (cond
                  (util/starts-with? href "http")
@@ -1408,7 +1414,7 @@
 
 (defn- media-link
   [config url s label metadata full_text]
-  (let [ext (keyword (util/get-file-ext s))
+  (let [ext (keyword (melange-common/file-extension s))
         label-text (get-label-text label)]
     (cond
       (contains? config/audio-formats ext)
@@ -1427,7 +1433,7 @@
   [s]
   (when (and (not (string/blank? s))
              (= \# (first s)))
-    (let [page-name (text/page-ref-un-brackets! (subs s 1))
+    (let [page-name (melange-common/get-page-name-or-self (subs s 1))
           page (db/get-page page-name)]
       (when (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page))
         page-name))))
@@ -1449,14 +1455,14 @@
          (not= \* (last s)))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
-    (block-ref/block-ref? s)
-    (let [id (block-ref/get-block-ref-id s)]
+    (melange-common/block-ref? s)
+    (let [id (melange-common/get-block-ref-id s)]
       (block-reference config id label))
 
     (not (string/includes? s "."))
     (page-reference config s label)
 
-    (path/protocol-url? s)
+    (melange-common/protocol-url? s)
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
@@ -1494,12 +1500,12 @@
   (let [{:keys [url label title metadata full_text]} link]
     (match url
       ["Block_ref" id]
-      (str block-ref/left-parens id block-ref/right-parens)
+      (str melange-common/left-parens id melange-common/right-parens)
 
       ["Page_ref" page]
       (let [label* (if (seq (mldoc/plain->text label)) label nil)]
         (if (and (string? page) (string/blank? page))
-          [:span (ref/->page-ref page)]
+          [:span (melange-common/to-page-ref page)]
           (page-reference config page label*)))
 
       ["Embed_data" src]
@@ -1533,7 +1539,7 @@
                                        (util/stop e)
                                        (js/window.apis.openPath file-path))
                            :data-href href*}
-                          {:href (path/path-join "file://" href*)
+                          {:href (melange-common/path-join "file://" (to-array [href*]))
                            :data-href href*
                            :target "_blank"})
                   title (assoc :title title))
@@ -1580,7 +1586,7 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (when-let [vimeo-id (nth (util/safe-re-find text-util/vimeo-regex url) 5)]
+    (when-let [vimeo-id (nth (melange-regex/safe-re-find text-util/vimeo-regex url) 5)]
       (when-not (string/blank? vimeo-id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1600,7 +1606,7 @@
     (when-let [id (cond
                     (<= (count url) 15) url
                     :else
-                    (nth (util/safe-re-find text-util/bilibili-regex url) 5))]
+                    (nth (melange-regex/safe-re-find text-util/bilibili-regex url) 5))]
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1618,7 +1624,7 @@
 (defn- macro-video-cp
   [_config arguments]
   (if-let [url (first arguments)]
-    (if (common-util/url? url)
+    (if (melange-common/url? url)
       (let [results (text-util/get-matched-video url)
             src (match results
                   [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
@@ -1678,8 +1684,8 @@
   [config options]
   (let [{:keys [name arguments]} options
         arguments (if (and (>= (count arguments) 2)
-                           (string/starts-with? (first arguments) page-ref/left-brackets)
-                           (string/ends-with? (last arguments) page-ref/right-brackets)) ; page reference
+                           (string/starts-with? (first arguments) melange-common/left-brackets)
+                           (string/ends-with? (last arguments) melange-common/right-brackets)) ; page reference
                     (let [title (string/join ", " arguments)]
                       [title])
                     arguments)]
@@ -1698,7 +1704,7 @@
         (when-let [youtube-id (cond
                                 (== 11 (count url)) url
                                 :else
-                                (nth (util/safe-re-find text-util/youtube-regex url) 5))]
+                                (nth (melange-regex/safe-re-find text-util/youtube-regex url) 5))]
           (when-not (string/blank? youtube-id)
             (youtube/youtube-video youtube-id nil))))
 
@@ -1734,7 +1740,7 @@
             (when-let [id (cond
                             (<= (count url) 15) url
                             :else
-                            (last (util/safe-re-find id-regex url)))]
+                            (last (melange-regex/safe-re-find id-regex url)))]
               (ui/tweet-embed id)))))
 
       (= name "embed")
@@ -1805,8 +1811,8 @@
 
     ["Tag" _]
     (when-let [s (gp-block/get-tag item)]
-      (let [s (text/page-ref-un-brackets! s)]
-        (if (common-util/uuid-string? s)
+      (let [s (melange-common/get-page-name-or-self s)]
+        (if (melange-common/uuid-string? s)
           (page-cp (assoc config :tag? true) {:block/name s})
           [:span (str "#" s)])))
 
@@ -2353,7 +2359,7 @@
                                 (:ui/show-empty-bullets? (state/get-config))
                                 collapsed?
                                 collapsable?
-                                (< (- (util/time-ms) (:block/created-at block)) 500))
+                                (< (- (melange-common/now-ms) (:block/created-at block)) 500))
                             (not doc-mode?))
                        bullet
 
@@ -2748,7 +2754,7 @@
         *hover-container? (hooks/use-memo #(atom false) [])
         [hover?] (hooks/use-atom *hover?)
         [_hover-container?] (hooks/use-atom *hover-container?)
-        private-tag? (ldb/private-tags (:db/ident tag))]
+        private-tag? (class-catalog/private-tags (:db/ident tag))]
     [:div.block-tag
      {:key (str "tag-" (:db/id tag))
       :class (str (when private-tag? "private-tag ")
@@ -2780,7 +2786,7 @@
                                   :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
                                  "Open in sidebar"
                                  (ui/dropdown-shortcut "shift+click"))
-                                (when-not (ldb/private-tags (:db/ident tag))
+                                (when-not (class-catalog/private-tags (:db/ident tag))
                                   (shui/dropdown-menu-item
                                    {:key "Remove tag"
                                     :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
@@ -2809,7 +2815,7 @@
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
-    (let [hidden-internal-tags (cond-> ldb/internal-tags
+    (let [hidden-internal-tags (cond-> class-catalog/internal-tags
                                  (:show-tag-and-property-classes? config)
                                  (set/difference #{:logseq.class/Tag :logseq.class/Property}))
           block-tags (->>
@@ -2835,7 +2841,7 @@
                                                  (fn []
                                                    (for [tag block-tags]
                                                      [:div.flex.flex-row.items-center.gap-1
-                                                      (when-not (ldb/private-tags (:db/ident tag))
+                                                      (when-not (class-catalog/private-tags (:db/ident tag))
                                                         (shui/button
                                                          {:title (t :block/remove-tag)
                                                           :variant :ghost
@@ -3469,7 +3475,7 @@
         block-reference-only? (some->
                                (:block/title block)
                                string/trim
-                               block-ref/block-ref?)
+                               (melange-common/block-ref?))
         named? (some? (:block/name block))
         table? (:table? config)
         raw-mode-block (state/use-sub :editor/raw-mode-block)
@@ -5022,7 +5028,7 @@
 
       ["Paragraph" l]
            ;; TODO: speedup
-      (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+      (if (melange-regex/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
         (->elem :div (map-inline config l))
         (->elem :div.is-paragraph (map-inline config l)))
 

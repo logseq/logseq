@@ -8,7 +8,7 @@
             [frontend.search.agency :as search-agency]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
-            [frontend.util :as util]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
@@ -39,7 +39,7 @@
                  files (->> result
                             (map first)
                             (remove (fn [file]
-                                      (mldoc-exts (util/get-file-ext file)))))]
+                                      (mldoc-exts (melange-common/file-extension file)))))]
            (when (seq files)
              (fuzzy/fuzzy-search files q :limit limit))))))))
 

@@ -1,21 +1,18 @@
 (ns logseq.db-sync.worker.handler.semantic
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.db :as db-db]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.content :as db-content]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
@@ -243,7 +240,7 @@
 
 (defn- page-ref-values [title]
   (when (string? title)
-    (->> (re-seq page-ref/page-ref-re title)
+    (->> (re-seq melange-common/page-ref-re title)
          (map (comp string/trim second))
          (remove string/blank?)
          distinct)))
@@ -253,7 +250,7 @@
 
 (defn- resolve-page-ref! [conn value]
   (cond
-    (common-util/uuid-string? value)
+    (melange-common/uuid-string? value)
     (when-let [entity (d/entity @conn [:block/uuid (uuid value)])]
       {:block/uuid (:block/uuid entity)
        :block/title value})
@@ -306,7 +303,7 @@
   (let [day (today-journal-day)]
     (or (ldb/get-journal-page-by-day @conn day)
         (let [formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
-              title (date-time-util/int->journal-title day formatter)
+              title (melange-common/format-journal-day day formatter)
               [_ page-id] (outliner-page/create! conn title {:journal? true :today-journal? true})]
           (d/entity @conn [:block/uuid page-id])))))
 
@@ -366,7 +363,7 @@
         entity (cond
                  (number? value) (d/entity db value)
                  (qualified-keyword? value) (d/entity db value)
-                 (and (string? value) (common-util/uuid-string? value))
+                 (and (string? value) (melange-common/uuid-string? value))
                  (d/entity db [:block/uuid (uuid value)])
                  (string? value)
                  (or (d/entity db (keyword value))
@@ -844,7 +841,7 @@
   (case handler
 
     :semantic/properties-list
-    (paginated-response url :properties (->> (db-db/get-all-properties db)
+    (paginated-response url :properties (->> (ldb/get-all-properties db)
                                               (remove entity-util/hidden?))
                         property-response)
 

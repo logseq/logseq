@@ -3,7 +3,7 @@
             [cljs.test :refer [deftest is use-fixtures]]
             [frontend.db.query-custom :as query-custom]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [logseq.db.frontend.inputs :as db-inputs]))
+            [logseq.melange.bridge.db.inputs :as db-inputs]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})

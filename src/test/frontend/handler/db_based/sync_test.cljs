@@ -9,7 +9,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (deftest coerce-http-request-does-not-add-client-revision-to-member-request-test

@@ -1,0 +1,24 @@
+(library
+ (name melange_common_api_internal)
+ (modes melange)
+ (modules
+  (:standard \ Workflows))
+ (libraries
+  melange_cljs_runtime
+  melange_common_impl
+  rrbvec)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_common_api_impl)
+ (modes melange)
+ (implements melange_common_api)
+ (modules Workflows)
+ (libraries
+  melange_cljs_runtime
+  melange_common_impl
+  melange_common_api_internal
+  rrbvec)
+ (preprocess
+  (pps melange.ppx)))

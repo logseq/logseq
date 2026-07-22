@@ -3,10 +3,10 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.test.helper :as test-helper]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.view :as db-view]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
@@ -125,12 +125,12 @@
         b1 (db-test/find-block-by-content @conn "b1")
         b2 (db-test/find-block-by-content @conn "b2")]
     (is (= ["P1"]
-           (map db-property/closed-value-content
-                (db-property/scoped-closed-values property-before b1))))
-    (is (empty? (db-property/scoped-closed-values property-before b2)))
+           (map melange-property/closed-value-content
+                (melange-property/scoped-closed-values property-before b1))))
+    (is (empty? (melange-property/scoped-closed-values property-before b2)))
     (outliner-property/class-add-property! conn :user.class/t2 :user.property/priority)
     (let [property-after (d/entity @conn :user.property/priority)]
-      (is (empty? (db-property/scoped-closed-values property-after b2)))
+      (is (empty? (melange-property/scoped-closed-values property-after b2)))
       (is (= [t1]
              (->> (:property/closed-values property-after)
                   (mapcat :logseq.property/choice-classes)

@@ -21,15 +21,13 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.date :as gdate]
             [goog.dom :as gdom]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.api.plugin :as api-plugin]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [logseq.outliner.property :as outliner-property]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
             [logseq.sdk.utils :as sdk-utils]
@@ -151,8 +149,14 @@
   [^js date]
   (let [date (js/Date. date)]
     (when-let [datestr (and (not (js/isNaN (.getTime date)))
-                            (-> (gdate/Date. date)
-                                (date-time-util/format "yyyy-MM-dd")))]
+                            (melange-common/format-date-time
+                             (.getFullYear date)
+                             (inc (.getMonth date))
+                             (.getDate date)
+                             0
+                             0
+                             0
+                             "yyyy-MM-dd"))]
       (create_page datestr nil #js {:journal true :redirect false}))))
 
 (defn delete_page
@@ -170,7 +174,7 @@
 (defn open_in_right_sidebar
   [block-id-or-uuid-or-key]
   (if (or (number? block-id-or-uuid-or-key)
-        (util/uuid-string? block-id-or-uuid-or-key))
+        (melange-common/uuid-string? block-id-or-uuid-or-key))
     (editor-handler/open-block-in-sidebar!
       (if (number? block-id-or-uuid-or-key)
         block-id-or-uuid-or-key
@@ -373,7 +377,7 @@
                              (state/get-current-page)
                              (db-model/get-today-journal-title))
           block           (<get-block uuid-or-page-name)
-          new-page        (when (and (not block) (not (util/uuid-string? uuid-or-page-name))) ; page not exists
+          new-page        (when (and (not block) (not (melange-common/uuid-string? uuid-or-page-name))) ; page not exists
                             (page-handler/<create! uuid-or-page-name
                                                    {:redirect?           false
                                                     :format              (state/get-preferred-format)}))]
@@ -401,7 +405,7 @@
                             (state/get-current-page)
                             (db-model/get-today-journal-title))]
      (p/let [_ (<ensure-page-loaded uuid-or-page-name)
-             page? (not (util/uuid-string? uuid-or-page-name))
+             page? (not (melange-common/uuid-string? uuid-or-page-name))
              page (db-model/get-page uuid-or-page-name)
              page-not-exist? (and page? (nil? page))
              new-page (when page-not-exist?
@@ -511,8 +515,8 @@
 (defn open_pdf_viewer
   [block-identity-or-file-url]
   (p/let [[block href] (if (and (string? block-identity-or-file-url)
-                                (or (path/protocol-url? block-identity-or-file-url)
-                                    (path/absolute? block-identity-or-file-url)))
+                                (or (melange-common/protocol-url? block-identity-or-file-url)
+                                    (melange-common/absolute? block-identity-or-file-url)))
                          [nil block-identity-or-file-url]
                          (p/let [block (<get-block block-identity-or-file-url {:children? false})]
                            [block (if block

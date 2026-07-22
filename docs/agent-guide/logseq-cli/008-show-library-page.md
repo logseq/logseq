@@ -87,13 +87,13 @@ The existing APIs can fetch the Library page and its `:block/parent` children, s
 
 ## Library model research
 
-The Library page name is defined in `/Users/rcmerci/gh-repos/logseq/deps/common/src/logseq/common/config.cljs`:
+The Library page name is defined in `/Users/rcmerci/gh-repos/logseq/deps/melange/lib/common/config.ml`:
 
 ```clojure
-(defonce library-page-name "Library")
+let library_page_name = "Library"
 ```
 
-New DB graphs create Library as a built-in page in `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/sqlite/create_graph.cljs`:
+New DB graphs create Library as a built-in page in `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/sqlite/create_graph.cljs`:
 
 ```text
 built-in-pages-names
@@ -102,7 +102,7 @@ built-in-pages-names
   -> mark-block-as-built-in sets :logseq.property/built-in? true
 ```
 
-A new page created by `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/sqlite/util.cljs` has the shape:
+A new page created by `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/sqlite/util.cljs` has the shape:
 
 ```text
 :block/name  = lower-case sanitized title
@@ -111,7 +111,7 @@ A new page created by `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/sqli
 :block/tags  = #{:logseq.class/Page}
 ```
 
-The public DB helper aliases in `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db.cljs` include:
+The public DB helpers in `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/core.cljs` include:
 
 ```text
 ldb/get-built-in-page

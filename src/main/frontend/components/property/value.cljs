@@ -1,5 +1,6 @@
 (ns frontend.components.property.value
-  (:require [cljs-time.coerce :as tc]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -30,13 +31,14 @@
             [frontend.util.cursor :as cursor]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.common.util.macro :as macro-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
+
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.content :as melange-content]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
+            [logseq.melange.bridge.db.property-type :as db-property-type]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -205,11 +207,11 @@
     (ui/hide-popups-until-preview-popup!))
   (let [<create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
-                                 (not (db-property/many? property)))
+                                 (not (melange-property/many? property)))
                           (p/let [default-value (:logseq.property/default-value property)
                                   new-block-id (db/new-block-id)
                                   _ (let [value' (if (and default-value (string? value) (string/blank? value))
-                                                   (db-property/property-value-content default-value)
+                                                   (melange-property/property-value-content default-value)
                                                    value)]
                                       (db-property-handler/create-property-text-block!
                                        (:db/id block)
@@ -241,7 +243,7 @@
                                       :or {exit-edit? true}}]
    (let [class? (ldb/class? block)
          property (db/entity property-id)
-         many? (db-property/many? property)
+         many? (melange-property/many? property)
          checkbox? (= :checkbox (:logseq.property/type property))
          blocks (get-operating-blocks block)]
      (when-not (ldb/class? property)
@@ -278,7 +280,7 @@
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
-  (let [many? (db-property/many? property)
+  (let [many? (melange-property/many? property)
         blocks (get-operating-blocks block)
         repo (state/get-current-repo)]
     (p/do!
@@ -366,12 +368,12 @@
           (shui/select-content
            (map (fn [choice]
                   (shui/select-item {:key (str (:db/id choice))
-                                     :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
+                                     :value (:db/id choice)} (melange-property/built-in-display-title choice t))) properties)))
         [:div.flex.flex-row.gap-1
          [:div.text-muted-foreground
           (t :property.repeat/is-label)]
          (when done-choice
-           (db-property/built-in-display-title done-choice t))]])]))
+           (melange-property/built-in-display-title done-choice t))]])]))
 
 (defn- <resolve-journal-page-for-date
   ([^js d]
@@ -412,7 +414,7 @@
         value (cond
                 (map? value)
                 (when-let [day (:block/journal-day value)]
-                  (let [t (date/journal-day->utc-ms day)]
+                  (let [t (melange-common/journal-day-to-utc-ms day)]
                     (js/Date. t)))
 
                 (number? value)
@@ -528,9 +530,9 @@
                         (if (= 0 hours minutes)
                           (when-not (or other-position? suppress-inline-edit-icon?)
                             (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"}))
-                          (str (util/zero-pad hours)
+                          (str (melange-common/zero-pad hours)
                                ":"
-                               (util/zero-pad minutes)))]))]]
+                               (melange-common/zero-pad minutes)))]))]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
@@ -605,7 +607,7 @@
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
           (cond
             (map? value)
-            (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
+            (let [date (tc/to-date-time (melange-common/journal-day-to-utc-ms (:block/journal-day value)))
                   compare-value (some-> date
                                         (t/plus (t/days 1))
                                         (t/minus (t/seconds 1)))
@@ -631,7 +633,7 @@
 
 (hsx/defc property-value-date-picker
   [block property value opts]
-  (let [multiple-values? (db-property/many? property)
+  (let [multiple-values? (melange-property/many? property)
         datetime? (= :datetime (:logseq.property/type property))]
     (date-picker value
                  (merge opts
@@ -659,7 +661,7 @@
   [block property classes page]
   (let [page* (string/trim page)
         ;; inline-class is only for input from :transform-fn
-        [page inline-class] (if (and (seq classes) (not (contains? db-property/db-attribute-properties (:db/ident property))))
+        [page inline-class] (if (and (seq classes) (not (contains? property-catalog/db-attribute-properties (:db/ident property))))
                               (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
                                   [page* nil])
                               [page* nil])
@@ -716,7 +718,7 @@
     items                   ; sorted by order
     (sort-by
      (juxt (fn [item] (not (selected-choices (:db/id item))))
-           db-property/property-value-content)
+           melange-property/property-value-content)
      items)))
 
 (hsx/defc select-aux
@@ -918,7 +920,7 @@
                                   (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)
-                                    (ldb/private-tags (:db/ident node))
+                                    (class-catalog/private-tags (:db/ident node))
 
                                     (and property-type (not= property-type :node))
                                     (if (= property-type :page)
@@ -938,7 +940,7 @@
                              id (:db/id node)
                              title (when (integer? id)
                                      (if (seq (:logseq.property/classes property))
-                                       (some-> (db-content/recur-replace-uuid-in-block-title node)
+                                       (some-> (melange-content/recur-replace-uuid-in-block-title node)
                                                (subs 0 256))
                                        (block-handler/block-unique-title node)))
                              [header label] (if (integer? id)
@@ -965,7 +967,7 @@
                                                      :value id
                                                      :disabled? (and tags? (contains?
                                                                             (set/union #{:logseq.class/Journal}
-                                                                                       (set/difference ldb/internal-tags #{:logseq.class/Page}))
+                                                                                       (set/difference class-catalog/internal-tags #{:logseq.class/Page}))
                                                                             (:db/ident node)))))) nodes)
         options (let [allow-page-class? (or (contains? selected-choice-ids page-class-id)
                                             (not (or (and (entity-util/page? block) (not (ldb/internal-page? block)))
@@ -982,18 +984,18 @@
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
-                 :input-default-placeholder (t :property/set-placeholder (db-property/built-in-display-title property t))
+                 :input-default-placeholder (t :property/set-placeholder (melange-property/built-in-display-title property t))
                  :show-new-when-not-exact-match? (not
                                                   (or (and extends-property?
                                                            (or (contains? (set children-pages) (:db/id block))
                                                                (when-let [input (when *input @*input)]
                                                                  (when-not (string/blank? input)
                                                                    (some (fn [ident]
-                                                                           (= input (:block/title (db/entity ident)))) ldb/extends-hidden-tags)))))
+                                                                           (= input (:block/title (db/entity ident)))) class-catalog/extends-hidden-tags)))))
                                                       ;; Don't allow creating private tags
                                                       (and (= :block/tags (:db/ident property))
                                                            (seq (set/intersection (set (map :db/ident classes'))
-                                                                                  ldb/private-tags)))))
+                                                                                  class-catalog/private-tags)))))
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
@@ -1026,7 +1028,7 @@
 
                 (= :block/tags (:db/ident property))
                 (assoc :exact-match-exclude-items
-                       (set (map (fn [ident] (:block/title (db/entity ident))) ldb/private-tags))
+                       (set (map (fn [ident] (:block/title (db/entity ident))) class-catalog/private-tags))
                        :choose-first-on-enter? true
                        :transform-fn
                        (fn [results input]
@@ -1152,13 +1154,13 @@
                        (let [date? (and
                                     (= (:db/ident property) :logseq.property.repeat/recur-unit)
                                     (= :date (:logseq.property/type (:property opts))))
-                             values (cond->> (db-property/scoped-closed-values property block)
+                             values (cond->> (melange-property/scoped-closed-values property block)
                                       date?
                                       (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                          (keep (fn [block]
                                  (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                       value (or (db-property/built-in-display-title block t)
-                                                 (db-property/closed-value-content block))]
+                                       value (or (melange-property/built-in-display-title block t)
+                                                 (melange-property/closed-value-content block))]
                                    {:label (if icon
                                              [:div.flex.flex-row.gap-1.items-center
                                               (icon-component/icon icon {:color? true})
@@ -1202,7 +1204,7 @@
                       :selected-choices selected-choices
                       :dropdown? dropdown?
                       :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
-                      :input-default-placeholder (t :property/set-placeholder (db-property/built-in-display-title property t))
+                      :input-default-placeholder (t :property/set-placeholder (melange-property/built-in-display-title property t))
                       :extract-chosen-fn :value
                       :extract-fn (fn [x] (or (:label-value x) (:label x)))
                       :content-props content-props
@@ -1223,7 +1225,7 @@
 (hsx/defc property-normal-block-value
   [block property value-block opts]
   (let [container-id (state/use-container-id)
-        multiple-values? (db-property/many? property)
+        multiple-values? (melange-property/many? property)
         block-container (state/get-component :block/container)
         blocks-container (state/get-component :block/blocks-container)
         value-block (if (and (coll? value-block) (every? entity-map? value-block))
@@ -1291,7 +1293,7 @@
         *ref (hooks/use-ref nil)
         string-value (cond
                        (string? value) value
-                       (some? value) (str (db-property/property-value-content value))
+                       (some? value) (str (melange-property/property-value-content value))
                        :else "")
         [value set-value!] (hooks/use-state string-value)
         set-property-value! (fn [value & {:keys [exit-editing?]
@@ -1355,9 +1357,9 @@
         block-id (:db/id (when eid (db/entity eid)))
         block (or (db/sub-block block-id) value)]
     (when value
-       (let [property-block? (db-property/property-created-block? block)
-             value' (or (db-property/built-in-display-title block t)
-                        (db-property/closed-value-content block))
+       (let [property-block? (melange-property/property-created-block? block)
+             value' (or (melange-property/built-in-display-title block t)
+                        (melange-property/closed-value-content block))
              icon (pu/get-block-property-value block :logseq.property/icon)]
          (cond
            icon
@@ -1400,7 +1402,12 @@
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
                          [:div.flex.flex-row.items-center
-                          (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))])]
+                          (inline-text
+                           {}
+                           :markdown
+                           (melange-common/expand-value-if-macro
+                            content
+                            #(get (state/get-macros) %)))])]
     [:div.select-item.cursor-pointer
      {:class (multiple-value-item-class opts)}
      (cond
@@ -1445,8 +1452,8 @@
        (when-let [reference (state/get-component :block/reference)]
          (when value (reference {:table-view? table-view?} (:block/uuid value))))
 
-       (and (map? value) (some? (db-property/property-value-content value)))
-       (let [content (str (db-property/property-value-content value))]
+       (and (map? value) (some? (melange-property/property-value-content value)))
+       (let [content (str (melange-property/property-value-content value))]
          (inline-text-cp content))
 
        :else
@@ -1512,7 +1519,7 @@
   [block property value {:keys [inline-text page-cp
                                 dom-id row?]
                          :as opts}]
-  (let [multiple-values? (db-property/many? property)
+  (let [multiple-values? (melange-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
         type (:logseq.property/type property)
@@ -1552,7 +1559,12 @@
        (property-block-value value block property page-cp opts)
 
        :else
-       (let [content (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))]
+       (let [content (inline-text
+                      {}
+                      :markdown
+                      (melange-common/expand-value-if-macro
+                       (str value)
+                       #(get (state/get-macros) %)))]
          (cond
            (contains? (set (keys string-value-on-click))
                       (:db/ident property))
@@ -1569,7 +1581,7 @@
   (let [[editing? set-editing!] (hooks/use-state false)
         *ref (hooks/use-ref nil)
         *input-ref (hooks/use-ref nil)
-        number-value (db-property/property-value-content value-block)
+        number-value (melange-property/property-value-content value-block)
         number-value-str (if (some? number-value) (str number-value) "")
         [value set-value!] (hooks/use-state number-value-str)
         [*value _] (hooks/use-state (atom value))
@@ -1585,7 +1597,7 @@
                                                                             (:db/ident property)
                                                                             value)))
 
-                               (set-value! (str (db-property/property-value-content
+                               (set-value! (str (melange-property/property-value-content
                                                  (get (db/entity (:db/id block)) (:db/ident property)))))
 
                                (when exit-editing?
@@ -1654,7 +1666,7 @@
   [asset-type]
   (let [kw (some-> asset-type keyword)]
     (cond
-      (contains? (common-config/img-formats) kw) "photo"
+      (and kw (melange-common/image-format? (name kw))) "photo"
       (contains? config/audio-formats kw) "music"
       (contains? config/video-formats kw) "movie"
       (= :pdf kw) "file-type-pdf"
@@ -1662,7 +1674,8 @@
 
 (defn- asset-image?
   [asset-type]
-  (contains? (common-config/img-formats) (some-> asset-type keyword)))
+  (when-let [asset-type (some-> asset-type keyword)]
+    (melange-common/image-format? (name asset-type))))
 
 (defn- asset-video?
   [asset-type]
@@ -1900,7 +1913,7 @@
         [selected-ids set-selected-ids!] (hooks/use-state (asset-selected-ids block property))
         [saving? set-saving!] (hooks/use-state false)
         repo (state/get-current-repo)
-        many? (db-property/many? property)
+        many? (melange-property/many? property)
         select-assets! #(<select-assets! block property many? selected-ids set-selected-ids! on-chosen %)
         unselect-asset! #(<unselect-asset! block property many? selected-ids set-selected-ids! on-chosen %)
         toggle-asset! (fn [asset]
@@ -2085,7 +2098,7 @@
         *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
-                (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
+                (remove (fn [v] (contains? class-catalog/hidden-tags (:db/ident v)))))
         select-cp (fn [select-opts target]
                     (let [select-opts (merge {:multiple-choices? true
                                               :on-chosen (fn []
@@ -2190,7 +2203,7 @@
             dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
             editor-id (str dom-id "-editor")
             type (:logseq.property/type property)
-            multiple-values? (db-property/many? property)
+            multiple-values? (melange-property/many? property)
             v (resolved-property-value-for-render block property multiple-values?)
             self-value-or-embedded? (fn [v]
                                       (or (= (:db/id v) (:db/id block))
@@ -2247,5 +2260,5 @@
                value-cp)
               (shui/tooltip-portal
                (shui/tooltip-content
-                (t :property/change-tooltip (db-property/built-in-display-title property t))))))
+                (t :property/change-tooltip (melange-property/built-in-display-title property t))))))
             value-cp))))))

@@ -3,7 +3,7 @@
   (:require [clojure.walk :as walk]
             [frontend.db.query-dsl :as query-dsl]
             [lambdaisland.glogi :as log]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
@@ -125,7 +125,7 @@
 (defn ->page-ref
   [x]
   (if (string? x)
-    (symbol (page-ref/->page-ref x))
+    (symbol (melange-common/to-page-ref x))
     (->page-ref (second x))))
 
 (defn- ->dsl*
@@ -149,7 +149,7 @@
 
     ;; property key value
     (and (vector? f) (= 3 (count f)) (contains? #{:property :private-property} (keyword (first f))))
-    (let [l (if (page-ref/page-ref? (str (last f)))
+    (let [l (if (melange-common/page-ref? (str (last f)))
               (symbol (last f))
               (last f))]
       (into [(symbol (first f))] [(second f) l]))
@@ -179,10 +179,10 @@
    (fn [f]
      (cond
        (and (vector? f) (vector? (first f)))
-       [:page-ref (page-ref/get-page-name (str f))]
+       [:page-ref (melange-common/get-page-name (str f))]
 
-       (and (string? f) (page-ref/get-page-name f))
-       [:page-ref (page-ref/get-page-name f)]
+       (and (string? f) (melange-common/get-page-name f))
+       [:page-ref (melange-common/get-page-name f)]
 
        (and (list? f)
             (symbol? (first f))

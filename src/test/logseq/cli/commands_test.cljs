@@ -14,7 +14,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
-            [logseq.db.frontend.rules :as rules]
+            [logseq.melange.bridge.db.rules :as rules]
             [promesa.core :as p]))
 
 (defn- strip-ansi

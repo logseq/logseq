@@ -3,13 +3,13 @@
   (:require [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.property :as melange-property]))
 
 (defn get-property-value
   "Get a property's name given its id"
   [e]
   (if-let [e (if (number? e) (db-utils/pull e) e)]
-    (db-property/property-value-content e)
+    (melange-property/property-value-content e)
     e))
 
 (defn readable-properties
@@ -25,7 +25,7 @@
                  [(key-fn (if original-key? k (-> prop-ent :block/title keyword)))
                   (cond
                     (set? v)
-                    (set (map db-property/property-value-content v))
+                    (set (map melange-property/property-value-content v))
 
                     (sequential? v)
                     (map #(get-property-value (or (:db/id %) %)) v)
@@ -41,4 +41,4 @@
   [property-id]
   (let [repo (state/get-current-repo)
         db (conn/get-db repo)]
-    (db-property/get-closed-property-values db property-id)))
+    (melange-property/get-closed-property-values db property-id)))

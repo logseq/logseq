@@ -25,10 +25,9 @@
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [goog.string :as gstring]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -156,8 +155,9 @@
   (if embed?
     (fn [chosen-item _e]
       (let [value (.-value input)
-            value' (str (common-util/safe-subs value 0 q)
-                        (common-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (melange-common/safe-substring-range value 0 q)
+                        (melange-common/safe-substring
+                                        value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)
@@ -181,7 +181,7 @@
                                  #{:logseq.class/Tag}
                                  ;; Page existence here should be the same as entity-util/page?.
                                  ;; Don't show 'New page' if a page has any of these tags
-                                 db-class/page-classes))
+                                 class-catalog/page-classes))
         page-exists? (some (fn [id] (nil? (:block/parent (db/entity id)))) ids)]
     (if (or page-exists?
             (and db-tag? (class-alias? (db/get-page q))))
@@ -273,9 +273,11 @@
             q (or
                (editor-handler/get-selected-text)
                (when (= action :page-search-hashtag)
-                 (common-util/safe-subs edit-content pos current-pos))
+                 (melange-common/safe-substring-range
+                                      edit-content pos current-pos))
                (when (> (count edit-content) current-pos)
-                 (common-util/safe-subs edit-content pos current-pos))
+                 (melange-common/safe-substring-range
+                                      edit-content pos current-pos))
                "")]
         (page-search-aux id format embed? db-tag? q input pos)))))
 
@@ -291,8 +293,9 @@
     (fn [chosen-item]
       (let [pos (state/get-editor-last-pos)
             value (.-value input)
-            value' (str (common-util/safe-subs value 0 q)
-                        (common-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (melange-common/safe-substring-range value 0 q)
+                        (melange-common/safe-substring
+                                        value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (let [current-block (state/get-edit-block)
@@ -358,8 +361,8 @@
              (subs edit-content pos current-pos)))]
     (when input
       (let [embed? (= action "Block embed")
-            page (when embed? (page-ref/get-page-name edit-content))
-            embed-block-id (when (and embed? page (common-util/uuid-string? page))
+            page (when embed? (melange-common/get-page-name edit-content))
+            embed-block-id (when (and embed? page (melange-common/uuid-string? page))
                              (uuid page))]
         (if embed-block-id
           (let [f (block-on-chosen-handler true input id q format nil)
@@ -416,7 +419,8 @@
     (when (and modes input)
       (let [current-pos  (cursor/pos input)
             q            (or (editor-handler/get-selected-text)
-                             (common-util/safe-subs edit-content pos current-pos)
+                             (melange-common/safe-substring-range
+                                                  edit-content pos current-pos)
                              "")
             matched      (seq (fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]

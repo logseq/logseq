@@ -4,8 +4,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
             [logseq.outliner.property :as outliner-property]))
 
 (def repo test-helper/test-db)
@@ -29,8 +28,8 @@
     (is (= (set
             (concat
              (map :title (vals (remove (fn [[ident _]]
-                                         (contains? ldb/private-tags ident))
-                                       db-class/built-in-classes)))
+                                         (contains? class-catalog/private-tags ident))
+                                       class-catalog/built-in-classes)))
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 

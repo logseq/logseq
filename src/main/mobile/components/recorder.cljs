@@ -14,8 +14,8 @@
             [frontend.util :as util]
             [goog.functions :as gfun]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -74,7 +74,7 @@
                                 @*target-block
                                 (assoc :target-block @*target-block)
                                 capture?
-                                (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+                                (assoc :save-to-page (ldb/get-built-in-page (db/get-db) melange-common/quick-add-page-name)))
                   result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
                   asset-entity (first result)]
             (when (nil? asset-entity)

@@ -14,10 +14,9 @@
    [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
    [lambdaisland.glogi :as log]
-   [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
    [promesa.core :as p]
-   [logseq.common.config :as common-config]))
+   [logseq.melange.bridge.common.api :as melange-common]))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -146,7 +145,7 @@
 (defn- touch-last-ws-message!
   [client]
   (when-let [*ts (:last-ws-message-ts client)]
-    (reset! *ts (common-util/time-ms))))
+    (reset! *ts (melange-common/now-ms))))
 
 (defn- ready-state
   [ws]
@@ -202,7 +201,7 @@
    :last-sync-error (atom nil)
    :reconnect (atom {:attempt 0 :timer nil})
    :stale-kill-timer (atom nil)
-   :last-ws-message-ts (atom (common-util/time-ms))
+   :last-ws-message-ts (atom (melange-common/now-ms))
    :online-users (atom [])
    :ws-state (atom :closed)})
 
@@ -272,7 +271,7 @@
                                   (identical? ws (:ws current)))
                          (cond
                            (ws-open? ws)
-                           (let [now (common-util/time-ms)
+                           (let [now (melange-common/now-ms)
                                  last-ts (or (some-> (:last-ws-message-ts current) deref) now)
                                  stale-ms (- now last-ts)]
                              (when (>= stale-ms ws-stale-timeout-ms)
@@ -348,7 +347,8 @@
   [repo]
   (if-let [graph-id (sync-util/get-graph-id repo)]
     (p/resolved graph-id)
-    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+    (let [target-graph-name (when (some? repo)
+                              (melange-common/strip-leading-db-version-prefix repo))]
       (if-not (seq target-graph-name)
         (p/resolved nil)
         (p/let [remote-graphs (list-remote-graphs!)

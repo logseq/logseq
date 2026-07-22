@@ -9,7 +9,7 @@
             [lambdaisland.glogi :as log]
             [logseq.cli.log :as cli-log]
             [logseq.cli.profile :as profile]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn- request-module

@@ -11,7 +11,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))
 

@@ -11,7 +11,7 @@
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
-            [logseq.common.version :as version]
+            [logseq.melange.bridge.common.version :as version]
             [promesa.core :as p]))
 
 (defn- result->exit-code

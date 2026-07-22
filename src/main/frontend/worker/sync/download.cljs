@@ -16,10 +16,10 @@
    [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
    [lambdaisland.glogi :as log]
    [logseq.db-sync.snapshot :as snapshot]
-   [logseq.db.common.sqlite :as common-sqlite]
-   [logseq.db.frontend.schema :as db-schema]
+   [logseq.melange.bridge.db.sqlite :as common-sqlite]
+   [logseq.melange.bridge.db.schema :as db-schema]
    [promesa.core :as p]
-   [logseq.db :as ldb]))
+   [logseq.melange.bridge.db.core :as ldb]))
 
 (defn- ->uint8 [data]
   (cond

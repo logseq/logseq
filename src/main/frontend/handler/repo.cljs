@@ -19,8 +19,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [logseq.common.version :as build-version]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.melange.bridge.common.version :as build-version]
+            [logseq.melange.bridge.db.schema :as db-schema]
             [promesa.core :as p]))
 
 ;; Project settings should be checked in two situations:

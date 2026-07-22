@@ -5,7 +5,7 @@
             [frontend.handler.history :as history]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]))
+            [logseq.melange.bridge.db.core :as ldb]))
 
 (deftest restore-cursor-and-state-prefers-ui-state-test
   (let [pause-calls (atom [])

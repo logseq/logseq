@@ -1,0 +1,30 @@
+(library
+ (name melange_db_api_internal)
+ (modes melange)
+ (modules
+  (:standard \ Workflows))
+ (libraries
+  melange_common_impl
+  melange_cljs_runtime
+  melange_datascript
+  melange_db_impl
+  melange-edn-melange
+  melange_runtime
+  melange-transit-melange)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_db_api_impl)
+ (modes melange)
+ (implements melange_db_api)
+ (modules Workflows)
+ (libraries
+  melange_common_impl
+  melange_cljs_runtime
+  melange_datascript
+  melange_db_impl
+  melange_db_api_internal
+  melange_runtime)
+ (preprocess
+  (pps melange.ppx)))

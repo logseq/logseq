@@ -32,10 +32,9 @@
             [frontend.util :as util]
             [frontend.util.email :as email-util]
             [frontend.version :refer [version]]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.version :as build-version]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.common.version :as build-version]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -154,7 +153,7 @@
   (let [_route-match (state/use-sub :route-match)
         current-page (sidebar/get-current-page)
         page (or (some-> current-page db/get-page)
-                 (when (util/uuid-string? current-page)
+                 (when (melange-common/uuid-string? current-page)
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
         db-storing? (state/use-sub :db/restoring?)
@@ -193,7 +192,7 @@
                    :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
-                  (when (db/get-page common-config/recycle-page-name)
+                  (when (db/get-page melange-common/recycle-page-name)
                     {:title (t :storage.recycle/title)
                      :options {:on-click page-handler/open-recycle!}
                      :icon (ui/icon "trash")})
@@ -404,7 +403,7 @@
 (hsx/defc block-breadcrumb
   [page-name]
   (let [db-restoring? (state/use-sub :db/restoring?)]
-    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+    (when-let [page (when (and page-name (melange-common/uuid-string? page-name))
                       (db/entity [:block/uuid (uuid page-name)]))]
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
       (when (and (if config/publishing? (not db-restoring?) true)

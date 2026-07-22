@@ -1,6 +1,7 @@
 (ns logseq.cli.command.show
   "Show-related CLI commands."
   (:require ["fs" :as fs]
+            [logseq.melange.bridge.common.api :as melange-common]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -13,9 +14,9 @@
             [logseq.cli.tree-text :as tree-text]
             [logseq.cli.transport :as transport]
             [logseq.cli.uuid-refs :as uuid-refs]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]
             [promesa.core :as p]
             ["string-width" :default string-width]))
 
@@ -266,14 +267,14 @@
 
 (def ^:private displayable-built-in-properties
   "Built-in properties that are displayed alongside user properties."
-  (set/difference db-property/public-built-in-properties
+  (set/difference property-catalog/public-built-in-properties
                   ;; Exclude built-in properties handled elsewhere in this command
                   #{:block/tags :logseq.property/status}))
 
 (defn- user-property-key?
   [k]
   (and (qualified-keyword? k)
-       (= db-property/default-user-namespace (namespace k))))
+       (= melange-property/default-user-namespace (namespace k))))
 
 (defn- displayable-property-key?
   [k]
@@ -362,7 +363,7 @@
                                                  [:block/uuid uuid]))
                               (number? value) value
                               (uuid? value) [:block/uuid value]
-                              (and (string? value) (common-util/uuid-string? value)) [:block/uuid (uuid value)]
+                              (and (string? value) (melange-common/uuid-string? value)) [:block/uuid (uuid value)]
                               :else nil))
           page-id-from (fn [block]
                          (let [page (:block/page block)

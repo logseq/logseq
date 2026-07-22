@@ -17,7 +17,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.api]
-            [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))

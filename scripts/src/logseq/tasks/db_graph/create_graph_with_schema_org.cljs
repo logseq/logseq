@@ -18,8 +18,8 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [datascript.core :as d]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))

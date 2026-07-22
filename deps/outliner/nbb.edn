@@ -1,7 +1,7 @@
-{:paths ["src"]
+{:paths ["src" "../melange/bridge/test-support"]
  :deps
- {logseq/db
-  {:local/root "../db"}
+ {logseq/melange-bridge
+  {:local/root "../melange/bridge"}
   logseq/graph-parser
   {:local/root "../graph-parser"}
   metosin/malli                         {:git/url "https://github.com/metosin/malli"

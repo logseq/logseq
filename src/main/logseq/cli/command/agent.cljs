@@ -1,6 +1,7 @@
 (ns logseq.cli.command.agent
   "Agent bridge command helpers."
-  (:require ["child_process" :as child-process]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["child_process" :as child-process]
             ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
@@ -12,8 +13,7 @@
             [logseq.cli.command.show :as show-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (def entries
@@ -991,11 +991,11 @@
 
 (defn- registry-page-name
   []
-  (common-util/page-name-sanity-lc agent-bridge-registry-page))
+  (melange-common/page-name-sanity-lower agent-bridge-registry-page))
 
 (defn- agent-page-name
   [agent-name]
-  (common-util/page-name-sanity-lc agent-name))
+  (melange-common/page-name-sanity-lower agent-name))
 
 (defn- pull-registry-page
   [cfg repo]

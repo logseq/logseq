@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))

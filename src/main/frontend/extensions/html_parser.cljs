@@ -4,7 +4,8 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.util :as util]
-            [hickory.core :as hickory]))
+            [hickory.core :as hickory]
+            [logseq.melange.bridge.common.regex :as melange-regex]))
 
 (defonce *inside-pre? (atom false))
 (defn- hiccup-without-style
@@ -137,7 +138,7 @@
                            :h6 (block-transform 6 children)
                            :a (let [href (:href attrs)
                                     label (or (string/trim (map-join children)) "")
-                                    has-img-tag? (util/safe-re-find #"\[:img" (str x))]
+                                    has-img-tag? (melange-regex/safe-re-find #"\[:img" (str x))]
                                 (when-not (string/blank? href)
                                   (if has-img-tag?
                                     (export-hiccup x)

@@ -5,25 +5,23 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.crypt.Md5]
-            [logseq.common.cognito-config :as cognito-config]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph-dir :as common-graph-dir]
-            [logseq.common.path :as path]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.common.regex :as melange-regex]
             [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
 (defonce dev? ^boolean (or dev-release? goog.DEBUG))
 
-(defonce publishing? common-config/PUBLISHING)
+(defonce publishing? util/PUBLISHING)
 
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-(def COGNITO-CLIENT-ID cognito-config/COGNITO-CLIENT-ID)
-(def OAUTH-DOMAIN cognito-config/OAUTH-DOMAIN)
+(def COGNITO-CLIENT-ID melange-common/cognito-client-id)
+(def OAUTH-DOMAIN melange-common/oauth-domain)
 
 (def API-DOMAIN "api.logseq.com")
 (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
@@ -160,7 +158,7 @@
 
 ;; ============
 
-(def app-name common-config/app-name)
+(def app-name melange-common/app-name)
 
 ;; FIXME:
 (def app-website
@@ -183,7 +181,11 @@
 (def video-formats
   #{:mp4 :webm :mov :flv :avi :mkv})
 
-(def media-formats (set/union (common-config/img-formats) audio-formats video-formats))
+(def media-formats
+  (set/union
+   (set (map keyword (array-seq (melange-common/image-format-keys))))
+   audio-formats
+   video-formats))
 
 (def mobile?
   "Triggering condition: Mobile phones
@@ -193,7 +195,7 @@
 
    Same as config/mobile?"
   (when-not util/node-test?
-    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
+    (melange-regex/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 (defn get-hr
   [format]
@@ -305,11 +307,11 @@
 ;; - `logseq_db_GraphName` => db based graph, sqlite as backend
 ;; - Use `""` while writing global files
 
-(defonce db-version-prefix common-config/db-version-prefix)
+(defonce db-version-prefix melange-common/db-version-prefix)
 
 (defn db-graph-name
   [repo-with-prefix]
-  (common-config/strip-leading-db-version-prefix repo-with-prefix))
+  (melange-common/strip-leading-db-version-prefix repo-with-prefix))
 
 (defn db-based-graph?
   ([]
@@ -325,14 +327,15 @@
 
 (defn get-local-dir
   [repo]
-  (path/path-join (get-in @state/state [:system/info :home-dir])
-                  "logseq"
-                  "graphs"
-                  (common-graph-dir/repo->encoded-graph-dir-name repo)))
+  (melange-common/path-join
+             (get-in @state/state [:system/info :home-dir])
+             (to-array ["logseq"
+                        "graphs"
+                        (melange-common/repo-to-encoded-graph-dir-name repo)])))
 
 (defn get-electron-backup-dir
   [repo]
-  (path/path-join (get-local-dir repo) "backup"))
+  (melange-common/path-join (get-local-dir repo) (to-array ["backup"])))
 
 (defn get-repo-dir
   [repo-url]
@@ -344,28 +347,28 @@
 
 (defn get-repo-config-path
   []
-  (path/path-join app-name config-file))
+  (melange-common/path-join app-name (to-array [config-file])))
 
 (defn get-custom-css-path
   ([]
    (get-custom-css-path (state/get-current-repo)))
   ([repo]
    (if (db-based-graph? repo)
-     (path/path-join app-name custom-css-file)
+     (melange-common/path-join app-name (to-array [custom-css-file]))
      (when-let [repo-dir (get-repo-dir repo)]
-       (path/path-join repo-dir app-name custom-css-file)))))
+       (melange-common/path-join repo-dir (to-array [app-name custom-css-file]))))))
 
 (defn get-export-css-path
   ([]
    (get-export-css-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (path/path-join repo-dir app-name  export-css-file))))
+     (melange-common/path-join repo-dir (to-array [app-name export-css-file])))))
 
 (defn get-repo-assets-root
   [repo]
   (when-let [repo-dir (get-repo-dir repo)]
-    (path/path-join repo-dir "assets")))
+    (melange-common/path-join repo-dir (to-array ["assets"]))))
 
 (defn get-current-repo-assets-root
   []
@@ -376,6 +379,6 @@
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
    (if (db-based-graph? repo)
-     (path/path-join app-name custom-js-file)
+     (melange-common/path-join app-name (to-array [custom-js-file]))
      (when-let [repo-dir (get-repo-dir repo)]
-       (path/path-join repo-dir app-name custom-js-file)))))
+       (melange-common/path-join repo-dir (to-array [app-name custom-js-file]))))))

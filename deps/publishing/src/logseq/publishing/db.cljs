@@ -2,9 +2,9 @@
   "Provides db fns and associated util fns for publishing"
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.melange.bridge.db.entity-plus :as entity-plus]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.rules :as rules]))
 
 (defn- get-db-public-pages
   "Returns public pages and anything they are directly related to: their tags,
@@ -150,7 +150,7 @@
         property-values (get-property-values-on-nodes db public-nodes)
         internal-ents (set/union
                        (->> eavt-datoms
-                            (keep #(when (and (= :db/ident (:a %)) (db-malli-schema/internal-ident? (:v %)))
+                            (keep #(when (and (= :db/ident (:a %)) (db-validation/internal-ident? (:v %)))
                                      (:e %)))
                             set)
                        (->> (d/datoms db :avet :logseq.property/built-in? true)

@@ -15,7 +15,7 @@
             [logseq.api.db-based.cli :as cli-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.plugin :as api-plugin]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
             [logseq.sdk.experiments :as exper]

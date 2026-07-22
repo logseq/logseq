@@ -1,16 +1,22 @@
 (ns logseq.outliner.validate
   "Reusable DB graph validations for outliner level and above. Most validations
   throw errors so the user action stops immediately to display a notification"
-  (:require [clojure.set :as set]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.date :as common-date]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.class :as db-class]
+            [logseq.melange.bridge.db.class-catalog :as class-catalog]
+            [logseq.melange.bridge.db.entity :as entity-util]
+            [logseq.melange.bridge.db.validation :as db-validation]
+            [logseq.melange.bridge.db.property :as melange-property]))
+
+(defn- journal-title?
+  [title]
+  (some? (melange-common/parse-journal-title-day
+          title
+          (melange-common/journal-title-formatters nil))))
 
 (defn ^:api validate-page-title-no-hashtag
   "Validates a page title doesn't include hashtag character"
@@ -27,8 +33,8 @@
   "Validates characters that must not be in a page title"
   [page-title meta-m]
   (validate-page-title-no-hashtag page-title meta-m)
-  (when (and (string/includes? page-title ns-util/parent-char)
-             (not (common-date/normalize-date page-title nil)))
+  (when (and (string/includes? page-title "/")
+             (not (journal-title? page-title)))
     (throw (ex-info "Page name can't include \"/\"."
                     (merge meta-m
                            {:type :notification
@@ -135,7 +141,7 @@
   "Validates a non-journal page renamed to journal format"
   [new-title entity]
   (when (and (entity-util/page? entity) (not (entity-util/journal? entity))
-             (common-date/normalize-date new-title nil))
+             (journal-title? new-title))
     (throw (ex-info "Page can't be renamed to a journal"
                     {:type :notification
                      :payload {:message "This page can't be changed to a journal page"
@@ -152,7 +158,7 @@
   "Validates a property's title when it has changed"
   ([new-title] (validate-property-title new-title {}))
   ([new-title meta-m]
-   (when-not (db-property/valid-property-name? new-title)
+   (when-not (melange-property/valid-property-name? new-title)
      (throw (ex-info "Property name is invalid"
                      (merge meta-m
                             {:type :notification
@@ -190,7 +196,7 @@
 
 (defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
-  (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
+  (when (some #(get class-catalog/built-in-classes (:db/ident %)) child-ents)
     (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
                      :payload {:message "Can't change the extends of a built-in tag"
@@ -235,7 +241,7 @@
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v & {:keys [delete?]}]
   ;; Skip #Page as it is validated by later fns
-  (when (and (contains? (disj ldb/private-tags :logseq.class/Page) (:db/ident (d/entity db v)))
+  (when (and (contains? (disj class-catalog/private-tags :logseq.class/Page) (:db/ident (d/entity db v)))
              (not
                ;; Allow assets to be tagged
               (and
@@ -263,7 +269,7 @@
   [ent]
   (or (:logseq.property/built-in? ent)
       (:file/path ent)
-      (some-> (:db/ident ent) db-malli-schema/internal-ident?)))
+      (some-> (:db/ident ent) db-validation/internal-ident?)))
 
 (defn- disallow-tagging-a-built-in-entity
   [db block-eids & {:keys [delete?]}]

@@ -1,8 +1,8 @@
 (ns logseq.cli.uuid-refs
   "Shared CLI helpers for rendering block refs stored as `[[uuid]]`."
-  (:require [clojure.string :as string]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [clojure.string :as string]
             [logseq.cli.transport :as transport]
-            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private uuid-ref-pattern #"\[\[([0-9a-fA-F-]{36})\]\]")
@@ -13,7 +13,7 @@
   [value]
   (->> (re-seq uuid-ref-pattern (or value ""))
        (map second)
-       (filter common-util/uuid-string?)
+       (filter melange-common/uuid-string?)
        (map string/lower-case)
        distinct))
 
@@ -74,7 +74,7 @@
 (defn fetch-uuid-entities
   [config repo uuid-strings]
   (let [uuid-strings (->> uuid-strings
-                          (filter common-util/uuid-string?)
+                          (filter melange-common/uuid-string?)
                           (map string/lower-case)
                           distinct
                           vec)]

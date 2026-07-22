@@ -7,7 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.fs :as fs]
             [frontend.state :as state]
-            [logseq.common.path :as path]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
@@ -19,12 +19,12 @@
 (defn global-config-dir
   "Fetch config dir in a global config context"
   []
-  (path/path-join @root-dir "config"))
+  (melange-common/path-join @root-dir (to-array ["config"])))
 
 (defn global-config-path
   "Fetch config path in a global config context"
   []
-  (path/path-join @root-dir "config" "config.edn"))
+  (melange-common/path-join @root-dir (to-array ["config" "config.edn"])))
 
 (defn set-global-config-state!
   [content]

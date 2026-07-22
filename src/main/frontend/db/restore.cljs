@@ -6,7 +6,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [promesa.core :as p]))
 
 (defn restore-graph!

@@ -1,10 +1,10 @@
 (ns logseq.outliner.core-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.core :as outliner-core]
-            [logseq.common.config :as common-config]))
+            [logseq.melange.bridge.common.api :as melange-common]))
 
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
@@ -128,7 +128,7 @@
 (deftest delete-blocks-rejects-built-in-entities
   (let [conn (db-test/create-conn)]
     (testing "built-in page is rejected"
-      (let [recycle-page (ldb/get-page @conn common-config/recycle-page-name)]
+      (let [recycle-page (ldb/get-page @conn melange-common/recycle-page-name)]
         (is (true? (:logseq.property/built-in? recycle-page)))
         (is (thrown-with-msg? js/Error #"Built-in nodes can't be deleted"
                               (db-test/silence-stderr (outliner-core/delete-blocks! conn [recycle-page] {}))))))

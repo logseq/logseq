@@ -117,11 +117,11 @@ That means linked wrapper blocks inside linked references currently render as th
 
 The current `db-worker-node` implementation in `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs` exposes `:thread-api/pull`, `:thread-api/q`, and `:thread-api/get-block-refs`.
 
-The current `:thread-api/pull` delegates to Datascript `d/pull` with the selector provided by the CLI and then applies `logseq.db.common.initial-data/with-parent`.
+The current `:thread-api/pull` delegates to Datascript `d/pull` with the selector provided by the CLI and then applies `logseq.melange.bridge.db.initial-data/with-parent`.
 
 Because the CLI controls the selector, the existing worker can return a shallow linked target when the selector includes `{:block/link [...]}`.
 
-The commented `with-block-link` helper in `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/common/initial_data.cljs` shows that link expansion has existed as an idea, but it is not part of the active `with-parent` path.
+The migrated initial-data boundary is `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/initial_data.cljs`; link expansion is not part of the active `with-parent` path.
 
 The frontend renderer already treats linked blocks as display aliases.
 
@@ -439,7 +439,7 @@ Expected result is a green lint and unit test suite.
 
 `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs` should be inspected to confirm no new thread API is necessary and that `:thread-api/pull` can return selector-provided `:block/link` data.
 
-`/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/common/initial_data.cljs` should be inspected to understand why active worker pull enrichment does not currently expand `:block/link` automatically.
+`/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/initial_data.cljs` should be inspected to understand why active worker pull enrichment does not currently expand `:block/link` automatically.
 
 `/Users/rcmerci/gh-repos/logseq/src/main/frontend/components/block.cljs` is a useful reference for current frontend linked-block rendering semantics and loop awareness.
 

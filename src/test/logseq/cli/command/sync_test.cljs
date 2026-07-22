@@ -1,5 +1,6 @@
 (ns logseq.cli.command.sync-test
-  (:require ["crypto" :as crypto]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            ["crypto" :as crypto]
             ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
@@ -10,7 +11,6 @@
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (defn- execute-with-runtime-auth
@@ -39,7 +39,7 @@
 (defn- graph-assets-dir
   [root-dir repo]
   (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
-                  (graph-dir/repo->encoded-graph-dir-name repo)
+                  (melange-common/repo-to-encoded-graph-dir-name repo)
                   "assets"))
 
 (defn- write-local-asset!

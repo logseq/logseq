@@ -4,7 +4,8 @@
             [clojure.string :as string]
             [logseq.cli.style :as style]
             [logseq.cli.uuid-refs :as uuid-refs]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.melange.bridge.db.property :as melange-property]
+            [logseq.melange.bridge.db.property-catalog :as property-catalog]))
 
 (defn- entity-id-text
   [entity]
@@ -39,13 +40,13 @@
       (string/join " " (map #(style/bold (str "#" %)) labels)))))
 
 (def ^:private displayable-built-in-properties
-  (set/difference db-property/public-built-in-properties
+  (set/difference property-catalog/public-built-in-properties
                   #{:block/tags :logseq.property/status}))
 
 (defn- user-property-key?
   [k]
   (and (qualified-keyword? k)
-       (= db-property/default-user-namespace (namespace k))))
+       (= melange-property/default-user-namespace (namespace k))))
 
 (defn- displayable-property-key?
   [k]

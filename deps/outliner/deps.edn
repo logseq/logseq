@@ -6,11 +6,11 @@
   com.cognitect/transit-cljs  {:mvn/version "0.8.280"}
 
   ;; Any other deps should be added here and to nbb.edn
-  logseq/db                   {:local/root "../db"}
+  logseq/melange-bridge       {:local/root "../melange/bridge"}
   logseq/graph-parser         {:local/root "../graph-parser"}
   metosin/malli               {:git/url "https://github.com/metosin/malli"
                                :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
-  ;; stubbed via logseq.common.log
+  ;; Stubbed via logseq.melange.bridge.common.log for nbb.
   com.lambdaisland/glogi      {:git/url "https://github.com/lambdaisland/glogi"
                                :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
  :aliases

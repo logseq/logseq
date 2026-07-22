@@ -43,3 +43,22 @@
                        (when prev-platform
                          (platform/set-platform! prev-platform))))
           (p/then (fn [] (done)))))))
+
+(deftest browser-broadcast-uses-unqualified-keyword-name
+  (let [prev-platform (try
+                        (platform/current)
+                        (catch :default _ nil))
+        common-channel-prev @shared-service/*common-channel
+        posted (atom nil)
+        common-channel #js {:postMessage (fn [message]
+                                           (reset! posted message))}]
+    (try
+      (platform/set-platform! (test-platform :browser))
+      (reset! shared-service/*common-channel common-channel)
+      (shared-service/broadcast-to-clients! :sync-db-changes {:tx 1})
+      (is (= "sync-db-changes" (.-type @posted)))
+      (is (string? (.-data @posted)))
+      (finally
+        (reset! shared-service/*common-channel common-channel-prev)
+        (when prev-platform
+          (platform/set-platform! prev-platform))))))

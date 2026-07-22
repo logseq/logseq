@@ -2,15 +2,13 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.pipeline :as worker-pipeline]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.test.helper :as db-test]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.db.core :as ldb]
+            [logseq.melange.bridge.db.order :as db-order]
+            [logseq.melange.bridge.db.schema :as db-schema]
+            [logseq.melange.bridge.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
+            [logseq.melange.bridge.db.test-helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.recycle :as outliner-recycle]))
@@ -23,8 +21,9 @@
 (defn- default-journal-page-name
   [journal-day]
   (-> journal-day
-      (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-      common-util/page-name-sanity-lc))
+      (melange-common/format-journal-day
+       melange-common/default-journal-title-formatter)
+      (melange-common/page-name-sanity-lower)))
 
 (defn- silence-stderr
   [f]
@@ -151,7 +150,7 @@
                                 (:datoms export-edn))
         conn (sqlite-export/create-conn)
         dest-purple-eid (:db/id (d/entity @conn :logseq.property/color.purple))]
-    (assert (= :datoms (::sqlite-export/graph-format export-edn))
+    (assert (= :datoms (:logseq.db.sqlite.export/graph-format export-edn))
             "Test relies on a datom-format export")
     (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
             "Test relies on shifted built-in eids between source and dest")
@@ -171,8 +170,8 @@
 (deftest batch-import-edn-invalid-datom-format-does-not-change-db-test
   (let [conn (sqlite-export/create-conn)
         page-class-id (:db/id (d/entity @conn :logseq.class/Page))
-        invalid-export-edn {::sqlite-export/export-type :graph
-                            ::sqlite-export/graph-format :datoms
+        invalid-export-edn {:logseq.db.sqlite.export/export-type :graph
+                            :logseq.db.sqlite.export/graph-format :datoms
                             :datoms [[1 :block/title "Orphan Page"]
                                      [1 :block/name "orphan page"]
                                      [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
@@ -241,7 +240,7 @@
         page1 (ldb/get-page @conn "page1")
         page2 (ldb/get-page @conn "page2")
         block-uuid (random-uuid)
-        now (common-util/time-ms)]
+        now (melange-common/now-ms)]
     (d/transact! conn [{:block/uuid block-uuid
                         :block/title "parented by page1"
                         :block/created-at now
@@ -382,10 +381,11 @@
     (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
-          expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
+          expected-title (melange-common/format-journal-day journal-day "yyyy-MM-dd EEEE")
           expected-name (-> journal-day
-                            (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                            common-util/page-name-sanity-lc)]
+                            (melange-common/format-journal-day
+                             melange-common/default-journal-title-formatter)
+                            (melange-common/page-name-sanity-lower))]
       (is (= expected-title (:block/title page))
           "Journal title follows configured title format")
       (is (= expected-name (:block/name page))
@@ -393,7 +393,7 @@
 
 (deftest apply-template-today-dynamic-variable-persists-journal-ref-test
   (testing "apply-template stores <% today %> as a DB graph id ref to the journal page"
-    (let [today (date-time-util/ms->journal-day (js/Date.))
+    (let [today (melange-common/journal-day-of-ms (.getTime (js/Date.)))
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:build/journal today}
@@ -422,12 +422,12 @@
                                 {})
         (let [inserted-block (db-test/find-block-by-content
                               @conn
-                              (str "date " (page-ref/->page-ref (:block/uuid today-page))))
+                              (str "date " (melange-common/to-page-ref (:block/uuid today-page))))
               raw-title (raw-block-title @conn inserted-block)]
           (is (some? inserted-block))
-          (is (= (str "date " (page-ref/->page-ref (:block/uuid today-page)))
+          (is (= (str "date " (melange-common/to-page-ref (:block/uuid today-page)))
                  raw-title))
-          (is (= (str "date " (page-ref/->page-ref (:block/title today-page)))
+          (is (= (str "date " (melange-common/to-page-ref (:block/title today-page)))
                  (:block/title inserted-block)))
           (is (= [(:block/uuid today-page)]
                  (mapv :block/uuid (:block/refs inserted-block)))))
@@ -436,10 +436,10 @@
 
 (deftest apply-template-tomorrow-dynamic-variable-creates-missing-journal-ref-test
   (testing "apply-template creates a missing journal page before storing <% tomorrow %> as an id ref"
-    (let [today (date-time-util/ms->journal-day (js/Date.))
-          tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+    (let [today (melange-common/journal-day-of-ms (.getTime (js/Date.)))
+          tomorrow (melange-common/journal-day-of-ms (+ (js/Date.now) (* 24 60 60 1000)))
           journal-title-format "yyyy-MM-dd"
-          expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
+          expected-tomorrow-title (melange-common/format-journal-day tomorrow journal-title-format)
           expected-tomorrow-name (default-journal-page-name tomorrow)
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -470,7 +470,7 @@
                                 {})
         (let [tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
               expected-raw-title (when tomorrow-page
-                                   (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page))))
+                                   (str "date " (melange-common/to-page-ref (:block/uuid tomorrow-page))))
               inserted-block (when expected-raw-title
                                (db-test/find-block-by-content @conn expected-raw-title))
               raw-title (raw-block-title @conn inserted-block)]
@@ -479,7 +479,7 @@
           (is (= expected-tomorrow-name (:block/name tomorrow-page)))
           (is (some? inserted-block))
           (is (= expected-raw-title raw-title))
-          (is (= (str "date " (page-ref/->page-ref (:block/title tomorrow-page)))
+          (is (= (str "date " (melange-common/to-page-ref (:block/title tomorrow-page)))
                  (:block/title inserted-block)))
           (is (= [(:block/uuid tomorrow-page)]
                  (mapv :block/uuid (:block/refs inserted-block)))))
@@ -550,10 +550,10 @@
       (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
       (let [inserted-block (db-test/find-block-by-content
                             @conn
-                            (str "auto " (page-ref/->page-ref (:block/uuid target-page))))
+                            (str "auto " (melange-common/to-page-ref (:block/uuid target-page))))
             raw-title (raw-block-title @conn inserted-block)]
         (is (some? inserted-block))
-        (is (= (str "auto " (page-ref/->page-ref (:block/uuid target-page)))
+        (is (= (str "auto " (melange-common/to-page-ref (:block/uuid target-page)))
                raw-title))
         (is (= "auto [[Target Page]]" (:block/title inserted-block)))
         (is (= [(:block/uuid target-page)]
@@ -563,10 +563,10 @@
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest tag-template-insertion-creates-missing-journal-ref-test
-  (let [today (date-time-util/ms->journal-day (js/Date.))
-        tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+  (let [today (melange-common/journal-day-of-ms (.getTime (js/Date.)))
+        tomorrow (melange-common/journal-day-of-ms (+ (js/Date.now) (* 24 60 60 1000)))
         journal-title-format "yyyy-MM-dd"
-        expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
+        expected-tomorrow-title (melange-common/format-journal-day tomorrow journal-title-format)
         expected-tomorrow-name (default-journal-page-name tomorrow)
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -589,7 +589,7 @@
       (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
       (let [tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
             expected-raw-title (when tomorrow-page
-                                 (str "auto " (page-ref/->page-ref (:block/uuid tomorrow-page))))
+                                 (str "auto " (melange-common/to-page-ref (:block/uuid tomorrow-page))))
             inserted-block (when expected-raw-title
                              (db-test/find-block-by-content @conn expected-raw-title))
             raw-title (raw-block-title @conn inserted-block)]
@@ -598,7 +598,7 @@
         (is (= expected-tomorrow-name (:block/name tomorrow-page)))
         (is (some? inserted-block))
         (is (= expected-raw-title raw-title))
-        (is (= (str "auto " (page-ref/->page-ref (:block/title tomorrow-page)))
+        (is (= (str "auto " (melange-common/to-page-ref (:block/title tomorrow-page)))
                (:block/title inserted-block)))
         (is (= [(:block/uuid tomorrow-page)]
                (mapv :block/uuid (:block/refs inserted-block)))))
@@ -606,8 +606,8 @@
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest tag-template-journal-ref-survives-cli-upsert-property-history-tx-test
-  (let [today (date-time-util/ms->journal-day (js/Date.))
-        tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+  (let [today (melange-common/journal-day-of-ms (.getTime (js/Date.)))
+        tomorrow (melange-common/journal-day-of-ms (+ (js/Date.now) (* 24 60 60 1000)))
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal today}}
@@ -641,7 +641,7 @@
                                {})
       (let [target-block (db-test/find-block-by-content @conn "target block")
             tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
-            expected-raw-title (str "auto " (page-ref/->page-ref (:block/uuid tomorrow-page)))
+            expected-raw-title (str "auto " (melange-common/to-page-ref (:block/uuid tomorrow-page)))
             inserted-block (db-test/find-block-by-content @conn expected-raw-title)]
         (is (= 1 (count (:logseq.property.history/_block target-block)))
             "The CLI-style batched outliner ops create property history before tag template tx-data")
@@ -666,12 +666,12 @@
           (is (= (inc before) (history-count))
               "One :logseq.property.history entry is recorded for a user-driven status change")))
 
-      (testing "Import: setting a history-enabled property with ::sqlite-export/imported-data? does not record history"
+      (testing "Import: setting a history-enabled property with :logseq.db.sqlite.export/imported-data? does not record history"
         (let [before (history-count)]
           (ldb/transact! conn
                          [[:db/add (:db/id block)
                            :logseq.property/status :logseq.property/status.doing]]
-                         {::sqlite-export/imported-data? true})
+                         {:logseq.db.sqlite.export/imported-data? true})
           (is (= before (history-count))
               "No :logseq.property.history entries are added for an imported transaction")))
       (finally

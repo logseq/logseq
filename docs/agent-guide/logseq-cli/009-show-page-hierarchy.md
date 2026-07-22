@@ -141,7 +141,7 @@ Examples from the current codebase:
 
 - `/Users/rcmerci/gh-repos/logseq/deps/outliner/src/logseq/outliner/page.cljs` can create namespace pages with parent relationships when `:split-namespace? true`.
 - `/Users/rcmerci/gh-repos/logseq/deps/outliner/test/logseq/outliner/page_test.cljs` verifies namespace pages such as `foo/bar/baz` produce `foo -> bar -> baz` parent relationships.
-- `/Users/rcmerci/gh-repos/logseq/deps/db/src/logseq/db/frontend/db.cljs` exposes `get-page-parents`, which walks `:block/parent` upward for page entities.
+- `/Users/rcmerci/gh-repos/logseq/deps/melange/bridge/src/logseq/melange/bridge/db/frontend.cljs` exposes `get-page-parents`, which walks `:block/parent` upward for page entities.
 - The existing CLI Library path walks the inverse direction by querying children where `:block/parent` equals the current page id.
 
 The new CLI option should use the same inverse child query as the Library path for ordinary pages.

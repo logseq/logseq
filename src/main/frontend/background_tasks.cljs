@@ -3,7 +3,6 @@
   (:require [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
             [frontend.state :as state]
-            [logseq.db.common.entity-plus :as entity-plus]
             [missionary.core :as m]))
 
 (def ^:private search-input-idle-sync-interval-ms 500)
@@ -17,15 +16,6 @@
        (emit! (js/Date.now))
        (fn []
          (js/clearInterval interval-id))))))
-
-(c.m/run-background-task
- :logseq.db.common.entity-plus/reset-immutable-entities-cache!
- (m/reduce
-  (fn [_ repo]
-    (when (some? repo)
-      ;; (prn :reset-immutable-entities-cache!)
-      (entity-plus/reset-immutable-entities-cache!)))
-  flows/current-repo-flow))
 
 (c.m/run-background-task
  ::sync-to-worker-network-online-status

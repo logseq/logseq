@@ -1,5 +1,6 @@
 (ns logseq.graph-parser.text-test
-  (:require [cljs.test :refer [are deftest testing]]
+  (:require [logseq.melange.bridge.common.api :as melange-common]
+            [cljs.test :refer [are deftest testing]]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
@@ -26,8 +27,8 @@
          "[logseq/page](file:./logseq.page.md)" "logseq/page"
          "[logseq/page](file:./pages/logseq.page.md)" "logseq/page"))
 
-(deftest page-ref-un-brackets!
-  (are [x y] (= (text/page-ref-un-brackets! x) y)
+(deftest page-ref-un-brackets
+  (are [x y] (= (melange-common/get-page-name-or-self x) y)
     "[[page]]" "page"
     "[[another page]]" "another page"
     "[[nested [[page]]]]" "nested [[page]]"

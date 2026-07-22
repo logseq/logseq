@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [logseq.melange.bridge.db.core :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 

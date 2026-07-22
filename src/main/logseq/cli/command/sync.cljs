@@ -12,8 +12,7 @@
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
-            [logseq.common.cognito-config :as cognito-config]
-            [logseq.common.graph-dir :as graph-dir]
+            [logseq.melange.bridge.common.api :as melange-common]
             [promesa.core :as p]))
 
 (def ^:private sync-grant-access-spec
@@ -503,9 +502,9 @@
 (defn- worker-auth-state
   [config]
   (let [oauth-domain (or (:oauth-domain config)
-                         cognito-config/OAUTH-DOMAIN)
+                         melange-common/oauth-domain)
         oauth-client-id (or (:oauth-client-id config)
-                            cognito-config/CLI-COGNITO-CLIENT-ID)
+                            melange-common/cli-cognito-client-id)
         oauth-token-url (or (:oauth-token-url config)
                             (when (seq oauth-domain)
                               (str "https://" oauth-domain "/oauth2/token")))
@@ -629,7 +628,7 @@
 
 (defn- graph-asset-file-path
   [config repo asset-uuid asset-type]
-  (if-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+  (if-let [graph-dir-name (melange-common/repo-to-encoded-graph-dir-name repo)]
     (node-path/join (cli-server/graphs-dir config)
                     graph-dir-name
                     "assets"

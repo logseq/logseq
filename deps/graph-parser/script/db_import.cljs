@@ -10,11 +10,11 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.validate :as db-validate]
+            [logseq.melange.bridge.common.api :as melange-common]
+            [logseq.melange.bridge.platform.node :as platform-node]
+            [logseq.melange.bridge.db.sqlite-cli :as sqlite-cli]
+            [logseq.melange.bridge.db.asset :as db-asset]
+            [logseq.melange.bridge.db.validation :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
@@ -39,9 +39,9 @@
    some operations"
   [dir*]
   (let [dir (node-path/resolve dir*)]
-    (->> (common-graph/get-files dir)
+    (->> (platform-node/get-files dir)
          (concat (when (fs/existsSync (node-path/join dir* "assets"))
-                   (common-graph/readdir (node-path/join dir* "assets"))))
+                   (platform-node/readdir (node-path/join dir* "assets"))))
          (mapv #(hash-map :path %
                           ::rpath (node-path/relative dir* %))))))
 
@@ -63,7 +63,7 @@
           asset-type (db-asset/asset-path->type (:path file))]
     (if (exceed-limit-size? buffer)
       (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
-      (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
+      (p/let [parent-dir (node-path/join db-graph-dir melange-common/local-assets-dir)
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
         (fsp/mkdir parent-dir #js {:recursive true})
         (swap! assets assoc asset-name

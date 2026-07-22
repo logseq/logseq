@@ -1,0 +1,75 @@
+(lang dune 3.23)
+
+(using melange 1.0)
+
+(name melange-deps)
+
+(generate_opam_files true)
+
+(source
+ (github logseq/logseq))
+
+(authors "Logseq contributors")
+
+(maintainers https://github.com/logseq/logseq/issues)
+
+(license AGPL-3.0-or-later)
+
+(homepage https://logseq.com)
+
+(documentation https://docs.logseq.com)
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-core)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-melange)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-edn.git#main")
+ (package
+  (name melange-edn-ppx)
+  (version 0.5.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-transit.git#main")
+ (package
+  (name melange-transit-core)
+  (version 0.1.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/melange-transit.git#main")
+ (package
+  (name melange-transit-melange)
+  (version 0.1.0)))
+
+(pin
+ (url "git+https://github.com/RCmerci/rrbvec.git#main")
+ (package
+  (name rrbvec)
+  (version dev)))
+
+(package
+ (name melange-deps)
+ (allow_empty)
+ (synopsis "Internal Melange implementation of Logseq Common and DB behavior")
+ (description
+  "Typed OCaml and Melange implementations, ClojureScript adapters, and private JavaScript package for Logseq Common and DB behavior.")
+ (depends
+  ocaml
+  melange
+  (melange-edn-melange (= 0.5.0))
+  (melange-edn-ppx (= 0.5.0))
+  (melange-transit-melange (= 0.1.0))
+  (melange-fest (= 0.2.0))
+  (rrbvec (= dev)))
+ (tags
+  (logseq melange)))
+
+; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

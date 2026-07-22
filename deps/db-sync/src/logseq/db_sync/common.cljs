@@ -1,7 +1,7 @@
 (ns logseq.db-sync.common
   (:require [clojure.string :as string]
             [logseq.db-sync.platform.core :as platform]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.melange.bridge.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn cors-headers []

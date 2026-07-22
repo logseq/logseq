@@ -1,0 +1,8 @@
+(library
+ (name melange_datascript)
+ (modes melange)
+ (implements melange_datascript_spec)
+ (modules Api)
+ (libraries melange.js melange_cljs_runtime)
+ (preprocess
+  (pps melange.ppx)))

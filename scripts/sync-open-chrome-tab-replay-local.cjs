@@ -90,14 +90,12 @@ function main() {
   }
 
   const artifactPath = path.resolve(args.artifact);
-  const dbDir = path.resolve(__dirname, '..', 'deps', 'db');
-  const scriptPath = 'script/replay_sync_artifact.cljs';
+  const scriptsDir = __dirname;
+  const scriptPath = 'src/logseq/tasks/db/replay_sync_artifact.cljs';
 
   const commandArgs = [
     'exec',
     'nbb-logseq',
-    '-cp',
-    'src:script:../db-sync/src',
     scriptPath,
     '--artifact',
     artifactPath,
@@ -113,7 +111,7 @@ function main() {
   }
 
   const result = spawnSync('pnpm', commandArgs, {
-    cwd: dbDir,
+    cwd: scriptsDir,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
   });

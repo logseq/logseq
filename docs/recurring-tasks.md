@@ -100,7 +100,7 @@ avoid infinite loops.
 ### Property
 
 `:logseq.property.repeat/repeat-type` is a closed-values property
-declared in `deps/db/src/logseq/db/frontend/property.cljs`. Its closed
+declared in `deps/melange/lib/db/property_catalog.ml`. Its closed
 values are:
 
 - `:logseq.property.repeat/repeat-type.dotted-plus` — `.+`
