@@ -350,7 +350,8 @@
                            :$addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! db data)
-        (schedule-wal-checkpoint! repo db)))
+        (schedule-wal-checkpoint! repo db)
+        nil))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))

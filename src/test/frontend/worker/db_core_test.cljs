@@ -1644,7 +1644,7 @@
   (let [new-sqlite-storage #'db-core/new-sqlite-storage
         db #js {:transaction (fn [f]
                                 (f #js {:exec (fn [_] nil)}))}
-        storage (new-sqlite-storage db)]
+        storage (new-sqlite-storage "test-repo" db)]
     ;; Verify it implements IStorage by checking it responds to protocol methods
     ;; In CLJS, reify creates an object that implements the protocol
     (is (some? storage))
