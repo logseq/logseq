@@ -5,6 +5,7 @@
    [frontend.common.thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
+   [frontend.worker.handler.block :as block-handler]
    [frontend.worker.plain-value :as worker-plain]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
@@ -95,11 +96,17 @@
             delta (db-listener/take-outliner-op-delta! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             listener-at (perf-time-ms)
+            editor-rows (when (seq editor-row-uuids)
+                          (select-keys
+                           (:blocks (block-handler/canonical-blocks
+                                     @conn editor-row-uuids))
+                           editor-row-uuids))
             response (cond-> {:result (worker-plain/worker-plain-value
                                        @conn operation-result)}
                        delta (assoc :delta delta)
-                       (and delta (seq editor-row-uuids))
-                       (assoc :editor-row-uuids editor-row-uuids))
+                       (seq editor-row-uuids)
+                       (assoc :editor-row-uuids editor-row-uuids
+                              :editor-rows editor-rows))
             plain-at (perf-time-ms)
             perf-data {:apply-ms (- applied-at apply-started-at)
                        :listener-ms (- listener-at applied-at)

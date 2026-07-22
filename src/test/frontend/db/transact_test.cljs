@@ -101,12 +101,15 @@
 (deftest apply-outliner-ops-applies-the-exact-delta-once-before-editor-side-effects-test
   (async done
     (let [repo "direct-render-delta-test"
-          block-id (random-uuid)
-          block {:block/uuid block-id
-                 :block/tx-id 1}
+          current-block-id (random-uuid)
+          inserted-block-id (random-uuid)
+          current-block {:block/uuid current-block-id
+                         :block/tx-id 1}
+          inserted-block {:block/uuid inserted-block-id
+                          :block/tx-id 2}
           delta {:graph-id repo
                  :rev 1
-                 :blocks {block-id block}
+                 :blocks {inserted-block-id inserted-block}
                  :deleted {}
                  :children {}
                  :affected-keys #{[:graph]}}
@@ -138,25 +141,35 @@
                               :thread-api/apply-outliner-ops
                               (p/resolved {:result ::persisted
                                            :delta delta
-                                           :editor-row-uuids [block-id]})
+                                           :editor-row-uuids [current-block-id inserted-block-id]
+                                           :editor-rows {current-block-id current-block
+                                                         inserted-block-id inserted-block}})
 
                               (p/resolved nil)))]
             (p/let [value (db-transact/apply-outliner-ops
                            nil
-                           [[:save-block [{:block/uuid block-id} {}]]]
+                           [[:save-block [{:block/uuid current-block-id} {}]]
+                            [:insert-blocks [[{:block/uuid inserted-block-id}] nil {}]]]
                            {:editor/edit-block-fn
-                            (fn [_rows]
-                              (swap! calls conj :editor-callback))})]
+                            (fn [rows]
+                              (swap! calls conj [:editor-callback rows]))})]
               (is (= ::persisted value))
               (is (= [:commit-start :delta :commit-end
                       :commit-start :editor-callback :commit-end]
                      (mapv #(if (vector? %) (first %) %) @calls)))
+              (is (= [current-block inserted-block]
+                     (some (fn [call]
+                             (when (= :editor-callback (first call))
+                               (second call)))
+                           (filter vector? @calls))))
               (let [applied-deltas (keep #(when (= :delta (first %))
                                             (second %))
                                          (filter vector? @calls))]
                 (is (= 1 (count applied-deltas)))
                 (is (identical? delta (first applied-deltas))
                     "The direct response must pass the worker-owned delta through untouched."))))
+          (p/catch (fn [error]
+                     (is false (str "Unexpected transaction failure: " error))))
           (p/finally (fn []
                        (set! (.-flushSync react-dom) original-flush-sync)
                        (done)))))))

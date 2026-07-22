@@ -125,20 +125,19 @@
        vec))
 
 (defn- canonical-editor-rows!
-  [delta row-uuids]
-  (let [blocks (:blocks delta)]
-    (mapv (fn [block-uuid]
-            (when-not (contains? blocks block-uuid)
-              (throw (ex-info "Missing canonical editor row in worker response"
-                              {:block-uuid block-uuid
-                               :row-uuids row-uuids})))
-            (get blocks block-uuid))
-          row-uuids)))
+  [editor-rows row-uuids]
+  (mapv (fn [block-uuid]
+          (when-not (contains? editor-rows block-uuid)
+            (throw (ex-info "Missing canonical editor row in worker response"
+                            {:block-uuid block-uuid
+                             :row-uuids row-uuids})))
+          (get editor-rows block-uuid))
+        row-uuids))
 
 (defn- run-response-editor-callback!
-  [tx-meta delta row-uuids]
+  [tx-meta editor-rows row-uuids]
   (let [started-at (now-ms)
-        rows (canonical-editor-rows! delta (vec (or row-uuids [])))
+        rows (canonical-editor-rows! editor-rows (vec (or row-uuids [])))
         rows-ready-at (now-ms)]
     (react-dom/flushSync
      #(run-edit-block-fn! tx-meta rows))
@@ -146,14 +145,14 @@
      :edit-block-flush-ms (- (now-ms) rows-ready-at)}))
 
 (defn- publish-worker-response!
-  [tx-meta delta row-uuids run-editor-callback?]
+  [tx-meta delta editor-rows row-uuids run-editor-callback?]
   (let [started-at (now-ms)]
     (when delta
       (react-dom/flushSync #(db-subs/apply-delta! delta)))
     (let [delta-flushed-at (now-ms)]
       (p/let [editor-callback-perf (when run-editor-callback?
                                      (run-response-editor-callback!
-                                      tx-meta delta row-uuids))]
+                                      tx-meta editor-rows row-uuids))]
         (let [completed-at (now-ms)]
           {:delta-flush-ms (- delta-flushed-at started-at)
            :editor-callback-ms (- completed-at delta-flushed-at)
@@ -202,7 +201,7 @@
                        ops
                        worker-opts))]
         (p/let [response (enqueue-outliner-mutation! request-repo request)
-                {:keys [result delta editor-row-uuids perf]} response
+                {:keys [result delta editor-rows editor-row-uuids perf]} response
                 mutation-returned-at (now-ms)
                 worker-returned-at (now-ms)
                 current-context? (and (= request-repo (state/get-current-repo))
@@ -212,7 +211,7 @@
                                   (:editor/edit-block-fn opts')))
                 ui-refresh-perf (when publish?
                                   (publish-worker-response!
-                                   opts' delta editor-row-uuids current-context?))
+                                   opts' delta editor-rows editor-row-uuids current-context?))
                 ui-updated-at (now-ms)]
           (when publish?
             (on-next-frame!

@@ -116,7 +116,7 @@
                             ":item-content (fn [idx block-uuid]"))
       (is (string/includes? root-source ":range-changed"))
       (is (string/includes? root-source
-                            "(select-block-under-pointer! selection-block-ids direction)"))
+                            "block-selection/virtual-range-boundary-id"))
       (is (not (string/includes? root-source ":total-count"))
           "A separate row count cannot race the UUID data.")
       (testing "the root API never accepts or reconstructs entity rows"

@@ -919,7 +919,7 @@
     (b/select-blocks 3)
     (k/press "ControlOrMeta+Shift+m")
     (choose-move-target! "Target page")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
 
 (deftest move-blocks-cmdk
   (testing "move blocks using cmdk"
@@ -929,7 +929,7 @@
     (b/select-blocks 3)
     (util/search-and-click "Move blocks to")
     (choose-move-target! "Target page 2")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
 
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"

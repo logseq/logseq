@@ -5014,14 +5014,23 @@
                         (let [^js previous-range (.-current *last-rendered-range)
                               previous-start (some-> previous-range .-startIndex)
                               current-start (.-startIndex rendered-range)
+                              current-end (.-endIndex rendered-range)
                               direction (cond
                                           (or (nil? previous-start)
                                               (= previous-start current-start)) nil
                                           (< previous-start current-start) :down
                                           :else :up)]
                           (set! (.-current *last-rendered-range) rendered-range)
-                          (when direction
-                            (select-block-under-pointer! selection-block-ids direction))))
+                          (when (and direction
+                                     (block-selection/pointer-down?))
+                            (let [boundary-id
+                                  (block-selection/virtual-range-boundary-id
+                                   block-uuids direction current-start current-end)]
+                              (editor-handler/highlight-selection-area!
+                               (str "ls-block-" boundary-id)
+                               (str boundary-id)
+                               {:append? true
+                                :block-ids selection-block-ids})))))
                       :item-content (fn [idx block-uuid]
                                       (subscribed-block-row
                                        (assoc config

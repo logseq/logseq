@@ -37,6 +37,13 @@
         {:direction direction
          :block-ids (if (= direction :up) (vec (reverse ids)) ids)}))))
 
+(defn virtual-range-boundary-id
+  [block-ids direction start-index end-index]
+  (case direction
+    :down (nth block-ids end-index)
+    :up (nth block-ids start-index)
+    nil))
+
 (defn unselected-block-ids
   [selected-block-ids block-ids]
   (->> block-ids

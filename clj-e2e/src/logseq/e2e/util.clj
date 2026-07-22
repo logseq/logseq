@@ -125,7 +125,7 @@
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
+  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"))
 
 (defn get-text
   [locator]

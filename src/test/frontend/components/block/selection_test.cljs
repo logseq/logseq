@@ -55,6 +55,15 @@
     nil :missing :c
     nil :a :missing))
 
+(deftest virtual-range-boundary-id-uses-the-complete-membership-order
+  (let [block-ids [:empty :first :middle :last]]
+    (is (= :last
+           (selection/virtual-range-boundary-id block-ids :down 1 3)))
+    (is (= :first
+           (selection/virtual-range-boundary-id block-ids :up 1 3)))
+    (is (nil?
+         (selection/virtual-range-boundary-id block-ids nil 1 3)))))
+
 (deftest unselected-block-ids-preserves-order-without-duplicate-ids
   (is (= [:d :e]
          (selection/unselected-block-ids [:a :b :c]
