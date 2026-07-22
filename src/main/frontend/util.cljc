@@ -99,8 +99,6 @@
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
-#?(:cljs (defonce convert-to-roman utils/convertToRoman))
-#?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
