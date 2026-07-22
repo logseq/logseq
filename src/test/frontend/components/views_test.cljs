@@ -308,6 +308,23 @@
       (is (= [row-uuid] @calls)
           "A mounted row supplies one UUID and owns no loader closure."))))
 
+(deftest gallery-loading-row-keeps-the-card-size-test
+  (with-redefs [db-hooks/use-block (constantly nil)]
+    (let [markup (render-static
+                  (views/lazy-item
+                   [(random-uuid)]
+                   0
+                   {:gallery-view? true}
+                   (fn [_item] nil)))
+          gallery-source (form-source
+                          (source-for "src/main/frontend/components/views.cljs")
+                          "(hsx/defc gallery-view")]
+      (is (string/includes? markup "ls-card-item")
+          "An unloaded gallery row must use the same CSS height as a loaded card.")
+      (is (not (string/includes? markup "min-height:24px")))
+      (is (string/includes? gallery-source ":increase-viewport-by")
+          "Gallery rows must mount ahead of the visible viewport."))))
+
 (deftest typed-group-values-keep-scalars-plain-and-hydrate-entities-test
   (let [entity-uuid (random-uuid)
         entity {:block/uuid entity-uuid

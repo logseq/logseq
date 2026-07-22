@@ -610,6 +610,43 @@
                                   (subs/resource-snapshot resource-key)))
                   (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
 
+(deftest children-load-seeds-the-open-subtree-atomically-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-uuid (random-uuid)
+               grandchild-uuid (random-uuid)
+               parent (block parent-uuid 10 "parent")
+               child (block child-uuid 11 "child")
+               grandchild (block grandchild-uuid 12 "grandchild")]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id _parent-uuid]
+                              (p/resolved
+                               {:basis-rev 12
+                                :parent-tx-id 10
+                                :items [[child-uuid "a"]]
+                                :blocks {parent-uuid parent
+                                         child-uuid child
+                                         grandchild-uuid grandchild}
+                                :children
+                                {parent-uuid {:parent-tx-id 10
+                                              :items [[child-uuid "a"]]}
+                                 child-uuid {:parent-tx-id 11
+                                             :items [[grandchild-uuid "a"]]}
+                                 grandchild-uuid {:parent-tx-id 12
+                                                  :items []}}}))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (= {:status :ready :value child}
+                         (subs/block-snapshot child-uuid)))
+                  (is (= {:status :ready :value grandchild}
+                         (subs/block-snapshot grandchild-uuid)))
+                  (is (= {:status :ready :value [grandchild-uuid]}
+                         (subs/children-snapshot child-uuid))
+                      "Open descendants must be ready with their parent membership.")
+                  (unsubscribe))))))))
+
 (deftest reset-graph-restarts-every-mounted-typed-load-test
   (async done
          (let [next-graph-id "subs-test-next-graph"
@@ -910,6 +947,42 @@
                   (is (every? #(= :ready (:status (subs/block-snapshot %)))
                               block-uuids))
                   (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
+
+(deftest block-subscriptions-coalesce-loads-across-microtasks-test
+  (async done
+         (let [block-a (random-uuid)
+               block-b (random-uuid)
+               scheduled (atom [])
+               worker-calls (atom [])]
+           (finish-async!
+            done
+            (p/with-redefs [subs/schedule-load-batch!
+                            (fn [callback]
+                              (swap! scheduled conj callback))
+                            state/<invoke-db-worker
+                            (fn [api graph-id payload]
+                              (swap! worker-calls conj [api graph-id payload])
+                              (p/resolved
+                               {:basis-rev 1
+                                :blocks
+                                (into {}
+                                      (map (fn [block-uuid]
+                                             [block-uuid
+                                              (block block-uuid 1 "loaded")]))
+                                      payload)}))]
+              (p/let [unsubscribe-a (subs/subscribe-block! block-a (fn []))
+                      _ (p/resolved nil)
+                      unsubscribe-b (subs/subscribe-block! block-b (fn []))
+                      _ (is (empty? @worker-calls)
+                            "Promise microtasks must not split a renderer batch.")
+                      _ ((first @scheduled))
+                      _ (p/delay 0)]
+                (is (= [[:thread-api/get-canonical-blocks
+                         test-graph-id
+                         [block-a block-b]]]
+                       @worker-calls))
+                (unsubscribe-a)
+                (unsubscribe-b)))))))
 
 (deftest duplicate-block-subscriptions-share-one-default-request-test
   (async done

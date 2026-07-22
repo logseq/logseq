@@ -235,6 +235,33 @@
           (sort-by second)
           vec)}))
 
+(defn open-block-tree
+  [db root-uuid]
+  (loop [pending [root-uuid]
+         seen #{}
+         block-uuids #{root-uuid}
+         children {}]
+    (if-let [parent-uuid (peek pending)]
+      (let [pending (pop pending)]
+        (if (contains? seen parent-uuid)
+          (recur pending seen block-uuids children)
+          (let [membership (direct-children-membership db parent-uuid)
+                child-uuids (mapv first (:items membership))
+                open-child-uuids
+                (remove #(true? (:block/collapsed?
+                                  (d/entity db [:block/uuid %])))
+                        child-uuids)]
+            (recur (into pending open-child-uuids)
+                   (conj seen parent-uuid)
+                   (into block-uuids child-uuids)
+                   (assoc children parent-uuid
+                          (dissoc membership :basis-rev))))))
+      (let [blocks (:blocks (canonical-blocks db (vec block-uuids)))
+            root-membership (get children root-uuid)]
+        (assoc root-membership
+               :blocks (select-keys blocks block-uuids)
+               :children children)))))
+
 (def ^:private block-children-limit 100)
 
 (defn- direct-child-blocks
@@ -503,8 +530,7 @@
      (into {}
            (map (fn [parent-uuid]
                   [parent-uuid
-                   (dissoc (direct-children-membership db parent-uuid)
-                           :basis-rev)]))
+                   (open-block-tree db parent-uuid)]))
            parent-uuids)}))
 
 (def-thread-api :thread-api/get-blocks

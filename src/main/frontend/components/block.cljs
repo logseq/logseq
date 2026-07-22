@@ -3757,8 +3757,7 @@
                   :editing-same-block? (= (:block/uuid block)
                                           (:block/uuid (state/get-edit-block)))
                   :active-selection? active-selection?
-                  :virtualized? (some? selection-block-ids)
-                  :pointer-moved? (= "mousemove" (.-type e))})]
+                  :virtualized? (some? selection-block-ids)})]
     (remember-block-pointer! e)
     (reset! *control-show? true)
     (when (and (not (comments-area-target? target))
@@ -4261,10 +4260,7 @@
                            (block-mouse-over e block *control-show? block-id doc-mode?
                                              (:selection/block-ids config)))
          :on-mouse-move (fn [e]
-                          (if (some? (:selection/block-ids config))
-                            (block-mouse-over e block *control-show? block-id doc-mode?
-                                              (:selection/block-ids config))
-                            (remember-block-pointer! e)))
+                          (remember-block-pointer! e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
@@ -4962,7 +4958,7 @@
                            (scroll-container)
                            scroll-container)
         *virtualized-ref (hooks/use-ref nil)
-        *last-rendered-range (hooks/use-ref nil)
+        *last-rendered-start (hooks/use-ref nil)
         virtual-opts {:ref *virtualized-ref
                       :custom-scroll-parent scroll-container
                       :compute-item-key (fn [_idx block-uuid]
@@ -4970,28 +4966,29 @@
                       :increase-viewport-by 254
                       :overscan 254
                       :data (to-array block-uuids)
-                      :range-changed
-                      (fn [^js rendered-range]
-                        (let [^js previous-range (.-current *last-rendered-range)
-                              previous-start (some-> previous-range .-startIndex)
-                              current-start (.-startIndex rendered-range)
-                              current-end (.-endIndex rendered-range)
+                      :items-rendered
+                      (fn [^js rendered-items]
+                        (when (pos? (alength rendered-items))
+                          (let [previous-start (.-current *last-rendered-start)
+                              current-start (.-index (aget rendered-items 0))
+                              current-end (.-index (aget rendered-items
+                                                        (dec (alength rendered-items))))
                               direction (cond
                                           (or (nil? previous-start)
                                               (= previous-start current-start)) nil
                                           (< previous-start current-start) :down
                                           :else :up)]
-                          (set! (.-current *last-rendered-range) rendered-range)
-                          (when (and direction
-                                     (block-selection/pointer-down?))
-                            (let [boundary-id
-                                  (block-selection/virtual-range-boundary-id
-                                   block-uuids direction current-start current-end)]
-                              (editor-handler/highlight-selection-area!
-                               (str "ls-block-" boundary-id)
-                               (str boundary-id)
-                               {:append? true
-                                :block-ids selection-block-ids})))))
+                            (set! (.-current *last-rendered-start) current-start)
+                            (when (and direction
+                                       (block-selection/pointer-down?))
+                              (let [boundary-id
+                                    (block-selection/virtual-range-boundary-id
+                                     block-uuids direction current-start current-end)]
+                                (editor-handler/highlight-selection-area!
+                                 (str "ls-block-" boundary-id)
+                                 (str boundary-id)
+                                 {:append? true
+                                  :block-ids selection-block-ids}))))))
                       :item-content (fn [idx block-uuid]
                                       (subscribed-block-row
                                        (assoc config
