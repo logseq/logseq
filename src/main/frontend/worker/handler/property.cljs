@@ -127,11 +127,18 @@
         structured-children-by-class-id (->> class-ids
                                              (map (fn [class-id]
                                                     [class-id (db-class/get-structured-children db class-id)]))
-                                             (into {}))]
+                                             (into {}))
+        extends-by-class-id (->> class-ids
+                                 (map (fn [class-id]
+                                        [class-id
+                                         (mapv entity-util/entity->map
+                                               (ldb/get-class-extends (d/entity db class-id)))]))
+                                 (into {}))]
     {:all-classes all-classes
      :class-options class-options
      :extends-class-options extends-class-options
      :structured-children-by-class-id structured-children-by-class-id
+     :extends-by-class-id extends-by-class-id
      :initial-choices (property-node-selector-initial-choices db property non-root-classes option)}))
 
 (def-thread-api :thread-api/get-all-classes

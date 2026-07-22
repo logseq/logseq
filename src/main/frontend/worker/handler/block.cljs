@@ -85,6 +85,9 @@
         ref-ident (:db/ident ref)
         ref-title (:block/title ref)
         ref-name (:block/name ref)
+        ref-tags (mapv (fn [tag]
+                         (select-keys tag [:db/id :block/uuid :db/ident]))
+                       (:block/tags ref))
         property-value (:logseq.property/value ref)
         property-icon (:logseq.property/icon ref)
         property-value-title (when (or (:block/closed-value-property ref)
@@ -104,6 +107,7 @@
       ref-ident (assoc :db/ident ref-ident)
       (string? ref-title) (assoc :block/title ref-title)
       (string? ref-name) (assoc :block/name ref-name)
+      (seq ref-tags) (assoc :block/tags ref-tags)
       (some? property-value) (assoc :logseq.property/value property-value)
       (some? property-icon) (assoc :logseq.property/icon property-icon)
       (some? property-value-title) (assoc :block/title property-value-title))))
