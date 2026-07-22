@@ -11,10 +11,6 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
-(defmethod db-listener/listen-db-changes ::capture-report
-  [_ {:keys [repo]} tx-report]
-  (swap! repo conj tx-report))
-
 (def ^:private forbidden-renderer-payload-keys
   #{:affected-keys
     :blocks
@@ -205,8 +201,7 @@
       (is (empty? @broadcast-payloads) (str tx-meta)))))
 
 (deftest db-listener-does-not-publish-skip-validation-render-deltas-test
-  (let [deferred-reports (atom [])
-        conn (db-test/create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "before"}]}])
         block (db-test/find-block-by-content @conn "before")
@@ -238,10 +233,9 @@
                     (fn [event payload]
                       (when (= :sync-db-changes event)
                         (swap! broadcast-payloads conj payload)))]
-        (db-listener/listen-db-changes! deferred-reports conn
+        (db-listener/listen-db-changes! "repo" conn
                                         :handler-keys [:sync-db-to-main-thread
                                                        :db-sync
-                                                       ::capture-report
                                                        :markdown-mirror])
         (ldb/transact! conn
                        [[:db/add block-id :block/title "after"]]
@@ -259,13 +253,10 @@
         "Transactions outside the formal pipeline cannot publish renderer deltas.")
     (is (= 1 (count @mirrored-reports))
         "Bypassing the renderer pipeline must not suppress unrelated post-commit handlers.")
-    (is (= 1 (count @deferred-reports))
-        "Bypassing renderer publication must not suppress deferred handlers.")
     (is (= {:skip-validate-db? true}
            (:tx-meta (first @mirrored-reports))))
-    (is (identical? (first @mirrored-reports)
-                    (first @deferred-reports))
-        "Auxiliary handlers must receive the same raw skipped transaction report.")))
+    (is (identical? @conn (:db-after (first @mirrored-reports)))
+        "Deferred handlers must receive the raw skipped transaction report.")))
 
 (deftest db-listener-reports-post-commit-failures-without-blocking-ui-sync-test
   (doseq [failed-stage [:checksum :persist]]

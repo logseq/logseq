@@ -841,7 +841,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                           (when (and page (common-util/uuid-string? page))
                             (uuid page)))
               parent-id (:db/id (:block/parent block))
-              tag-ids (seq (map :db/id (:block/tags block)))
+              tags (not-empty
+                    (mapv #(select-keys % [:db/id :db/ident :block/title
+                                           :logseq.property/icon])
+                          (:block/tags block)))
               icon (:logseq.property/icon block)
               alias (or alias-source alias-match)
               unique-title (db-block-title/block-unique-title
@@ -862,8 +865,8 @@ DROP TRIGGER IF EXISTS blocks_au;
             parent-id
             (assoc :block/parent parent-id)
 
-            tag-ids
-            (assoc :block/tags tag-ids)
+            tags
+            (assoc :block/tags tags)
 
             icon
             (assoc :logseq.property/icon icon)

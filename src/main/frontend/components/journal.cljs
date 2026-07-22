@@ -10,8 +10,7 @@
   (let [bundle (db-hooks/use-resource [:journal-bundle journal-uuid])]
     [:div.journal-item.content.relative
      (cond-> {}
-       last? (assoc :class "journal-last-item")
-       (nil? bundle) (assoc :style {:min-height 1}))
+       last? (assoc :class "journal-last-item"))
      (when bundle
        (page/journal-page journal-uuid {:journals? true}))]))
 

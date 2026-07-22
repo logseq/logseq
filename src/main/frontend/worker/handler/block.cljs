@@ -129,6 +129,8 @@
   (let [entity-id (:db/id entity)
         block-uuid (:block/uuid entity)
         block-tx-id (:block/tx-id entity)
+        raw-title (:block/raw-title entity)
+        display-title (:block/title entity)
         order-list-type (worker-plain/order-list-type entity)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"
@@ -163,6 +165,12 @@
                      (canonical-positioned-properties-map db entity)
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
+        (string? raw-title)
+        (assoc :block/raw-title raw-title)
+
+        (string? display-title)
+        (assoc :block/title display-title)
+
         order-list-type
         (assoc :block.temp/order-list-index
                (worker-plain/order-list-index entity order-list-type))))))
@@ -205,7 +213,8 @@
      (->> (d/datoms db :avet :block/parent parent-id)
           (map #(d/entity db (:e %)))
           (remove #(or (ldb/recycled? %)
-                       (ldb/closed-value? %)))
+                       (ldb/closed-value? %)
+                       (:logseq.property/created-from-property %)))
           (map (fn [child]
                  (let [child-uuid (:block/uuid child)
                        order (:block/order child)]
@@ -240,7 +249,9 @@
                     true (keep #(d/entity db %))
                     true ldb/sort-by-order
                     reverse? reverse))]
-     (remove :block/closed-value-property blocks))))
+     (remove #(or (:block/closed-value-property %)
+                  (:logseq.property/created-from-property %))
+             blocks))))
 
 (defn- get-block-children
   [db block {:keys [all? include-collapsed-children?]}]

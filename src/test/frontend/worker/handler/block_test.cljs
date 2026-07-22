@@ -151,6 +151,28 @@
         (is (= 11 (:block/tx-id after)))
         (is (not (contains? after :block/collapsed?)))))))
 
+(deftest canonical-block-exposes-page-reference-titles-for-editing-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Foo"
+                     :block/name "foo"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid block-uuid
+                     :block/tx-id 1
+                     :block/title (str "Reference [[" page-uuid "]]")
+                     :block/refs [-1]}])
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid block-uuid]))]
+        (is (= (str "Reference [[" page-uuid "]]")
+               (:block/raw-title block)))
+        (is (= "Reference [[Foo]]" (:block/title block)))))))
+
 (deftest canonical-property-includes-derived-closed-values-test
   (when-let [canonical-block (canonical-block-api)]
     (let [{:keys [conn]} (canonical-block-fixture)
@@ -309,6 +331,14 @@
                      :block/parent [:block/uuid page-uuid]
                      :block/order "a-closed"
                      :block/closed-value-property
+                     [:block/uuid property-uuid]}
+                    {:block/uuid (random-uuid)
+                     :block/tx-id 12
+                     :block/title "Text property value"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid page-uuid]
+                     :block/order "a-property-value"
+                     :logseq.property/created-from-property
                      [:block/uuid property-uuid]}])
       (let [db @conn
             response (direct-children-membership db page-uuid)]

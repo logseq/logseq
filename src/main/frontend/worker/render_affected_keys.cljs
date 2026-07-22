@@ -37,6 +37,7 @@
   #{:block/closed-value-property
     :block/order
     :block/parent
+    :logseq.property/created-from-property
     :logseq.property/deleted-at})
 
 (def ^:private route-candidate-attrs
@@ -292,7 +293,12 @@
 (defn- status-value?
   [db entity-id]
   (when db
-    (or (seq (d/datoms db :avet :logseq.property/status entity-id))
+    (or (if (get-in (d/schema db) [:logseq.property/status :db/index])
+          (seq (d/datoms db :avet :logseq.property/status entity-id))
+          (d/q '[:find ?owner .
+                 :in $ ?status
+                 :where [?owner :logseq.property/status ?status]]
+               db entity-id))
         (= entity-id
            (some-> (d/entity db :logseq.property/status)
                    :logseq.property/default-value
