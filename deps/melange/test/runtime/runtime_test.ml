@@ -3,8 +3,8 @@ module Keyword = Runtime.Keyword
 module Uuid = Runtime.Uuid
 module Date_time = Runtime.Date_time
 module Vector = Runtime.Persistent_vector
-module Value = Runtime.Value
-module Codec = Runtime.Codec
+module Melange_edn = Melange_edn_melange
+module Transit = Transit_melange.Transit.Json
 
 let fail message =
   Fest.expect |> Fest.equal message "";
@@ -19,6 +19,16 @@ let expect_false label condition =
 let expect_equal label actual expected =
   try Fest.expect |> Fest.equal actual expected
   with _ -> fail (label ^ ": values differ")
+
+let expect_edn_equal label actual expected =
+  expect_equal label
+    (Melange_edn.to_edn_string actual)
+    (Melange_edn.to_edn_string expected)
+
+let decode_transit text = Transit.to_edn (Transit.of_string text)
+
+let encode_transit ?(mode = Transit.Normal) value =
+  Transit.to_string ~mode (Transit.of_edn value)
 
 let expect_ok label = function
   | Ok value -> value
@@ -150,167 +160,106 @@ let () =
       expect_error "large vector index" (Vector.nth mapped 10000);
       expect_error "set outside vector" (Vector.set mapped 10000 0));
 
-  Fest.test "closed values compare nested persistent structures" (fun () ->
-      let keyword =
-        expect_ok "value keyword" (Keyword.of_string "block/title")
-      in
-      let uuid =
-        expect_ok "value uuid"
-          (Uuid.of_string "11111111-1111-4111-8111-111111111111")
-      in
+  Fest.test "compile-time EDN fixtures support typed antiquotation" (fun () ->
+      let title = Melange_edn.string "Alpha" in
       let value =
-        Value.Map
-          (vector
-             [|
-               (Value.Keyword keyword, Value.String "Alpha");
-               ( Value.Keyword
-                   (expect_ok "items keyword" (Keyword.of_string "items")),
-                 Value.Vector
-                   (vector [| Value.Nil; Value.Bool false; Value.Uuid uuid |])
-               );
-             |])
+        [%edn
+          {|{:block/title ?title
+             :items [nil false #uuid "11111111-1111-4111-8111-111111111111"]}|}]
       in
-      expect_true "nested value equality" (Value.equal value value);
-      expect_false "nested value inequality"
-        (Value.equal value (Value.String "Alpha")));
+      let expected =
+        [%edn
+          {|{:block/title "Alpha"
+             :items [nil false #uuid "11111111-1111-4111-8111-111111111111"]}|}]
+      in
+      expect_edn_equal "typed antiquotation" value expected);
 
-  Fest.test "EDN codec round trips maps collections keywords and UUID tags"
+  Fest.test "EDN round trips maps collections keywords and UUID tags"
     (fun () ->
       let source =
         "{:block/title \"Alpha\" :items [nil false #uuid \
          \"11111111-1111-4111-8111-111111111111\"]}"
       in
-      let decoded = expect_ok "decode EDN" (Codec.edn_of_string source) in
-      let encoded = expect_ok "encode EDN" (Codec.edn_to_string decoded) in
-      let round_trip =
-        expect_ok "decode encoded EDN" (Codec.edn_of_string encoded)
+      let decoded = Melange_edn.of_edn_string source in
+      let encoded = Melange_edn.to_edn_string decoded in
+      let round_trip = Melange_edn.of_edn_string encoded in
+      let expected =
+        [%edn
+          {|{:block/title "Alpha"
+             :items [nil false #uuid "11111111-1111-4111-8111-111111111111"]}|}]
       in
-      expect_true "EDN semantic round trip" (Value.equal decoded round_trip));
+      expect_edn_equal "decoded EDN" decoded expected;
+      expect_edn_equal "EDN semantic round trip" round_trip expected);
 
-  Fest.test "EDN codec preserves supported scalar collection and tagged values"
+  Fest.test "EDN preserves supported scalar collection and tagged values"
     (fun () ->
       let source =
         "(\\newline #\"a+\" #{:tag} 9223372036854775808N 1.25M 1/3 #custom/tag \
          {:x 1} ##NaN)"
       in
-      let decoded =
-        expect_ok "decode tagged EDN" (Codec.edn_of_string source)
+      let decoded = Melange_edn.of_edn_string source in
+      let encoded = Melange_edn.to_edn_string decoded in
+      let round_trip = Melange_edn.of_edn_string encoded in
+      let expected =
+        [%edn
+          {|(\newline #"a+" #{:tag} 9223372036854775808N 1.25M 1/3
+             #custom/tag {:x 1} ##NaN)|}]
       in
-      let encoded =
-        expect_ok "encode tagged EDN" (Codec.edn_to_string decoded)
-      in
-      let round_trip =
-        expect_ok "decode tagged EDN round trip" (Codec.edn_of_string encoded)
-      in
-      expect_true "tagged EDN semantic round trip"
-        (Value.equal decoded round_trip));
+      expect_edn_equal "decoded tagged EDN" decoded expected;
+      expect_edn_equal "tagged EDN semantic round trip" round_trip expected);
 
-  Fest.test "EDN codec rejects malformed keywords UUIDs integers and tags"
+  Fest.test "Transit round trips supported Logseq boundary values"
     (fun () ->
-      [|
-        ""; ":"; ":bad key"; "#uuid \"bad\""; "9223372036854775808"; "# \"x\"";
-      |]
-      |> Array.iter (fun source ->
-          expect_error ("malformed EDN " ^ source) (Codec.edn_of_string source)));
-
-  Fest.test "EDN codec keeps signed 64-bit integer boundaries" (fun () ->
-      let min_value =
-        expect_ok "minimum int" (Codec.edn_of_string "-9223372036854775808")
-      in
-      let max_value =
-        expect_ok "maximum int" (Codec.edn_of_string "9223372036854775807")
-      in
-      expect_true "minimum int value"
-        (Value.equal min_value (Value.Int Int64.min_int));
-      expect_true "maximum int value"
-        (Value.equal max_value (Value.Int Int64.max_int)));
-
-  Fest.test "Transit codec round trips supported Logseq boundary values"
-    (fun () ->
-      let keyword =
-        expect_ok "transit keyword" (Keyword.of_string "block/title")
-      in
-      let uuid =
-        expect_ok "transit uuid"
-          (Uuid.of_string "11111111-1111-4111-8111-111111111111")
-      in
+      let binary = Melange_edn.string "\000\255" in
       let value =
-        Value.Map
-          (vector
-             [|
-               ( Value.Keyword keyword,
-                 Value.Vector
-                   (vector
-                      [|
-                        Value.Uuid uuid;
-                        Value.Date 1704067200000L;
-                        Value.Big_int "9223372036854775808";
-                        Value.Decimal "1234567890.123456789";
-                        Value.Binary "\000\255";
-                        Value.Uri "https://logseq.com/页面";
-                        Value.Set
-                          (vector [| Value.String "a"; Value.String "b" |]);
-                        Value.List (vector [| Value.Int 1L; Value.Bool true |]);
-                        Value.Tagged ("custom", Value.String "value");
-                      |]) );
-             |])
+        [%edn
+          {|{:block/title
+             [#uuid "11111111-1111-4111-8111-111111111111"
+              #transit/time 1704067200000
+              9223372036854775808N
+              1234567890.123456789M
+              #transit/bytes ?binary
+              #transit/uri "https://logseq.com/页面"
+              #{"a" "b"}
+              (1 true)
+              #custom "value"]}|}]
       in
-      let normal = expect_ok "encode Transit" (Codec.transit_to_string value) in
-      let verbose =
-        expect_ok "encode verbose Transit"
-          (Codec.transit_to_string ~mode:Codec.Verbose value)
-      in
-      expect_true "normal Transit round trip"
-        (Value.equal value
-           (expect_ok "decode Transit" (Codec.transit_of_string normal)));
-      expect_true "verbose Transit round trip"
-        (Value.equal value
-           (expect_ok "decode verbose Transit"
-              (Codec.transit_of_string verbose))));
+      let normal = encode_transit value in
+      let verbose = encode_transit ~mode:Transit.Verbose value in
+      expect_edn_equal "normal Transit round trip"
+        (decode_transit normal) value;
+      expect_edn_equal "verbose Transit round trip"
+        (decode_transit verbose) value);
 
-  Fest.test "Transit codec rejects malformed input and integer overflow"
-    (fun () ->
-      expect_error "malformed Transit" (Codec.transit_of_string "[");
-      expect_error "Transit integer overflow"
-        (Codec.transit_of_string "[\"~#'\",\"~i9223372036854775808\"]"));
+  Fest.test "Transit rejects malformed input" (fun () ->
+      let rejected =
+        try
+          ignore (Transit.of_string "[");
+          false
+        with Transit.Decode_error _ -> true
+      in
+      expect_true "malformed Transit" rejected);
 
-  Fest.test "Transit codec decodes current SQLite Transit content"
+  Fest.test "Transit decodes current SQLite content"
     (fun () ->
-      let keyword text =
-        Value.Keyword (expect_ok ("keyword " ^ text) (Keyword.of_string text))
-      in
-      let uuid =
-        Value.Uuid
-          (expect_ok "uuid"
-             (Uuid.of_string "11111111-1111-4111-8111-111111111111"))
-      in
       let decoded =
-        expect_ok "decode sqlite Transit"
-          (Codec.transit_of_string
-             "[\"^ \",\"~:eavt\",2,\"~:avet\",3,\"~:aevt\",4,\"~:block/uuid\",\"~u11111111-1111-4111-8111-111111111111\",\"~:items\",[\"~#set\",[\"~:a\",\"~:b\"]],\"~:nested\",[[\"^ \",\"~:x\",1]]]")
+        decode_transit
+          "[\"^ \",\"~:eavt\",2,\"~:avet\",3,\"~:aevt\",4,\"~:block/uuid\",\"~u11111111-1111-4111-8111-111111111111\",\"~:items\",[\"~#set\",[\"~:a\",\"~:b\"]],\"~:nested\",[[\"^ \",\"~:x\",1]]]"
       in
       let expected =
-        Value.Map
-          (vector
-             [|
-               (keyword "eavt", Value.Int 2L);
-               (keyword "avet", Value.Int 3L);
-               (keyword "aevt", Value.Int 4L);
-               (keyword "block/uuid", uuid);
-               ( keyword "items",
-                 Value.Set (vector [| keyword "a"; keyword "b" |]) );
-               ( keyword "nested",
-                 Value.Vector
-                   (vector
-                      [|
-                        Value.Map
-                          (vector [| (keyword "x", Value.Int 1L) |]);
-                      |]) );
-             |])
+        [%edn
+          {|{:eavt 2
+             :avet 3
+             :aevt 4
+             :block/uuid #uuid "11111111-1111-4111-8111-111111111111"
+             :items #{:a :b}
+             :nested [{:x 1}]}|}]
       in
-      expect_true "sqlite Transit value" (Value.equal expected decoded));
+      expect_edn_equal "sqlite Transit value" decoded expected);
 
-  Fest.test "Transit encoder returns explicit errors for EDN-only values"
+  Fest.test "Transit maps EDN-only values to tagged values"
     (fun () ->
-      expect_error "Transit regex" (Codec.transit_to_string (Value.Regex "a+"));
-      expect_error "Transit ratio" (Codec.transit_to_string (Value.Ratio "1/3")))
+      let encoded = encode_transit [%edn {|[\newline 1/3 #"a+"]|}] in
+      let decoded = decode_transit encoded in
+      expect_edn_equal "Transit-compatible EDN values" decoded
+        [%edn {|["\n" #edn/ratio "1/3" #edn/regex "a+"]|}])

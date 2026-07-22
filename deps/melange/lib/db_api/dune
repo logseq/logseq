@@ -8,7 +8,9 @@
   melange_cljs_runtime
   melange_datascript
   melange_db_impl
-  melange_runtime)
+  melange-edn-melange
+  melange_runtime
+  melange-transit-melange)
  (preprocess
   (pps melange.ppx)))
 

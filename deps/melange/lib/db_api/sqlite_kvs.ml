@@ -1,7 +1,5 @@
-module Codec = Melange_runtime.Codec
-module Keyword = Melange_runtime.Keyword
-module Value = Melange_runtime.Value
-module Vector = Melange_runtime.Persistent_vector
+module Melange_edn = Melange_edn_melange
+module Transit = Transit_melange.Transit.Json
 
 type database = Js.Json.t
 type statement
@@ -75,27 +73,25 @@ let row_pair row context =
   else (row.(0), row.(1))
 
 let parse_transit text =
-  match Codec.transit_of_string text with
-  | Ok value -> value
-  | Error message -> fail message
+  try text |> Transit.of_string |> Transit.to_edn
+  with Transit.Decode_error message -> fail ("Transit decode error: " ^ message)
 
-let keyword text =
-  match Keyword.of_string text with
-  | Ok keyword -> Value.Keyword keyword
-  | Error message -> fail message
-
-let map_get value key_text =
+let map_get (Melange_edn.Any value) key =
   match value with
-  | Value.Map entries ->
-      let key = keyword key_text in
-      Vector.to_array entries
-      |> Array.find_map (fun (entry_key, entry_value) ->
-             if Value.equal entry_key key then Some entry_value else None)
+  | Melange_edn.Map entries ->
+      Array.find_map
+        (fun (Melange_edn.Any entry_key, entry_value) ->
+          match entry_key with
+          | Melange_edn.Keyword keyword
+            when String.equal (Melange_edn.keyword_to_string keyword) key ->
+              Some entry_value
+          | _ -> None)
+        entries
   | _ -> fail "schema root expects Transit map"
 
-let int_value value context =
+let int_value (Melange_edn.Any value) context =
   match value with
-  | Value.Int value -> Int64.to_int value
+  | Melange_edn.Int value -> Int64.to_int value
   | _ -> fail (context ^ " expects int")
 
 let required_map_value schema key =
