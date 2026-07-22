@@ -8,6 +8,7 @@
    :block/parent {:db/valueType :db.type/ref}
    :block/closed-value-property {:db/valueType :db.type/ref
                                  :db/cardinality :db.cardinality/many}
+   :logseq.property/created-from-property {:db/valueType :db.type/ref}
    :block/order {}
    :block/tx-id {}
    :logseq.property/deleted-at {}})
@@ -122,7 +123,8 @@
 (deftest direct-child-visibility-builds-remove-and-upsert-patches-test
   (doseq [[label attr value]
           [["recycled child" :logseq.property/deleted-at 1000]
-           ["closed property value" :block/closed-value-property 3]]]
+           ["closed property value" :block/closed-value-property 3]
+           ["text property value" :logseq.property/created-from-property 3]]]
     (testing label
       (let [parent-uuid (random-uuid)
             child-uuid (random-uuid)

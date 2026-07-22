@@ -2483,6 +2483,17 @@
     view-entity
     (assoc view-entity :logseq.property.view/type (built-in-property display-type))))
 
+(def ^:private default-view-title-key-by-feature-type
+  {:linked-references :view/linked-references
+   :unlinked-references :view/unlinked-references
+   :class-objects :view/all
+   :property-objects :view/all
+   :all-pages :view/all})
+
+(defn- default-view-title-key
+  [view-feature-type]
+  (get default-view-title-key-by-feature-type view-feature-type))
+
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
   (p/let [repo (state/get-current-repo)
@@ -2498,8 +2509,11 @@
                            (contains? #{:linked-references :unlinked-references} view-feature-type)
                            (assoc :logseq.property.view/type (:db/id list-view-type)
                                   :logseq.property.view/group-by-property (:db/id block-page-property)))
+            view-title (if auto-triggered?
+                         (some-> (default-view-title-key view-feature-type) t)
+                         "")
             view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
-            result (editor-handler/api-insert-new-block! ""
+            result (editor-handler/api-insert-new-block! view-title
                                                          (cond->
                                                           {:page (:block/uuid page)
                                                            :properties properties
@@ -2508,13 +2522,6 @@
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
         (db-async/<get-block repo (:block/uuid result) {:children? false})))))
-
-(def ^:private default-view-title-key-by-feature-type
-  {:linked-references :view/linked-references
-   :unlinked-references :view/unlinked-references
-   :class-objects :view/all
-   :property-objects :view/all
-   :all-pages :view/all})
 
 (def ^:private default-view-title-candidates
   (reduce-kv

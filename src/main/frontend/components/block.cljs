@@ -3050,7 +3050,7 @@
 (defn block-reactions
   [block]
   (when (uuid? (:block/uuid block))
-    [loaded-block-reactions block]))
+    (loaded-block-reactions block)))
 
 (hsx/defc status-history-row
   [{:keys [created-at status-uuid]}]

@@ -653,12 +653,15 @@
               target-ids)))))
 
 (defn- revision-owner-ids
-  [tx-report]
-  (into (projected-reference-owner-ids tx-report)
-        (comp
-         (filter projected-reference-content-datom?)
-         (map :e))
-        (:tx-data tx-report)))
+  [{:keys [tx-data tx-meta] :as tx-report}]
+  (let [revision-datom? (if (:fix-db? tx-meta)
+                          #(not= :block/tx-id (:a %))
+                          projected-reference-content-datom?)]
+    (into (projected-reference-owner-ids tx-report)
+          (comp
+           (filter revision-datom?)
+           (map :e))
+          tx-data)))
 
 (defn transact-pipeline
   "Compute extra tx-data and block refs, then stamp changed block entities and

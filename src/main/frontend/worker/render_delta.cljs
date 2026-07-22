@@ -8,6 +8,7 @@
   #{:block/closed-value-property
     :block/order
     :block/parent
+    :logseq.property/created-from-property
     :logseq.property/deleted-at})
 
 (defn- fail!
@@ -76,6 +77,7 @@
   [db entity-id]
   (when-let [entity (d/entity db entity-id)]
     (when-not (or (:block/closed-value-property entity)
+                  (:logseq.property/created-from-property entity)
                   (:logseq.property/deleted-at entity))
       (when-let [parent (:block/parent entity)]
         (let [block-uuid (:block/uuid entity)
@@ -125,7 +127,7 @@
 
 (defn- parent-patch
   [base-rev rev db-after parent-uuid operations]
-  (when-let [parent-after (d/entity db-after [:block/uuid parent-uuid])]
+  (when (d/entity db-after [:block/uuid parent-uuid])
     {:base-rev base-rev
      :rev rev
      :remove (ordered-operations (:remove operations))
