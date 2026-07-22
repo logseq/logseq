@@ -7,11 +7,11 @@ type entity = {
   uuid : string;
   parent_id : int option;
   page_id : int option;
-  order : string;
+  order : string option;
   created_from_query : bool;
 }
 
-let entity ?parent_id ?page_id ?(order = "a") ?(created_from_query = false) id =
+let entity ?parent_id ?page_id ?order ?(created_from_query = false) id =
   {
     id;
     uuid = "uuid-" ^ string_of_int id;
@@ -148,9 +148,14 @@ let capabilities :
     project_group_key = (fun value -> value);
     sort_by_order =
       (fun rows ->
+        record "strict-order";
         let rows = Rrbvec.to_array rows in
         Array.sort
-          (fun left right -> String.compare left.order right.order)
+          (fun left right ->
+            match (left.order, right.order) with
+            | Some left, Some right -> String.compare left right
+            | None, _ | _, None ->
+                invalid_arg "DB view data workflow: block order is missing")
           rows;
         Rrbvec.of_array rows);
     query_properties =
@@ -261,7 +266,7 @@ let () =
               expect_equal "group ids" (Rrbvec.to_array ids) [| 2; 1 |]
           | Parent_groups _ -> failwith "expected table group ids")
       | Ids _ -> failwith "expected grouped result");
-  Fest.test "DB view data workflow builds list parent groups in order"
+  Fest.test "DB view data workflow sorts parent entities and blocks separately"
     (fun () ->
       reset_calls ();
       let grouped_rows =
@@ -281,6 +286,10 @@ let () =
           group_entities =
             (fun ~property:_ ~group_ident:_ ~sort_ident:_ ~descending:_ rows ->
               Rrbvec.singleton (Text "Group", rows));
+          sort_entities =
+            (fun ~sorting rows ->
+              record ("sort:" ^ (Rrbvec.nth sorting 0).id);
+              rows);
         }
       in
       let result =
@@ -290,7 +299,7 @@ let () =
                ~list_view:true ())
           ~options:(options ())
       in
-      match result.data with
+      (match result.data with
       | Grouped groups -> (
           match (Rrbvec.nth groups 0).rows with
           | Parent_groups parents ->
@@ -308,4 +317,7 @@ let () =
                 [| 5; 4 |];
               expect_equal "second group root uuid" second.uuid "uuid-6"
           | Group_ids _ -> failwith "expected parent groups")
-      | Ids _ -> failwith "expected grouped list result")
+      | Ids _ -> failwith "expected grouped list result");
+      expect_equal "list sorting calls"
+        (Rrbvec.to_array !call_log)
+        [| "sort:block/order"; "strict-order"; "strict-order" |])

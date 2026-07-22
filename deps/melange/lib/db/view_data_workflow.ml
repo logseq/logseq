@@ -178,7 +178,9 @@ let sort_parent_buckets (capabilities : (_, _, _, _, _) capabilities) buckets =
       buckets
   in
   let sorted_parents =
-    with_parent |> Rrbvec.map fst |> capabilities.sort_by_order
+    capabilities.sort_entities
+      ~sorting:(Rrbvec.singleton { id = "block/order"; ascending = true })
+      (Rrbvec.map fst with_parent)
   in
   let sorted =
     Rrbvec.filter_map

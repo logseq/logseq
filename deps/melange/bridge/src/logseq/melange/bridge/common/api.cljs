@@ -85,8 +85,13 @@
 (defn same-repo? [& args] (invoke graph-dir "sameRepo" args))
 
 (defn expand-value-if-macro [& args] (invoke macro-api "expandValueIfMacro" args))
-(defn get-last-part [& args] (invoke namespace-api "getLastPart" args))
-(defn namespace-page? [& args] (invoke namespace-api "namespacePage" args))
+(defn get-last-part [value]
+  (if (string? value)
+    (invoke namespace-api "getLastPart" [value])
+    value))
+(defn namespace-page? [value]
+  (and (string? value)
+       (invoke namespace-api "namespacePage" [value])))
 
 (def left-and-right-brackets (.-leftAndRightBrackets page-ref))
 (def left-brackets (.-leftBrackets page-ref))

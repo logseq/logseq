@@ -217,11 +217,13 @@ let view_config runtime datascript database view_id feature_override journals =
   else
     let field = Entity_read.field runtime datascript in
     let view = required_entity datascript database view_id "view entity" in
-    let stored_feature =
-      field view "logseq.property.view/feature-type"
-      |> ident_text runtime |> Selection.feature_of_string
+    let feature =
+      match feature_override with
+      | Some feature -> feature
+      | None ->
+          field view "logseq.property.view/feature-type"
+          |> ident_text runtime |> Selection.feature_of_string
     in
-    let feature = Option.value feature_override ~default:stored_feature in
     let view_for =
       optional_field runtime datascript view "logseq.property/view-for"
     in

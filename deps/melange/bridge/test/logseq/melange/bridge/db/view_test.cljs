@@ -9,11 +9,35 @@
   (let [tx (d/transact! conn [(cond-> {:db/id -100
                                        :block/title "Test view"
                                        :block/uuid (random-uuid)
-                                       :logseq.property.view/feature-type feature-type
                                        :logseq.property.view/type :logseq.property.view/type.table}
+                                feature-type
+                                (assoc :logseq.property.view/feature-type feature-type)
                                 view-for-id
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
+
+(deftest get-view-data-query-result-override-skips-missing-stored-feature-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Alpha"}}
+                {:page {:block/title "Beta"}}]})
+        query-entity-ids (mapv :db/id
+                               [(db-test/find-page-by-title @conn "Alpha")
+                                (db-test/find-page-by-title @conn "Beta")])
+        view-id (create-view-id conn nil)
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :query-result
+                                       :query-entity-ids query-entity-ids
+                                       :query '[:find (pull ?b [*])]
+                                       :sorting [{:id :block/title :asc? true}]})]
+    (is (= 2 (:count result)))
+    (is (= (set query-entity-ids) (set (:data result))))))
+
+(deftest get-view-data-invalid-stored-feature-still-fails-test
+  (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+        view-id (create-view-id conn :invalid-feature)]
+    (is (thrown? js/Error
+                 (db-view/get-view-data @conn view-id {})))))
 
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test
   (let [conn (db-test/create-conn-with-blocks
@@ -89,6 +113,50 @@
     (is (number? (:count result)))
     (is (contains? (set (:data result)) bar-id))
     (is (contains? result :ref-pages-count))))
+
+(deftest get-view-data-list-allows-page-parent-without-block-order-test
+  (let [conn (db-test/create-conn)
+        tx (d/transact! conn [{:db/id -1
+                               :block/title "Target"
+                               :block/uuid (random-uuid)}
+                              {:db/id -2
+                               :block/title "Journal"
+                               :block/uuid (random-uuid)
+                               :block/journal-day 20260722}
+                              {:db/id -3
+                               :block/title "Second reference"
+                               :block/uuid (random-uuid)
+                               :block/page -2
+                               :block/parent -2
+                               :block/order "b"}
+                              {:db/id -4
+                               :block/title "First reference"
+                               :block/uuid (random-uuid)
+                               :block/page -2
+                               :block/parent -2
+                               :block/order "a"}])
+        target-id (get-in tx [:tempids -1])
+        journal-id (get-in tx [:tempids -2])
+        second-id (get-in tx [:tempids -3])
+        first-id (get-in tx [:tempids -4])
+        _ (d/transact! conn [[:db/add first-id :block/refs target-id]
+                             [:db/add second-id :block/refs target-id]])
+        view-id (create-view-id conn :linked-references :view-for-id target-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :block/page]
+                             [:db/add view-id :logseq.property.view/type :logseq.property.view/type.list]])
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :linked-references
+                                       :view-for-id target-id})
+        [[group [[root-uuid blocks]]]] (:data result)]
+    (is (= 2 (:count result)))
+    (is (= journal-id (:db/id group)))
+    (is (contains? #{(:block/uuid (d/entity @conn first-id))
+                     (:block/uuid (d/entity @conn second-id))}
+                   root-uuid))
+    (is (= [first-id second-id] (map :db/id blocks)))
+    (is (every? #(= (:block/uuid (d/entity @conn journal-id))
+                    (:block/parent %))
+                blocks))))
 
 (deftest get-view-data-number-groups-sort-numerically-test
   (let [conn (db-test/create-conn-with-blocks

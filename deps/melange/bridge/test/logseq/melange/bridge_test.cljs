@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
+            [logseq.melange.bridge.common.api :as common-api]
             [logseq.melange.bridge.common.authorization :as authorization]
             [logseq.melange.bridge.common.util :as common-util]
             [logseq.melange.bridge.db.asset :as asset]
@@ -139,6 +140,14 @@
     (d/transact! conn [{:block/uuid #uuid "11111111-1111-4111-8111-111111111111"
                         :block/title "Alpha"}])
     conn))
+
+(deftest namespace-api-preserves-cljs-dynamic-contract
+  (is (false? (common-api/namespace-page? nil)))
+  (is (false? (common-api/namespace-page? {})))
+  (is (true? (common-api/namespace-page? "parent/child")))
+  (is (false? (common-api/namespace-page? "page")))
+  (let [value {}]
+    (is (identical? value (common-api/get-last-part value)))))
 
 (deftest runtime-validation-primitives
   (let [adapter (runtime/runtime-adapter)
