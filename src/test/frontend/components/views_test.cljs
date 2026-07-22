@@ -155,18 +155,29 @@
   (is (= :logseq.property.view/type.table
          (#'views/view-display-type {} :all-pages))))
 
+(deftest default-view-title-matches-the-feature-type
+  (is (= :view/linked-references
+         (#'views/default-view-title-key :linked-references)))
+  (is (= :view/unlinked-references
+         (#'views/default-view-title-key :unlinked-references)))
+  (is (= :view/all
+         (#'views/default-view-title-key :all-pages)))
+  (is (nil? (#'views/default-view-title-key :query-result))))
+
 (deftest built-in-many-properties-use-datascript-cardinality
   (is (= :db.cardinality/many
          (:db/cardinality (#'views/built-in-property :block/tags)))))
 
-(deftest journal-virtualized-items-keep-a-nonzero-loading-shell
+(deftest journal-virtualized-items-use-the-master-css-placeholder-height
   (let [source (source-for "src/main/frontend/components/journal.cljs")
-        journal-item-source (form-source source "(hsx/defc journal-item")]
+        journal-item-source (form-source source "(hsx/defc journal-item")
+        css (source-for "src/main/frontend/components/journal.css")]
     (is (some? journal-item-source))
     (is (string/includes? journal-item-source
                           "[:div.journal-item.content.relative"))
-    (is (string/includes? journal-item-source
-                          ":min-height 1"))))
+    (is (not (string/includes? journal-item-source ":min-height")))
+    (is (string/includes? css "min-h-[250px]"))
+    (is (string/includes? css "min-h-[500px]"))))
 
 (deftest view-type-button-uses-the-contextual-display-type
   (let [view {:db/id 1}

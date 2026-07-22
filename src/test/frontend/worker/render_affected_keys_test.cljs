@@ -20,6 +20,7 @@
                                       :db/cardinality :db.cardinality/many}
    :block/closed-value-property {:db/valueType :db.type/ref
                                  :db/cardinality :db.cardinality/many}
+   :logseq.property/created-from-property {:db/valueType :db.type/ref}
    :logseq.property.comments/blocks {:db/valueType :db.type/ref
                                      :db/cardinality :db.cardinality/many}
    :logseq.property.history/block {:db/valueType :db.type/ref}
@@ -79,6 +80,7 @@
     (testing "ordering and visibility invalidate the current parent"
       (doseq [tx-data [[[:db/add 12 :block/order "b0"]]
                        [[:db/add 12 :block/closed-value-property 11]]
+                       [[:db/add 12 :logseq.property/created-from-property 11]]
                        [[:db/add 12 :logseq.property/deleted-at 1000]]]]
         (is (= #{[:children parent-before-uuid]}
                (children-keys (affected-keys db tx-data))))))

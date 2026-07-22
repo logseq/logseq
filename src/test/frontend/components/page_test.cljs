@@ -242,8 +242,8 @@
                                 {page-uuid (block page-uuid rev "Page")}
                                 :children
                                 {page-uuid
-                                 {:base-tx-id (dec rev)
-                                  :tx-id rev
+                                 {:base-rev (dec rev)
+                                  :rev rev
                                   :remove remove-items
                                   :upsert upsert-items}}})))]
                 (p/let [_ (p/delay 0)
