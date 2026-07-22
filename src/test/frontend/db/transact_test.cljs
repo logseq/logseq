@@ -55,7 +55,7 @@
      nil)
     (is (= :called @calls))))
 
-(deftest worker-response-uses-its-canonical-delta-for-editor-rows-test
+(deftest worker-response-uses-explicit-canonical-editor-rows-test
   (async done
     (let [block-a-uuid (random-uuid)
           block-b-uuid (random-uuid)
@@ -85,6 +85,8 @@
                         (fn [rows]
                           (swap! calls conj [:callback rows]))}
                        delta
+                       {block-a-uuid block-a
+                        block-b-uuid block-b}
                        row-uuids
                        true)]
               (is (= [[:delta delta]
