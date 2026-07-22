@@ -1002,6 +1002,28 @@
                                 0
                                 response))))
 
+(deftest block-unlinked-ref-exists-resource-gates-empty-reference-views-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn page view-row]} (render-resource-fixture)
+          page-id (entity-id @conn page)
+          row-id (entity-id @conn view-row)
+          resource-key [:block-unlinked-ref-exists page]
+          _ (d/transact! conn [[:db/add page-id :block/title "Reference target"]
+                               [:db/add row-id :block/title "Mentions reference target"]])]
+      (with-redefs [search-handler/search-blocks
+                    (fn [_repo _query _opts] [{:db/id row-id}])]
+        (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
+          (assert-resource-envelope @conn resource-key
+                                    #{[:entity page] [:unlinked-index]}
+                                    true
+                                    response)))
+      (with-redefs [search-handler/search-blocks (fn [& _] [])]
+        (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
+          (assert-resource-envelope @conn resource-key
+                                    #{[:entity page] [:unlinked-index]}
+                                    false
+                                    response))))))
+
 (deftest block-comment-threads-resource-returns-only-ordered-thread-uuids-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block comment-thread]} (render-resource-fixture)
