@@ -1269,9 +1269,9 @@ html.is-mobile .ls-block-content-indent {
   }
 
   &.as-order-list {
-    width: 1.4em;
+    width: auto;
     min-width: 1.4em;
-    @apply whitespace-nowrap justify-center pl-[3px];
+    @apply whitespace-nowrap justify-end pl-[3px] pr-[2px];
   }
 
   .bullet {
