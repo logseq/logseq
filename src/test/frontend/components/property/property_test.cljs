@@ -1,14 +1,64 @@
 (ns frontend.components.property.property-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.components.property :as property-component]
+            [frontend.components.property.config :as property-config]
+            [frontend.components.property.default-value :as property-default-value]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.property :as property-handler]
+            [goog.object :as gobj]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
+
+(deftest property-configuration-subscribes-to-current-property-data-test
+  (let [property-uuid (random-uuid)
+        owner-uuid (random-uuid)
+        property {:block/uuid property-uuid
+                  :db/ident :user.property/choices}
+        owner {:block/uuid owner-uuid}
+        calls (atom [])]
+    (with-redefs [db-hooks/use-block
+                  (fn [block-uuid]
+                    (swap! calls conj block-uuid)
+                    (cond
+                      (= block-uuid property-uuid)
+                      (assoc property :property/closed-values [{:db/id 1}])
+
+                      (= block-uuid owner-uuid)
+                      owner))]
+      (render-static (property-config/property-dropdown property owner {}))
+      (is (= [property-uuid owner-uuid] @calls)
+          "Property configuration must subscribe instead of retaining popup snapshots."))))
+
+(deftest default-value-editor-subscribes-to-current-property-data-test
+  (let [property-uuid (random-uuid)
+        property {:block/uuid property-uuid
+                  :db/ident :user.property/default}
+        calls (atom [])]
+    (with-redefs [db-hooks/use-block
+                  (fn [block-uuid]
+                    (swap! calls conj block-uuid)
+                    property)]
+      (render-static (property-default-value/default-value-config property))
+      (is (= [property-uuid] @calls)
+          "The default-value editor must own a live property subscription."))))
 
 (defn- property-source
   []

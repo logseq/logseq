@@ -384,6 +384,14 @@
     [#{[:refs block-uuid]}
      (ldb/get-block-refs-count db (:db/id block))]))
 
+(defn- block-unlinked-ref-exists
+  [db resource-key {:keys [repo]}]
+  (require-shape! resource-key :block-unlinked-ref-exists 2)
+  (let [block-uuid (second resource-key)
+        block (entity-by-uuid! db :block-uuid block-uuid)]
+    [#{[:entity block-uuid] [:unlinked-index]}
+     (block-handler/unlinked-reference-exists? db repo (:db/id block))]))
+
 (defn- block-comment-threads
   [db resource-key]
   (require-shape! resource-key :block-comment-threads 2)
@@ -1146,6 +1154,7 @@
     :block-positioned-properties (block-positioned-properties db resource-key)
     :block-bidirectional-properties (block-bidirectional-properties db resource-key)
     :block-ref-count (block-ref-count db resource-key)
+    :block-unlinked-ref-exists (block-unlinked-ref-exists db resource-key runtime)
     :block-comment-threads (block-comment-threads db resource-key)
     :block-comment-summary (block-comment-summary db resource-key)
     :block-task-time (block-task-time db resource-key)

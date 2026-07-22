@@ -521,30 +521,22 @@
                  (some-> (worker-plain/entity-forward-map @conn block {})
                          worker-plain/with-explicit-ref-fields-recursive))))))
 
-(def-thread-api :thread-api/get-block-refs-count
-  [repo id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs-count @conn id)))
-
 (def-thread-api :thread-api/get-block-source
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (:db/id (first (:block/_alias (d/entity @conn id))))))
 
-(def-thread-api :thread-api/block-refs-check
-  [repo id {:keys [unlinked?]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          block (d/entity db id)]
-      (if unlinked?
-        (let [title (string/lower-case (:block/title block))
-              result (search-handler/search-blocks repo title {:limit 100})]
-          (boolean (some (fn [candidate]
-                           (let [candidate (d/entity db (:db/id candidate))]
-                             (and (not= id (:db/id candidate))
-                                  (not ((set (map :db/id (:block/refs candidate))) id))
-                                  (string/includes? (string/lower-case (:block/title candidate)) title)))) result)))
-        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
+(defn unlinked-reference-exists?
+  [db repo id]
+  (let [block (d/entity db id)
+        title (string/lower-case (:block/title block))
+        result (search-handler/search-blocks repo title {:limit 100})]
+    (boolean (some (fn [candidate]
+                     (let [candidate (d/entity db (:db/id candidate))]
+                       (and (not= id (:db/id candidate))
+                            (not ((set (map :db/id (:block/refs candidate))) id))
+                            (string/includes? (string/lower-case (:block/title candidate)) title))))
+                   result))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]

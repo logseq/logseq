@@ -8,6 +8,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -1025,14 +1026,17 @@
   [property* owner-block opts]
   (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
         [values] (hooks/use-atom *values)
-        property property*]
+        property (db-hooks/use-block (:block/uuid property*))
+        owner-uuid (:block/uuid owner-block)
+        owner-or-property (db-hooks/use-block (or owner-uuid (:block/uuid property*)))
+        owner-block (when owner-uuid owner-or-property)]
     (hooks/use-effect!
      (fn []
        (reset! *values :loading)
        (p/let [result (db-async/<get-property-values (:db/ident property*))]
          (reset! *values result)))
      [(:db/ident property*)])
-    (when-not (= :loading values)
+    (when (and property (not= :loading values))
       (into [:<>]
             (map-indexed (partial with-react-key "property-dropdown"))
             (property-dropdown-options property owner-block values opts)))))

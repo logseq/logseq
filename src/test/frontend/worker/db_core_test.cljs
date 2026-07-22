@@ -167,9 +167,7 @@
    "src/main/frontend/worker/handler/block.cljs"
    #{:thread-api/get-blocks
      :thread-api/get-block-refs
-     :thread-api/get-block-refs-count
      :thread-api/get-block-source
-     :thread-api/block-refs-check
      :thread-api/get-block-parents}
 
    "src/main/frontend/worker/handler/search.cljs"
@@ -255,7 +253,7 @@
           :thread-api/db-sync-get-all-block-conflicts :thread-api/db-sync-clear-block-conflicts
           :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
-          :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
+          :thread-api/get-block-refs :thread-api/get-block-source
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
@@ -3354,41 +3352,6 @@
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (get-block-refs! test-repo [:block/uuid ref-uuid])]
          (is (seq result)))))))
-
-;; ---- block-refs-check thread-api tests ----
-
-(deftest block-refs-check-unlinked-returns-true-when-title-match-without-link
-  (restoring-worker-state
-   (fn []
-     (let [block-refs-check! (get-thread-api :thread-api/block-refs-check)
-           conn (d/create-conn db-schema/schema)
-           source-id 100
-           candidate-id 101]
-       (d/transact! conn [{:db/id source-id
-                           :block/uuid (random-uuid)
-                           :block/title "Foo"}
-                          {:db/id candidate-id
-                           :block/uuid (random-uuid)
-                           :block/title "foo bar"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [search-handler/search-blocks (fn [_repo _q _opts]
-                                                    [{:db/id candidate-id}])]
-         (is (true? (block-refs-check! test-repo source-id {:unlinked? true}))))))))
-
-(deftest block-refs-check-linked-branch-uses-common-get-block-refs
-  (restoring-worker-state
-   (fn []
-     (let [block-refs-check! (get-thread-api :thread-api/block-refs-check)
-           conn (d/create-conn db-schema/schema)
-           source-id 200]
-       (d/transact! conn [{:db/id source-id
-                           :block/uuid (random-uuid)
-                           :block/title "Bar"}])
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [common-initial-data/get-block-refs (fn [_db _id] [{:db/id 1}])]
-         (is (true? (block-refs-check! test-repo source-id {:unlinked? false}))))
-       (with-redefs [common-initial-data/get-block-refs (fn [_db _id] [])]
-         (is (false? (block-refs-check! test-repo source-id {:unlinked? false}))))))))
 
 (deftest set-page-favorite-mutates-worker-db
   (restoring-worker-state

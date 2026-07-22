@@ -30,7 +30,7 @@
           (gobj/set js/globalThis "React" previous-react)
           (js-delete js/globalThis "React"))))))
 
-(deftest linked-and-unlinked-references-use-only-the-page-uuid-test
+(deftest reference-views-mount-only-when-matches-exist-test
   (let [page-uuid (random-uuid)
         page {:block/uuid page-uuid
               :block/tx-id 12
@@ -45,7 +45,9 @@
                   db-hooks/use-resource
                   (fn [resource-key]
                     (swap! resource-calls conj resource-key)
-                    2)
+                    (case (first resource-key)
+                      :block-ref-count 2
+                      :block-unlinked-ref-exists true))
                   state/get-ref-open-blocks-level (constantly 0)
                   views/build-columns (fn [& _] [])
                   views/view
@@ -57,19 +59,36 @@
       (render-static
        (reference/unlinked-references page-uuid {}))
       (is (= [page-uuid page-uuid] @block-calls))
-      (is (= [[:block-ref-count page-uuid]] @resource-calls)
-          "Unlinked references render their view without a precheck request.")
+      (is (= [[:block-ref-count page-uuid]
+              [:block-unlinked-ref-exists page-uuid]]
+             @resource-calls))
       (is (= [:linked-references :unlinked-references]
              (mapv :view-feature-type @view-calls)))
       (is (every? #(= page-uuid (:view-parent-uuid %)) @view-calls))
       (is (not-any? #(map? (:view-parent %)) @view-calls)
-          "Reference views never retain a graph entity as membership state."))))
+          "Reference views never retain a graph entity as membership state."))
+    (reset! view-calls [])
+    (with-redefs [db-hooks/use-block (constantly page)
+                  db-hooks/use-resource
+                  (fn [resource-key]
+                    (case (first resource-key)
+                      :block-ref-count 0
+                      :block-unlinked-ref-exists false))
+                  views/build-columns (fn [& _] [])
+                  views/view (fn [option]
+                               (swap! view-calls conj option)
+                               [:span])]
+      (render-static (reference/references page-uuid {}))
+      (render-static (reference/unlinked-references page-uuid {}))
+      (is (empty? @view-calls)
+          "Empty reference sections must not create persistent views."))))
 
 (deftest references-have-no-mount-time-loader-or-local-membership-copy-test
   (let [source (reference-source)]
     (is (string/includes? source "db-hooks/use-block"))
     (is (string/includes? source "db-hooks/use-resource"))
     (is (string/includes? source ":block-ref-count"))
+    (is (string/includes? source ":block-unlinked-ref-exists"))
     (is (string/includes? source ":linked-references"))
     (is (string/includes? source ":unlinked-references"))
     (testing "membership is owned by the mounted view-data resource"
