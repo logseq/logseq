@@ -258,17 +258,19 @@
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
               path        (or path (current-path))]
           (route-handler/set-route-match! route-match)
-          (when-not (sync-browser-route! stack route route-match path)
-            (notify-route-change!
-             {:route {:to          (or (get-in route [:data :name])
-                                       (get-in route-match [:data :name]))
-                      :path-params (or (:path-params route)
-                                       (get-in route-match [:parameters :path]))
-                      :query-params (or (:query-params route)
-                                        (get-in route-match [:parameters :query]))}
-              :path  path
-              :stack stack
-              :push  false})))))))
+          (let [synced-browser-route? (sync-browser-route! stack route route-match path)]
+            (when (or (not synced-browser-route?)
+                      (= stack "search"))
+              (notify-route-change!
+               {:route {:to          (or (get-in route [:data :name])
+                                         (get-in route-match [:data :name]))
+                        :path-params (or (:path-params route)
+                                         (get-in route-match [:parameters :path]))
+                        :query-params (or (:query-params route)
+                                          (get-in route-match [:parameters :query]))}
+                :path  path
+                :stack stack
+                :push  false}))))))))
 
 (defn pop-modal!
   []

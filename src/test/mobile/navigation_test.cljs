@@ -155,6 +155,73 @@
         (is (= "Hello" @mobile-state/*search-input))
         (is (= [[:home {} {}]] @replace-calls))))))
 
+(deftest leaving-search-result-detail-preserves-search-stack-and-resets-home
+  (testing "Home selected from a native search result detail should not discard Search history"
+    (let [payloads (atom [])]
+      (reset! mobile-state/*tab "search")
+      (reset! @#'mobile-nav/active-stack "search")
+      (reset! @#'mobile-nav/initialised-stacks {"search" true
+                                                "home" true})
+      (reset! @#'mobile-nav/stack-history
+              {"search" {:history [(stack-entry :page "/page/jun-2nd-2026")]}
+               "home" {:history [(stack-entry :home "/")]}})
+      (with-redefs [mobile-nav/orig-replace-state (constantly nil)
+                    route-handler/set-route-match! (constantly nil)
+                    mobile-util/native-platform? (constantly true)
+                    mobile-util/ui-local #js {:routeDidChange
+                                               (fn [payload]
+                                                 (swap! payloads conj
+                                                        (js->clj payload :keywordize-keys true))
+                                                 (js/Promise.resolve nil))}]
+        (mobile-state/set-tab! "home")
+        (is (= "home" @mobile-state/*tab))
+        (is (= ["reset"] (mapv :navigationType @payloads)))
+        (is (= ["/"] (stack-paths "home")))
+        (is (= ["/page/jun-2nd-2026"] (stack-paths "search")))))))
+
+(deftest leaving-search-for-another-tab-preserves-search-stack
+  (testing "switching away from Search should keep existing results/detail state"
+    (let [stacks (atom [])]
+      (reset! mobile-state/*tab "search")
+      (reset! @#'mobile-nav/active-stack "search")
+      (reset! @#'mobile-nav/stack-history
+              {"search" {:history [(stack-entry :page "/page/jun-2nd-2026")]}
+               "flashcards" {:history [(stack-entry :flashcards "/__stack__/flashcards")]}})
+      (with-redefs [mobile-nav/switch-stack! (fn [stack] (swap! stacks conj stack))]
+        (mobile-state/set-tab! "flashcards")
+        (is (= "flashcards" @mobile-state/*tab))
+        (is (= ["flashcards"] @stacks))
+        (is (= ["/page/jun-2nd-2026"] (stack-paths "search")))))))
+
+(deftest restoring-search-result-detail-notifies-native-stack
+  (testing "returning to a preserved Search detail should reattach native web content"
+    (let [payloads (atom [])
+          replace-calls (atom [])]
+      (reset! @#'mobile-nav/active-stack "home")
+      (reset! @#'mobile-nav/initialised-stacks {"home" true
+                                                "search" true})
+      (reset! @#'mobile-nav/stack-history
+              {"home" {:history [(stack-entry :home "/")]}
+               "search" {:history [(stack-entry :page "/page/jun-2nd-2026")]}})
+      (with-redefs [mobile-nav/orig-replace-state (fn [& args] (swap! replace-calls conj args))
+                    route-handler/set-route-match! (constantly nil)
+                    mobile-util/native-platform? (constantly true)
+                    mobile-util/ui-local #js {:routeDidChange
+                                               (fn [payload]
+                                                 (swap! payloads conj
+                                                        (js->clj payload :keywordize-keys true))
+                                                 (js/Promise.resolve nil))}]
+        (mobile-nav/switch-stack! "search")
+        (is (= [[:page {} {}]] @replace-calls))
+        (is (= [{:navigationType "replace"
+                 :push false
+                 :stack "search"
+                 :route {:to "page"
+                         :path-params {}
+                         :query-params {}}
+                 :path "/page/jun-2nd-2026"}]
+               @payloads))))))
+
 (deftest selecting-flashcards-does-not-open-cards-dialog
   (testing "flashcards is a normal tab surface, not a modal shortcut"
     (let [events (atom [])
