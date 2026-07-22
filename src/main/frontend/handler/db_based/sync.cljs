@@ -450,7 +450,16 @@
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? true)]
+  ;; local-mode fix: push the self-hosted token into this repo's worker BEFORE
+  ;; the very first RTC call fires. Unlike <rtc-upload-graph!/<rtc-start!, this
+  ;; function never pushed auth state itself; a freshly-spawned worker for a
+  ;; brand-new repo has no :auth/static-sync-token yet, so its first call
+  ;; (list-remote-graphs, inside create) fails with :missing-field :auth-token,
+  ;; the graph never registers, and every later attempt cascades into a
+  ;; :user-rsa-key-pair error (a never-registered graph defaults to e2ee=true
+  ;; locally, and local mode has no RSA/Cognito identity to satisfy it).
+  (p/let [_ (<sync-auth-state-to-db-worker!)
+          graph-id (<rtc-create-graph! repo graph-e2ee? true)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))
     (p/do!
