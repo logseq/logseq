@@ -2018,6 +2018,46 @@
   [table-view?]
   (if table-view? 33 24))
 
+(def ^:private view-prefetch-limit 1000)
+
+(defn- view-prefetch-window
+  [rows start-index end-index]
+  (let [rows (vec rows)
+        rows-count (count rows)]
+    (if (<= rows-count view-prefetch-limit)
+      rows
+      (let [center-index (quot (+ start-index end-index) 2)
+            max-start (- rows-count view-prefetch-limit)
+            start-index (min max-start
+                             (max 0 (- center-index
+                                       (quot view-prefetch-limit 2))))]
+        (subvec rows start-index (+ start-index view-prefetch-limit))))))
+
+(defn- rendered-item-index
+  [^js item]
+  (.-index item))
+
+(defn- use-view-row-prefetch
+  [rows]
+  (let [last-initial-index (min (dec (count rows))
+                                (dec view-prefetch-limit))
+        [[start-index end-index] set-rendered-range!]
+        (hooks/use-state [0 (max 0 last-initial-index)])
+        prefetch-rows (if (seq rows)
+                        (view-prefetch-window rows start-index end-index)
+                        [])]
+    (db-hooks/use-block-prefetch prefetch-rows)
+    (fn [^js rendered-items]
+      (when (pos? (alength rendered-items))
+        (let [next-range [(rendered-item-index (aget rendered-items 0))
+                          (rendered-item-index
+                           (aget rendered-items (dec (alength rendered-items))))]]
+          (set-rendered-range!
+           (fn [current-range]
+             (if (= current-range next-range)
+               current-range
+               next-range))))))))
+
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view?]} item-render]
   (let [row-uuid (util/nth-safe data idx)
@@ -2030,26 +2070,28 @@
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
-  (when (seq rows)
-    (virtualized-list
-     {:ref #(reset! *scroller-ref %)
-      :increase-viewport-by {:top 300 :bottom 300}
-      :custom-scroll-parent (get-scroll-parent
-                             (-> (:config option)
-                                 (assoc :viewel (js/document.getElementById (:viewid option)))))
-      :compute-item-key (fn [idx]
-                          (str "table-row-" (util/nth-safe rows idx)))
-      :skipAnimationFrameInResizeObserver true
-      :total-count (count rows)
-      :item-content (fn [idx]
-                      (let [option (assoc option :table-view? true)]
-                        (lazy-item (:data table) idx option
-                                   (fn [row]
-                                     (table-row table row {} option)))))
-      :items-rendered (fn [props]
-                        (when (seq props)
-                          (set-items-rendered! true)))}
-     (:disable-virtualized? option))))
+  (let [prefetch-rows! (use-view-row-prefetch (:data table))]
+    (when (seq rows)
+      (virtualized-list
+       {:ref #(reset! *scroller-ref %)
+        :increase-viewport-by {:top 300 :bottom 300}
+        :custom-scroll-parent (get-scroll-parent
+                               (-> (:config option)
+                                   (assoc :viewel (js/document.getElementById (:viewid option)))))
+        :compute-item-key (fn [idx]
+                            (str "table-row-" (util/nth-safe rows idx)))
+        :skipAnimationFrameInResizeObserver true
+        :total-count (count rows)
+        :item-content (fn [idx]
+                        (let [option (assoc option :table-view? true)]
+                          (lazy-item (:data table) idx option
+                                     (fn [row]
+                                       (table-row table row {} option)))))
+        :items-rendered (fn [props]
+                          (prefetch-rows! props)
+                          (when (seq props)
+                            (set-items-rendered! true)))}
+       (:disable-virtualized? option)))))
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
@@ -2261,6 +2303,7 @@
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
+        prefetch-rows! (use-view-row-prefetch blocks)
         render-card (fn [idx]
                       (lazy-item blocks idx
                                  (assoc (gallery-lazy-item-opts option)
@@ -2288,6 +2331,7 @@
            :skipAnimationFrameInResizeObserver true
            :compute-item-key (fn [idx]
                                (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
+           :items-rendered prefetch-rows!
            :item-content render-card})))
      (when-not (:hide-action-bar? option)
        (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
