@@ -68,7 +68,9 @@
 (defonce ^:private *node-pools (atom {}))
 
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
+(defonce ^:private *wal-checkpoint-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
+(def ^:private wal-checkpoint-idle-ms 2000)
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
 
@@ -148,6 +150,17 @@
          (log/warn :db-worker/wal-checkpoint-failed
                    (cond-> {:error e}
                      repo (assoc :repo repo))))))))
+
+(defn- schedule-wal-checkpoint!
+  [repo db]
+  (when-let [timer (get @*wal-checkpoint-timers repo)]
+    (js/clearTimeout timer))
+  (let [timer (js/setTimeout
+               (fn []
+                 (swap! *wal-checkpoint-timers dissoc repo)
+                 (checkpoint-db! repo db))
+               wal-checkpoint-idle-ms)]
+    (swap! *wal-checkpoint-timers assoc repo timer)))
 
 (defn- <export-db-file
   ([repo]
@@ -323,7 +336,7 @@
 
 (defn new-sqlite-storage
   "Update sqlite-cli/new-sqlite-storage when making changes"
-  [^Object db]
+  [repo ^Object db]
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
       (let [data (map
@@ -336,13 +349,17 @@
                            :$content (sqlite-util/write-transit-str data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data)))
+        (upsert-addr-content! db data)
+        (schedule-wal-checkpoint! repo db)))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
+  (when-let [timer (get @*wal-checkpoint-timers repo)]
+    (js/clearTimeout timer))
+  (swap! *wal-checkpoint-timers dissoc repo)
   (checkpoint-db! repo db)
   (checkpoint-db! repo search)
   (checkpoint-db! repo client-ops)
@@ -450,6 +467,10 @@
   [^Object db]
   (.exec db "PRAGMA locking_mode=exclusive")
   (.exec db "PRAGMA journal_mode=WAL"))
+
+(defn- disable-sqlite-auto-checkpoint!
+  [^Object db]
+  (.exec db "PRAGMA wal_autocheckpoint=0"))
 
 (defn- run-client-ops-cleanup!
   [repo]
@@ -591,7 +612,7 @@
       (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
               dbs (cond-> [db search-db]
                     client-ops-db (conj client-ops-db))
-              storage (new-sqlite-storage db)]
+              storage (new-sqlite-storage repo db)]
         (swap! *sqlite-conns assoc repo {:db db
                                          :search search-db
                                          :client-ops client-ops-db})
@@ -599,6 +620,7 @@
           (swap! *vector-indexes assoc repo vector-index))
         (doseq [db' dbs]
           (enable-sqlite-wal-mode! db'))
+        (disable-sqlite-auto-checkpoint! db)
         (common-sqlite/create-kvs-table! db)
         (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
         (search/create-tables-and-triggers! search-db)
