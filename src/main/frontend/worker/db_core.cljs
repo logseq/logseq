@@ -719,6 +719,16 @@
 (def-thread-api :thread-api/set-db-sync-config
   [config]
   (reset! worker-state/*db-sync-config (worker-state/non-auth-db-sync-config config))
+  ;; local-mode headless override: a stock CLI frontend resolves api.logseq.io (it
+  ;; predates custom-server support) and pushes it here, clobbering the env bootstrap.
+  ;; Re-pin the self-hosted server from LOGSEQ_SYNC_URL so env always wins. Also
+  ;; re-assert the static token in case a caller reset auth state. No-op without env.
+  (when-let [url (some-> (aget (.-env js/process) "LOGSEQ_SYNC_URL") not-empty)]
+    (let [http-base (string/replace url #"/+$" "")
+          ws-url (str (string/replace http-base #"^http" "ws") "/sync/%s")]
+      (swap! worker-state/*db-sync-config assoc :http-base http-base :ws-url ws-url)
+      (when-let [token (some-> (aget (.-env js/process) "LOGSEQ_SYNC_TOKEN") not-empty)]
+        (worker-state/set-new-state! {:auth/static-sync-token token}))))
   nil)
 
 (def-thread-api :thread-api/get-db-sync-config
