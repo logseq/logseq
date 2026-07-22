@@ -18,6 +18,8 @@
 
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
+(goog-define OUTLINER-PERF-LOGGING false)
+
 (defn maybe-run-recycle-gc!
   [conn]
   (let [now (common-util/time-ms)
@@ -71,8 +73,10 @@
 
 (defn- log-outliner-op-perf!
   [data]
-  (when (and goog.DEBUG (:perf-id data))
-    (log/info :db-worker/outliner-op-perf data)))
+  (when (and (or goog.DEBUG OUTLINER-PERF-LOGGING)
+             (:perf-id data))
+    (log/info :db-worker/outliner-op-perf
+              (assoc data :worker-apply-ms (:apply-ms data)))))
 
 (def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
