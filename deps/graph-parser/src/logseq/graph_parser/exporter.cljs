@@ -2628,11 +2628,8 @@
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
           ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-          tx-meta {::imported-data? true
-                   ::path file
-                   ;; Missing block references are represented by temporary UUID-only entities
-                   ;; until cleanup runs after every file has been imported.
-                   ::new-graph? true}
+          ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
+          tx-meta {::imported-data? true ::path file ::new-graph? true}
           main-props-tx-report (ldb/transact! conn property-pages-tx tx-meta)
           _ (save-from-tx property-pages-tx options)
 
