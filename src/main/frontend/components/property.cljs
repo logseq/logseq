@@ -632,7 +632,11 @@
 
 (defn- restore-resource-entity-values
   [block property value]
-  (let [entities (entity-values-by-uuid [block property])]
+  (let [property-ident (:db/ident property)
+        value (if (contains? block property-ident)
+                (get block property-ident)
+                value)
+        entities (entity-values-by-uuid [block property])]
     (letfn [(restore [item]
               (cond
                 (uuid? item) (get entities item item)

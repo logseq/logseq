@@ -17,11 +17,14 @@
   (true? @*pointer-is-down?))
 
 (defn select-on-hover?
-  [{:keys [last-client-y client-y dragging? editing-same-block? active-selection?]}]
-  (and (or (not= last-client-y client-y)
-           active-selection?)
-       (not dragging?)
-       (not editing-same-block?)))
+  [{:keys [last-client-y client-y dragging? editing-same-block? active-selection?
+           virtualized? pointer-moved?]}]
+  (boolean
+   (and (or (not virtualized?) pointer-moved?)
+        (or (not= last-client-y client-y)
+            (and active-selection? (not virtualized?)))
+        (not dragging?)
+        (not editing-same-block?))))
 
 (defn block-id-range
   [block-ids start-block-id end-block-id]

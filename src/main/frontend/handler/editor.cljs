@@ -801,6 +801,7 @@
   [block previous-block]
   (let [parent-key (block-ref-key (:block/parent block))]
     (when (and parent-key previous-block
+               (not= (block-ref-key block) (block-ref-key previous-block))
                (or (= parent-key (block-ref-key previous-block))
                    (= parent-key (block-ref-key (:block/parent previous-block)))))
       previous-block)))

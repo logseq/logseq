@@ -259,6 +259,7 @@
 
 (defn go-to-journals!
   []
+  (state/clear-edit!)
   (let [route (if (state/custom-home-page?)
                 :all-journals
                 :home)]
