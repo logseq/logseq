@@ -566,7 +566,7 @@
   (or
    (when-not (or (:sync-download-graph? tx-meta)
                  (:reverse? tx-meta)
-                 (:transact-remote? tx-meta))
+                 (rtc-tx-or-download-graph? tx-meta))
      (ensure-journal-page-protected-attrs-not-updated! tx-report)
      (let [extra-tx-data (compute-extra-tx-data tx-report)
            tx-report* (if (seq extra-tx-data)
