@@ -3,7 +3,19 @@
             [datascript.core :as d]
             [logseq.melange.bridge.db.property :as melange-property]
             [logseq.melange.bridge.db.sqlite.export :as sqlite-export]
-            [logseq.melange.bridge.db.test-helper :as db-test]))
+            [logseq.melange.bridge.db.test-helper :as db-test]
+            [logseq.melange.bridge.runtime :as runtime]))
+
+(def ^:private invalid-graph-export
+  {:logseq.db.sqlite.export/graph-format :datoms
+   :datoms [[1 :block/title "Orphan Page"]
+            [1 :block/name "orphan page"]
+            [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+            [1 :block/tags 2]
+            [2 :block/title "Page"]
+            [2 :block/name "page"]
+            [2 :db/ident :logseq.class/Page]
+            [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]})
 
 (deftest build-import-prepares-structured-page-transactions
   (let [conn (db-test/create-conn)
@@ -86,11 +98,34 @@
             (:user.property/score block))))))
 
 (deftest validate-export-rejects-invalid-graph-datoms
-  (let [result
-        (sqlite-export/validate-export
-         {:logseq.db.sqlite.export/graph-format :datoms
-          :datoms [[1 :block/title "Missing required page fields"]]})]
-    (is (re-find #"exported EDN" (:error result)))))
+  (let [result (sqlite-export/validate-export invalid-graph-export)]
+    (is (re-find #"Exported EDN" (:error result)))))
+
+(deftest validate-import-transactions-uses-capitalized-default-label
+  (let [conn (db-test/create-conn)
+        result (sqlite-export/validate-import-txs
+                {:init-tx []
+                 :block-props-tx []
+                 :misc-tx [[:db/add -1 :block/title "Orphan block"]]}
+                @conn)]
+    (is (re-find #"Imported EDN" (:error result)))))
+
+(deftest validation-errors-log-sanitized-entities
+  (let [console-errors (atom [])
+        printed-values (atom [])]
+    (with-redefs [runtime/log-error (fn [message]
+                                      (swap! console-errors conj message))
+                  runtime/log-values (fn [values]
+                                       (swap! printed-values into
+                                              (array-seq values)))]
+      (sqlite-export/validate-export invalid-graph-export))
+    (is (some #(re-find #"Exported EDN has [0-9]+ validation error\(s\)" %)
+              @console-errors))
+    (let [diagnostics (pr-str @printed-values)]
+      (is (re-find #":entity" diagnostics))
+      (is (re-find #":dispatch-key" diagnostics))
+      (is (re-find #":errors" diagnostics))
+      (is (not (re-find #":block/tags" diagnostics))))))
 
 (deftest export-selected-nodes-with-missing-node
   (let [conn (db-test/create-conn-with-blocks

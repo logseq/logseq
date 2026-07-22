@@ -88,9 +88,9 @@
   "Dry-runs import txs against db and validates the resulting local DB.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
-   (validate-import-txs txs db {:edn-label "imported EDN"}))
+   (validate-import-txs txs db {:edn-label "Imported EDN"}))
   ([txs db {:keys [edn-label]
-            :or {edn-label "imported EDN"}}]
+            :or {edn-label "Imported EDN"}}]
    (import-validation-result->map
     ((.-validateImportTransactionsWith sqlite-export-workflow-api)
      (melange-keyword/runtime-adapter)

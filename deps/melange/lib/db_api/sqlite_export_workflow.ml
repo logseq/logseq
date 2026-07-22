@@ -3795,6 +3795,50 @@ let exception_message exn =
       Option.value ~default:(Printexc.to_string exn) (Js.Exn.message error)
   | None -> Printexc.to_string exn
 
+let validation_error_groups runtime groups =
+  groups
+  |> Array.map (fun (group : Validation_schema.encoded_error_group) ->
+      let attribute =
+        group.attribute |> Js.Nullable.toOption
+        |> Option.value ~default:"entity"
+      in
+      [|
+        keyword runtime attribute;
+        group.messages
+        |> Array.map (Support.Runtime_codec.string_to_value runtime)
+        |> Support.Runtime_codec.array_to_vector runtime;
+      |])
+  |> Support.Runtime_codec.entries_to_map runtime
+
+let validation_entity_summary runtime entity =
+  [| "db/id"; "db/ident"; "block/uuid"; "block/title" |]
+  |> Array.fold_left
+       (fun result name ->
+         let value = field runtime entity name in
+         if Support.Runtime_codec.value_is_nil runtime value then result
+         else assoc runtime name value result)
+       (empty_map runtime)
+
+let validation_diagnostic runtime
+    (error : Validation_schema.encoded_entity_error) =
+  let dispatch_key =
+    match Js.Nullable.toOption error.dispatchKey with
+    | Some name -> keyword runtime name
+    | None -> Support.Runtime_codec.nil_value runtime
+  in
+  empty_map runtime
+  |> assoc runtime "entity" (validation_entity_summary runtime error.entity)
+  |> assoc runtime "dispatch-key" dispatch_key
+  |> assoc runtime "errors" (validation_error_groups runtime error.errors)
+
+let log_validation_errors runtime edn_label error_count errors =
+  Support.Runtime_codec.log_error runtime
+    (edn_label ^ " has " ^ string_of_int error_count ^ " validation error(s)");
+  errors
+  |> Array.map (validation_diagnostic runtime)
+  |> Support.Runtime_codec.array_to_vector runtime
+  |> fun diagnostics -> Support.Runtime_codec.log_values runtime [| diagnostics |]
+
 let validateImportTransactionsWith runtime datascript transactions database
     edn_label =
   let supplied_error = field runtime transactions "error" in
@@ -3804,6 +3848,7 @@ let validateImportTransactionsWith runtime datascript transactions database
   else
     try
       let db_add = keyword runtime "db/add" in
+      let validation_errors = ref [||] in
       let validation_capabilities :
           ( Support.Datascript.database,
             Support.Runtime_codec.cljs_value,
@@ -3825,6 +3870,7 @@ let validateImportTransactionsWith runtime datascript transactions database
                 Validation_schema.validateLocalDatabaseWith runtime
                   datascript database validation_options false
               in
+              validation_errors := validation.errors;
               validation.errors |> Rrbvec.of_array
               |> Rrbvec.map
                    (fun (error : Validation_schema.encoded_entity_error) ->
@@ -3879,6 +3925,7 @@ let validateImportTransactionsWith runtime datascript transactions database
       | Domain.Valid_import { database; transactions } ->
           import_validation_success runtime database transactions
       | Invalid_import { error_count } ->
+          log_validation_errors runtime edn_label error_count !validation_errors;
           import_validation_error runtime
             ("The " ^ edn_label ^ " has " ^ string_of_int error_count
            ^ " validation error(s)")
@@ -4030,7 +4077,7 @@ let validateExport runtime datascript export_map database options =
   try
     let transactions = buildImport runtime datascript export_map database options in
     validateImportTransactionsWith runtime datascript transactions database
-      "exported EDN"
+      "Exported EDN"
   with exn ->
     let message = exception_message exn in
     Support.Runtime_codec.log_error runtime
