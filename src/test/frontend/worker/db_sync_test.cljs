@@ -2077,6 +2077,7 @@
                 {:pages-and-blocks [{:page {:build/journal 20250314}}]})
           client-ops-conn (new-client-ops-db)
           journal (db-test/find-journal-by-journal-day @conn 20250314)
+          tx-id-before (:block/tx-id journal)
           journal-class (d/entity @conn :logseq.class/Journal)
           title-format "EEE, dd.MM.yyyy"
           title "Fri, 14.03.2025"]
@@ -2094,7 +2095,10 @@
                   (d/entity @conn :logseq.class/Journal))))
           (is (= title
                  (:block/title
-                  (db-test/find-journal-by-journal-day @conn 20250314)))))))))
+                  (db-test/find-journal-by-journal-day @conn 20250314))))
+          (is (not= tx-id-before
+                    (:block/tx-id
+                     (db-test/find-journal-by-journal-day @conn 20250314)))))))))
 
 (deftest apply-remote-txs-applies-db-migration-entry-test
   (testing "pulled db migration txs apply with migration transact semantics"
