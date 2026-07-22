@@ -63,12 +63,14 @@
 
 (hsx/defc unlinked-references
   [page-uuid config]
-  (when-let [page-entity (db-hooks/use-block page-uuid)]
-    (let [config (assoc config :highlight-query (:block/title page-entity))]
-      [:div.unlinked-references
-       (views/view
-        {:view-parent-uuid page-uuid
-         :view-feature-type :unlinked-references
-         :columns (views/build-columns config [] {:add-page-column? true})
-         :defer-resource? true
-         :config config})])))
+  (let [page-entity (db-hooks/use-block page-uuid)
+        has-references? (db-hooks/use-resource [:block-unlinked-ref-exists page-uuid])]
+    (when (and page-entity has-references?)
+      (let [config (assoc config :highlight-query (:block/title page-entity))]
+        [:div.unlinked-references
+         (views/view
+          {:view-parent-uuid page-uuid
+           :view-feature-type :unlinked-references
+           :columns (views/build-columns config [] {:add-page-column? true})
+           :defer-resource? true
+           :config config})]))))
