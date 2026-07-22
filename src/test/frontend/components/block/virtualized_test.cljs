@@ -114,7 +114,8 @@
                             ":compute-item-key (fn [_idx block-uuid]"))
       (is (string/includes? root-source
                             ":item-content (fn [idx block-uuid]"))
-      (is (string/includes? root-source ":range-changed"))
+      (is (string/includes? root-source ":items-rendered"))
+      (is (not (string/includes? root-source ":range-changed")))
       (is (string/includes? root-source
                             "block-selection/virtual-range-boundary-id"))
       (is (not (string/includes? root-source

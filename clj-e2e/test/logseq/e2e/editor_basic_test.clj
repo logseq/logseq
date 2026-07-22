@@ -823,6 +823,55 @@
                        second
                        Double/parseDouble))))
 
+(defn- editor-input-state
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const editor = document.querySelector('.editor-wrapper textarea');
+       return JSON.stringify({
+         value: editor?.value ?? null,
+         focused: editor === document.activeElement,
+         selectionStart: editor?.selectionStart ?? null,
+         selectionEnd: editor?.selectionEnd ?? null,
+         blockTitles: Array.from(document.querySelectorAll('.ls-page-blocks .block-title-wrap'))
+           .map((node) => node.textContent.trim())
+       });
+     })();")
+   json/keyword-keys-object-mapper))
+
+(deftest consecutive-enter-keeps-text-and-cursor-on-the-new-block
+  (b/new-block "rapid enter start")
+  (k/enter)
+  (util/press-seq "rapid enter alpha")
+  (k/enter)
+  (util/press-seq "rapid enter beta")
+  (util/wait-timeout 800)
+  (let [{:keys [value focused selectionStart selectionEnd]}
+        (editor-input-state)]
+    (is (= "rapid enter beta" value))
+    (is focused)
+    (is (= (count value) selectionStart selectionEnd)))
+  (util/exit-edit)
+  (let [block-titles (:blockTitles (editor-input-state))]
+    (is (some #{"rapid enter alpha"} block-titles) block-titles)
+    (is (some #{"rapid enter beta"} block-titles) block-titles)))
+
+(deftest enter-delete-keeps-text-and-cursor-on-the-previous-block
+  (b/new-block "rapid delete start")
+  (k/enter)
+  (k/backspace)
+  (util/press-seq " tail")
+  (util/wait-timeout 800)
+  (let [{:keys [value focused selectionStart selectionEnd]}
+        (editor-input-state)]
+    (is (= "rapid delete start tail" value))
+    (is focused)
+    (is (= (count value) selectionStart selectionEnd)))
+  (util/exit-edit)
+  (let [block-titles (:blockTitles (editor-input-state))]
+    (is (some #{"rapid delete start tail"} block-titles) block-titles)))
+
 (deftest consecutive-enter-and-delete-ops-stay-within-render-budget
   (util/wait-timeout 500)
   (let [old-logs (set (console-logs))]
