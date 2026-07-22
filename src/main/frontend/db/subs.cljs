@@ -79,6 +79,10 @@
   [callback delay-ms]
   (js/setTimeout callback delay-ms))
 
+(defn ^:no-doc schedule-load-batch!
+  [callback]
+  (js/setTimeout callback 0))
+
 (defn- enqueue-load!
   [batch-state flush! graph-id key]
   (let [entry-key [graph-id key]]
@@ -95,7 +99,7 @@
                                 :key key
                                 :result result}))))
         (when schedule?
-          (js/queueMicrotask flush!))
+          (schedule-load-batch! flush!))
         result))))
 
 (defn- take-load-entries!
@@ -493,32 +497,28 @@
   [resource-key]
   (= :journal-bundle (first resource-key)))
 
-(defn- require-journal-bundle!
-  [resource-key value]
-  (when-not (and (vector? resource-key)
-                 (= 2 (count resource-key)))
-    (throw (ex-info "Invalid journal bundle resource key"
-                    {:resource-key resource-key})))
+(defn- require-block-bundle!
+  [root-uuid value]
   (when-not (and (map? value)
                  (= #{:root-uuid :blocks :children} (set (keys value))))
-    (throw (ex-info "Invalid journal bundle value"
-                    {:resource-key resource-key})))
-  (let [{:keys [root-uuid blocks children]} value]
-    (require-uuid! :root-uuid root-uuid)
-    (when-not (= (second resource-key) root-uuid)
-      (throw (ex-info "Journal bundle root does not match its resource key"
-                      {:resource-key resource-key
-                       :root-uuid root-uuid})))
+    (throw (ex-info "Invalid block bundle value"
+                    {:root-uuid root-uuid})))
+  (require-uuid! :root-uuid root-uuid)
+  (let [{bundle-root-uuid :root-uuid :keys [blocks children]} value]
+    (when-not (= root-uuid bundle-root-uuid)
+      (throw (ex-info "Block bundle root does not match"
+                      {:root-uuid root-uuid
+                       :bundle-root-uuid bundle-root-uuid})))
     (when-not (map? blocks)
-      (throw (ex-info "Invalid journal bundle blocks"
-                      {:resource-key resource-key})))
+      (throw (ex-info "Invalid block bundle blocks"
+                      {:root-uuid root-uuid})))
     (when-not (map? children)
-      (throw (ex-info "Invalid journal bundle children"
-                      {:resource-key resource-key})))
+      (throw (ex-info "Invalid block bundle children"
+                      {:root-uuid root-uuid})))
     (when-not (and (contains? blocks root-uuid)
                    (set/subset? (set (keys children)) (set (keys blocks))))
-      (throw (ex-info "Journal bundle memberships require canonical blocks"
-                      {:resource-key resource-key})))
+      (throw (ex-info "Block bundle memberships require canonical blocks"
+                      {:root-uuid root-uuid})))
     (let [blocks (into {}
                        (map (fn [[block-uuid block]]
                               [block-uuid (require-block! block-uuid block)]))
@@ -531,7 +531,7 @@
                    (when-not (and (map? membership)
                                   (= #{:parent-tx-id :items}
                                      (set (keys membership))))
-                     (throw (ex-info "Invalid journal bundle membership"
+                     (throw (ex-info "Invalid block bundle membership"
                                      {:parent-uuid parent-uuid})))
                    (let [parent-tx-id
                          (require-revision! :block/tx-id
@@ -540,12 +540,12 @@
                                                      (:items membership))]
                      (when-not (= parent-tx-id
                                   (get-in blocks [parent-uuid :block/tx-id]))
-                       (throw (ex-info "Journal bundle membership revision mismatch"
+                       (throw (ex-info "Block bundle membership revision mismatch"
                                        {:parent-uuid parent-uuid
                                         :parent-tx-id parent-tx-id})))
                      (doseq [[child-uuid] items]
                        (when-not (contains? block-uuids child-uuid)
-                         (throw (ex-info "Journal bundle child has no canonical block"
+                         (throw (ex-info "Block bundle child has no canonical block"
                                          {:parent-uuid parent-uuid
                                           :block-uuid child-uuid}))))
                      [parent-uuid {:parent-tx-id parent-tx-id
@@ -555,25 +555,30 @@
        :blocks blocks
        :children children})))
 
+(declare apply-block-tree-load!)
+
 (defn- apply-children-load!
-  [generation parent-uuid {:keys [basis-rev parent-tx-id items]}]
-  (require-revision! :basis-rev basis-rev)
-  (require-revision! :block/tx-id parent-tx-id)
-  (let [items (require-child-items! parent-uuid items)
-        next-slot (ready-children-slot basis-rev parent-tx-id items)
-        changed? (volatile! false)]
-    (swap! *store
-           (fn [store]
-             (let [current (get-in store [:children parent-uuid])]
-               (if (or (not= generation (:generation store))
-                       (< basis-rev (slot-revision current)))
-                 store
-                 (do
-                   (when-not (= current next-slot)
-                     (vreset! changed? true))
-                   (assoc-in store [:children parent-uuid] next-slot))))))
-    (when @changed?
-      (notify-key! :children parent-uuid))))
+  [generation parent-uuid {:keys [blocks children] :as response}]
+  (if (and blocks children)
+    (apply-block-tree-load! generation parent-uuid response)
+    (let [{:keys [basis-rev parent-tx-id items]} response]
+      (require-revision! :basis-rev basis-rev)
+      (require-revision! :block/tx-id parent-tx-id)
+      (let [items (require-child-items! parent-uuid items)
+            next-slot (ready-children-slot basis-rev parent-tx-id items)
+            changed? (volatile! false)]
+        (swap! *store
+               (fn [store]
+                 (let [current (get-in store [:children parent-uuid])]
+                   (if (or (not= generation (:generation store))
+                           (< basis-rev (slot-revision current)))
+                     store
+                     (do
+                       (when-not (= current next-slot)
+                         (vreset! changed? true))
+                       (assoc-in store [:children parent-uuid] next-slot))))))
+        (when @changed?
+          (notify-key! :children parent-uuid))))))
 
 (defn- bundle-has-newer-slot?
   [store basis-rev {:keys [blocks children]}]
@@ -582,7 +587,7 @@
       (some #(> (slot-revision (get-in store [:children %])) basis-rev)
             (keys children))))
 
-(defn- seed-journal-bundle
+(defn- seed-block-bundle
   [store basis-rev {:keys [blocks children]}
    changed-blocks changed-children]
   (let [store
@@ -609,6 +614,32 @@
      store
      children)))
 
+(defn- apply-block-tree-load!
+  [generation parent-uuid {:keys [basis-rev parent-tx-id items blocks children]}]
+  (require-revision! :basis-rev basis-rev)
+  (let [bundle (require-block-bundle!
+                parent-uuid
+                {:root-uuid parent-uuid
+                 :blocks blocks
+                 :children children})
+        root-membership (get children parent-uuid)]
+    (when-not (= {:parent-tx-id parent-tx-id
+                  :items (require-child-items! parent-uuid items)}
+                 root-membership)
+      (throw (ex-info "Block tree root membership does not match"
+                      {:parent-uuid parent-uuid})))
+    (let [changed-blocks (volatile! #{})
+          changed-children (volatile! #{})]
+      (swap! *store
+             (fn [store]
+               (if (or (not= generation (:generation store))
+                       (bundle-has-newer-slot? store basis-rev bundle))
+                 store
+                 (seed-block-bundle store basis-rev bundle
+                                    changed-blocks changed-children))))
+      (notify-keys! :blocks @changed-blocks)
+      (notify-keys! :children @changed-children))))
+
 (defn- apply-resource-load!
   [generation resource-key {:keys [basis-rev key watch-keys value]}]
   (require-revision! :basis-rev basis-rev)
@@ -620,7 +651,12 @@
                     {:resource-key resource-key :watch-keys watch-keys})))
   (let [journal-bundle? (journal-bundle-key? resource-key)
         value (if journal-bundle?
-                (require-journal-bundle! resource-key value)
+                (do
+                  (when-not (and (vector? resource-key)
+                                 (= 2 (count resource-key)))
+                    (throw (ex-info "Invalid journal bundle resource key"
+                                    {:resource-key resource-key})))
+                  (require-block-bundle! (second resource-key) value))
                 value)
         next-slot (ready-resource-slot basis-rev watch-keys value)
         changed-resource? (volatile! false)
@@ -646,8 +682,8 @@
                                  (assoc-in store [:resources resource-key]
                                            next-slot)))]
                    (if journal-bundle?
-                     (seed-journal-bundle store basis-rev value
-                                          changed-blocks changed-children)
+                     (seed-block-bundle store basis-rev value
+                                        changed-blocks changed-children)
                      store))))))
     (when @stale-response?
       (schedule-resource-reload! resource-key))

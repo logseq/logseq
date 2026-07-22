@@ -2019,12 +2019,14 @@
   (if table-view? 33 24))
 
 (hsx/defc lazy-item
-  [data idx {:keys [table-view?]} item-render]
+  [data idx {:keys [gallery-view? table-view?]} item-render]
   (let [row-uuid (util/nth-safe data idx)
         item (db-hooks/use-block row-uuid)]
     (if item
       (item-render item)
-      [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}])))
+      (if gallery-view?
+        [:div.ls-card-item {:aria-hidden true}]
+        [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))))
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
@@ -2280,6 +2282,8 @@
          (ui/virtualized-grid
           {:ref #(reset! *scroller-ref %)
            :total-count (count blocks)
+           :increase-viewport-by {:top (* 2 (:height dimensions))
+                                  :bottom (* 2 (:height dimensions))}
            :custom-scroll-parent (get-scroll-parent config)
            :skipAnimationFrameInResizeObserver true
            :compute-item-key (fn [idx]
