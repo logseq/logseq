@@ -308,6 +308,40 @@
       (is (= [row-uuid] @calls)
           "A mounted row supplies one UUID and owns no loader closure."))))
 
+(deftest view-prefetch-window-holds-row-subscriptions-test
+  (let [rows (mapv (fn [_] (random-uuid)) (range 100))
+        large-rows (mapv (fn [_] (random-uuid)) (range 2000))
+        subscribed (atom [])
+        unsubscribed (atom [])
+        original-use-effect (gobj/get react "useEffect")]
+    (is (= rows
+           (#'views/view-prefetch-window rows 40 40)))
+    (is (= (subvec rows 0 10)
+           (#'views/view-prefetch-window (subvec rows 0 10) 90 99))
+        "A filtered view can shrink before Virtuoso reports its new range.")
+    (is (= (subvec large-rows 500 1500)
+           (#'views/view-prefetch-window large-rows 1000 1000))
+        "Large views retain one bounded window around the rendered rows.")
+    (with-redefs [subs/subscribe-block!
+                  (fn [block-uuid _listener]
+                    (swap! subscribed conj block-uuid)
+                    #(swap! unsubscribed conj block-uuid))]
+      (let [cleanup (atom nil)]
+        (with-use-sync-external-store
+          (fn [_subscribe get-snapshot _get-server-snapshot]
+            (get-snapshot))
+          (fn []
+            (gobj/set react "useEffect"
+                      (fn [effect _deps]
+                        (reset! cleanup (effect))))
+            (try
+              (db-hooks/use-block-prefetch rows)
+              (finally
+                (gobj/set react "useEffect" original-use-effect)))))
+        (is (= rows @subscribed))
+        (@cleanup)
+        (is (= rows @unsubscribed))))))
+
 (deftest gallery-loading-row-keeps-the-card-size-test
   (with-redefs [db-hooks/use-block (constantly nil)]
     (let [markup (render-static
