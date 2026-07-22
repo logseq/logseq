@@ -96,9 +96,7 @@
    {:keys [affected-keys deleted-block-uuids]}]
   (let [imported-data? (::sqlite-export/imported-data? tx-meta)
         blocks (canonical-replacements tx-report)
-        deleted-block-uuids (if imported-data?
-                              (reduce disj deleted-block-uuids (keys blocks))
-                              deleted-block-uuids)
+        deleted-block-uuids (reduce disj deleted-block-uuids (keys blocks))
         delta-tx-report (if imported-data?
                           (assoc tx-report :tx-data [])
                           tx-report)]
