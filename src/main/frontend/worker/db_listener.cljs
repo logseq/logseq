@@ -61,7 +61,8 @@
   [tx-meta]
   (not (or (:rtc-download-graph? tx-meta)
            (:sync-download-graph? tx-meta)
-           (:skip-validate-db? tx-meta))))
+           (:skip-validate-db? tx-meta)
+           (:logseq.graph-parser.exporter/new-graph? tx-meta))))
 
 (defn- tagged-with-ident?
   [db block ident]

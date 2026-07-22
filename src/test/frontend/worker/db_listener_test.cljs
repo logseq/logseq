@@ -202,9 +202,10 @@
            (#'db-listener/canonical-replacements report))
         "A tx-id datom must not publish an entity absent from db-after.")))
 
-(deftest db-listener-does-not-publish-graph-download-render-deltas-test
+(deftest db-listener-does-not-publish-incomplete-graph-render-deltas-test
   (doseq [tx-meta [{:rtc-download-graph? true}
-                   {:sync-download-graph? true}]]
+                   {:sync-download-graph? true}
+                   {:logseq.graph-parser.exporter/new-graph? true}]]
     (let [conn (db-test/create-conn)
           build-inputs (atom [])
           broadcast-payloads (atom [])]
