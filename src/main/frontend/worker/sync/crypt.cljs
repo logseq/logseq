@@ -78,14 +78,16 @@
     (fail-missing-e2ee-password! {:reason :missing-refresh-token
                                   :hint "Run logseq login first."})))
 
-(defn- missing-persisted-password-error?
+(def ^:private non-retriable-user-rsa-key-error-codes
+  #{:ui-interaction-required
+    :ui-request-cancelled
+    :ui-request-rejected
+    :ui-request-timeout})
+
+(defn- user-rsa-key-cache-retryable-error?
   [error]
-  (let [data (ex-data error)]
-    (and (contains? #{:db-sync/missing-e2ee-password
-                      :missing-e2ee-password}
-                    (or (:code data)
-                        (some-> error ex-message keyword)))
-         (= :missing-persisted-password (:reason data)))))
+  (not (contains? non-retriable-user-rsa-key-error-codes
+                  (:code (ex-data error)))))
 
 (defn- parse-auth-file
   [text]
@@ -461,9 +463,7 @@
                        (p/rejected headless-error)
                        (-> (<decrypt-with-ui-request encrypted-private-key)
                            (p/catch (fn [ui-error]
-                                      (if (missing-persisted-password-error? headless-error)
-                                        (p/rejected ui-error)
-                                        (p/rejected headless-error))))))))))))
+                                      (p/rejected ui-error)))))))))))
 
 (defn- <import-public-key
   [public-key-str]
@@ -517,16 +517,18 @@
                :private-key private-key'}))]
     (-> (<load-once)
         (p/catch (fn [error]
-                   (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)]
-                         (<load-once))
-                       (p/catch (fn [retry-error]
-                                  (log/warn :db-sync/user-rsa-key-cache-invalid
-                                            {:base base
-                                             :user-id user-id
-                                             :graph-id graph-id
-                                             :first-error error
-                                             :retry-error retry-error})
-                                  (throw retry-error)))))))))
+                   (if-not (user-rsa-key-cache-retryable-error? error)
+                     (p/rejected error)
+                     (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)]
+                           (<load-once))
+                         (p/catch (fn [retry-error]
+                                    (log/warn :db-sync/user-rsa-key-cache-invalid
+                                              {:base base
+                                               :user-id user-id
+                                               :graph-id graph-id
+                                               :first-error error
+                                               :retry-error retry-error})
+                                    (throw retry-error))))))))))
 
 (defn <preflight-upload-e2ee!
   [repo encrypted-graph?]
