@@ -823,6 +823,53 @@
                             (reset! worker-state/*state old-state)
                             (done)))))))
 
+(deftest preflight-upload-does-not-retry-rejected-password-request-test
+  (async done
+         (let [old-state @worker-state/*state
+               get-pair-calls (atom 0)
+               clear-cache-calls (atom 0)
+               ui-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "current-refresh-token"))
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://sync.example.test")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<get-user-rsa-key-pair-raw
+                               (fn [_base]
+                                 (swap! get-pair-calls inc)
+                                 (p/resolved {:public-key "public-key"
+                                              :encrypted-private-key "encrypted-private-key"}))
+                               sync-crypt/<clear-user-rsa-key-pair-cache!
+                               (fn [_base _user-id]
+                                 (swap! clear-cache-calls inc)
+                                 (p/resolved nil))
+                               sync-crypt/<import-public-key (fn [_public-key]
+                                                               (p/resolved :public-key))
+                               platform/current (fn [] {:env {:runtime :node
+                                                              :owner-source :electron}})
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/resolved "stored-password"))
+                               ldb/read-transit-str identity
+                               crypt/<decrypt-text-by-text-password
+                               (fn [_refresh-token _data]
+                                 (p/rejected (ex-info "decrypt-text-by-text-password" {})))
+                               ui-request/<request
+                               (fn [action payload & _opts]
+                                 (swap! ui-calls conj {:action action :payload payload})
+                                 (p/rejected (ex-info "cancelled" {:code :ui-request-rejected})))]
+                 (sync-crypt/<preflight-upload-e2ee! "logseq_db_demo" true))
+               (p/then (fn [_]
+                         (is false "expected rejected password request")))
+               (p/catch (fn [error]
+                          (is (= :ui-request-rejected (:code (ex-data error))))
+                          (is (= 1 @get-pair-calls))
+                          (is (zero? @clear-cache-calls))
+                          (is (= [{:action :request-e2ee-password
+                                   :payload {:reason :decrypt-user-rsa-private-key}}]
+                                 @ui-calls))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
 (deftest ensure-graph-aes-key-uses-platform-kv-adapters-test
   (async done
          (let [fetch-prev js/fetch
