@@ -67,6 +67,44 @@
     (is (= "hello" (:type @sent)))
     (is (false? (contains? @sent :checksum)))))
 
+(deftest tx-batch-message-adds-graph-and-user-context-to-transact-meta-test
+  (let [sql (test-sql/make-sql)
+        conn (storage/open-conn sql)
+        ws #js {:readyState 1}
+        sent (atom nil)
+        tx-metas (atom [])
+        self #js {:conn conn
+                  :graph-id "graph-ws"
+                  :schema-ready true
+                  :sql sql}
+        raw (protocol/encode-message
+             {:type "tx/batch"
+              :client-revision "revision-ws"
+              :t-before 0
+              :txs [{:tx (protocol/tx->transit [[:db/add -1 :block/title "ws context"]])
+                     :outliner-op :save-block}]})]
+    (with-redefs [presence/get-user (fn [_self _ws]
+                                      {:user-id "user-1"
+                                       :username "alice"})
+                  ws/broadcast! (fn [& _] nil)
+                  ws/send! (fn [_target msg]
+                             (reset! sent msg))]
+      (d/listen! conn ::capture-ws-context-tx-meta
+                 (fn [tx-report]
+                   (swap! tx-metas conj (:tx-meta tx-report))))
+      (try
+        (ws-handler/handle-ws-message! self ws raw)
+        (finally
+          (d/unlisten! conn ::capture-ws-context-tx-meta))))
+    (is (= "tx/batch/ok" (:type @sent)))
+    (is (some #(= {:op :apply-client-tx
+                   :outliner-op :save-block
+                   :graph-id "graph-ws"
+                   :client-revision "revision-ws"
+                   :username "alice"}
+                  (select-keys % [:op :outliner-op :graph-id :client-revision :username]))
+              @tx-metas))))
+
 (deftest ws-send-serializes-tx-reject-uuids-as-strings-test
   (let [raw* (atom nil)
         ws #js {:readyState 1
@@ -128,6 +166,24 @@
                          (is (= 409 (.-status response)))
                          (is (empty? @accepted))
                          (is (empty? @presence-events))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest websocket-connection-uses-graph-id-from-sync-path-test
+  (async done
+         (let [seen-graph-id (atom ::unset)
+               self #js {}
+               request (js/Request. "http://localhost/sync/graph-from-path"
+                                    #js {:method "GET"})]
+           (-> (p/with-redefs [sync-handler/<ready-for-sync? (fn [_self graph-id]
+                                                               (reset! seen-graph-id graph-id)
+                                                               (p/resolved false))]
+                 (ws-handler/handle-ws self request))
+               (p/then (fn [response]
+                         (is (= "graph-from-path" @seen-graph-id))
+                         (is (= 409 (.-status response)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))

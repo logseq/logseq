@@ -72,6 +72,15 @@
     (assert (fn? f) (str "thread api not registered: " k))
     f))
 
+(defn- silence-stderr
+  [f]
+  (let [orig-write (.-write js/process.stderr)]
+    (set! (.-write js/process.stderr) (fn [& _] true))
+    (try
+      (f)
+      (finally
+        (set! (.-write js/process.stderr) orig-write)))))
+
 (defn- <wait-for-progress!
   [progress-calls pred max-tries]
   (p/loop [remaining max-tries]
@@ -1603,6 +1612,39 @@
          (is (map? result))
            (is (= "test page" (:block/title result)))))))))
 
+(deftest get-blocks-removes-nil-values-from-returned-blocks
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get @thread-api/*thread-apis :thread-api/get-blocks)
+           conn (d/create-conn db-schema/schema)
+           request [{:id 42 :opts {:children? true}}]]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [common-initial-data/get-block-and-children
+                     (fn [_db _id _opts]
+                       {:block {:db/id 42
+                                :block/title "parent"
+                                :block/parent nil}
+                        :children [{:db/id 43
+                                    :block/title "child"
+                                    :block/parent nil}
+                                   {:db/id 44
+                                    :block/title "loaded"
+                                    :block/parent 42
+                                    :block.temp/load-status nil}]})]
+         (let [result (-> (get-blocks! test-repo (ldb/write-transit-str request))
+                          ldb/read-transit-str
+                          first)]
+           (is (= 42 (:id result)))
+           (is (= {:db/id 42
+                   :block/title "parent"}
+                  (:block result)))
+           (is (= [{:db/id 43
+                    :block/title "child"}
+                   {:db/id 44
+                    :block/title "loaded"
+                    :block/parent 42}]
+                  (:children result)))))))))
+
 ;; ---- undo-redo thread-api tests ----
 
 (deftest undo-redo-clear-history-calls-worker-fn
@@ -2061,7 +2103,9 @@
    (fn []
      (let [;; Source: shift built-in eids by one relative to a freshly seeded dest
            source-conn (d/create-conn db-schema/schema)
-           _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+	         ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+           _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+           _ (d/transact! source-conn [[:db/retractEntity 1]])
            _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
            export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
            source-purple-eid (some (fn [[e a v]]
@@ -2084,3 +2128,25 @@
              "color.purple ident is preserved after datom import despite eid shift")
          (finally
            (ldb/register-transact-pipeline-fn! identity)))))))
+
+(deftest import-edn-invalid-datom-format-does-not-change-db-test
+  (restoring-worker-state
+   (fn []
+     (let [dest-conn (sqlite-export/create-conn)
+           page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page))
+           invalid-export-edn {::sqlite-export/export-type :graph
+                               ::sqlite-export/graph-format :datoms
+                               :datoms [[1 :block/title "Orphan Page"]
+                                        [1 :block/name "orphan page"]
+                                        [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+                                        [1 :block/tags 2]
+                                        [2 :block/title "Page"]
+                                        [2 :block/name "page"]
+                                        [2 :db/ident :logseq.class/Page]
+                                        [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]}]
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (let [result (silence-stderr
+                     #((get-thread-api :thread-api/import-edn) test-repo invalid-export-edn))]
+         (is (string? (:error result)))
+         (is (= page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page)))
+             "Invalid datom import should not replace the existing graph"))))))

@@ -166,6 +166,7 @@
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
+  (sync-apply/clear-upload-response-timeout! client)
   (let [reason (:reason message)
         remote-tx (:t message)
         success-tx-ids (:success-tx-ids message)
@@ -197,7 +198,6 @@
                                    vec)
             failed-tx-id (when (and failed-tx-id (contains? inflight-set failed-tx-id))
                            failed-tx-id)
-            recoverable-missing? (seq missing-block-uuids)
             data (when-let [raw-data (:data message)]
                    (parse-transit raw-data
                                   {:repo repo
@@ -211,23 +211,19 @@
                             (contains? message :t) (assoc :t remote-tx)
                             (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
                             (some? failed-tx-id) (assoc :failed-tx-id failed-tx-id)
-                            recoverable-missing? (assoc :missing-block-uuids (vec missing-block-uuids))
+                            (seq missing-block-uuids) (assoc :missing-block-uuids (vec missing-block-uuids))
                             (some? data) (assoc :data data))]
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))
           (do
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
-            (if recoverable-missing?
-              (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
-              (when failed-tx-id
-                (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id]))))
+            (when failed-tx-id
+              (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
           ;; Backward compatibility for older servers without per-tx reject metadata.
           (sync-apply/rollback-and-mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
-        (when recoverable-missing?
-          (sync-apply/enqueue-flush-pending! repo client))
         (fail-fast :db-sync/tx-rejected
                    rejected-data)))))
 
@@ -269,6 +265,7 @@
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
+  (sync-apply/ack-upload-response! repo client)
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
@@ -344,6 +341,9 @@
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
   (clear-pending-pull! client)
+  ;; (log/info ::handle-pull-ok! {:repo repo
+  ;;                              :remote-tx remote-tx
+  ;;                              :local-tx local-tx})
   (when (> remote-tx local-tx)
     (let [txs (:txs message)]
       (require-non-negative remote-tx {:repo repo :type "pull/ok"})
@@ -353,10 +353,14 @@
                                 :outliner-op (:outliner-op data)
                                 :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
                              txs)]
+        ;; (log/info ::handle-pull-remote-txs-count {:count (count remote-txs)})
         (when (seq remote-txs)
           (->
            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                   ;; _ (log/info ::handle-pull-request-aes-key {})
                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                   ;; _ (when (some? aes-key)
+                   ;;     (log/info ::handle-pull-request-aes-key-success {}))
                    _ (when (and graph-e2ee? (nil? aes-key))
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                    remote-txs* (if aes-key

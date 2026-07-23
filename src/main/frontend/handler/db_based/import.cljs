@@ -203,25 +203,29 @@
                      (finished-error-handler)
                      nil))]
     (when (some? edn-data)
-      (-> (p/let
-           [_ (persist-db/<new graph {:import-type :edn})
-            _ (state/add-repo! {:url graph})
-            _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
-            _ (state/set-current-repo! graph)
-            {:keys [error]} (ui-outliner-tx/transact!
-                             {:outliner-op :batch-import-edn}
-                             (outliner-op/batch-import-edn! edn-data {:tx-meta {:import-db? true}}))]
-            (if error
-              (do
-                (notification/show! error :error)
-                (finished-error-handler))
-              (finished-ok-handler)))
-          (p/catch
-           (fn [e]
-             (js/console.error e)
-             (notification/show! (t :import/unexpected-error (.-message e))
-                                 :error)
-             (finished-error-handler)))))))
+      (if-let [error (:error (sqlite-export/validate-export edn-data))]
+        (do
+          (notification/show! error :error)
+          (finished-error-handler))
+        (-> (p/let
+             [_ (persist-db/<new graph {:import-type :edn})
+              _ (state/add-repo! {:url graph})
+              _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
+              _ (state/set-current-repo! graph)
+              {:keys [error]} (ui-outliner-tx/transact!
+                               {:outliner-op :batch-import-edn}
+                               (outliner-op/batch-import-edn! edn-data {:tx-meta {:import-db? true}}))]
+              (if error
+                (do
+                  (notification/show! error :error)
+                  (finished-error-handler))
+                (finished-ok-handler)))
+            (p/catch
+             (fn [e]
+               (js/console.error e)
+               (notification/show! (t :import/unexpected-error (.-message e))
+                                   :error)
+               (finished-error-handler))))))))
 
 (defn- import-edn-data-from-form [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
@@ -266,6 +270,10 @@
                       :class "overflow-y-auto"
                       :rows 10
                       :auto-focus true
+                      :ref (fn [element]
+                             (when element
+                               (js/requestAnimationFrame
+                                (fn [_] (.focus element)))))
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}

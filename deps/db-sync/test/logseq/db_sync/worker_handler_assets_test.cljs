@@ -58,3 +58,25 @@
                           (restore!)
                           (is false (str error))
                           (done)))))))
+
+(deftest assets-get-serves-image-inline-with-extension-content-type-test
+  (async done
+         (let [payload (js/Uint8Array. #js [1 2 3 4])
+               request (js/Request. "http://localhost/assets/graph-1/image-id.png"
+                                    #js {:method "GET"})
+               env #js {:LOGSEQ_SYNC_ASSETS
+                        #js {:get (fn [_key]
+                                    (p/resolved
+                                     #js {:body payload
+                                          :size 4
+                                          ;; Existing Code Mode uploads stored the transfer MIME type.
+                                          :httpMetadata #js {:contentType "application/json"}}))}}]
+           (-> (p/let [resp (assets/handle request env)]
+                 (is (= 200 (.-status resp)))
+                 (is (= "image/png" (.get (.-headers resp) "content-type")))
+                 (is (= "inline; filename=\"image-id.png\""
+                        (.get (.-headers resp) "content-disposition"))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

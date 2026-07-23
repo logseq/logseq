@@ -447,6 +447,32 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-org-page-title-when-property-appears-in-middle
+  (p/let [file (write-temp-graph-file
+                "pages/20230410145300-end_to_end_note.org"
+                ":PROPERTIES:
+:ID:       c537c812-1ec9-4f13-adaf-1a39fd7da967
+:END:
+#+title: end_to_end_note
+#+date: <2023-04-10 Mon 14:53>
+#+filetags: :PUBLIC:
+
+abc
+
+#+hugo: more
+
+123
+")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-page-by-title @conn "end_to_end_note"))
+        "Org #+title is imported when another property appears in the middle of the file")
+    (is (nil? (db-test/find-page-by-title @conn "20230410145300-end_to_end_note"))
+        "Importer should not fall back to the org-roam file stem")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-empty-journal-file
   (p/let [file (write-temp-graph-file "journals/2025_11_11.md" "\n")
           conn (db-test/create-conn)
@@ -629,6 +655,7 @@
 
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
         target-uuid #uuid "22222222-2222-2222-2222-222222222222"
         empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
         empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
@@ -636,6 +663,7 @@
                          "pages/A.md"
                          (str "Plain pre-block\n"
                               "- Missing ref ((" missing-uuid "))\n"
+                              "- {{embed ((" missing-embed-uuid "))}}\n"
                               "- Existing ref ((" target-uuid "))\n"
                               "- ((" empty-title-property-uuid "))\n"
                               "  heading:: true\n"
@@ -668,11 +696,18 @@
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid missing-embed-uuid]))
+          "Missing OG block embeds do not leave placeholder entities")
+      (is (empty? (d/q '[:find ?b
+                         :where [?b :block/link ?target]
+                         [(missing? $ ?target :block/uuid)]]
+                       @conn))
+          "Missing OG block embeds do not leave dangling block links")
       (is (nil? (d/entity @conn [:block/uuid empty-title-property-uuid]))
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 2 (count empty-title-blocks))
+      (is (= 3 (count empty-title-blocks))
           "Blocks whose titles become empty after cleanup are preserved")
       (is (true? (:logseq.property/heading empty-title-property-block))
           "Empty-title blocks keep imported heading properties")
@@ -710,6 +745,68 @@
           "Missing block ref cleanup tx-report is propagated to import callers")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
+
+(deftest export-doc-files-aborts-on-export-file-failure
+  (cljs.test/async
+   done
+   (let [attempted-paths (atom [])
+         failed-error (ex-info "worker transact failed" {:code :worker-transact-failed})
+         graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
+                                           ["pages/B.md" "- second\n"]])
+         first-file (node-path/join graph-dir "pages/A.md")
+         second-file (node-path/join graph-dir "pages/B.md")
+         conn (db-test/create-conn)
+         doc-options (gp-exporter/build-doc-options
+                      {:macros {} :file/name-format :triple-lowbar}
+                      (merge default-export-options
+                             {:notify-user (constantly nil)
+                              :user-options {:convert-all-tags? false}
+                              :<export-file (fn [_conn {:file/keys [path]} _opts]
+                                              (swap! attempted-paths conj path)
+                                              (p/rejected failed-error))}))
+         assert-failure (fn [result]
+                          (is (= :worker-transact-failed
+                                 (or (:code (ex-data result))
+                                     (:code (ex-data (.-cause result)))))
+                              "Export file failure is propagated to the caller")
+                          (is (= [first-file] @attempted-paths)
+                              "Import stops after the first export file failure")
+                          (done))]
+     (try
+       (-> (gp-exporter/export-doc-files
+            conn
+            [{:path first-file} {:path second-file}]
+            <read-file
+            doc-options)
+           (.then (fn [_]
+                    (is false "Export file failure should reject")
+                    (done)))
+           (.catch assert-failure))
+       (catch :default e
+         (assert-failure e))))))
+
+(deftest-async export-doc-files-preserves-filesystem-timestamps
+  (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
+        modified-at (js/Date. "2021-06-07T08:09:10.000Z")]
+    (p/let [file (write-temp-graph-file "pages/timestamps.md" "- timestamped\n")
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            doc-options (gp-exporter/build-doc-options
+                         {:macros {} :file/name-format :triple-lowbar}
+                         (merge default-export-options
+                                {:user-options {:convert-all-tags? false}
+                                 :<get-file-stat (fn [_]
+                                                   {:birthtime created-at
+                                                    :mtime modified-at})
+                                 :<export-file (fn [conn' file-map opts]
+                                                 (gp-exporter/<add-file-to-db-graph
+                                                  conn' (:file/path file-map) (:file/content file-map) opts))}))
+            _ (gp-exporter/export-doc-files conn [{:path file}] <read-file doc-options)
+            page (ldb/get-page @conn "timestamps")
+            block (db-test/find-block-by-content @conn "timestamped")]
+      (is (= (.getTime created-at) (:block/created-at page) (:block/created-at block)))
+      (is (= (.getTime modified-at) (:block/updated-at page) (:block/updated-at block)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
@@ -1826,6 +1923,44 @@
         "Legacy journal page ref points at the journal page")
     (is (nil? (db-test/find-page-by-title @conn "2026_04_02"))
         "Legacy journal page ref does not create an ordinary page")))
+
+(deftest-async import-default-format-journal-refs-with-custom-title-format
+  (p/let [dir (write-temp-file-graph
+               {"pages/source.md"
+                "- existing journal [[May 18th, 2021]]\n- missing journal [[May 19th, 2021]]\n"
+                "journals/2021_05_18.md"
+                "- journal entry\n"
+                "pages/2021_05_19.md"
+                "- ordinary date-named page\n"})
+          source-file (-> (node-path/join dir "pages/source.md")
+                          (string/replace "\\" "/"))
+          journal-file (-> (node-path/join dir "journals/2021_05_18.md")
+                           (string/replace "\\" "/"))
+          ordinary-date-file (-> (node-path/join dir "pages/2021_05_19.md")
+                                 (string/replace "\\" "/"))
+          conn (db-test/create-conn)
+          _ (import-files-to-db [source-file journal-file ordinary-date-file] conn
+                                {:user-config {:journal/page-title-format "EEEE, dd-MM-yyyy"}})
+          existing-journal (db-test/find-journal-by-journal-day @conn 20210518)
+          missing-page (db-test/find-page-by-title @conn "May 19th, 2021")
+          existing-ref-block (db-test/find-block-by-content @conn #"existing journal")
+          missing-ref-block (db-test/find-block-by-content @conn #"missing journal")]
+    (is (= "Tuesday, 18-05-2021" (:block/title existing-journal))
+        "Default-format ref resolves the journal file using the configured title")
+    (is (= #{:logseq.class/Journal}
+           (set (map :db/ident (:block/tags existing-journal))))
+        "Existing journal does not retain the ordinary page tag")
+    (is (= #{(:block/uuid existing-journal)}
+           (set (map :block/uuid (:block/refs existing-ref-block))))
+        "Existing journal ref points at the journal page")
+    (is (= #{:logseq.class/Page}
+           (set (map :db/ident (:block/tags missing-page))))
+        "Default-format ref without a file under journals remains an ordinary page")
+    (is (nil? (db-test/find-journal-by-journal-day @conn 20210519))
+        "Date-named file outside journals does not create a journal")
+    (is (= #{(:block/uuid missing-page)}
+           (set (map :block/uuid (:block/refs missing-ref-block))))
+        "Missing journal ref points at the ordinary page")))
 
 (deftest-async import-creates-missing-ordinary-page-refs
   (p/let [file (write-temp-graph-file

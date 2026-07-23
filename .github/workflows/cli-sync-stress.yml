@@ -188,7 +188,7 @@ jobs:
             --sync \
             --offline \
             --no-e2ee \
-            --max-ops 1000 \
+            --max-ops 3000 \
             --timeout-ms 60000
 
           "$LOGSEQ_BIN" graph validate --graph "$GRAPH" --output json --timeout-ms 60000

@@ -76,7 +76,6 @@
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
-            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -3566,10 +3565,10 @@
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
 
-	          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-	                        (:property? config) (:hide-block-tags? config))
-	            (when (seq (:block/tags block))
-	              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
+                  (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+                                (:property? config) (:hide-block-tags? config))
+                    (when (seq (:block/tags block))
+                      (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (defn non-dragging?
   [e]
@@ -4041,7 +4040,8 @@
      :on-drag-end (fn [event]
                     (doseq [block (or (seq (state/get-selection-blocks)) [(.-target event)])]
                       (dom/remove-class! block "dragging"))
-                    (dom/remove! js/document.body (dom/sel1 "#dragging-ghost-element"))
+                    (when-let [node (dom/sel1 "#dragging-ghost-element")]
+                      (dom/remove! js/document.body node))
                     (block-drag-end event *move-to'))}))
 
 (defn- root-block?
@@ -5262,6 +5262,7 @@
                         ;; Leave some space for the new inserted block
                         :increase-viewport-by 254
                         :overscan 254
+                        :skipAnimationFrameInResizeObserver true
                         :total-count blocks-count
                         :item-content (fn [idx]
                                         (let [top? (zero? idx)
@@ -5277,8 +5278,7 @@
                                             (block-item config'
                                                         block
                                                         {:top? top?
-                                                         :bottom? bottom?}))))})
-        *wrap-ref (hooks/use-ref nil)]
+                                                         :bottom? bottom?}))))})]
     (hooks/use-effect!
      (fn []
        (let [last-idx (dec blocks-count)]
@@ -5308,27 +5308,11 @@
      (fn []
        (when virtualized?
          (when (:current-page? config)
-           (let [ref (.-current *virtualized-ref)]
-             (ui-handler/scroll-to-anchor-block ref blocks false)
-             (state/set-state! :editor/virtualized-scroll-fn
-                               #(ui-handler/scroll-to-anchor-block ref blocks false))))
-         ;; Try to fix virtuoso scrollable container blink for the block insertion at bottom
-         (let [^js *ob (volatile! nil)]
-           (js/setTimeout
-            (fn []
-              (when-let [_inst (hooks/deref *virtualized-ref)]
-                (when-let [^js target (.-firstElementChild (hooks/deref *wrap-ref))]
-                  (let [set-wrap-h! #(when-let [ref (hooks/deref *wrap-ref)] (set! (.-height (.-style ref)) %))
-                        set-wrap-h! (debounce set-wrap-h! 16)
-                        ob (js/ResizeObserver.
-                            (fn []
-                              (when-let [h (and (hooks/deref *wrap-ref)
-                                                (.-height (.-style target)))]
-                                ;(prn "==>> debug: " h)
-                                (set-wrap-h! h))))]
-                    (.observe ob target)
-                    (vreset! *ob ob))))))
-           #(some-> @*ob (.disconnect)))))
+            (let [ref (.-current *virtualized-ref)]
+              (ui-handler/scroll-to-anchor-block ref blocks false)
+              (state/set-state! :editor/virtualized-scroll-fn
+                                #(ui-handler/scroll-to-anchor-block ref blocks false)))))
+        (fn []))
      [])
     (hooks/use-effect!
      (fn []
@@ -5340,8 +5324,7 @@
      [scroll-container selection-block-ids])
 
     [:div.blocks-list-wrap
-     {:data-level (or (:level config) 0)
-      :ref *wrap-ref}
+     {:data-level (or (:level config) 0)}
      (cond
        virtualized?
        (ui/virtualized-list virtual-opts)

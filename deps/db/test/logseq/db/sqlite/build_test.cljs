@@ -226,6 +226,44 @@
                 (map #(:block/title (d/entity @conn %)))))
         "Property page has correct blocks")))
 
+(deftest build-class-extends-rejects-cycles
+  (testing "self cycle"
+    (is (thrown-with-msg?
+         js/Error
+         #"Cycle detected in :build/class-extends"
+         (sqlite-build/build-blocks-tx
+          {:classes {:user.class/A {:build/class-extends [:user.class/A]}}}))))
+  (testing "deprecated class parent self cycle"
+    (is (thrown-with-msg?
+         js/Error
+         #"Cycle detected in :build/class-extends"
+         (sqlite-build/build-blocks-tx
+          {:classes {:user.class/A {:build/class-parent :user.class/A}}}))))
+  (testing "deprecated class parent takes precedence"
+    (let [txs (sqlite-build/build-blocks-tx
+               {:classes {:user.class/A {:build/class-parent :user.class/B
+                                         :build/class-extends [:user.class/A]}
+                          :user.class/B {}}})
+          class-a (some #(when (= :user.class/A (:db/ident %)) %) (:init-tx txs))
+          class-b (some #(when (= :user.class/B (:db/ident %)) %) (:init-tx txs))]
+      (is (= [(:db/id class-b)]
+             (:logseq.property.class/extends class-a)))))
+  (testing "multi-class cycle"
+    (is (thrown-with-msg?
+         js/Error
+         #"Cycle detected in :build/class-extends"
+         (sqlite-build/build-blocks-tx
+          {:classes {:user.class/A {:build/class-extends [:user.class/B]}
+                     :user.class/B {:build/class-extends [:user.class/C]}
+                     :user.class/C {:build/class-extends [:user.class/A]}}}))))
+  (testing "diamond inheritance without a cycle"
+    (is (map?
+         (sqlite-build/build-blocks-tx
+          {:classes {:user.class/A {}
+                     :user.class/B {:build/class-extends [:user.class/A]}
+                     :user.class/C {:build/class-extends [:user.class/A]}
+                     :user.class/D {:build/class-extends [:user.class/B :user.class/C]}}})))))
+
 (deftest property-value-with-properties-and-tags
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:p1 {:logseq.property/type :default}}

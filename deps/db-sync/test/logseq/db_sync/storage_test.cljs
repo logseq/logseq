@@ -114,6 +114,36 @@
             (is (= stale-checksum
                    (storage/get-checksum sql)))))))))
 
+(deftest initial-checksum-does-not-overwrite-existing-checksum-test
+  (testing "snapshot checksum initialization must not replace an existing incremental checksum"
+    (let [sql (test-sql/make-sql)
+          existing-checksum "aaaaaaaaaaaaaaaa"
+          snapshot-checksum "bbbbbbbbbbbbbbbb"]
+      (storage/init-schema! sql)
+      (storage/set-initial-checksum! sql existing-checksum)
+      (let [result (try
+                     (storage/set-initial-checksum! sql snapshot-checksum)
+                     :ok
+                     (catch :default error
+                       error))]
+        (is (not= :ok result))
+        (is (= existing-checksum (storage/get-checksum sql)))))))
+
+(deftest initial-checksum-rejects-non-empty-tx-log-test
+  (testing "snapshot checksum initialization must not run after tx history already advanced"
+    (let [sql (test-sql/make-sql)
+          snapshot-checksum "bbbbbbbbbbbbbbbb"]
+      (storage/init-schema! sql)
+      (storage/append-tx! sql 1 "tx-1" 100 :save-block)
+      (storage/set-t! sql 1)
+      (let [result (try
+                     (storage/set-initial-checksum! sql snapshot-checksum)
+                     :ok
+                     (catch :default error
+                       error))]
+        (is (not= :ok result))
+        (is (nil? (storage/get-checksum sql)))))))
+
 (deftest stale-checksum-transact-keeps-kvs-and-tx-log-consistent-test
   (testing "stale checksum should not fail transact; kvs and tx_log/t should advance together"
     (with-memory-sql

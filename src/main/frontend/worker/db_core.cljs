@@ -872,6 +872,16 @@
                (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+
+(defn- sanitize-block-result
+  [result]
+  (cond-> result
+    (:block result)
+    (update :block common-util/remove-nils-non-nested)
+
+    (:children result)
+    (update :children common-util/fast-remove-nils)))
+
 (def ^:private get-blocks-with-cache
   (common.cache/cache-fn
    *get-blocks-cache
@@ -885,6 +895,7 @@
             (mapv (fn [{:keys [id opts]}]
                     (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
                       (-> (common-initial-data/get-block-and-children db id' opts)
+                          sanitize-block-result
                           (assoc :id id)))))
             ldb/write-transit-str)))))
 
@@ -1553,15 +1564,18 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (when-not conn
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
-    (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
-          tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta (cond-> {::sqlite-export/imported-data? true}
-                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
-                    ;; to keep pipeline from reverting their import
-                    (= :datoms (::sqlite-export/graph-format export-edn))
-                    (assoc :initial-db? true))]
-      (ldb/transact! conn tx-data tx-meta)
-      {:tx-count (count tx-data)})))
+    (let [txs (sqlite-export/build-import export-edn @conn {})
+          validation (sqlite-export/validate-import-txs txs @conn)]
+      (if-let [error (:error validation)]
+        {:error error}
+        (let [tx-data (:tx-data validation)
+              tx-meta (cond-> {::sqlite-export/imported-data? true}
+                        ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
+                        ;; to keep pipeline from reverting their import
+                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        (assoc :initial-db? true))]
+          (ldb/transact! conn tx-data tx-meta)
+          {:tx-count (count tx-data)})))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]

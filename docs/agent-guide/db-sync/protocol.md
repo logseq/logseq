@@ -28,7 +28,8 @@
 - `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>","outliner-op":"<keyword?>"}...]}`
   - Pull response with txs and post-apply entity checksum.
 - `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}`
-  - Batch accepted; server advanced to t and returns the resulting entity checksum.
+  - Batch accepted; `t` and `checksum` describe the resulting server state.
+    `t` remains unchanged when every entry is an idempotent no-op.
 - `{"type":"changed","t":<t>}`
   - Broadcast once after a handled `tx/batch` that advanced server state (`t` increased); client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
@@ -91,11 +92,6 @@
 - `GET /sync/:graph-id/pull?since=<t>`
   - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>","outliner-op":"<keyword?>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
-  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
-- `GET /sync/:graph-id/repair/blocks?uuid=<block-uuid>&uuid=<block-uuid>`
-  - Fetch server-authoritative block data for client repair while applying remote txs.
-  - Response: `{"tx":"<tx-transit>"}` where `tx` is a Transit-encoded Datascript transaction vector of `[:db/add ...]` datoms. Repaired block entities use `repair-block-<uuid>` temp ids and lookup refs for referenced blocks outside the repair payload.
-  - Error response (400): `{"error":"missing block uuid"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":[{"tx":"<tx-transit>","tx-id":"<uuid?>","outliner-op":"<keyword?>"}, ...]}`.
