@@ -94,11 +94,11 @@
         [decrypt-fail? set-decrypt-fail!] (hooks/use-state false)
         on-submit (fn []
                     (->
-                     (p/let [password (-> (hooks/deref *password-container)
-                                          (.querySelector "input")
-                                          .-value)
-                             private-key (crypt/<decrypt-private-key password encrypted-private-key)]
-                       (state/<invoke-db-worker :thread-api/save-e2ee-password password)
+                     (p/let [entered-password (-> (hooks/deref *password-container)
+                                                  (.querySelector "input")
+                                                  .-value)
+                             private-key (crypt/<decrypt-private-key entered-password encrypted-private-key)]
+                       (state/<invoke-db-worker :thread-api/save-e2ee-password entered-password)
                        (p/resolve! private-key-promise private-key)
                        (shui/dialog-close!))
                      (p/catch (fn [e]
