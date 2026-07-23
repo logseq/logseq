@@ -231,7 +231,15 @@
                  (number? id-or-uuid) id-or-uuid
                  (uuid? id-or-uuid) id-or-uuid
                  :else (sdk-utils/uuid-or-throw-error id-or-uuid))
-            {:keys [block children]} (db-async/<get-block-with-children repo id {:children? true})]
+            {:keys [block children]}
+            (if includeChildren
+              (db-async/<get-block-with-children repo id {:children? true
+                                                          :include-collapsed-children? true})
+              (p/let [block (db-async/<get-block repo id {:children? false})
+                      children (when block
+                                 (db-async/<get-block-immediate-children repo (:block/uuid block)))]
+                {:block block
+                 :children children}))]
       (when (and block
                  (or (true? (some-> opts (.-includePage)))
                      (not (contains? block :block/name))))

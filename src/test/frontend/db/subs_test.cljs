@@ -914,7 +914,7 @@
                          (subs/resource-snapshot resource-key)))
                   (unsubscribe))))))))
 
-(deftest block-subscriptions-coalesce-default-loads-in-batches-of-25-test
+(deftest block-subscriptions-coalesce-view-prefetch-in-one-batch-test
   (async done
          (let [block-uuids (vec (repeatedly 100 random-uuid))
                worker-calls (atom [])]
@@ -936,13 +936,13 @@
                 (p/let [_ (p/delay 0)
                         calls @worker-calls
                         payloads (mapv #(nth % 2) calls)]
-                  (is (<= (count calls) 4)
-                      "One tick of 100 UUID subscriptions needs at most four worker calls.")
+                  (is (= 1 (count calls))
+                      "One view prefetch tick produces one canonical block response.")
                   (is (every? #(= :thread-api/get-canonical-blocks (first %)) calls))
                   (is (every? #(= test-graph-id (second %)) calls))
                   (is (every? vector? payloads)
                       "The typed worker API receives plain UUID vectors.")
-                  (is (every? #(<= (count %) 25) payloads))
+                  (is (every? #(<= (count %) 1000) payloads))
                   (is (= (set block-uuids) (set (mapcat identity payloads))))
                   (is (every? #(= :ready (:status (subs/block-snapshot %)))
                               block-uuids))
@@ -1340,6 +1340,37 @@
                             :value (block block-uuid 2 "load 2")}
                            (subs/block-snapshot block-uuid)))
                     (unsubscribe-after-gc)))))))))
+
+(deftest unmounted-children-remain-warm-for-page-navigation-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               first-child-uuid (random-uuid)
+               second-child-uuid (random-uuid)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id _parent-uuid]
+                              (p/resolved {:basis-rev 1
+                                           :parent-tx-id 1
+                                           :items [[first-child-uuid "a"]]}))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (unsubscribe)
+                        _ (p/delay 0)]
+                  (is (= {:status :ready :value [first-child-uuid]}
+                         (subs/children-snapshot parent-uuid))
+                      "A recently visited page retains its direct children.")
+                  (subs/apply-delta!
+                   (delta 2
+                          {:children
+                           {parent-uuid {:base-rev 1
+                                         :rev 2
+                                         :remove []
+                                         :upsert [[second-child-uuid "b"]]}}}))
+                  (is (= {:status :ready
+                          :value [first-child-uuid second-child-uuid]}
+                         (subs/children-snapshot parent-uuid))
+                      "An unmounted warm page still receives direct-child patches."))))))))
 
 (deftest collected-request-token-cannot-complete-a-remounted-slot-test
   (async done

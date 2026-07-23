@@ -15,18 +15,6 @@
 (def ^:private page-membership-attrs
   (into page-identity-attrs (conj visibility-attrs :block/tags)))
 
-(def ^:private reference-row-attrs
-  (into visibility-attrs
-        #{:block/order
-          :block/page
-          :block/parent
-          :block/refs
-          :block/title}))
-
-(def ^:private unlinked-index-attrs
-  (into visibility-attrs
-        #{:block/link :block/refs :block/title :db/ident}))
-
 (def ^:private comments-attrs
   #{:block/order
     :block/tags
@@ -89,6 +77,10 @@
 (defn- datom-entity-ids
   [datoms]
   (into #{} (map :e) datoms))
+
+(defn- entity-datoms
+  [datoms]
+  (remove #(= :block/updated-at (:a %)) datoms))
 
 (defn- tagged-with-ident?
   [entity ident]
@@ -357,10 +349,10 @@
 (defn- task-attribute-keys
   [db-before db-after datoms]
   (reduce-kv
-   (fn [keys entity-id entity-datoms]
+   (fn [keys entity-id grouped-datoms]
      (if (or (task-entity? db-before entity-id)
              (task-entity? db-after entity-id))
-       (into keys (map (fn [datom] [:task-attr (:a datom)])) entity-datoms)
+       (into keys (map (fn [datom] [:task-attr (:a datom)])) grouped-datoms)
        keys))
    #{}
    (group-by :e datoms)))
@@ -512,11 +504,10 @@
                 datoms)
         ref-block-uuids
         (mapcat (fn [datom]
-                  (when (contains? reference-row-attrs (:a datom))
-                    (mapcat (fn [db]
-                              (map :block/uuid
-                                   (values (:block/refs (entity-at db (:e datom))))))
-                            [db-before db-after])))
+                  (mapcat (fn [db]
+                            (map :block/uuid
+                                 (values (:block/refs (entity-at db (:e datom))))))
+                          [db-before db-after]))
                 datoms)]
     (into #{}
           (keep (fn [target-uuid]
@@ -529,12 +520,13 @@
   [{:keys [db-before db-after tx-data]}]
   (let [datoms (vec (semantic-datoms tx-data))
         touched-entity-ids (datom-entity-ids datoms)
+        changed-entity-ids (datom-entity-ids (entity-datoms datoms))
         class-tree-changed? (class-tree? db-before db-after datoms)
         ref-scope-changed? (or class-tree-changed?
                                (some #(= :block/alias (:a %)) datoms))]
     (into #{[:graph]}
           (concat
-           (entity-keys db-before db-after touched-entity-ids)
+           (entity-keys db-before db-after changed-entity-ids)
            (attribute-keys datoms)
            (children-keys db-before db-after datoms)
            (route-page-keys db-before db-after datoms)
@@ -552,6 +544,4 @@
            (class-membership-keys db-before db-after datoms)
            (when class-tree-changed? [[:class-tree]])
            (ref-target-keys db-before db-after datoms)
-           (when ref-scope-changed? [[:ref-scope]])
-           (when (some #(contains? unlinked-index-attrs (:a %)) datoms)
-             [[:unlinked-index]])))))
+           (when ref-scope-changed? [[:ref-scope]])))))
