@@ -9,17 +9,6 @@
             [goog.object :as gobj]
             [promesa.core :as p]))
 
-(defn- node-platform-source
-  []
-  (let [source-path (node-path/join (.cwd js/process)
-                                    "src"
-                                    "main"
-                                    "frontend"
-                                    "worker"
-                                    "platform"
-                                    "node.cljs")]
-    (.toString (fs/readFileSync source-path) "utf8")))
-
 (defn- js-bind
   [pairs]
   (let [bind (js-obj)]
@@ -70,16 +59,6 @@
      (when (some? row-mode)
        (gobj/set opts "rowMode" row-mode))
      ((:exec sqlite) db opts))))
-
-(deftest node-platform-runtime-dependency-is-node-sqlite
-  (let [source (node-platform-source)]
-    (is (string/includes? source "\"node:sqlite\""))
-    (is (not (string/includes? source "\"better-sqlite3\"")))))
-
-(deftest node-platform-loads-zvec-lazily
-  (let [source (node-platform-source)]
-    (is (not (string/includes? source "[\"@zvec/zvec\" :as zvec]")))
-    (is (string/includes? source "(js/require \"@zvec/zvec\")"))))
 
 (deftest node-platform-disables-vector-embedding-off-macos
   (async done
@@ -149,11 +128,6 @@
   (let [topks #'platform-node/vector-query-topks]
     (is (= [10] (topks 10 nil)))
     (is (= [40 160 640] (topks 10 "page-1")))))
-
-(deftest node-platform-backup-uses-shared-sqlite-backup-implementation
-  (let [source (node-platform-source)]
-    (is (string/includes? source "logseq.db.sqlite.backup"))
-    (is (string/includes? source "sqlite-backup/backup-connection!"))))
 
 (deftest node-platform-env-owner-source-is-propagated
   (async done

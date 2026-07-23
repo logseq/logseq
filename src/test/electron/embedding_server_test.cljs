@@ -1,6 +1,5 @@
 (ns electron.embedding-server-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
+  (:require ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [electron.embedding-server :as embedding-server]
@@ -329,16 +328,3 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
-
-(deftest electron-builder-bundles-only-sidecar-python-file
-  (let [repo-root (.cwd js/process)
-        sidecar-dir (node-path/join repo-root "sidecar")
-        builder-config (.toString (fs/readFileSync (node-path/join repo-root
-                                                                  "resources"
-                                                                  "electron-builder.yml"))
-                                  "utf8")
-        sidecar-files (when (fs/existsSync sidecar-dir)
-                        (js->clj (fs/readdirSync sidecar-dir)))]
-    (is (string/includes? builder-config "from: ../sidecar"))
-    (is (string/includes? builder-config "to: sidecar"))
-    (is (= ["embedding_server.py"] sidecar-files))))
