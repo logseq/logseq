@@ -42,8 +42,7 @@ class NativeBottomSheetPlugin : Plugin() {
 
         activity.runOnUiThread {
             WebViewSnapshotManager.registerWindow(activity.window)
-            pendingRestoreWebView?.let { finishDismissal(it) }
-            if (dialog != null) {
+            if (dialog != null || awaitingContentReady) {
                 call.resolve()
                 return@runOnUiThread
             }
@@ -101,7 +100,7 @@ class NativeBottomSheetPlugin : Plugin() {
             behavior.skipCollapsed = !allowFullHeight
 
             sheet.setOnDismissListener {
-                notifyListeners("state", JSObject().put("dismissing", true))
+                awaitingContentReady = true
 
                 // Forcefully detach WebView before restoring
                 try {
@@ -118,6 +117,7 @@ class NativeBottomSheetPlugin : Plugin() {
                     scheduleDismissalFallback()
                 }
 
+                notifyListeners("state", JSObject().put("dismissing", true))
                 dialog = null
                 container = null
             }
