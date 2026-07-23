@@ -67,7 +67,7 @@
 (deftest affected-resource-keys-pass-through-without-delta-owned-invalidation-test
   (let [db (db-with-blocks [])
         affected-keys #{[:entity (random-uuid)]
-                        [:unlinked-index]}
+                        [:refs (random-uuid)]}
         delta (build-delta {:db-before db :db-after db :tx-data []}
                            {:affected-keys affected-keys})]
     (is (= affected-keys (:affected-keys delta))

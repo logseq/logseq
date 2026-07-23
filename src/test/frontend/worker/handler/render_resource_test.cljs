@@ -1017,13 +1017,13 @@
                     (fn [_repo _query _opts] [{:db/id row-id}])]
         (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
           (assert-resource-envelope @conn resource-key
-                                    #{[:entity page] [:unlinked-index]}
+                                    #{}
                                     true
                                     response)))
       (with-redefs [search-handler/search-blocks (fn [& _] [])]
         (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
           (assert-resource-envelope @conn resource-key
-                                    #{[:entity page] [:unlinked-index]}
+                                    #{}
                                     false
                                     response))))))
 
@@ -1402,15 +1402,11 @@
             :watch #{[:entity other-view]
                      [:entity view-owner]
                      [:refs view-owner]
-                     [:ref-scope]
-                     [:attr :block/title]}
+                     [:ref-scope]}
             :row reference-block}
            {:key [:view-data unlinked-view
                   {:feature-type :unlinked-references :sorting sorting}]
-            :watch #{[:entity unlinked-view]
-                     [:entity page]
-                     [:unlinked-index]
-                     [:attr :block/title]}
+            :watch #{}
             :row view-row}
            {:key [:view-data query-view
                   {:feature-type :query-result

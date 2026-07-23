@@ -536,9 +536,6 @@
 (def ^:private journal-protected-update-attrs
   #{:block/title :block/name})
 
-(def ^:private direct-child-visibility-attrs
-  #{:block/closed-value-property :logseq.property/deleted-at})
-
 (defn- ensure-journal-page-protected-attrs-not-updated!
   [{:keys [db-before tx-data]}]
   (when-let [violation
@@ -557,35 +554,6 @@
                             :journal-day (:block/journal-day before-ent)}))))
                    tx-data)]
     (throw (ex-info "journal page protected attr updated" violation))))
-
-(defn- structural-parent-ids
-  [{:keys [db-before db-after tx-data]}]
-  (into #{}
-        (mapcat (fn [datom]
-                  (let [attr (:a datom)]
-                    (cond
-                      (= :block/parent attr)
-                      [(:v datom)]
-
-                      (or (= :block/order attr)
-                          (contains? direct-child-visibility-attrs attr))
-                      (keep #(some-> (d/entity % (:e datom))
-                                     :block/parent
-                                     :db/id)
-                            [db-before db-after])
-
-                      :else
-                      []))))
-        tx-data))
-
-(defn- collect-structural-parent-uuids
-  [{:keys [db-before db-after] :as tx-report}]
-  (into #{}
-        (keep (fn [id]
-                (some-> (or (d/entity db-after id)
-                            (d/entity db-before id))
-                        :block/uuid)))
-        (structural-parent-ids tx-report)))
 
 (defn- projected-reference-content-datom?
   [datom]
@@ -719,26 +687,6 @@
   [tx-report _context]
   (try
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-          changed-entities (concat pages blocks)
-          db-after (:db-after tx-report)
-          render-dependent-eids
-          (into #{}
-                (mapcat (fn [entity]
-                          (let [entity-id (:db/id entity)
-                                property-ident (:db/ident entity)]
-                            (concat
-                             (map :e (d/datoms db-after :avet :block/tags entity-id))
-                             (when property-ident
-                               (d/q '[:find [?e ...]
-                                      :in $ ?property
-                                      :where [?e ?property]]
-                                    db-after property-ident))))))
-                changed-entities)
-          render-invalidated-block-uuids
-          (into #{}
-                (keep #(some-> (d/entity db-after %) :block/uuid))
-                render-dependent-eids)
-          structural-parent-uuids (collect-structural-parent-uuids tx-report)
           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
           deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-block-ids (set (map :db/id deleted-blocks))
@@ -756,8 +704,6 @@
        :affected-keys affected-keys
        :deleted-block-uuids deleted-block-uuids
        :deleted-assets deleted-assets
-       :render-invalidated-block-uuids render-invalidated-block-uuids
-       :structural-parent-uuids structural-parent-uuids
        :pages pages
        :blocks blocks})
     (catch :default e

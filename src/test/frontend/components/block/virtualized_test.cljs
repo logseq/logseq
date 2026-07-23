@@ -132,7 +132,7 @@
           (is (not (string/includes? root-source forbidden))
               (str "Unexpected page-root data: " forbidden)))))))
 
-(deftest page-root-virtualizer-does-not-own-descendant-height-test
+(deftest page-root-virtualizer-measures-editable-rows-synchronously-test
   (let [source (source-for "src/main/frontend/components/block.cljs")
         root-source (form-source source "(hsx/defc page-root-virtual-list")]
     (is (some? root-source))
@@ -140,9 +140,9 @@
       (is (not (string/includes? root-source ":scrollSeekConfiguration"))
           "Replacing a mounted root row would collapse its plain descendants.")
       (is (not (string/includes? root-source ":ScrollSeekPlaceholder")))
-      (is (not (string/includes? root-source
-                                 ":skipAnimationFrameInResizeObserver true"))
-          "A newly focused editor row may settle after the current layout."))))
+      (is (string/includes? root-source
+                            ":skipAnimationFrameInResizeObserver true")
+          "Editable block lists should process resize observations synchronously."))))
 
 (deftest scroll-position-persistence-runs-after-scrolling-stops
   (let [source (source-for "src/main/frontend/handler/common.cljs")

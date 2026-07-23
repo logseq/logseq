@@ -344,9 +344,11 @@
   [repo staged-assets]
   (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
     (when (seq staged-assets)
-      (fs/mkdir-if-not-exists assets-dir)
-      (doseq [{:keys [asset-id asset-type payload]} staged-assets]
-        (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true})))))
+      (p/let [_ (fs/mkdir-if-not-exists assets-dir)]
+        (p/all
+         (mapv (fn [{:keys [asset-id asset-type payload]}]
+                 (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true}))
+               staged-assets))))))
 
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}

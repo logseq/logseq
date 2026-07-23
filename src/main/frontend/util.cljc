@@ -1364,6 +1364,11 @@
           (not (string/includes? js/window.location.search "virtualized=true")))))
 
 #?(:cljs
+   (defn force-virtualization?
+     []
+     (string/includes? js/window.location.search "virtualized=true")))
+
+#?(:cljs
    (defn sanitize-port-input
      "Strips all non-digit characters from a port input string."
      [value]

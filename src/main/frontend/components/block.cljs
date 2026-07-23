@@ -3730,7 +3730,7 @@
           repo (state/get-current-repo)
           move-to @*move-to']
       (p/let [selected (db-async/<get-blocks repo block-uuids {:children? false})
-              blocks (if (seq selected) selected [@*dragging-block])
+              blocks (if (seq selected) (keep :block selected) [@*dragging-block])
               blocks (remove-nils blocks)]
         (if (seq blocks)
           ;; dnd block moving in current Logseq instance
@@ -4949,6 +4949,9 @@
   (let [disable-virtualized? (util/rtc-test-without-virtualization?)
         block-uuids (vec block-uuids)
         blocks-count (count block-uuids)
+        virtualized? (and (not disable-virtualized?)
+                          (or (util/force-virtualization?)
+                              (>= blocks-count 1000)))
         selection-block-ids (or (:selection/block-ids config) block-uuids)
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
@@ -4958,6 +4961,7 @@
                            (scroll-container)
                            scroll-container)
         *virtualized-ref (hooks/use-ref nil)
+        *block-uuids-ref (hooks/use-ref block-uuids)
         *last-rendered-start (hooks/use-ref nil)
         virtual-opts {:ref *virtualized-ref
                       :custom-scroll-parent scroll-container
@@ -4965,6 +4969,7 @@
                                           (str (:container-id config) "-" block-uuid))
                       :increase-viewport-by 254
                       :overscan 254
+                      :skipAnimationFrameInResizeObserver true
                       :data (to-array block-uuids)
                       :items-rendered
                       (fn [^js rendered-items]
@@ -4996,26 +5001,29 @@
                                        block-uuid
                                        {:top? (zero? idx)
                                         :bottom? (= (dec blocks-count) idx)}))}]
+    (set! (.-current *block-uuids-ref) block-uuids)
     (hooks/use-effect!
      (fn []
-       (when (and (not disable-virtualized?)
+       (when (and virtualized?
                   (seq block-uuids)
                   (:current-page? config))
          (let [ref (.-current *virtualized-ref)]
            (ui-handler/scroll-to-anchor-block ref block-uuids false)
            (state/set-state! :editor/virtualized-scroll-fn
-                             #(ui-handler/scroll-to-anchor-block ref block-uuids false))))
+                             #(ui-handler/scroll-to-anchor-block
+                               ref
+                               (.-current *block-uuids-ref)
+                               false))))
        (fn []))
-     [block-uuids])
-    (when (seq block-uuids)
-      [:div.blocks-container.flex-1
-       {:containerid (:container-id config)}
-       (if disable-virtualized?
-         (plain-block-list config block-uuids)
-         [:div.blocks-list-wrap
-          {:data-level (or (:level config) 0)
-           :data-virtuoso-scroller true}
-          (ui/virtualized-list virtual-opts)])])))
+     [virtualized?])
+    [:div.blocks-container.flex-1
+     {:containerid (:container-id config)}
+     (if virtualized?
+       [:div.blocks-list-wrap
+        {:data-level (or (:level config) 0)
+         :data-virtuoso-scroller true}
+        (ui/virtualized-list virtual-opts)]
+       (plain-block-list config block-uuids))]))
 
 
 (defn- block-row-uuid
