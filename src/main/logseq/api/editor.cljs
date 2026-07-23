@@ -416,18 +416,17 @@
            uuid-or-page-name (or uuid-or-page-name current-page-or-today)
            _ (<ensure-page-loaded uuid-or-page-name)
              page? (not (util/uuid-string? uuid-or-page-name))
-             page-result (db-async/<get-block-with-children (state/get-current-repo)
-                                                            uuid-or-page-name
-                                                            {:children? true})
-             page (:block page-result)
+             repo (state/get-current-repo)
+             page (db-async/<get-block repo uuid-or-page-name {:children? false})
              page-not-exist? (and page? (nil? page))
              new-page (when page-not-exist?
                         (page-handler/<create! uuid-or-page-name
                                                {:redirect? false
                                                 :format (state/get-preferred-format)}))
-             block (or page new-page)]
-       (let [children (:children page-result)
-             [target sibling?] (if (seq children)
+             block (or page new-page)
+             children (when page
+                        (db-async/<get-block-immediate-children repo (:block/uuid page)))]
+       (let [[target sibling?] (if (seq children)
                                  [(last (ldb/sort-by-order children)) true]
                                  [block false])
              target-id (str (:block/uuid target))

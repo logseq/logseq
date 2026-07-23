@@ -154,17 +154,28 @@
              (editor/get-state))))))
 
 (deftest inserted-block-edit-uses-persisted-window-row-test
-  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
-        pending-block {:block/uuid block-id :block/title "created"}
-        inserted-block (assoc pending-block :db/id 10)
-        calls (atom [])]
-    (with-redefs [editor/edit-block! (fn [block pos opts]
-                                      (reset! calls [block pos opts]))]
-      ((#'editor/inserted-block-edit-fn pending-block 7) [inserted-block])
-      (is (= [inserted-block 0 {:container-id 7
-                                :save-code-editor? false
-                                :skip-load? true}]
-             @calls)))))
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          pending-block {:block/uuid block-id :block/title "created"}
+          inserted-block (assoc pending-block :db/id 10)
+          calls (atom [])
+          original-edit-block! editor/edit-block!]
+      (set! editor/edit-block! (fn [block pos opts]
+                                 (reset! calls [block pos opts])))
+      (-> ((#'editor/inserted-block-edit-fn pending-block pending-block 7) [inserted-block])
+          (p/then
+           (fn []
+             (is (= [inserted-block 0 {:container-id 7
+                                       :save-code-editor? false
+                                       :skip-load? true}]
+                    @calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor/edit-block! original-edit-block!)
+             (done)))))))
 
 (deftest save-block-if-changed-uses-passed-block-content-test
   (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"

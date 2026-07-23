@@ -41,6 +41,18 @@
     (p/resolved {:block block
                  :children (block-descendants test-db block)})))
 
+(defn- <test-get-block
+  [_repo id & _opts]
+  (p/resolved (block-by-id (conn/get-db test-helper/test-db) id)))
+
+(defn- <test-get-block-immediate-children
+  [_repo block-uuid]
+  (let [test-db (conn/get-db test-helper/test-db)
+        block (block-by-id test-db block-uuid)]
+    (p/resolved
+     (->> (:block/_parent (d/entity test-db (:db/id block)))
+          (mapv #(d/pull test-db block-pull-selector (:db/id %)))))))
+
 (deftest get-block
   (async done
     (db/transact! test-helper/test-db
@@ -59,7 +71,9 @@
                     :block/uuid #uuid "0c3053c3-2dab-4769-badd-14ce16d8ba8d"
                     :block/parent 10002
                     :block/title "4"}])
-    (-> (p/with-redefs [db-async/<get-block-with-children <test-get-block-with-children]
+    (-> (p/with-redefs [db-async/<get-block <test-get-block
+                         db-async/<get-block-immediate-children <test-get-block-immediate-children
+                         db-async/<get-block-with-children <test-get-block-with-children]
           (p/let [block-10000 (api-block/get_block 10000 #js {})
                   block-by-string (api-block/get_block "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {})
                   block-by-uuid (api-block/get_block #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172" #js {})
@@ -79,5 +93,33 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest get-block-includes-descendants-under-collapsed-blocks-test
+  (async done
+    (let [requested-options (atom nil)
+          block {:db/id 10001
+                 :block/uuid #uuid "d9b7b45f-267f-4794-9569-f43d1ce77172"
+                 :block/title "root"}
+          child {:db/id 10002
+                 :block/uuid #uuid "adae3006-f03e-4814-a1f5-f17f15b86556"
+                 :block/parent {:db/id 10001}
+                 :block/title "collapsed"}
+          grandchild {:db/id 10003
+                      :block/uuid #uuid "0c3053c3-2dab-4769-badd-14ce16d8ba8d"
+                      :block/parent {:db/id 10002}
+                      :block/title "grandchild"}]
+      (-> (p/with-redefs [db-async/<get-block-with-children
+                          (fn [_repo _id options]
+                            (reset! requested-options options)
+                            (p/resolved {:block block
+                                         :children [child grandchild]}))]
+            (p/let [result (api-block/get_block (:db/id block) #js {:includeChildren true})]
+              (is (true? (:include-collapsed-children? @requested-options)))
+              (is (= "grandchild"
+                     (get-in (js->clj result :keywordize-keys true)
+                             [:children 0 :children 0 :title])))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
 
 #_(cljs.test/run-tests)

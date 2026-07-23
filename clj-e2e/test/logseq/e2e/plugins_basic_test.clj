@@ -47,6 +47,17 @@
       (ls-api-call! :editor.removeBlock uuid')
       (assert-api-ls-block! uuid' 0))))
 
+(deftest append-block-in-page-stays-at-page-root-test
+  (page/new-page "test-append-block-root")
+  (let [page (ls-api-call! :editor.getPage "test-append-block-root")
+        root (ls-api-call! :editor.appendBlockInPage "test-append-block-root" "root")
+        nested (ls-api-call! :editor.insertBlock (get root "uuid") "nested-1" {:sibling false})
+        _ (ls-api-call! :editor.insertBlock (get nested "uuid") "nested-2" {:sibling true})
+        appended (ls-api-call! :editor.appendBlockInPage "test-append-block-root" "appended")
+        appended-block (ls-api-call! :editor.getBlock (get appended "uuid"))]
+    (is (= (get page "id")
+           (get-in appended-block ["parent" "id"])))))
+
 (deftest block-properties-test
   (testing "block properties related apis"
     (page/new-page "test-block-properties-apis")

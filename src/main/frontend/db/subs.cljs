@@ -56,7 +56,9 @@
         new-tx-id (require-revision! :block/tx-id (:block/tx-id new-block))]
     (not= old-tx-id new-tx-id)))
 
+(def ^:private block-load-batch-limit 1000)
 (def ^:private load-batch-limit 25)
+(def ^:private children-slot-cache-ms 30000)
 
 (defonce ^:private *block-load-batch
   (atom {:scheduled? false :entries {}}))
@@ -115,18 +117,18 @@
 
 (defn- flush-block-loads!
   []
-  (doseq [[graph-id entries] (group-by :graph-id
-                                       (take-load-entries! *block-load-batch))
-          batch (partition-all load-batch-limit entries)]
-    (let [block-uuids (mapv :key batch)]
-      (-> (state/<invoke-db-worker :thread-api/get-canonical-blocks
-                                   graph-id
-                                   block-uuids)
-          (p/then (fn [response]
-                    (doseq [{:keys [result]} batch]
-                      (p/resolve! result response))))
-          (p/catch (fn [error]
-                     (reject-load-entries! batch error)))))))
+  (let [entries (take-load-entries! *block-load-batch)]
+    (doseq [[graph-id entries] (group-by :graph-id entries)
+            batch (partition-all block-load-batch-limit entries)]
+      (let [block-uuids (mapv :key batch)]
+        (-> (state/<invoke-db-worker :thread-api/get-canonical-blocks
+                                     graph-id
+                                     block-uuids)
+            (p/then (fn [response]
+                      (doseq [{:keys [result]} batch]
+                        (p/resolve! result response))))
+            (p/catch (fn [error]
+                       (reject-load-entries! batch error))))))))
 
 (defn- children-batch-results
   [entries {:keys [basis-rev children]}]
@@ -724,19 +726,22 @@
 
 (defn- schedule-slot-gc!
   [slot-type key]
-  (js/queueMicrotask
-   (fn []
-     (when-not (mounted? slot-type key)
-       (let [journal-bundle
-             (when (and (= :resources slot-type)
-                        (journal-bundle-key? key))
-               (get-in @*store [:resources key :snapshot :value]))]
-         (collect-slot! slot-type key)
-         (when journal-bundle
-           (doseq [block-uuid (keys (:blocks journal-bundle))]
-             (collect-slot! :blocks block-uuid))
-           (doseq [parent-uuid (keys (:children journal-bundle))]
-             (collect-slot! :children parent-uuid))))))))
+  (let [collect!
+        (fn []
+          (when-not (mounted? slot-type key)
+            (let [journal-bundle
+                  (when (and (= :resources slot-type)
+                             (journal-bundle-key? key))
+                    (get-in @*store [:resources key :snapshot :value]))]
+              (collect-slot! slot-type key)
+              (when journal-bundle
+                (doseq [block-uuid (keys (:blocks journal-bundle))]
+                  (collect-slot! :blocks block-uuid))
+                (doseq [parent-uuid (keys (:children journal-bundle))]
+                  (collect-slot! :children parent-uuid))))))]
+    (if (= :children slot-type)
+      (js/setTimeout collect! children-slot-cache-ms)
+      (js/queueMicrotask collect!))))
 
 (defn- add-listener!
   [slot-type key listener start-load!]
