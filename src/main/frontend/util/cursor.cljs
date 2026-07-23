@@ -107,6 +107,24 @@
           (when-let [pre-char (subs content (dec pos') pos')]
             (= pre-char \newline))))))
 
+(defn end-of-line?
+  [input]
+  (let [[content pos'] (get-input-content&pos input)]
+    (when content
+      (or (= pos' (count content))
+          (when-let [next-char (subs content pos' (inc pos'))]
+            (= next-char \newline))))))
+
+(defn adjacent-line-end-pos
+  "Given block `content` and a caret position `pos'` sitting at the end of a
+   hard line, return the position of the end of the previous (:up) / next
+   (:down) hard line, or nil when there is no such line."
+  [content pos' direction]
+  (case direction
+    :up (string/last-index-of content \newline (dec pos'))
+    :down (or (string/index-of content \newline (inc pos'))
+              (count content))))
+
 (comment
   (defn line-end-pos
     [input]
@@ -220,7 +238,12 @@
 
 (defn- move-cursor-up-down
   [input direction]
-  (move-cursor-to input (next-cursor-pos-up-down direction (get-caret-pos input))))
+  (if-let [pos' (and (end-of-line? input)
+                     (adjacent-line-end-pos (gobj/get input "value")
+                                            (util/get-selection-start input)
+                                            direction))]
+    (move-cursor-to input pos')
+    (move-cursor-to input (next-cursor-pos-up-down direction (get-caret-pos input)))))
 
 (defn move-cursor-up [input]
   (move-cursor-up-down input :up))

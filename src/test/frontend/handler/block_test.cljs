@@ -63,3 +63,14 @@
     (with-redefs [db/get-db (fn [] @conn)
                   db/entity (fn [eid] (d/entity @conn eid))]
       (is (= "Project/Milestone" (block-handler/block-unique-title plain-class-map))))))
+
+(deftest text-range-by-lst-fst-line-end-of-line
+  (let [f #'block-handler/text-range-by-lst-fst-line]
+    (testing ":end keeps caret at end of target line"
+      (is (= "longer first line" (f "longer first line\nsecond" [:down :end])))
+      (is (= "" (f "\nsecond" [:down :end])))
+      (is (= "a\nb\nlong last line" (f "a\nb\nlong last line" [:up :end])))
+      (is (= "only line" (f "only line" [:up :end]))))
+    (testing "numeric pos preserves column (unchanged behavior)"
+      (is (= "lo" (f "longer first line\nsecond" [:down 2])))
+      (is (= "a\nb\nlo" (f "a\nb\nlong last line" [:up 2]))))))
