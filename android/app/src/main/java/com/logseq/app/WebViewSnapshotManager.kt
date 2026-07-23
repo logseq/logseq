@@ -43,6 +43,7 @@ object WebViewSnapshotManager {
     fun showSnapshot(tag: String, webView: View): View? {
         val overlay = ensureOverlay(webView) ?: return null
         clearSnapshot(tag)
+        overlay.isClickable = true
         overlay.visibility = View.VISIBLE
 
         val snapshotView = makeSnapshotView(webView)
@@ -68,6 +69,7 @@ object WebViewSnapshotManager {
         if (view != null && container != null) {
             container.removeView(view)
             if (container.childCount == 0) {
+                container.isClickable = false
                 container.visibility = View.GONE
             }
         }
