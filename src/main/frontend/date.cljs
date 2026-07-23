@@ -58,6 +58,12 @@
 (defn start-of-day [date]
   (t/date-time (t/year date) (t/month date) (t/day date)))
 
+(defn next-local-day-ms
+  ([]
+   (next-local-day-ms (js/Date.)))
+  ([^js now]
+   (.getTime (js/Date. (.getFullYear now) (.getMonth now) (inc (.getDate now)) 0 0 1))))
+
 (defn today
   []
   (journal-name))
