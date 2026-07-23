@@ -390,7 +390,7 @@
                                              (do
                                                (state/pub-event!
                                                 [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
-                                               (when (util/mobile?)
+                                               (when (mobile-util/native-platform?)
                                                  false))
 
                                              :else
