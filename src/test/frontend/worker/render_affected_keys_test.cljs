@@ -154,6 +154,28 @@
            (affected-keys db [[:db/add 10 :block/tx-id 11]]))
         "Pipeline transaction stamps are transport metadata, not resource dependencies.")))
 
+(deftest empty-block-insertion-does-not-invalidate-page-reference-resources-test
+  (let [page-uuid (random-uuid)
+        block-uuid (random-uuid)
+        db (db-with [{:db/id 10
+                      :block/uuid page-uuid
+                      :block/name "page"
+                      :block/title "Page"
+                      :block/updated-at 1000}])
+        keys (affected-keys
+              db
+              [[:db/add 10 :block/updated-at 2000]
+               {:db/id 11
+                :block/uuid block-uuid
+                :block/title ""
+                :block/parent 10
+                :block/page 10
+                :block/order "a0"
+                :block/created-at 2000
+                :block/updated-at 2000}])]
+    (is (not (contains? keys [:entity page-uuid]))
+        "A parent timestamp update must not invalidate resources derived from page content.")))
+
 (deftest semantic-attributes-invalidate-the-entity-and-property-membership-test
   (let [block-uuid (random-uuid)
         property-ident :user.property/priority
@@ -188,7 +210,7 @@
                                :block/uuid new-uuid
                                :block/name "new page"}])))))
 
-(deftest page-visibility-invalidates-page-membership-and-unlinked-references-test
+(deftest page-visibility-invalidates-page-membership-test
   (let [page-uuid (random-uuid)
         db (db-with [{:db/id 10
                       :block/uuid page-uuid
@@ -198,8 +220,7 @@
              [:entity page-uuid]
              [:attr :logseq.property/deleted-at]
              [:property-membership :logseq.property/deleted-at]
-             [:page-membership]
-             [:unlinked-index]}
+             [:page-membership]}
            (affected-keys db [[:db/add 10 :logseq.property/deleted-at 1000]])))))
 
 (deftest journal-membership-follows-journal-identity-and-visibility-test
@@ -227,8 +248,7 @@
                [:attr :logseq.property/deleted-at]
                [:property-membership :logseq.property/deleted-at]
                [:page-membership]
-               [:journals]
-               [:unlinked-index]}
+               [:journals]}
              (affected-keys db [[:db/add 10 :logseq.property/deleted-at 1000]]))))))
 
 (deftest reaction-invalidation-resolves-targets-from-both-databases-test
@@ -360,8 +380,7 @@
              [:attr :block/refs]
              [:property-membership :block/refs]
              [:refs target-before-uuid]
-             [:refs target-after-uuid]
-             [:unlinked-index]}
+             [:refs target-after-uuid]}
            (affected-keys db [[:db/retract 12 :block/refs 10]
                               [:db/add 12 :block/refs 11]])))))
 
@@ -384,9 +403,14 @@
     (testing "content"
       (is (= (into common
                    #{[:attr :block/title]
-                     [:property-membership :block/title]
-                     [:unlinked-index]})
+                     [:property-membership :block/title]})
              (affected-keys db [[:db/add 13 :block/title "After"]]))))
+    (testing "sorting attributes"
+      (is (= #{[:graph]
+               [:attr :block/updated-at]
+               [:property-membership :block/updated-at]
+               [:refs target-uuid]}
+             (affected-keys db [[:db/add 13 :block/updated-at 1000]]))))
     (testing "structure"
       (is (= (into common
                    #{[:attr :block/parent]
@@ -398,8 +422,7 @@
       (is (= (into common
                    #{[:attr :logseq.property/deleted-at]
                      [:property-membership :logseq.property/deleted-at]
-                     [:children parent-before-uuid]
-                     [:unlinked-index]})
+                     [:children parent-before-uuid]})
              (affected-keys db [[:db/add 13 :logseq.property/deleted-at 1000]]))))))
 
 (deftest comments-invalidation-resolves-old-and-new-thread-targets-test

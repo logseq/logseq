@@ -389,7 +389,7 @@
   (require-shape! resource-key :block-unlinked-ref-exists 2)
   (let [block-uuid (second resource-key)
         block (entity-by-uuid! db :block-uuid block-uuid)]
-    [#{[:entity block-uuid] [:unlinked-index]}
+    [#{}
      (block-handler/unlinked-reference-exists? db repo (:db/id block))]))
 
 (defn- block-comment-threads
@@ -733,11 +733,15 @@
 
 (defn- view-watch-keys
   [db view-uuid owner feature-type config view-partition]
-  (let [owner-uuid (:block/uuid owner)
-        base (cond-> (conj (view-value-watch-keys config view-partition)
-                           [:entity view-uuid])
-               owner-uuid (conj [:entity owner-uuid]))]
-    (case feature-type
+  (if (= :unlinked-references feature-type)
+    #{}
+    (let [owner-uuid (:block/uuid owner)
+          value-watch-keys (if (= :linked-references feature-type)
+                             #{}
+                             (view-value-watch-keys config view-partition))
+          base (cond-> (conj value-watch-keys [:entity view-uuid])
+                 owner-uuid (conj [:entity owner-uuid]))]
+      (case feature-type
       :all-pages
       (conj base [:page-membership])
 
@@ -770,11 +774,8 @@
                      [:refs target-uuid]))
               refs-scope))
 
-      :unlinked-references
-      (conj base [:unlinked-index])
-
       :query-result
-      base)))
+      base))))
 
 (defn- normalize-view-row
   [db row]

@@ -99,7 +99,7 @@
                                                  :error error})
                   ;; Disable this temporarily
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                  ))))))
+                  (throw error)))))))
 
 (defn write-file!
   "A node only version of write-plain-text-file! to avoid using the fs-protocol

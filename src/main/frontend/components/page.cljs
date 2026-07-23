@@ -154,7 +154,7 @@
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
       [:div.page-blocks-inner.relative
-       (when (seq child-uuids)
+       (when (or (seq child-uuids) (:current-page? config))
          (block/page-root-virtual-list config child-uuids))
        (when (and (not config/publishing?)
                   (or (empty? child-uuids)
@@ -168,7 +168,7 @@
         child-uuids (db-hooks/use-resource membership-key)]
     (when page
       [:div.page-blocks-inner.relative
-       (when (seq child-uuids)
+       (when (or (seq child-uuids) (:current-page? config))
          (block/page-root-virtual-list config child-uuids))
        (when (and (not config/publishing?)
                   (or (empty? child-uuids)

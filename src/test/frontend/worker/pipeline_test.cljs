@@ -313,9 +313,10 @@
     (is (= #{[:graph]
              [:entity block-uuid]
              [:attr :block/title]
-             [:property-membership :block/title]
-             [:unlinked-index]}
-           (:affected-keys result)))))
+             [:property-membership :block/title]}
+           (:affected-keys result)))
+    (is (not (contains? result :render-invalidated-block-uuids)))
+    (is (not (contains? result :structural-parent-uuids)))))
 
 (deftest referenced-entity-content-change-invalidates-owning-block-test
   (let [conn (db-test/create-conn-with-blocks
