@@ -25,6 +25,10 @@
  ;; Default value: true
  :feature/enable-search-remove-accents? true
 
+ ;; Enable journals.
+ ;; Default value: true
+ :feature/enable-journals? true
+
  ;; Enable flashcards.
  ;; Default value: true
  ;; :feature/enable-flashcards? true

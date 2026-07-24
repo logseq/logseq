@@ -1699,6 +1699,7 @@
  :settings.editor/wide-mode "宽屏模式"
 
  :settings.features/enable-flashcards "记忆卡片"
+ :settings.features/enable-journals "开启日记"
  :settings.features/home-default-page "设置首页默认页面"
  :settings.features/home-default-page-update-success "主页默认页面已更新成功！"
  :settings.features/login-prompt "你必须是 Logseq 的 Open Collective Sponsor 或者 Backer 才能提前使用新功能（仍在测试中），因此需要登录。"

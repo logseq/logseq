@@ -12,7 +12,7 @@
 
 (defn- redirect-to-journal!
   [page]
-  (when page
+  (when (and page (state/enable-journals? (state/get-current-repo)))
     (p/do!
      (db-async/<get-block (state/get-current-repo) page :children? false)
      (if (db-model/page-exists? page #{:logseq.class/Journal})
