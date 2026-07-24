@@ -393,6 +393,72 @@
       (on-click #js {})
       (is (empty? @events)))))
 
+(deftest native-mobile-remote-graph-download-allows-popup-to-close-test
+  (let [events (atom [])
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :remote? true
+                 :rtc-graph? true
+                 :GraphName "demo"
+                 :GraphUUID "graph-1"
+                 :GraphSchemaVersion "65"
+                 :graph-ready-for-use? true}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [mobile-util/native-platform? (constantly true)
+                  state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (is (not (false? (on-click #js {}))))
+      (is (= [[:rtc/download-remote-graph "demo" "graph-1" "65" nil]]
+             @events)))))
+
+(deftest graph-selection-defers-closing-sidebar-at-mobile-breakpoint-test
+  (async done
+         (let [close-f (some-> (resolve 'frontend.components.repo/close-sidebar-after-repo-popup-action!)
+                               deref)
+               sidebar-open? (state/get-state :ui/left-sidebar-open?)]
+           (is (fn? close-f) "Graph selection should close the mobile sidebar")
+           (if-not close-f
+             (done)
+             (with-redefs [util/sm-breakpoint? (constantly true)]
+               (state/set-left-sidebar-open! true)
+               (close-f)
+               (is (true? (state/get-state :ui/left-sidebar-open?))
+                   "Sidebar closing must not unmount the dropdown during its click handler")
+               (js/setTimeout
+                (fn []
+                  (is (false? (state/get-state :ui/left-sidebar-open?)))
+                  (state/set-left-sidebar-open! sidebar-open?)
+                  (done))
+                0))))))
+
+(deftest graph-selection-keeps-desktop-sidebar-state-test
+  (let [close-f (some-> (resolve 'frontend.components.repo/close-sidebar-after-repo-popup-action!)
+                        deref)
+        states (atom [])]
+    (is (fn? close-f) "Graph selection should expose the mobile sidebar close action")
+    (when close-f
+      (with-redefs [util/sm-breakpoint? (constantly false)
+                    state/set-left-sidebar-open! #(swap! states conj %)]
+        (close-f)
+        (is (empty? @states))))))
+
+(deftest repo-popup-action-target-test
+  (let [target? (some-> (resolve 'frontend.components.repo/repo-popup-action-target?)
+                        deref)
+        container (.createElement js/document "div")]
+    (is (fn? target?) "The graph popup should identify every actionable item")
+    (when target?
+      (set! (.-innerHTML container)
+            (str "<div role=\"menuitem\"><span id=\"graph\">Graph</span></div>"
+                 "<button><span id=\"footer\">All graphs</span></button>"
+                 "<a><span id=\"link\">Import</span></a>"
+                 "<div id=\"blank\"></div>"))
+      (doseq [id ["graph" "footer" "link"]]
+        (is (true? (target? (.querySelector container (str "#" id)))) id))
+      (is (false? (target? (.querySelector container "#blank")))))))
+
 (deftest shift-click-opens-downloaded-remote-graph-in-new-tab-with-graph-id-test
   (let [events (atom [])
         links (#'repo/repos-dropdown-links

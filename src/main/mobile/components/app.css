@@ -317,7 +317,7 @@ ul {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
-      @apply text-base opacity-100;
+      @apply text-sm opacity-100;
       display: flex !important;
     }
   }
@@ -327,7 +327,7 @@ ul {
   }
 
   .hd .wrap-th > strong {
-    @apply !text-base;
+    @apply !text-sm;
   }
 }
 
