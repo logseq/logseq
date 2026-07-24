@@ -78,7 +78,12 @@
                        (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
                        (seq config/COGNITO-CLIENT-ID)
-                       (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
+                       (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)
+
+                       ;; Always set (nil clears a previously pushed token) so
+                       ;; the worker never keeps a stale self-hosted token.
+                       true
+                       (assoc :auth/static-sync-token (config/local-sync-token)))))
               (dedupe)))
         <init-sync-done? (p/deferred)
         task (m/reduce

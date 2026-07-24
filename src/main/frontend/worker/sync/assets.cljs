@@ -7,6 +7,7 @@
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.auth :as sync-auth]
+   [frontend.worker.sync.util :as sync-util]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
@@ -168,7 +169,7 @@
                               (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
-                  headers (merge (sync-auth/auth-headers (worker-state/get-id-token))
+                  headers (merge (sync-auth/auth-headers (sync-util/auth-token))
                                  {"x-amz-meta-checksum" checksum
                                   "x-amz-meta-type" asset-type})
                   ^js resp (js/fetch put-url
@@ -358,7 +359,7 @@
                              (throw (ex-info (name tag) data))))
                   asset-id (str asset-uuid)
                   get-url (sync-large-title/asset-url base graph-id asset-id asset-type)
-                  headers (sync-auth/auth-headers (worker-state/get-id-token))
+                  headers (sync-auth/auth-headers (sync-util/auth-token))
                   request-opts (cond-> {:method "GET"}
                                  (seq headers) (assoc :headers headers))
                   ^js resp (js/fetch get-url

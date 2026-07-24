@@ -611,8 +611,26 @@
         (catch :default e
           (p/rejected e))))))
 
+(defn- bootstrap-sync-from-env!
+  "Headless CLI sync: the desktop app pushes the self-hosted sync URL + token
+   into the worker from localStorage, but a CLI-spawned node worker has no
+   localStorage, so sync/util.auth-token comes up nil (missing-field :auth-token).
+   When LOGSEQ_SYNC_URL is set in the environment, seed the same worker state the
+   app would (token into *state; URL into *db-sync-config -- the latter is also
+   re-pinned in set-db-sync-config below since a stock CLI frontend overwrites it
+   with the cloud default). No-op when the env var is absent; GUI unchanged."
+  []
+  (when-let [url (some-> (aget (.-env js/process) "LOGSEQ_SYNC_URL") not-empty)]
+    (let [http-base (string/replace url #"/+$" "")
+          ws-url (str (string/replace http-base #"^http" "ws") "/sync/%s")]
+      (reset! worker-state/*db-sync-config {:http-base http-base :ws-url ws-url})
+      (when-let [token (some-> (aget (.-env js/process) "LOGSEQ_SYNC_TOKEN") not-empty)]
+        (worker-state/set-new-state! {:auth/static-sync-token token}))
+      (log/info :db-worker-node-sync-env-bootstrap {:http-base http-base}))))
+
 (defn main
   []
+  (bootstrap-sync-from-env!)
   (let [{:keys [root-dir repo help? version? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?

@@ -1,9 +1,42 @@
 (ns logseq.db-sync.node-server-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [logseq.db-sync.node.server :as node-server]
             [logseq.db-sync.platform.node :as platform-node]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
+
+(defn- tmp-data-dir []
+  (str "tmp/db-sync-node-test/local-token-" (random-uuid)))
+
+(deftest resolve-local-token-generates-and-persists-test
+  (let [dir (tmp-data-dir)
+        cfg {:data-dir dir}
+        token (node-server/resolve-local-token! cfg)]
+    (is (string? token))
+    (is (= 64 (count token)))
+    (is (fs/existsSync (node-path/join dir "local-token")))
+    ;; same token on subsequent startups
+    (is (= token (node-server/resolve-local-token! cfg)))))
+
+(deftest resolve-local-token-nil-with-cognito-test
+  (is (nil? (node-server/resolve-local-token!
+             {:data-dir (tmp-data-dir)
+              :cognito-issuer "https://cognito.example"}))))
+
+(deftest resolve-local-token-env-var-wins-test
+  (let [dir (tmp-data-dir)]
+    (aset (.-env js/process) "DB_SYNC_LOCAL_TOKEN" "env-secret")
+    (try
+      (is (= "env-secret" (node-server/resolve-local-token! {:data-dir dir})))
+      (is (= "env-secret" (node-server/resolve-local-token!
+                           {:data-dir dir
+                            :cognito-issuer "https://cognito.example"})))
+      ;; env token does not create the persisted token file
+      (is (not (fs/existsSync (node-path/join dir "local-token"))))
+      (finally
+        (js-delete (.-env js/process) "DB_SYNC_LOCAL_TOKEN")))))
 
 (defn- fetch-with-timeout [url timeout-ms]
   (let [timeout-sentinel ::timeout]

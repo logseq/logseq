@@ -56,6 +56,37 @@
   [env]
   (env-flag-enabled? env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
 
+(defn- constant-time-equal?
+  [^string a ^string b]
+  (and (string? a)
+       (string? b)
+       (let [len (max (count a) (count b))]
+         (loop [i 0
+                diff (if (= (count a) (count b)) 0 1)]
+           (if (< i len)
+             (recur (inc i)
+                    (bit-or diff
+                            (bit-xor (.charCodeAt a (mod i (count a)))
+                                     (.charCodeAt b (mod i (count b))))))
+             (zero? diff))))))
+
+(defn- local-token
+  [env]
+  (let [v (some-> env (aget "DB_SYNC_LOCAL_TOKEN"))]
+    (when (and (string? v) (not (string/blank? v)))
+      v)))
+
+(defn- local-token-claims
+  [env]
+  (let [user-id (or (let [v (some-> env (aget "DB_SYNC_LOCAL_USER_ID"))]
+                      (when (and (string? v) (not (string/blank? v)))
+                        v))
+                    "local-user")]
+    #js {"sub" user-id
+         "email" (str user-id "@local")
+         "email_verified" true
+         "preferred_username" user-id}))
+
 (defn- expired-token?
   [token]
   (when-let [claims (unsafe-jwt-claims token)]
@@ -66,18 +97,24 @@
 
 (defn auth-claims [request env]
   (let [token (token-from-request request)]
-    (if (string? token)
-      (if (expired-token? token)
-        (p/resolved nil)
-        (-> (authorization/verify-jwt token env)
-            (p/catch (fn [error]
-                       (cond
-                         (recoverable-auth-error? error)
-                         nil
+    ;; Self-hosted local mode: when DB_SYNC_LOCAL_TOKEN is set, the shared
+    ;; secret is the only accepted credential and JWT verification is skipped.
+    (if-let [expected (local-token env)]
+      (p/resolved
+       (when (constant-time-equal? token expected)
+         (local-token-claims env)))
+      (if (string? token)
+        (if (expired-token? token)
+          (p/resolved nil)
+          (-> (authorization/verify-jwt token env)
+              (p/catch (fn [error]
+                         (cond
+                           (recoverable-auth-error? error)
+                           nil
 
-                         (allow-unverified-jwt-claims? env)
-                         (unsafe-jwt-claims token)
+                           (allow-unverified-jwt-claims? env)
+                           (unsafe-jwt-claims token)
 
-                         :else
-                         (p/rejected error))))))
-      (p/resolved nil))))
+                           :else
+                           (p/rejected error))))))
+        (p/resolved nil)))))
