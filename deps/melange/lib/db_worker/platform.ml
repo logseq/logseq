@@ -294,7 +294,8 @@ module Browser = struct
       = "importDb"
     [@@mel.send]
 
-    external remove_vfs_ : storage_pool -> unit = "removeVfs" [@@mel.send]
+    external remove_vfs_ : storage_pool -> bool Js.Promise.t = "removeVfs"
+    [@@mel.send]
 
     let install_opfs_pool sqlite pool_name =
       install_opfs_pool_ sqlite
@@ -346,8 +347,8 @@ module Browser = struct
     let resolve_db_path = Some (fun _repo _pool path -> path)
 
     let remove_vfs pool =
-      remove_vfs_ pool;
-      Js.Promise.resolve ()
+      remove_vfs_ pool
+      |> Js.Promise.then_ (fun _removed -> Js.Promise.resolve ())
 
     let read_text = Opfs.read_text
     let write_text = Opfs.write_text

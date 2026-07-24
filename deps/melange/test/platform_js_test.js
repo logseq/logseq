@@ -656,6 +656,52 @@ test("Node JS API bundle does not depend on local runtime shims", () => {
   }
 });
 
+test("Browser storage removeVfs waits for the underlying Promise", async () => {
+  let finishRemoval;
+  let removalFinished = false;
+  const pool = {
+    removeVfs: () =>
+      new Promise((resolve) => {
+        finishRemoval = () => {
+          removalFinished = true;
+          resolve(true);
+        };
+      }),
+  };
+  let adapterFinished = false;
+  const removal = BrowserPlatform.browser.storage
+    .removeVfs(pool)
+    .then(() => {
+      adapterFinished = true;
+    });
+
+  try {
+    await Promise.resolve();
+    assert.equal(adapterFinished, false);
+    assert.equal(removalFinished, false);
+  } finally {
+    finishRemoval();
+    await removal;
+  }
+
+  assert.equal(adapterFinished, true);
+  assert.equal(removalFinished, true);
+});
+
+test("Browser storage removeVfs propagates the underlying rejection", async () => {
+  const removalError = new Error("removeVfs failed");
+  const underlyingRemoval = Promise.reject(removalError);
+  underlyingRemoval.catch(() => {});
+  const pool = {
+    removeVfs: () => underlyingRemoval,
+  };
+
+  await assert.rejects(
+    BrowserPlatform.browser.storage.removeVfs(pool),
+    removalError,
+  );
+});
+
 test("Platform Js_api can be called from plain JavaScript", async () => {
   assertFunction(BrowserPlatform, "browser_platform");
   assert.equal(typeof BrowserPlatform.browser, "object");
