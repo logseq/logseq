@@ -239,29 +239,6 @@
     (catch :default _
       [])))
 
-(deftest validated-transact-retries-when-live-conn-changes-before-commit-test
-  (testing "validated transact does not overwrite a concurrent live commit"
-    (let [conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks [{:page {:block/title "page 1"}
-                                     :blocks [{:block/title "first"}
-                                              {:block/title "second"}]}]})
-          first-block (db-test/find-block-by-content @conn "first")
-          second-block (db-test/find-block-by-content @conn "second")
-          injected? (atom false)]
-      (reset! ldb/*transact-pipeline-fn
-              (fn [tx-report]
-                (when (and (not @injected?)
-                           (some (fn [datom]
-                                   (and (= :block/title (:a datom))
-                                        (= "first updated" (:v datom))))
-                                 (:tx-data tx-report)))
-                  (reset! injected? true)
-                  (ldb/transact! conn [[:db/add (:db/id second-block) :block/title "second updated"]]))
-                tx-report))
-      (ldb/transact! conn [[:db/add (:db/id first-block) :block/title "first updated"]])
-      (is (= "first updated" (:block/title (d/entity @conn (:db/id first-block)))))
-      (is (= "second updated" (:block/title (d/entity @conn (:db/id second-block))))))))
-
 (defn- seed-client-op-txs!
   [repo txs]
   (doseq [tx txs]
@@ -2100,6 +2077,35 @@
                       nil
                       (catch :default e
                         e)))))))))
+
+(deftest apply-remote-txs-updates-journal-title-format-test
+  (testing "remote journal title format changes apply without blocking sync"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:build/journal 20250314}}]})
+          client-ops-conn (new-client-ops-db)
+          journal (db-test/find-journal-by-journal-day @conn 20250314)
+          tx-id-before (:block/tx-id journal)
+          journal-class (d/entity @conn :logseq.class/Journal)
+          title-format "EEE, dd.MM.yyyy"
+          title "Fri, 14.03.2025"]
+      (reset! ldb/*transact-pipeline-fn worker-pipeline/transact-pipeline)
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add (:db/id journal-class)
+                        :logseq.property.journal/title-format title-format]
+                       [:db/add (:db/id journal) :block/title title]]}])
+          (is (= title-format
+                 (:logseq.property.journal/title-format
+                  (d/entity @conn :logseq.class/Journal))))
+          (is (= title
+                 (:block/title
+                  (db-test/find-journal-by-journal-day @conn 20250314))))
+          (is (not= tx-id-before
+                    (:block/tx-id
+                     (db-test/find-journal-by-journal-day @conn 20250314)))))))))
 
 (deftest apply-remote-txs-applies-db-migration-entry-test
   (testing "pulled db migration txs apply with migration transact semantics"

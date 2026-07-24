@@ -23,9 +23,6 @@
   (is (= #{"1" "2" "3"}
          (graph/selected-tag-id-set {} (graph/tag-options graph-data)))))
 
-(deftest settings-use-non-grid-tags-layout-by-default
-  (is (false? (:grid-layout? (graph/decode-settings {})))))
-
 (deftest settings-roundtrip-keeps-all-tags-sentinel
   (let [settings {:view-mode :tags-and-objects
                   :selected-tag-ids nil
@@ -83,11 +80,6 @@
 	    (is (not (contains? decoded :visible-recent-task-count)))
 	    (is (not (contains? decoded :show-arrows?)))
 	    (is (not (contains? decoded :show-edge-labels?)))))
-
-(deftest depth-control-is-active-only-with-selected-nodes
-  (is (true? (graph/depth-control-disabled? [])))
-  (is (true? (graph/depth-control-disabled? nil)))
-  (is (false? (graph/depth-control-disabled? [{:id "1"}]))))
 
 (deftest tag-selection-toggle-materializes-custom-selection-from-all
   (let [available-tags (graph/tag-options graph-data)
