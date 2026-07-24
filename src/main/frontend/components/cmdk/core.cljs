@@ -663,8 +663,8 @@
         (:file-path item) (do
                             (open-file (:file-path item))
                             (shui/dialog-close! :ls-dialog-cmdk))
-        (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
         (and shift-or-sidebar? page?) (handle-action :open-page-right state event)
+        (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
         page? (handle-action :open-page state event)
         block? (handle-action :open-block state event)))))
 
