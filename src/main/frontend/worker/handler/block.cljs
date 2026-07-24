@@ -88,6 +88,10 @@
         ref-tags (mapv (fn [tag]
                          (select-keys tag [:db/id :block/uuid :db/ident]))
                        (:block/tags ref))
+        choice-exclusions
+        (mapv (fn [choice]
+                (select-keys choice [:db/id :block/uuid :db/ident]))
+              (:logseq.property/choice-exclusions ref))
         property-value (:logseq.property/value ref)
         property-icon (:logseq.property/icon ref)
         property-value-title (when (or (:block/closed-value-property ref)
@@ -108,6 +112,8 @@
       (string? ref-title) (assoc :block/title ref-title)
       (string? ref-name) (assoc :block/name ref-name)
       (seq ref-tags) (assoc :block/tags ref-tags)
+      (seq choice-exclusions)
+      (assoc :logseq.property/choice-exclusions choice-exclusions)
       (some? property-value) (assoc :logseq.property/value property-value)
       (some? property-icon) (assoc :logseq.property/icon property-icon)
       (some? property-value-title) (assoc :block/title property-value-title))))

@@ -2759,8 +2759,13 @@
                            :block/title "B"
                            :block/tags :logseq.class/Property}
                           {:db/ident :user.property/a
+                           :db/id -10
                            :block/title "A"
                            :block/tags :logseq.class/Property}
+                          {:block/uuid #uuid "00000000-0000-0000-0000-000000000010"
+                           :block/title "Choice A"
+                           :block/order "a0"
+                           :block/closed-value-property -10}
                           {:db/ident :logseq.property/private
                            :block/title "Private"
                            :block/tags :logseq.class/Property
@@ -2775,9 +2780,15 @@
                            :logseq.property/deleted-at 1}])
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [public-result (get-all-properties! test-repo {})
-             with-built-ins (get-all-properties! test-repo {:remove-built-in-property? false})]
+             with-built-ins (get-all-properties! test-repo {:remove-built-in-property? false})
+             property-a (some #(when (= :user.property/a (:db/ident %)) %)
+                              public-result)]
          (is (= [:user.property/a :user.property/b :logseq.property/icon]
                 (map :db/ident public-result)))
+         (is (= [:logseq.class/Property]
+                (mapv :db/ident (:block/tags property-a))))
+         (is (= ["Choice A"]
+                (mapv :block/title (:property/closed-values property-a))))
          (is (= [:user.property/a :user.property/b :logseq.property/icon :logseq.property/private]
                 (map :db/ident with-built-ins))))))))
 

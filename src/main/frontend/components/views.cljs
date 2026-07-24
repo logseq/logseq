@@ -2815,15 +2815,16 @@
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
-        visible-columns (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
-                          (zipmap (conj hidden-columns :id) (repeat false))
-                          ;; This case can happen for imported tables
-                          (if (seq (:logseq.property.table/ordered-columns view-entity))
-                            (zipmap (set/difference (set (map :id columns))
-                                                    (set (:logseq.property.table/ordered-columns view-entity))
-                                                    #{:select :block/created-at :block/updated-at})
-                                    (repeat false))
-                            {}))
+        visible-columns (-> (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+                              (zipmap hidden-columns (repeat false))
+                              ;; This case can happen for imported tables
+                              (if (seq (:logseq.property.table/ordered-columns view-entity))
+                                (zipmap (set/difference (set (map :id columns))
+                                                        (set (:logseq.property.table/ordered-columns view-entity))
+                                                        #{:select :block/created-at :block/updated-at})
+                                        (repeat false))
+                                {}))
+                            (assoc :id false))
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
