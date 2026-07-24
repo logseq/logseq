@@ -668,11 +668,6 @@
   }
 }
 
-.cp__right-sidebar-scrollable {
-  min-height: 100%;
-  overflow-y: scroll;
-}
-
 .cp__right-sidebar-inner {
   padding-top: 0;
   background-color: var(--lx-gray-02, var(--ls-secondary-background-color));

@@ -45,6 +45,19 @@
       (is (= "none" color))
       (is (= inner-bg topbar-bg)))))
 
+(deftest right-sidebar-uses-only-content-scrollbar
+  (testing "the outer sidebar does not reserve a second scrollbar"
+    (w/click ".toggle-right-sidebar")
+    (assert/assert-is-visible ".cp__right-sidebar.open .sidebar-item-list")
+    (let [outer-overflow
+          (w/eval-js
+           "getComputedStyle(document.querySelector('.cp__right-sidebar-scrollable')).overflowY")
+          content-overflow
+          (w/eval-js
+           "getComputedStyle(document.querySelector('.sidebar-item-list')).overflowY")]
+      (is (= "visible" outer-overflow))
+      (is (= "auto" content-overflow)))))
+
 (deftest same-block-updates-in-main-and-right-sidebar
   (testing "one mounted UUID rerenders content and properties in both containers"
     (let [initial-title "sidebar live block before"
