@@ -1342,6 +1342,24 @@
                                 [class-visible-child]
                                 response))))
 
+(deftest stale-class-page-membership-returns-direct-children-after-tag-conversion-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn class-page class-visible-child class-filtered-child]}
+          (render-resource-fixture)
+          class-id (entity-id @conn class-page)
+          resource-key [:page-membership class-page :class]]
+      (d/transact! conn
+                   [[:db/retract class-id :db/ident]
+                    [:db/retract class-id :block/tags :logseq.class/Tag]
+                    [:db/add class-id :block/tags :logseq.class/Page]])
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:entity class-page]
+                                  [:children class-page]
+                                  [:class-membership class-page]}
+                                [class-visible-child class-filtered-child]
+                                (call-resource api conn resource-key)))))
+
 (deftest property-page-membership-watches-its-property-ident-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn property-page property-visible-child]}
@@ -1916,7 +1934,6 @@
                               [:block-task-time resource-block :extra]
                               [:route-block "" "route"]
                               [:route-block "page identity" ""]
-                              [:page-membership page :class]
                               [:page-membership page :property]
                               [:page-membership quick-add-page :quick-add nil]
                               [:page-membership quick-add-page :unknown]
