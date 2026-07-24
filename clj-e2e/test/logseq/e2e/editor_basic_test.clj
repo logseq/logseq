@@ -9,6 +9,7 @@
    [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.locator :as loc]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
    [wally.main :as w]))
@@ -18,6 +19,28 @@
 (use-fixtures :each
   fixtures/new-logseq-page
   fixtures/validate-graph)
+
+(defn- open-recycle!
+  []
+  (w/click ".toolbar-dots-btn")
+  (w/click "[role='menuitem'] div:text('Recycle')"))
+
+(defn- recycle-root
+  [page-name]
+  (loc/filter ".ls-recycle-page-content section > div > div"
+              :has-text page-name))
+
+(deftest recycle-restore-removes-row-immediately-test
+  (let [page-name (str "recycle-restore-" (random-uuid))]
+    (p/new-page page-name)
+    (p/delete-page page-name)
+    (open-recycle!)
+    (let [root (recycle-root page-name)]
+      (assert/assert-is-visible root)
+      (w/click (.locator root "button:text('Restore')"))
+      (assert/assert-have-count root 0)
+      (w/eval-js
+       "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
 
 (defn- choose-move-target!
   [target]
