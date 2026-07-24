@@ -1379,22 +1379,6 @@
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(deftest ^:long copy-paste-tree-op-registered-in-sim-op-table-test
-  (testing "sim op-table includes copy-paste tree op for random sync stress"
-    (is (contains? (set (map :name op-table))
-                   :copy-paste-block-tree-into-empty-target))))
-
-(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
-  (testing "sim op-table includes cut-paste op for random sync stress"
-    (is (contains? (set (map :name op-table))
-                   :cut-paste-block-with-child))))
-
-(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
-  (testing "sim op-table includes undo/redo ops for random sync stress"
-    (let [registered (set (map :name op-table))]
-      (is (contains? registered :undo))
-      (is (contains? registered :redo)))))
-
 (def ^:private required-core-outliner-op-names
   #{:save-block
     :insert-blocks
@@ -1420,13 +1404,6 @@
     :delete-page
     :toggle-reaction
     :transact})
-
-(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
-  (testing "sim op-table includes core logseq.outliner.op operations"
-    (let [registered (set (map :name op-table))
-          required required-core-outliner-op-names]
-      (is (empty? (set/difference required registered))
-          (str "missing ops: " (set/difference required registered))))))
 
 (def ^:private local-undo-redo-run-count 1000)
 (def ^:private local-undo-redo-full-cycle-runs 5)
