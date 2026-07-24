@@ -94,6 +94,7 @@
               (:logseq.property/choice-exclusions ref))
         property-value (:logseq.property/value ref)
         property-icon (:logseq.property/icon ref)
+        hide-from-node (:logseq.property.class/hide-from-node ref)
         property-value-title (when (or (:block/closed-value-property ref)
                                        (:logseq.property/created-from-property ref))
                                (:block/title ref))]
@@ -116,6 +117,7 @@
       (assoc :logseq.property/choice-exclusions choice-exclusions)
       (some? property-value) (assoc :logseq.property/value property-value)
       (some? property-icon) (assoc :logseq.property/icon property-icon)
+      (some? hide-from-node) (assoc :logseq.property.class/hide-from-node hide-from-node)
       (some? property-value-title) (assoc :block/title property-value-title))))
 
 (defn- canonical-positioned-properties-map
