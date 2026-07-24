@@ -185,7 +185,7 @@
           }
 
           > strong {
-            @apply sm:text-xs text-base font-medium;
+            @apply sm:text-xs text-sm font-medium;
           }
         }
 
