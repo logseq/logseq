@@ -59,16 +59,20 @@
 
 (hsx/defc e2ee-request-password
   [password-promise]
-  (let [[password set-password!] (hooks/use-state "")
+  (let [*password-input (hooks/use-ref nil)
+        [password set-password!] (hooks/use-state "")
         on-submit (fn []
-                    (p/resolve! password-promise password)
+                    (p/resolve! password-promise
+                                (-> (hooks/deref *password-input)
+                                    .-value))
                     (shui/dialog-close!))]
     [:div.e2ee-password-modal-overlay
      [:div.e2ee-password-modal-content.flex.flex-col.gap-8.p-4
       [:div.text-2xl.font-medium (t :encryption/enter-password-title)]
       [:div.flex.flex-col.gap-4
        (shui/toggle-password
-        {:value password
+        {:ref *password-input
+         :value password
          :on-key-press (fn [e]
                          (when (= "Enter" (util/ekey e))
                            (on-submit)))
@@ -84,12 +88,15 @@
 
 (hsx/defc e2ee-password-to-decrypt-private-key
   [encrypted-private-key private-key-promise]
-  (let [[password set-password!] (hooks/use-state "")
+  (let [*password-input (hooks/use-ref nil)
+        [password set-password!] (hooks/use-state "")
         [decrypt-fail? set-decrypt-fail!] (hooks/use-state false)
         on-submit (fn []
                     (->
-                     (p/let [private-key (crypt/<decrypt-private-key password encrypted-private-key)]
-                       (state/<invoke-db-worker :thread-api/save-e2ee-password password)
+                     (p/let [entered-password (-> (hooks/deref *password-input)
+                                                  .-value)
+                             private-key (crypt/<decrypt-private-key entered-password encrypted-private-key)]
+                       (state/<invoke-db-worker :thread-api/save-e2ee-password entered-password)
                        (p/resolve! private-key-promise private-key)
                        (shui/dialog-close!))
                      (p/catch (fn [e]
@@ -101,7 +108,8 @@
       [:div.flex.flex-col.gap-4
        [:div.flex.flex-col.gap-1
         (shui/toggle-password
-         {:value password
+         {:ref *password-input
+          :value password
           :on-key-press (fn [e]
                           (when (= "Enter" (util/ekey e))
                             (on-submit)))

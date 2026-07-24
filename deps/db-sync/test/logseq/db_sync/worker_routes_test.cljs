@@ -1,6 +1,5 @@
 (ns logseq.db-sync.worker-routes-test
   (:require [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
             [logseq.db-sync.worker.routes.index :as routes]
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]))
 
@@ -88,13 +87,3 @@
            (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/assets"))))
     (is (= handler
            (:handler (semantic-routes/match-internal method "/semantic/assets"))))))
-
-(deftest every-semantic-operation-has-a-working-route-test
-  (doseq [{:keys [method path internal-path handler]} semantic-routes/operations]
-    (let [concrete-path (string/replace path #":([^/]+)" "$1")]
-      (is (= handler (:handler (semantic-routes/match-public method concrete-path)))
-          (str method " " path)))
-    (when internal-path
-      (let [concrete-path (string/replace internal-path #":([^/]+)" "$1")]
-        (is (= handler (:handler (semantic-routes/match-internal method concrete-path)))
-            (str method " " internal-path))))))

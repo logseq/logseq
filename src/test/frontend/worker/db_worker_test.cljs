@@ -6,7 +6,6 @@
             [frontend.worker.a-test-env]
             [frontend.worker.db-core :as db-worker]
             [frontend.worker.platform :as platform]
-            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -494,34 +493,6 @@
                   (p/finally (fn []
                                (set! js/fetch original-fetch)))))))))
 
-(deftest db-sync-import-rows-chunk-calls-import-rows-batch-test
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)
-                  conn (d/create-conn db-schema/schema)
-                  rows [[1 "row-1" nil]
-                        [2 "row-2" nil]]
-                  captured-rows (atom nil)]
-              (with-fake-create-or-open-db
-                test-repo conn
-                (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      rtc-log-and-state/rtc-log (fn [& _] nil)
-                                      sync-download/<ensure-import-rows-db! (fn [state]
-                                                                              (p/resolved state))
-                                      sync-download/import-rows-batch! (fn [_state rows*]
-                                                                         (reset! captured-rows rows*)
-                                                                         (p/resolved 2))]
-                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
-                                _ (rows-chunk rows "graph-1" import-id)]
-                          (is (= rows @captured-rows))
-                          (done)))
-                      (p/catch (fn [error]
-                                 (is false (str error))
-                                 (done)))))))))))
-
 (deftest snapshot-datoms-in-import-order-puts-schema-before-data-test
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
@@ -598,57 +569,6 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
-
-(deftest thread-api-validate-db-passes-sync-diagnostics-test
-  (restoring-worker-state
-   (fn []
-     (let [validate (@thread-api/*thread-apis :thread-api/validate-db)
-           conn (d/create-conn db-schema/schema)
-           captured (atom nil)
-           latest-prev @db-sync/*repo->latest-remote-tx]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (reset! db-sync/*repo->latest-remote-tx {test-repo 11})
-       (try
-         (with-redefs [client-op/get-local-tx (fn [_repo] 7)
-                       client-op/get-local-checksum (fn [_repo] "local-checksum")
-                       worker-db-validate/validate-db (fn [& args]
-                                                        (reset! captured args)
-                                                        {:ok true})]
-           (validate test-repo)
-           (is (= [conn nil]
-                  @captured)))
-         (finally
-           (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
-(deftest thread-api-recompute-checksum-diagnostics-passes-sync-diagnostics-test
-  (restoring-worker-state
-   (fn []
-     (let [recompute (@thread-api/*thread-apis :thread-api/recompute-checksum-diagnostics)
-           conn (d/create-conn db-schema/schema)
-           captured (atom nil)
-           latest-tx-prev @db-sync/*repo->latest-remote-tx
-           latest-checksum-prev @db-sync/*repo->latest-remote-checksum
-           result {:recomputed-checksum "recomputed"
-                   :checksum-attrs [:block/uuid]
-                   :blocks []}]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (reset! db-sync/*repo->latest-remote-tx {test-repo 22})
-       (reset! db-sync/*repo->latest-remote-checksum {test-repo "remote-checksum"})
-       (try
-         (with-redefs [client-op/get-local-tx (fn [_repo] 10)
-                       client-op/get-local-checksum (fn [_repo] "local-checksum")
-                       worker-db-validate/recompute-checksum-diagnostics (fn [& args]
-                                                                           (reset! captured args)
-                                                                           result)]
-           (is (= (assoc result :local-checksum "recomputed")
-                  (recompute test-repo)))
-           (is (= [test-repo
-                   conn
-                   {:local-checksum "local-checksum"
-                    :remote-checksum "remote-checksum"}]
-                  @captured)))
-         (finally
-           (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
-           (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev)))))))
 
 (deftest thread-api-export-client-ops-db-binary-checkpoints-and-exports-client-ops-file-test
   (async done

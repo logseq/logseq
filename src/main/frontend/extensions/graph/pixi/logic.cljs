@@ -81,10 +81,6 @@
       (str (subs label 0 max-prefix-length) "...")
       label)))
 
-(defn label-surface-fill-alpha
-  [_label-kind _active?]
-  1.0)
-
 (defn renderer-init-options
   [device-pixel-ratio]
   {:backgroundAlpha 0
