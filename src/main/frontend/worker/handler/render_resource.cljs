@@ -537,13 +537,14 @@
       :class
       (do
         (require-shape! resource-key :page-membership 3)
-        (when-not (ldb/class? page)
-          (fail! "Page membership target is not a class" {:page-uuid page-uuid}))
         [#{[:entity page-uuid]
            [:children page-uuid]
            [:class-membership page-uuid]}
          (->> children
-              (remove #(tagged-with-page? % (:db/id page)))
+              ;; A class membership resource can remain subscribed for the
+              ;; transaction that converts its class to a page.
+              (remove #(and (ldb/class? page)
+                            (tagged-with-page? % (:db/id page))))
               (mapv :block/uuid))])
 
       :property
