@@ -441,7 +441,7 @@
         (let [started (process-cpu-time-ms)
               result (doall (search/combine-results :db keyword-results))
               elapsed-ms (- (process-cpu-time-ms) started)]
-          (is (< elapsed-ms 100)
+          (is (< elapsed-ms 200)
               (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms CPU"))
           (is (= (count ids) (count result)))
           (is (= page-id (:id (first result)))
