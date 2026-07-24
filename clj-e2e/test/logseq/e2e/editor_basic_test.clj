@@ -42,6 +42,29 @@
       (w/eval-js
        "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
 
+(defn- open-block-context-menu!
+  []
+  (b/new-blocks ["hover target"])
+  (util/exit-edit)
+  (util/right-click
+   ".ls-page-blocks .ls-block:not(.block-add-button) .bullet-container")
+  (w/wait-for ".ls-context-menu-content"))
+
+(deftest block-context-menu-clickable-controls-use-pointer-test
+  (open-block-context-menu!)
+  (let [heading-button (w/-query "button[title='Auto heading']")
+        item (loc/filter "[role='menuitem']" :has-text "Add comment")
+        sub-trigger (loc/filter "[role='menuitem']" :has-text "Add reaction")]
+    (.hover heading-button)
+    (is (= "pointer"
+           (.evaluate heading-button "element => getComputedStyle(element).cursor")))
+    (.hover item)
+    (is (= "pointer"
+           (.evaluate item "element => getComputedStyle(element).cursor")))
+    (.hover sub-trigger)
+    (is (= "pointer"
+           (.evaluate sub-trigger "element => getComputedStyle(element).cursor")))))
+
 (defn- choose-move-target!
   [target]
   (w/fill "input[placeholder=\"Move blocks to\"]" target)
