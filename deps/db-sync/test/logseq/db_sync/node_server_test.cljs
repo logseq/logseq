@@ -69,7 +69,12 @@
                       (is false (str error))
                       (done)))))))))
 
-(deftest node-server-request-origin-uses-configured-base-url-host-test
+(deftest node-server-request-origin-uses-configured-base-url-scheme-test
+  ;; DB_SYNC_BASE_URL controls the scheme+host for URL reconstruction. When
+  ;; multiple comma-separated URLs are configured the server matches the
+  ;; incoming Host header against the configured origins and picks the right
+  ;; scheme. This allows requests to arrive via a LAN IP (http) and a
+  ;; Tailscale / reverse-proxy domain (https) simultaneously.
   (async done
          (let [stop-server! (atom nil)
                request-opts (atom [])
@@ -84,10 +89,8 @@
                          _ (reset! stop-server! stop!)
                          response (js/fetch (str "http://localhost:" port "/health"))]
                    (is (= 200 (.-status response)))
-                   (is (some #(= {:scheme "https"
-                                  :host "sync.example.test:9443"}
-                                %)
-                             @request-opts))))
+                    (is (some #(= [{:scheme "https" :host "sync.example.test:9443"}] %)
+                              @request-opts))))
                (p/then
                 (fn []
                   (if-let [stop! @stop-server!]
