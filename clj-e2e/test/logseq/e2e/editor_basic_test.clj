@@ -4,6 +4,7 @@
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [jsonista.core :as json]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.custom-report :as custom-report]
@@ -64,6 +65,31 @@
     (.hover sub-trigger)
     (is (= "pointer"
            (.evaluate sub-trigger "element => getComputedStyle(element).cursor")))))
+
+(deftest notification-appears-at-top-right-test
+  (let [message-key "notification-position-test"]
+    (ls-api-call! :show_msg
+                  "notification position test"
+                  "success"
+                  {"key" message-key
+                   "timeout" 0})
+    (try
+      (w/wait-for ".ui__toast")
+      (is (= "top-right"
+             (w/eval-js
+              "(() => {
+                 const toast = Array.from(document.querySelectorAll('.ui__toast'))
+                   .find((element) => element.textContent.includes('notification position test'));
+                 const rect = toast.getBoundingClientRect();
+                 const vertical = rect.top < window.innerHeight / 2 ? 'top' : 'bottom';
+                 const horizontal = window.innerWidth - rect.right <= 48 ? 'right' : 'left';
+                 return `${vertical}-${horizontal}`;
+               })()")))
+      (finally
+        (ls-api-call! :close_msg message-key)
+        (w/eval-js
+         "document.querySelectorAll('.ui__toast-close').forEach((button) => button.click())")
+        (util/wait-timeout 600)))))
 
 (defn- choose-move-target!
   [target]
