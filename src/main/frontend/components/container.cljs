@@ -124,20 +124,22 @@
 
 (hsx/defc main-content
   []
-  (let [default-home (app-left-sidebar/get-default-home-if-valid)
-           current-repo (state/use-sub :git/current-repo)
-           redirect-target (cond
-                             (and default-home
-                                  (= :home (state/get-current-route))
-                                  (not (state/route-has-p?))
-                                  (:page default-home))
-                             [:page (:page default-home)]
+  (let [current-repo (state/use-sub :git/current-repo)
+        enable-journals? (state/use-enable-journals? current-repo)
+        default-home (app-left-sidebar/get-default-home-if-valid)
+        redirect-target (cond
+                          (and default-home
+                               (= :home (state/get-current-route))
+                               (not (state/route-has-p?))
+                               (:page default-home))
+                          [:page (:page default-home)]
 
-                             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-                               (and config/publishing?
-                                    (not default-home)
-                                    (empty? latest-journals)))
-                             [:route :all-pages])]
+                          (or (false? enable-journals?)
+                              (and config/publishing?
+                                   (some? enable-journals?)
+                                   (not default-home)
+                                   (empty? (db/get-latest-journals current-repo 1))))
+                          [:route :all-pages])]
        (hooks/use-effect!
         (fn []
           (when-not @sidebar-inited?
@@ -161,7 +163,8 @@
             nil))
         [redirect-target])
        [:div
-        (when-not redirect-target
+        (when (and (some? enable-journals?)
+                   (not redirect-target))
           (journal/all-journals))]))
 
 (defn- hide-context-menu-and-clear-selection

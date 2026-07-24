@@ -218,6 +218,8 @@
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (state/use-sub [:preferred-language])
         cards-due-count (state/use-sub :srs/cards-due-count)
+        current-repo (state/use-sub :git/current-repo)
+        enable-journals? (state/use-enable-journals? current-repo)
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
@@ -241,9 +243,9 @@
       :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-0.5"}
              (shui/tabler-icon "filter-edit" {:size 14})]}
      [:div.sidebar-navigations.flex.flex-col.mt-1
-       ;; required custom home page
+      ;; Custom home page when journals are disabled
       (let [page (:page default-home)]
-        (if page
+        (if (and page (false? enable-journals?))
           (sidebar-item
            {:class "home-nav"
             :title page
@@ -254,17 +256,18 @@
             :icon "home"
             :shortcut :go/home})
 
-          (sidebar-item
-           {:class "journals-nav"
-            :active (and (not srs-open?)
-                         (or (= route-name :all-journals) (= route-name :home)))
-            :title (t :nav/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon "calendar"
-            :shortcut :go/journals})))
+          (when enable-journals?
+            (sidebar-item
+             {:class "journals-nav"
+              :active (and (not srs-open?)
+                           (or (= route-name :all-journals) (= route-name :home)))
+              :title (t :nav/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon "calendar"
+              :shortcut :go/journals}))))
 
       (for [nav checked-navs]
         (cond

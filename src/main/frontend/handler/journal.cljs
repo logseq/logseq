@@ -12,13 +12,14 @@
 
 (defn- redirect-to-journal!
   [page]
-  (when page
-    (p/do!
-     (db-async/<get-block (state/get-current-repo) page :children? false)
-     (if (db-model/page-exists? page #{:logseq.class/Journal})
-       (route-handler/redirect! {:to          :page
-                                 :path-params {:name page}})
-       (page-handler/<create! page)))))
+  (when-let [repo (and page (state/get-current-repo))]
+    (when (state/enable-journals? repo)
+      (p/do!
+       (db-async/<get-block repo page :children? false)
+       (if (db-model/page-exists? page #{:logseq.class/Journal})
+         (route-handler/redirect! {:to          :page
+                                   :path-params {:name page}})
+         (page-handler/<create! page))))))
 
 (defn go-to-tomorrow!
   []

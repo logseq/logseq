@@ -38,12 +38,14 @@
           current-page (state/get-current-page) ;; empty when in journals page
           default-page (get-in (state/get-config)
                                [:quick-capture-options :default-page])
+          enable-journals? (state/enable-journals?)
           page (cond
-                 (or (= page "TODAY")
-                     (and (string/blank? page) insert-today?))
+                 (and enable-journals?
+                      (or (= page "TODAY")
+                          (and (string/blank? page) insert-today?)))
                  today-page
 
-                 (not-empty page)
+                 (and (not-empty page) (not= page "TODAY"))
                  page
 
                  (not-empty default-page)
@@ -53,7 +55,9 @@
                  current-page
 
                  :else
-                 today-page)
+                 (if enable-journals?
+                   today-page
+                   "quick capture"))
           time (date/get-current-time)
           text (or (and content (not-empty (string/trim content))) "")
           link (cond

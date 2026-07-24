@@ -722,6 +722,21 @@ should be done through this fn in order to get global config and config defaults
   (let [_ (use-sub :ui/viewport)]
     (enable-fold-button-right?)))
 
+(defn enable-journals?
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals? (get-config repo))))))
+
+(defn use-enable-journals?
+  ([]
+   (use-enable-journals? (get-current-repo)))
+  ([repo]
+   (let [db-restoring? (use-sub :db/restoring?)
+         journals-enabled? (:feature/enable-journals? (use-sub-config repo))]
+     (when (false? db-restoring?)
+       (not (false? journals-enabled?))))))
+
 (defn enable-flashcards?
   ([]
    (enable-flashcards? (get-current-repo)))

@@ -516,6 +516,14 @@
       :else
       (notification/show! (t :settings.features/page-not-found value) :warning))))
 
+(defn journal-row [enable-journals?]
+  (toggle "enable_journals"
+          (t :settings.features/enable-journals)
+          enable-journals?
+          (fn []
+            (let [value (not enable-journals?)]
+              (config-handler/set-config! :feature/enable-journals? value)))))
+
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
           (t :settings.editor/enable-all-pages-public)
@@ -1111,22 +1119,25 @@
         app-user-cfgs (state/use-sub :electron/user-cfgs)
         default-home-page (state/use-sub-default-home-page)
         current-repo (state/get-current-repo)
+        enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         semantic-search-enabled? (true? (:feature/enable-semantic-search? app-user-cfgs))
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "default page"}
-       (t :settings.features/home-default-page)]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md.sm:max-w-xs
-        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-         {:default-value default-home-page
-          :on-blur       update-home-page
-          :on-key-press  (fn [e]
-                           (when (= "Enter" (util/ekey e))
-                             (update-home-page e)))}]]]]
+     (journal-row enable-journals?)
+     (when-not enable-journals?
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "default page"}
+         (t :settings.features/home-default-page)]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+           {:default-value default-home-page
+            :on-blur       update-home-page
+            :on-key-press  (fn [e]
+                             (when (= "Enter" (util/ekey e))
+                               (update-home-page e)))}]]]])
      (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)
