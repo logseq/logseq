@@ -151,10 +151,10 @@
       @apply fixed m-0 overflow-visible pointer-events-none;
       width: calc(100vw - 2rem);
       z-index: 100000;
-      bottom: 1rem;
+      bottom: auto;
       right: 1rem;
       left: auto;
-      top: auto;
+      top: 3rem;
 
       .ui__toast {
         --gap: 0.75rem;
@@ -162,9 +162,9 @@
         --scale: calc(1 - (var(--toast-index) * 0.1));
         --shrink: calc(1 - var(--scale));
         --height: var(--toast-frontmost-height, var(--toast-height));
-        --offset-y: calc(var(--toast-offset-y) * -1 + (var(--toast-index) * var(--gap) * -1) + var(--toast-swipe-movement-y));
+        --offset-y: calc(var(--toast-offset-y) + (var(--toast-index) * var(--gap)) + var(--toast-swipe-movement-y));
 
-        @apply absolute bottom-0 w-full overflow-hidden rounded-md border bg-background text-foreground shadow-lg cursor-default;
+        @apply absolute top-0 w-full overflow-hidden rounded-md border bg-background text-foreground shadow-lg cursor-default;
         border-color: hsl(var(--border));
         box-sizing: border-box;
         height: var(--height);
@@ -172,10 +172,10 @@
         left: auto;
         margin: 0 auto;
         margin-right: 0;
-        transform-origin: bottom center;
+        transform-origin: top center;
         z-index: calc(1000 - var(--toast-index));
         transform: translateX(var(--toast-swipe-movement-x))
-          translateY(calc(var(--toast-swipe-movement-y) - (var(--toast-index) * var(--peek)) - (var(--shrink) * var(--height))))
+          translateY(calc(var(--toast-swipe-movement-y) + (var(--toast-index) * var(--peek)) + (var(--shrink) * var(--height))))
           scale(var(--scale));
         transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s, height 0.15s;
 
@@ -187,7 +187,7 @@
 
         &[data-starting-style],
         &[data-ending-style] {
-          transform: translateY(150%);
+          transform: translateY(-150%);
         }
 
         &[data-limited] {
@@ -289,7 +289,6 @@
 
       @media (min-width: 500px) {
         width: 22.5rem;
-        bottom: 2rem;
         right: 2rem;
       }
     }
