@@ -4881,10 +4881,10 @@
                :child-uuids child-uuids
                :render-children render-children))))
    (fn [^js previous-props ^js next-props]
-     (let [previous-block (second (.-args previous-props))
-           next-block (second (.-args next-props))
-           same? (same-block-revision? previous-block next-block)]
-       same?))))
+     (let [[_previous-config previous-block previous-child-uuids] (.-args previous-props)
+           [_next-config next-block next-child-uuids] (.-args next-props)]
+       (and (same-block-revision? previous-block next-block)
+            (= previous-child-uuids next-child-uuids))))))
 
 (defn- render-loaded-block-row
   [config block child-uuids render-children opts]

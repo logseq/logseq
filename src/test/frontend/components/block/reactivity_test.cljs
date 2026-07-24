@@ -1,10 +1,18 @@
 (ns frontend.components.block.reactivity-test
   (:require ["react" :as react]
             [cljs.test :refer [async deftest is testing use-fixtures]]
+            [frontend.components.block]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [goog.object :as gobj]
             [promesa.core :as p]))
+
+(defn- loaded-block-row-compare
+  []
+  (let [memoized-row (some-> (resolve 'frontend.components.block/memoized-loaded-block-row)
+                             deref)]
+    (is (some? memoized-row) "Missing memoized loaded block row")
+    (gobj/get memoized-row "compare")))
 
 (def ^:private test-graph-id "block-reactivity-test")
 
@@ -89,6 +97,17 @@
 (use-fixtures :each
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
+
+(deftest loaded-block-row-rerenders-when-children-change-test
+  (let [block-uuid (random-uuid)
+        child-a (random-uuid)
+        child-b (random-uuid)
+        current-block (block block-uuid 1 "parent")
+        compare (loaded-block-row-compare)
+        previous-props #js {:args [nil current-block [child-a] nil nil]}
+        next-props #js {:args [nil current-block [child-a child-b] nil nil]}]
+    (is (false? (compare previous-props next-props))
+        "A child membership change must rerender the loaded block row.")))
 
 (deftest the-same-uuid-shares-one-load-across-main-and-sidebar-test
   (async done
