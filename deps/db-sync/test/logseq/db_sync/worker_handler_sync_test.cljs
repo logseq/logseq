@@ -1940,6 +1940,54 @@
           (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
           (is (= 300 (block-title-prefix-count @conn "large-tempid-block-"))))))))
 
+(deftest tx-batch-keeps-static-schema-ref-tempids-in-one-chunk-test
+  (testing "large tx chunking preserves tempids used by ref attrs from the static schema"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "static-schema-ref-page"
+                                    :block/title "static-schema-ref-page"}])
+              t-before (storage/get-t sql)
+              page-class-eid "static-schema-page-class"
+              tagged-block-uuid (random-uuid)
+              tagged-block-eid (str tagged-block-uuid)
+              filler-tx (large-block-insert-tx page-uuid 72)
+              tagged-block-tx [[:db/add tagged-block-eid :block/uuid tagged-block-uuid]
+                               [:db/add tagged-block-eid :block/title "static-schema-tagged-block"]
+                               [:db/add tagged-block-eid :block/page [:block/uuid page-uuid]]
+                               [:db/add tagged-block-eid :block/parent [:block/uuid page-uuid]]
+                               [:db/add tagged-block-eid :block/order "z0"]
+                               [:db/add tagged-block-eid :block/created-at 1]
+                               [:db/add tagged-block-eid :block/updated-at 1]
+                               [:db/add tagged-block-eid :block/tags page-class-eid]]
+              tx-data (vec (concat [[:db/add page-class-eid :db/ident :logseq.class/Page]]
+                                   filler-tx
+                                   tagged-block-tx))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::static-schema-ref-tempid-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::static-schema-ref-tempid-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= 1 @tx-report-count))
+          (is (= #{:logseq.class/Page}
+                 (set (map :db/ident
+                           (:block/tags
+                            (d/entity @conn [:block/uuid tagged-block-uuid])))))))))))
+
 (deftest tx-batch-applies-large-entry-with-dependent-blocks-across-chunks-test
   (testing "large tx chunking preserves ordered parent-before-child dependencies"
     (with-memory-sql

@@ -347,7 +347,9 @@
 
 (defn- ref-attr?
   [db attr]
-  (= :db.type/ref (:db/valueType (d/entity db attr))))
+  (= :db.type/ref
+     (or (get-in (d/schema db) [attr :db/valueType])
+         (:db/valueType (d/entity db attr)))))
 
 (defn- tx-item-tempids
   [db item]
