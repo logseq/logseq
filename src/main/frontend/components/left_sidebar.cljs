@@ -4,6 +4,7 @@
             [frontend.components.block :as block]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
+            [frontend.components.left-sidebar-util :as sidebar-util]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -428,8 +429,7 @@
                               (set-local-closing? false)
                               (close-modal-fn)))
        :on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
-                    (when (some (fn [sel] (boolean (.closest target sel)))
-                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
+                    (when (sidebar-util/mobile-navigation-target? target)
                       (close-fn)))}
 
       [:div.wrap
