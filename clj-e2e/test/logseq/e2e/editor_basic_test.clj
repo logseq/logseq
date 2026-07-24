@@ -107,6 +107,14 @@
            [(.count favorite-item)
             (.count recent-item)]))))
 
+(deftest language-select-shows-dropdown-indicator-test
+  (w/click ".toolbar-dots-btn")
+  (w/click (loc/filter "[role='menuitem']" :has-text "Settings"))
+  (assert/assert-is-visible ".ui__select-trigger")
+  (assert/assert-have-count
+   ".ui__select-trigger .ui__select-icon svg"
+   1))
+
 (defn- choose-move-target!
   [target]
   (w/fill "input[placeholder=\"Move blocks to\"]" target)

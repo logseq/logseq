@@ -894,7 +894,20 @@
        (react/createElement SelectRootPart props')))))
 (def SelectGroup (forward-part SelectGroupPart nil))
 (def SelectValue (forward-part SelectValuePart nil))
-(def SelectTrigger (forward-part SelectTriggerPart "ui__select-trigger flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"))
+(def SelectTrigger
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [props' (with-class-props props "ui__select-trigger flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1" nil)
+           children (prop props "children")]
+       (when ref (set-prop! props' "ref" ref))
+       (react/createElement
+        SelectTriggerPart
+        props'
+        children
+        (react/createElement
+         SelectIconPart
+         #js {:className "ui__select-icon shrink-0 text-muted-foreground"}
+         (react/createElement IconChevronDown #js {:className "h-4 w-4"})))))))
 (def SelectIcon (forward-part SelectIconPart nil))
 (def SelectLabel (forward-part SelectGroupLabelPart "ui__select-label py-1.5 pl-8 pr-2 text-sm font-semibold"))
 (def SelectSeparator (forward-part SelectSeparatorPart "ui__select-separator -mx-1 my-1 h-px bg-muted"))
