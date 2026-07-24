@@ -78,12 +78,13 @@
                                on-before-hide on-after-hide trigger-id] :as opts}]
   (let [id (or id (gen-id))
         *target (volatile! nil)
+        browser-event (or (some-> event .-nativeEvent) event)
         position (cond
                    (vector? event) event
 
-                   (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
+                   (or (instance? js/MouseEvent browser-event)
                        (instance? js/goog.events.BrowserEvent event))
-                   (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
+                   (do (vreset! *target (.-target browser-event))
                        [(.-clientX event) (.-clientY event)])
 
                    (instance? js/Element event)

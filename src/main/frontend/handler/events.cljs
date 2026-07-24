@@ -375,6 +375,32 @@
    (notification/show! (t :graph/removed-from-sync) :warning false)
    (rtc-handler/<get-remote-graphs)))
 
+(defn- download-graph-progress
+  [graph-name]
+  [:div.flex.flex-col.items-center.justify-center.gap-4
+   [:div (t :sync/downloading-graph graph-name)]
+   (indicator/downloading-logs)])
+
+(defn show-download-graph-progress!
+  [graph-name]
+  (if (mobile-util/native-platform?)
+    (shui/popup-show!
+     nil
+     #(download-graph-progress graph-name)
+     {:id :download-rtc-graph})
+    (shui/dialog-open!
+     #(download-graph-progress graph-name)
+     {:id :download-rtc-graph
+      :content-props
+      {:onPointerDownOutside #(.preventDefault %)
+       :onOpenAutoFocus #(.preventDefault %)}})))
+
+(defn hide-download-graph-progress!
+  []
+  (if (mobile-util/native-platform?)
+    (shui/popup-hide! :download-rtc-graph)
+    (shui/dialog-close! :download-rtc-graph)))
+
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
@@ -383,22 +409,17 @@
   (->
    (p/do!
     (when (util/mobile?)
-      (shui/popup-show!
-       nil
-       (fn []
-         [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (t :sync/downloading-graph graph-name)]
-          (indicator/downloading-logs)])
-       {:id :download-rtc-graph}))
+      (show-download-graph-progress! graph-name))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name) {:rtc-download? true}])
     (when (util/mobile?)
-      (shui/popup-hide! :download-rtc-graph)))
+      (hide-download-graph-progress!)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
-              (shui/popup-hide! :download-rtc-graph)
+              (when (util/mobile?)
+                (hide-download-graph-progress!))
               (when (rtc-error/download-decrypt-failed? e)
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 
