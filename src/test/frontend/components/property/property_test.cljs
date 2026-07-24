@@ -142,7 +142,6 @@
                  (p/catch (fn [error]
                             (is false (str error))))
                  (p/finally done))))))
-
 (deftest choosing-existing-closed-value-property-reuses-picker-data-test
   (async done
          (let [block {:block/uuid (random-uuid)}

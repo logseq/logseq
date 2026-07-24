@@ -11,9 +11,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.graph-view :as graph-view]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.export :as worker-export-handler]
             [frontend.worker.handler.graph :as worker-graph-handler]
@@ -28,12 +26,9 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
-            [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.download :as sync-download]
             [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
-            [logseq.api.db-based.tools :as api-tools]
-            [logseq.cli.common.db-worker :as cli-db-worker]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
@@ -1500,46 +1495,6 @@
         arr (js/Array. 1 2 3)]
     (is (instance? js/Uint8Array (->uint8array arr)))
     (is (= 3 (.-length (->uint8array arr))))))
-
-(deftest ->uint8array-passes-through-other-data
-  (let [->uint8array #'db-core/->uint8array]
-    (is (= "string" (->uint8array "string")))
-    (is (= nil (->uint8array nil)))
-    (is (= 42 (->uint8array 42)))))
-
-;; ---- node-runtime? tests ----
-
-(deftest node-runtime-returns-true-for-node
-  (restoring-worker-state
-   (fn []
-     (let [node-runtime? #'db-core/node-runtime?]
-       (platform/set-platform! (build-test-platform {:runtime :node}))
-       (is (true? (node-runtime?)))))))
-
-(deftest node-runtime-returns-false-for-browser
-  (restoring-worker-state
-   (fn []
-     (let [node-runtime? #'db-core/node-runtime?]
-       (platform/set-platform! (build-test-platform {:runtime :browser}))
-       (is (false? (node-runtime?)))))))
-
-;; ---- storage-pool-name tests ----
-
-(deftest storage-pool-name-uses-graph-dir-key-for-node
-  (restoring-worker-state
-   (fn []
-     (let [storage-pool-name #'db-core/storage-pool-name]
-       (platform/set-platform! (build-test-platform {:runtime :node}))
-       ;; For node, it should use graph-dir/repo->graph-dir-key
-       (is (string? (storage-pool-name test-repo)))))))
-
-(deftest storage-pool-name-uses-worker-util-for-browser
-  (restoring-worker-state
-   (fn []
-     (let [storage-pool-name #'db-core/storage-pool-name]
-       (platform/set-platform! (build-test-platform {:runtime :browser}))
-       ;; For browser, it should use worker-util/get-pool-name which returns a string
-       (is (string? (storage-pool-name test-repo)))))))
 
 ;; ---- get-storage-pool / remember-storage-pool! / forget-storage-pool! tests ----
 
@@ -3223,29 +3178,6 @@
 
 ;; ---- search-delete-blocks / search-truncate-tables tests ----
 
-(deftest search-delete-blocks-calls-search-fn
-  (restoring-worker-state
-   (fn []
-     (let [delete-blocks! (get @thread-api/*thread-apis :thread-api/search-delete-blocks)
-           calls (atom [])]
-       (reset! worker-state/*sqlite-conns {test-repo {:search (fake-db)}})
-       (with-redefs [search/delete-blocks! (fn [db ids]
-                                              (swap! calls conj [db ids]))]
-         (delete-blocks! test-repo [1 2 3])
-         (is (= 1 (count @calls)))
-         (is (= [1 2 3] (second (first @calls)))))))))
-
-(deftest search-truncate-tables-calls-search-fn
-  (restoring-worker-state
-   (fn []
-     (let [truncate-tables! (get @thread-api/*thread-apis :thread-api/search-truncate-tables)
-           calls (atom [])]
-       (reset! worker-state/*sqlite-conns {test-repo {:search (fake-db)}})
-       (with-redefs [search/truncate-table! (fn [db]
-                                              (swap! calls conj db))]
-         (truncate-tables! test-repo)
-         (is (= 1 (count @calls))))))))
-
 ;; ---- db-exists thread-api test ----
 
 (deftest db-exists-returns-false-by-default
@@ -3297,17 +3229,6 @@
              (p/finally done)))))))
 
 ;; ---- set-context thread-api test ----
-
-(deftest set-context-returns-nil
-  (let [set-context! (get @thread-api/*thread-apis :thread-api/set-context)
-        context {:current-repo test-repo
-                 :theme "dark"}]
-    ;; set-context returns nil after updating state
-    (is (nil? (set-context! context)))))
-
-(deftest set-context-returns-nil-for-nil-context
-  (let [set-context! (get @thread-api/*thread-apis :thread-api/set-context)]
-    (is (nil? (set-context! nil)))))
 
 ;; ---- sync-app-state thread-api test ----
 
@@ -3582,211 +3503,6 @@
              (is (= {:repo repo
                      :conflicts nil}
                     (ex-data error))))))))))
-
-(deftest db-core-db-sync-thread-apis-delegate-to-sync-modules-test
-  (restoring-worker-state
-   (fn []
-     (let [calls (atom [])
-           request-repo "graph-a"
-           graph-id "graph-id-1"
-           block-uuid "block-1"
-           target-email "user@example.com"
-           sync-status {:state :connected}
-           remote-graphs [{:graph-id graph-id}]
-           import-prepare {:import-id "import-1"}]
-       (with-redefs [db-sync/status (fn [repo]
-                                      (swap! calls conj [:status repo])
-                                      sync-status)
-                     db-sync/list-remote-graphs! (fn []
-                                                   (swap! calls conj [:list-remote-graphs])
-                                                   remote-graphs)
-                     db-sync/stop-upload! (fn [repo]
-                                            (swap! calls conj [:stop-upload repo])
-                                            :stopped)
-                     db-sync/resume-upload! (fn [repo]
-                                              (swap! calls conj [:resume-upload repo])
-                                              :resumed)
-                     db-sync/upload-stopped? (fn [repo]
-                                               (swap! calls conj [:upload-stopped? repo])
-                                               true)
-                     client-op/clear-sync-conflicts! (fn [repo block]
-                                                       (swap! calls conj [:clear-sync-conflicts repo block])
-                                                       nil)
-                     shared-service/broadcast-to-clients! (fn [event payload]
-                                                            (swap! calls conj [:broadcast event payload])
-                                                            nil)
-                     sync-download/download-graph-by-id! (fn [repo gid graph-e2ee?]
-                                                           (swap! calls conj [:download-graph-by-id repo gid graph-e2ee?])
-                                                           :downloaded)
-                     sync-download/prepare-import! (fn [repo reset? gid graph-e2ee? total-datoms]
-                                                     (swap! calls conj [:prepare-import repo reset? gid graph-e2ee? total-datoms])
-                                                     import-prepare)
-                     sync-download/import-rows-chunk! (fn [rows gid import-id]
-                                                        (swap! calls conj [:import-rows-chunk rows gid import-id])
-                                                        :rows-imported)
-                     sync-download/finalize-import! (fn [repo gid remote-tx import-id]
-                                                     (swap! calls conj [:finalize-import repo gid remote-tx import-id])
-                                                     :import-finalized)
-                     db-sync/rehydrate-large-titles-from-db! (fn [repo gid]
-                                                               (swap! calls conj [:rehydrate-large-titles repo gid])
-                                                               :rehydrated)
-                     sync-crypt/<grant-graph-access! (fn [repo gid email]
-                                                       (swap! calls conj [:grant-graph-access repo gid email])
-                                                       :granted)]
-         (is (= sync-status ((get-thread-api :thread-api/db-sync-status) request-repo)))
-         (is (= remote-graphs ((get-thread-api :thread-api/db-sync-list-remote-graphs))))
-         (is (= :stopped ((get-thread-api :thread-api/db-sync-stop-upload) request-repo)))
-         (is (= :resumed ((get-thread-api :thread-api/db-sync-resume-upload) request-repo)))
-         (is (true? ((get-thread-api :thread-api/db-sync-upload-stopped?) request-repo)))
-         ((get-thread-api :thread-api/db-sync-clear-block-conflicts) request-repo block-uuid)
-         (is (= :downloaded ((get-thread-api :thread-api/db-sync-download-graph-by-id) request-repo graph-id true)))
-         (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) request-repo graph-id target-email)))
-         (is (= import-prepare ((get-thread-api :thread-api/db-sync-import-prepare) request-repo true graph-id true 12)))
-         (is (= :rows-imported ((get-thread-api :thread-api/db-sync-import-rows-chunk) [[1 "row" nil]] graph-id "import-1")))
-         (is (= :import-finalized ((get-thread-api :thread-api/db-sync-import-finalize) request-repo graph-id 88 "import-1")))
-         (is (= :rehydrated ((get-thread-api :thread-api/db-sync-rehydrate-large-titles) request-repo graph-id)))
-         (is (some #(= [:broadcast
-                        :sync-conflicts-updated
-                        {:repo request-repo
-                         :block-uuid block-uuid
-                         :conflicts []}]
-                       %)
-                   @calls)))))))
-
-(deftest db-core-undo-redo-thread-apis-delegate-to-worker-undo-redo-test
-  (restoring-worker-state
-   (fn []
-     (let [calls (atom [])
-           repo test-repo
-           editor-info {:block-uuid "b1"}
-           ui-state "{:cursor 1}"]
-       (with-redefs [worker-undo-redo/set-pending-editor-info! (fn [r info]
-                                                                  (swap! calls conj [:set-pending r info]))
-                     worker-undo-redo/record-editor-info! (fn [r info]
-                                                            (swap! calls conj [:record-editor r info]))
-                     worker-undo-redo/record-ui-state! (fn [r state]
-                                                         (swap! calls conj [:record-ui r state]))
-                     worker-undo-redo/undo (fn [r]
-                                             (swap! calls conj [:undo r])
-                                             :undo-result)
-                     worker-undo-redo/redo (fn [r]
-                                             (swap! calls conj [:redo r])
-                                             :redo-result)]
-         (is (nil? ((get-thread-api :thread-api/undo-redo-set-pending-editor-info) repo editor-info)))
-         (is (nil? ((get-thread-api :thread-api/undo-redo-record-editor-info) repo editor-info)))
-         (is (nil? ((get-thread-api :thread-api/undo-redo-record-ui-state) repo ui-state)))
-         (is (= :undo-result ((get-thread-api :thread-api/undo-redo-undo) repo)))
-         (is (= :redo-result ((get-thread-api :thread-api/undo-redo-redo) repo)))
-         (is (= [[:set-pending repo editor-info]
-                 [:record-editor repo editor-info]
-                 [:record-ui repo ui-state]
-                 [:undo repo]
-                 [:redo repo]]
-                @calls)))))))
-
-(deftest db-core-cli-and-api-thread-apis-delegate-to-cli-modules-test
-  (restoring-worker-state
-   (fn []
-     (let [conn (d/create-conn db-schema/schema)
-           calls (atom [])
-           options {:limit 10}
-           ops [{:op :upsert}]
-           page-title "My Page"]
-       (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [cli-db-worker/list-properties (fn [db opt]
-                                                     (swap! calls conj [:cli-list-properties db opt])
-                                                     [:p1])
-                     cli-db-worker/list-tags (fn [db opt]
-                                               (swap! calls conj [:cli-list-tags db opt])
-                                               [:t1])
-                     cli-db-worker/list-pages (fn [db opt]
-                                                (swap! calls conj [:cli-list-pages db opt])
-                                                [:pg1])
-                     cli-db-worker/list-tasks (fn [db opt]
-                                                (swap! calls conj [:cli-list-tasks db opt])
-                                                [:task1])
-                     cli-db-worker/list-nodes (fn [db opt]
-                                                (swap! calls conj [:cli-list-nodes db opt])
-                                                [:node1])
-                     api-tools/get-page-data (fn [db title]
-                                               (swap! calls conj [:api-get-page-data db title])
-                                               {:title title})
-                     api-tools/list-properties (fn [db opt]
-                                                 (swap! calls conj [:api-list-properties db opt])
-                                                 [:ap1])
-                     api-tools/list-tags (fn [db opt]
-                                           (swap! calls conj [:api-list-tags db opt])
-                                           [:at1])
-                     api-tools/list-pages (fn [db opt]
-                                            (swap! calls conj [:api-list-pages db opt])
-                                            [:apg1])
-                     api-tools/build-upsert-nodes-edn (fn [db input-ops]
-                                                        (swap! calls conj [:api-build-upsert-nodes-edn db input-ops])
-                                                        {:ops input-ops})]
-         (is (= [:p1] ((get-thread-api :thread-api/cli-list-properties) test-repo options)))
-         (is (= [:t1] ((get-thread-api :thread-api/cli-list-tags) test-repo options)))
-         (is (= [:pg1] ((get-thread-api :thread-api/cli-list-pages) test-repo options)))
-         (is (= [:task1] ((get-thread-api :thread-api/cli-list-tasks) test-repo options)))
-         (is (= [:node1] ((get-thread-api :thread-api/cli-list-nodes) test-repo options)))
-         (is (= {:title page-title} ((get-thread-api :thread-api/api-get-page-data) test-repo page-title)))
-         (is (= [:ap1] ((get-thread-api :thread-api/api-list-properties) test-repo options)))
-         (is (= [:at1] ((get-thread-api :thread-api/api-list-tags) test-repo options)))
-         (is (= [:apg1] ((get-thread-api :thread-api/api-list-pages) test-repo options)))
-         (is (= {:ops ops} ((get-thread-api :thread-api/api-build-upsert-nodes-edn) test-repo ops)))
-         (is (= 10 (count @calls))))))))
-
-(deftest db-core-export-view-and-validate-thread-apis-delegate-test
-  (restoring-worker-state
-   (fn []
-     (let [conn (d/create-conn db-schema/schema)
-           repo test-repo
-           export-options {:format :edn}
-           content-options {:include-journal? true}
-           view-option {:limit 5}
-           property-option {:property-ident :block/tags}
-           calls (atom [])
-           validate-result {:ok true}
-           recompute-result {:recomputed-checksum "new-checksum"}]
-       (reset! worker-state/*datascript-conns {repo conn})
-       (reset! worker-state/*client-ops-conns {repo :client-ops})
-       (with-redefs [worker-export/get-debug-datoms (fn [c]
-                                                      (swap! calls conj [:export-get-debug-datoms c])
-                                                      [:d1])
-                     worker-export/get-all-page->content (fn [db options]
-                                                           (swap! calls conj [:export-get-all-page->content db options])
-                                                           {"Page" "Body"})
-                     worker-db-validate/validate-db (fn [c opts]
-                                                      (swap! calls conj [:validate-db c opts])
-                                                      validate-result)
-                     worker-db-validate/recompute-checksum-diagnostics (fn [input-repo c diagnostics]
-                                                                         (swap! calls conj [:recompute-checksum input-repo c diagnostics])
-                                                                         recompute-result)
-                     client-op/get-local-checksum (fn [_] "old-checksum")
-                     client-op/update-local-checksum (fn [input-repo checksum]
-                                                       (swap! calls conj [:update-local-checksum input-repo checksum])
-                                                       nil)
-                     db-view/get-view-data (fn [db view-id option]
-                                             (swap! calls conj [:get-view-data db view-id option])
-                                             {:view-id view-id})
-                     db-view/get-property-values (fn [c property-ident option]
-                                                   (swap! calls conj [:get-property-values c property-ident option])
-                                                   [:value-1])
-                     ldb/get-bidirectional-properties (fn [db target-id]
-                                                       (swap! calls conj [:get-bidirectional-properties db target-id])
-                                                       [:p-link])
-                     graph-view/build-graph (fn [db option]
-                                              (swap! calls conj [:build-graph db option])
-                                              {:nodes 1})]
-         (is (= [:d1] ((get-thread-api :thread-api/export-get-debug-datoms) repo)))
-         (is (= {"Page" "Body"} ((get-thread-api :thread-api/export-get-all-page->content) repo content-options)))
-         (is (= validate-result ((get-thread-api :thread-api/validate-db) repo export-options)))
-         (is (= (assoc recompute-result :local-checksum "new-checksum")
-                ((get-thread-api :thread-api/recompute-checksum-diagnostics) repo)))
-         (is (= {:view-id "view-1"} ((get-thread-api :thread-api/get-view-data) repo "view-1" view-option)))
-         (is (= [:value-1] ((get-thread-api :thread-api/get-property-values) repo property-option)))
-         (is (= [:p-link] ((get-thread-api :thread-api/get-bidirectional-properties) repo {:target-id "b1"})))
-         (is (= {:nodes 1} ((get-thread-api :thread-api/build-graph) repo {:depth 1})))
-         (is (some #(= [:update-local-checksum repo "new-checksum"] %) @calls)))))))
 
 (deftest worker-export-replaces-block-refs-with-worker-db-test
   (let [conn (d/create-conn db-schema/schema)

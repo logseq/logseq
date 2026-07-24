@@ -640,7 +640,8 @@
                                     (:reverse? tx-meta)
                                     (:transact-remote? tx-meta)
                                     (imported-data? tx-meta)))
-        _ (when derive-extra-data?
+        _ (when (and derive-extra-data?
+                     (not (rtc-tx-or-download-graph? tx-meta)))
             (ensure-journal-page-protected-attrs-not-updated! tx-report))
         extra-tx-data (when derive-extra-data?
                         (compute-extra-tx-data tx-report))
