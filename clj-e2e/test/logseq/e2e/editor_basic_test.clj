@@ -918,6 +918,20 @@
     (assert/assert-is-visible
      ".cp__right-sidebar .sidebar-item :text('Ordinary sidebar page')")))
 
+(deftest comments-update-and-title-edit
+  (testing "a submitted comment renders immediately and its thread title is editable"
+    (p/new-page "Comments reactivity")
+    (b/new-blocks ["comment target"])
+    (util/search-and-click "Add comment")
+    (assert/assert-is-visible ".ls-comments-area")
+    (assert/assert-is-hidden ".ls-block.is-comments-area .block-tags")
+    (w/fill ".ls-comment-add textarea" "first comment")
+    (w/click ".ls-comment-submit")
+    (assert/assert-is-visible ".ls-comment-row :text('first comment')")
+    (w/click ".ls-comments-label")
+    (assert/assert-is-visible ".ls-comments-title-editor textarea")
+    (assert/assert-is-hidden ":text('Something went wrong')")))
+
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"
     (p/goto-page "Library")
