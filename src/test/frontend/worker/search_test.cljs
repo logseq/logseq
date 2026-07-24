@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -515,6 +516,42 @@
           (is (not (contains? result :block/tags)))
           (is (not (contains? result :logseq.property/icon)))
           (is (not (contains? result :alias))))))))
+
+(deftest search-result-resolves-uuid-refs-only-when-requested
+  (let [ref-uuid #uuid "11111111-2222-3333-4444-555555555555"
+        target-uuid #uuid "22222222-3333-4444-5555-666666666666"
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "refs"}
+                 :blocks [{:block/title "Alpha"
+                           :block/uuid ref-uuid
+                           :build/keep-uuid? true}]}
+                {:page {:block/title "targets"}
+                 :blocks [{:block/title (str "Entry " (page-ref/->page-ref ref-uuid) " Done")
+                           :block/uuid target-uuid
+                           :build/keep-uuid? true
+                           :build/tags [:Topic]}]}]})
+        raw-title (str "Entry " (page-ref/->page-ref ref-uuid) " Done")
+        search-result {:id (str target-uuid)
+                       :title raw-title
+                       :keyword-score 1}
+        result-without-refs (#'search/search-result->block-result
+                             conn
+                             "Entry"
+                             nil
+                             {:enable-snippet? false}
+                             (first (search/combine-results @conn [search-result])))
+        result-with-refs (#'search/search-result->block-result
+                          conn
+                          "Entry"
+                          nil
+                          {:enable-snippet? false
+                           :resolve-title-refs? true}
+                          (first (search/combine-results @conn [search-result] nil "Entry"
+                                                         {:resolve-title-refs? true})))]
+    (is (= raw-title (:block/title result-without-refs)))
+    (is (= "Entry [[Alpha]] Done" (:block/title result-with-refs)))))
 
 (deftest block-index-includes-page-alias-titles
   (testing "page aliases can be matched by page-ref autocomplete search"

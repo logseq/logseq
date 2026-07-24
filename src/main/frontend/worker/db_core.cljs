@@ -43,6 +43,7 @@
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.common.view :as db-view]
    [logseq.db.frontend.class :as db-class]
+   [logseq.db.frontend.content :as db-content]
    [logseq.db.frontend.entity-util :as entity-util]
    [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
@@ -1587,6 +1588,16 @@
   (let [db @(worker-state/get-datascript-conn repo)]
     (->> (db-class/get-class-objects db class-id)
          (map entity-util/entity->map))))
+
+(def-thread-api :thread-api/get-property-node-objects
+  [repo class-ids]
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (->> class-ids
+         (mapcat #(db-class/get-class-objects db %))
+         distinct
+         (map (fn [object]
+                (assoc (entity-util/entity->map object)
+                       :block/title (db-content/recur-replace-uuid-in-block-title object)))))))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]

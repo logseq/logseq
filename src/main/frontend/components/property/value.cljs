@@ -33,7 +33,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -816,20 +815,14 @@
     (if (or (some? result) broad-scope?)
       (let [class-ids (scoped-class-ids repo classes)]
         (filter #(node-matches-scoped-classes? class-ids %) result))
-      (->>
-       (mapcat
-        (fn [class]
-          (model/get-class-objects repo (:db/id class)))
-        classes)
-       distinct))))
+      [])))
 
 (defn- <load-initial-node-choices
   [repo property non-root-classes]
   (if (seq non-root-classes)
     (if (broad-scoped-node-property? property non-root-classes)
       (db-async/<get-property-values (:db/ident property))
-      (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))]
-        (distinct (apply concat result))))
+      (db-async/<get-property-node-objects repo (mapv :db/id non-root-classes)))
     (db-async/<get-property-values (:db/ident property))))
 
 (hsx/defc ^:large-vars/cleanup-todo select-node
@@ -839,6 +832,7 @@
   (let [[*input set-input!] (hooks/use-state nil)
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
+        class-scoped? (not (empty? classes))
         tags? (= :block/tags (:db/ident property))
         page-class (db/entity :logseq.class/Page)
         page-class-id (:db/id page-class)
@@ -937,10 +931,12 @@
                                     node)
                              id (:db/id node)
                              title (when (integer? id)
-                                     (if (seq (:logseq.property/classes property))
-                                       (some-> (db-content/recur-replace-uuid-in-block-title node)
-                                               (subs 0 256))
+                                     (if class-scoped?
+                                       (some-> (:block/title node) (subs 0 256))
                                        (block-handler/block-unique-title node)))
+                             label-value (if class-scoped?
+                                           (or title (:block/title node))
+                                           (or (:block/title node) title))
                              [header label] (if (integer? id)
                                               (when title
                                                 (let [node (or (db/entity id) node)
@@ -950,7 +946,7 @@
                                                                   (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
                                                                               {:disabled? true})]))
                                                       label [:div.flex.flex-row.items-center.gap-1
-                                                             (when-not (or (:logseq.property/classes property)
+                                                             (when-not (or class-scoped?
                                                                            (contains? #{:class :property} property-type))
                                                                (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
                                                              [:div (if (contains? #{:class :property :page} property-type)
@@ -958,15 +954,15 @@
                                                                      (block-handler/block-title-with-icon node title icon-component/icon))]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
-                                              (assoc node
-                                                     :header header
-                                                     :label-value (or (:block/title node) title)
-                                                     :label label
-                                                     :value id
-                                                     :disabled? (and tags? (contains?
-                                                                            (set/union #{:logseq.class/Journal}
-                                                                                       (set/difference ldb/internal-tags #{:logseq.class/Page}))
-                                                                            (:db/ident node)))))) nodes)
+                         (assoc node
+                                :header header
+                                :label-value (or label-value (:block/title node) title)
+                                :label label
+                                :value id
+                                :disabled? (and tags? (contains?
+                                                       (set/union #{:logseq.class/Journal}
+                                                                  (set/difference ldb/internal-tags #{:logseq.class/Page}))
+                                                       (:db/ident node)))))) nodes)
         options (let [allow-page-class? (or (contains? selected-choice-ids page-class-id)
                                             (not (or (and (entity-util/page? block) (not (ldb/internal-page? block)))
                                                      (:logseq.property/created-from-property block))))]
@@ -1068,6 +1064,9 @@
         set-result-and-initial-choices! (fn [value]
                                           (set-initial-choices! value)
                                           (set-result! value))
+        repo (state/get-current-repo)
+        classes (:logseq.property/classes property)
+        class-scoped? (not (empty? classes))
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -1094,18 +1093,17 @@
                                  (if (string/blank? v)
                                    (set-result! (current-initial-choices))
                                    ;; TODO rank initial choices higher
-                                  (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
-                                                                                                   :built-in? false})]
-                                    (set-result!
-                                     (cond-> result
-                                       (and (= :block/tags (:db/ident property))
-                                            (string/includes? (string/lower-case "Page")
-                                                              (string/lower-case v)))
-                                       (conj (db/entity :logseq.class/Page)))))))
+                                   (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
+                                                                                                   :built-in? false
+                                                                                                   :resolve-title-refs? class-scoped?})]
+                                     (set-result!
+                                      (cond-> result
+                                        (and (= :block/tags (:db/ident property))
+                                             (string/includes? (string/lower-case "Page")
+                                                               (string/lower-case v)))
+                                        (conj (db/entity :logseq.class/Page)))))))
                      :add-new-choice! (fn [new-choice]
                                         (set-initial-choices! (add-initial-node-choice (current-initial-choices) new-choice))))
-        repo (state/get-current-repo)
-        classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))
         non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
                            class?

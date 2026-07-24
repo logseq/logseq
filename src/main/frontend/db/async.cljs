@@ -267,6 +267,10 @@
           [?b :block/tags ?class-id]]
         class-ids)))
 
+(defn <get-property-node-objects
+  [graph class-ids]
+  (state/<invoke-db-worker :thread-api/get-property-node-objects graph class-ids))
+
 (defn <get-views
   [graph class-id view-feature-type]
   (<q graph {:transact-db? true}
