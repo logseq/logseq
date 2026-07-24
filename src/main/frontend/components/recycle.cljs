@@ -35,7 +35,7 @@
     :avatar-src (:logseq.property.user/avatar user)}))
 
 (defn- deleted-root-header
-  [root]
+  [root remove-restored-root!]
   (let [user (deleted-by root)
         deleted-at (:logseq.property/deleted-at root)
         root-uuid (:block/uuid root)
@@ -56,7 +56,8 @@
        {:variant :ghost
         :size :xs
         :class "!py-0 !px-1 h-4"
-        :on-click #(page-handler/restore-recycled! root-uuid)}
+        :on-click #(p/let [_ (page-handler/restore-recycled! root-uuid)]
+                     (remove-restored-root! root-uuid))}
        (t :storage.recycle/restore))
       (shui/button
        {:variant :ghost
@@ -83,6 +84,12 @@
   [_page {:keys [class]}]
   (let [repo (state/get-current-repo)
         [roots set-roots!] (hooks/use-state nil)
+        remove-restored-root! (fn [root-uuid]
+                                (set-roots!
+                                 #(into []
+                                        (remove (fn [root]
+                                                  (= root-uuid (:block/uuid root))))
+                                        %)))
         groups (->> (or roots [])
                     (group-by group-title)
                     (sort-by (fn [[_ roots]]
@@ -113,6 +120,6 @@
               [:div.flex.flex-col
                (for [root roots]
                  [:div {:key (str (:block/uuid root))}
-                 (deleted-root-header root)
+                 (deleted-root-header root remove-restored-root!)
                  (deleted-root-outliner root)])]])
           [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))
