@@ -154,6 +154,57 @@
               :block-container :container}
              (editor/get-state))))))
 
+(deftest enter-handler-uses-the-keydown-target-snapshot-test
+  (let [stale-node #js {:value ""}
+        target #js {:value "a"
+                    :selectionStart 1}
+        stale-state {:node stale-node
+                     :value ""
+                     :pos 0}
+        captured-state (atom nil)
+        event #js {:target target
+                   :preventDefault (fn [])}]
+    (with-redefs [editor/get-state (constantly stale-state)
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/keydown-new-block (fn [state]
+                                             (reset! captured-state state))]
+      (editor/keydown-new-block-handler event)
+      (is (= {:node target
+              :value "a"
+              :pos 1}
+             @captured-state)
+          "Enter must use the textarea that received the keydown event."))))
+
+(deftest keydown-new-block-keeps-the-keydown-editor-state-test
+  (let [block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :block/title ""}
+        keydown-node #js {:value "a"}
+        stale-node #js {:value ""}
+        keydown-state {:block block
+                       :config {}
+                       :node keydown-node
+                       :value "a"
+                       :pos 1}
+        stale-state (assoc keydown-state
+                           :node stale-node
+                           :value ""
+                           :pos 0)
+        insert-call (atom nil)]
+    (with-redefs [editor/auto-complete? (constantly false)
+                  editor/get-state (constantly stale-state)
+                  state/get-input (constantly stale-node)
+                  editor/own-order-number-list? (constantly false)
+                  editor/last-top-level-child? (constantly true)
+                  editor/insert-new-block! (fn [& args]
+                                             (reset! insert-call args))]
+      (#'editor/keydown-new-block keydown-state)
+      (is (= [keydown-state "a" nil] @insert-call)
+          "The split must keep the content captured by keydown."))))
+
 (deftest inserted-block-edit-uses-persisted-window-row-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
