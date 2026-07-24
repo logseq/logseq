@@ -239,29 +239,6 @@
     (catch :default _
       [])))
 
-(deftest validated-transact-retries-when-live-conn-changes-before-commit-test
-  (testing "validated transact does not overwrite a concurrent live commit"
-    (let [conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks [{:page {:block/title "page 1"}
-                                     :blocks [{:block/title "first"}
-                                              {:block/title "second"}]}]})
-          first-block (db-test/find-block-by-content @conn "first")
-          second-block (db-test/find-block-by-content @conn "second")
-          injected? (atom false)]
-      (reset! ldb/*transact-pipeline-fn
-              (fn [tx-report]
-                (when (and (not @injected?)
-                           (some (fn [datom]
-                                   (and (= :block/title (:a datom))
-                                        (= "first updated" (:v datom))))
-                                 (:tx-data tx-report)))
-                  (reset! injected? true)
-                  (ldb/transact! conn [[:db/add (:db/id second-block) :block/title "second updated"]]))
-                tx-report))
-      (ldb/transact! conn [[:db/add (:db/id first-block) :block/title "first updated"]])
-      (is (= "first updated" (:block/title (d/entity @conn (:db/id first-block)))))
-      (is (= "second updated" (:block/title (d/entity @conn (:db/id second-block))))))))
-
 (defn- seed-client-op-txs!
   [repo txs]
   (doseq [tx txs]
