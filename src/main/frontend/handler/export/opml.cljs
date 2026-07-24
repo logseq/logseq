@@ -3,8 +3,6 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [clojure.zip :as z]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
@@ -13,7 +11,8 @@
             [hiccups.runtime :as h]
             [frontend.handler.export.common-impl :as common-impl :refer
              [*state* raw-text simple-asts->string space]]
-            [frontend.handler.export.util :refer-macros [concatv mapcatv removev]]))
+            [frontend.handler.export.util :refer-macros [concatv mapcatv removev]]
+            [promesa.core :as p]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -386,7 +385,7 @@
 ;;; block/inline-ast -> hiccup (ends)
 
 ;;; export fns
-(defn- export-helper
+(defn export-helper
   [content format options & {:keys [title] :or {title "untitled"}}]
   (let [remove-options (set (:remove-options options))
         other-options (:other-options options)]
@@ -431,24 +430,16 @@
   [repo root-block-uuids-or-page-uuid options]
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
-  (util/profile
-    :export-blocks-as-opml
-    (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
-          content
-          (if (uuid? root-block-uuids-or-page-uuid)
-           ;; page
-            (common/get-page-content root-block-uuids-or-page-uuid
-                                     {:open-blocks-only? open-blocks-only?})
-            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
-                                              {:open-blocks-only? open-blocks-only?}))
-          title (if (uuid? root-block-uuids-or-page-uuid)
-                  (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
-                  "untitled")
-          first-block (and (coll? root-block-uuids-or-page-uuid)
-                           (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-          format (get first-block :block/format :markdown)]
-      (binding [common-impl/*current-db* (conn/get-db repo)
-                common-impl/*content-config* (common/get-content-config)]
+  (let [remove-options (set (:remove-options options))
+        include-properties? (not (contains? remove-options :property))
+        open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))]
+    (util/profile
+      :export-blocks-as-opml
+      (p/let [{:keys [content format title]}
+              (common/<get-blocks-export-data repo
+                                              root-block-uuids-or-page-uuid
+                                              {:open-blocks-only? open-blocks-only?
+                                               :include-properties? include-properties?})]
         (export-helper content format options :title title)))))
 
 ;;; export fns (ends)

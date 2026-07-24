@@ -1,11 +1,21 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
   (:require [dommy.core :as dom]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [logseq.shui.hooks :as hooks]))
+            [logseq.shui.hooks :as hooks]
+            [promesa.core :as p]))
+
+(defn- <record-editor-info!
+  [repo edit-block-db-id editor-info]
+  (p/let [page-info (db-async/<get-block-page-info repo edit-block-db-id)
+          page-id (:block/uuid page-info)]
+    (when page-id
+      (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info
+                               repo
+                               editor-info))))
 
 (defn did-mount!
   [id config]
@@ -30,15 +40,11 @@
 
     ;; skip recording editor info when undo or redo is still running
     (when-not (or (:skip-focus? config)
-                  (contains? #{:undo :redo} @(:editor/op @state/state)))
+                  (contains? #{:undo :redo} (state/get-state :editor/op)))
       (when-let [edit-block-db-id (:db/id (state/get-edit-block))]
-        (let [page-id (:block/uuid (:block/page (db/entity edit-block-db-id)))
-              repo (state/get-current-repo)
+        (let [repo (state/get-current-repo)
               editor-info (state/get-editor-info)]
-          (when page-id
-            (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info
-                                     repo
-                                     editor-info)))))
+          (<record-editor-info! repo edit-block-db-id editor-info))))
     (state/set-state! :editor/op nil)))
 
 (defn use-did-mount!

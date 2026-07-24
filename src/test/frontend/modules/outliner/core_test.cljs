@@ -4,29 +4,17 @@
             [clojure.test.check.generators :as gen]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
 
 (def test-db test-helper/test-db)
-
-(defn listen-db-fixture
-  [f]
-  (let [test-db-conn (conn/get-db test-db false)]
-    (assert (some? test-db-conn))
-    (worker-db-listener/listen-db-changes! test-db test-db-conn
-                                           {:handler-keys [:sync-db-to-main-thread]})
-
-    (f)
-    (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))
 
 (defn disable-browser-fns
   [f]
@@ -36,24 +24,22 @@
 
 (use-fixtures :each
   disable-browser-fns
-  test-helper/react-components
   #(test-helper/start-and-destroy-db
     %
     {:build-init-data? false
      :schema {:logseq.property/deleted-at {:db/index true}
               :logseq.property/created-from-property {:db/index true}
-              }})
-  listen-db-fixture)
+              }}))
 
 (defn get-block
   ([id]
    (get-block id false))
   ([id _node?]
-   (db/entity test-db [:block/uuid id])))
+   (db-utils/entity (conn/get-db test-db) [:block/uuid id])))
 
 (defn get-children
   [id]
-  (->> (:block/_parent (d/entity (db/get-db) [:block/uuid id]))
+  (->> (:block/_parent (d/entity (conn/get-db test-db) [:block/uuid id]))
        ldb/sort-by-order
        (mapv :block/uuid)))
 
@@ -101,7 +87,7 @@
   [tree]
   (let [blocks (build-blocks tree)]
     (assert (every? (fn [block] (and (:block/parent block) (:block/order block))) blocks) (str "Invalid blocks: " blocks))
-    (d/transact! (db/get-db test-db false)
+    (d/transact! (conn/get-db test-db false)
                  (concat [{:db/id 1
                            :block/uuid 1
                            :block/name "Test page"}]
@@ -132,7 +118,7 @@
 (defn- transact-opts
   []
   {:outliner-op :test
-   :transact-opts {:conn (db/get-db test-db false)}})
+   :transact-opts {:conn (conn/get-db test-db false)}})
 
 (deftest test-delete-block
   (testing "
@@ -150,7 +136,7 @@
     (transact-tree! tree)
     (let [block (get-block 6)]
       (outliner-tx/transact! (transact-opts)
-                             (outliner-core/delete-blocks! (db/get-db test-db false)
+                             (outliner-core/delete-blocks! (conn/get-db test-db false)
                                                            [block] {}))
       (is (= [3 9] (get-children 2))))))
 
@@ -170,7 +156,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks! (db/get-db test-db false)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
                                  [(get-block 3)] (get-block 14)
                                  {:sibling? true}))
     (is (= [6 9] (get-children 2)))
@@ -193,7 +179,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks! (db/get-db test-db false)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
                                  [(get-block 3)] (get-block 12)
                                  {:sibling? false}))
     (is (= [6 9] (get-children 2)))
@@ -206,7 +192,7 @@
                           [5]]]])
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks! (db/get-db test-db false)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
                                  [(get-block 3)] (get-block 2)
                                  {:sibling? true}))
     (is (= [4] (get-children 2)))
@@ -221,7 +207,7 @@
                           [7]]]])
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks! (db/get-db test-db false)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
                                  [(get-block 3) (get-block 6)] (get-block 2)
                                  {:sibling? true}))
     (is (= [4] (get-children 2)))
@@ -237,7 +223,7 @@
                           [8]]]])
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks! (db/get-db test-db false)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
                                  [(get-block 3) (get-block 5)] (get-block 2)
                                  {:sibling? false}))
     (is (= [3 5 4] (get-children 2)))
@@ -259,7 +245,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 6) (get-block 9)] true))
+     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 6) (get-block 9)] true))
     (is (= [4 5 6 9] (get-children 3)))))
 
 (deftest test-indent-blocks-regression-5604
@@ -278,7 +264,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 13) (get-block 14) (get-block 15)] false))
+     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 13) (get-block 14) (get-block 15)] false))
     (is (= [2 12 13 14 15 16] (get-children 22))))
   (testing "
   [22 [[2 [[3
@@ -295,7 +281,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 13) (get-block 14)] false))
+     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 13) (get-block 14)] false))
     (is (= [2 12 13 14 16] (get-children 22)))))
 
 (deftest test-outdent-blocks
@@ -314,7 +300,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 4) (get-block 5)] false))
+     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 4) (get-block 5)] false))
     (is (= [3 4 5 6 9] (get-children 2)))))
 
 (deftest test-outdent-skips-comments-right-siblings
@@ -326,12 +312,12 @@
     (transact-tree! [[22 [[2 [[3]
                             [4 [[6]]]
                             [5]]]]]])
-    (d/transact! (db/get-db test-db false)
+    (d/transact! (conn/get-db test-db false)
                  [{:db/ident :logseq.class/Comments}
                   [:db/add (:db/id (get-block 4)) :block/tags :logseq.class/Comments]])
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 3)] false))
+     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 3)] false))
     (is (= [4] (get-children 2)))
     (is (= [6] (get-children 4)))
     (is (= [5] (get-children 3)))))
@@ -345,37 +331,37 @@
     (transact-tree! [[22 [[2 [[3]
                             [4 [[6]]]
                             [5]]]]]])
-    (d/transact! (db/get-db test-db false)
+    (d/transact! (conn/get-db test-db false)
                  [{:db/ident :logseq.class/Comments}
                   [:db/add (:db/id (get-block 4)) :block/tags :logseq.class/Comments]])
     (testing "comments area cannot be moved as a child"
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 4)] (get-block 3) {:sibling? false}))
+       (outliner-core/move-blocks! (conn/get-db test-db false) [(get-block 4)] (get-block 3) {:sibling? false}))
       (is (= [3 4 5] (get-children 2)))
       (is (empty? (get-children 3))))
     (testing "comments area can be moved as a sibling"
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 4)] (get-block 5) {:sibling? true}))
+       (outliner-core/move-blocks! (conn/get-db test-db false) [(get-block 4)] (get-block 5) {:sibling? true}))
       (is (= [3 5 4] (get-children 2)))
       (is (= [6] (get-children 4))))
     (testing "comment item cannot be moved"
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 6)] (get-block 5) {:sibling? false}))
+       (outliner-core/move-blocks! (conn/get-db test-db false) [(get-block 6)] (get-block 5) {:sibling? false}))
       (is (= [6] (get-children 4)))
       (is (empty? (get-children 5))))
     (testing "ordinary blocks can be moved as siblings of comments"
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 3)] (get-block 4) {:sibling? true}))
+       (outliner-core/move-blocks! (conn/get-db test-db false) [(get-block 3)] (get-block 4) {:sibling? true}))
       (is (= [5 4 3] (get-children 2)))
       (is (= [6] (get-children 4))))
     (testing "ordinary blocks cannot be moved into comments as children"
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 5)] (get-block 4) {:sibling? false}))
+       (outliner-core/move-blocks! (conn/get-db test-db false) [(get-block 5)] (get-block 4) {:sibling? false}))
       (is (= [5 4 3] (get-children 2)))
       (is (= [6] (get-children 4))))))
 
@@ -395,7 +381,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/delete-blocks! (db/get-db test-db false)
+     (outliner-core/delete-blocks! (conn/get-db test-db false)
                                    [(get-block 6) (get-block 9)] {}))
     (is (= [3] (get-children 2)))))
 
@@ -415,7 +401,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/delete-blocks! (db/get-db test-db false)
+     (outliner-core/delete-blocks! (conn/get-db test-db false)
                                    [(get-block 10) (get-block 13)] {}))
     (is (= [11] (get-children 9)))
     (is (= [14 15] (get-children 12)))))
@@ -435,7 +421,7 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      (transact-opts)
-     (outliner-core/move-blocks-up-down! (db/get-db test-db false) [(get-block 9)] true))
+     (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
 (deftest test-insert-blocks
@@ -459,7 +445,7 @@
       (outliner-tx/transact!
        (transact-opts)
        (outliner-core/insert-blocks!
-        (db/get-db test-db false)
+        (conn/get-db test-db false)
         new-blocks target-block {:sibling? true
                                  :keep-uuid? true
                                  :replace-empty-target? false}))
@@ -478,13 +464,14 @@
           [16 [[17]]]]]]
  "
     (transact-tree! tree)
-    (db/transact! test-db [{:block/uuid 22
-                            :block/title ""}])
+    (d/transact! (conn/get-db test-db false)
+                 [{:block/uuid 22
+                   :block/title ""}])
     (let [target-block (get-block 22)]
       (outliner-tx/transact!
        (transact-opts)
        (outliner-core/insert-blocks!
-        (db/get-db test-db false)
+        (conn/get-db test-db false)
         [{:block/title "test"
           :block/parent 1
           :block/page 1
@@ -508,14 +495,15 @@
     Copy 1,2,3 and paste into the empty block with :replace-empty-target? true
  "
     (transact-tree! [[22 [[23]]] [24] [25]])
-    (db/transact! test-db [{:block/uuid 22
-                            :block/title "1"}
-                           {:block/uuid 23
-                            :block/title "2"}
-                           {:block/uuid 24
-                            :block/title "3"}
-                           {:block/uuid 25
-                            :block/title ""}])
+    (d/transact! (conn/get-db test-db false)
+                 [{:block/uuid 22
+                   :block/title "1"}
+                  {:block/uuid 23
+                   :block/title "2"}
+                  {:block/uuid 24
+                   :block/title "3"}
+                  {:block/uuid 25
+                   :block/title ""}])
     (let [target-block (get-block 25)
           copied-blocks (->> (build-blocks [[101 [[102]]] [103]])
                              (map (fn [block]
@@ -526,7 +514,7 @@
                                       block))))]
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/insert-blocks! (db/get-db test-db false)
+       (outliner-core/insert-blocks! (conn/get-db test-db false)
                                      copied-blocks
                                      target-block
                                      {:sibling? true
@@ -546,11 +534,45 @@
           (is (= "2" (:block/title (get-block (first replaced-children))))))
         (is (= "3" (:block/title (get-block (first new-top-level)))))))))
 
+(deftest paste-text-reuses-new-page-references-across-blocks
+  (transact-tree! [[22]])
+  (let [conn (conn/get-db test-db false)
+        _ (d/transact! conn [{:db/ident :logseq.class/Page}])
+        first-ref-uuid (random-uuid)
+        second-ref-uuid (random-uuid)
+        page-ref (fn [ref-uuid]
+                   {:block/type "page"
+                    :block/name "new-page"
+                    :block/title "New Page"
+                    :block/uuid ref-uuid})
+        block (fn [ref-uuid]
+                {:block/uuid (random-uuid)
+                 :block/title (str "[[" ref-uuid "]]")
+                 :block/refs [(page-ref ref-uuid)]})
+        result (outliner-core/insert-blocks
+                @conn
+                [(block first-ref-uuid) (block second-ref-uuid)]
+                (get-block 22)
+                {:sibling? true
+                 :keep-uuid? true
+                 :outliner-op :paste
+                 :outliner-real-op :paste-text})]
+    (d/transact! conn (:tx-data result))
+    (let [pages (d/q '[:find [(pull ?page [:block/uuid]) ...]
+                       :where
+                       [?page :block/name "new-page"]]
+                     @conn)
+          inserted-ref-uuids (mapv (comp :block/uuid first :block/refs)
+                                   (:blocks result))]
+      (is (= 1 (count pages)))
+      (is (apply = inserted-ref-uuids)))))
+
 (deftest test-cut-paste-parent-child-into-empty-block
   (testing "keep-uuid + replace-empty-target remaps child parent to replaced target uuid"
     (transact-tree! [[25]])
-    (db/transact! test-db [{:block/uuid 25
-                            :block/title ""}])
+    (d/transact! (conn/get-db test-db false)
+                 [{:block/uuid 25
+                   :block/title ""}])
     (let [target-block (get-block 25)
           copied-blocks (->> (build-blocks [[101 [[102]]]])
                              (map (fn [block]
@@ -563,7 +585,7 @@
                                       block))))]
       (outliner-tx/transact!
        (transact-opts)
-       (outliner-core/insert-blocks! (db/get-db test-db false)
+       (outliner-core/insert-blocks! (conn/get-db test-db false)
                                      copied-blocks
                                      target-block
                                      {:sibling? true
@@ -579,26 +601,27 @@
 (deftest test-paste-property-values-into-empty-property-value-block
   (testing "replace-empty-target remaps pasted property value uuids before adding many-property refs"
     (transact-tree! [[25]])
-    (db/transact! test-db [{:block/uuid 25
-                            :block/title ""}])
-    (let [conn (db/get-db test-db false)
-          _ (db/transact! test-db [{:db/ident :logseq.property/created-from-property
-                                    :db/valueType :db.type/ref
-                                    :db/cardinality :db.cardinality/one
-                                    :db/index true}])
+    (d/transact! (conn/get-db test-db false)
+                 [{:block/uuid 25
+                   :block/title ""}])
+    (let [conn (conn/get-db test-db false)
+          _ (d/transact! conn [{:db/ident :logseq.property/created-from-property
+                                :db/valueType :db.type/ref
+                                :db/cardinality :db.cardinality/one
+                                :db/index true}])
           property-ident :user.property/reproduciblesteps
-          _ (db/transact! test-db [{:db/ident property-ident
-                                    :db/valueType :db.type/ref
-                                    :db/cardinality :db.cardinality/many
-                                    :logseq.property/type :default}])
+          _ (d/transact! conn [{:db/ident property-ident
+                                :db/valueType :db.type/ref
+                                :db/cardinality :db.cardinality/many
+                                :logseq.property/type :default}])
           property (d/entity @conn property-ident)
           property-ident (:db/ident property)
           target-block (get-block 25)
-          _ (db/transact! test-db [{:db/id (:db/id target-block)
-                                    :logseq.property/created-from-property (:db/id property)}
-                                   [:db/add (:db/id (:block/parent target-block))
-                                    property-ident
-                                    (:db/id target-block)]])
+          _ (d/transact! conn [{:db/id (:db/id target-block)
+                                :logseq.property/created-from-property (:db/id property)}
+                               [:db/add (:db/id (:block/parent target-block))
+                                property-ident
+                                (:db/id target-block)]])
           target-block (get-block 25)
           _ (is (some? (:logseq.property/created-from-property target-block)))
           copied-blocks [{:block/uuid 101
@@ -636,10 +659,10 @@
             target-block (get-block 2)]
         (outliner-tx/transact!
          (transact-opts)
-         (outliner-core/insert-blocks! (db/get-db test-db false) new-blocks target-block {:sibling? false
+         (outliner-core/insert-blocks! (conn/get-db test-db false) new-blocks target-block {:sibling? false
                                                                                           :keep-uuid? true
                                                                                           :replace-empty-target? false})
-         (outliner-core/delete-blocks! (db/get-db test-db false)
+         (outliner-core/delete-blocks! (conn/get-db test-db false)
                                        [(get-block 3)] {}))
 
         (is (= [4] (get-children 2)))
@@ -690,15 +713,15 @@
     (transact-tree! tree)
     (is (=
          '(2 3 4 5 6 7 8 9 10 11)
-         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 2))))))
+         (map :block/uuid (tree/get-sorted-block-and-children (conn/get-db test-db) (:db/id (get-block 2))))))
 
     (is (=
          '(22 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17)
-         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 22))))))
+         (map :block/uuid (tree/get-sorted-block-and-children (conn/get-db test-db) (:db/id (get-block 22))))))
 
     (is (=
          '(16 17)
-         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 16))))))))
+         (map :block/uuid (tree/get-sorted-block-and-children (conn/get-db test-db) (:db/id (get-block 16))))))))
 
 ;;; Fuzzy tests
 
@@ -730,7 +753,7 @@
 (defn insert-blocks!
   [blocks target]
   (outliner-tx/transact! (transact-opts)
-                         (outliner-core/insert-blocks! (db/get-db test-db false)
+                         (outliner-core/insert-blocks! (conn/get-db test-db false)
                                                        blocks
                                                        target
                                                        {:sibling? (gen/generate gen/boolean)
@@ -746,7 +769,7 @@
 
 (defn get-datoms
   []
-  (let [db' (db/get-db test-db)
+  (let [db' (conn/get-db test-db)
         recycled-ids (into #{}
                            (map :e)
                            (d/datoms db' :avet :logseq.property/deleted-at))
@@ -769,11 +792,11 @@
   (let [datoms (->> (get-datoms)
                     (remove (fn [datom] (= 1 (:e datom))))
                     (remove (fn [datom]
-                              (empty? (d/datoms (db/get-db test-db) :eavt (:e datom) :block/parent))))
+                              (empty? (d/datoms (conn/get-db test-db) :eavt (:e datom) :block/parent))))
                     vec)]
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
-            block (db/entity test-db id)]
+            block (db-utils/entity (conn/get-db test-db) id)]
         (assert (:block/parent block)
                 (str "No parent for block: " block))
         block)
@@ -788,8 +811,8 @@
       (when-let [block (get-random-block)]
         (loop [result [block]
                node block]
-          (if-let [next (outliner-core/get-right-sibling (db/get-db test-db) (:db/id node))]
-            (let [next (db/pull test-db '[*] (:db/id next))]
+          (if-let [next (outliner-core/get-right-sibling (conn/get-db test-db) (:db/id node))]
+            (let [next (d/pull (conn/get-db test-db) '[*] (:db/id next))]
               (if (>= (count result) limit)
                 result
                 (recur (conj result next) next)))
@@ -825,7 +848,7 @@
       (let [blocks (get-random-blocks)]
         (when (seq blocks)
           (outliner-tx/transact! (transact-opts)
-                                 (outliner-core/delete-blocks! (db/get-db test-db false)
+                                 (outliner-core/delete-blocks! (conn/get-db test-db false)
                                                                blocks {})))))))
 
 (deftest ^:long random-moves
@@ -843,7 +866,7 @@
           (when (seq blocks)
             (let [target (get-random-block)]
               (outliner-tx/transact! (transact-opts)
-                                     (outliner-core/move-blocks! (db/get-db test-db false)
+                                     (outliner-core/move-blocks! (conn/get-db test-db false)
                                                                  blocks
                                                                  target
                                                                  {:sibling? (gen/generate gen/boolean)}))
@@ -864,7 +887,7 @@
         (let [blocks (get-random-blocks)]
           (when (seq blocks)
             (outliner-tx/transact! (transact-opts)
-                                   (outliner-core/move-blocks-up-down! (db/get-db test-db false) blocks (gen/generate gen/boolean)))
+                                   (outliner-core/move-blocks-up-down! (conn/get-db test-db false) blocks (gen/generate gen/boolean)))
             (let [total (get-blocks-count)]
               (is (= total (count @*random-blocks))))))))))
 
@@ -883,7 +906,7 @@
                 indent? (gen/generate gen/boolean)]
             (when (seq blocks)
               (outliner-tx/transact! (transact-opts)
-                                     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) blocks indent?))
+                                     (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) blocks indent?))
               (let [total (get-blocks-count)]
                 (is (= total (count @*random-blocks)))))))))))
 
@@ -903,7 +926,7 @@
                    (swap! *random-blocks (fn [old]
                                            (set/difference old (set (map :block/uuid blocks)))))
                    (outliner-tx/transact! (transact-opts)
-                                          (outliner-core/delete-blocks! (db/get-db test-db false)
+                                          (outliner-core/delete-blocks! (conn/get-db test-db false)
                                                                         blocks {})))))
 
              ;; move
@@ -911,7 +934,7 @@
                (let [blocks (get-random-blocks)]
                  (when (seq blocks)
                    (outliner-tx/transact! (transact-opts)
-                                          (outliner-core/move-blocks! (db/get-db test-db false)
+                                          (outliner-core/move-blocks! (conn/get-db test-db false)
                                                                       blocks
                                                                       (get-random-block)
                                                                       {:sibling? (gen/generate gen/boolean)})))))
@@ -921,14 +944,14 @@
                (let [blocks (get-random-blocks)]
                  (when (seq blocks)
                    (outliner-tx/transact! (transact-opts)
-                                          (outliner-core/move-blocks-up-down! (db/get-db test-db false) blocks (gen/generate gen/boolean))))))
+                                          (outliner-core/move-blocks-up-down! (conn/get-db test-db false) blocks (gen/generate gen/boolean))))))
 
              ;; indent outdent
              (fn []
                (let [blocks (get-random-blocks)]
                  (when (seq blocks)
                    (outliner-tx/transact! (transact-opts)
-                                          (outliner-core/indent-outdent-blocks! (db/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
+                                          (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
     (dotimes [_i 100]
       ((rand-nth ops)))))
 
@@ -946,7 +969,7 @@
         (is (<= total (count @*random-blocks)))
 
         ;; 2. verify page's length + page itself = total blocks
-        (is (= (inc (db-model/get-page-blocks-count test-db page-id))
+        (is (= (inc (ldb/get-page-blocks-count (conn/get-db test-db) page-id))
                total))))))
 
 (deftest test-non-consecutive-blocks->vec-tree
@@ -1004,12 +1027,37 @@
              :block/parent #:db{:id 2315},
              :block/page #:db{:id 2313},
              :block/level 2,
-             :block/children
-             [{:db/id 2334,
+           :block/children
+           [{:db/id 2334,
                :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
+
+(deftest blocks->vec-tree-preserves-worker-fields-and-order
+  (let [page-id (random-uuid)
+        page {:db/id 1
+              :block/uuid page-id
+              :block/tx-id 10
+              :block/tags [{:db/ident :logseq.class/Page}]}
+        later {:db/id 2
+               :block/uuid (random-uuid)
+               :block/tx-id 11
+               :block/order "a1"
+               :block/parent {:db/id 1}
+               :block/page {:db/id 1}}
+        earlier {:db/id 3
+                 :block/uuid (random-uuid)
+                 :block/tx-id 12
+                 :block/order "a0"
+                 :block/parent {:db/id 1}
+                 :block/page {:db/id 1}}
+        result (tree/blocks->vec-tree [page later earlier] page-id)]
+    (is (= [(:block/uuid earlier) (:block/uuid later)]
+           (mapv :block/uuid result)))
+    (is (= [1 1] (mapv :block/level result)))
+    (is (= [12 11] (mapv :block/tx-id result))
+        "The renderer tree must preserve worker transaction identities.")))
 
 (deftest non-consecutive-blocks->vec-tree-preserves-worker-pulled-block-fields
   (let [page-ref #:db{:id 1}

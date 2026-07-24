@@ -1,8 +1,6 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.string :as string]
-            [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.react :as react]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
@@ -10,95 +8,73 @@
             [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
-  [tx-data]
-  (when-let [editing-block (state/get-edit-block)]
-    (let [editing-title (state/get-edit-content)]
-      (when-let [d (some (fn [d] (when (and (= (:e d) (:db/id editing-block))
-                                            (= (:a d) :block/title)
-                                            (not= (string/trim editing-title) (string/trim (:v d)))
-                                            (:added d))
-                                   d)) tx-data)]
-        (when-let [new-title (:block/title (db/entity (:e d)))]
-          (state/set-edit-content! new-title))))))
+  [blocks]
+  (when-let [editing-block-uuid (:block/uuid (state/get-edit-block))]
+    (when-let [title (:block/title (get blocks editing-block-uuid))]
+      (let [editing-title (state/get-edit-content)]
+        (when (not= (string/trim (or editing-title ""))
+                    (string/trim title))
+          (state/set-edit-content! title))))))
+
+(defn- current-page-deleted?
+  [current-page deleted]
+  (and current-page
+       (some #(= current-page (str %)) (keys deleted))))
+
+(defn- current-page-recycled?
+  [current-page blocks]
+  (and current-page
+       (some (fn [[block-uuid block]]
+               (and (= current-page (str block-uuid))
+                    (ldb/recycled? block)))
+             blocks)))
+
+(defn- publish-plugin-hook!
+  [tx-meta {:keys [blocks deleted]}]
+  (when (and state/lsp-enabled?
+             (seq blocks)
+             (<= (count blocks) 1000))
+    (state/pub-event!
+     [:plugin/hook-db-tx
+      {:blocks (vec (vals blocks))
+       :deleted-block-uuids (set (keys deleted))
+       :tx-data []
+       :tx-meta tx-meta}])))
 
 (defn invoke-hooks
-  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
+  [{:keys [repo tx-meta delta]}]
+  (when delta
+    (db-subs/apply-delta! delta))
   (let [{:keys [initial-pages? end?]} tx-meta
-        tx-report {:tx-meta tx-meta
-                   :tx-data tx-data}
-        current-block-id (state/get-current-page)
-        current-block (when (and current-block-id (util/uuid-string? current-block-id))
-                        (let [id (uuid current-block-id)]
-                          (db/entity [:block/uuid id])))]
+        current-page (state/get-current-page)
+        blocks (:blocks delta)
+        deleted (:deleted delta)]
     (when (= repo (state/get-current-repo))
-      (when (seq deleted-block-uuids)
-        (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
-          (state/sidebar-remove-deleted-block! ids))
-        (when-let [block-id (state/get-current-page)]
-          (when (and (contains? (set (map str deleted-block-uuids)) block-id)
-                     (not (util/mobile?)))
-            (let [parent (:block/parent (ldb/get-page (db/get-db) block-id))]
-              (if parent
-                (route-handler/redirect-to-page! (:block/uuid parent))
-                (route-handler/redirect-to-home!))))))
+      (when-let [ids (not-empty (keep :db/id (vals deleted)))]
+        (state/sidebar-remove-deleted-block! ids))
+      (when (and (current-page-deleted? current-page deleted)
+                 (not (util/mobile?)))
+        (route-handler/redirect-to-home!))
 
-      (when-let [conn (db/get-db repo false)]
-        (cond
-          initial-pages?
-          (do
-            (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
-            (when end?
-              (state/pub-event! [:init/commands])
-              (ui-handler/re-render-root!)))
+      (cond
+        initial-pages?
+        (when end?
+          (state/pub-event! [:init/commands])
+          (ui-handler/re-render-root!))
 
-          :else
-          (do
-            (state/set-state! :db/latest-transacted-entity-uuids
-                              {:updated-ids (set (map :block/uuid blocks))
-                               :deleted-ids (set deleted-block-uuids)})
-            (let [tx-data' (concat
-                            (map
-                             (fn [id]
-                               [:db/retractEntity [:block/uuid id]])
-                             deleted-block-uuids)
-                            (if (contains? #{:create-property-text-block :insert-blocks} (:outliner-op tx-meta))
-                              (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
-                                                                                   {:db/id (:e datom)
-                                                                                    :block.temp/load-status :self})) tx-data)]
-                                (concat update-blocks-fully-loaded tx-data))
-                              tx-data))]
-              (d/transact! conn tx-data' tx-meta))
+        :else
+        (do
+          (when (current-page-recycled? current-page blocks)
+            (route-handler/redirect! {:to :home :push false}))
 
-            (when (and current-block (ldb/recycled? (db/entity [:block/uuid (:block/uuid current-block)])))
-              (route-handler/redirect! {:to :home :push false}))
+          (when (or (not= (:client-id tx-meta) (:client-id @state/state))
+                    (= :apply-template (:outliner-op tx-meta)))
+            (update-editing-block-title-if-changed! blocks))
 
-            (when (or (not= (:client-id tx-meta) (:client-id @state/state))
-                      (= :apply-template (:outliner-op tx-meta)))
-              (update-editing-block-title-if-changed! tx-data))
+          (state/set-state! :editor/start-pos nil)
 
-            ;; (when (seq deleted-assets)
-            ;;   (doseq [asset deleted-assets]
-            ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
-
-            (state/set-state! :editor/start-pos nil)
-
-            (when-not (:graph/importing @state/state)
-
-              (let [edit-block-f (state/take-edit-block-fn! (:editor/edit-block-fn-id tx-meta))]
-                (when-not (:skip-refresh? tx-meta)
-                  (react/refresh! repo affected-keys))
-                (when edit-block-f
-                  (util/schedule edit-block-f)))
-
-              (when (and state/lsp-enabled?
-                         (seq blocks)
-                         (<= (count blocks) 1000))
-                (state/pub-event! [:plugin/hook-db-tx
-                                   {:blocks  blocks
-                                    :deleted-assets deleted-assets
-                                    :deleted-block-uuids deleted-block-uuids
-                                    :tx-data (:tx-data tx-report)
-                                    :tx-meta (:tx-meta tx-report)}])))))))
+          (when-not (:graph/importing @state/state)
+            (publish-plugin-hook! tx-meta delta)))))
 
     (when (= (:outliner-op tx-meta) :delete-page)
       (state/pub-event! [:page/deleted (:deleted-page tx-meta) tx-meta]))

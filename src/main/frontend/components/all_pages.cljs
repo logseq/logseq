@@ -3,7 +3,7 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.hooks :as db-hooks]
             [logseq.common.config :as common-config]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -26,11 +26,13 @@
 
 (hsx/defc all-pages
   []
-  (let [columns' (views/build-columns {} (columns)
+  (let [view-parent-uuid (db-hooks/use-resource [:page-identity common-config/views-page-name])
+        columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
                                        :with-id? false})]
     [:div.ls-all-pages.w-full.mx-auto
-     (views/view {:view-parent (db/get-page common-config/views-page-name)
-                  :view-feature-type :all-pages
-                  :show-items-count? true
-                  :columns columns'})]))
+     (when view-parent-uuid
+       (views/view {:view-parent-uuid view-parent-uuid
+                    :view-feature-type :all-pages
+                    :show-items-count? true
+                    :columns columns'}))]))

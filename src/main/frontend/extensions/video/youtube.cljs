@@ -124,7 +124,7 @@
                            last)]
       (let [id (gobj/get iframe "id" "")
             id (string/replace-first id #"youtube-player-" "")]
-        (get (get @state/state :youtube/players) id)))))
+        (get (state/get-state :youtube/players) id)))))
 
 (defn- notify-timestamp-unavailable! []
   (notification/show!
@@ -150,7 +150,7 @@
                        (t :youtube/player-not-ready)
                        :warning
                        false)))))}
-   svg/clock
+   [:span.inline-flex.relative.-bottom-1 svg/clock]
    (seconds->display seconds)])
 
 (defn gen-youtube-ts-macro []

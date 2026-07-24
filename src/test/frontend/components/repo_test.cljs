@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [deftest is async]]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
-            [frontend.db :as db]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.repo :as repo-handler]
@@ -10,13 +9,16 @@
             [frontend.state :as state]
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 (defn- ensure-rsa-key-fn
   []
   #'repo/ensure-e2ee-rsa-key-for-cloud!)
+
+(defn- finish-async-test!
+  [done]
+  (js/setTimeout done 0))
 
 (deftest local-uploadable-graph-allows-native-mobile-local-graph-without-root-test
   (with-redefs [mobile-util/native-platform? (constantly true)
@@ -59,7 +61,7 @@
                events (atom [])]
            (is (fn? open-f) "All graphs should expose a web open-in-another-tab action")
            (if-not open-f
-             (done)
+             (finish-async-test! done)
              (-> (p/with-redefs [graph-handler/<get-graph-registry
                                  (fn []
                                    (p/resolved [{:repo "logseq_db_demo"
@@ -73,10 +75,10 @@
                            (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
                                                              :graph-id "local-uuid"}]]
                                   @events))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest upload-local-graph-with-confirm-asks-before-upload-test
   (async done
@@ -87,7 +89,7 @@
            (if-not upload-fn
              (do
                (is false "missing upload-local-graph-with-confirm!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [shui/dialog-confirm! (fn [content opts]
                                                         (swap! dialogs conj {:content content
                                                                              :opts opts})
@@ -109,10 +111,10 @@
                            (is (= 1 (count @dialogs)))
                            (is (= [["logseq_db_demo" true]] @upload-calls))
                            (is (= 1 @finished-calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest upload-local-graph-switches-before-uploading-non-current-graph-test
   (async done
@@ -122,7 +124,7 @@
            (if-not upload-fn
              (do
                (is false "missing upload-local-graph-with-confirm!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [shui/dialog-confirm! (fn [_content _opts]
                                                         (p/resolved nil))
                                  state/get-current-repo (fn []
@@ -131,11 +133,13 @@
                                                     (swap! calls conj event)
                                                     (reset! current-repo (second event))
                                                     (p/resolved nil))
-                                 db/get-db (fn []
-                                             :db-after-switch)
-                                 ldb/get-graph-rtc-e2ee? (fn [db]
-                                                           (is (= :db-after-switch db))
-                                                           false)
+                                 repo/<invoke-db-worker
+                                 (fn [op repo key]
+                                   (swap! calls conj [op repo key])
+                                   (is (= :thread-api/get-key-value op))
+                                   (is (= "logseq_db_other" repo))
+                                   (is (= :logseq.kv/graph-rtc-e2ee? key))
+                                   (p/resolved false))
                                  rtc-handler/<rtc-upload-graph! (fn [repo graph-e2ee?]
                                                                   (swap! calls conj [:upload repo graph-e2ee?])
                                                                   (p/resolved nil))
@@ -147,12 +151,50 @@
                    (upload-fn {:url "logseq_db_other"}))
                  (p/then (fn [_]
                            (is (= [[:graph/switch "logseq_db_other"]
+                                   [:thread-api/get-key-value "logseq_db_other" :logseq.kv/graph-rtc-e2ee?]
                                    [:upload "logseq_db_other" false]]
                                   @calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
+
+(deftest upload-local-graph-reads-current-graph-e2ee-from-worker-test
+  (async done
+         (let [upload-fn (some-> (resolve 'frontend.components.repo/upload-local-graph-with-confirm!) deref)
+               calls (atom [])]
+           (if-not upload-fn
+             (do
+               (is false "missing upload-local-graph-with-confirm!")
+               (finish-async-test! done))
+             (-> (p/with-redefs [shui/dialog-confirm! (fn [_content _opts]
+                                                        (p/resolved nil))
+                                 state/get-current-repo (fn []
+                                                          "logseq_db_demo")
+                                 repo/<invoke-db-worker
+                                 (fn [op repo key]
+                                   (swap! calls conj [op repo key])
+                                   (is (= :thread-api/get-key-value op))
+                                   (is (= "logseq_db_demo" repo))
+                                   (is (= :logseq.kv/graph-rtc-e2ee? key))
+                                   (p/resolved false))
+                                 rtc-handler/<rtc-upload-graph! (fn [repo graph-e2ee?]
+                                                                  (swap! calls conj [:upload repo graph-e2ee?])
+                                                                  (p/resolved nil))
+                                 rtc-indicator/on-upload-finished-task (fn [f]
+                                                                         (f))
+                                 util/mobile? (fn [] false)
+                                 shui/popup-show! (fn [& _] nil)
+                                 shui/popup-hide! (fn [& _] nil)]
+                   (upload-fn {:url "logseq_db_demo"}))
+                 (p/then (fn [_]
+                           (is (= [[:thread-api/get-key-value "logseq_db_demo" :logseq.kv/graph-rtc-e2ee?]
+                                   [:upload "logseq_db_demo" false]]
+                                  @calls))
+                           (finish-async-test! done)))
+                 (p/catch (fn [error]
+                            (is false (str error))
+                            (finish-async-test! done))))))))
 
 (deftest upload-local-graph-shows-mobile-popup-before-upload-starts-test
   (async done
@@ -161,7 +203,7 @@
            (if-not upload-fn
              (do
                (is false "missing upload-local-graph-with-confirm!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [shui/dialog-confirm! (fn [_content _opts]
                                                         (p/resolved nil))
                                  state/get-current-repo (fn []
@@ -182,10 +224,10 @@
                  (p/then (fn [_]
                            (is (= [:popup-show :finish-handler :upload :popup-hide]
                                   @calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest upload-local-graph-hides-mobile-popup-when-upload-errors-test
   (async done
@@ -194,7 +236,7 @@
            (if-not upload-fn
              (do
                (is false "missing upload-local-graph-with-confirm!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [shui/dialog-confirm! (fn [_content _opts]
                                                         (p/resolved nil))
                                  state/get-current-repo (fn []
@@ -213,12 +255,12 @@
                                :graph-e2ee? true}))
                  (p/then (fn [_]
                            (is false "expected upload failure")
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is (= "upload failed" (ex-message error)))
                             (is (= [:popup-show :finish-handler :upload :popup-hide]
                                    @calls))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest ensure-rsa-key-does-not-create-graph-test
   (async done
@@ -229,10 +271,10 @@
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [state/pub-event! (fn [_event]
                                                     (p/resolved nil))
-                                 state/<invoke-db-worker
+                                 repo/<invoke-db-worker
                                  (fn [op & args]
                                    (swap! db-worker-calls conj (into [op] args))
                                    (if (= op :thread-api/db-sync-ensure-user-rsa-keys)
@@ -262,10 +304,10 @@
                              (is (not (contains? set-config :oauth-client-id))))
                            (is (= [true] @ensured-values))
                            (is (zero? @create-calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest ensure-rsa-key-nil-result-does-not-create-graph-test
   (async done
@@ -276,10 +318,10 @@
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
-               (done))
+               (finish-async-test! done))
              (-> (p/with-redefs [state/pub-event! (fn [_event]
                                                     (p/resolved nil))
-                                 state/<invoke-db-worker
+                                 repo/<invoke-db-worker
                                  (fn [op & args]
                                    (swap! db-worker-calls conj (into [op] args))
                                    (p/resolved nil))
@@ -307,10 +349,10 @@
                              (is (not (contains? set-config :oauth-client-id))))
                            (is (= [false] @ensured-values))
                            (is (zero? @create-calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest ensure-rsa-key-skips-when-prerequisites-missing-test
   (async done
@@ -321,8 +363,8 @@
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
-               (done))
-             (-> (p/with-redefs [state/<invoke-db-worker
+               (finish-async-test! done))
+             (-> (p/with-redefs [repo/<invoke-db-worker
                                  (fn [& _]
                                    (swap! ensure-calls inc)
                                    (p/resolved {:public-key "pk"}))
@@ -341,10 +383,10 @@
                            (is (zero? @ensure-calls))
                            (is (empty? @ensured-values))
                            (is (zero? @create-calls))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest ensure-rsa-key-skips-when-graph-e2ee-disabled-test
   (async done
@@ -354,8 +396,8 @@
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
-               (done))
-             (-> (p/with-redefs [state/<invoke-db-worker
+               (finish-async-test! done))
+             (-> (p/with-redefs [repo/<invoke-db-worker
                                  (fn [& _]
                                    (swap! ensure-calls inc)
                                    (p/resolved {:public-key "pk"}))]
@@ -370,10 +412,10 @@
                  (p/then (fn [_]
                            (is (zero? @ensure-calls))
                            (is (empty? @ensured-values))
-                           (done)))
+                           (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
-                            (done))))))))
+                            (finish-async-test! done))))))))
 
 (deftest not-ready-remote-graph-does-not-trigger-download-test
   (let [events (atom [])
@@ -436,10 +478,10 @@
                          (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
                                                            :graph-id "local-uuid"}]]
                                 @events))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest electron-shift-click-opens-local-graph-in-new-window-by-repo-test
   (let [events (atom [])

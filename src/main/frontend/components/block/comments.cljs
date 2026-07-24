@@ -7,12 +7,14 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
+            [frontend.db.hooks :as db-hooks]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -67,7 +69,7 @@
    (state/set-state! :editor/block block)
    (state/set-editing-block-id! [(or container-id :comments-area) (:block/uuid block)])
    (state/set-state! :editor/container-id container-id)
-   (state/set-state! :editor/content (or content "") :path-in-sub-atom (:block/uuid block))
+   (state/set-state! :editor/content (or content "") :nested-path (:block/uuid block))
    (state/set-state! :editor/last-key-code nil)
    (state/set-state! :editor/set-timestamp-block nil)
    (state/set-state! :editor/cursor-range nil)
@@ -177,6 +179,27 @@
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
    [active? (:block/uuid editor-block)]))
 
+(defn- comment-box-editor-props
+  [{:keys [active? editor-box editor-block input-id config focus-editor? draft
+           placeholder container-id update-draft! asset-target-block submit!
+           create-sibling-block! exit-comment-editor! activate-reply! draft']}]
+  {:active? active?
+   :editor-box editor-box
+   :editor-block editor-block
+   :input-id input-id
+   :config config
+   :focus-editor? focus-editor?
+   :draft draft
+   :placeholder placeholder
+   :container-id container-id
+   :update-draft! update-draft!
+   :asset-target-block asset-target-block
+   :submit! submit!
+   :create-sibling-block! create-sibling-block!
+   :exit-comment-editor! exit-comment-editor!
+   :activate-reply! activate-reply!
+   :draft' draft'})
+
 (hsx/defc comment-box
   [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
     :or {refocus-after-submit? true
@@ -221,13 +244,6 @@
                           (when comments-block
                             (comments-model/save-comment-draft! comments-block value))
                           (set-draft! value)))
-        _ (when (and active? focus-editor?)
-            (activate-comment-editor! input-id
-                                      (assoc editor-block :block/title draft)
-                                      draft
-                                      container-id
-                                      true
-                                      (comments-model/comment-edit-cursor-position draft)))
         content (comments-model/submittable-comment-content draft)
         create-sibling-block! (fn [e]
                                 (util/stop e)
@@ -251,25 +267,27 @@
      (fn []
        clear-comment-edit!)
      [(:block/uuid editor-block)])
+    (hooks/use-effect!
+     (fn []
+       (when (and active? focus-editor?)
+         (activate-comment-editor! input-id
+                                   (assoc editor-block :block/title draft)
+                                   draft
+                                   container-id
+                                   true
+                                   (comments-model/comment-edit-cursor-position draft)))
+       nil)
+     [active? focus-editor? input-id (:block/uuid editor-block) draft container-id])
     (use-comment-box-outside-click! active? editor-block exit-comment-editor!)
     [:div.ls-comment-box
      (comment-box-editor-view
-      {:active? active?
-       :editor-box editor-box
-       :editor-block editor-block
-       :input-id input-id
-       :config config
-       :focus-editor? focus-editor?
-       :draft draft
-       :placeholder placeholder
-       :container-id container-id
-       :update-draft! update-draft!
-       :asset-target-block (or comments-block (:block/parent comment-block))
-       :submit! submit!
-       :create-sibling-block! create-sibling-block!
-       :exit-comment-editor! exit-comment-editor!
-       :activate-reply! activate-reply!
-       :draft' draft'})
+      (comment-box-editor-props
+       {:active? active? :editor-box editor-box :editor-block editor-block :input-id input-id
+        :config config :focus-editor? focus-editor? :draft draft :placeholder placeholder
+        :container-id container-id :update-draft! update-draft!
+        :asset-target-block (or comments-block (:block/parent comment-block))
+        :submit! submit! :create-sibling-block! create-sibling-block!
+        :exit-comment-editor! exit-comment-editor! :activate-reply! activate-reply! :draft' draft'}))
      (comment-box-actions
       {:content content
        :on-cancel on-cancel
@@ -391,6 +409,12 @@
                         (comments-handler/delete-comment! comment-block))}
            (shui/tabler-icon "trash" {:size 14})))])]))
 
+(hsx/defc subscribed-comment-row
+  [config comment-uuid *hide-block-refs? *show-query? renderers]
+  (let [comment-block (db-hooks/use-block comment-uuid)]
+    (when comment-block
+      (comment-row-view config comment-block *hide-block-refs? *show-query? renderers))))
+
 (hsx/defc add-comment-button
   [config comments-block {:keys [focus-on-mount?]}]
   (let [placeholder (t :block.comments/placeholder)]
@@ -436,12 +460,9 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing-in-container? (state/use-sub-editing? [container-id block-uuid])
-        editing-in-unknown-container? (state/use-sub-editing? [:unknown-container block-uuid])]
-    (boolean
-     (and block-uuid
-          (or editing-in-container?
-              editing-in-unknown-container?)))))
+        editing? (or (boolean (rfx/use-sub [:editor/editing? [container-id block-uuid]]))
+                     (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-uuid]])))]
+    (and block-uuid editing?)))
 
 (defn- comments-area-title-view
   [config block editing? *hide-block-refs? *show-query? {:keys [block-content-or-editor]}]
@@ -472,17 +493,17 @@
        (comments-model/comments-area-title block)])))
 
 (hsx/defc comments-area-view
-  [config block children collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
+  [config block comment-uuids collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
   (let [*comments-list-ref (hooks/use-ref nil)
         [targets-open? set-targets-open!] (hooks/use-state false)
         title-editing? (comments-area-title-editing? config block)
-        render-token (comments-model/comments-render-token children)
-        summary (comments-model/comments-summary children)
-        count (count children)]
+        summary (db-hooks/use-resource [:block-comment-summary (:block/uuid block)])
+        render-token (vec comment-uuids)
+        count (:count summary)]
     (hooks/use-effect!
      (fn []
        (when (and (not collapsed?)
-                  (seq children))
+                  (seq comment-uuids))
          (js/requestAnimationFrame
           #(some-> (hooks/deref *comments-list-ref)
                    (scroll-comments-list-to-bottom!))))
@@ -518,10 +539,10 @@
             (t :block.comments/on-those-blocks)])]
         (when (comments-model/show-comment-thread-targets? block targets-open?)
           (comment-thread-targets-view block))
-        (when (seq children)
+        (when (seq comment-uuids)
           [:div.ls-comments-list
            {:ref *comments-list-ref}
-           (for [comment-block children]
-             ^{:key (str (:block/uuid comment-block))}
-             [comment-row-view config comment-block *hide-block-refs? *show-query? renderers])])
+           (for [comment-uuid comment-uuids]
+             ^{:key (str comment-uuid)}
+             [subscribed-comment-row config comment-uuid *hide-block-refs? *show-query? renderers])])
         (add-comment-button config block {:focus-on-mount? focus-editor?})])]))

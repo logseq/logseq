@@ -1,8 +1,6 @@
 (ns frontend.modules.outliner.op
   "Build outliner ops"
-  (:require [datascript.impl.entity :as de]
-            [frontend.db.utils :as db-utils]
-            [frontend.handler.user :as user-handler]))
+  (:require [frontend.handler.user :as user-handler]))
 
 (defn- current-user-delete-opts
   [opts]
@@ -25,37 +23,20 @@
 (defn- ->block-id
   [block-or-id]
   (cond
-    (keyword? block-or-id)
-    (:block/uuid (db-utils/entity block-or-id))
-
-    (de/entity? block-or-id)
-    (:block/uuid block-or-id)
-
     (map? block-or-id)
-    (:block/uuid block-or-id)
-
-    (number? block-or-id)
-    (:block/uuid (db-utils/entity block-or-id))
+    (or (:block/uuid block-or-id) (:uuid block-or-id))
 
     :else
     block-or-id))
 
 (defn- ->property-id
   [property-id]
-  (cond
-    (number? property-id)
-    (:db/ident (db-utils/entity property-id))
-
-    :else
-    property-id))
+  property-id)
 
 (defn save-block!
   [block & {:as opts}]
   (op-transact!
-   (when-let [block' (if (de/entity? block)
-                       (-> (dissoc (.-kv ^js block) :db/id)
-                           (assoc :block/uuid (:block/uuid block)))
-                       block)]
+   (when-let [block' block]
      [:save-block [block' opts]])))
 
 (defn insert-blocks!
@@ -96,6 +77,16 @@
   (op-transact!
    (let [ids (map ->block-id blocks)]
      [:indent-outdent-blocks [ids indent? opts]])))
+
+(defn collapse-expand-blocks!
+  [blocks collapsed?]
+  (op-transact!
+   [:collapse-expand-blocks
+    [(mapv (fn [block]
+             {:block/uuid (->block-id block)
+              :block/collapsed? collapsed?})
+           blocks)
+     {}]]))
 
 (defn upsert-property!
   [property-id schema property-opts]

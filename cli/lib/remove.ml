@@ -273,6 +273,18 @@ let apply_outliner_ops config repo ops =
     ~ops:(Edn_util.vector_t_vec ops)
     ~options:(Edn_util.map_t_vec Vec.empty)
 
+let apply_delete_op config repo op =
+  let open Cli_effect in
+  bind (apply_outliner_ops config repo (Vec.singleton op)) (fun response ->
+      let result =
+        if Edn_util.is_null response then Edn_util.bool true
+        else
+          match Edn_util.get response "result" with
+          | Some result -> result
+          | None -> response
+      in
+      pure result)
+
 let delete_block_uuids config repo uuids =
   let op =
     Edn_util.vector_vec
@@ -288,7 +300,7 @@ let delete_block_uuids config repo uuids =
                 |]);
          |])
   in
-  apply_outliner_ops config repo (Vec.singleton op)
+  apply_delete_op config repo op
 
 let delete_page_uuid config repo uuid =
   let op =
@@ -300,7 +312,7 @@ let delete_page_uuid config repo uuid =
              (Vec.of_array [| Edn_util.uuid uuid; Edn_util.map_vec Vec.empty |]);
          |])
   in
-  apply_outliner_ops config repo (Vec.singleton op)
+  apply_delete_op config repo op
 
 let entities_of_value value =
   match

@@ -2,33 +2,31 @@
   "App top header"
   (:require ["@capacitor/dialog" :refer [Dialog]]
             [clojure.string :as string]
-            [frontend.context.i18n :refer [t]]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as db-conn]
-            [frontend.flows :as flows]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
+            [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util.entity :as entity]
+            [frontend.util.repo :as repo-util]
             [goog.date :as gdate]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [mobile.components.settings :as mobile-settings]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
-            [io.factorhouse.hsx.core :as hsx]))
+            [promesa.core :as p]))
 
 (defonce native-top-bar-listener? (atom false))
 (defonce native-top-bar-listener-version (atom nil))
@@ -38,11 +36,13 @@
 (defn- open-journal-calendar! []
   (when (compare-and-set! *journal-calendar-open? false true)
     (let [apply-date! (fn [date]
-                        (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                          (if-let [journal (db/get-page page-name)]
-                            (route-handler/redirect-to-page! (:block/uuid journal))
-                            (p/let [page (page-handler/<create! page-name {:redirect? false})]
-                              (route-handler/redirect-to-page! (:block/uuid page))))))]
+                        (let [repo (state/get-current-repo)
+                              page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                          (p/let [journal (db-async/<get-block repo page-name {:children? false})
+                                  page (if journal
+                                         journal
+                                         (page-handler/<create! page-name {:redirect? false}))]
+                            (route-handler/redirect-to-page! (:block/uuid page)))))]
       (-> (.showDatePicker mobile-util/ui-local)
           (p/then (fn [^js e]
                     (when-let [value (some-> e (.-value))]
@@ -100,7 +100,7 @@
            (shui/popup-hide!)
            (-> (.confirm ^js Dialog
                          #js {:title (t :ui/confirm)
-                              :message (if (entity-util/page? block)
+                              :message (if (entity/page? block)
                                          (t :mobile.header/delete-page-confirm-desc)
                                          (t :mobile.header/delete-block-confirm-desc))})
                (p/then
@@ -131,7 +131,7 @@
        {:on-click #(p/do!
                     (shui/popup-hide!)
                     (open-new-db-graph!))}
-     (t :mobile.header/create-graph))])
+       (t :mobile.header/create-graph))])
    {:default-height false}))
 
 (defn- global-cards-id?
@@ -166,13 +166,13 @@
       :default-height false})))
 
 (defn current-local-uploadable-graph
-  []
+  [rtc-graph-uuid]
   (let [current-repo (state/get-current-repo)]
     (some (fn [{:keys [url] :as graph}]
             (when (and (= current-repo url)
                        (repo/local-uploadable-graph?
                         (assoc graph :rtc-graph?
-                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
+                               (boolean rtc-graph-uuid))))
               graph))
           (state/get-repos))))
 
@@ -195,26 +195,34 @@
                       "add-graph" (open-new-db-graph!)
                       "home-setting" (open-home-settings-actions!)
                       "graph-setting" (open-graph-settings-actions!)
-                      "sync" (if-let [graph (current-local-uploadable-graph)]
-                               (repo/upload-local-graph-with-confirm! graph)
-                               (shui/popup-show! nil
-                                                 (rtc-indicator/details)
-                                                 {}))
+                      "sync" (p/let [rtc-graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid
+                                                                             (state/get-current-repo))]
+                               (if-let [graph (current-local-uploadable-graph rtc-graph-uuid)]
+                                 (repo/upload-local-graph-with-confirm! graph)
+                                 (shui/popup-show! nil
+                                                   (rtc-indicator/details)
+                                                   {})))
                       "favorite" (when-let [id (state/get-current-page)]
                                    (when (common-util/uuid-string? id)
-                                     (when-let [block (db/entity [:block/uuid (uuid id)])]
-                                       (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
-                                         (p/do!
-                                          (if favorited?
-                                            (page-handler/<unfavorite-page! id)
-                                            (page-handler/<favorite-page! id))
-                                          (let [favorited? (not favorited?)]
-                                            (when-let [f @*configure-top-bar-f]
-                                              (f favorited?))))))))
+                                     (p/let [block (db-async/<get-block (state/get-current-repo)
+                                                                        (uuid id)
+                                                                        {:children? false})]
+                                       (when block
+                                         (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
+                                           (p/do!
+                                            (if favorited?
+                                              (page-handler/<unfavorite-page! id)
+                                              (page-handler/<favorite-page! id))
+                                            (let [favorited? (not favorited?)]
+                                              (when-let [f @*configure-top-bar-f]
+                                                (f favorited?)))))))))
                       "page-setting" (when-let [id (state/get-current-page)]
                                        (when (common-util/uuid-string? id)
-                                         (when-let [block (db/entity [:block/uuid (uuid id)])]
-                                           (open-page-settings block))))
+                                         (p/let [block (db-async/<get-block (state/get-current-repo)
+                                                                            (uuid id)
+                                                                            {:children? false})]
+                                           (when block
+                                             (open-page-settings block)))))
 
                       nil)))
     (reset! native-top-bar-listener? true)
@@ -287,7 +295,7 @@
   (cond
     (= tab "home")
     (if current-repo
-      (db-conn/get-short-repo-name current-repo)
+      (repo-util/get-short-repo-name current-repo)
       (t :graph.switch/select-prompt))
 
     (= tab "search")
@@ -310,13 +318,14 @@
         native-ios-graphs? (and (mobile-util/native-ios?) (= tab "graphs"))
         page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
-        detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
-        _ (hooks/use-flow-state flows/current-login-user-flow)
-        online? (hooks/use-flow-state flows/network-online-event-flow)
+        [rtc-graph-uuid set-rtc-graph-uuid!] (hooks/use-state nil)
+        detail-info (rtc-indicator/use-detail-info)
+        _ (rfx/use-sub [:auth/current-login-user])
+        online? (rfx/use-sub [:network/online?])
         rtc-state (:rtc-state detail-info)
         graph-uuid (or (:graph-uuid detail-info)
-                       (ldb/get-graph-rtc-uuid (db/get-db)))
-        local-uploadable-graph (current-local-uploadable-graph)
+                       rtc-graph-uuid)
+        local-uploadable-graph (current-local-uploadable-graph graph-uuid)
         show-sync? (and current-repo graph-uuid (user-handler/logged-in?))
         show-local-upload? (some? local-uploadable-graph)
         unpushed-block-update-count (:pending-local-ops detail-info)
@@ -332,15 +341,25 @@
                      "#CA8A04")]
     (hooks/use-effect!
      (fn []
+       (if current-repo
+         (let [cancelled? (atom false)]
+           (-> (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid current-repo)
+               (p/then (fn [uuid]
+                         (when-not @cancelled?
+                           (set-rtc-graph-uuid! uuid))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         (do
+           (set-rtc-graph-uuid! nil)
+           nil)))
+     [current-repo])
+
+    (hooks/use-effect!
+     (fn []
        (when (and (mobile-util/native-platform?)
                   mobile-util/native-top-bar)
          (register-native-top-bar-events! *configure-top-bar-f)
-         (let [block (when (and page-route?
-                                (common-util/uuid-string? route-id))
-                       (db/entity [:block/uuid (uuid route-id)]))
-               favorited? (when block
-                            (page-handler/favorited? (str (:block/uuid block))))
-               title (or (:block/title block) fallback-title)
+         (let [title fallback-title
                f (fn [favorited?]
                    (configure-native-top-bar!
                     {:tab tab
@@ -352,9 +371,9 @@
                      :show-local-upload? show-local-upload?
                      :favorited? favorited?}))]
            (reset! *configure-top-bar-f f)
-           (f favorited?)))
+           (f nil)))
        nil)
-     [current-repo tab route-name route-view route-id fallback-title sync-color show-sync? show-local-upload? page-route?])
+     [current-repo tab route-name route-view fallback-title sync-color show-sync? show-local-upload?])
 
     (hooks/use-effect!
      (fn []
@@ -392,7 +411,7 @@
 
 (hsx/defc header
   [current-repo tab]
-  (let [route-match (state/use-sub :route-match)
+  (let [route-match (rfx/use-sub [:route-match])
         [flashcards-header] (hooks/use-atom mobile-state/*flashcards-header)]
     (header-inner current-repo tab
                   route-match

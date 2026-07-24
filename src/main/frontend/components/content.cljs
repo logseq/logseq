@@ -1,5 +1,6 @@
 (ns frontend.components.content
-  (:require [clojure.string :as string]
+  (:require ["react" :as react]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
@@ -9,7 +10,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
@@ -20,6 +21,7 @@
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -38,9 +40,17 @@
 
 (hsx/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
+  (let [selection-block-ids (state/get-selection-block-ids)
+        [selected-blocks set-selected-blocks!] (hooks/use-state nil)
+        [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         comment-targets (comments-model/comment-target-blocks
-                         (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
+                         selected-blocks)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [results (db-async/<get-blocks (state/get-current-repo) selection-block-ids)]
+         (set-selected-blocks! (vec (keep :block results))))
+       nil)
+     [selection-block-ids])
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
                                                                             :logseq.property/background-color
@@ -53,10 +63,12 @@
 
      (shui/dropdown-menu-sub
       {:open set-icon-sub-menu-open?
-       :onOpenChange (fn [v]
-                       (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                         (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                         (set-icon-sub-menu-open v)))}
+       :onOpenChange (fn [v event-details]
+                       (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                         (some-> event-details (.cancel))
+                         (do
+                           (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                           (set-icon-sub-menu-open v))))}
       (shui/dropdown-menu-sub-trigger
        (t :context-menu/set-icon))
       (shui/dropdown-menu-sub-content
@@ -167,12 +179,20 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
-  (let [block (db/entity [:block/uuid block-id])
-        simple-commands (state/use-sub [:plugin/simple-commands])
-        developer-mode? (state/use-sub [:ui/developer-mode?])
+  (let [[block set-block!] (hooks/use-state nil)
+        simple-commands (rfx/use-sub [:plugin/simple-commands])
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])
         [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
-        [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
+        [heading set-heading!] (hooks/use-state false)
         [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
+         (set-block! block)
+         (set-heading! (or (pu/lookup block :logseq.property/heading) false))
+         (set-current-color! (pu/lookup block :logseq.property/background-color)))
+       nil)
+     [block-id])
     (when block
       [:<>
        (ui/menu-background-color current-color
@@ -235,10 +255,12 @@
 
          (shui/dropdown-menu-sub
           {:open set-icon-sub-menu-open?
-           :onOpenChange (fn [v]
-                           (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                             (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                             (set-icon-sub-menu-open v)))}
+           :onOpenChange (fn [v event-details]
+                           (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                             (some-> event-details (.cancel))
+                             (do
+                               (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                               (set-icon-sub-menu-open v))))}
           (shui/dropdown-menu-sub-trigger
            (t :context-menu/set-icon))
           (shui/dropdown-menu-sub-content
@@ -366,13 +388,12 @@
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
                (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-ast
-                :on-click (fn []
-                            (let [block (db/entity [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/title block)
-                                                                   (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
+	              (shui/dropdown-menu-item
+	               {:key :dev/show-block-ast
+	                :on-click (fn []
+	                            (dev-common-handler/show-content-ast (:block/title block)
+	                                                                 (get block :block/format :markdown)))}
+	               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
 
 (hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]
@@ -409,14 +430,17 @@
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
-       (for [{:keys [title options]} page-menu-options]
-         (let [on-click (:on-click options)]
-           (shui/dropdown-menu-item
-            (assoc options
-                   :on-click (fn [e]
-                               (when-not (false? (when on-click (on-click e)))
-                                 (shui/popup-hide! popup-id))))
-            title)))])))
+       (for [[idx {:keys [title options]}] (map-indexed vector page-menu-options)]
+         (let [on-click (:on-click options)
+               key (or (:key options) (str "page-menu-" idx))]
+           (react/cloneElement
+            (shui/dropdown-menu-item
+             (assoc options
+                    :on-click (fn [e]
+                                (when-not (false? (when on-click (on-click e)))
+                                  (shui/popup-hide! popup-id))))
+             title)
+            #js {:key (str key)})))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -430,7 +454,7 @@
 
 (hsx/defc non-hiccup-content
   [id content on-click on-hide config format]
-  (let [edit? (state/use-sub-editing? id)]
+  (let [edit? (boolean (get (rfx/use-sub [:editor/editing?]) id))]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}

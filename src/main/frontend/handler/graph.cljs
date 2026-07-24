@@ -4,15 +4,12 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.common.idb :as idb]
-            [frontend.db :as db]
             [frontend.graph-tab :as graph-tab]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.graph-registry :as graph-registry]
-            [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def graph-registry-key
@@ -92,44 +89,31 @@
 (defn current-graph-id
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [db* (db/get-db repo)]
-      (some-> (or (ldb/get-graph-rtc-uuid db*)
-                  (ldb/get-graph-local-uuid db*))
-              str))))
-
-(defn- new-local-graph-uuid
-  []
-  (uuid (str "00000000" (subs (str (common-uuid/gen-uuid)) 8))))
+    (let [{tab-repo :repo graph-id :graph-id} (get-tab-graph)]
+      (when (and (= repo tab-repo) (seq graph-id))
+        graph-id))))
 
 (defn- <ensure-local-graph-uuid!
-  [repo db*]
-  (if-let [local-graph-uuid (ldb/get-graph-local-uuid db*)]
-    (p/resolved local-graph-uuid)
-    (let [local-graph-uuid (new-local-graph-uuid)]
-      (p/let [_ (db/transact! repo
-                              [(ldb/kv :logseq.kv/local-graph-uuid local-graph-uuid)]
-                              {:graph-open/ensure-local-graph-uuid? true})]
-        local-graph-uuid))))
+  [repo]
+  (state/<invoke-db-worker :thread-api/ensure-local-graph-uuid repo))
 
 (defn remember-current-graph-id-in-tab!
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [graph-id (current-graph-id)]
-      (set-tab-graph! repo graph-id))))
+    (p/let [graph-id (state/<invoke-db-worker :thread-api/get-graph-uuid repo)]
+      (when graph-id
+        (set-tab-graph! repo (str graph-id))))))
 
 (defn <upsert-current-graph-registry!
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [db* (db/get-db repo)]
-      (p/let [local-graph-uuid (<ensure-local-graph-uuid! repo db*)
-              db* (or (db/get-db repo) db*)
-              graph-uuid (or (ldb/get-graph-rtc-uuid db*)
-                             local-graph-uuid)]
-        (<upsert-graph-registry-entry!
-         {:repo repo
-          :graph-name (common-config/strip-leading-db-version-prefix repo)
-          :local-graph-id (str local-graph-uuid)
-          :graph-id (some-> graph-uuid str)})))))
+    (p/let [local-graph-uuid (<ensure-local-graph-uuid! repo)
+            graph-uuid (state/<invoke-db-worker :thread-api/get-graph-uuid repo)]
+      (<upsert-graph-registry-entry!
+       {:repo repo
+        :graph-name (common-config/strip-leading-db-version-prefix repo)
+        :local-graph-id (str local-graph-uuid)
+        :graph-id (some-> (or graph-uuid local-graph-uuid) str)}))))
 
 (defn settle-metadata-to-local!
   [m]

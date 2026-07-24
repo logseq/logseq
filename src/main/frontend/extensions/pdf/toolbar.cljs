@@ -5,12 +5,12 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -32,8 +32,8 @@
 
   (let [*el-popup (hooks/use-ref nil)
         [area-dashed? set-area-dashed?] (hooks/use-atom *area-dashed?)
-        hl-block-colored? (state/use-sub :pdf/block-highlight-colored?)
-        auto-open-ctx-menu? (state/use-sub :pdf/auto-open-ctx-menu?)]
+        hl-block-colored? (rfx/use-sub [:pdf/block-highlight-colored?])
+        auto-open-ctx-menu? (rfx/use-sub [:pdf/auto-open-ctx-menu?])]
 
     (hooks/use-effect!
      (fn []
@@ -69,7 +69,7 @@
      (fn []
        (let [cb  #(let [^js target (.-target %)]
                     (when (and (not (some-> (hooks/deref *el-popup) (.contains target)))
-                               (nil? (.closest target ".ui__modal")))
+                               (nil? (.closest target ".ui__dialog-content")))
                       (hide-settings!)))
              doc (resolve-own-container viewer)]
          (js/setTimeout
@@ -378,8 +378,7 @@
   (let [[src set-src!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (p/let [_ (db-async/<get-block repo id {:children? false})
-               block (db-model/get-block-by-uuid id)]
+       (p/let [block (db-async/<get-block repo id {:children? false})]
          (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
            (-> asset-path' (assets-handler/<make-asset-url)
                (p/then #(set-src! %))))))
@@ -583,7 +582,7 @@
          {:title (t :pdf/annotations-page)
           :on-click (fn []
                       (if asset-block
-                        (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
+                        (pdf-assets/goto-annotations-page! pdf-current)
                         (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
          (svg/annotations 16)]
 

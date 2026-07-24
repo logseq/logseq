@@ -16,17 +16,7 @@
  :builds
  {:app {:target        :browser
         :module-loader true
-        :js-options    {:ignore-asset-requires true
-                        :resolve {"react" {:target :global
-                                           :global "React"}
-                                  "react-dom" {:target :global
-                                               :global "ReactDOM"}
-                                  "react-dom/client" {:target :global
-                                                      :global "ReactDOMClient"}
-                                  "react/jsx-runtime" {:target :global
-                                                       :global "ReactJSXRuntime"}
-                                  "react/jsx-dev-runtime" {:target :global
-                                                           :global "ReactJSXDevRuntime"}}}
+	        :js-options    {:ignore-asset-requires true}
         :modules       {:main
                         {:init-fn frontend.core/init}
                         :code-editor
@@ -53,7 +43,6 @@
 
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
-                   :watch-dir "static"
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]
                    :loader-mode :eval
@@ -105,17 +94,7 @@
 
   :mobile {:target        :browser
            :module-loader true
-           :js-options    {:ignore-asset-requires true
-                           :resolve {"react" {:target :global
-                                              :global "React"}
-                                     "react-dom" {:target :global
-                                                  :global "ReactDOM"}
-                                     "react-dom/client" {:target :global
-                                                         :global "ReactDOMClient"}
-                                     "react/jsx-runtime" {:target :global
-                                                          :global "ReactJSXRuntime"}
-                                     "react/jsx-dev-runtime" {:target :global
-                                                              :global "ReactJSXDevRuntime"}}}
+	           :js-options    {:ignore-asset-requires true}
            ;; handle `require(xxx.css)`
            :modules       {:main
                            {:init-fn mobile.core/init}
@@ -204,17 +183,7 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options {:ignore-asset-requires true
-                            :resolve {"react" {:target :global
-                                               :global "React"}
-                                      "react-dom" {:target :global
-                                                   :global "ReactDOM"}
-                                      "react-dom/client" {:target :global
-                                                          :global "ReactDOMClient"}
-                                      "react/jsx-runtime" {:target :global
-                                                           :global "ReactJSXRuntime"}
-                                      "react/jsx-dev-runtime" {:target :global
-                                                               :global "ReactJSXDevRuntime"}}}
+	               :js-options {:ignore-asset-requires true}
                :modules {:main
                          {:init-fn frontend.publishing/init}
                          :code-editor

@@ -1,8 +1,32 @@
 (ns frontend.extensions.pdf.assets-test
-  (:require [clojure.test :as test :refer [are deftest testing]]
+  (:require [cljs.test :as test :refer [are async deftest testing]]
+            [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.util :as util]
-            [frontend.extensions.pdf.utils :as pdf-utils]))
+            [frontend.extensions.pdf.utils :as pdf-utils]
+            [promesa.core :as p]))
+
+(deftest highlight-color-id-loads-closed-values-through-worker-test
+  (async done
+    (let [calls (atom [])
+          original-get-property-closed-values db-async/<get-property-closed-values]
+      (set! db-async/<get-property-closed-values
+            (fn [repo property-id]
+              (swap! calls conj [repo property-id])
+              (p/resolved [{:db/id 1 :block/title "blue"}
+                           {:db/id 2 :block/title "yellow"}])))
+      (-> (pdf-assets/<highlight-color-id "test" "yellow")
+          (p/then
+           (fn [color-id]
+             (test/is (= 2 color-id))
+             (test/is (= [["test" :logseq.property.pdf/hl-color]] @calls))))
+          (p/catch
+           (fn [error]
+             (test/is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-property-closed-values original-get-property-closed-values)
+             (done)))))))
 
 (deftest fix-local-asset-pagename
   (testing "matched filenames"

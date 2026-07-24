@@ -1,7 +1,7 @@
 (ns frontend.util.url
   "Util fns related to protocol url"
   (:require [clojure.string :as string]
-            [frontend.db.conn :as db-conn]))
+            [frontend.util.repo :as repo-util]))
 
 ;; Keep same as electron/electron.core
 (def LSP_SCHEME "logseq")
@@ -12,8 +12,8 @@
 
 (defn get-local-repo-identifier
   [repo]
-  (let [repo-name (db-conn/get-repo-name repo)]
-    (db-conn/get-short-repo-name repo-name)))
+  (let [repo-name (repo-util/get-repo-name repo)]
+    (repo-util/get-short-repo-name repo-name)))
 
 (defn get-repo-id-url
   "Get Logseq protocol URL, w/o param (v0.1).

@@ -178,7 +178,6 @@
  :cmdk.action/search "بحث"
  :cmdk.action/trigger "تنفيذ"
 
- :cmdk.create/configure-tag "تكوين الوسم"
  :cmdk.create/page "إنشاء صفحة"
  :cmdk.create/tag "إنشاء وسم"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "محدّثة مؤخراً"
  :cmdk.group/themes "السمات"
 
- :cmdk.info/configure-tag "تهيئة الوسم #{1}"
  :cmdk.info/create-page "إنشاء صفحة '{1}'"
  :cmdk.info/create-tag "إنشاء وسم '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "لا يمكن حذف العناصر المدمجة."
  :node/new "عقدة جديدة"
 
- :notification/clear-all "مسح الكل"
  :notification/copied "تم النسخ"
 
  :onboarding.import/desc "وصف الاستيراد"
@@ -1718,7 +1715,6 @@
  :ui/image "صورة"
  :ui/label "تسمية"
  :ui/link "رابط"
- :ui/load-more "تحميل المزيد"
  :ui/loading "جارٍ التحميل"
  :ui/login "تسجيل الدخول"
  :ui/logout "تسجيل الخروج"

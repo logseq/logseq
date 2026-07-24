@@ -7,15 +7,15 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [promesa.core :as p]
-            [frontend.db.model :as db-model]
             [frontend.db.async :as db-async]))
 
 (defn- redirect-to-journal!
   [page]
   (when page
-    (p/do!
-     (db-async/<get-block (state/get-current-repo) page :children? false)
-     (if (db-model/page-exists? page #{:logseq.class/Journal})
+    (p/let [repo (state/get-current-repo)
+            _ (db-async/<get-block repo page :children? false)
+            exists? (db-async/<page-exists? repo page #{:logseq.class/Journal})]
+     (if exists?
        (route-handler/redirect! {:to          :page
                                  :path-params {:name page}})
        (page-handler/<create! page)))))
@@ -24,23 +24,24 @@
   []
   (redirect-to-journal! (date/tomorrow)))
 
-(defn- get-current-journal
+(defn- <get-current-journal
   []
   (let [current-page (state/get-current-page)]
-    (or (when current-page
-          (date/journal-title->long (:block/title (db-model/get-block-by-uuid current-page))))
-        (util/time-ms))))
+    (p/let [block (when current-page
+                    (db-async/<get-block (state/get-current-repo) current-page {:children? false}))]
+      (or (some-> block :block/title date/journal-title->long)
+          (util/time-ms)))))
 
 (defn go-to-prev-journal!
   []
-  (let [current-journal (get-current-journal)
-        day (tc/from-long current-journal)
-        page (date/journal-name (t/minus day (t/days 1)))]
+  (p/let [current-journal (<get-current-journal)
+          day (tc/from-long current-journal)
+          page (date/journal-name (t/minus day (t/days 1)))]
     (redirect-to-journal! page)))
 
 (defn go-to-next-journal!
   []
-  (let [current-journal (get-current-journal)
-        day (tc/from-long current-journal)
-        page (date/journal-name (t/plus day (t/days 1)))]
+  (p/let [current-journal (<get-current-journal)
+          day (tc/from-long current-journal)
+          page (date/journal-name (t/plus day (t/days 1)))]
     (redirect-to-journal! page)))

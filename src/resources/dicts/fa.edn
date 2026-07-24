@@ -178,7 +178,6 @@
  :cmdk.action/search "جستجو"
  :cmdk.action/trigger "اجرا"
 
- :cmdk.create/configure-tag "پیکربندی برچسب"
  :cmdk.create/page "ایجاد صفحه"
  :cmdk.create/tag "ایجاد برچسب"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "اخیراً به‌روزرسانی شده"
  :cmdk.group/themes "پوسته‌ها"
 
- :cmdk.info/configure-tag "پیکربندی #{1}"
  :cmdk.info/create-page "ایجاد صفحه '{1}'"
  :cmdk.info/create-tag "ایجاد برچسب '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "عناصر داخلی قابل حذف نیستند."
  :node/new "گره جدید"
 
- :notification/clear-all "پاک کردن همه"
  :notification/copied "کپی شد"
 
  :onboarding.import/desc "توضیحات وارد کردن"
@@ -1718,7 +1715,6 @@
  :ui/image "تصویر"
  :ui/label "برچسب"
  :ui/link "پیوند"
- :ui/load-more "بارگذاری بیشتر"
  :ui/loading "در حال بارگذاری"
  :ui/login "ورود"
  :ui/logout "خروج"

@@ -21,7 +21,7 @@
   (b/new-blocks ["setup"])
   (w/click (util/get-by-text "setup" true))
   (k/press "Control+e")
-  (util/input-command "Add new property")
+  (util/input-command "Add property")
   (w/click "input[placeholder]")
   (util/input property-name)
   (w/click (w/get-by-text "New option:"))
@@ -61,13 +61,15 @@
 
 (defn- open-property-value-select
   [property-name]
-  (w/click "div.jtrigger span:has-text('Empty')")
+  (w/click (format ".bottom-property-pill:has(.property-k:has-text('%s')) .property-value-container .jtrigger"
+                   property-name))
   (assert/assert-is-visible (format "input[placeholder='Set %s']" property-name))
   (w/click (format "input[placeholder='Set %s']" property-name))
   (assert/assert-is-visible ".cp__select-results"))
 
 (deftest tag-scoped-property-choices-test
-  (let [tag "Device"
+  (let [setup-page (page/get-page-name)
+        tag "Device"
         property-name "device-type"
         scoped-choice "wired"
         global-choice "wireless"]
@@ -78,7 +80,7 @@
     (add-choice property-name scoped-choice)
     (util/wait-timeout 100)
     (k/esc)
-    (page/goto-page property-name)
+    (page/goto-page setup-page)
     (add-choice property-name global-choice)
     (util/wait-timeout 100)
     (k/esc)

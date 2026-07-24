@@ -4,11 +4,10 @@ const mobileCssBuild = process.argv.some((arg) => arg.endsWith('tailwind.mobile.
 
 module.exports = {
   plugins: [
-    require('autoprefixer')(),
     require('postcss-import-ext-glob')(),
     require('postcss-import')(),
-    require('tailwindcss/nesting')('postcss-nested'),
-    require('tailwindcss')(),
+    require('postcss-nested')(),
+    require('@tailwindcss/postcss')({ optimize: false }),
     ...(mobileCssBuild ? [stripIOSWebFontSourcesPlugin()] : []),
     ...(process.env.NODE_ENV === 'production' ? [require('cssnano')()] : [])
   ]

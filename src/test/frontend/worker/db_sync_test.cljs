@@ -1361,8 +1361,15 @@
                      :get-graph-uuid (constantly "graph-1")
                      :latest-remote-tx {test-repo 42}
                      :latest-remote-checksum {test-repo "fresh"}}
-                    test-repo)]
-        (is (= cached-checksum (:local-checksum counts)))))))
+                    test-repo)
+            payload (sync-presence/rtc-state-payload
+                     (constantly counts)
+                     {:repo test-repo
+                      :ws-state (atom :open)
+                      :online-users (atom [])})]
+        (is (= cached-checksum (:local-checksum counts)))
+        (is (= "graph-1" (:graph-id counts)))
+        (is (= "graph-1" (:graph-uuid payload)))))))
 
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
@@ -5016,6 +5023,28 @@
             (is (= [] @(:inflight client)))
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
+
+(deftest tx-batch-ok-broadcasts-cleared-pending-state-test
+  (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+        client {:repo test-repo
+                :graph-id "graph-1"
+                :inflight (atom [])
+                :online-users (atom [])
+                :ws-state (atom :open)}
+        raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                 :t 1}))
+        broadcasts (atom [])]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (worker-page/create! conn "Ack Page" :uuid (random-uuid))
+        (reset! (:inflight client)
+                (mapv :tx-id (#'sync-apply/pending-txs test-repo)))
+        (with-redefs [shared-service/broadcast-to-clients!
+                      (fn [event payload]
+                        (when (= :rtc-sync-state event)
+                          (swap! broadcasts conj payload)))]
+          (sync-handle-message/handle-message! test-repo client raw-message))
+        (is (= 0 (:unpushed-block-update-count (last @broadcasts))))))))
 
 (deftest tx-batch-ok-removes-only-inflight-acked-pending-txs-test
   (testing "tx/batch/ok should only clear pending txs tracked in inflight"

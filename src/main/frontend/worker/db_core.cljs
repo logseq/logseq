@@ -2,22 +2,32 @@
   "Core db-worker logic without host-specific bootstrap."
   (:require
    [cljs-bean.core :as bean]
-   [cljs.cache :as cache]
    [clojure.set]
    [clojure.string :as string]
    [datascript.core :as d]
    [datascript.storage :refer [IStorage] :as storage]
-   [frontend.common.cache :as common.cache]
-   [frontend.common.graph-view :as graph-view]
-   [frontend.common.missionary :as c.m]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
    [frontend.worker.db.fix :as db-fix]
    [frontend.worker.db.migrate :as db-migrate]
    [frontend.worker.db.validate :as worker-db-validate]
-   [frontend.worker.export :as worker-export]
-   [frontend.worker.markdown-mirror :as markdown-mirror]
+   [frontend.worker.handler.cli]
+   [frontend.worker.handler.comments]
+   [frontend.worker.handler.export]
+   [frontend.worker.handler.flashcard]
+   [frontend.worker.handler.graph]
+   [frontend.worker.handler.markdown]
+   [frontend.worker.handler.maintenance]
+   [frontend.worker.handler.page]
+   [frontend.worker.handler.property]
+   [frontend.worker.handler.query]
+   [frontend.worker.handler.render-resource]
+   [frontend.worker.handler.search :as search-handler]
+   [frontend.worker.handler.sync]
+   [frontend.worker.handler.transaction :as transaction-handler]
+   [frontend.worker.handler.undo-redo]
+   [frontend.worker.handler.view]
    [frontend.worker.pipeline :as worker-pipeline]
    [frontend.worker.platform :as platform]
    [frontend.worker.publish]
@@ -32,29 +42,19 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
-   [logseq.api.db-based.tools :as api-tools]
-   [logseq.cli.common.db-worker :as cli-db-worker]
    [logseq.common.graph-dir :as graph-dir]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
-   [logseq.db.common.initial-data :as common-initial-data]
+   [logseq.db.common.entity-plus :as entity-plus]
    [logseq.db.common.order :as db-order]
-   [logseq.db.common.reference :as db-reference]
    [logseq.db.common.sqlite :as common-sqlite]
-   [logseq.db.common.view :as db-view]
+   [logseq.db.frontend.asset :as db-asset]
    [logseq.db.frontend.class :as db-class]
-   [logseq.db.frontend.entity-util :as entity-util]
    [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-   [logseq.db.sqlite.export :as sqlite-export]
-   [logseq.db.sqlite.gc :as sqlite-gc]
    [logseq.db.sqlite.util :as sqlite-util]
-   [logseq.outliner.op :as outliner-op]
-   [logseq.outliner.recycle :as outliner-recycle]
-   [logseq.publishing.html :as publish-html]
-   [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
-   [missionary.core :as m]
+   [logseq.graph-parser.exporter :as gp-exporter]
    [promesa.core :as p]
    [shadow.resource :as rc]))
 
@@ -67,25 +67,10 @@
 (defonce *publishing? (atom false))
 (defonce ^:private *node-pools (atom {}))
 
-(def search-db-version
-  "Current search index version, stored in PRAGMA user_version.
-  Bump to force a rebuild when the index format changes."
-  2)
-(def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
-
-(def ^:private search-index-build-batch-size 200)
-(def ^:private vector-embedding-batch-size 32)
-(def ^:private vector-embedding-parallelism 2)
-(def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
-(def ^:private vector-embedding-max-title-length 2048)
-(def ^:private query-embedding-timeout-ms 50)
-(def ^:private search-index-build-time-budget-ms 8)
-(def ^:private search-index-build-idle-status-ttl-ms 2000)
-(def ^:private search-index-build-pause-ms 300)
-(defonce ^:private *search-index-build-ids (atom {}))
-(defonce ^:private *vector-index-rebuild-ids (atom {}))
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
+(defonce ^:private *wal-checkpoint-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
+(def ^:private wal-checkpoint-idle-ms 2000)
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
 
@@ -166,6 +151,17 @@
                    (cond-> {:error e}
                      repo (assoc :repo repo))))))))
 
+(defn- schedule-wal-checkpoint!
+  [repo db]
+  (when-let [timer (get @*wal-checkpoint-timers repo)]
+    (js/clearTimeout timer))
+  (let [timer (js/setTimeout
+               (fn []
+                 (swap! *wal-checkpoint-timers dissoc repo)
+                 (checkpoint-db! repo db))
+               wal-checkpoint-idle-ms)]
+    (swap! *wal-checkpoint-timers assoc repo timer)))
+
 (defn- <export-db-file
   ([repo]
    (<export-db-file repo repo-path))
@@ -218,6 +214,99 @@
   (let [storage (platform/storage (platform/current))]
     ((:import-db storage) pool repo-path data)))
 
+(defn- import-state-summary
+  [import-state]
+  (into {}
+        (map (fn [[k v]]
+               [k (if (satisfies? IDeref v) @v v)]))
+        import-state))
+
+(defn- file-content
+  [file]
+  (or (:file/content file)
+      (:content file)
+      ""))
+
+(defn- import-file-payload
+  [payload]
+  (cond
+    (instance? js/Uint8Array payload)
+    payload
+
+    (instance? js/ArrayBuffer payload)
+    (js/Uint8Array. payload)
+
+    (array? payload)
+    (js/Uint8Array. payload)
+
+    :else
+    nil))
+
+(defn- <read-and-stage-import-asset
+  [file assets buffer-handler staged-assets]
+  (when-let [payload (some-> file :asset/payload import-file-payload)]
+    (let [buffer (.-buffer payload)
+          asset-type (db-asset/asset-path->type (:path file))
+          asset-id (d/squuid)
+          asset-name (some-> (:path file) gp-exporter/asset-path->name)
+          size (or (:asset/size file) (.-byteLength payload))]
+      (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+              {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
+              asset-data (with-edn-content
+                           {:size size
+                            :type asset-type
+                            :path (:path file)
+                            :checksum checksum
+                            :asset-id asset-id})]
+        (swap! assets assoc asset-name asset-data)
+        (when-not pdf-annotation?
+          (swap! staged-assets conj {:path (:path file)
+                                     :asset-id asset-id
+                                     :asset-type asset-type
+                                     :payload payload}))))))
+
+(defn- finalize-import-render-revisions!
+  [conn]
+  (let [db @conn
+        entity-ids (d/q '[:find [?e ...]
+                          :where
+                          [?e :block/uuid]
+                          [?e :block/title]
+                          [(missing? $ ?e :block/tx-id)]]
+                        db)]
+    (when (seq entity-ids)
+      (let [tx-id (inc (:max-tx db))]
+        (ldb/transact! conn
+                       (mapv (fn [entity-id]
+                               {:db/id entity-id
+                                :block/tx-id tx-id})
+                             entity-ids)
+                       {::gp-exporter/imported-data? true})))))
+
+(defn- <import-file-graph!
+  [repo config-file files opts]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [notifications (atom [])
+          staged-assets (atom [])
+          options (-> opts
+                      (assoc :notify-user #(swap! notifications conj %)
+                             :log-fn (fn [& args]
+                                       (log/info :import-file-graph {:args args}))
+                             :<read-file (fn [file] (p/resolved (file-content file)))
+                             :<get-file-stat (constantly nil)
+                             :<read-and-copy-asset (fn [file assets buffer-handler]
+                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
+                      (dissoc :set-ui-state))]
+      (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+              _ (finalize-import-render-revisions! conn)
+              validation (worker-db-validate/validate-db conn :fix false)]
+        {:files (:files result)
+         :import-state (import-state-summary (:import-state result))
+         :notifications @notifications
+         :staged-assets @staged-assets
+         :validation {:errors (:errors validation)
+                      :invalid-entity-ids (:invalid-entity-ids validation)}}))))
+
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data]
@@ -247,7 +336,7 @@
 
 (defn new-sqlite-storage
   "Update sqlite-cli/new-sqlite-storage when making changes"
-  [^Object db]
+  [repo ^Object db]
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
       (let [data (map
@@ -260,13 +349,18 @@
                            :$content (sqlite-util/write-transit-str data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data)))
+        (upsert-addr-content! db data)
+        (schedule-wal-checkpoint! repo db)
+        nil))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
+  (when-let [timer (get @*wal-checkpoint-timers repo)]
+    (js/clearTimeout timer))
+  (swap! *wal-checkpoint-timers dissoc repo)
   (checkpoint-db! repo db)
   (checkpoint-db! repo search)
   (checkpoint-db! repo client-ops)
@@ -282,7 +376,7 @@
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
-  (swap! *search-index-build-ids dissoc repo)
+  (search-handler/clear-search-index-builds! repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
@@ -322,16 +416,6 @@
           (finally
             (.close search-db)))
         nil))))
-
-(defn reset-db!
-  [repo db-transit-str]
-  (when-let [conn (get @*datascript-conns repo)]
-    (let [new-db (ldb/read-transit-str db-transit-str)
-          new-db' (update new-db :eavt (fn [^BTSet s]
-                                         (set! (.-storage s) (.-storage (:eavt @conn)))
-                                         s))]
-      (d/reset-conn! conn new-db' {:reset-conn! true})
-      (d/reset-schema! conn (:schema new-db)))))
 
 (defn- vector-index-path
   [repo pool]
@@ -385,21 +469,9 @@
   (.exec db "PRAGMA locking_mode=exclusive")
   (.exec db "PRAGMA journal_mode=WAL"))
 
-(defn- gc-sqlite-dbs!
-  "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db datascript-conn {:keys [full-gc?]}]
-  (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
-    (when (or full-gc?
-              (nil? last-gc-at)
-              (not (number? last-gc-at))
-              (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
-      (log/info :gc-sqlite-dbs "gc current graph")
-      (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? full-gc?})
-      (.exec sqlite-db "VACUUM")
-      (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                       :kv/value (common-util/time-ms)}]
-                     {:skip-validate-db? true
-                      :persist-op? false}))))
+(defn- disable-sqlite-auto-checkpoint!
+  [^Object db]
+  (.exec db "PRAGMA wal_autocheckpoint=0"))
 
 (defn- run-client-ops-cleanup!
   [repo]
@@ -417,18 +489,6 @@
                                 client-ops-cleanup-interval-ms)]
       (swap! *client-ops-cleanup-timers assoc repo timer))
     nil))
-
-(defn- maybe-run-recycle-gc!
-  [conn]
-  (let [now (common-util/time-ms)
-        last-gc-at (:kv/value (d/entity @conn recycle-gc-kv))]
-    (when (or (not (number? last-gc-at))
-              (> (- now last-gc-at) outliner-recycle/gc-interval-ms))
-      (outliner-recycle/gc! conn {:now-ms now})
-      (ldb/transact! conn [{:db/ident recycle-gc-kv
-                            :kv/value now}]
-                     {:persist-op? false
-                      :skip-validate-db? true}))))
 
 (defn- handle-migrate-result-local-txs!
   [repo migrate-result]
@@ -516,85 +576,114 @@
              (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
     (enqueue-built-in-sync-repair! repo)))
 
+(defn- debug-transit-raw->datoms
+  [raw]
+  (let [db-or-datoms (ldb/read-transit-str raw)]
+    (if (d/db? db-or-datoms)
+      (vec (d/datoms db-or-datoms :eavt))
+      db-or-datoms)))
+
+(defn- bootstrap-transact!
+  [conn tx-data]
+  (when (seq tx-data)
+    (d/transact! conn tx-data {:initial-db? true})))
+
+(defn- ensure-canonical-revisions!
+  [conn]
+  (let [db @conn
+        tx-id (inc (:max-tx db))
+        tx-data (keep (fn [datom]
+                        (let [entity (d/entity db (:e datom))]
+                          (when-not (nat-int? (:block/tx-id entity))
+                            {:db/id (:db/id entity)
+                             :block/tx-id tx-id})))
+                      (d/datoms db :avet :block/uuid))]
+    (bootstrap-transact! conn tx-data)))
+
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
-  (when creating-remote-graph?
-    (when (and (worker-state/get-sqlite-conn repo :client-ops)
-               (nil? (client-op/get-local-tx repo)))
-      (client-op/update-local-tx repo 0)))
-  (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
-            dbs (cond-> [db search-db]
-                  client-ops-db (conj client-ops-db))
-            storage (new-sqlite-storage db)]
-      (swap! *sqlite-conns assoc repo {:db db
-                                       :search search-db
-                                       :client-ops client-ops-db})
-      (when vector-index
-        (swap! *vector-indexes assoc repo vector-index))
-      (doseq [db' dbs]
-        (enable-sqlite-wal-mode! db'))
-      (common-sqlite/create-kvs-table! db)
-      (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
-      (search/create-tables-and-triggers! search-db)
-      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
-      (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
-            _ (db-fix/check-and-fix-schema! conn)
-            _ (when datoms
-                (let [ident-eids (into #{}
-                                       (comp (filter (fn [datom]
-                                                       (= (:a datom) :db/ident)))
-                                             (map :e))
-                                       datoms)
-                      to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
-                      batch-size 20000
-                      ident-batches (->> datoms
-                                         (filter #(contains? ident-eids (:e %)))
-                                         (map to-tx)
-                                         (partition-all batch-size))
-                      _ (doseq [batch ident-batches]
-                          (d/transact! conn batch {:initial-db? true}))
-                      non-ident-batches (->> datoms
-                                             (remove #(contains? ident-eids (:e %)))
-                                             (map to-tx)
-                                             (partition-all batch-size))]
-                  (doseq [batch non-ident-batches]
-                    (d/transact! conn batch {:initial-db? true}))))
-            client-ops-conn (when-not @*publishing? client-ops-db)
-            initial-data-exists? (when (nil? datoms)
-                                   (and (d/entity @conn :logseq.class/Root)
-                                        (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
-        (swap! *datascript-conns assoc repo conn)
-        (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when-not @*publishing?
-          (client-op/ensure-sqlite-schema! client-ops-db))
-        (when creating-remote-graph?
-          (when (nil? (client-op/get-local-tx repo))
-            (client-op/update-local-tx repo 0)))
-        (ensure-client-ops-cleanup-timer! repo)
-        (let [initial-tx-report (when-not (or initial-data-exists?
-                                              (seq datoms)
-                                              sync-download-graph?)
-                                  (let [config (resolve-initial-config config)
-                                        initial-data (sqlite-create-graph/build-db-initial-data
-                                                      config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
-                                    (ldb/transact! conn initial-data
-                                                   {:initial-db? true})))]
-          (when-not sync-download-graph?
-            (let [migrate-result (db-migrate/migrate conn)]
-              (if migrate-result
-                (handle-migrate-result-local-txs! repo migrate-result)
-                (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
-            (gc-sqlite-dbs! db conn {})
-            (maybe-run-recycle-gc! conn))
+  [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
+  (let [datoms (or datoms
+                   (when debug-transit-raw
+                     (debug-transit-raw->datoms debug-transit-raw)))]
+    (when creating-remote-graph?
+      (when (and (worker-state/get-sqlite-conn repo :client-ops)
+                 (nil? (client-op/get-local-tx repo)))
+        (client-op/update-local-tx repo 0)))
+    (when-not (worker-state/get-sqlite-conn repo)
+      (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
+              dbs (cond-> [db search-db]
+                    client-ops-db (conj client-ops-db))
+              storage (new-sqlite-storage repo db)]
+        (swap! *sqlite-conns assoc repo {:db db
+                                         :search search-db
+                                         :client-ops client-ops-db})
+        (when vector-index
+          (swap! *vector-indexes assoc repo vector-index))
+        (doseq [db' dbs]
+          (enable-sqlite-wal-mode! db'))
+        (disable-sqlite-auto-checkpoint! db)
+        (common-sqlite/create-kvs-table! db)
+        (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
+        (search/create-tables-and-triggers! search-db)
+        (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+        (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
+        (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
+              _ (db-fix/check-and-fix-schema! conn)
+              _ (when datoms
+                  (let [ident-eids (into #{}
+                                         (comp (filter (fn [datom]
+                                                         (= (:a datom) :db/ident)))
+                                               (map :e))
+                                         datoms)
+                        to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
+                        batch-size 20000
+                        ident-batches (->> datoms
+                                           (filter #(contains? ident-eids (:e %)))
+                                           (map to-tx)
+                                           (partition-all batch-size))
+                        _ (doseq [batch ident-batches]
+                            (bootstrap-transact! conn batch))
+                        non-ident-batches (->> datoms
+                                               (remove #(contains? ident-eids (:e %)))
+                                               (map to-tx)
+                                               (partition-all batch-size))]
+                    (doseq [batch non-ident-batches]
+                      (bootstrap-transact! conn batch))))
+              client-ops-conn (when-not @*publishing? client-ops-db)
+              initial-data-exists? (when (nil? datoms)
+                                     (and (d/entity @conn :logseq.class/Root)
+                                          (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
+          (swap! *datascript-conns assoc repo conn)
+          (swap! *client-ops-conns assoc repo client-ops-conn)
+          (when-not @*publishing?
+            (client-op/ensure-sqlite-schema! client-ops-db))
+          (when creating-remote-graph?
+            (when (nil? (client-op/get-local-tx repo))
+              (client-op/update-local-tx repo 0)))
+          (ensure-client-ops-cleanup-timer! repo)
+          (let [initial-tx-report (when-not (or initial-data-exists?
+                                                (seq datoms)
+                                                sync-download-graph?)
+                                    (let [config (resolve-initial-config config)
+                                          initial-data (sqlite-create-graph/build-db-initial-data
+                                                        config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
+                                      (bootstrap-transact! conn initial-data)))]
+            (when-not sync-download-graph?
+              (let [migrate-result (db-migrate/migrate conn)]
+                (if migrate-result
+                  (handle-migrate-result-local-txs! repo migrate-result)
+                  (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
+              (transaction-handler/maybe-run-recycle-gc! conn))
 
-          (when initial-tx-report
-            (db-sync/handle-local-tx! repo initial-tx-report))
+            (ensure-canonical-revisions! conn)
 
-          (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
+            (when initial-tx-report
+              (db-sync/handle-local-tx! repo initial-tx-report))
 
-          nil)))))
+            (db-listener/listen-db-changes! repo conn)
+
+            nil))))))
+
 
 (defn- <list-all-dbs
   []
@@ -620,114 +709,9 @@
     (let [storage (platform/storage (platform/current))]
       ((:remove-vfs! storage) pool))))
 
-(defn- get-search-db
-  [repo]
-  (worker-state/get-sqlite-conn repo :search))
-
-(defn- search-index-version
-  [^js search-db]
-  (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0))
-
-(defn- expected-vector-index-metadata
-  []
-  {:embedding-model-id (platform/embedding-model-id (platform/current))
-   :embedding-dimension (platform/embedding-dimension (platform/current))
-   :context-version search/vector-context-version})
-
-(defn- persist-vector-index-metadata!
-  [repo]
-  (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
-    (set-metadata! (expected-vector-index-metadata))))
-
-(declare <embed-index-batches vector-embedding-batches)
-
-(defn- start-vector-index-rebuild!
-  [repo build-id]
-  (swap! *vector-index-rebuild-ids assoc repo build-id))
-
-(defn- active-vector-index-rebuild?
-  [repo build-id]
-  (= build-id (get @*vector-index-rebuild-ids repo)))
-
-(defn- clear-vector-index-rebuild!
-  [repo build-id]
-  (swap! *vector-index-rebuild-ids
-         (fn [builds]
-           (if (= build-id (get builds repo))
-             (dissoc builds repo)
-             builds))))
-
-(defn- schedule-vector-index-rebuild!
-  [repo build-id indexed-blocks]
-  (when (worker-state/get-vector-index repo)
-    (start-vector-index-rebuild! repo build-id)
-    (let [indexed-blocks (vec indexed-blocks)]
-      (-> (if (seq indexed-blocks)
-            (p/let [vector-blocks (<embed-index-batches (vector-embedding-batches indexed-blocks))]
-              (when (active-vector-index-rebuild? repo build-id)
-                (when-let [vector-index (worker-state/get-vector-index repo)]
-                  (search/upsert-vector-blocks! vector-index vector-blocks))))
-            (p/resolved nil))
-          (p/then (fn [_]
-                    (when (active-vector-index-rebuild? repo build-id)
-                      (persist-vector-index-metadata! repo))))
-          (p/catch (fn [error]
-                     (when (active-vector-index-rebuild? repo build-id)
-                       (log/error :search/vector-index-rebuild-failed {:repo repo
-                                                                       :error error}))))
-          (p/finally (fn []
-                       (clear-vector-index-rebuild! repo build-id))))))
-  nil)
-
-(defn- start-search-index-build!
-  [repo]
-  (let [build-id (str (random-uuid))]
-    (swap! *search-index-build-ids assoc repo build-id)
-    build-id))
-
-(defn- clear-search-index-build!
-  [repo build-id]
-  (swap! *search-index-build-ids
-         (fn [builds]
-           (if (= build-id (get builds repo))
-             (dissoc builds repo)
-             builds))))
-
-(defn- ensure-active-search-index-build!
-  [repo build-id]
-  (when-not (= build-id (get @*search-index-build-ids repo))
-    (throw (ex-info "stale search index build"
-                    {:type :search/stale-index-build
-                     :repo repo
-                     :build-id build-id}))))
-
-(defn- report-search-index-progress!
-  [repo payload]
-  (if (node-runtime?)
-    (do
-      (platform/post-message! (platform/current)
-                              :thread-api/search-index-build-progress
-                              [repo payload])
-      (p/resolved nil))
-    (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
-        (p/catch (fn [_error] nil)))))
-
 (def-thread-api :thread-api/init
   []
   (init-sqlite-module!))
-
-(def-thread-api :thread-api/set-db-sync-config
-  [config]
-  (reset! worker-state/*db-sync-config (worker-state/non-auth-db-sync-config config))
-  nil)
-
-(def-thread-api :thread-api/get-db-sync-config
-  []
-  (worker-state/non-auth-db-sync-config @worker-state/*db-sync-config))
-
-(def-thread-api :thread-api/db-sync-status
-  [repo]
-  (db-sync/status repo))
 
 (defn- db-sync-dbs-open?
   [repo]
@@ -742,76 +726,6 @@
     (p/do!
      (start-db! repo {:close-other-db? false})
      (db-sync/start! repo))))
-
-(def-thread-api :thread-api/db-sync-stop
-  []
-  (db-sync/stop!))
-
-(def-thread-api :thread-api/db-sync-update-presence
-  [editing-block-uuid]
-  (db-sync/update-presence! editing-block-uuid))
-
-(def-thread-api :thread-api/db-sync-request-asset-download
-  [repo asset-uuid]
-  (db-sync/request-asset-download! repo asset-uuid))
-
-(def-thread-api :thread-api/db-sync-download-missing-assets
-  [repo graph-id]
-  (db-sync/download-missing-assets! repo graph-id))
-
-(def-thread-api :thread-api/db-sync-retry-asset-upload
-  [repo]
-  (db-sync/retry-asset-upload! repo))
-
-(def-thread-api :thread-api/db-sync-grant-graph-access
-  [repo graph-id target-email]
-  (sync-crypt/<grant-graph-access! repo graph-id target-email))
-
-(def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
-  [& [opts]]
-  (sync-crypt/ensure-user-rsa-keys! opts))
-
-(def-thread-api :thread-api/db-sync-list-remote-graphs
-  []
-  (db-sync/list-remote-graphs!))
-
-(def-thread-api :thread-api/db-sync-upload-graph
-  [repo]
-  (db-sync/upload-graph! repo))
-
-(def-thread-api :thread-api/db-sync-create-remote-graph
-  [repo graph-e2ee? graph-ready-for-use?]
-  (db-sync/create-remote-graph! repo {:graph-e2ee? graph-e2ee?
-                                      :graph-ready-for-use? graph-ready-for-use?}))
-
-(def-thread-api :thread-api/db-sync-stop-upload
-  [repo]
-  (db-sync/stop-upload! repo))
-
-(def-thread-api :thread-api/db-sync-resume-upload
-  [repo]
-  (db-sync/resume-upload! repo))
-
-(def-thread-api :thread-api/db-sync-upload-stopped?
-  [repo]
-  (db-sync/upload-stopped? repo))
-
-(def-thread-api :thread-api/db-sync-get-block-conflicts
-  [repo block-uuid]
-  (client-op/get-sync-conflicts repo block-uuid))
-
-(def-thread-api :thread-api/db-sync-clear-block-conflicts
-  [repo block-uuid]
-  (client-op/clear-sync-conflicts! repo block-uuid)
-  (shared-service/broadcast-to-clients!
-   :sync-conflicts-updated
-   {:repo repo
-    :block-uuid block-uuid
-    :conflicts []}))
-
-(def-thread-api :thread-api/db-sync-download-graph-by-id
-  [repo graph-id graph-e2ee?]
-  (sync-download/download-graph-by-id! repo graph-id graph-e2ee?))
 
 ;; [graph service]
 (defonce *service (atom []))
@@ -848,343 +762,12 @@
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (start-db! repo opts))
-
-(def-thread-api :thread-api/q
-  [repo inputs]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (apply d/q (first inputs) @conn (rest inputs))))
-
-(def-thread-api :thread-api/datoms
-  [repo & args]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [result (apply d/datoms @conn args)]
-      (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]) result))))
-
-(def-thread-api :thread-api/pull
-  [repo selector id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [eid (if (and (vector? id) (= :block/name (first id)))
-                (:db/id (ldb/get-page @conn (second id)))
-                id)]
-      (some->> eid
-               (d/pull @conn selector)
-               (common-initial-data/with-parent @conn)))))
-
-(def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
-
-(defn- sanitize-block-result
-  [result]
-  (cond-> result
-    (:block result)
-    (update :block common-util/remove-nils-non-nested)
-
-    (:children result)
-    (update :children common-util/fast-remove-nils)))
-
-(def ^:private get-blocks-with-cache
-  (common.cache/cache-fn
-   *get-blocks-cache
-   (fn [repo requests]
-     (let [db (some-> (worker-state/get-datascript-conn repo) deref)]
-       [[repo (:max-tx db) requests]
-        [db requests]]))
-   (fn [db requests]
-     (when db
-       (->> requests
-            (mapv (fn [{:keys [id opts]}]
-                    (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                      (-> (common-initial-data/get-block-and-children db id' opts)
-                          sanitize-block-result
-                          (assoc :id id)))))
-            ldb/write-transit-str)))))
-
-(def-thread-api :thread-api/get-blocks
-  [repo requests]
-  (let [requests (ldb/read-transit-str requests)]
-    (get-blocks-with-cache repo requests)))
-
-(def-thread-api :thread-api/get-block-refs
-  [repo id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (->> (db-reference/get-linked-references @conn id)
-         :ref-blocks
-         (map (fn [b] (assoc (into {} b) :db/id (:db/id b)))))))
-
-(def-thread-api :thread-api/get-block-refs-count
-  [repo id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs-count @conn id)))
-
-(def-thread-api :thread-api/get-block-source
-  [repo id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (:db/id (first (:block/_alias (d/entity @conn id))))))
-
-(defn- search-blocks
-  [repo q option]
-  (let [search-db (get-search-db repo)
-        conn (worker-state/get-datascript-conn repo)
-        vector-index (worker-state/get-vector-index repo)]
-    (search/search-blocks conn search-db vector-index q option)))
-
-(defn- validate-embedding-count!
-  [blocks embeddings]
-  (when-not (= (count blocks) (count embeddings))
-    (throw (ex-info "embedding result count mismatch"
-                    {:block-count (count blocks)
-                     :embedding-count (count embeddings)
-                     :model-id (platform/embedding-model-id (platform/current))}))))
-
-(defn- embeddable-index-block?
-  [{:keys [id page title]}]
-  (and id page (not (string/blank? (str title)))))
-
-(defn- vector-embedding-title
-  [block-or-title]
-  (let [title (if (map? block-or-title)
-                (or (:vector-title block-or-title)
-                    (:title block-or-title))
-                block-or-title)
-        title (str title)]
-    (if (> (count title) vector-embedding-max-title-length)
-      (subs title 0 vector-embedding-max-title-length)
-      title)))
-
-(defn- vector-embedding-batches
-  [blocks]
-  (loop [remaining (seq blocks)
-         batch []
-         batch-chars 0
-         result []]
-    (if-let [block (first remaining)]
-      (let [text (vector-embedding-title block)
-            text-chars (count text)
-            full? (or (>= (count batch) vector-embedding-batch-size)
-                      (and (seq batch)
-                           (> (+ batch-chars text-chars)
-                              vector-embedding-max-batch-chars)))]
-        (if full?
-          (recur remaining [] 0 (conj result batch))
-          (recur (next remaining)
-                 (conj batch block)
-                 (+ batch-chars text-chars)
-                 result)))
-      (cond-> result
-        (seq batch) (conj batch)))))
-
-(defn- <embed-index-batch
-  ([batch]
-   (<embed-index-batch #(platform/embed-texts (platform/current) %) batch))
-  ([embed-texts-fn batch]
-   (p/let [embeddings (embed-texts-fn (mapv vector-embedding-title batch))
-           _ (validate-embedding-count! batch embeddings)]
-     (mapv (fn [block embedding]
-             (assoc block :embedding embedding))
-           batch
-           embeddings))))
-
-(defn- <embed-index-batch-with-fallback
-  ([batch]
-   (<embed-index-batch-with-fallback #(platform/embed-texts (platform/current) %) batch))
-  ([embed-texts-fn batch]
-   (-> (<embed-index-batch embed-texts-fn batch)
-       (p/catch
-        (fn [error]
-          (if (= 1 (count batch))
-            (throw error)
-            (let [split-index (quot (count batch) 2)
-                  left (subvec (vec batch) 0 split-index)
-                  right (subvec (vec batch) split-index)]
-              (p/let [left-embedded (<embed-index-batch-with-fallback embed-texts-fn left)
-                      right-embedded (<embed-index-batch-with-fallback embed-texts-fn right)]
-                (into left-embedded right-embedded)))))))))
-
-(defn- pop-embedding-batch!
-  [queue]
-  (let [selected (atom nil)]
-    (swap! queue
-           (fn [items]
-             (if (seq items)
-               (do
-                 (reset! selected (first items))
-                 (subvec items 1))
-               items)))
-    @selected))
-
-(defn- <embed-index-batches
-  ([batches]
-   (<embed-index-batches batches nil))
-  ([batches on-batch-embedded]
-   (let [batches (vec batches)]
-     (if (empty? batches)
-       (p/resolved [])
-       (let [queue (atom (mapv vector (range (count batches)) batches))
-             results (atom {})
-             worker-count (min vector-embedding-parallelism (count batches))]
-         (letfn [(worker []
-                   (if-let [[idx batch] (pop-embedding-batch! queue)]
-                     (-> (<embed-index-batch-with-fallback batch)
-                         (p/then (fn [embedded]
-                                   (swap! results assoc idx embedded)
-                                   (when on-batch-embedded
-                                     (on-batch-embedded (count embedded)))
-                                   (worker))))
-                     (p/resolved nil)))]
-           (p/let [_ (p/all (mapv (fn [_] (worker)) (range worker-count)))]
-             (into [] (mapcat (fn [idx]
-                                (get @results idx))
-                              (range (count batches)))))))))))
-
-(defn- <embed-index-blocks
-  [repo blocks]
-  (let [blocks (vec (filter embeddable-index-block? blocks))]
-    (if (and (seq blocks) (worker-state/get-vector-index repo))
-      (<embed-index-batches (vector-embedding-batches blocks))
-      (p/resolved []))))
-
-(defn- schedule-vector-index-upsert!
-  [repo blocks]
-  (when (and (seq blocks) (worker-state/get-vector-index repo))
-    (-> (<embed-index-blocks repo blocks)
-        (p/then (fn [vector-blocks]
-                  (when (seq vector-blocks)
-                    (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
-        (p/catch (fn [error]
-                   (log/error :search/vector-index-upsert-failed {:repo repo
-                                                                  :error error})))))
-  nil)
-
-(defn- <search-blocks
-  [repo q option]
-  (let [vector-index (worker-state/get-vector-index repo)]
-    (if (and vector-index
-             (:feature/enable-semantic-search? option)
-             (not (:page-only? option))
-             (not (:query-embedding option))
-             (not (string/blank? q)))
-      (-> (p/let [embeddings (-> (platform/embed-texts (platform/current) [q])
-                                  (p/timeout query-embedding-timeout-ms))
-                  _ (validate-embedding-count! [{:title q}] embeddings)]
-            (search-blocks repo q (assoc option :query-embedding (first embeddings))))
-          (p/catch (fn [error]
-                     (log/warn :search/query-embedding-failed {:repo repo
-                                                               :error error})
-                     (search-blocks repo q option))))
-      (p/resolved (search-blocks repo q option)))))
-
-(def-thread-api :thread-api/block-refs-check
-  [repo id {:keys [unlinked?]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          block (d/entity db id)]
-      (if unlinked?
-        (let [title (string/lower-case (:block/title block))
-              result (search-blocks repo title {:limit 100})]
-          (boolean (some (fn [b]
-                           (let [block (d/entity db (:db/id b))]
-                             (and (not= id (:db/id block))
-                                  (not ((set (map :db/id (:block/refs block))) id))
-                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
-
-(def-thread-api :thread-api/get-block-parents
-  [repo id depth]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [block-id (:block/uuid (d/entity @conn id))]
-      (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
-           (map (fn [b]
-                  (-> (into {} b)
-                      (assoc :db/id (:db/id b)
-                             :block/title (:block/title b)))))))))
-
-(def-thread-api :thread-api/set-context
-  [context]
-  (when context (worker-state/update-context! context))
-  nil)
-
-(def-thread-api :thread-api/transact
-  [repo tx-data tx-meta context]
-  (assert (some? repo))
-  (worker-state/set-db-latest-tx-time! repo)
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (assert (some? conn) {:repo repo})
-    (try
-      (let [tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
-                       (map (fn [m]
-                              (if (and (map? m) (nil? (:block/order m)))
-                                (assoc m :block/order (db-order/gen-key nil))
-                                m)) tx-data)
-                       tx-data)
-            _ (when context (worker-state/set-context! context))
-            tx-meta' (cond-> tx-meta
-                       true
-                       (dissoc :insert-blocks?))]
-        (when-not (and (:create-today-journal? tx-meta)
-                       (:today-journal-name tx-meta)
-                       (seq tx-data')
-                       (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
-
-          ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
-
-          (worker-util/profile "Worker db transact"
-                               (ldb/transact! conn tx-data' tx-meta')))
-        (maybe-run-recycle-gc! conn)
-        nil)
-      (catch :default e
-        (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
-        (log/error ::worker-transact-failed e)
-        (throw e)))))
-
-(def-thread-api :thread-api/undo-redo-set-pending-editor-info
-  [repo editor-info]
-  (worker-undo-redo/set-pending-editor-info! repo editor-info)
-  nil)
-
-(def-thread-api :thread-api/undo-redo-record-editor-info
-  [repo editor-info]
-  (worker-undo-redo/record-editor-info! repo editor-info)
-  nil)
-
-(def-thread-api :thread-api/undo-redo-record-ui-state
-  [repo ui-state-str]
-  (worker-undo-redo/record-ui-state! repo ui-state-str)
-  nil)
-
-(def-thread-api :thread-api/undo-redo-undo
-  [repo]
-  (worker-undo-redo/undo repo))
-
-(def-thread-api :thread-api/undo-redo-redo
-  [repo]
-  (worker-undo-redo/redo repo))
-
-(def-thread-api :thread-api/undo-redo-clear-history
-  [repo]
-  (worker-undo-redo/clear-history! repo)
-  nil)
-
-(def-thread-api :thread-api/undo-redo-get-debug-state
-  [repo]
-  (worker-undo-redo/get-debug-state repo))
-
-(def-thread-api :thread-api/get-initial-data
-  [repo opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (if (:file-graph-import? opts)
-      {:schema (:schema @conn)
-       :initial-data (vec (d/datoms @conn :eavt))}
-      (common-initial-data/get-initial-data @conn))))
-
-(def-thread-api :thread-api/build-publishing-html
-  [repo options]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (publish-html/build-html @conn options)))
-
-(def-thread-api :thread-api/reset-db
-  [repo db-transit]
-  (reset-db! repo db-transit)
-  nil)
+  (p/let [_ (start-db! repo opts)
+          conn (or (worker-state/get-datascript-conn repo)
+                   (throw (ex-info "Missing worker graph connection"
+                                   {:type :db/missing-connection
+                                    :repo repo})))]
+    {:schema (:schema @conn)}))
 
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]
@@ -1301,397 +884,9 @@
             _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
 
-(def-thread-api :thread-api/search-blocks
-  [repo q option]
-  (<search-blocks repo q option))
-
-(def-thread-api :thread-api/search-upsert-blocks
-  [repo blocks]
-  (when-let [db (get-search-db repo)]
-    (search/upsert-blocks! db (bean/->js blocks))
-    (schedule-vector-index-upsert! repo blocks)
-    nil))
-
-(def-thread-api :thread-api/search-delete-blocks
-  [repo ids]
-  (when-let [db (get-search-db repo)]
-    (search/delete-vector-blocks! (worker-state/get-vector-index repo) ids)
-    (search/delete-blocks! db ids)
-    nil))
-
-(def-thread-api :thread-api/search-truncate-tables
-  [repo]
-  (when-let [db (get-search-db repo)]
-    (search/truncate-vector-index! (worker-state/get-vector-index repo))
-    (search/truncate-table! db)
-    nil))
-
-(def-thread-api :thread-api/search-build-blocks-indice
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (search/build-blocks-indice @conn)))
-
-(defn- take-search-index-batch
-  [items batch-size time-budget-ms]
-  (let [deadline (+ (common-util/time-ms) time-budget-ms)]
-    (loop [batch (transient [])
-           remaining (seq items)
-           n 0]
-      (if (or (nil? remaining)
-              (>= n batch-size)
-              (and (pos? n) (>= (common-util/time-ms) deadline)))
-        [(persistent! batch) remaining]
-        (recur (conj! batch (first remaining))
-               (next remaining)
-               (inc n))))))
-
-(defn- search-index-input-idle?
-  [repo]
-  (if (node-runtime?)
-    true
-    (let [status-map @(:thread-atom/search-input-idle-status @worker-state/*state)
-          {:keys [idle? ts]} (get status-map repo)
-          fresh? (and (number? ts)
-                      (<= (- (common-util/time-ms) ts)
-                          search-index-build-idle-status-ttl-ms))]
-      (if (and fresh? (boolean? idle?))
-        idle?
-        true))))
-
-(defn- <wait-for-search-index-idle!
-  [repo build-id]
-  (p/loop []
-    (ensure-active-search-index-build! repo build-id)
-    (if (search-index-input-idle? repo)
-      nil
-      (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
-        (p/recur)))))
-
-(defn- <build-blocks-index!
-  "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
-  [repo search-db conn build-id]
-  (ensure-active-search-index-build! repo build-id)
-  (let [db @conn
-        blocks (->> (d/datoms db :avet :block/uuid)
-                    (keep #(d/entity db (:e %)))
-                    (remove search/hidden-entity?)
-                    vec)
-        total (count blocks)
-        vector-index (worker-state/get-vector-index repo)
-        index-opts {:include-vector-title? (some? vector-index)}
-        progress-for-fts (fn [processed]
-                           (if (zero? total)
-                             100
-                             (min 100 (int (* 100 (/ processed total))))))
-        report-progress! (fn [progress processed total]
-                           (report-search-index-progress! repo {:build-id build-id
-                                                                :status :running
-                                                                :stage :search-index
-                                                                :progress progress
-                                                                :processed processed
-                                                                :total total}))]
-    (p/do!
-     (report-search-index-progress! repo {:build-id build-id
-                                          :status :running
-                                          :stage :search-index
-                                          :progress 0
-                                          :processed 0
-                                          :total total})
-     (<wait-for-search-index-idle! repo build-id)
-     (ensure-active-search-index-build! repo build-id)
-     (search/truncate-table! search-db)
-     (search/truncate-vector-index! vector-index)
-     (p/loop [remaining (seq blocks)
-              processed 0
-              last-progress 0
-              indexed-blocks []]
-       (ensure-active-search-index-build! repo build-id)
-       (if (seq remaining)
-         (let [[batch remaining'] (take-search-index-batch remaining
-                                                           search-index-build-batch-size
-                                                           search-index-build-time-budget-ms)
-               processed' (+ processed (count batch))
-               indexed (vec (keep #(search/block->index % index-opts) batch))
-               indexed-blocks' (into indexed-blocks indexed)
-               progress (progress-for-fts processed')
-               should-report? (> progress last-progress)]
-           (p/let [_ (when (seq indexed)
-                       (search/upsert-blocks! search-db (bean/->js indexed)))
-                   _ (when should-report?
-                       (report-progress! progress processed' total))
-                   _ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-             (p/recur remaining' processed' (if should-report? progress last-progress) indexed-blocks')))
-         (do
-           (ensure-active-search-index-build! repo build-id)
-           (schedule-vector-index-rebuild! repo build-id indexed-blocks)
-           (p/let [_ (do
-                       (.exec search-db (str "PRAGMA user_version = " search-db-version))
-                       (report-search-index-progress! repo {:build-id build-id
-                                                            :status :completed
-                                                            :stage :search-index
-                                                            :progress 100
-                                                            :processed total
-                                                            :total total}))]
-             nil)))))))
-
-(def-thread-api :thread-api/search-build-blocks-indice-in-worker
-  [repo & [force?]]
-  (p/let [search-db (get-search-db repo)]
-    (when search-db
-      (let [version (search-index-version search-db)]
-        (if (and (= version search-db-version)
-                 (not force?))
-          version
-         (when-let [conn (worker-state/get-datascript-conn repo)]
-           (let [build-id (start-search-index-build! repo)]
-              (-> (report-search-index-progress! repo {:build-id build-id
-                                                       :status :running
-                                                       :stage :search-index
-                                                       :progress 0
-                                                       :processed 0
-                                                       :total 0})
-                  (p/then (fn [_]
-                            (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
-                  (p/then (fn [_]
-                            (<build-blocks-index! repo search-db conn build-id)))
-                  (p/catch (fn [error]
-                             (when-not (= :search/stale-index-build (:type (ex-data error)))
-                               (log/error :search/index-build-failed {:repo repo
-                                                                      :error error}))))
-                  (p/finally (fn []
-                               (when (= build-id (get @*search-index-build-ids repo))
-                                 (report-search-index-progress! repo {:build-id build-id
-                                                                      :status :idle}))
-                               (clear-search-index-build! repo build-id))))
-              :started)))))))
-
-(def-thread-api :thread-api/search-build-pages-indice
-  [_repo]
-  nil)
-
-(def-thread-api :thread-api/apply-outliner-ops
-  [repo ops opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (try
-      (worker-util/profile
-       "apply outliner ops"
-       (outliner-op/apply-ops! conn ops opts))
-      (catch :default e
-        (let [data (ex-data e)
-              {:keys [type payload]} (when (map? data) data)]
-          (case type
-            :notification
-            (do
-              (log/error ::apply-outliner-ops-failed e)
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)
-                                                                   (select-keys payload [:i18n-key :i18n-args])])
-              ;; re-throw as CLI needs to see notification
-              (throw e))
-            (throw e)))))))
-
-(def-thread-api :thread-api/sync-app-state
-  [new-state]
-  (when (and (contains? new-state :git/current-repo)
-             (nil? (:git/current-repo new-state)))
-    (log/error :thread-api/sync-app-state new-state))
-  (worker-state/set-new-state! new-state)
-  nil)
-
-(def-thread-api :thread-api/markdown-mirror-set-enabled
-  [repo enabled?]
-  (markdown-mirror/set-enabled! repo enabled?)
-  nil)
-
-(def-thread-api :thread-api/markdown-mirror-flush
-  [repo]
-  (markdown-mirror/<flush-repo! repo {}))
-
-(def-thread-api :thread-api/markdown-mirror-regenerate
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (markdown-mirror/<mirror-repo! repo @conn {})))
-
-(def-thread-api :thread-api/export-get-debug-datoms
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-debug-datoms conn)))
-
-(def-thread-api :thread-api/export-get-all-page->content
-  [repo options]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-all-page->content @conn options)))
-
-(def-thread-api :thread-api/validate-db
-  [repo & [opts]]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db conn opts)))
-
-(defn- checksum-diagnostics
-  [repo]
-  {:local-checksum (client-op/get-local-checksum repo)
-   :remote-checksum (get @db-sync/*repo->latest-remote-checksum repo)})
-
-(def-thread-api :thread-api/recompute-checksum-diagnostics
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [result (worker-db-validate/recompute-checksum-diagnostics repo conn (checksum-diagnostics repo))
-          recomputed-checksum (:recomputed-checksum result)]
-      (when (and (some? recomputed-checksum)
-                 (worker-state/get-client-ops-conn repo))
-        (client-op/update-local-checksum repo recomputed-checksum))
-      (cond-> result
-        (some? recomputed-checksum)
-        (assoc :local-checksum recomputed-checksum)))))
-
-;; Returns an export-edn map for given repo. When there's an unexpected error, a map
-;; with key :export-edn-error is returned
-(def-thread-api :thread-api/export-edn
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (try
-      (sqlite-export/build-export @conn options)
-      (catch :default e
-        (js/console.error "export-edn error: " e)
-        (js/console.error "Stack:\n" (.-stack e))
-        (platform/post-message! (platform/current)
-                                :notification
-                                [nil :error nil nil nil
-                                 {:i18n-key :export/error-unexpected}])
-        {:export-edn-error (.-message e)}))))
-
-(def-thread-api :thread-api/import-edn
-  [repo export-edn]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (when-not conn
-      (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
-    (let [txs (sqlite-export/build-import export-edn @conn {})
-          validation (sqlite-export/validate-import-txs txs @conn)]
-      (if-let [error (:error validation)]
-        {:error error}
-        (let [tx-data (:tx-data validation)
-              tx-meta (cond-> {::sqlite-export/imported-data? true}
-                        ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
-                        ;; to keep pipeline from reverting their import
-                        (= :datoms (::sqlite-export/graph-format export-edn))
-                        (assoc :initial-db? true))]
-          (ldb/transact! conn tx-data tx-meta)
-          {:tx-count (count tx-data)})))))
-
-(def-thread-api :thread-api/get-view-data
-  [repo view-id option]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (db-view/get-view-data db view-id option)))
-
-(def-thread-api :thread-api/get-class-objects
-  [repo class-id]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (->> (db-class/get-class-objects db class-id)
-         (map entity-util/entity->map))))
-
-(def-thread-api :thread-api/get-property-values
-  [repo {:keys [property-ident] :as option}]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (db-view/get-property-values @conn property-ident option)))
-
-(def-thread-api :thread-api/get-bidirectional-properties
-  [repo {:keys [target-id]}]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (worker-util/profile "get-bidirectional-properties"
-                         (ldb/get-bidirectional-properties @conn target-id))))
-
-(def-thread-api :thread-api/build-graph
-  [repo option]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (graph-view/build-graph @conn option)))
-
-(def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
-(defn- get-all-page-titles
-  [db]
-  (let [pages (ldb/get-all-pages db)]
-    (sort (map :block/title pages))))
-
-(def ^:private get-all-page-titles-with-cache
-  (common.cache/cache-fn
-   *get-all-page-titles-cache
-   (fn [repo]
-     (let [db @(worker-state/get-datascript-conn repo)]
-       [[repo (:max-tx db)] ;cache-key
-        [db]             ;f-args
-        ]))
-   get-all-page-titles))
-
-(def-thread-api :thread-api/get-all-page-titles
-  [repo]
-  (get-all-page-titles-with-cache repo))
-
-(def-thread-api :thread-api/gc-graph
-  [repo]
-  (let [{:keys [db]} (get @*sqlite-conns repo)
-        conn (get @*datascript-conns repo)]
-    (when (and db conn)
-      (gc-sqlite-dbs! db conn {:full-gc? true})
-      nil)))
-
-(def-thread-api :thread-api/mobile-logs
-  []
-  @worker-state/*log)
-
-(def-thread-api :thread-api/get-rtc-graph-uuid
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-graph-rtc-uuid @conn)))
-
-;; Cli specific fns start with 'cli-'
-(def-thread-api :thread-api/cli-list-properties
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-db-worker/list-properties @conn options)))
-
-(def-thread-api :thread-api/cli-list-tags
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-db-worker/list-tags @conn options)))
-
-(def-thread-api :thread-api/cli-list-pages
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-db-worker/list-pages @conn options)))
-
-(def-thread-api :thread-api/cli-list-tasks
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-db-worker/list-tasks @conn options)))
-
-(def-thread-api :thread-api/cli-list-nodes
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-db-worker/list-nodes @conn options)))
-
-;; API server specific fns start with 'api-'
-(def-thread-api :thread-api/api-get-page-data
-  [repo page-title]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/get-page-data @conn page-title)))
-
-(def-thread-api :thread-api/api-list-properties
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/list-properties @conn options)))
-
-(def-thread-api :thread-api/api-list-tags
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/list-tags @conn options)))
-
-(def-thread-api :thread-api/api-list-pages
-  [repo options]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/list-pages @conn options)))
-
-(def-thread-api :thread-api/api-build-upsert-nodes-edn
-  [repo ops]
-  (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/build-upsert-nodes-edn @conn ops)))
+(def-thread-api :thread-api/import-file-graph
+  [repo config-file files opts]
+  (<import-file-graph! repo config-file files opts))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
@@ -1702,15 +897,14 @@
 
 (defn- on-become-master
   [repo start-opts]
-  (js/Promise.
-   (m/sp
-     (log/info :db-worker/on-become-master-start {:repo repo
-                                                  :import-type (:import-type start-opts)})
-     (c.m/<? (init-sqlite-module!))
-     (when-not (:import-type start-opts)
-       (c.m/<? (start-db! repo start-opts))
-       (assert (some? (worker-state/get-datascript-conn repo))))
-     nil)))
+  (log/info :db-worker/on-become-master-start {:repo repo
+                                               :import-type (:import-type start-opts)})
+  (p/let [_ (init-sqlite-module!)
+          _ (when-not (:import-type start-opts)
+              (start-db! repo start-opts))]
+    (when-not (:import-type start-opts)
+      (assert (some? (worker-state/get-datascript-conn repo))))
+    nil))
 
 (def broadcast-data-types
   (set (map
@@ -1742,14 +936,18 @@
         (log/info :db-worker/init-service {:graph graph
                                            :prev-graph prev-graph
                                            :import-type (:import-type start-opts)})
-        (p/let [service (shared-service/<create-service graph
-                                                        (bean/->js fns)
-                                                        #(on-become-master graph start-opts)
-                                                        broadcast-data-types
-                                                        {:import? (:import-type? start-opts)})]
-          (assert (p/promise? (get-in service [:status :ready])))
-          (reset! *service [graph service])
-          service)))))
+        (let [service-promise (shared-service/<create-service
+                               graph
+                               (bean/->js fns)
+                               #(on-become-master graph start-opts)
+                               broadcast-data-types
+                               {:import? (:import-type? start-opts)})]
+          (reset! *service [graph service-promise])
+          (p/let [service service-promise]
+            (assert (p/promise? (get-in service [:status :ready])))
+            (when (identical? service-promise (second @*service))
+              (reset! *service [graph service]))
+            service))))))
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
@@ -1788,8 +986,9 @@
                               (string? payload) (ldb/read-transit-str payload)
                               (array? payload) (js->clj payload :keywordize-keys true)
                               :else payload)
-                   [graph opts] payload']
-               (p/let [service (<init-service! graph opts)
+                   [graph opts] payload'
+                   service-promise (<init-service! graph opts)]
+               (p/let [service service-promise
                        client-id (:client-id service)]
                  (when client-id
                    (platform/post-message! (platform/current)
@@ -1806,7 +1005,8 @@
 
              :else
              ;; ensure service is ready
-             (p/let [_ready-value (get-in service [:status :ready])]
+             (p/let [service service
+                     _ready-value (get-in service [:status :ready])]
                (js-invoke (:proxy service) k args)))))]))
    (into {})
    bean/->js))

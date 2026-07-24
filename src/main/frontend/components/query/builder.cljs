@@ -3,9 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.components.select :as component-select]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
@@ -76,6 +74,21 @@
       :on-change #(reset! *input-value (util/evalue %))}]))
 
 (defonce *between-dates (atom {}))
+
+(defn- built-in-property
+  [ident]
+  (when-let [{:keys [title schema closed-values]} (get db-property/built-in-properties ident)]
+    (cond-> {:db/ident ident
+             :block/title title
+             :logseq.property/type (:type schema)}
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))))
+
+(defn- property-title
+  [ident]
+  (or (:block/title (built-in-property ident))
+      (name ident)))
+
 (hsx/defc datepicker
   [id placeholder {:keys [on-select]}]
   (let [*input-value (hooks/use-memo #(atom nil) [])
@@ -190,7 +203,8 @@
   (let [[values set-values!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
+       (p/let [result (db-async/<get-all-classes repo {:except-root-class? true
+                                                        :except-private-tags? false})]
          (set-values! result)))
      [])
     (let [items (->> (sort-by :block/title values)
@@ -235,7 +249,7 @@
        (tags repo *tree opts loc)
 
        "task"
-       (let [items (let [values (:property/closed-values (db/entity :logseq.property/status))]
+       (let [items (let [values (:property/closed-values (built-in-property :logseq.property/status))]
                      (mapv db-property/property-value-content values))]
          (select items
                  (constantly nil)
@@ -251,7 +265,7 @@
 
        "priority"
        (select
-        (let [values (:property/closed-values (db/entity :logseq.property/priority))]
+        (let [values (:property/closed-values (built-in-property :logseq.property/priority))]
           (mapv db-property/property-value-content values))
         (constantly nil)
         {:multiple-choices? true
@@ -341,9 +355,7 @@
 
 (defn- uuid->page-title
   [s]
-  (if (and (string? s) (common-util/uuid-string? s))
-    (:block/title (db/entity [:block/uuid (uuid s)]))
-    s))
+  s)
 
 (defn- dsl-human-output
   [clause]
@@ -369,7 +381,7 @@
 
       (contains? #{:property :private-property} (keyword f))
       (str (if (qualified-keyword? (second clause))
-             (:block/title (db/entity (second clause)))
+             (property-title (second clause))
              (some-> (second clause) name))
            ": "
            (uuid->page-title
@@ -401,7 +413,7 @@
                (= k :block/updated-at)
                (t :query.builder/updated-label)
                :else
-               (or (:block/title (db/entity k)) (name k)))
+               (property-title k))
              " " start
              (when end
                (str " ~ " end))))
@@ -565,11 +577,11 @@
                   (atom (query-builder/from-dsl query')))
                [_block])
         [tree] (hooks/use-atom *tree)]
-    (hooks/use-effect!
-     (fn []
-       (let [q-str (get-q _block)
-             blocks-query? (:blocks? (query-dsl/parse-query q-str (db/get-db)))
-             find-mode (cond
+	    (hooks/use-effect!
+	     (fn []
+	       (let [q-str (get-q _block)
+	             blocks-query? (some? (re-find #"(between|property|private-property|todo|task|priority|page|\"[^\"]+\")" q-str))
+	             find-mode (cond
                          blocks-query?
                          :block
                          (false? blocks-query?)
@@ -586,9 +598,8 @@
                                   (if (string? result)
                                     (util/format "\"%s\"" result)
                                     (str result))))
-                            repo (state/get-current-repo)
-                            block (db/entity [:block/uuid (:block/uuid _block)])]
-                        (editor-handler/save-block! repo (:block/uuid block) q)))))
+                            repo (state/get-current-repo)]
+                        (editor-handler/save-block! repo (:block/uuid _block) q)))))
        #(remove-watch *tree :updated))
      [_block *tree])
     [:div.cp__query-builder

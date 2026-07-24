@@ -1,53 +1,45 @@
 (ns frontend.flows
-  "This ns contains some event flows."
+  "Shared reactive app values backed by atoms."
   (:require [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.util :as mobile-util]
-            [malli.core :as ma]
-            [missionary.core :as m]))
+            [frontend.rfx :as rfx]))
 
-;; Some Input Atoms
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defonce ^:private *sub-atoms
+  (atom {}))
 
-(def *current-repo (atom nil))
+(defn sub-atom
+  [sub]
+  (or (get @*sub-atoms sub)
+      (let [state* (atom (get-in (rfx/snapshot) sub))
+            listener-id (random-uuid)]
+        (rfx/listen!
+         listener-id
+         (fn [_db]
+           (let [value (get-in (rfx/snapshot) sub)]
+             (when-not (= @state* value)
+               (reset! state* value)))))
+        (swap! *sub-atoms assoc sub state*)
+        state*)))
 
-(def ^:private current-login-user-schema
-  [:or
-   [:= :logout]
-   [:map
-    [:email :string]
-    [:sub :string]
-    [:cognito:username :string]]])
-
-(def ^:private current-login-user-validator (ma/validator current-login-user-schema))
-(def *current-login-user (atom nil :validator current-login-user-validator))
-
-(def *network-online? (atom true))
-
-;; Public Flows
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(def current-repo-flow
+(def current-repo
   "Like get-current-repo."
-  (m/eduction
-   (dedupe)
-   (m/watch *current-repo)))
+  (sub-atom [:git/current-repo]))
 
-(def current-login-user-flow
-  (m/eduction
-   (dedupe)
-   (m/watch *current-login-user)))
+(def current-login-user
+  (sub-atom [:auth/current-login-user]))
 
-(def document-visibility-state-flow
-  (->> (m/observe
-        (fn ctor [emit!]
-          (let [callback-fn #(emit! js/document.visibilityState)]
-            (.addEventListener ^js js/document "visibilitychange" callback-fn)
-            (callback-fn)
-            (fn dtor [] (.removeEventListener ^js js/document "visibilitychange" callback-fn)))))
-       (m/eduction (dedupe))
-       (m/relieve)))
+(def document-visibility-state
+  (let [document (some-> js/globalThis .-document)
+        state* (atom (some-> document .-visibilityState))
+        callback-fn #(reset! state* (some-> document .-visibilityState))]
+    (some-> document (.addEventListener "visibilitychange" callback-fn))
+    state*))
 
-(def network-online-event-flow
+(def network-online?
   (if (mobile-util/native-platform?)
-    (m/eduction (map :connected) mobile-flows/mobile-network-status-flow)
-    (m/watch *network-online?)))
+    (let [state* (atom (:connected (js->clj @mobile-flows/*mobile-network-status :keywordize-keys true)))]
+      (add-watch mobile-flows/*mobile-network-status ::network-online
+                 (fn [_ _ _ status]
+                   (reset! state* (:connected (js->clj status :keywordize-keys true)))))
+      state*)
+    (sub-atom [:network/online?])))

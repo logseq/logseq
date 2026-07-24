@@ -5,7 +5,6 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [datascript.impl.entity :as de]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -17,6 +16,7 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.common.idb :as idb]
             [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -398,7 +398,7 @@
   (when-let [pid (keyword (:id plugin-metadata))]
     (some->> plugin-metadata
       (normalize-plugin-metadata)
-      (swap! state/state update-in [:plugin/installed-plugins] assoc pid))))
+      (state/swap-state! update-in [:plugin/installed-plugins] assoc pid))))
 
 (defn host-mounted!
   []
@@ -408,17 +408,17 @@
   [pid [cmd actions]]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/installed-slash-commands pid]
+      (state/swap-state! update-in [:plugin/installed-slash-commands pid]
         (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
       (state/pub-event! [:rebuild-slash-commands-list])
       true)))
 
 (defn unregister-plugin-slash-command
   ([pid]
-   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+   (state/swap-state! medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
    (state/pub-event! [:rebuild-slash-commands-list]))
   ([pid cmd]
-   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid) cmd])
+   (state/swap-state! medley/dissoc-in [:plugin/installed-slash-commands (keyword pid) cmd])
    (state/pub-event! [:rebuild-slash-commands-list])))
 
 (def keybinding-mode-handler-map
@@ -460,15 +460,15 @@
   [pid {:keys [type] :as cmd} action]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/simple-commands pid]
+      (state/swap-state! update-in [:plugin/simple-commands pid]
         (fnil conj []) [type cmd action pid])
       true)))
 
 (defn unregister-plugin-simple-command
   ([pid]
-   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+   (state/swap-state! medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
   ([pid key]
-   (swap! state/state update-in [:plugin/simple-commands (keyword pid)]
+   (state/swap-state! update-in [:plugin/simple-commands (keyword pid)]
      (fn [commands]
        (->> commands
             (remove #(= key (:key (second %))))
@@ -480,13 +480,13 @@
     (when (contains? (:plugin/installed-plugins @state/state) pid)
       (let [items (or (get-in @state/state [:plugin/installed-ui-items pid]) [])
             items (filter #(not= key (:key (second %))) items)]
-        (swap! state/state assoc-in [:plugin/installed-ui-items pid]
+        (state/swap-state! assoc-in [:plugin/installed-ui-items pid]
           (conj items [type opts pid])))
       true)))
 
 (defn unregister-plugin-ui-items
   [pid]
-  (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
+  (state/swap-state! assoc-in [:plugin/installed-ui-items (keyword pid)] []))
 
 (declare *route-renderer-providers schedule-route-renderer-refresh!)
 
@@ -497,7 +497,7 @@
       (let [path [:plugin/installed-resources pid type]]
         ;; TODO: conditions
         ;; (when (contains? #{:error nil} (get-in @state/state (conj path key))))
-        (swap! state/state update-in path
+        (state/swap-state! update-in path
           (fnil assoc {}) key (merge opts {:pid pid}))
         true))))
 
@@ -506,7 +506,7 @@
   (when-let [pid (keyword pid)]
     (when-let [type (and key (keyword type))]
       (let [path [:plugin/installed-resources pid type]]
-        (swap! state/state
+        (state/swap-state!
           (fn [state]
             (let [resources (get-in state path)
                   resources' (some-> resources (dissoc key))]
@@ -519,7 +519,7 @@
   [pid]
   (when-let [pid (keyword pid)]
     (let [had-routes? (contains? @*route-renderer-providers pid)]
-      (swap! state/state medley/dissoc-in [:plugin/installed-resources pid])
+      (state/swap-state! medley/dissoc-in [:plugin/installed-resources pid])
       (swap! *route-renderer-providers disj pid)
       (when had-routes?
         (schedule-route-renderer-refresh!)))
@@ -779,16 +779,15 @@
 
 (defn serialize-property-value-for-plugin
   "Serialize a property value so it survives `clj->js`.
-   Datascript Entity implements `IEncodeJS` as returning nil,
-   so raw entities would become null in JS.  This fn converts:
-     - Entity       → {:uuid \"...\" :title \"...\"}  (js object)
-     - Set/coll of entities → JS array of the above
+   This fn converts:
+     - Block maps   → {:uuid \"...\" :title \"...\"}  (js object)
+     - Set/coll of block maps → JS array of the above
      - keyword      → \":ns/name\" string
      - uuid         → string
      - other values → as-is"
   [v]
   (cond
-    (de/entity? v)
+    (and (map? v) (or (:block/uuid v) (:block/title v) (:db/id v)))
     (let [m (cond-> {}
               (:block/uuid v)  (assoc :uuid (str (:block/uuid v)))
               (:block/title v) (assoc :title (:block/title v)))]
@@ -797,7 +796,8 @@
     (set? v)
     (mapv serialize-property-value-for-plugin v)
 
-    (and (sequential? v) (some de/entity? v))
+    (and (sequential? v)
+         (some #(and (map? %) (or (:block/uuid %) (:block/title %) (:db/id %))) v))
     (mapv serialize-property-value-for-plugin v)
 
     (keyword? v)
@@ -1192,7 +1192,7 @@
 ;; components
 (hsx/defc lsp-indicator
   []
-  (let [text (or (state/use-sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
+  (let [text (or (rfx/use-sub [:plugin/indicator-text]) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col
@@ -1205,7 +1205,7 @@
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
-    (.render (rdc/createRoot el) (lsp-indicator)))
+    (.render (rdc/createRoot el) (rfx/provider (lsp-indicator))))
 
   (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
@@ -1247,7 +1247,7 @@
                                           (unregister-plugin-themes pid)
                                           (remove-pinned-toolbar-items-of-plugin! pid)
                                           ;; plugins
-                                          (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
+                                          (state/swap-state! medley/dissoc-in [:plugin/installed-plugins pid])
                                           ;; commands
                                           (clear-commands! pid))))
 
@@ -1267,7 +1267,7 @@
                                     (unregister-plugin-themes pid)))
 
                   (.on "themes-changed" (fn [^js themes]
-                                          (swap! state/state assoc :plugin/installed-themes
+                                          (state/swap-state! assoc :plugin/installed-themes
                                             (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
                   (.on "theme-selected" (fn [^js theme]

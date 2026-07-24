@@ -1715,239 +1715,37 @@ let process_comment invoke_config repo graph agent_name config master_session
         in
         pure { block = comment_block; session = Some session }
 
-let transit_cache_code_digits = 44
-let transit_cache_base = Char.code '0'
-
-type transit_reader = { mutable cache : string array }
-
-let transit_cache_code_index text =
-  match String.length text with
-  | 2 -> Some (Char.code text.[1] - transit_cache_base)
-  | 3 ->
-      Some
-        (((Char.code text.[1] - transit_cache_base) * transit_cache_code_digits)
-        + (Char.code text.[2] - transit_cache_base))
-  | _ -> None
-
-let transit_cache_code text =
-  String.length text >= 2
-  && String.length text <= 3
-  && text.[0] = '^'
-  && text <> "^ "
-
-let transit_remember reader text =
-  if String.length text > 3 then
-    reader.cache <- Array.append reader.cache [| text |]
-
-let transit_lookup reader text =
-  match transit_cache_code_index text with
-  | Some index when index >= 0 && index < Array.length reader.cache ->
-      Some reader.cache.(index)
-  | _ -> None
-
-let transit_drop_prefix text = String.sub text 2 (String.length text - 2)
-
-let rec decode_transit_string reader ?(cache_string_key = false)
-    ?(remember_value = true) text =
-  if transit_cache_code text then
-    match transit_lookup reader text with
-    | Some text ->
-        decode_transit_string reader ~cache_string_key ~remember_value:false
-          text
-    | None -> Edn_util.string text
-  else if text = "" then Edn_util.string text
-  else if text.[0] <> '~' then (
-    if cache_string_key && remember_value then transit_remember reader text;
-    Edn_util.string text)
-  else if String.length text = 1 then Edn_util.string text
-  else
-    match text.[1] with
-    | '~' | '^' | '`' ->
-        Edn_util.string (String.sub text 1 (String.length text - 1))
-    | '_' when String.length text = 2 -> Edn_util.nil
-    | '?' -> (
-        match transit_drop_prefix text with
-        | "t" -> Edn_util.bool true
-        | "f" -> Edn_util.bool false
-        | _ -> Edn_util.string text)
-    | ':' ->
-        if remember_value then transit_remember reader text;
-        Edn_util.keyword (transit_drop_prefix text)
-    | '$' ->
-        if remember_value then transit_remember reader text;
-        Edn_util.any (Melange_edn_melange.symbol (transit_drop_prefix text))
-    | 'u' -> Edn_util.uuid (transit_drop_prefix text)
-    | _ -> Edn_util.string text
-
-let decode_transit_tag reader text =
-  let raw =
-    if transit_cache_code text then transit_lookup reader text else Some text
-  in
-  match raw with
-  | Some raw when String.length raw >= 3 && String.sub raw 0 2 = "~#" ->
-      if not (transit_cache_code text) then transit_remember reader raw;
-      Some (String.sub raw 2 (String.length raw - 2))
-  | _ -> None
-
-let rec normalize_transit_value reader value =
-  match Edn_util.as_string value with
-  | Some text -> decode_transit_string reader text
-  | None -> (
-      match Edn_util.as_vector value with
-      | Some values when Vec.length values = 2 -> (
-          let tag_value = Vec.nth values 0 in
-          let rep = Vec.nth values 1 in
-          match
-            Option.bind
-              (Edn_util.as_string tag_value)
-              (decode_transit_tag reader)
-          with
-          | Some "set" ->
-              normalize_transit_rep_values reader rep |> Edn_util.set
-          | Some "list" ->
-              normalize_transit_rep_values reader rep |> Edn_util.list
-          | Some tag ->
-              Edn_util.any
-                (Melange_edn_melange.tagged tag
-                   (normalize_transit_value reader rep))
-          | None -> normalize_transit_vector reader values)
-      | Some values -> normalize_transit_vector reader values
-      | None -> value)
-
-and normalize_transit_rep_values reader rep =
-  match Edn_util.as_seq rep with
-  | Some values ->
-      values |> Vec.map (normalize_transit_value reader) |> Vec.to_list
-  | None -> [ normalize_transit_value reader rep ]
-
-and normalize_transit_vector reader values =
-  match Vec.pop_front values with
-  | Some (first, rest) when Edn_util.as_string first = Some "^ " ->
-      normalize_transit_map reader rest
-  | _ -> Edn_util.vector_vec (values |> Vec.map (normalize_transit_value reader))
-
-and normalize_transit_map reader flat =
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | Some (key, remaining) when not (Vec.is_empty remaining) ->
-        let value, rest =
-          match Vec.pop_front remaining with
-          | Some pair -> pair
-          | None -> failwith "non-empty vector must have a front value"
-        in
-        let key =
-          match Edn_util.as_string key with
-          | Some text ->
-              decode_transit_string reader ~cache_string_key:true text
-          | None -> normalize_transit_value reader key
-        in
-        let value = normalize_transit_value reader value in
-        loop (Vec.push_back acc (key, value)) rest
-    | _ -> Edn_util.map_vec acc
-  in
-  loop Vec.empty flat
-
-let normalize_event_payload payload =
-  let raw =
-    match Edn_util.as_string payload with
-    | Some text -> (
-        try Json_util.value_of_json_string text with _ -> payload)
-    | None -> payload
-  in
-  let normalized = normalize_transit_value { cache = [||] } raw in
-  match Edn_util.as_vector normalized with
-  | Some values when Vec.length values = 2 -> Vec.nth values 1
-  | _ -> normalized
-
-let datom_vector datom =
-  match datom with
-  | Melange_edn_melange.Any
-      (Melange_edn_melange.Tagged ("datascript/Datom", value)) ->
-      Edn_util.as_vector value
-  | _ -> Edn_util.as_vector datom
-
-let datom_index datom index =
-  match datom_vector datom with
-  | Some values -> Vec.nth_opt values index
-  | None -> None
-
-let datom_attr datom =
-  match Edn_util.get_string datom "a" with
-  | Some attr -> Some (strip_keyword_prefix attr)
-  | None ->
-      Option.bind (datom_index datom 1) Edn_util.as_string_like
-      |> Option.map strip_keyword_prefix
-
-let datom_value_string datom =
-  match Edn_util.get_string datom "v" with
-  | Some value -> Some value
-  | None -> Option.bind (datom_index datom 2) Edn_util.as_string_like
-
-let datom_added datom =
-  match Edn_util.get_bool datom "added" with
-  | Some added -> added
-  | None -> (
-      match Option.bind (datom_index datom 4) Edn_util.as_bool with
-      | Some false -> false
-      | _ -> true)
-
-let datom_entity_id datom =
-  match Edn_util.get_int64 datom "e" with
-  | Some id -> Some id
-  | None -> (
-      match Edn_util.get_int64 datom "db/id" with
-      | Some id -> Some id
-      | None -> Option.bind (datom_index datom 0) Edn_util.as_int64)
-
-let comment_title_datom datom agent_name =
-  datom_added datom
-  && datom_attr datom = Some "block/title"
-  &&
-  match datom_value_string datom with
-  | Some title ->
-      String.trim agent_name <> ""
-      && (string_contains ~needle:("[[" ^ agent_name ^ "]]") title
-         || string_contains ~needle:"[[" title)
-  | None -> false
-
-let sync_payload_tx_data payload =
-  let payload = normalize_event_payload payload in
-  value_list (Edn_util.get payload "tx-data")
-
-let route_comment_datom invoke_config repo graph agent_name config
-    master_session datom =
+let route_comment_candidate invoke_config repo graph agent_name config
+    master_session block_id =
   let open Cli_effect in
   let ( let* ) = bind in
-  match datom_entity_id datom with
-  | None -> pure None
-  | Some block_id ->
-      let* comment_block = pull_comment_block invoke_config repo block_id in
-      if comment_block_matches comment_block agent_name then
-        let* routed =
-          process_comment invoke_config repo graph agent_name config
-            master_session comment_block
-        in
-        pure (Some routed)
-      else pure None
+  let* comment_block = pull_comment_block invoke_config repo block_id in
+  if comment_block_matches comment_block agent_name then
+    let* routed =
+      process_comment invoke_config repo graph agent_name config master_session
+        comment_block
+    in
+    pure (Some routed)
+  else pure None
 
-let route_comment_datoms invoke_config repo graph agent_name config
-    master_session payload =
+let comment_candidate_ids payload =
+  value_list (Edn_util.get payload "comment-route-candidate-ids")
+  |> Vec.filter_map Edn_util.as_int64
+
+let route_comment_candidates invoke_config repo graph agent_name config
+    master_session candidate_ids =
   let open Cli_effect in
-  let datoms =
-    sync_payload_tx_data payload
-    |> Vec.filter (fun datom -> comment_title_datom datom agent_name)
-  in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure acc
-    | Some (datom, rest) ->
+    | Some (block_id, rest) ->
         bind
-          (route_comment_datom invoke_config repo graph agent_name config
-             master_session datom) (function
+          (route_comment_candidate invoke_config repo graph agent_name config
+             master_session block_id) (function
           | Some routed -> loop (Vec.push_back acc routed) rest
           | None -> loop acc rest)
   in
-  loop Vec.empty datoms
+  loop Vec.empty candidate_ids
 
 let parent_block_id block =
   match Edn_util.get block "block/parent" with
@@ -2043,17 +1841,10 @@ let process_task invoke_config repo graph agent_name config master_session block
 
 let process_tasks invoke_config repo graph agent_name config master_session
     tasks =
-  let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure acc
-    | Some (block, rest) ->
-        bind
-          (process_task invoke_config repo graph agent_name config
-             master_session block) (fun routed ->
-            loop (Vec.push_back acc routed) rest)
-  in
-  loop Vec.empty tasks
+  Cli_effect.all
+    (Vec.map
+       (process_task invoke_config repo graph agent_name config master_session)
+       tasks)
 
 let bridge_log_line message = Time.rfc3339_millis (Time.now ()) ^ " " ^ message
 
@@ -2283,9 +2074,10 @@ let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
           let process_graph_changes event_type payload =
             if event_type = sync_db_changes_event_type then (
               emit_bridge_log mode "got graph changes: sync-db-changes";
+              let candidate_ids = comment_candidate_ids payload in
               let* _routed_comments =
-                route_comment_datoms invoke_config repo graph agent_name config
-                  master_session payload
+                route_comment_candidates invoke_config repo graph agent_name
+                  config master_session candidate_ids
               in
               let* _routed_tasks =
                 route_current_tasks invoke_config repo graph agent_name config

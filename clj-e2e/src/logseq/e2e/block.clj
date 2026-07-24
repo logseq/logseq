@@ -56,8 +56,7 @@
                     {:current-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")
                      :last-id last-id}
                     e))
-            (do (prn :retry-new-block title)
-                (new-block title true))))))))
+            (new-block title true)))))))
 
 ;; TODO: support tree
 (defn new-blocks
@@ -119,11 +118,11 @@
 (defn toggle-property
   [property-title property-value]
   (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
-  (w/fill ".ls-property-dialog .ls-property-input input" property-title)
+  (w/fill ".ls-property-dialog .cp__select-input" property-title)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-title))
   (k/enter)
   (util/wait-timeout 100)
-  (w/click (w/-query ".ls-property-dialog .ls-property-input input"))
+  (w/click (w/-query ".ls-property-dialog .cp__select-input"))
   (util/wait-timeout 100)
   (util/input property-value)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-value))
@@ -131,4 +130,5 @@
 
 (defn select-blocks
   [n]
-  (util/repeat-keyboard n "Shift+ArrowUp"))
+  (util/repeat-keyboard n "Shift+ArrowUp")
+  (util/wait-timeout 200))

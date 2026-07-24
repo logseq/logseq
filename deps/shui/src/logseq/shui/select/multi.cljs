@@ -65,8 +65,8 @@
         [search-key1 set-search-key!] (hooks/use-state search-key)
         search-key1' (some-> search-key1 (string/trim) (string/lower-case))
         valid-search-key? (and search-enabled? (not (string/blank? search-key1')))
-        get-content-el #(some-> % (.closest "[data-radix-menu-content]"))
-        get-item-nodes #(some-> % (get-content-el) (.querySelectorAll "[data-radix-collection-item]") (js->clj))
+        get-content-el #(some-> % (.closest ".ui__dropdown-menu-content"))
+        get-item-nodes #(some-> % (get-content-el) (.querySelectorAll ".ui__dropdown-menu-item") (js->clj))
         focus-search-input! (fn [^js target]
                               (when (and search-enabled? (not= "INPUT" (.-nodeName target)))
                                 ;; focus search input
@@ -123,7 +123,7 @@
                            (.stopPropagation e)
                            (case (.-key e)
                              "Escape" (if (string/blank? search-key1)
-                                        (some-> (.-target e) (.closest "[data-radix-menu-content]") (.focus))
+                                        (some-> (.-target e) (.closest ".ui__dropdown-menu-content") (.focus))
                                         (set-search-key! ""))
                              :dune))
             :on-change #(set-search-key! (.-value (.-target %)))}

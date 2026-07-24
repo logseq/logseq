@@ -4,6 +4,7 @@
    [electron.ipc :as ipc]
   [frontend.context.i18n :refer [t]]
    [frontend.handler.notification :as notification]
+   [frontend.rfx :as rfx]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -15,8 +16,8 @@
 
 (hsx/defc panel-of-tokens
   [close-panel]
-  (let [server-state (state/use-sub :electron/server)
-        [tokens set-tokens!] (hooks/use-state (get-in @state/state [:electron/server :tokens]))
+  (let [server-state (rfx/use-sub [:electron/server])
+        [tokens set-tokens!] (hooks/use-state (:tokens server-state))
         changed? (not= tokens (:tokens server-state))]
     [:div.cp__server-tokens-panel.pt-6
      [:h2.text-3xl.-translate-y-4 (t :server.token/title)]
@@ -62,8 +63,8 @@
 
 (hsx/defc panel-of-configs
   [close-panel]
-  (let [server-state (state/use-sub :electron/server)
-        [configs set-configs!] (hooks/use-state (:electron/server @state/state))
+  (let [server-state (rfx/use-sub [:electron/server])
+        [configs set-configs!] (hooks/use-state server-state)
         {:keys [host port autostart]} configs
         hp-changed?  (or (not= host (:host server-state))
                          (not= (util/safe-parse-int (or port 0))

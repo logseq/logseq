@@ -1,5 +1,7 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
+            ["react" :as react]
+            ["@tabler/icons-react" :as tabler-icons]
             ["emoji-mart" :refer [SearchIndex]]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
@@ -10,11 +12,12 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [logseq.common.util :as common-util]
             [medley.core :as medley]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
@@ -58,11 +61,11 @@
       (let [asset-type (:logseq.property.asset/type node-entity)
             first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
         (cond
-          (ldb/class? node-entity)
+          (entity/class? node-entity)
           "hash"
-          (ldb/property? node-entity)
+          (entity/property? node-entity)
           "letter-p"
-          (ldb/page? node-entity)
+          (entity/page? node-entity)
           "file"
           (= asset-type "pdf")
           "book"
@@ -93,7 +96,7 @@
   []
   (if @*tabler-icons
     @*tabler-icons
-    (let [result (->> (keys (bean/->clj js/tablerIcons))
+    (let [result (->> (keys (bean/->clj tabler-icons))
                       (map (fn [k]
                              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
                                  (string/replace-first "Icon " ""))))
@@ -121,7 +124,7 @@
   [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
    (when-let [icon' (cond-> icon' (string? icon') (string/replace " " ""))]
-     {:key icon'
+     {:key (str "tabler-icon-" icon')
       :tabIndex "0"
       :title icon'
       :on-click (fn [e]
@@ -140,7 +143,8 @@
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
    (cond->
-    {:tabIndex "0"
+    {:key (str "emoji-" id)
+     :tabIndex "0"
      :title name
      :on-click (fn [e]
                  (on-chosen e (assoc emoji :type :emoji)))
@@ -159,6 +163,21 @@
     (icon-cp (if (string? item) item (:id item)) opts)
     (emoji-cp item opts)))
 
+(defn- item-render-key
+  [item idx]
+  (str (cond
+         (string? item) "tabler-icon"
+         (:type item) (name (:type item))
+         :else "item")
+       "-"
+       (or (:id item) item idx)))
+
+(defn- keyed-item-render
+  [idx item opts]
+  (react/cloneElement
+   (item-render item opts)
+   #js {:key (item-render-key item idx)}))
+
 (hsx/defc pane-section
   [label items & {:keys [searching? virtual-list?]
                   :or {virtual-list? true}
@@ -172,29 +191,23 @@
      [:div.hd.px-1.pb-1.leading-none
       [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
      (if virtual-list?
-       (let [total (count items)
-             step 9
-             rows (quot total step)
-             mods (mod total step)
-             rows (if (zero? mods) rows (inc rows))
-             items (vec items)]
-         (ui/virtualized-list
-          (cond-> {:total-count rows
-                   :item-content (fn [idx]
-                                   (icons-row
-                                    (let [last? (= (dec rows) idx)
-                                          start (* idx step)
-                                          end (* (inc idx) (if (and last? (not (zero? mods))) mods step))
-                                          icons (try (subvec items start end)
-                                                     (catch js/Error e
-                                                       (js/console.error e)
-                                                       nil))]
-                                      (mapv #(item-render % opts) icons))))}
+       (let [items-per-row 9
+             rows (vec (partition-all items-per-row items))]
+          (ui/virtualized-list
+           (cond-> {:total-count (count rows)
+                    :item-content (fn [idx]
+                                    (icons-row
+                                     (map-indexed
+                                      (fn [item-idx item]
+                                        (keyed-item-render item-idx item opts))
+                                      (nth rows idx []))))}
 
-            searching?
-            (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
+             searching?
+             (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
        [:div.its
-        (map #(item-render % opts) items)])]))
+        (map-indexed (fn [idx item]
+                       (keyed-item-render idx item opts))
+                     items)])]))
 
 (defn- normalize-tabs
   [tabs default-tab]
@@ -232,6 +245,7 @@
   [m]
   (let [s (some->> (or (get-used-items) [])
                    (take 24)
+                   (common-util/distinct-by #(str (:type %) ":" (:id %)))
                    (filter #(not= m %))
                    (cons m))]
     (storage/set :ui/ls-icons-used s)))
@@ -257,7 +271,7 @@
         icon-items (take 48 (get-tabler-icons))
         opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
-     (when (count used-items)
+     (when (seq used-items)
        (pane-section (t :ui/frequently-used) used-items opts))
      (pane-section (t :icon/emojis-count (count emojis))
                    emoji-items
@@ -332,16 +346,17 @@
 (hsx/defc color-picker
   [*color on-select!]
   (let [[color, set-color!] (hooks/use-state @*color)
+        [open? set-open!] (hooks/use-state false)
         *el (hooks/use-ref nil)
         content-fn (fn []
                      (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
                                    "#f2be00" "#e47a00" "#f38e81" "#fb434c" nil]]
-                       [:div.color-picker-presets
+                       [:div.color-picker-presets.p-2
                         (for [c colors]
                           (shui/button
                            {:on-click (fn [] (set-color! c)
                                         (some-> on-select! (apply [c]))
-                                        (shui/popup-hide!))
+                                        (set-open! false))
                             :size :sm :variant :outline
                             :class "it" :style {:background-color c}}
                            (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
@@ -354,17 +369,19 @@
        (reset! *color color))
      [color])
 
-    (shui/button {:size :sm
-                  :ref *el
-                  :class "color-picker"
-                  :on-pointer-down (fn [^js e]
-                                     (util/stop e)
-                                     (shui/popup-show! (.-target e) content-fn
-                                                       {:id :icons-color-picker
-                                                        :content-props {:side-offset 6}}))
-                  :variant :outline}
-                 [:strong {:style {:color (or color "inherit")}}
-                  (shui/tabler-icon "palette")])))
+    (shui/popover
+      {:open open?
+       :onOpenChange (fn [a] (set-open! a))}
+      (shui/popover-trigger
+        (shui/button {:size :sm
+                      :ref *el
+                      :class "color-picker"
+                      :variant :outline}
+          [:strong {:style {:color (or color "inherit")}}
+           (shui/tabler-icon "palette")]))
+      (shui/popover-content
+        {:id :icons-color-picker}
+        (content-fn)))))
 
 (hsx/defc ^:large-vars/cleanup-todo icon-search
   [{:keys [on-chosen del-btn? color-auto-chosen? icon-value] :as opts}]
@@ -526,10 +543,11 @@
                     "font-normal text-sm px-[0.5px] text-muted-foreground hover:text-foreground")
          :on-click (fn [^js e]
                      (when-not disabled?
-                       (shui/popup-show! (.-target e) content-fn
+                       (shui/popup-show! (.-currentTarget e) content-fn
                                          (medley/deep-merge
                                           {:align :start
                                            :id :ls-icon-picker
+                                           :force-popover? true
                                            :content-props {:class "ls-icon-picker"
                                                            :onEscapeKeyDown #(.preventDefault %)}}
                                           popup-opts))))}

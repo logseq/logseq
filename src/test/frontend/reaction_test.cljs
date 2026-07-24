@@ -1,22 +1,11 @@
 (ns frontend.reaction-test
-  (:require [cljs.test :refer [deftest is testing use-fixtures]]
-            [frontend.reaction :as reaction]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
-
-(use-fixtures :each {:before test-helper/start-test-db!
-                     :after test-helper/destroy-test-db!})
+  (:require [cljs.test :refer [deftest is testing]]
+            [frontend.reaction :as reaction]))
 
 (deftest summarize-usernames
   (testing "collects unique usernames per emoji"
-    (load-test-files
-     [{:page {:block/title "Alice"
-              :build/properties {:logseq.property.user/email "alice@example.com"
-                                 :logseq.property.user/name "alice"}}}
-      {:page {:block/title "Bob"
-              :build/properties {:logseq.property.user/email "bob@example.com"
-                                 :logseq.property.user/name "bob"}}}])
-    (let [alice (select-keys (test-helper/find-page-by-title "Alice") [:db/id])
-          bob (select-keys (test-helper/find-page-by-title "Bob") [:db/id])
+    (let [alice {:db/id 1 :block/title "Alice"}
+          bob {:db/id 2 :block/title "Bob"}
           reactions [{:logseq.property.reaction/emoji-id "+1"
                       :logseq.property/created-by-ref alice}
                      {:logseq.property.reaction/emoji-id "+1"
@@ -28,3 +17,14 @@
       (is (= "+1" (:emoji-id item)))
       (is (= ["Alice" "Bob"] (:usernames item)))
       (is (= 3 (:count item))))))
+
+(deftest summarize-identifies-current-user-by-uuid
+  (let [current-user-uuid (random-uuid)
+        reactions [{:logseq.property.reaction/emoji-id "+1"
+                    :logseq.property/created-by-ref
+                    {:db/id 42
+                     :block/uuid current-user-uuid
+                     :block/title "Current user"}}]
+        summary (reaction/summarize reactions current-user-uuid)]
+    (is (true? (:reacted-by-me? (first summary)))
+        "Reaction payloads should identify the current user without another DB lookup.")))

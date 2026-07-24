@@ -3,9 +3,6 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
             [frontend.handler.assets :as assets-handler]
             [frontend.loader :refer [load]]
             [frontend.state :as state]
@@ -20,6 +17,8 @@
 ;; sidebars
 (def *left-sidebar-resized-at (atom (js/Date.now)))
 (def *right-sidebar-resized-at (atom (js/Date.now)))
+
+(def ^:private <invoke-db-worker state/<invoke-db-worker)
 
 (defn persist-right-sidebar-width!
   [width]
@@ -78,15 +77,8 @@
 
 (defn re-render-root!
   ([]
-   (re-render-root! {}))
-  ([{:keys [clear-query-state?]
-     :or {clear-query-state? true}}]
-   {:post [(nil? %)]}
-   (when clear-query-state?
-     (react/clear-query-state!))
-   (doseq [component (keys @react/component->query-key)]
-     (when (fn? component)
-       (component)))
+   nil)
+  ([_opts]
    nil))
 
 (defn highlight-element!
@@ -105,12 +97,26 @@
         (js/setTimeout #(dom/remove-class! element "block-highlight")
                        4000)))))
 
+(defn <get-file-content
+  [repo path]
+  (state/<invoke-db-worker :thread-api/get-file-content repo path))
+
+(defn- <pull-anchor-block
+  [repo anchor-id]
+  (<invoke-db-worker :thread-api/pull repo [:db/id :block/uuid] [:block/uuid anchor-id]))
+
+(defn- <get-block-parents
+  [repo db-id]
+  (<invoke-db-worker :thread-api/get-block-parents repo db-id 3))
+
 (defn add-style-if-exists!
   []
-  (when-let [style (or (state/get-custom-css-link)
-                       (db-model/get-custom-css))]
-    (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
-      (util/add-style! style))))
+  (p/let [style (or (state/get-custom-css-link)
+                    (when-let [repo (state/get-current-repo)]
+                      (<get-file-content repo "logseq/custom.css")))]
+    (when style
+      (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
+        (util/add-style! style)))))
 
 (defn reset-custom-css!
   []
@@ -153,8 +159,10 @@
             (load href #(do (js/console.log "[custom js]" href) (execed))))
 
           :else
-          (when-let [script (db/get-file href)]
-            (exec-fn script)))))))
+          (p/let [script (when-let [repo (state/get-current-repo)]
+                           (<get-file-content repo href))]
+            (when script
+              (exec-fn script))))))))
 
 (defn toggle-wide-mode!
   []
@@ -234,7 +242,7 @@
 
 (defn toggle-cards!
   []
-  (if (shui-dialog/get-modal :srs)
+  (if (shui-dialog/get-dialog :srs)
     (shui/dialog-close!)
     (state/pub-event! [:modal/show-cards])))
 
@@ -262,28 +270,27 @@
         block-ids (if editing-block
                     (conj selected-ids (:block/uuid editing-block))
                     selected-ids)
-        *state (:ui/show-empty-and-hidden-properties? @state/state)
-        {:keys [ids mode show?]} @*state]
+        {:keys [ids mode show?]} (state/get-state :ui/show-empty-and-hidden-properties?)]
     (if (seq block-ids)
       (let [block-ids' (set block-ids)]
-        (reset! *state
-                {:mode :block
-                 :ids block-ids'
-                 :show? (cond
-                          (= mode :global)
-                          true
-                          (not= ids block-ids')
-                          true
-                          :else
-                          (not show?))}))
-      (reset! *state
-              {:mode :global
-               :show? (if (= mode :block)
-                        true
-                        (not show?))}))))
+        (state/set-state! :ui/show-empty-and-hidden-properties?
+                          {:mode :block
+                           :ids block-ids'
+                           :show? (cond
+                                    (= mode :global)
+                                    true
+                                    (not= ids block-ids')
+                                    true
+                                    :else
+                                    (not show?))}))
+      (state/set-state! :ui/show-empty-and-hidden-properties?
+                        {:mode :global
+                         :show? (if (= mode :block)
+                                  true
+                                  (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [^js ref blocks gallery?]
+  [^js ref rows gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))
@@ -291,20 +298,26 @@
                         (when (util/uuid-string? id)
                           (uuid id))))]
       (when (and ref anchor-id)
-        (let [block-ids (map :block/uuid blocks)
+        (let [block-ids (mapv (fn [row]
+                                (if (uuid? row) row (:block/uuid row)))
+                              rows)
               find-idx (fn [anchor-id]
                          (let [idx (.indexOf block-ids anchor-id)]
                            (when (pos? idx) idx)))
-              idx (or (find-idx anchor-id)
-                      (let [block (db/entity [:block/uuid anchor-id])
-                            parents (map :block/uuid (db/get-block-parents (state/get-current-repo) (:block/uuid block) {}))]
-                        (some find-idx parents)))]
-          (when idx
-            (js/setTimeout
-             (fn []
-               (.scrollToIndex ref #js {:index idx})
-               ;; wait until this block has been rendered.
-               (js/setTimeout #(highlight-element! anchor) 200))
-             ;; BUG: grid scrollToIndex not working in useEffect on first render
-             ;; https://github.com/petyosi/react-virtuoso/issues/757
-             (if gallery? 100 0))))))))
+              scroll-to-idx! (fn [idx]
+                               (js/setTimeout
+                                (fn []
+                                  (.scrollToIndex ref #js {:index idx})
+                                  ;; wait until this block has been rendered.
+                                  (js/setTimeout #(highlight-element! anchor) 200))
+                                ;; BUG: grid scrollToIndex not working in useEffect on first render
+                                ;; https://github.com/petyosi/react-virtuoso/issues/757
+                                (if gallery? 100 0)))]
+          (if-let [idx (find-idx anchor-id)]
+            (scroll-to-idx! idx)
+            (when-let [repo (state/get-current-repo)]
+              (p/let [block (<pull-anchor-block repo anchor-id)
+                      parents (when-let [db-id (:db/id block)]
+                                (<get-block-parents repo db-id))]
+                (when-let [idx (some find-idx (map :block/uuid parents))]
+                  (scroll-to-idx! idx))))))))))

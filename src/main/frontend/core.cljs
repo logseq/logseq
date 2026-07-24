@@ -12,7 +12,9 @@
             [frontend.handler.route :as route-handler]
             [frontend.log]
             [frontend.page :as page]
+            [frontend.rfx :as rfx]
             [frontend.routes :as routes]
+            [frontend.runtime.globals :as runtime-globals]
             [frontend.spec]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -69,31 +71,69 @@
 
 (defonce root (rdc/createRoot (.getElementById js/document "root")))
 
+(defonce ^:private *css-hot-reload-installed? (atom false))
+
+(defn- app-style-link
+  []
+  (some
+   (fn [^js link]
+     (let [url (js/URL. (.-href link))]
+       (when (contains? #{"css/style.css" "static/css/style.css"}
+                        (subs (.-pathname url) 1))
+         link)))
+   (array-seq (.querySelectorAll js/document "link[rel~='stylesheet']"))))
+
+(defn- stylesheet-signature
+  [^js link]
+  (some-> (.-href link)
+          (js/fetch #js {:method "HEAD" :cache "no-store"})
+          (.then (fn [^js response]
+                   (let [headers (.-headers response)]
+                     (str (.get headers "last-modified")
+                          ":"
+                          (.get headers "content-length")))))))
+
+(defn- refresh-stylesheet!
+  [^js link]
+  (let [url (js/URL. (.-href link))]
+    (.set (.-searchParams url) "v" (str (js/Date.now)))
+    (set! (.-href link) (str url))))
+
+(defn- install-css-hot-reload! []
+  (when (and config/dev?
+             (compare-and-set! *css-hot-reload-installed? false true))
+    (let [*signature (atom nil)
+          *reload-timeout (atom nil)]
+      (js/setInterval
+       (fn []
+         (when-let [link (app-style-link)]
+           (-> (stylesheet-signature link)
+               (.then
+                (fn [signature]
+                  (when (seq signature)
+                    (if (nil? @*signature)
+                      (reset! *signature signature)
+                      (when (not= signature @*signature)
+                        (reset! *signature signature)
+                        (when @*reload-timeout
+                          (js/clearTimeout @*reload-timeout))
+                        (reset! *reload-timeout
+                                (js/setTimeout
+                                 #(refresh-stylesheet! link)
+                                 300)))))))
+               (.catch #(js/console.warn "CSS hot reload check failed" %)))))
+       1000))))
+
 (defn ^:export start []
   (when-not (util/capacitor?)
     (when config/dev?
-      (md/start!))
+      (md/start!)
+      (install-css-hot-reload!))
     (set-router!)
 
-    (.render ^js root (page/current-page))
+    (.render ^js root (rfx/provider (page/current-page)))
 
     (display-welcome-message)))
-
-(comment
-  (def d-entity-count (volatile! 0))
-  (def ident->count (volatile! {}))
-  (def time-sum (volatile! 0))
-  (defn- setup-entity-profile!
-    []
-    (let [origin-d-entity d/entity]
-      (set! d/entity (fn [& args]
-                       (let [{r :result time :time} (util/with-time (apply origin-d-entity args))
-                             k (last args)]
-                         (vswap! d-entity-count inc)
-                         (vswap! ident->count update k inc)
-                         (vswap! time-sum #(+ time %))
-                         (println @d-entity-count (:db/id r) k (get @ident->count k) @time-sum "ms")
-                         r))))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
@@ -101,6 +141,7 @@
   ;; so it is available even in :advanced release builds
 
   ;; (setup-entity-profile!)
+  (runtime-globals/install!)
   (log/info ::init "App started")
   (handler/start! start))
 

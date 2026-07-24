@@ -106,30 +106,6 @@
     container-id
     :unknown-container))
 
-(defn- child-comments-area?
-  [block comments-area]
-  (let [block-id (:db/id block)
-        parent-id (some-> comments-area :block/parent :db/id)]
-    (boolean
-     (and block-id
-          parent-id
-          (= block-id parent-id)))))
-
-(defn comment-threads-for-block
-  [block]
-  (->> (get block :logseq.property.comments/_blocks)
-       (filter comments-area?)
-       (remove #(child-comments-area? block %))
-       (remove :logseq.property/deleted-at)
-       vec))
-
-(defn comment-thread-for-block
-  ([block]
-   (first (comment-threads-for-block block)))
-  ([rendered-block fresh-block]
-   (or (some-> fresh-block comment-thread-for-block)
-       (comment-thread-for-block rendered-block))))
-
 (defn- author-initials
   [author]
   (let [author (string/trim (str author))]
@@ -187,22 +163,9 @@
                     (number? updated-at)
                     (> updated-at created-at)))}))
 
-(defn comment-rows
-  [blocks]
-  (mapv comment-row blocks))
-
 (defn comment-author-visible?
   [current-user-uuid]
   (boolean (uuid-string current-user-uuid)))
-
-(defn comments-summary
-  [blocks]
-  (let [rows (comment-rows blocks)]
-    (when (seq rows)
-      (let [latest (last (sort-by #(or (:created-at %) 0) rows))]
-        {:count (count rows)
-         :latest-author (:author latest)
-         :latest-created-at (:created-at latest)}))))
 
 (defn collapsed-comments-label
   [summary]
@@ -261,14 +224,6 @@
 
          :else
          (t :block.comments/date-at-time (comment-date date) time))))))
-
-(defn comments-render-token
-  [blocks]
-  (mapv (fn [block]
-          [(:block/uuid block)
-           (:block/title block)
-           (:block/updated-at block)])
-        blocks))
 
 (defn comment-draft-block
   [comments-block draft-uuid draft]

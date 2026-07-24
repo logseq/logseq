@@ -7,9 +7,7 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.lifecycle :as lifecycle]
@@ -17,18 +15,19 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.rfx :as rfx]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.entity :as entity]
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -38,8 +37,7 @@
 
 (defn- use-current-edit-content
   []
-  (state/use-sub :editor/content
-                 :path-in-sub-atom (:block/uuid (state/get-edit-block))))
+  (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
 (defn filter-commands
   [page? commands]
@@ -56,13 +54,9 @@
 
 (defn node-render
   [block q {:keys [db-tag?]}]
-  (let [block' (if-let [id (:block/uuid block)]
-                 (if-let [e (db/entity [:block/uuid id])]
-                   (assoc e
-                          :block/title (or (:friendly-title block) (:block/title block) (:block/title e))
-                          :alias (:alias block))
-                   block)
-                 block)]
+  (let [block' (cond-> block
+                 (:friendly-title block)
+                 (assoc :block/title (:friendly-title block)))]
     (when-not (string/blank? (:block/title block'))
       [:div.flex.flex-col
        (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
@@ -96,7 +90,7 @@
 (hsx/defc commands
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
-        page? (db/page? (db/entity (:db/id (state/get-edit-block))))
+        page? (entity/page? (state/get-edit-block))
         matched (or (filter-commands page? matched') no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
     (ui/auto-complete
@@ -160,10 +154,10 @@
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (p/let [page (db/get-page chosen-item)
-                _ (when-not page (page-handler/<create! chosen-item {:redirect? false
-                                                                     :reference? true}))
-                page' (db/get-page chosen-item)
+        (p/let [page (db-async/<get-block (state/get-current-repo) chosen-item {:children? false})
+                page' (or page
+                          (page-handler/<create! chosen-item {:redirect? false
+                                                             :reference? true}))
                 current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
                                                 {:block-uuid (:block/uuid current-block)
@@ -174,35 +168,38 @@
 
 (defn- class-alias?
   [page]
-  (some ldb/class? (:block/_alias page)))
+  (:block/alias-source-page-class? page))
 
-(defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
-  (let [ids (db/page-exists? q (if db-tag?
-                                 #{:logseq.class/Tag}
-                                 ;; Page existence here should be the same as entity-util/page?.
-                                 ;; Don't show 'New page' if a page has any of these tags
-                                 db-class/page-classes))
-        page-exists? (some (fn [id] (nil? (:block/parent (db/entity id)))) ids)]
-    (if (or page-exists?
-            (and db-tag? (class-alias? (db/get-page q))))
-      partial-matched-pages
-      (if db-tag?
-        (concat
-       ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
-         (when-not (let [entity (db/get-page q)]
-                     (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-           [{:block/title (str (t :editor/new-tag) " " q)}])
-         partial-matched-pages)
-        (cons {:block/title (str (t :editor/new-page) " " q)}
-              partial-matched-pages)))))
+(defn- matched-pages-with-new-page [partial-matched-pages db-tag? q exact-page]
+  (when (some? partial-matched-pages)
+    (let [page-exists? (and (nil? (:block/parent exact-page))
+                            (if db-tag?
+                              (entity/class? exact-page)
+                              (entity/page? exact-page)))]
+      (if (or page-exists?
+              (and db-tag? (class-alias? exact-page)))
+        partial-matched-pages
+        (if db-tag?
+          (concat
+           ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
+           (when-not (and (entity/internal-page? exact-page) (= (:block/title exact-page) q))
+             [{:block/title (str (t :editor/new-tag) " " q)}])
+           partial-matched-pages)
+          (cons {:block/title (str (t :editor/new-page) " " q)}
+                partial-matched-pages))))))
 
 (defn- search-pages
-  [q db-tag? set-matched-pages!]
-  (when-not (string/blank? q)
+  [q db-tag? set-matched-pages! set-exact-page!]
+  (if (string/blank? q)
+    (when db-tag?
+      (p/let [classes (db-async/<get-all-classes (state/get-current-repo)
+                                                 {:except-root-class? true})]
+        (set-exact-page! nil)
+        (set-matched-pages! classes)))
     (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
             result (if db-tag?
-                     (let [classes (editor-handler/get-matched-classes q)]
-                       (if (and (ldb/internal-page? block)
+                     (p/let [classes (editor-handler/get-matched-classes q)]
+                       (if (and (entity/internal-page? block)
                                 (= (:block/title block) q)
                                 (not (ldb/built-in? block))
                                 (not (class-alias? block)))
@@ -212,28 +209,30 @@
                                 :convert-page-to-tag? true
                                 :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))
-                     (editor-handler/<get-matched-blocks q {:nlp-pages? true
-                                                            :page-only? false}))]
+                             (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                    :page-only? false}))]
+      (set-exact-page! block)
       (set-matched-pages! result))))
 
 (hsx/defc page-search-aux
   [id format embed? db-tag? q input pos]
   (let [q (string/trim q)
         [matched-pages set-matched-pages!] (hooks/use-state nil)
-        search-f #(search-pages q db-tag? set-matched-pages!)]
+        [exact-page set-exact-page!] (hooks/use-state nil)
+        search-f #(search-pages q db-tag? set-matched-pages! set-exact-page!)]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
-                           (if db-tag?
-                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (date/nlp-pages-i18n :nlp-date? true)
-                                  (take 10)))
+                                   (if db-tag?
+                                     matched-pages
+                                     (->> (date/nlp-pages-i18n :nlp-date? true)
+                                          (take 10)))
                            ;; reorder, shortest and starts-with first.
                            (if (and (seq matched-pages)
-                                    (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
-                             (cons (first matched-pages)
-                                   (matched-pages-with-new-page (rest matched-pages) db-tag? q))
-                             (matched-pages-with-new-page matched-pages db-tag? q)))]
+                                            (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
+                                     (cons (first matched-pages)
+                                           (matched-pages-with-new-page (rest matched-pages) db-tag? q exact-page))
+                                     (matched-pages-with-new-page matched-pages db-tag? q exact-page)))]
       [:<>
        (ui/auto-complete
         matched-pages'
@@ -258,7 +257,7 @@
   "Page or tag searching popup"
   [id format]
   (let [pos (hooks/use-memo state/get-editor-last-pos [])
-        action (state/use-sub :editor/action)
+        action (rfx/use-sub [:editor/action])
         embed? (= @commands/*current-command "Page embed")
         tag? (= action :page-search-hashtag)
         db-tag? tag?
@@ -295,15 +294,13 @@
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (let [current-block (state/get-edit-block)
-              id (:block/uuid chosen-item)
-              id (if (string? id) (uuid id) id)]
+        (let [current-block (state/get-edit-block)]
           (p/do!
            (editor-handler/api-insert-new-block! ""
-                                                 {:block-uuid (:block/uuid current-block)
-                                                  :sibling? true
-                                                  :replace-empty-target? true
-                                                  :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
+                                                  {:block-uuid (:block/uuid current-block)
+                                                   :sibling? true
+                                                   :replace-empty-target? true
+                                                   :other-attrs {:block/link (:db/id chosen-item)}})
            (state/clear-edit!)))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
@@ -363,9 +360,9 @@
                              (uuid page))]
         (if embed-block-id
           (let [f (block-on-chosen-handler true input id q format nil)
-                block (db/entity embed-block-id)]
-            (when block (f block))
-            nil)
+                repo (state/get-current-repo)]
+            (p/let [block (db-async/<get-block repo embed-block-id {:children? false})]
+              (when block (f block))))
           (block-search-auto-complete edit-block input id q format selected-text))))))
 
 (hsx/defc template-search-aux
@@ -472,7 +469,7 @@
       (when (seq options)
         (let [command (:command (first options))]
           [:div.p-2.rounded-md.flex.flex-col.gap-2
-           (for [{:keys [id placeholder type]} options]
+           (for [{:keys [id placeholder type auto-focus]} options]
              (shui/input
               (cond->
                {:key (str "modal-input-" (name id))
@@ -482,7 +479,10 @@
                              (swap! input-value assoc id (util/evalue e)))}
 
                 placeholder
-                (assoc :placeholder placeholder))))
+                (assoc :placeholder placeholder)
+
+                auto-focus
+                (assoc :auto-focus true))))
            (ui/button
             (t :ui/submit)
             :on-click
@@ -565,7 +565,7 @@
   [content]
   (hooks/use-effect!
    (fn []
-     (when-not @(:editor/on-paste? @state/state)
+     (when-not (state/get-state :editor/on-paste?)
        (try (editor-handler/handle-last-input)
             (catch :default _e
               nil)))
@@ -665,7 +665,7 @@
 (hsx/defc command-popups
   "React to atom changes, find and render the correct popup"
   [id format]
-  (let [action (state/use-sub :editor/action)]
+  (let [action (rfx/use-sub [:editor/action])]
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
@@ -710,7 +710,7 @@
         component-state {:opts opts
                          :id id
                          :config config}
-        content (state/use-sub :editor/content :path-in-sub-atom (:block/uuid block))
+        content (rfx/use-sub [:editor/content (:block/uuid block)])
         heading-class (get-editor-style-class block content format)
         read-only? (editor-readonly? block)
         _ (lifecycle/use-did-mount! id config)

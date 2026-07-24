@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
@@ -50,30 +49,28 @@
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
   [blocks content format {:keys [page-name]}]
-  (let [repo (state/get-current-repo)]
-    (try
-      (let [blocks (gp-block/extract-blocks blocks content format
-                                            {:user-config (state/get-config)
-                                             :block-pattern common-config/block-pattern
-                                             :db (db/get-db repo)
-                                             :date-formatter (state/get-date-formatter)
-                                             :page-name page-name
-                                             :db-graph-mode? true})]
-        (map (fn [block]
-               (let [block (standalone-display-block block)]
-                 (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
-                   (:block/properties block)
-                   (merge (update-keys (:block/properties block)
-                                       (fn [k]
-                                         (or ({:heading :logseq.property/heading} k)
-                                             (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
-             blocks))
-      (catch :default e
-        (log/error :exception e)
-        (state/pub-event! [:capture-error {:error e
-                                           :payload {:type "Extract-blocks"}}])
-        (notification/show! (t :block/extraction-error) :error)
-        []))))
+  (try
+    (let [blocks (gp-block/extract-blocks blocks content format
+                                          {:user-config (state/get-config)
+                                           :block-pattern common-config/block-pattern
+                                           :date-formatter (state/get-date-formatter)
+                                           :page-name page-name
+                                           :db-graph-mode? true})]
+      (map (fn [block]
+             (let [block (standalone-display-block block)]
+               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
+                 (:block/properties block)
+                 (merge (update-keys (:block/properties block)
+                                     (fn [k]
+                                       (or ({:heading :logseq.property/heading} k)
+                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
+           blocks))
+    (catch :default e
+      (log/error :exception e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
+      (notification/show! (t :block/extraction-error) :error)
+      [])))
 
 (defn parse-block
   [{:block/keys [uuid title format] :as block}]

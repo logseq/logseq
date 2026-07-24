@@ -1577,14 +1577,32 @@
       (when (comment-block? comment-block agent-name)
         (route-comment-once! cfg opts comment-block)))))
 
+(defn- route-task-candidate-id!
+  [cfg {:keys [repo agent-name] :as opts} block-id]
+  (when block-id
+    (p/let [block (pull-task-block cfg repo block-id)]
+      (when (routable-task? block agent-name)
+        (p/let [tree-text (show-task-tree cfg repo block)]
+          (route-task-once! cfg opts {:block block
+                                      :tree-text tree-text}))))))
+
+(defn- route-comment-candidate-id!
+  [cfg {:keys [repo agent-name] :as opts} block-id]
+  (when block-id
+    (p/let [comment-block (pull-comment-block cfg repo block-id)]
+      (when (comment-block? comment-block agent-name)
+        (route-comment-once! cfg opts comment-block)))))
+
 (defn- process-sync-db-changes-event!
-  [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
+  [cfg {:keys [repo] :as opts} {:keys [tx-data task-route-candidate-ids comment-route-candidate-ids]}]
   (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)
           routability-datoms (resolve-routability-datoms cfg repo tx-data)]
     (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
           routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
                                (map #(route-routability-datom! cfg opts %) routability-datoms)
-                               (map #(route-comment-datom! cfg opts %) comment-datoms)))]
+                               (map #(route-comment-datom! cfg opts %) comment-datoms)
+                               (map #(route-task-candidate-id! cfg opts %) (distinct task-route-candidate-ids))
+                               (map #(route-comment-candidate-id! cfg opts %) (distinct comment-route-candidate-ids))))]
       (when (seq routing)
         (p/all routing)))))
 

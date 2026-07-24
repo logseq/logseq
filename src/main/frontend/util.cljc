@@ -12,7 +12,6 @@
                      [cljs-bean.core :as bean]
                      [cljs-time.core :as t]
                      [clojure.pprint]
-                     [datascript.impl.entity :as de]
                      [dommy.core :as d]
                      [frontend.loader :refer [load]]
                      [frontend.mobile.util :as mobile-util]
@@ -100,8 +99,6 @@
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
-#?(:cljs (defonce convert-to-roman utils/convertToRoman))
-#?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
@@ -734,20 +731,16 @@
 #?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks embed-block? owner-window]}]
-     (let [blocks (map (fn [block] (if (de/entity? block)
-                                     (-> (into {} block)
-                                         ;; FIXME: why :db/id is not included?
-                                         (assoc :db/id (:db/id block)))
-                                     block)) blocks)
+     (let [blocks (map identity blocks)
            data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
                    :html html
                    :blocks (when (and graph (seq blocks))
                              (pr-str
-                              {:graph graph
+                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
+                               :blocks (vec blocks)}))}))]
        (if owner-window
          (write-clipboard data owner-window)
          (write-clipboard data)))))
@@ -774,9 +767,6 @@
     (println (str "Debug " k))
     (time (reset! result (doall (f))))
     @result))
-
-#?(:cljs
-   (def concat-without-nil common-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!
@@ -931,9 +921,6 @@
 
 #?(:cljs
    (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
-
-#?(:cljs
-   (def get-page-title common-util/get-page-title))
 
 #?(:cljs
    (defn add-style!
@@ -1369,6 +1356,17 @@
    (defn rtc-test?
      []
      (string/includes? js/window.location.search "?rtc-test=true")))
+
+#?(:cljs
+   (defn rtc-test-without-virtualization?
+     []
+     (and (rtc-test?)
+          (not (string/includes? js/window.location.search "virtualized=true")))))
+
+#?(:cljs
+   (defn force-virtualization?
+     []
+     (string/includes? js/window.location.search "virtualized=true")))
 
 #?(:cljs
    (defn sanitize-port-input

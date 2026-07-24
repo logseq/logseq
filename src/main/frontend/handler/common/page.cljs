@@ -4,21 +4,18 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -60,18 +57,49 @@
                 (edit!))))]
     (poll! 5000)))
 
+(defn- page-lookup-ref
+  [page-id-or-title]
+  (cond
+    (uuid? page-id-or-title)
+    [:block/uuid page-id-or-title]
+
+    (common-util/uuid-string? page-id-or-title)
+    [:block/uuid (uuid page-id-or-title)]
+
+    :else
+    [:block/name (common-util/page-name-sanity-lc page-id-or-title)]))
+
+(defn- <page-for-edit
+  [page-id-or-title]
+  (if (map? page-id-or-title)
+    (p/resolved page-id-or-title)
+    (when-let [repo (state/get-current-repo)]
+      (state/<invoke-db-worker :thread-api/pull
+                               repo
+                               [:db/id :block/uuid]
+                               (page-lookup-ref page-id-or-title)))))
+
+(def ^:private page-for-create-selector
+  '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+    {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+    {:block/parent ...}])
+
+(defn- <page-for-create
+  [page-id-or-title]
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/pull
+                             repo
+                             page-for-create-selector
+                             (page-lookup-ref page-id-or-title))))
+
 (defn edit-page-when-present!
   [page-id-or-title]
   (letfn [(poll! [remaining-ms]
-            (if-let [page (cond
-                            (map? page-id-or-title)
-                            page-id-or-title
-
-                            page-id-or-title
-                            (db/get-page page-id-or-title))]
-              (edit-page! page)
-              (when (pos? remaining-ms)
-                (js/setTimeout #(poll! (- remaining-ms 100)) 100))))]
+            (p/let [page (<page-for-edit page-id-or-title)]
+              (if page
+                (edit-page! page)
+                (when (pos? remaining-ms)
+                  (js/setTimeout #(poll! (- remaining-ms 100)) 100)))))]
     (poll! 5000)))
 
 (defn <create!
@@ -108,13 +136,13 @@
 
          :else
          (when-not (string/blank? title')
-           (p/let [existing-page (when-not class? (db/get-page title'))]
+           (p/let [existing-page (when-not class? (<page-for-create title'))]
              (if (and existing-page (not (ldb/recycled? existing-page)))
                (do
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))
                  (when (and edit? (not today-journal?))
-                     (js/setTimeout #(some-> (db/get-page title') edit-page!) 100)))
+                     (js/setTimeout #(edit-page! existing-page) 100)))
                  existing-page)
                (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
                                   (nil? (:split-namespace? options))
@@ -122,51 +150,42 @@
                        [_page-name page-uuid] (ui-outliner-tx/transact!
                                                {:outliner-op :create-page}
                                                (outliner-op/create-page! title' options'))
-                       page (db/get-page (or page-uuid title'))]
+                       page (<page-for-create (or page-uuid title'))]
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)
                    (when (and edit? (not today-journal?))
-                     (js/setTimeout #(some-> (db/get-page (or page-uuid title')) edit-page!) 100)))
+                     (js/setTimeout #(some-> page edit-page!) 100)))
                  page)))))))))
 
 ;; favorite fns
 ;; ============
-(defn- find-block-in-favorites-page
-  [page-block-uuid]
-  (let [db (conn/get-db)]
-    (when-let [page (db/get-page common-config/favorites-page-name)]
-      (let [blocks (ldb/get-page-blocks db (:db/id page))]
-        (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
-          (some (fn [block]
-                  (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
-                    block))
-                blocks))))))
-
-(defn db-favorited?
+(defn <db-favorited?
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (some? (find-block-in-favorites-page page-block-uuid)))
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/favorited-page?
+                             repo
+                             page-block-uuid)))
 
 (defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :insert-blocks}
-      (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                  (db/get-page common-config/favorites-page-name)
-                                  {})))))
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/set-page-favorite repo page-block-uuid true)))
 
 (defn <db-unfavorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (when-let [block (find-block-in-favorites-page page-block-uuid)]
-    (ui-outliner-tx/transact!
-     {:outliner-op :delete-blocks}
-     (outliner-op/delete-blocks! [block] {}))))
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/set-page-favorite repo page-block-uuid false)))
 
 ;; favorites fns end ================
+
+(defn- delete-page-opts
+  []
+  (if-let [user-uuid (user-handler/user-uuid)]
+    {:deleted-by-uuid (uuid user-uuid)}
+    {}))
 
 (defn <delete!
   "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
@@ -175,50 +194,55 @@
   [page-uuid-or-name ok-handler & {:keys [error-handler]}]
   (when page-uuid-or-name
     (assert (or (uuid? page-uuid-or-name) (string? page-uuid-or-name)))
-    (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
-                             (:block/uuid (db/get-page page-uuid-or-name)))]
-      (when @state/*db-worker
-        (let [page (db/entity [:block/uuid page-uuid])
-              default-home (state/get-default-home)
-              home-page? (= (:block/title page) (:page default-home))]
-          (p/do!
-           (when home-page?
-             (p/do!
-              (config-handler/set-config! :default-home (dissoc default-home :page))
-              (notification/show! (t :settings.features/home-default-page-update-success) :success)))
-           (-> (p/let [res (ui-outliner-tx/transact!
-                             {:outliner-op :delete-page}
-                             (outliner-op/delete-page! page-uuid))]
-                 (if res
-                   (when ok-handler (ok-handler))
-                   (when error-handler (error-handler))))
-               (p/catch (fn [error]
-                          (js/console.error error))))))))))
+    (when @state/*db-worker
+      (when-let [repo (state/get-current-repo)]
+        (p/let [page (state/<invoke-db-worker
+                      :thread-api/pull
+                      repo
+                      [:block/uuid :block/title]
+                      (page-lookup-ref page-uuid-or-name))]
+          (when-let [page-uuid (:block/uuid page)]
+            (let [default-home (state/get-default-home)
+                  home-page? (= (:block/title page) (:page default-home))]
+              (p/do!
+               (when home-page?
+                 (p/do!
+                  (config-handler/set-config! :default-home (dissoc default-home :page))
+                  (notification/show! (t :settings.features/home-default-page-update-success) :success)))
+               (-> (p/let [res (state/<invoke-db-worker
+                                 :thread-api/apply-outliner-ops
+                                 repo
+                                 [[:delete-page [page-uuid (delete-page-opts)]]]
+                                 nil)]
+                     (if res
+                       (when ok-handler (ok-handler))
+                       (when error-handler (error-handler))))
+                   (p/catch (fn [error]
+                              (js/console.error error))))))))))))
 
 ;; other fns
 ;; =========
 
 (defn after-page-deleted!
   [page-name]
-  ;; TODO: move favorite && unfavorite to worker too
-  (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-    (<db-unfavorite-page! page-block-uuid)))
+  (when-let [repo (state/get-current-repo)]
+    (p/let [page (state/<invoke-db-worker :thread-api/pull repo [:block/uuid] (page-lookup-ref page-name))]
+      (when-let [page-block-uuid (:block/uuid page)]
+        (<db-unfavorite-page! page-block-uuid)))))
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]
   (let [old-page-name       (common-util/page-name-sanity-lc old-name)
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                     (common-util/page-name-sanity-lc old-page-name))
-        page (db/entity repo page-id)]
-
-    ;; Redirect to the newly renamed page
-    (when redirect?
-      (route-handler/redirect! {:to          :page
-                                :push        false
-                                :path-params {:name (str (:block/uuid page))}}))
-
-    (let [home (get (state/get-config) :default-home {})]
-      (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
-        (config-handler/set-config! :default-home (assoc home :page new-name))))
-
-    (ui-handler/re-render-root!)))
+                     (common-util/page-name-sanity-lc old-page-name))]
+    (p/do!
+     (when redirect?
+       (p/let [page (state/<invoke-db-worker :thread-api/pull repo [:block/uuid] page-id)]
+         (when-let [page-uuid (:block/uuid page)]
+           (route-handler/redirect! {:to          :page
+                                     :push        false
+                                     :path-params {:name (str page-uuid)}}))))
+     (let [home (get (state/get-config) :default-home {})]
+       (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
+         (config-handler/set-config! :default-home (assoc home :page new-name))))
+     (ui-handler/re-render-root!))))

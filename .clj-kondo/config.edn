@@ -199,7 +199,8 @@
                         clojure.string/join hooks.path-invalid-construct/string-join
                         clojure.string/replace hooks.regex-checks/double-escaped-regex
                         logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
-                        frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api}}
+                        frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api
+                        frontend.handler.events.macros/defevent! hooks.defevent/defevent}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur

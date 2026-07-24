@@ -128,7 +128,7 @@
   (add-watch state/state
              :sync-ui-state
              (fn [_ _ prev current]
-               (when-not @(:history/paused? @state/state)
+               (when-not (state/get-state :history/paused?)
                  (let [f (fn [state]
                            (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
                                (assoc :route-data (get-route-data (:route-match state)))))
@@ -211,10 +211,13 @@
                                 (if (= :thread-api/import-db-binary qkw)
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
-                              (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                            (str (namespace qkw) "/" (name qkw))
-                                                            (ldb/write-transit-str args))]
-                                (ldb/read-transit-str result))))
+                              (-> (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                                 (str (namespace qkw) "/" (name qkw))
+                                                                 (ldb/write-transit-str args))]
+                                    (ldb/read-transit-str result))
+                                  (p/catch (fn [error]
+                                             (js/console.error "DB worker API failed:" (str qkw) error)
+                                             (throw error))))))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
@@ -281,10 +284,10 @@
   (<release-access-handles [_this repo]
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
-  (<fetch-initial-data [_this repo opts]
-    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+  (<open-and-fetch-schema [_this repo opts]
+    (-> (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
                 _ (<sync-markdown-mirror-setting! repo)]
-          (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
+          result)
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]

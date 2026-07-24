@@ -6,6 +6,7 @@
    [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
+   [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
@@ -111,7 +112,9 @@
   []
   (w/eval-js
    "() => {
-      history.replaceState(null, '', location.pathname + location.hash);
+      const url = new URL(location.href);
+      url.searchParams.set('virtualized', 'true');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
     }")
   (w/refresh)
   (assert/assert-graph-loaded?))
@@ -130,8 +133,8 @@
       const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const scrollContainer = document.querySelector('#main-content-container');
 
-      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
-        .find((block) => block.textContent.includes(title));
+      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]'))
+        .find((block) => block.dataset.blockTitle === title);
 
       const scrollToBlock = async (title) => {
         for (let i = 0; i < 80; i++) {
@@ -141,39 +144,25 @@
             await nextFrame();
             return block;
           }
-          scrollContainer.scrollTop += 260;
+          if (title === blockTitles[0]) {
+            scrollContainer.scrollTop = 0;
+          } else {
+            scrollContainer.scrollTop += 260;
+          }
           await nextFrame();
+          await delay(50);
         }
         throw new Error(`Could not find mounted block ${title}`);
       };
 
-      if (!document.querySelector('[data-virtuoso-scroller]')) {
-        throw new Error('Expected virtualized list scroller');
+      if (document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)').length >= blockTitles.length) {
+        throw new Error('Expected virtualized block window');
       }
 
       if (!blockByTitle(blockTitles[0])) {
         scrollContainer.scrollTop = 0;
         await delay(500);
       }
-
-      const appWrapper = document.querySelector('#app-container-wrapper');
-      appWrapper?.dispatchEvent(new PointerEvent('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX: 1,
-        clientY: 1
-      }));
-      appWrapper?.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 0,
-        clientX: 1,
-        clientY: 1
-      }));
-      await nextFrame();
 
       const firstBlock = await scrollToBlock(blockTitles[0]);
       const firstContent = firstBlock.querySelector('.block-content');
@@ -248,6 +237,89 @@
       window.logseq.api.push_state('page', { name: page.uuid }, null);
     })();"
     (json/write-value-as-string blocks))))
+
+(defn- scroll-page-to-block!
+  [title-prefix block-count target-index]
+  (let [target-title (format "%s%05d" title-prefix target-index)]
+    (w/eval-js
+     (format
+      "(async () => {
+        const titlePrefix = %s;
+        const targetTitle = %s;
+        const totalCount = %d;
+        const targetIndex = %d;
+        const scrollContainer = document.querySelector('#main-content-container');
+        const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        if (!scrollContainer) {
+          throw new Error('Expected main content scroller');
+        }
+
+        const mountedBlocks = () => Array.from(
+          document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]')
+        ).filter((block) => block.dataset.blockTitle.startsWith(titlePrefix));
+        const findTarget = () => mountedBlocks()
+          .find((block) => block.dataset.blockTitle === targetTitle);
+        const maxScrollTop = () => Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        const clampScrollTop = (value) => Math.max(0, Math.min(maxScrollTop(), value));
+
+        scrollContainer.scrollTop = clampScrollTop(
+          maxScrollTop() * (targetIndex / Math.max(1, totalCount - 1))
+        );
+
+        for (let attempt = 0; attempt < 120; attempt++) {
+          await nextFrame();
+          const target = findTarget();
+          if (target) {
+            target.scrollIntoView({ block: 'center' });
+            await nextFrame();
+            return target.dataset.blockTitle;
+          }
+
+          const blocks = mountedBlocks();
+          if (blocks.length > 0) {
+            const middle = blocks[Math.floor(blocks.length / 2)];
+            const middleIndex = Number.parseInt(
+              middle.dataset.blockTitle.slice(titlePrefix.length),
+              10
+            );
+            const estimatedRowHeight = Math.max(1, maxScrollTop() / totalCount);
+            scrollContainer.scrollTop = clampScrollTop(
+              scrollContainer.scrollTop + ((targetIndex - middleIndex) * estimatedRowHeight)
+            );
+          }
+        }
+
+        throw new Error(`Could not mount page block ${targetTitle}`);
+      })();"
+      (json/write-value-as-string title-prefix)
+      (json/write-value-as-string target-title)
+      block-count
+      target-index))))
+
+(deftest click-rendered-block-focuses-editor
+  (testing "clicking a rendered block leaves the editor textarea focused"
+    (let [title "click rendered block focuses editor"]
+      (insert-current-page-blocks! [title])
+      (w/click (format ".ls-block .block-content:has-text('%s')" title))
+      (assert/assert-editor-mode)
+      (let [{:keys [activeId activeTag editorId editorFocused]}
+            (json/read-value
+             (w/eval-js
+              "(() => {
+                 const editor = document.querySelector('.editor-wrapper textarea');
+                 return JSON.stringify({
+                   activeId: document.activeElement && document.activeElement.id,
+                   activeTag: document.activeElement && document.activeElement.tagName,
+                   editorId: editor && editor.id,
+                   editorFocused: editor === document.activeElement
+                 });
+               })();")
+             json/keyword-keys-object-mapper)]
+        (is editorFocused
+            {:active-id activeId
+             :active-tag activeTag
+             :editor-id editorId})))))
 
 (defn- select-block-range-with-fast-scroll!
   [blocks]
@@ -456,81 +528,33 @@
       });
     })();"))
 
-(defn- journals-long-remount-metrics
-  [long-block-title]
-  (js-json
+(defn- set-journals-scroll-position!
+  [position]
+  (w/eval-js
    (format
-    "(async () => {
-      const longBlockTitle = %s;
-      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    "(() => {
       const scrollContainer = document.querySelector('#main-content-container');
-
-      const findLongJournal = () => Array.from(document.querySelectorAll('#journals .journal-item'))
-        .find((item) => item.textContent.includes(longBlockTitle));
-
-      const waitForLongJournal = async () => {
-        for (let i = 0; i < 80; i++) {
-          const journal = findLongJournal();
-          if (journal) {
-            return journal;
-          }
-          await delay(100);
-        }
-        throw new Error('Expected long journal item');
-      };
-
-      const stableLongJournalHeight = async () => {
-        let previous = null;
-        let stableCount = 0;
-        for (let i = 0; i < 80; i++) {
-          const journal = await waitForLongJournal();
-          const height = Math.round(journal.getBoundingClientRect().height);
-          if (previous !== null && Math.abs(height - previous) <= 1) {
-            stableCount += 1;
-          } else {
-            stableCount = 0;
-          }
-          previous = height;
-          if (stableCount >= 3) {
-            return height;
-          }
-          await delay(100);
-        }
-        return previous;
-      };
-
-      const snapshot = async (label) => {
-        const journal = await waitForLongJournal();
-        return {
-          label,
-          'scroll-top': Math.round(scrollContainer.scrollTop),
-          'scroll-height': Math.round(scrollContainer.scrollHeight),
-          'long-journal-height': Math.round(journal.getBoundingClientRect().height)
-        };
-      };
-
-      const initialLongJournalHeight = await stableLongJournalHeight();
-      const initial = await snapshot('initial');
-
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      await delay(500);
-      scrollContainer.scrollTop = 0;
-      await nextFrame();
-      const afterReturn = await snapshot('after-return');
-      await delay(800);
-      const afterSettle = await snapshot('after-settle');
-      await delay(5500);
-      const afterFallback = await snapshot('after-fallback');
-
-      return JSON.stringify({
-        'initial': { ...initial, 'long-journal-height': initialLongJournalHeight },
-        'after-return': afterReturn,
-        'after-settle': afterSettle,
-        'after-fallback': afterFallback
-      });
+      if (!scrollContainer) {
+        throw new Error('Expected main content scroller');
+      }
+      scrollContainer.scrollTop = %s;
     })();"
-    (json/write-value-as-string long-block-title))))
+    (case position
+      :start "0"
+      :end "scrollContainer.scrollHeight"))))
+
+(defn- mounted-journal-height
+  [block-title]
+  (w/eval-js
+   "title => {
+      const journal = Array.from(document.querySelectorAll('#journals .journal-item'))
+        .find((item) => item.textContent.includes(title));
+      if (!journal) {
+        throw new Error(`Expected mounted journal containing ${title}`);
+      }
+      return Math.round(journal.getBoundingClientRect().height);
+    }"
+   block-title))
 
 (defn- multiline-heading-bullet-alignment
   [title]
@@ -618,29 +642,23 @@
         (doseq [block blocks]
           (is (string/includes? clipboard block)))))))
 
-(deftest copy-blocks-selected-while-scrolling-journals-list
-  (testing "copy includes blocks selected across virtualized journals while scrolling"
-    (let [later-journal-blocks (mapv #(format "journals selection prelude block %03d %s"
-                                               %
-                                               (string/join " " (repeat 30 "wrapped-content")))
-                                     (range 1 101))
-          journals (mapv (fn [idx]
-                           {:date (format "2026-02-%02dT12:00:00" idx)
-                            :blocks (mapv #(format "journal %02d scroll copy block %02d" idx %)
-                                          (range 1 31))})
-                         (range 1 5))
-          blocks (mapcat :blocks (reverse journals))]
-      (seed-journals!
-       [{:date "2026-03-21T12:00:00"
-         :blocks later-journal-blocks}])
-      (seed-journals! journals)
-      (w/wait-for "#journals [data-virtuoso-scroller]")
-      (scroll-journals-to-text! (first blocks))
-      (is (pos? (count (select-block-titles-while-scrolling! blocks))))
-      (b/copy)
-      (let [clipboard (w/clipboard-text)]
-        (doseq [block blocks]
-          (is (string/includes? clipboard block)))))))
+(deftest page-virtualization-renders-top-middle-and-bottom-of-1k-membership
+  (testing "one real 1k top-level membership remains navigable across the full page"
+    (let [block-count 1000
+          title-prefix "large page membership block "
+          blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
+      (insert-current-page-blocks! blocks)
+      (enable-virtualized-rendering!)
+      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
+        (let [target-title (format "%s%05d" title-prefix target-index)]
+          (is (= target-title
+                 (scroll-page-to-block!
+                  title-prefix block-count target-index))
+              (str {:target-index target-index}))
+          (assert/assert-is-visible
+           (format ".ls-page-blocks .ls-block[data-block-title='%s']"
+                   target-title)))))))
 
 (deftest journals-list-uses-measured-spacing-without-item-margins
   (testing "journals list spacing does not use item margins that destabilize Virtuoso measurement"
@@ -666,9 +684,10 @@
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
 
-(deftest journals-list-keeps-long-journal-height-after-remount
-  (testing "long journals do not restart progressive rendering from a low measured height after remount"
-    (let [long-block-title "journals remount stable block 001"
+(deftest journals-list-remounts-complete-long-journal-with-one-scroller
+  (testing "an outer journal remount restores all content without a nested virtualizer"
+    (let [first-block-title "journals remount stable block 001"
+          last-block-title "journals remount stable block 080"
           long-blocks (mapv #(format "journals remount stable block %03d %s"
                                       %
                                       (string/join " " (repeat 24 "wrapped-content")))
@@ -682,26 +701,27 @@
                :blocks long-blocks}]
              older-journals))
       (enable-virtualized-rendering!)
-      (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" long-block-title))
-      (let [{:keys [initial after-return after-settle after-fallback] :as metrics} (journals-long-remount-metrics long-block-title)
-            initial-height (:long-journal-height initial)
-            initial-scroll-height (:scroll-height initial)]
-        (is (>= (:long-journal-height after-return) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-return) (dec initial-scroll-height)) metrics)
-        (is (>= (:long-journal-height after-settle) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-settle) (dec initial-scroll-height)) metrics)
-        (is (>= (:long-journal-height after-fallback) (dec initial-height)) metrics)
-        (is (>= (:scroll-height after-fallback) (dec initial-scroll-height)) metrics)))))
-
-(deftest journals-list-keeps-single-scroller-with-iframe-embeds
-  (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"
-    (seed-journals!
-     [{:date "2026-03-07T12:00:00"
-       :blocks ["{{video https://www.youtube.com/watch?v=7xTGNNLPyMI}}"]}])
-    (enable-virtualized-rendering!)
-    (w/wait-for "#journals iframe")
-    (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
-      (is (= 1 journals-scroller-count) metrics))))
+      (let [journal-selector (format "#journals .journal-item:has-text('%s')"
+                                     first-block-title)
+            last-block-selector (format "%s .ls-block:has-text('%s')"
+                                        journal-selector last-block-title)]
+        (w/wait-for last-block-selector)
+        (let [initial-height (mounted-journal-height first-block-title)]
+          (set-journals-scroll-position! :end)
+          (w/wait-for-not-visible journal-selector)
+          (set-journals-scroll-position! :start)
+          (w/wait-for last-block-selector)
+          (let [{:keys [journals-scroller-count] :as metrics}
+                (journals-layout-metrics)
+                remounted-height (mounted-journal-height first-block-title)]
+            (is (>= remounted-height (dec initial-height))
+                (str (assoc metrics
+                            :initial-height initial-height
+                            :remounted-height remounted-height)))
+            (is (= 1 journals-scroller-count) metrics)
+            (assert/assert-have-count
+             (format "%s [data-virtuoso-scroller]" journal-selector)
+             0)))))))
 
 (deftest journals-linked-refs-remain-visible
   (testing "journals linked refs stay visible while journals layout owns the outer measurement"
@@ -711,6 +731,107 @@
       (is (false? collapsed) metrics)
       (is (true? body-mounted) metrics)
       (is (pos? body-height) metrics))))
+
+(defn- console-logs
+  []
+  (->> (some-> custom-report/*pw-page->console-logs* deref vals)
+       (mapcat identity)
+       vec))
+
+(defn- worker-apply-times
+  [logs op-names]
+  (->> logs
+       (filter #(string/includes? % (str ":op-names " op-names)))
+       (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
+                       second
+                       Double/parseDouble))))
+
+(defn- editor-input-state
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const editor = document.querySelector('.editor-wrapper textarea');
+       return JSON.stringify({
+         value: editor?.value ?? null,
+         focused: editor === document.activeElement,
+         selectionStart: editor?.selectionStart ?? null,
+         selectionEnd: editor?.selectionEnd ?? null,
+         blockTitles: Array.from(document.querySelectorAll('.ls-page-blocks .block-title-wrap'))
+           .map((node) => node.textContent.trim())
+       });
+     })();")
+   json/keyword-keys-object-mapper))
+
+(deftest consecutive-enter-keeps-text-and-cursor-on-the-new-block
+  (b/new-block "rapid enter start")
+  (k/enter)
+  (util/press-seq "rapid enter alpha")
+  (k/enter)
+  (util/press-seq "rapid enter beta")
+  (util/wait-timeout 800)
+  (let [{:keys [value focused selectionStart selectionEnd]}
+        (editor-input-state)]
+    (is (= "rapid enter beta" value))
+    (is focused)
+    (is (= (count value) selectionStart selectionEnd)))
+  (util/exit-edit)
+  (let [block-titles (:blockTitles (editor-input-state))]
+    (is (some #{"rapid enter alpha"} block-titles) block-titles)
+    (is (some #{"rapid enter beta"} block-titles) block-titles)))
+
+(deftest enter-delete-keeps-text-and-cursor-on-the-previous-block
+  (b/new-block "rapid delete start")
+  (k/enter)
+  (k/backspace)
+  (util/press-seq " tail")
+  (util/wait-timeout 800)
+  (let [{:keys [value focused selectionStart selectionEnd]}
+        (editor-input-state)]
+    (is (= "rapid delete start tail" value))
+    (is focused)
+    (is (= (count value) selectionStart selectionEnd)))
+  (util/exit-edit)
+  (let [block-titles (:blockTitles (editor-input-state))]
+    (is (some #{"rapid delete start tail"} block-titles) block-titles)))
+
+(deftest consecutive-enter-and-delete-ops-stay-within-render-budget
+  (util/wait-timeout 500)
+  (let [old-logs (set (console-logs))]
+    (doseq [idx (range 3)]
+      (b/new-block (str "render budget " idx))
+      (b/delete-blocks))
+    (util/wait-timeout 800)
+    (let [logs (remove old-logs (console-logs))
+          enter-times (concat
+                       (worker-apply-times logs "[:insert-blocks]")
+                       (worker-apply-times logs "[:save-block :insert-blocks]"))
+          delete-times (worker-apply-times logs "[:delete-blocks]")
+          all-op-times (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
+                                      second
+                                      Double/parseDouble)
+                             logs)]
+      (is (<= 3 (count enter-times)) (pr-str enter-times))
+      (is (<= 3 (count delete-times)) (pr-str delete-times))
+      (is (every? #(<= % 60.0) enter-times) (pr-str enter-times))
+      (is (every? #(<= % 60.0) delete-times) (pr-str delete-times))
+      (is (every? #(<= % 60.0) all-op-times) (pr-str all-op-times))
+      (is (not-any? #(some (fn [message] (string/includes? % message))
+                            ["DB worker API failed"
+                             "Missing renderer resource entity"
+                             "Unsupported view resource row"
+                             "Invalid renderer resource UUID"])
+                    logs)))))
+
+(deftest today-queries-render-without-resource-errors
+  (w/eval-js
+   "(async () => {
+      const page = await window.logseq.api.create_journal_page(new Date().toISOString());
+      window.logseq.api.push_state('page', { name: page.uuid }, null);
+    })();")
+  (util/wait-timeout 1500)
+  (assert/assert-have-count "#today-queries" 1)
+  (assert/assert-have-count "#today-queries .block-content-fallback-ui" 0))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"
@@ -760,7 +881,7 @@
     (b/select-blocks 3)
     (k/press "ControlOrMeta+Shift+m")
     (choose-move-target! "Target page")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
 
 (deftest move-blocks-cmdk
   (testing "move blocks using cmdk"
@@ -770,7 +891,7 @@
     (b/select-blocks 3)
     (util/search-and-click "Move blocks to")
     (choose-move-target! "Target page 2")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
 
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"

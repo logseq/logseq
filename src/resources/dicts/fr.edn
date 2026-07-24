@@ -178,7 +178,6 @@
  :cmdk.action/search "Rechercher"
  :cmdk.action/trigger "Exécuter"
 
- :cmdk.create/configure-tag "Configurer le tag"
  :cmdk.create/page "Créer une page"
  :cmdk.create/tag "Créer un tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Récemment mis à jour"
  :cmdk.group/themes "Thèmes"
 
- :cmdk.info/configure-tag "Configurer #{1}"
  :cmdk.info/create-page "Créer la page « {1} »"
  :cmdk.info/create-tag "Créer le tag « {1} »"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Les éléments intégrés ne peuvent pas être supprimés."
  :node/new "Nouveau nœud"
 
- :notification/clear-all "Tout effacer"
  :notification/copied "Copié"
 
  :onboarding.import/desc "S'ils sont au format EDN ou Markdown, Logseq peut les importer."
@@ -1718,7 +1715,6 @@
  :ui/image "image"
  :ui/label "Libellé"
  :ui/link "Lien"
- :ui/load-more "Charger plus"
  :ui/loading "Chargement"
  :ui/login "Connexion"
  :ui/logout "Déconnexion"

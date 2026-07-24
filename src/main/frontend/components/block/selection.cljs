@@ -17,9 +17,9 @@
   (true? @*pointer-is-down?))
 
 (defn select-on-hover?
-  [{:keys [last-client-y client-y dragging? editing-same-block? active-selection?]}]
+  [{:keys [last-client-y client-y dragging? editing-same-block? active-selection? virtualized?]}]
   (and (or (not= last-client-y client-y)
-           active-selection?)
+           (and active-selection? (not virtualized?)))
        (not dragging?)
        (not editing-same-block?)))
 
@@ -37,21 +37,16 @@
         {:direction direction
          :block-ids (if (= direction :up) (vec (reverse ids)) ids)}))))
 
-(defn mounted-nodes?
-  [start-node end-node]
-  (boolean (and (some-> start-node .-isConnected)
-                (some-> end-node .-isConnected))))
+(defn virtual-range-boundary-id
+  [block-ids direction start-index end-index]
+  (case direction
+    :down (nth block-ids end-index)
+    :up (nth block-ids start-index)
+    nil))
 
-(defn mounted-node-range
-  [nodes start-node end-node]
-  (let [nodes (vec nodes)
-        start-idx (.indexOf nodes start-node)
-        end-idx (.indexOf nodes end-node)]
-    (when (and (<= 0 start-idx)
-               (<= 0 end-idx))
-      (let [direction (if (> start-idx end-idx) :up :down)
-            from-idx (min start-idx end-idx)
-            to-idx (inc (max start-idx end-idx))
-            nodes (subvec nodes from-idx to-idx)]
-        {:direction direction
-         :nodes (if (= direction :up) (vec (reverse nodes)) nodes)}))))
+(defn unselected-block-ids
+  [selected-block-ids block-ids]
+  (->> block-ids
+       (remove (set selected-block-ids))
+       distinct
+       vec))

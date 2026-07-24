@@ -5,11 +5,17 @@
             [electron.ipc :as ipc]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
+
+(defn- <resolve-page-db-id
+  [repo page-db-id]
+  (if (string? page-db-id)
+    (p/let [page (state/<invoke-db-worker :thread-api/pull repo [:db/id] [:block/name page-db-id])]
+      (:db/id page))
+    page-db-id))
 
 (defn search
   "The aggregation of search results"
@@ -22,20 +28,18 @@
                  limit 10}
             :as opts}]
    (when-not (string/blank? q)
-     (let [page-db-id (if (string? page-db-id)
-                        (:db/id (db/get-page page-db-id))
-                        page-db-id)
-           opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-       (p/let [blocks (search/block-search repo q opts)
-               files (search/file-search q)]
-         (let [result (merge
-                       {:blocks blocks
-                        :has-more? (= limit (count blocks))}
-                       (when-not page-db-id
-                         {:files files}))
-               search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)
-           result))))))
+     (p/let [page-db-id (<resolve-page-db-id repo page-db-id)
+             opts (if page-db-id (assoc opts :page (str page-db-id)) opts)
+             blocks (search/block-search repo q opts)
+             files (search/file-search q)]
+       (let [result (merge
+                     {:blocks blocks
+                      :has-more? (= limit (count blocks))}
+                     (when-not page-db-id
+                       {:files files}))
+             search-key (if more? :search/more-result :search/result)]
+         (state/swap-state! assoc search-key result)
+         result)))))
 
 (defn open-find-in-page!
   []
@@ -97,7 +101,7 @@
   ([clear-search-mode?]
    (let [m {:search/result nil
             :search/q ""}]
-     (swap! state/state merge m)
+     (state/swap-state! merge m)
      (when config/lsp-enabled? (state/reset-plugin-search-engines)))
    (when clear-search-mode?
      (state/set-search-mode! :global))))
@@ -128,7 +132,7 @@
             [:span
              (when-not (string/blank? before)
                [:span before])
-             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
+             [:mark {:style {:padding 0 :border-radius 0}} (subs content i (+ i (count q)))]
              (when-not (string/blank? after)
                [:span after])])
           (let [elements (loop [words q-words
@@ -144,7 +148,7 @@
                                         (vec
                                          (concat result
                                                  [[:span (subs content 0 i)]
-                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
+                                                  [:mark {:style {:padding 0 :border-radius 0}} (subs content i (+ i (count word)))]])))
                                  (recur nil
                                         content
                                         result)))

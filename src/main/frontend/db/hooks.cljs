@@ -1,41 +1,92 @@
 (ns frontend.db.hooks
   "Hooks for DB-backed React integration."
-  (:require [frontend.db.react :as react]
-            [logseq.shui.hooks :as hooks]))
+  (:require ["react" :as react]
+            [frontend.db.subs :as subs]))
 
-(defn use-query
-  "Subscribe to a DB reactive query atom returned by `frontend.db.react/q`."
-  [query-ref]
-  (let [[value set-value!] (hooks/use-state (when query-ref @query-ref))
-        [_render-token set-render-token!] (hooks/use-state 0)
-        render-token-ref (hooks/use-ref 0)
-        component-ref (hooks/use-ref nil)
-        query-key (react/query-key query-ref)]
-    (when-not (hooks/deref component-ref)
-      (hooks/set-ref! component-ref
+(defn- use-stable-key
+  [key]
+  (let [key-ref (react/useRef key)]
+    (when-not (= (.-current key-ref) key)
+      (set! (.-current key-ref) key))
+    (.-current key-ref)))
+
+(defn- use-external-store
+  [subscribe! snapshot key]
+  (let [key (use-stable-key key)
+        subscribe (react/useCallback
+                   (fn [listener] (subscribe! key listener))
+                   #js [subscribe! key])
+        get-snapshot (react/useCallback
+                      (fn [] (snapshot key))
+                      #js [snapshot key])
+        {:keys [status value error] :as result}
+        (react/useSyncExternalStore
+         subscribe
+         get-snapshot
+         get-snapshot)]
+    (case status
+      :ready value
+      (:loading :missing) nil
+      :error (throw error)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))))
+
+(defn- use-external-store-projection
+  [subscribe! snapshot key project]
+  (let [key (use-stable-key key)
+        projection-ref (react/useRef nil)
+        subscribe (react/useCallback
+                   (fn [listener] (subscribe! key listener))
+                   #js [subscribe! key])
+        get-snapshot (react/useCallback
                       (fn []
-                        (let [next-token (inc (hooks/deref render-token-ref))]
-                          (hooks/set-ref! render-token-ref next-token)
-                          (set-render-token! next-token)))))
-    (hooks/use-effect!
+                        (let [source (snapshot key)
+                              cached (.-current projection-ref)]
+                          (if (identical? source (:source cached))
+                            (:snapshot cached)
+                            (let [projected (if (= :ready (:status source))
+                                              (update source :value project)
+                                              source)
+                                  projected (if (= projected (:snapshot cached))
+                                              (:snapshot cached)
+                                              projected)]
+                              (set! (.-current projection-ref)
+                                    {:source source :snapshot projected})
+                              projected))))
+                      #js [snapshot key project])
+        {:keys [status value error] :as result}
+        (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
+    (case status
+      :ready value
+      (:loading :missing) nil
+      :error (throw error)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))))
+
+(defn use-block
+  [block-uuid]
+  (use-external-store subs/subscribe-block! subs/block-snapshot block-uuid))
+
+(defn use-block-prefetch
+  "Keep canonical block loads alive for a render-ahead window."
+  [block-uuids]
+  (let [block-uuids (use-stable-key (vec block-uuids))]
+    (react/useEffect
      (fn []
-       (when query-key
-         (react/add-query-component! query-key (hooks/deref component-ref)))
-       #(react/remove-query-component! (hooks/deref component-ref)))
-     [query-key])
-    (hooks/use-effect!
-     (fn []
-       (if query-ref
-         (let [current-value @query-ref
-               id (str (random-uuid))]
-           (when-not (= value current-value)
-             (set-value! current-value))
-           (add-watch query-ref id (fn [_ _ prev-state next-state]
-                                     (when-not (= prev-state next-state)
-                                       (set-value! next-state))))
-           #(remove-watch query-ref id))
-         (do
-           (set-value! nil)
-           nil)))
-     [query-ref])
-    value))
+       (let [unsubscribes
+             (mapv #(subs/subscribe-block! % (fn [])) block-uuids)]
+         #(run! (fn [unsubscribe] (unsubscribe)) unsubscribes)))
+     #js [block-uuids])))
+
+(defn use-block-projection
+  [block-uuid project]
+  (use-external-store-projection subs/subscribe-block! subs/block-snapshot
+                                 block-uuid project))
+
+(defn use-children
+  [parent-uuid]
+  (use-external-store subs/subscribe-children! subs/children-snapshot parent-uuid))
+
+(defn use-resource
+  [resource-key]
+  (use-external-store subs/subscribe-resource! subs/resource-snapshot resource-key))

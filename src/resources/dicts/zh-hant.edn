@@ -178,7 +178,6 @@
  :cmdk.action/search "搜尋"
  :cmdk.action/trigger "觸發"
 
- :cmdk.create/configure-tag "設定標籤"
  :cmdk.create/page "建立頁面"
  :cmdk.create/tag "建立標籤"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "主題"
 
- :cmdk.info/configure-tag "設定 #{1}"
  :cmdk.info/create-page "建立名為「{1}」的頁面"
  :cmdk.info/create-tag "建立名為「{1}」的標籤"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "無法刪除內建項。"
  :node/new "新增節點"
 
- :notification/clear-all "清除所有通知"
  :notification/copied "已複製！"
 
  :onboarding.import/desc "如果它們是 EDN 或 Markdown 格式，Logseq 可以使用它們。"
@@ -1731,7 +1728,6 @@
  :ui/image "圖片"
  :ui/label "標籤"
  :ui/link "連結"
- :ui/load-more "載入更多"
  :ui/loading "載入中..."
  :ui/login "登入"
  :ui/logout "登出"

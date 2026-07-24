@@ -339,40 +339,40 @@ module Events = struct
         ~signal:(Fetch.AbortController.signal controller)
         ()
     in
-    let handle_response response =
-      if not (Fetch.Response.ok response) then
-        Js.Promise.reject
-          (Js.Exn.raiseError
-             ("events request failed ("
-             ^ string_of_int (Fetch.Response.status response)
-             ^ ")"))
-      else
-        match response_body response with
-        | None ->
-            Fetch.Response.text response
-            |> Js.Promise.then_ (fun text ->
-                if not !closed then on_chunk text;
-                Js.Promise.resolve ())
-        | Some body ->
-            let reader = get_reader body in
-            reader_ref := Some reader;
-            read_loop closed (make_decoder ()) reader on_chunk
-    in
-    let request =
-      Fetch.fetchWithInit url init
-      |> Js.Promise.then_ handle_response
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-    in
-    let close () =
-      Fetch.AbortController.abort controller;
-      (match !reader_ref with
-      | None -> ()
-      | Some reader ->
-          ignore
-            (cancel reader |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-              : unit Js.Promise.t));
-      Cli_effect.catch (HTTP.promise_to_effect request) (fun _ ->
-          Cli_effect.pure ())
-    in
-    Cli_effect.pure { close }
+    Cli_effect.bind
+      (HTTP.promise_to_effect (Fetch.fetchWithInit url init))
+      (fun response ->
+        if not (Fetch.Response.ok response) then
+          Cli_effect.error
+            (Js.Exn.raiseError
+               ("events request failed ("
+               ^ string_of_int (Fetch.Response.status response)
+               ^ ")"))
+        else
+          let request =
+            (match response_body response with
+              | None ->
+                  Fetch.Response.text response
+                  |> Js.Promise.then_ (fun text ->
+                      if not !closed then on_chunk text;
+                      Js.Promise.resolve ())
+              | Some body ->
+                  let reader = get_reader body in
+                  reader_ref := Some reader;
+                  read_loop closed (make_decoder ()) reader on_chunk)
+            |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+          in
+          let close () =
+            Fetch.AbortController.abort controller;
+            (match !reader_ref with
+            | None -> ()
+            | Some reader ->
+                ignore
+                  (cancel reader
+                   |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+                    : unit Js.Promise.t));
+            Cli_effect.catch (HTTP.promise_to_effect request) (fun _ ->
+                Cli_effect.pure ())
+          in
+          Cli_effect.pure { close })
 end

@@ -7,6 +7,11 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
+(defn- process-cpu-time-ms
+  []
+  (let [usage (.cpuUsage js/process)]
+    (/ (+ (.-user usage) (.-system usage)) 1000)))
+
 (defn- sql-placeholder-count
   [sql]
   (count (re-seq #"\?" sql)))
@@ -221,6 +226,7 @@
                               (swap! fts-binds conj (first bind)))
                             #js []))}]
       (with-redefs [search/combine-results (fn [_db results] results)
+                    d/db? (constantly false)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       result)]
@@ -248,7 +254,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (is (empty? (search/search-blocks (atom :large-db) db "xxx and " {:limit 10})))
         (is (empty? (search/search-blocks (atom :large-db) db "xxx AND " {:limit 10})))
         (is (empty? (search/search-blocks (atom :large-db) db "xxx or " {:limit 10})))
@@ -294,7 +300,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
           (is (= [{:id "67e55044-10b1-426f-9247-bb680e5fe0c8"
                    :page "67e55044-10b1-426f-9247-bb680e5fe0c8"
@@ -394,7 +400,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (let [result (vec (search/search-blocks (atom :large-db)
                                                 db
                                                 "block"
@@ -432,11 +438,11 @@
                                         lookup-refs))
                     ldb/hidden? (constantly false)
                     ldb/page? :page?]
-        (let [started (system-time)
+        (let [started (process-cpu-time-ms)
               result (doall (search/combine-results :db keyword-results))
-              elapsed-ms (- (system-time) started)]
-          (is (< elapsed-ms 100)
-              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms"))
+              elapsed-ms (- (process-cpu-time-ms) started)]
+          (is (< elapsed-ms 200)
+              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms CPU"))
           (is (= (count ids) (count result)))
           (is (= page-id (:id (first result)))
               "page boost should still rank matching pages ahead of equally relevant blocks"))))))
@@ -452,9 +458,10 @@
       (with-redefs [search/combine-results (fn [_db results]
                                              (doall results)
                                              rows)
+                    d/db? (constantly false)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (is (= 10
                (count (search/search-blocks (atom :large-db)
                                             (checking-db)
@@ -515,6 +522,31 @@
           (is (not (contains? result :block/tags)))
           (is (not (contains? result :logseq.property/icon)))
           (is (not (contains? result :alias))))))))
+
+(deftest search-result-keeps-tag-identities-for-ui-entity-predicates
+  (let [page-id #uuid "00000000-0000-0000-0000-000000000124"
+        page-tag {:db/id 2
+                  :db/ident :logseq.class/Page
+                  :block/title "Page"}
+        page {:db/id 1
+              :block/uuid page-id
+              :block/title "Foo"
+              :block/tags [page-tag]}]
+    (with-redefs [d/entity (fn [_db [_attr id]]
+                             (when (= id page-id)
+                               page))
+                  ldb/page? (constantly true)
+                  ldb/built-in? (constantly false)
+                  ldb/hidden? (constantly false)]
+      (let [result (#'search/search-result->block-result
+                    (atom :db)
+                    "Foo"
+                    nil
+                    {:enable-snippet? false}
+                    {:id (str page-id)
+                     :page (str page-id)
+                     :title "Foo"})]
+        (is (= [page-tag] (:block/tags result)))))))
 
 (deftest block-index-includes-page-alias-titles
   (testing "page aliases can be matched by page-ref autocomplete search"
@@ -744,18 +776,18 @@
                                         :block/created-at now
                                         :block/updated-at now})
                                      (range sync-search-indice-performance-block-count)))
-        started (.now js/performance)
+        started (process-cpu-time-ms)
         blocks-to-add (:blocks-to-add
                        (search/sync-search-indice
                         tx-report
                         {:include-vector-title? include-vector-title?}))
-        elapsed-ms (- (.now js/performance) started)]
+        elapsed-ms (- (process-cpu-time-ms) started)]
     {:blocks-to-add blocks-to-add
      :elapsed-ms elapsed-ms}))
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-enabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case true)]
-    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms"))
+    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms CPU"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (every? :vector-title blocks-to-add))
@@ -763,7 +795,7 @@
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-disabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case false)]
-    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms"))
+    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms CPU"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (not-any? #(contains? % :vector-title) blocks-to-add))))

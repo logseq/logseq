@@ -178,7 +178,6 @@
  :cmdk.action/search "Cercar"
  :cmdk.action/trigger "Executar"
 
- :cmdk.create/configure-tag "Configurar etiqueta"
  :cmdk.create/page "Crear pàgina"
  :cmdk.create/tag "Crear etiqueta"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Actualitzats recentment"
  :cmdk.group/themes "Temes"
 
- :cmdk.info/configure-tag "Configurar #{1}"
  :cmdk.info/create-page "Crear la pàgina '{1}'"
  :cmdk.info/create-tag "Crear l'etiqueta '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Els elements integrats no es poden eliminar."
  :node/new "Nou node"
 
- :notification/clear-all "Netejar tot"
  :notification/copied "Copiat"
 
  :onboarding.import/desc "Descripció d'importació"
@@ -1718,7 +1715,6 @@
  :ui/image "imatge"
  :ui/label "Etiqueta"
  :ui/link "Enllaç"
- :ui/load-more "Carrega'n més"
  :ui/loading "Carregant"
  :ui/login "Iniciar sessió"
  :ui/logout "Tancar sessió"

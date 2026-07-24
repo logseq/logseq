@@ -2,6 +2,7 @@
   "Shared helpers for db-based API calls."
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.api.db-based.util :as api-util]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -68,13 +69,7 @@
     (->> (otree/blocks->vec-tree db blocks page-id)
          (map #(update % :block/uuid str)))))
 
-(defn ^:api remove-hidden-properties
-  "Given an entity map, remove properties that shouldn't be returned in api calls"
-  [m]
-  (->> (remove (fn [[k _v]]
-                 (or (= "block.temp" (namespace k))
-                     (contains? #{:block/tx-id} k))) m)
-       (into {})))
+(def remove-hidden-properties api-util/remove-hidden-properties)
 
 (defn get-page-data
   "Get page data for GetPage tool including the page's entity and its blocks"
@@ -329,19 +324,6 @@
       (throw (ex-info (str (string/capitalize (name (get (ex-data e) :entity-type :page)))
                            " " (pr-str (:title (ex-data e))) " is invalid: " (ex-message e))
                       (ex-data e))))))
-
-(defn ^:api summarize-upsert-operations [operations {:keys [dry-run]}]
-  (let [counts (reduce (fn [acc op]
-                         (let [entity-type (keyword (:entityType op))
-                               operation-type (keyword (:operation op))]
-                           (update-in acc [operation-type entity-type] (fnil inc 0))))
-                       {}
-                       operations)]
-    (str (if dry-run "Dry run: " "")
-         (when (counts :add)
-           (str "Added: " (pr-str (counts :add)) "."))
-         (when (counts :edit)
-           (str " Edited: " (pr-str (counts :edit)) ".")))))
 
 (defn ^:api build-upsert-nodes-edn
   "Given llm generated operations, builds the import EDN, validates it and returns it. It fails

@@ -18,11 +18,17 @@
     (nil? input) ""
     :else (pr-str input)))
 
+(defn- remove-accents*
+  [s]
+  (if-let [remove-fn (.-remove remove-accents)]
+    (remove-fn s)
+    (remove-accents s)))
+
 (defn- normalize-text [app-config text]
   (cond-> (to-string text)
     ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
-    (:feature/enable-search-remove-accents? app-config) (remove-accents)))
+    (:feature/enable-search-remove-accents? app-config) (remove-accents*)))
 
 (defn highlight-query* [app-config query text]
   (cond
@@ -43,9 +49,11 @@
         (if (seq segs)
           (into [:span {"data-testid" text-string}]
                 (map-indexed (fn [i seg]
-                               (if (even? i)
-                                 [:span seg]
-                                 [:mark.p-0.rounded-none seg]))
+                               (with-meta
+                                 (if (even? i)
+                                   [:span seg]
+                                   [:mark {:style {:padding 0 :border-radius 0}} seg])
+                                 {:key (str "highlight-" i)}))
                              segs))
           [:span normal-text])))))
 

@@ -1,11 +1,14 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.react :as react]
-            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]
-            [frontend.util :as util]))
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [frontend.db.utils :as db-utils]
+            [frontend.test.helper :as test-helper :include-macros true]
+            [frontend.util :as util]
+            [frontend.worker.query-dsl :as query-dsl]
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.build :as sqlite-build]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -37,6 +40,37 @@
     {:block/page [:db/id :block/name :block/title :block/journal-day]}
     {:block/_parent ...}])
 
+(defn- build-query-test-block
+  [block]
+  (if-let [status (some->> (:build.test/title block)
+                           (re-find test-helper/bare-marker-pattern)
+                           second
+                           test-helper/file-to-db-statuses)]
+    (-> {:block/title
+         (string/replace-first (:build.test/title block) test-helper/bare-marker-pattern "")}
+        (assoc :block/tags [{:db/ident :logseq.class/Task}])
+        (update :build/properties merge {:logseq.property/status status}))
+    block))
+
+(defn- load-test-files
+  [options*]
+  (let [options (cond (:page (first options*))
+                      {:pages-and-blocks options* :auto-create-ontology? true}
+                      :else
+                      (assoc options* :auto-create-ontology? true))
+        options' (update options
+                         :pages-and-blocks
+                         (fn [pbs]
+                           (mapv (fn [m]
+                                   (update m :blocks
+                                           (fn [blocks]
+                                             (mapv build-query-test-block blocks))))
+                                 pbs)))
+        {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options')
+        init-index (map #(select-keys % [:block/uuid]) init-tx)]
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 (concat init-index init-tx block-props-tx))))
+
 (def dsl-query*
   "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
   result of build query. This is useful for documenting examples and debugging.
@@ -51,7 +85,10 @@
                         (let [res (apply old-build-query args')]
                           (println "EXAMPLE:" (pr-str (:query res)))
                           res))]
-          (apply query-dsl/query args))))
+          (let [[repo s] args]
+            (query-dsl/execute-query s
+                                     (conn/get-db repo)
+                                     {:block-attrs db-block-attrs})))))
     (some? js/process.env.DB_QUERY_TYPE)
     (fn dsl-query-star [& args]
       (let [old-build-property @#'query-dsl/build-property]
@@ -69,24 +106,30 @@
                                    m)]
                           m'))
                       query-dsl/db-block-attrs db-block-attrs]
-          (apply query-dsl/query args))))
+          (let [[repo s] args]
+            (query-dsl/execute-query s
+                                     (conn/get-db repo)
+                                     {:block-attrs db-block-attrs})))))
     :else
     (fn dsl-query-star [& args]
       (with-redefs [query-dsl/db-block-attrs db-block-attrs]
-        (apply query-dsl/query args)))))
+        (let [[repo s] args]
+          (query-dsl/execute-query s
+                                   (conn/get-db repo)
+                                   {:block-attrs db-block-attrs}))))))
 
 (defn- dsl-query
   [s]
-  (react/clear-query-state!)
   (when-let [result (dsl-query* test-helper/test-db s)]
-    (map first (deref result))))
+    (map first result)))
 
 (defn- custom-query
   [query]
-  (react/clear-query-state!)
-  (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
-                      (query-dsl/custom-query test-helper/test-db query {}))]
-    (map first (deref result))))
+  (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+    (when-let [result (query-dsl/execute-custom-query query
+                                                      (conn/get-db test-helper/test-db)
+                                                      {:block-attrs db-block-attrs})]
+      (map first result))))
 
 ;; Tests
 ;; =====
@@ -504,7 +547,7 @@
     (is (= #{"bar" "b1" "b2Z"}
            (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
                 (keep testable-content)
-                (remove (fn [s] (db/page? (db/get-page s))))
+                (remove (fn [s] (ldb/page? (ldb/get-page (conn/get-db test-helper/test-db) s))))
                 set)))
 
     (is (= #{"b2Z" "b4Z"}
@@ -562,12 +605,14 @@
 
   (is (= ["page1"]
          (map (fn [result]
-                (:block/title (db/entity (:db/id (:block/page result)))))
+                (:block/title (db-utils/entity (conn/get-db test-helper/test-db)
+                                               (:db/id (:block/page result)))))
               (dsl-query "(page page1)"))))
 
   (is (= []
          (map (fn [result]
-                (:block/title (db/entity (:db/id (:block/page result)))))
+                (:block/title (db-utils/entity (conn/get-db test-helper/test-db)
+                                               (:db/id (:block/page result)))))
               (dsl-query "(page nope)")))
       "Correctly returns no results"))
 
@@ -591,6 +636,12 @@
     (is (= ["b2"]
            (map testable-content (dsl-query "[[page 2]]")))
         "Page ref arg")
+
+    (let [page (ldb/get-page (conn/get-db test-helper/test-db) "page 2")
+          query (str "[[" (:block/uuid page) "]]")]
+      (is (= ["b2"]
+             (map testable-content (dsl-query query)))
+          "UUID page ref arg"))
 
     (is (= ["b2"]
            (map testable-content (dsl-query "#tag1")))
@@ -705,11 +756,4 @@
   (test-helper/start-test-db!)
 
   (query-dsl/query test-helper/test-db "(task done)")
-
- ;; Useful for debugging
-  (prn
-   (datascript.core/q
-    '[:find (pull ?b [*])
-      :where
-      [?b :block/name]]
-    (frontend.db/get-db test-helper/test-db))))
+  nil)

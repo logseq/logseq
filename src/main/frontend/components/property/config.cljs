@@ -7,12 +7,8 @@
             [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
-            [frontend.db.model :as model]
-            [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -21,6 +17,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -43,6 +40,14 @@
   [block]
   [:block/uuid (:block/uuid block)])
 
+(defn- <worker-transact!
+  [tx-data tx-meta]
+  (state/<invoke-db-worker :thread-api/transact
+                           (state/get-current-repo)
+                           tx-data
+                           tx-meta
+                           nil))
+
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
@@ -53,7 +58,7 @@
 (defn ->closed-choice-scope-opts
   [{:keys [owner-block scoped-to-owner?]}]
   (if (and scoped-to-owner?
-           (ldb/class? owner-block)
+           (entity/class? owner-block)
            (:db/id owner-block))
     {:scoped-class-id (:db/id owner-block)}
     {}))
@@ -78,7 +83,7 @@
 
 (defn choice-scoped-from-other-tags?
   [{:keys [choice owner-block]}]
-  (let [owner-class? (ldb/class? owner-block)
+  (let [owner-class? (entity/class? owner-block)
         owner-id (:db/id owner-block)
         scope-ids (set (keep :db/id (:logseq.property/choice-classes choice)))]
     (boolean
@@ -106,13 +111,12 @@
 (defn- set-property-description!
   [property description]
   (if-let [ent (:logseq.property/description property)]
-    (db/transact! (state/get-current-repo)
-                  [(outliner-core/block-with-updated-at
-                    {:block/uuid (:block/uuid ent) :block/title description})]
-                  {:outliner-op :save-block})
+    (<worker-transact! [(outliner-core/block-with-updated-at
+                         {:block/uuid (:block/uuid ent) :block/title description})]
+                       {:outliner-op :save-block})
     (when-not (string/blank? description)
       (db-property-handler/set-block-property!
-       (:db/id property)
+       (:block/uuid property)
        :logseq.property/description description))))
 
 (defn- <create-class-if-not-exists!
@@ -127,6 +131,16 @@
   [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
              :or {multiple-choices? true}}]
   (let [*ref (hooks/use-ref nil)
+        repo (state/get-current-repo)
+        [classes set-classes!] (hooks/use-state [])
+        _ (hooks/use-effect!
+           (fn []
+             (when repo
+               (p/let [classes (db-async/<get-all-classes repo {:except-root-class? true
+                                                                 :except-private-tags? false})]
+                 (set-classes! classes)))
+             nil)
+           [repo])
         schema-classes (:logseq.property/classes property)]
     [:div.flex.flex-1.col-span-3
      (let [content-fn
@@ -134,7 +148,6 @@
              (let [toggle-fn #(do
                                 (when (fn? on-hide) (on-hide))
                                 (shui/popup-hide! id))
-                   classes (model/get-all-readable-classes (state/get-current-repo) {:except-root-class? true})
                    options (map (fn [class]
                                   {:label (:block/title class)
                                    :value (:block/uuid class)})
@@ -170,7 +183,7 @@
                                                           (->block-lookup-id property)
                                                           :logseq.property/classes
                                                           [:block/uuid class-uuid]]]
-                                                _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
+                                                _ (<worker-transact! tx-data {:outliner-op :update-property})]
                                           (when-not multiple-choices? (toggle-fn)))))}]
 
                (select/select opts)))]
@@ -259,7 +272,7 @@
                      :icon (:logseq.property/icon block)
                      :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
-        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state false)
+        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state (and create? (entity/class? owner-block)))
         *input-ref (hooks/use-ref nil)]
 
     (hooks/use-effect!
@@ -284,7 +297,7 @@
      [:div.pt-2 (shui/textarea
                  {:placeholder (t :property/description-placeholder) :default-value (:description form-data)
                   :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
-     (when (and create? (ldb/class? owner-block))
+     (when (and create? (entity/class? owner-block))
        (let [tag-title (:block/title owner-block)]
          [:div.pt-2.flex.items-center.gap-2
           (shui/checkbox {:id "scope-choice-to-tag"
@@ -325,25 +338,28 @@
                       item-props)
         [sub-open? set-sub-open!] (hooks/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str (or id (random-uuid)))
+        id1 (hooks/use-memo #(str (or id (random-uuid))) [id])
         id2 (str "d2-" id1)
-        or-close-menu-sub! (fn []
-                             (when (and (not (shui-popup/get-popup :ls-icon-picker))
-                                        (not (shui-popup/get-popup :ls-base-edit-form))
-                                        (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
-                               (set-sub-open! false)
-                               (restore-root-highlight-item! id1)))
+        or-close-menu-sub! (fn [event-details]
+                             (if (or (shui-popup/get-popup :ls-icon-picker)
+                                     (shui-popup/get-popup :ls-base-edit-form)
+                                     (shui-popup/get-popup :ls-node-tags-sub-pane))
+                               (some-> event-details (.cancel))
+                               (do
+                                 (set-sub-open! false)
+                                 (restore-root-highlight-item! id1))))
         wrap-menuitem (if submenu-content
-                        #(shui/dropdown-menu-sub
-                          {:open sub-open?
-                           :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
+                          #(shui/dropdown-menu-sub
+                            {:open sub-open?
+                           :on-open-change (fn [v event-details]
+                                             (if v
+                                               (set-sub-open! true)
+                                               (or-close-menu-sub! event-details)))}
                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props') %)
-                          (shui/dropdown-menu-portal
-                           (shui/dropdown-menu-sub-content
-                            (merge {:hideWhenDetached true
-                                    :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
-                            (if (fn? submenu-content)
-                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content))))
+                          (shui/dropdown-menu-sub-content
+                           sub-content-props
+                           (if (fn? submenu-content)
+                             (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content)))
                         #(shui/dropdown-menu-item
                           (merge {:on-select (fn []
                                                (when toggle?
@@ -361,7 +377,7 @@
         (fn? desc)
         (desc)
         (boolean? toggle-checked?)
-        [:span.scale-90.flex.items-center
+        [:span.flex.items-center
          (let [f (if checkbox? shui/checkbox shui/switch)]
            (f {:id id2 :size "sm" :checked toggle-checked?
                :disabled disabled? :on-click #(util/stop-propagation %)
@@ -372,10 +388,10 @@
 
 (defn- resolve-owner-class-block
   [owner-block]
-  (let [owner-class? (ldb/class? owner-block)
+  (let [owner-class? (entity/class? owner-block)
         owner-id (when (and owner-class? (:db/id owner-block))
                    (:db/id owner-block))
-        owner-block' (db/sub-block owner-id)]
+        owner-block' (when owner-id owner-block)]
     {:owner-class? owner-class?
      :owner-block' owner-block'
      :owner-id (:db/id owner-block')}))
@@ -383,7 +399,7 @@
 (defn- transact-choice-scope!
   [tx-data]
   (when (seq tx-data)
-    (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})))
+    (<worker-transact! tx-data {:outliner-op :update-property})))
 
 (defn- <delete-choice!
   [property block]
@@ -399,16 +415,15 @@
 
 (defn- choice-default-menu-item
   [property block scoped-choice-from-other-tags?]
-  (let [property' (db/sub-block (:db/id property))
-        default-type? (contains? #{:default :number} (:logseq.property/type property))
-        default-value (when default-type? (:logseq.property/default-value property'))
+  (let [default-type? (contains? #{:default :number} (:logseq.property/type property))
+        default-value (when default-type? (:logseq.property/default-value property))
         default-value? (= (:db/id default-value) (:db/id block))]
     (when (and default-type? (not scoped-choice-from-other-tags?))
       (shui/dropdown-menu-item
        {:key "default value"
         :on-click #(let [value (if default-value? nil (:db/id block))]
                      (db-property-handler/set-block-property!
-                      (:db/ident property') :logseq.property/default-value value))}
+                      (:block/uuid property) :logseq.property/default-value value))}
        (shui/checkbox {:id "default value"
                        :size :sm
                        :title (t :property/set-default-choice)
@@ -424,9 +439,9 @@
           toggle-exclusion! (fn []
                               (if excluded?
                                 (db-property-handler/delete-property-value!
-                                 (:db/id owner-block) :logseq.property/choice-exclusions (:db/id block))
+                                 (:block/uuid owner-block) :logseq.property/choice-exclusions (:db/id block))
                                 (db-property-handler/set-block-property!
-                                 (:db/id owner-block) :logseq.property/choice-exclusions (:db/id block))))]
+                                 (:block/uuid owner-block) :logseq.property/choice-exclusions (:db/id block))))]
       (shui/dropdown-menu-item
        {:key "exclude for tag"
         :on-click toggle-exclusion!}
@@ -503,6 +518,7 @@
                            (shui/popup-show! (.-target e)
                                              (fn [] (choice-base-edit-form property block owner-block))
                                              {:id :ls-base-edit-form
+                                              :force-popover? true
                                               :align "start"}))
                :title value}
       value]
@@ -570,29 +586,17 @@
     (vary-meta item assoc :key (str prefix "-" idx))
     item))
 
-(defn- use-choice-blocks
-  [ids]
-  (let [repo (state/get-current-repo)
-        query-ref (when (and repo (seq ids))
-                    (react/q repo [:custom :property/choice-blocks ids]
-                             {:query-fn (fn [db _]
-                                          (keep #(db-utils/entity db %) ids))}
-                             nil))]
-    (or (db-hooks/use-query query-ref) [])))
-
 (defn- maybe-show-add-choice-popup!
   [^js e property owner-block values']
-  (p/do!
-   (when (seq values')
-     (db-async/<get-blocks (state/get-current-repo) (map (fn [{:keys [value]}] (:db/id value)) values')))
-   (shui/popup-show! (.-target e)
-                     (fn [{:keys [id]}]
-                       (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
-                         (if (seq values')
-                           (add-existing-values property values' opts)
-                           (choice-base-edit-form property {:create? true} owner-block))))
-                     {:id :ls-base-edit-form
-                      :align "start"})))
+  (shui/popup-show! (.-target e)
+                    (fn [{:keys [id]}]
+                      (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                        (if (seq values')
+                          (add-existing-values property values' opts)
+                          (choice-base-edit-form property {:create? true} owner-block))))
+                    {:id :ls-base-edit-form
+                     :force-popover? true
+                     :align "start"}))
 
 (defn- add-choice-menuitem
   [property owner-block]
@@ -600,7 +604,8 @@
    {:icon :plus
     :title (t :property/add-choice)
     :item-props
-    {:on-click
+    {:close-on-click false
+     :on-click
      (fn [^js e]
        (p/let [values (db-async/<get-property-values (:db/ident property) {})
                existing-values (seq (:property/closed-values property))
@@ -620,20 +625,27 @@
 (defn- on-choice-drag-end
   [property {:keys [active-id over-id direction]}]
   (let [move-down? (= direction :down)
-        over (db/entity [:block/uuid (uuid over-id)])
-        active (db/entity [:block/uuid (uuid active-id)])
+        active-uuid (uuid active-id)
+        over-uuid (uuid over-id)
+        active (some #(when (= active-uuid (:block/uuid %)) %) (:property/closed-values property))
+        choices (->> (:property/closed-values property)
+                     (remove #(= active-uuid (:block/uuid %)))
+                     ldb/sort-by-order)
+        over (some #(when (= over-uuid (:block/uuid %)) %) choices)
+        over-index (first (keep-indexed (fn [idx choice]
+                                          (when (= over-uuid (:block/uuid choice)) idx))
+                                        choices))
         over-order (:block/order over)
         new-order (if move-down?
-                    (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
+                    (let [next-order (:block/order (nth choices (inc over-index) nil))]
                       (db-order/gen-key over-order next-order))
-                    (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
+                    (let [prev-order (:block/order (nth choices (dec over-index) nil))]
                       (db-order/gen-key prev-order over-order)))]
-    (db/transact! (state/get-current-repo)
-                  [{:block/uuid (:block/uuid active)
-                    :block/order new-order}
-                   (outliner-core/block-with-updated-at
-                    {:block/uuid (:block/uuid property)})]
-                  {:outliner-op :save-block})))
+    (<worker-transact! [{:block/uuid (:block/uuid active)
+                         :block/order new-order}
+                        (outliner-core/block-with-updated-at
+                         {:block/uuid (:block/uuid property)})]
+                       {:outliner-op :save-block})))
 
 (defn- ->choice-item
   [property owner-block opts block]
@@ -645,44 +657,47 @@
 (hsx/defc choices-sub-pane
   [property {:keys [disabled? owner-block] :as opts}]
   (let [*show-hidden? (hooks/use-memo #(atom false) [])
-           [show-hidden?] (hooks/use-atom *show-hidden?)
-           {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
-           values (:property/closed-values property)
-           value-ids (vec (keep :db/id values))
-           choices (use-choice-blocks value-ids)
-           scoped-choices (db-property/scoped-closed-values property owner-block {:values choices})
-           scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
-           excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
-           hidden-excluded-choices (filter (partial hidden-excluded-choice? excluded-ids) scoped-choices)
-           hidden-choices (concat hidden-excluded-choices scoped-from-other-tags)
-           visible-choices (remove (partial hidden-excluded-choice? excluded-ids) scoped-choices)
-           list-choices (if show-hidden?
-                          (concat visible-choices hidden-choices)
-                          visible-choices)
-           choice-items (map (partial ->choice-item property owner-block opts) list-choices)]
-       [:div.ls-property-dropdown.ls-property-choices-sub-pane
-        (when (seq scoped-choices)
-          [:<>
-           (when (and (seq hidden-choices) owner-class?)
-             (shui/button
-              {:size :sm
-               :variant :ghost
-               :class "text-muted-foreground"
-               :on-click (fn []
-                           (swap! *show-hidden? not))}
-              (if show-hidden? (t :property/hide-hidden-choices) (t :property/show-hidden-choices))))
-           [:ul.choices-list
-            (dnd/items
-             choice-items
-             {:sort-by-inner-element? false
-              :on-drag-end
-              (fn [_ data]
-                (on-choice-drag-end property data))})]
-           (shui/dropdown-menu-separator)])
+        [show-hidden?] (hooks/use-atom *show-hidden?)
+        {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
+        choices (or (db-hooks/use-resource
+                     [:property-choices (:block/uuid property)])
+                    (vec (:property/closed-values property)))
+        property-with-choices (assoc property :property/closed-values choices)
+        scoped-choices (db-property/scoped-closed-values
+                        property-with-choices owner-block {:values choices})
+        scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
+        excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
+        hidden-excluded-choices (filter (partial hidden-excluded-choice? excluded-ids) scoped-choices)
+        hidden-choices (concat hidden-excluded-choices scoped-from-other-tags)
+        visible-choices (remove (partial hidden-excluded-choice? excluded-ids) scoped-choices)
+        list-choices (if show-hidden?
+                       (concat visible-choices hidden-choices)
+                       visible-choices)
+        choice-items (map (partial ->choice-item property-with-choices owner-block opts)
+                          list-choices)]
+    [:div.ls-property-dropdown.ls-property-choices-sub-pane
+     (when (seq scoped-choices)
+       [:<>
+        (when (and (seq hidden-choices) owner-class?)
+          (shui/button
+           {:size :sm
+            :variant :ghost
+            :class "text-muted-foreground"
+            :on-click (fn []
+                        (swap! *show-hidden? not))}
+           (if show-hidden? (t :property/hide-hidden-choices) (t :property/show-hidden-choices))))
+        [:ul.choices-list
+         (dnd/items
+          choice-items
+          {:sort-by-inner-element? false
+           :on-drag-end
+           (fn [_ data]
+             (on-choice-drag-end property-with-choices data))})]
+        (shui/dropdown-menu-separator)])
 
-        ;; add choice
-        (when-not disabled?
-          (add-choice-menuitem property owner-block))]))
+     ;; add choice
+     (when-not disabled?
+       (add-choice-menuitem property-with-choices owner-block))]))
 
 (hsx/defc checkbox-state-mapping
   [choices]
@@ -736,7 +751,7 @@
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (db-property-handler/set-block-property!
-                            (:db/id property)
+                            (:block/uuid property)
                             :logseq.property/ui-position
                             (keyword v))
                            (set-sub-open! false)
@@ -763,7 +778,7 @@
 
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
-  (let [class? (or class? (ldb/class? block))
+  (let [class? (or class? (entity/class? block))
         remove! #(if (and class? class-schema?)
                    (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
                    (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
@@ -840,7 +855,7 @@
                          (icon-component/icon icon {:size 15})])
         built-in? (ldb/built-in? property)
         disabled? (or built-in? config/publishing?)
-        class-schema? (and (ldb/class? owner-block) class-schema?)
+        class-schema? (and (entity/class? owner-block) class-schema?)
         special-built-in-prop? (contains? #{:block/title :block/tags :block/created-at :block/updated-at} (:db/ident property))]
     (->>
      [(when with-title?
@@ -935,7 +950,7 @@
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
-                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
+                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:block/uuid property)
                                                                                                                             :logseq.property/hide?
                                                                                                                             %)}))
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
@@ -944,7 +959,7 @@
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
                                :disabled? config/publishing?
                                :on-toggle-checked-change (fn []
-                                                           (db-property-handler/set-block-property! (:db/id property)
+                                                           (db-property-handler/set-block-property! (:block/uuid property)
                                                                                                     :logseq.property/hide-empty-value
                                                                                                     (not (:logseq.property/hide-empty-value property))))}))]
                           (remove nil?))]
@@ -980,8 +995,8 @@
                           :on-checked-change
                           (fn [value]
                             (if value
-                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                              (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+                              (db-property-handler/set-block-property! (:block/uuid owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                              (db-property-handler/delete-property-value! (:block/uuid owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
       (when (and owner-block
                 ;; Any property should be removable from Tag Properties
@@ -996,10 +1011,9 @@
           :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                        :on-select (fn [^js e]
                                     (util/stop e)
-                                    (-> (p/do!
-                                         (handle-delete-property! owner-block property {:class-schema? class-schema?})
-                                         (shui/popup-hide-all!))
-                                        (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
+                                    (shui/popup-hide-all!)
+                                    (-> (handle-delete-property! owner-block property {:class-schema? class-schema?})
+                                        (p/catch (fn [] nil))))}}))
       (when debug?
         [:<>
          (shui/dropdown-menu-separator)
@@ -1016,15 +1030,17 @@
   [property* owner-block opts]
   (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
         [values] (hooks/use-atom *values)
-        property (db/sub-block (:db/id property*))
-        owner-block (db/sub-block (:db/id owner-block))]
+        property (db-hooks/use-block (:block/uuid property*))
+        owner-uuid (:block/uuid owner-block)
+        owner-or-property (db-hooks/use-block (or owner-uuid (:block/uuid property*)))
+        owner-block (when owner-uuid owner-or-property)]
     (hooks/use-effect!
      (fn []
        (reset! *values :loading)
        (p/let [result (db-async/<get-property-values (:db/ident property*))]
          (reset! *values result)))
      [(:db/ident property*)])
-    (when-not (= :loading values)
+    (when (and property (not= :loading values))
       (into [:<>]
             (map-indexed (partial with-react-key "property-dropdown"))
             (property-dropdown-options property owner-block values opts)))))

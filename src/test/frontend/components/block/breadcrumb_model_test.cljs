@@ -173,6 +173,20 @@
       (is (= (str "See [[" ref-uuid "]]") (:text seg)))
       (is (= (str "See [[" ref-uuid "]]") (:full-text seg))))))
 
+(deftest breadcrumb-ref-titles-enrich-shallow-canonical-refs-test
+  (let [block-uuid #uuid "00000000-0000-0000-0000-000000000001"
+        ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+        entity {:db/id 1
+                :block/uuid block-uuid
+                :block/raw-title (str "See [[" ref-uuid "]] and #[[" ref-uuid "]]")
+                :block/refs [{:db/id 2 :block/uuid ref-uuid}]}
+        enriched (model/with-breadcrumb-ref-titles
+                  entity
+                  {ref-uuid "Referenced title"})
+        segment (model/block->breadcrumb-segment enriched)]
+    (is (= "See [[Referenced title]] and #[[Referenced title]]"
+           (:text segment)))))
+
 (deftest block->breadcrumb-segment-title-ref-ids-test
   (testing "returns uuid refs from the breadcrumb label line"
     (let [visible-uuid #uuid "00000000-0000-0000-0000-000000000002"
@@ -316,10 +330,9 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest navigated-between-parents-test
-  (let [page-ref {:db/id 1}
-        initial-block {:db/id 2
+  (let [initial-block {:db/id 2
                        :block/uuid #uuid "00000000-0000-0000-0000-000000000002"
-                       :block/parent page-ref}
+                       :block/parent-id 1}
         navigating-block #uuid "00000000-0000-0000-0000-000000000002"]
     (testing "missing UI-db entity keeps the worker-pulled block list"
       (is (false? (model/navigated-between-parents? initial-block navigating-block nil))))
@@ -329,14 +342,14 @@
                    initial-block
                    navigating-block
                    {:db/id 2
-                    :block/parent page-ref}))))
+                    :block/parent-id 1}))))
 
     (testing "different parent is navigated"
       (is (true? (model/navigated-between-parents?
                   initial-block
                   navigating-block
                   {:db/id 2
-                   :block/parent {:db/id 3}}))))))
+                   :block/parent-id 3}))))))
 
 ;; ---------------------------------------------------------------------------
 ;; segments->full-title

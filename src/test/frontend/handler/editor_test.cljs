@@ -1,29 +1,51 @@
 (ns frontend.handler.editor-test
   (:require [clojure.test :refer [async deftest is testing use-fixtures]]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor-component]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
+            [frontend.db.conn :as conn]
+            [frontend.db.transact :as db-transact]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.assets :as assets-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
-(use-fixtures :each {:before test-helper/start-test-db!
+(use-fixtures :each {:before (fn []
+                              (async done
+                                     (test-helper/start-test-db!)
+                                     (done)))
                      :after (fn []
                               (state/set-current-repo! nil)
                               (test-helper/destroy-test-db!))})
+
+(defn- <pull-page-from-test-db
+  [api _repo _selector lookup]
+  (p/resolved
+   (when (= api :thread-api/pull)
+     (when (= :block/name (first lookup))
+       (let [test-db (conn/get-db test-helper/test-db)
+             page-name (second lookup)]
+         (if-let [page (ldb/get-page test-db page-name)]
+           (select-keys page [:block/uuid :block/title :block/name])
+           (gp-block/page-name->map page-name test-db true (state/get-date-formatter))))))))
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -65,8 +87,537 @@
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
 
+(deftest own-order-number-list-uses-passed-block-test
+  (is (true? (editor/own-order-number-list?
+              {:db/id 1
+               :logseq.property/order-list-type {:block/title "number"}})))
+  (is (false? (editor/own-order-number-list?
+              {:db/id 2
+               :logseq.property/order-list-type {:block/title "roman"}}))))
+
+(deftest selected-delete-restores-the-mounted-previous-block-test
+  (let [block-id (random-uuid)
+        block {:db/id 1
+               :block/uuid block-id
+               :block/title "previous"}
+        sibling #js {}
+        edits (atom [])]
+    (aset sibling "__logseqBlock" block)
+    (with-redefs [dom/attr (fn [node attr]
+                             (when (identical? node sibling)
+                               (case attr
+                                 "blockid" (str block-id)
+                                 "containerid" "17"
+                                 nil)))
+                  state/get-edit-block (constantly nil)
+                  editor/edit-block! (fn [& args]
+                                       (swap! edits conj args))]
+      (let [edit-after-delete (#'editor/edit-previous-window-block-fn sibling)]
+        (edit-after-delete [])
+        (is (= block (ffirst @edits)))
+        (is (= (count (:block/title block))
+               (second (first @edits))))))))
+
+(deftest get-state-uses-editor-args-block-without-renderer-rehydration-test
+  (let [block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :block/title "current block"}
+        node #js {:value "content"}]
+    (with-redefs [state/get-editor-args
+                  (constantly [{:on-hide :hide
+                                :block block
+                                :block-id 1
+                                :block-parent-id 2
+                                :format :markdown
+                                :sidebar? true}
+                               "edit-block-test"
+                               {:container-id :main}])
+                  gdom/getElement (fn [id]
+                                    (when (= "edit-block-test" id)
+                                      node))
+                  util/get-selection-start (constantly 3)
+                  util/rec-get-node (fn [_node attr]
+                                      (when (= "ls-block" attr)
+                                        :container))]
+      (is (= {:config {:container-id :main}
+              :on-hide :hide
+              :sidebar? true
+              :format :markdown
+              :id "edit-block-test"
+              :block block
+              :block-id 1
+              :block-parent-id 2
+              :node node
+              :value "content"
+              :pos 3
+              :block-container :container}
+             (editor/get-state))))))
+
+(deftest inserted-block-edit-uses-persisted-window-row-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          pending-block {:block/uuid block-id :block/title "created"}
+          inserted-block (assoc pending-block :db/id 10)
+          calls (atom [])
+          original-edit-block! editor/edit-block!]
+      (set! editor/edit-block! (fn [block pos opts]
+                                 (reset! calls [block pos opts])))
+      (-> ((#'editor/inserted-block-edit-fn pending-block pending-block 7) [inserted-block])
+          (p/then
+           (fn []
+             (is (= [inserted-block 0 {:container-id 7
+                                       :save-code-editor? false
+                                       :skip-load? true}]
+                    @calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor/edit-block! original-edit-block!)
+             (done)))))))
+
+(deftest save-block-if-changed-uses-passed-block-content-test
+  (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title "Old title"}
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [db ops opts]
+                                                   (reset! tx-calls [db ops opts])
+                                                   :tx)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [block opts]
+                                            (swap! save-calls conj [block opts]))]
+      (is (nil? (editor/save-block-if-changed! block " Old title ")))
+      (is (empty? @save-calls)
+          "Same trimmed title should not build a save op")
+      (is (empty? @tx-calls)
+          "Same trimmed title should not save")
+      (is (= :tx (editor/save-block-if-changed! block "New title" {:source :test})))
+      (is (= [[{:block/uuid block-uuid
+                :block/title "New title"}
+               nil]]
+             @save-calls))
+      (is (= [nil
+              []
+              {:source :test
+               :outliner-op :save-block}]
+             @tx-calls))
+      (reset! save-calls [])
+      (reset! tx-calls [])
+      (is (= :tx (editor/save-block-if-changed! block "Old title" {:force? true})))
+      (is (= [[{:block/uuid block-uuid
+                :block/title "Old title"}
+               nil]]
+             @save-calls))
+      (is (= [nil
+              []
+              {:force? true
+               :outliner-op :save-block}]
+             @tx-calls)))))
+
+(deftest open-block-in-sidebar-loads-target-through-worker-test
+  (async done
+    (let [page-id #uuid "11111111-1111-1111-1111-111111111111"
+          block-id #uuid "22222222-2222-2222-2222-222222222222"
+          worker-calls (atom [])
+          sidebar-calls (atom [])
+          original-get-current-repo state/get-current-repo
+          original-<invoke-db-worker state/<invoke-db-worker
+          original-sidebar-add-block! state/sidebar-add-block!
+          restore! (fn []
+                     (set! state/get-current-repo original-get-current-repo)
+                     (set! state/<invoke-db-worker original-<invoke-db-worker)
+                     (set! state/sidebar-add-block! original-sidebar-add-block!))]
+      (set! state/get-current-repo (constantly "test"))
+      (set! state/<invoke-db-worker
+            (fn [& args]
+              (swap! worker-calls conj (vec args))
+              (p/resolved
+               (case (last args)
+                 [:block/uuid page-id] {:db/id 10}
+                 [:block/uuid block-id] {:db/id 20
+                                         :block/page {:db/id 10}}
+                 nil))))
+      (set! state/sidebar-add-block!
+            (fn [& args]
+              (swap! sidebar-calls conj (vec args))))
+      (-> (p/do!
+           (editor/open-block-in-sidebar! page-id)
+           (editor/open-block-in-sidebar! block-id))
+          (p/then
+           (fn []
+             (is (= [[:thread-api/pull "test" [:db/id {:block/page [:db/id]}] [:block/uuid page-id]]
+                     [:thread-api/pull "test" [:db/id {:block/page [:db/id]}] [:block/uuid block-id]]]
+                    @worker-calls))
+             (is (= [["test" 10 :page]
+                     ["test" 20 :block]]
+                    @sidebar-calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
+(deftest open-link-in-sidebar-loads-target-through-worker-test
+  (async done
+    (let [page-db-id 10
+          block-id #uuid "22222222-2222-2222-2222-222222222222"
+          block-db-id 20
+          nearest-pages (atom ["Some Page" (str block-id)])
+          worker-calls (atom [])
+          sidebar-calls (atom [])
+          original-get-nearest-page editor/get-nearest-page
+          original-get-current-repo state/get-current-repo
+          original-<invoke-db-worker state/<invoke-db-worker
+          original-sidebar-add-block! state/sidebar-add-block!
+          restore! (fn []
+                     (set! editor/get-nearest-page original-get-nearest-page)
+                     (set! state/get-current-repo original-get-current-repo)
+                     (set! state/<invoke-db-worker original-<invoke-db-worker)
+                     (set! state/sidebar-add-block! original-sidebar-add-block!))]
+      (set! editor/get-nearest-page (fn []
+                                      (let [[pages] (swap-vals! nearest-pages rest)]
+                                        (first pages))))
+      (set! state/get-current-repo (constantly "test"))
+      (set! state/<invoke-db-worker
+            (fn [& args]
+              (swap! worker-calls conj (vec args))
+              (p/resolved
+               (case (last args)
+                 [:block/name "some page"] {:db/id page-db-id}
+                 [:block/uuid block-id] {:db/id block-db-id}
+                 nil))))
+      (set! state/sidebar-add-block!
+            (fn [& args]
+              (swap! sidebar-calls conj (vec args))))
+      (-> (p/do!
+           (editor/open-link-in-sidebar!)
+           (editor/open-link-in-sidebar!))
+          (p/then
+           (fn []
+             (is (= [[:thread-api/pull "test" [:db/id] [:block/name "some page"]]
+                     [:thread-api/pull "test" [:db/id] [:block/uuid block-id]]]
+                    @worker-calls))
+             (is (= [["test" page-db-id :page]
+                     ["test" block-db-id :block]]
+                    @sidebar-calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
+(deftest zoom-in-uses-current-edit-block-without-renderer-lookup-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          calls (atom [])]
+      (-> (p/with-redefs [state/editing? (constantly true)
+                          state/get-edit-block (constantly {:block/uuid block-id})
+                          state/clear-editor-action! (fn []
+                                                       (swap! calls conj [:clear-editor-action]))
+                          state/set-editing-block-id! (fn [id]
+                                                        (swap! calls conj [:set-editing-block-id id]))
+                          editor/save-current-block! (fn []
+                                                       (swap! calls conj [:save-current-block])
+                                                       (p/resolved nil))
+                          route-handler/redirect-to-page! (fn [id]
+                                                            (swap! calls conj [:redirect id])
+                                                            (p/resolved nil))]
+            (-> (try
+                  (editor/zoom-in!)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [[:clear-editor-action]
+                           [:set-editing-block-id [:unknown-container block-id]]
+                           [:save-current-block]
+                           [:redirect block-id]]
+                          @calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
+
+(deftest zoom-out-loads-parent-through-worker-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          parent-id #uuid "22222222-2222-2222-2222-222222222222"
+          calls (atom [])
+          original-editing? state/editing?
+          original-get-current-repo state/get-current-repo
+          original-get-current-page state/get-current-page
+          original-get-edit-block state/get-edit-block
+          original-get-editor-action state/get-editor-action
+          original-clear-editor-action! state/clear-editor-action!
+          original-set-editing-block-id! state/set-editing-block-id!
+          original-<invoke-db-worker state/<invoke-db-worker
+          original-redirect! route-handler/redirect!
+          restore! (fn []
+                     (set! state/editing? original-editing?)
+                     (set! state/get-current-repo original-get-current-repo)
+                     (set! state/get-current-page original-get-current-page)
+                     (set! state/get-edit-block original-get-edit-block)
+                     (set! state/get-editor-action original-get-editor-action)
+                     (set! state/clear-editor-action! original-clear-editor-action!)
+                     (set! state/set-editing-block-id! original-set-editing-block-id!)
+                     (set! state/<invoke-db-worker original-<invoke-db-worker)
+                     (set! route-handler/redirect! original-redirect!))]
+      (set! state/editing? (constantly true))
+      (set! state/get-current-repo (constantly "test"))
+      (set! state/get-current-page (constantly (str block-id)))
+      (set! state/get-edit-block (constantly {:block/uuid block-id}))
+      (set! state/get-editor-action (constantly :skip-save))
+      (set! state/clear-editor-action! (fn []
+                                         (swap! calls conj [:clear-editor-action])))
+      (set! state/set-editing-block-id! (fn [id]
+                                          (swap! calls conj [:set-editing-block-id id])))
+      (set! state/<invoke-db-worker (fn [api repo & args]
+                                      (case api
+                                        :thread-api/get-blocks
+                                        (let [requests (ldb/read-transit-str (first args))]
+                                          (swap! calls conj [:get-blocks repo requests])
+                                          (p/resolved (ldb/write-transit-str
+                                                       [{:block {:db/id 10
+                                                                 :block/uuid block-id
+                                                                 :block/page {:db/id 100}}}])))
+
+                                        :thread-api/get-block-parents
+                                        (let [[id depth] args]
+                                          (swap! calls conj [:get-block-parents repo id depth])
+                                          (p/resolved [{:db/id 9
+                                                        :block/uuid parent-id
+                                                        :block/title "Parent"}]))
+
+                                        :thread-api/get-page-route-info
+                                        (let [page-name (first args)]
+                                          (swap! calls conj [:route-info repo page-name])
+                                          (p/resolved {:page-title (str page-name)})))))
+      (set! route-handler/redirect! (fn [route]
+                                      (swap! calls conj [:redirect route])
+                                      nil))
+      (-> (try
+            (editor/zoom-out!)
+            (catch :default error
+              (p/rejected error)))
+          (p/then
+           (fn []
+             (is (some #(= [:get-blocks "test" [{:id (str block-id)
+                                                 :opts {:children? false}}]]
+                           %)
+                       @calls))
+             (is (some #(= [:get-block-parents "test" 10 1] %)
+                       @calls))
+             (is (some #(and (= :route-info (first %))
+                             (= parent-id (nth % 2 nil)))
+                       @calls))
+             (is (some #(= [:redirect {:to :page
+                                       :path-params {:name (str parent-id)}
+                                       :query-params nil}]
+                           %)
+                       @calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
+(deftest edit-last-block-after-inserted-uses-returned-block-test
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        inserted-block {:db/id 10
+                        :block/uuid block-id
+                        :block/title "inserted"}
+        calls (atom [])]
+    (with-redefs [util/schedule (fn [f]
+                                  (swap! calls conj [:schedule])
+                                  (f))
+                  editor/edit-block! (fn [& args]
+                                       (swap! calls conj (into [:edit-block] args)))
+                  editor/clear-when-saved! (fn []
+                                             (swap! calls conj [:clear-when-saved]))]
+      (try
+        (#'editor/edit-last-block-after-inserted! {:blocks [inserted-block]})
+        (is (= [[:schedule]
+                [:clear-when-saved]
+                [:edit-block inserted-block :max]]
+               @calls))
+        (catch :default error
+          (is false (str error)))))))
+
+(deftest cycle-todo-uses-current-edit-block-test
+  (let [edit-block {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :logseq.property/status {:db/ident :logseq.property/status.todo}}
+        tx-calls (atom [])
+        cycle-calls (atom [])]
+    (with-redefs [state/get-editor-action (constantly nil)
+                  editor/get-selected-blocks (constantly nil)
+                  state/get-edit-block (constantly edit-block)
+                  state/get-edit-input-id (constantly "edit-block-test")
+                  gdom/getElement (constantly #js {})
+                  state/get-edit-pos (constantly 0)
+                  conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [db ops opts]
+                                                   (reset! tx-calls [db ops opts])
+                                                   :tx)
+                  editor/db-based-cycle-todo! (fn [block]
+                                                (swap! cycle-calls conj block))]
+      (editor/cycle-todo!)
+      (is (= [edit-block] @cycle-calls))
+      (is (= [nil
+              []
+              {:outliner-op :cycle-todos}]
+             @tx-calls)))))
+
+(deftest delete-block-aux-uses-passed-block-test
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        block {:db/id 1
+               :block/uuid block-id
+               :block/title "delete me"}
+        top-level-block (assoc block :block/level 1)
+        calls (atom [])]
+    (with-redefs [block-handler/get-top-level-blocks
+                  (fn [blocks]
+                    (swap! calls conj [:top-level blocks])
+                    [top-level-block])
+                  frontend-outliner-op/delete-blocks!
+                  (fn [blocks opts]
+                    (swap! calls conj [:delete blocks opts]))
+                  db-transact/apply-outliner-ops
+                  (fn [_db ops opts]
+                    (swap! calls conj [:apply ops opts]))]
+      (try
+        (editor/delete-block-aux! block)
+        (is (= [[:top-level [block]]
+                [:delete [top-level-block] {}]
+                [:apply [] {:outliner-op :delete-blocks}]]
+               @calls))
+        (catch :default error
+          (is false (str error)))))))
+
+(deftest move-selected-blocks-loads-selection-through-worker-test
+  (async done
+    (let [block-id-a #uuid "11111111-1111-1111-1111-111111111111"
+          block-id-b #uuid "22222222-2222-2222-2222-222222222222"
+          block-a {:db/id 1
+                   :block/uuid block-id-a
+                   :block/title "A"}
+          block-b {:db/id 2
+                   :block/uuid block-id-b
+                   :block/title "B"}
+          target {:db/id 3
+                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}
+          selection-active? (atom true)
+          event #js {}
+          calls (atom [])]
+      (-> (p/with-redefs [util/stop (fn [e]
+                                      (swap! calls conj [:stop e]))
+                          state/get-selection-block-ids (constantly [block-id-a block-id-b])
+                          state/get-current-repo (constantly "test")
+                          db-async/<get-blocks
+                          (fn [repo ids opts]
+                            (swap! calls conj [:get-blocks repo ids opts])
+                            (p/resolved [{:block block-a} {:block block-b}]))
+                          block-handler/get-top-level-blocks
+                          (fn [blocks]
+                            (let [blocks (vec blocks)]
+                              (swap! calls conj [:top-level blocks])
+                              (map #(when @selection-active? %) blocks)))
+                          state/clear-selection!
+                          (fn []
+                            (reset! selection-active? false))
+                          editor/move-blocks!
+                          (fn [blocks move-target opts]
+                            (swap! calls conj [:move (mapv :block/uuid blocks) move-target opts]))
+                          route-handler/go-to-search!
+                          (fn [route opts]
+                            (swap! calls conj [:go-to-search route (:action opts)])
+                            ((:trigger opts) {:source-block target}))]
+            (-> (try
+                  (editor/move-selected-blocks event)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [[:stop event]
+                           [:get-blocks "test" [block-id-a block-id-b] {:children? false}]
+                           [:top-level [block-a block-b]]
+                           [:go-to-search :nodes :move-blocks]
+                           [:move [block-id-a block-id-b] target {:bottom? true}]]
+                          @calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
+
+(deftest cycle-todo-loads-selected-blocks-through-worker-test
+  (async done
+    (let [block-id-a #uuid "11111111-1111-1111-1111-111111111111"
+          block-id-b #uuid "22222222-2222-2222-2222-222222222222"
+          block-a {:db/id 1
+                   :block/uuid block-id-a
+                   :logseq.property/status {:db/ident :logseq.property/status.todo}}
+          block-b {:db/id 2
+                   :block/uuid block-id-b
+                   :logseq.property/status {:db/ident :logseq.property/status.doing}}
+          cycle-calls (atom [])
+          worker-calls (atom [])
+          original-cycle-todo! editor/db-based-cycle-todo!]
+      (set! editor/db-based-cycle-todo!
+            (fn [block]
+              (swap! cycle-calls conj block)))
+      (-> (p/with-redefs [state/get-editor-action (constantly nil)
+                          editor/get-selected-blocks (constantly [:node-a :node-b])
+                          dom/attr (fn [node attr]
+                                     (when (= "blockid" attr)
+                                       (case node
+                                         :node-a (str block-id-a)
+                                         :node-b (str block-id-b))))
+                          state/get-current-repo (constantly "test")
+                          db-async/<get-blocks
+                          (fn [repo ids opts]
+                            (swap! worker-calls conj [:get-blocks repo ids opts])
+                            (p/resolved [{:block block-a} {:block block-b}]))]
+            (-> (try
+                  (editor/cycle-todo!)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [[:get-blocks "test" [block-id-a block-id-b] {:children? false}]]
+                          @worker-calls))
+                   (is (= [block-a block-b] @cycle-calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally (fn []
+                       (set! editor/db-based-cycle-todo! original-cycle-todo!)
+                       (done)))))))
+
+(deftest db-based-cycle-todo-uses-block-status-test
+  (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        set-calls (atom [])]
+    (with-redefs [property-handler/set-block-property!
+                  (fn [& args]
+                    (swap! set-calls conj (vec args)))]
+      (editor/db-based-cycle-todo!
+       {:block/uuid block-uuid
+        :logseq.property/status {:db/ident :logseq.property/status.todo}})
+      (is (= [[block-uuid :logseq.property/status :logseq.property/status.doing]]
+             @set-calls)))))
+
 (defn- follow-page-link-result
-  [{:keys [page-title existing-page? worker-page?]}]
+  [{:keys [page-title existing-page?]}]
   (let [events (atom [])
         redirects (atom [])
         worker-page-uuid (random-uuid)
@@ -81,13 +632,9 @@
                     editor/save-current-block! (constantly nil)
                     state/clear-editor-action! (constantly nil)
                     state/clear-edit! (constantly nil)
-                    db/get-page (fn [title]
-                                  (when (and existing-page? (= page-title title))
-                                    {:block/title title
-                                     :block/uuid (random-uuid)}))
                     db-async/<get-block (fn [_repo title _opts]
                                           (p/resolved
-                                           (when (and worker-page? (= page-title title))
+                                           (when (and existing-page? (= page-title title))
                                              {:block/title title
                                               :block/uuid worker-page-uuid})))
                     state/pub-event! (fn [event]
@@ -122,13 +669,50 @@
 (deftest follow-link-under-cursor-uses-worker-page-before-creating-test
   (async done
     (-> (follow-page-link-result {:page-title "May 15th, 2026"
-                                  :existing-page? false
-                                  :worker-page? true})
+                                  :existing-page? true})
         (p/then
          (fn [{:keys [events redirects]}]
            (is (empty? events))
            (is (= [["May 15th, 2026"]] redirects))
            (done))))))
+
+(deftest follow-link-under-cursor-uses-worker-without-renderer-page-lookup-test
+  (async done
+    (let [page-title "Project"
+          events (atom [])
+          redirects (atom [])
+          input-id "edit-block-test"
+          input #js {:value (str "Open [[" page-title "]]")}]
+      (p/with-redefs [state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                      state/get-edit-input-id (constantly input-id)
+                      gdom/getElement (fn [id]
+                                        (when (= input-id id)
+                                          input))
+                      cursor/pos (constantly 10)
+                      editor/save-current-block! (constantly nil)
+                      state/clear-editor-action! (constantly nil)
+                      state/clear-edit! (constantly nil)
+                      state/get-current-repo (constantly "test")
+                      db-async/<get-block (fn [repo title opts]
+                                            (is (string? repo))
+                                            (is (= page-title title))
+                                            (is (= {:children? false} opts))
+                                            (p/resolved {:block/title title
+                                                         :block/uuid (random-uuid)}))
+                      state/pub-event! (fn [event]
+                                         (swap! events conj event)
+                                         (p/resolved nil))
+                      route-handler/redirect-to-page! (fn [& args]
+                                                        (swap! redirects conj args))]
+        (-> (editor/follow-link-under-cursor!)
+            (p/then
+             (fn []
+               (is (empty? @events))
+               (is (= [[page-title]] @redirects))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally done))))))
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
@@ -201,36 +785,167 @@
 
 (defn- create-tag-with-alias!
   []
-  (test-helper/create-page! "Project Tag" :redirect? false :class? true)
-  (test-helper/create-page! "Alias Only" :redirect? false)
-  (let [class (db/get-case-page "Project Tag")
-        alias (db/get-case-page "Alias Only")]
-    (db/transact! test-helper/test-db [{:db/id (:db/id class)
-                                        :block/alias #{(:db/id alias)}}])))
+  (let [{:keys [init-tx block-props-tx]}
+        (sqlite-build/build-blocks-tx
+         {:pages-and-blocks [{:page {:block/title "Project Tag"}
+                              :blocks []}
+                             {:page {:block/title "Alias Only"}
+                              :blocks []}]
+          :auto-create-ontology? true})
+        init-index (map #(select-keys % [:block/uuid]) init-tx)
+        test-conn (conn/get-db test-helper/test-db false)]
+    (d/transact! test-conn (concat init-index init-tx block-props-tx)))
+  (let [test-db (conn/get-db test-helper/test-db)
+        class (ldb/get-case-page test-db "Project Tag")
+        alias (ldb/get-case-page test-db "Alias Only")]
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [{:db/id (:db/id class)
+                   :block/alias #{(:db/id alias)}
+                   :block/tags #{:logseq.class/Tag}}])))
 
 (deftest get-matched-classes-includes-class-aliases
-  (create-tag-with-alias!)
-  (is (= ["Project Tag"]
-         (map :block/title (editor/get-matched-classes "Project Tag")))
-      "Existing tag title matching still works")
-  (is (= ["Alias Only"]
-         (map :block/title (editor/get-matched-classes "Alias Only")))
-      "Tag aliases stay available as tag completion choices"))
+  (async done
+    (let [class-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          alias {:db/id 2
+                 :block/uuid alias-uuid
+                 :block/title "Alias Only"}
+          class {:db/id 1
+                 :block/uuid class-uuid
+                 :block/title "Project Tag"
+                 :db/ident :user.class/project-tag
+                 :block/alias #{alias}}
+          original-<get-all-classes db-async/<get-all-classes
+          original-<invoke-db-worker state/<invoke-db-worker
+          previous-worker @state/*db-worker]
+      (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
+      (reset! state/*db-worker (fn [& _args] (p/resolved nil)))
+      (create-tag-with-alias!)
+      (set! db-async/<get-all-classes (fn [_repo _opts]
+                                        (p/resolved [class])))
+      (-> (p/let [title-matches (editor/get-matched-classes "Project Tag")
+                  alias-matches (editor/get-matched-classes "Alias Only")]
+            (is (= ["Project Tag"]
+                   (map :block/title title-matches))
+                "Existing tag title matching still works")
+            (is (= [{:db/id 1
+                     :db/ident :user.class/project-tag
+                     :block/uuid class-uuid
+                     :block/title "Project Tag"}]
+                   (map #(select-keys % [:db/id :db/ident :block/uuid :block/title]) title-matches))
+                "Existing class choices keep their identity so they are not recreated")
+            (is (= ["Alias Only"]
+                   (map :block/title alias-matches))
+                "Tag aliases stay available as tag completion choices"))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (set! state/<invoke-db-worker original-<invoke-db-worker)
+                       (reset! state/*db-worker previous-worker)
+                       (done)))))))
+
+(deftest get-matched-classes-includes-page-class-for-blocks
+  (async done
+    (let [page-class {:db/id 3
+                      :db/ident :logseq.class/Page
+                      :block/title "Page"}
+          original-<get-all-classes db-async/<get-all-classes]
+      (state/set-state! :editor/block {:block/uuid (random-uuid)
+                                       :block/title "Editing block"})
+      (set! db-async/<get-all-classes
+            (fn [_repo opts]
+              (p/resolved (if (false? (:except-private-tags? opts))
+                            [page-class]
+                            []))))
+      (-> (p/let [matches (editor/get-matched-classes "Page")]
+            (is (= [page-class]
+                   (map #(select-keys % [:db/id :db/ident :block/title]) matches))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (state/set-state! :editor/block nil)
+                       (done)))))))
 
 (deftest tag-search-does-not-convert-class-aliases
   (async done
-    (create-tag-with-alias!)
-    (let [matched-pages (atom nil)]
-      (-> (p/with-redefs [db-async/<get-block (fn [_repo _title _opts]
-                                                (p/resolved (db/get-page "Alias Only")))]
-            (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %)))
-          (.then
+    (let [matched-pages (atom nil)
+          original-<get-block db-async/<get-block
+          original-<get-all-classes db-async/<get-all-classes
+          original-<invoke-db-worker state/<invoke-db-worker
+          previous-worker @state/*db-worker]
+      (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
+      (reset! state/*db-worker (fn [& _args] (p/resolved nil)))
+      (create-tag-with-alias!)
+      (set! db-async/<get-block (fn [_repo _title _opts]
+                                  (let [test-db (conn/get-db test-helper/test-db)
+                                        alias (ldb/get-page test-db "Alias Only")]
+                                    (p/resolved (assoc alias :block/alias-source-page-class? true)))))
+      (set! db-async/<get-all-classes
+            (fn [_repo _opts]
+              (let [test-db (conn/get-db test-helper/test-db)
+                    alias (ldb/get-case-page test-db "Alias Only")
+                    class (assoc (select-keys (ldb/get-case-page test-db "Project Tag")
+                                              [:db/id :block/uuid :block/title])
+                                 :block/alias #{(select-keys alias [:db/id :block/uuid :block/title])})]
+                (p/resolved [class]))))
+      (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
+          (p/then
            (fn []
              (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
                  "The alias is still selectable from tag completion")
              (is (not-any? :convert-page-to-tag? @matched-pages)
-                 "A class alias must not show a redundant Convert action")
-             (done)))))))
+                 "A class alias must not show a redundant Convert action")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-block original-<get-block)
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (set! state/<invoke-db-worker original-<invoke-db-worker)
+	                       (reset! state/*db-worker previous-worker)
+	                       (done)))))))
+
+(deftest tag-search-does-not-prepend-new-tag-for-matched-page-class
+  (async done
+    (let [matched-pages (atom nil)
+          page-class {:db/id 3
+                      :db/ident :logseq.class/Page
+                      :block/uuid #uuid "00000002-1484-3403-2900-000000000000"
+                      :block/title "Page"}
+          original-<get-block db-async/<get-block
+          original-<get-all-classes db-async/<get-all-classes]
+      (state/set-state! :editor/block {:block/uuid (random-uuid)
+                                       :block/title "Editing block"})
+      (set! db-async/<get-block (fn [& _args] (p/resolved nil)))
+      (set! db-async/<get-all-classes
+            (fn [_repo opts]
+              (p/resolved (if (false? (:except-private-tags? opts))
+                            [page-class]
+                            []))))
+      (-> (#'editor-component/search-pages "Page" true #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (= ["Page"]
+                    (map :block/title @matched-pages))
+                 "An exact built-in Page class match should be chosen before creating a new tag.")
+             (is (= [:logseq.class/Page]
+                    (map :db/ident @matched-pages)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-block original-<get-block)
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (state/set-state! :editor/block nil)
+                       (done)))))))
+
+(deftest tag-search-does-not-offer-new-tag-while-class-search-is-pending
+  (is (nil? (seq (#'editor-component/matched-pages-with-new-page nil true "Page" nil)))
+      "Pending tag search should not show a create-new result before existing classes load.")
+  (is (seq (#'editor-component/matched-pages-with-new-page [] true "Missing tag" nil))
+      "Resolved empty tag search can still offer a create-new result."))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
@@ -369,82 +1084,299 @@
   [block]
   (let [deleted? (atom false)
         stopped? (atom false)
-        input #js {:value ""}]
-    (with-redefs [state/get-input (constantly input)
-                  cursor/pos (constantly 0)
-                  util/stop (fn [_] (reset! stopped? true))
-                  state/get-current-repo (constantly test-helper/test-db)
-                  state/get-edit-block (constantly block)
-                  db/entity (fn [_] block)
-                  ldb/get-left-sibling (constantly nil)
-                  editor/get-state (constantly {:config {}})
-                  editor/delete-block! (fn [_] (reset! deleted? true))]
-      (#'editor/delete-block-when-zero-pos! nil)
-      {:deleted? @deleted?
-       :stopped? @stopped?})))
+        input #js {:value ""}
+        originals [state/get-input cursor/pos util/stop state/get-current-repo
+                   state/get-edit-block db-async/<get-block-sibling
+                   editor/get-state editor/delete-block-inner!
+                   util/get-prev-block-non-collapsed-non-embed]
+        restore! (fn []
+                   (set! state/get-input (nth originals 0))
+                   (set! cursor/pos (nth originals 1))
+                   (set! util/stop (nth originals 2))
+                   (set! state/get-current-repo (nth originals 3))
+                   (set! state/get-edit-block (nth originals 4))
+                   (set! db-async/<get-block-sibling (nth originals 5))
+                   (set! editor/get-state (nth originals 6))
+                   (set! editor/delete-block-inner! (nth originals 7))
+                   (set! util/get-prev-block-non-collapsed-non-embed (nth originals 8)))]
+    (set! state/get-input (constantly input))
+    (set! cursor/pos (constantly 0))
+    (set! util/stop (fn [_] (reset! stopped? true)))
+    (set! state/get-current-repo (constantly test-helper/test-db))
+    (set! state/get-edit-block (constantly block))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! editor/get-state (constantly {:config {}}))
+    (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
+    (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
+    (-> (#'editor/delete-block-when-zero-pos! nil)
+        (p/then (fn []
+                  {:deleted? @deleted?
+                   :stopped? @stopped?}))
+        (p/finally restore!))))
 
 (deftest delete-block-when-zero-pos-keeps-asset-block-test
-  (testing "Backspace at the start of an asset block does not delete the block"
-    (is (= {:deleted? false
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}
-             :logseq.property.asset/type "png"})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}
+                         :logseq.property.asset/type "png"})]
+          (is (= {:deleted? false :stopped? true} result)))
+        (p/finally done))))
 
 (deftest delete-block-when-zero-pos-keeps-comments-block-test
-  (testing "Backspace at the start of a Comments block does not delete the block"
-    (is (= {:deleted? false
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}
-             :block/tags [{:db/ident :logseq.class/Comments}]})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}
+                         :block/tags [{:db/ident :logseq.class/Comments}]})]
+          (is (= {:deleted? false :stopped? true} result)))
+        (p/finally done))))
 
 (deftest delete-block-when-zero-pos-keeps-regular-empty-block-behavior-test
-  (testing "Backspace at the start of a regular empty block still deletes it"
-    (is (= {:deleted? true
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}})]
+          (is (= {:deleted? true :stopped? true} result)))
+        (p/finally done))))
+
+(deftest delete-block-when-zero-pos-keeps-the-keydown-editor-state-test
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title ""
+                 :block/page {:db/id 10}}
+          next-block {:db/id 2
+                      :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                      :block/title ""
+                      :block/page {:db/id 10}}
+          editor-state {:block-id (:block/uuid block)
+                        :current-block block
+                        :config {}}
+          next-editor-state {:block-id (:block/uuid next-block)
+                             :current-block next-block
+                             :config {}}
+          *block (atom block)
+          *editor-state (atom editor-state)
+          *resolve-sibling (atom nil)
+          sibling-promise (js/Promise. #(reset! *resolve-sibling %))
+          *deleted-editor-state (atom nil)]
+      (-> (p/with-redefs [state/get-input (constantly #js {:value ""})
+                          cursor/pos (constantly 0)
+                          util/stop (constantly nil)
+                          state/get-current-repo (constantly test-helper/test-db)
+                          state/get-edit-block #(deref *block)
+                          editor/get-state #(deref *editor-state)
+                          util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                          db-async/<get-block-sibling
+                          (fn [& _] sibling-promise)
+                          editor/delete-block-inner!
+                          (fn [_repo state]
+                            (reset! *deleted-editor-state state))]
+            (let [result (#'editor/delete-block-when-zero-pos! nil)]
+              (reset! *block next-block)
+              (reset! *editor-state next-editor-state)
+              (@*resolve-sibling nil)
+              result))
+          (p/then (fn []
+                    (is (= editor-state @*deleted-editor-state)
+                        "Delete must use the editor state captured by its keydown.")))
+          (p/finally done)))))
+
+(deftest insert-block-saves-current-block-before-switching-editor-test
+  (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
+        next-id #uuid "22222222-2222-2222-2222-222222222222"
+        editing-block (atom {:db/id 1
+                             :block/uuid current-id
+                             :block/title "Performance row 2"})
+        current-block {:db/id 1
+                       :block/uuid current-id
+                       :block/title "Performance"
+                       :block/raw-title "Performance"
+                       :block/page {:db/id 10}}
+        next-block {:block/uuid next-id
+                    :block/title "row 2"}
+        calls (atom [])
+        edit-block-f (fn [_rows]
+                       (reset! editing-block next-block))]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                    state/get-editor-action (constantly nil)
+                    state/get-current-repo (constantly "test")
+                    state/get-editor-args (constantly [nil nil {}])
+                    state/get-edit-block #(deref editing-block)
+                    state/get-edit-input-id (constantly "edit-block-test")
+                    gdom/getElement (constantly #js {:value "row 2"})
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (fn [& _]
+                                                       (swap! calls conj :save-block))
+                    frontend-outliner-op/insert-blocks! (fn [& _]
+                                                          (swap! calls conj :insert-blocks))
+                    db-transact/apply-outliner-ops (fn [_ ops opts]
+                                                     (swap! calls conj [:apply ops opts])
+                                                     :tx)]
+        (editor/outliner-insert-block!
+         {:editor/edit-block-fn edit-block-f}
+         current-block
+         next-block
+         {:sibling? true :keep-uuid? true :outliner-op :create-view})
+        (is (= [:save-block
+                :insert-blocks
+                [:apply
+                 []
+                 {:outliner-op :insert-blocks
+                  :source-outliner-op :create-view
+                  :ui/page-id 10
+                  :editor/edit-block-fn edit-block-f}]]
+               @calls)
+            "Insert metadata and operations must use one transaction."))))
+
+(deftest split-current-block-keeps-rendered-title-in-sync-test
+  (let [block {:block/title "Performance row 2"
+               :block/raw-title "Performance row 2"}]
+    (is (= {:block/title "Performance"
+            :block/raw-title "Performance"}
+           (#'editor/current-block-with-title block "Performance")))))
+
+(deftest loaded-block-builds-master-compatible-focus
+  (let [previous {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title "before"}
+        calls (atom [])]
+    (with-redefs [state/get-edit-block (constantly nil)
+                  editor/edit-block! (fn [block pos opts]
+                                       (swap! calls conj [block pos opts]))]
+      (let [{:keys [edit-block-f] :as edit} (#'editor/loaded-block-edit previous "" 7)]
+        (is (= {:prev-block previous
+                :new-content "before"
+                :pos 6}
+               (dissoc edit :edit-block-f)))
+        (is (empty? @calls)
+            "Backspace must not focus before the worker response refreshes the UI.")
+        (edit-block-f)
+        (is (= [[previous 6 {:custom-content "before"
+                             :tail-len 0
+                             :container-id 7
+                             :save-code-editor? false
+                             :skip-load? true}]]
+               @calls))))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
-  (let [asset-block {:db/id 1
-                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                     :block/title ""
-                     :logseq.property.asset/type "png"}
-        sibling-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
-                                          "containerid" nil} %)}
-        edit-calls (atom [])]
-    (with-redefs [db/entity (fn [lookup-ref]
-                              (when (contains? #{[:block/uuid (:block/uuid asset-block)]
-                                                 (:db/id asset-block)}
-                                               lookup-ref)
-                                asset-block))
-                  editor/edit-block! (fn [block pos opts]
-                                       (swap! edit-calls conj {:block block
-                                                               :pos pos
-                                                               :opts opts}))]
-      (let [{:keys [new-content pos edit-block-f]} (#'editor/move-to-prev-block
-                                                    test-helper/test-db
-                                                    sibling-dom
-                                                    "after")]
-        (is (= "after" new-content))
-        (is (= 0 pos))
-        (edit-block-f)
-        (is (= [{:block asset-block
-                 :pos 0
-                 :opts {:custom-content "after"
-                        :tail-len 5
-                        :container-id nil}}]
-               @edit-calls))))))
+  (async done
+    (let [asset-block {:db/id 1
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title ""
+                       :logseq.property.asset/type "png"}
+          sibling-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
+                                            "containerid" nil} %)}
+          edit-calls (atom [])
+          original-<get-block db-async/<get-block
+          original-edit-block! editor/edit-block!]
+      (set! db-async/<get-block
+            (fn [_repo id _opts]
+              (when (= id (:block/uuid asset-block))
+                (p/resolved asset-block))))
+      (set! editor/edit-block!
+            (fn [block pos opts]
+              (swap! edit-calls conj {:block block
+                                      :pos pos
+                                      :opts opts})))
+      (-> (p/let [{:keys [new-content pos edit-block-f]} (#'editor/move-to-prev-block
+                                                          test-helper/test-db
+                                                          sibling-dom
+                                                          "after")]
+            (is (= "after" new-content))
+            (is (= 0 pos))
+            (edit-block-f)
+            (is (= [{:block asset-block
+                     :pos 0
+                     :opts {:custom-content "after"
+                            :tail-len 5
+                            :container-id nil
+                            :save-code-editor? false
+                            :skip-load? true}}]
+                   @edit-calls)))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-block original-<get-block)
+                       (set! editor/edit-block! original-edit-block!)
+                       (done)))))))
+
+(deftest move-to-prev-block-edit-fn-uses-loaded-sibling-entity-test
+  (async done
+    (let [sibling-block {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title "before"}
+          sibling-dom #js {:getAttribute #({"blockid" (str (:block/uuid sibling-block))
+                                            "containerid" nil} %)}
+          worker-lookups (atom [])
+          edit-calls (atom [])
+          original-<get-block db-async/<get-block
+          original-get-edit-block state/get-edit-block
+          original-edit-block! editor/edit-block!]
+      (aset sibling-dom "__logseqBlock" sibling-block)
+      (set! db-async/<get-block
+            (fn [_repo id _opts]
+              (swap! worker-lookups conj id)
+              (when (= id (:block/uuid sibling-block))
+                (p/resolved sibling-block))))
+      (set! state/get-edit-block (constantly nil))
+      (set! editor/edit-block!
+            (fn [block pos opts]
+              (swap! edit-calls conj {:block block
+                                      :pos pos
+                                      :opts opts})))
+      (-> (p/let [{:keys [new-content pos edit-block-f]} (#'editor/move-to-prev-block
+                                                          test-helper/test-db
+                                                          sibling-dom
+                                                          "after")]
+            (is (= "beforeafter" new-content))
+            (is (= 6 pos))
+            (edit-block-f)
+            (is (empty? @worker-lookups)
+                "A mounted previous block must not be fetched from the worker again.")
+            (is (= [{:block sibling-block
+                     :pos 6
+                     :opts {:custom-content "beforeafter"
+                            :tail-len 5
+                            :container-id nil
+                            :save-code-editor? false
+                            :skip-load? true}}]
+                   @edit-calls)))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-block original-<get-block)
+                       (set! state/get-edit-block original-get-edit-block)
+                       (set! editor/edit-block! original-edit-block!)
+                       (done)))))))
+
+(deftest left-sibling-or-parent-uses-mounted-previous-sibling-test
+  (async done
+    (let [parent {:db/id 10}
+          block {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/parent parent}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/parent parent}
+          worker-lookups (atom 0)]
+      (-> (p/with-redefs [db-async/<get-block-sibling
+                          (fn [& _]
+                            (swap! worker-lookups inc)
+                            (p/resolved nil))]
+            (p/let [result (#'editor/<left-sibling-or-parent
+                             test-helper/test-db block previous)]
+              (is (= previous result))
+              (is (zero? @worker-lookups)
+                  "A mounted direct sibling must satisfy tree navigation locally.")))
+          (p/finally done)))))
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
@@ -548,6 +1480,19 @@
       (is (empty? @events)
           "Comment editor > should stay plain text instead of converting the draft to a quote block"))))
 
+(deftest current-edit-block-matches-by-uuid
+  (let [block-uuid (random-uuid)]
+    (with-redefs [state/get-edit-block (constantly {:block/uuid block-uuid})]
+      (is (#'editor/current-edit-block?
+           {:db/id 196
+            :block/uuid block-uuid})))))
+
+(deftest outliner-transaction-identifies-the-page-to-refresh
+  (with-redefs [state/get-current-page (constantly 20)]
+    (is (= {:ui/page-id 10}
+           (#'block-handler/outliner-tx-meta
+            {:block/page {:db/id 10}})))))
+
 (deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks
   (let [draft-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
         expanded (atom [])
@@ -568,30 +1513,45 @@
 (deftest db-based-save-assets-honors-explicit-target-block
   (async done
     (let [draft-uuid #uuid "8789a99e-5147-41a1-a836-4e0a6f03fe9e"
-          asset-uuid #uuid "146b4102-b3d4-4e74-9044-a1c4c3a93326"
           target-block {:block/uuid #uuid "aa2b426a-7357-452d-a5cc-f1d9117b1772"
                         :block/title "Comments"}
-          inserted (atom nil)]
-      (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
-                                                              (p/resolved ["/tmp/repo" "assets"]))
-                          model/get-today-journal-title (constantly "Today")
-                          model/get-journal-page (constantly {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})
-                          state/get-edit-block (constantly {:block/uuid draft-uuid
-                                                            :block/title ""})
-                          state/get-edit-content (constantly "")
-                          state/get-editor-args (constantly [nil nil {:comment-editor? true
-                                                                      :comment-asset-target-block target-block}])
-                          editor/new-asset-block (fn [_repo _file opts]
-                                                   (p/resolved {:block/uuid (or (:block/uuid opts) asset-uuid)}))
-                          outliner-op/insert-blocks! (fn [blocks target opts]
-                                                       (reset! inserted {:blocks blocks
-                                                                         :target target
-                                                                         :opts opts}))
-                          db/entity (fn [lookup]
-                                      (when (= lookup [:block/uuid asset-uuid])
-                                        {:block/uuid asset-uuid}))]
-            (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
-                                          :target-block target-block))
+          inserted (atom nil)
+          original-ensure-assets-dir! assets-handler/ensure-assets-dir!
+          original-get-file-checksum assets-handler/get-file-checksum
+          original-exceed-limit-size? assets-handler/exceed-limit-size?
+          original-<get-today-journal-title db-async/<get-today-journal-title
+          original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-db-based-write-asset! editor/db-based-write-asset!
+          original-insert-blocks! frontend-outliner-op/insert-blocks!
+          original-<get-blocks db-async/<get-blocks
+          original-get-edit-block state/get-edit-block
+          original-get-edit-content state/get-edit-content
+          original-get-editor-args state/get-editor-args]
+      (set! assets-handler/ensure-assets-dir! (fn [_repo]
+                                                (p/resolved ["/tmp/repo" "assets"])))
+      (set! assets-handler/get-file-checksum (constantly nil))
+      (set! assets-handler/exceed-limit-size? (constantly false))
+      (set! db-async/<get-today-journal-title (fn [_repo]
+                                                (p/resolved "Today")))
+      (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
+                                                (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! editor/db-based-write-asset! (fn [& _args]
+                                           (p/resolved nil)))
+      (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
+                                         (reset! inserted {:blocks blocks
+                                                           :target target
+                                                           :opts opts})))
+      (set! db-async/<get-blocks (fn [_repo blocks _opts]
+                                   (p/resolved (mapv (fn [block]
+                                                       {:block/uuid block})
+                                                     blocks))))
+      (set! state/get-edit-block (constantly {:block/uuid draft-uuid
+                                              :block/title ""}))
+      (set! state/get-edit-content (constantly ""))
+      (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
+                                                        :comment-asset-target-block target-block}]))
+      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
+                                        :target-block target-block)
           (p/then (fn [_]
                     (is (= target-block (:target @inserted)))
                     (is (= {:bottom? true
@@ -599,34 +1559,63 @@
                             :replace-empty-target? false
                             :sibling? false}
                            (:opts @inserted)))))
-          (p/finally done)))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! assets-handler/ensure-assets-dir! original-ensure-assets-dir!)
+                       (set! assets-handler/get-file-checksum original-get-file-checksum)
+                       (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
+                       (set! db-async/<get-today-journal-title original-<get-today-journal-title)
+                       (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
+                       (set! db-async/<get-blocks original-<get-blocks)
+                       (set! state/get-edit-block original-get-edit-block)
+                       (set! state/get-edit-content original-get-edit-content)
+                       (set! state/get-editor-args original-get-editor-args)
+                       (done)))))))
 
 (deftest db-based-save-assets-ignores-stale-comment-target-without-explicit-target
   (async done
-    (let [asset-uuid #uuid "6b326622-8fe8-463f-b625-70e5329d92d5"
-          edit-block {:block/uuid #uuid "f387fbb5-ef2a-41f7-9b99-f49b91a61cde"
+    (let [edit-block {:block/uuid #uuid "f387fbb5-ef2a-41f7-9b99-f49b91a61cde"
                       :block/title "Current block"}
           stale-comment-target {:block/uuid #uuid "4da73880-13d5-4952-86fc-eb1be04bb030"
                                 :block/title "Stale comments"}
-          inserted (atom nil)]
-      (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
-                                                              (p/resolved ["/tmp/repo" "assets"]))
-                          model/get-today-journal-title (constantly "Today")
-                          model/get-journal-page (constantly {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})
-                          state/get-edit-block (constantly edit-block)
-                          state/get-edit-content (constantly "Current block")
-                          state/get-editor-args (constantly [nil nil {:comment-editor? true
-                                                                      :comment-asset-target-block stale-comment-target}])
-                          editor/new-asset-block (fn [_repo _file opts]
-                                                   (p/resolved {:block/uuid (or (:block/uuid opts) asset-uuid)}))
-                          outliner-op/insert-blocks! (fn [blocks target opts]
-                                                       (reset! inserted {:blocks blocks
-                                                                         :target target
-                                                                         :opts opts}))
-                          db/entity (fn [lookup]
-                                      (when (= lookup [:block/uuid asset-uuid])
-                                        {:block/uuid asset-uuid}))]
-            (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]))
+          inserted (atom nil)
+          original-ensure-assets-dir! assets-handler/ensure-assets-dir!
+          original-get-file-checksum assets-handler/get-file-checksum
+          original-exceed-limit-size? assets-handler/exceed-limit-size?
+          original-<get-today-journal-title db-async/<get-today-journal-title
+          original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-db-based-write-asset! editor/db-based-write-asset!
+          original-insert-blocks! frontend-outliner-op/insert-blocks!
+          original-<get-blocks db-async/<get-blocks
+          original-get-edit-block state/get-edit-block
+          original-get-edit-content state/get-edit-content
+          original-get-editor-args state/get-editor-args]
+      (set! assets-handler/ensure-assets-dir! (fn [_repo]
+                                                (p/resolved ["/tmp/repo" "assets"])))
+      (set! assets-handler/get-file-checksum (constantly nil))
+      (set! assets-handler/exceed-limit-size? (constantly false))
+      (set! db-async/<get-today-journal-title (fn [_repo]
+                                                (p/resolved "Today")))
+      (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
+                                                (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! editor/db-based-write-asset! (fn [& _args]
+                                           (p/resolved nil)))
+      (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
+                                         (reset! inserted {:blocks blocks
+                                                           :target target
+                                                           :opts opts})))
+      (set! db-async/<get-blocks (fn [_repo blocks _opts]
+                                   (p/resolved (mapv (fn [block]
+                                                       {:block/uuid block})
+                                                     blocks))))
+      (set! state/get-edit-block (constantly edit-block))
+      (set! state/get-edit-content (constantly "Current block"))
+      (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
+                                                        :comment-asset-target-block stale-comment-target}]))
+      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
           (p/then (fn [_]
                     (is (= edit-block (:target @inserted)))
                     (is (= {:bottom? true
@@ -634,36 +1623,86 @@
                             :replace-empty-target? true
                             :sibling? true}
                            (:opts @inserted)))))
-          (p/finally done)))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! assets-handler/ensure-assets-dir! original-ensure-assets-dir!)
+                       (set! assets-handler/get-file-checksum original-get-file-checksum)
+                       (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
+                       (set! db-async/<get-today-journal-title original-<get-today-journal-title)
+                       (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
+                       (set! db-async/<get-blocks original-<get-blocks)
+                       (set! state/get-edit-block original-get-edit-block)
+                       (set! state/get-edit-content original-get-edit-content)
+                       (set! state/get-editor-args original-get-editor-args)
+                       (done)))))))
 
 (deftest save-block!
-  (testing "Saving blocks with and without properties"
-    (test-helper/load-test-files [{:page {:block/title "foo"}
-                                   :blocks [{:block/title "foo"
-                                             :build/properties {:logseq.property/heading 1}}]}])
-    (let [repo test-helper/test-db
-          page-uuid (:block/uuid (db/get-page "foo"))
-          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
-      (editor/save-block! repo block-uuid "# bar")
-      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid))))
-
-      (editor/save-block! repo block-uuid "# bar")
-      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid)))))))
+  (async done
+    (testing "Saving blocks with and without properties"
+      (test-helper/load-test-files [{:page {:block/title "foo"}
+                                     :blocks [{:block/title "foo"
+                                               :build/properties {:logseq.property/heading 1}}]}])
+      (let [repo test-helper/test-db
+            block-uuid (random-uuid)
+            block {:db/id 1
+                   :block/uuid block-uuid
+                   :block/title "foo"
+                   :logseq.property/heading 1}
+            tx-calls (atom [])
+            original-<get-block db-async/<get-block
+            original-apply-outliner-ops db-transact/apply-outliner-ops
+            original-<invoke-db-worker state/<invoke-db-worker]
+        (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
+        (set! db-async/<get-block (fn [_repo id _opts]
+                                    (p/resolved (assoc block :block/uuid id))))
+        (set! db-transact/apply-outliner-ops
+              (fn [db ops opts]
+                (swap! tx-calls conj [db ops opts])
+                :tx))
+        (-> (p/do!
+             (editor/save-block! repo block-uuid "# bar")
+             (editor/save-block! repo block-uuid "# bar")
+	             (is (= [[nil
+	                       [[:save-block [{:block/title "bar"
+	                                        :block/uuid block-uuid
+	                                        :block/tags ()
+	                                        :block/refs ()
+	                                        :logseq.property/heading 1}
+	                                       nil]]]
+	                       {:outliner-op :save-block}]
+	                      [nil
+	                       [[:save-block [{:block/title "bar"
+	                                        :block/uuid block-uuid
+	                                        :block/tags ()
+	                                        :block/refs ()
+	                                        :logseq.property/heading 1}
+	                                       nil]]]
+	                       {:outliner-op :save-block}]]
+	                    @tx-calls)))
+            (p/catch (fn [error]
+                       (is false (str error))))
+            (p/finally (fn []
+                         (set! db-async/<get-block original-<get-block)
+                         (set! db-transact/apply-outliner-ops original-apply-outliner-ops)
+                         (set! state/<invoke-db-worker original-<invoke-db-worker)
+                         (done))))))))
 
 (deftest block-default-collapsed-respects-ignore-block-collapsed-flag
-  (with-redefs [db/entity (constantly nil)]
-    (is (true? (editor/block-default-collapsed?
-                {:block/collapsed? true}
-                {})))
-    (is (not (editor/block-default-collapsed?
+  (is (true? (editor/block-default-collapsed?
               {:block/collapsed? true}
-              {:ignore-block-collapsed? true}))
-        "Flashcard review should be able to ignore persisted collapsed state")
-    (is (true? (editor/block-default-collapsed?
-                {:block/collapsed? false}
-                {:ignore-block-collapsed? true
-                 :default-collapsed? true}))
-        "Ignore flag should not disable other default-collapsed rules")))
+              {})))
+  (is (not (editor/block-default-collapsed?
+            {:block/collapsed? true}
+            {:ignore-block-collapsed? true}))
+      "Flashcard review should be able to ignore persisted collapsed state")
+  (is (true? (editor/block-default-collapsed?
+              {:block/collapsed? false}
+              {:ignore-block-collapsed? true
+               :default-collapsed? true}))
+      "Ignore flag should not disable other default-collapsed rules"))
 
 (deftest load-children-respects-ignore-block-collapsed-flag
   (is (false? (#'editor/load-children?
@@ -688,59 +1727,69 @@
       "Temporary collapsed UI state should skip children loading"))
 
 (deftest paste-cut-recycled-block-moves-existing-node-out-of-recycle
-  (test-helper/load-test-files [{:page {:block/title "Page 1"}
-                                 :blocks [{:block/title "source"}]}
-                                {:page {:block/title "Page 2"}
-                                 :blocks [{:block/title "target"}]}])
-  (let [source (test-helper/find-block-by-content "source")
-        target (test-helper/find-block-by-content "target")
-        recycle-page (db/get-page "Recycle")]
-    (outliner-core/delete-blocks! (db/get-db test-helper/test-db false) [source] {})
-    (state/set-block-op-type! :cut)
-    (editor/paste-blocks [{:block/uuid (:block/uuid source)
-                           :block/title "source"}]
-                         {:target-block target
-                          :sibling? true
-                          :keep-uuid? true
-                          :ops-only? true})
-    (let [source' (db/entity [:block/uuid (:block/uuid source)])]
-      (is (= (:db/id (:block/page target)) (:db/id (:block/page source'))))
-      (is (= (:db/id (:block/parent target)) (:db/id (:block/parent source'))))
-      (is (nil? (:logseq.property/deleted-at source')))
-      (is (nil? (:logseq.property.recycle/original-page source')))
-      (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+  (async done
+    (test-helper/load-test-files [{:page {:block/title "Page 1"}
+                                   :blocks [{:block/title "source"}]}
+                                  {:page {:block/title "Page 2"}
+                                   :blocks [{:block/title "target"}]}])
+    (let [source (test-helper/find-block-by-content "source")
+          target (test-helper/find-block-by-content "target")
+          test-db (conn/get-db test-helper/test-db)
+          recycle-page (ldb/get-page test-db "Recycle")]
+      (outliner-core/delete-blocks! (conn/get-db test-helper/test-db false) [source] {})
+      (state/set-block-op-type! :cut)
+      (-> (p/with-redefs [db-transact/apply-outliner-ops
+                          (fn [_db ops opts]
+                            (outliner-op/apply-ops!
+                             (conn/get-db test-helper/test-db false) ops opts))]
+            (p/let [_ (editor/paste-blocks [{:block/uuid (:block/uuid source)
+                                             :block/title "source"}]
+                                           {:target-block target
+                                            :sibling? true
+                                            :keep-uuid? true
+                                            :ops-only? true})]
+              (let [source' (db-utils/entity (conn/get-db test-helper/test-db)
+                                             [:block/uuid (:block/uuid source)])]
+                (is (= (:db/id (:block/page target)) (:db/id (:block/page source'))))
+                (is (= (:db/id (:block/parent target)) (:db/id (:block/parent source'))))
+                (is (nil? (:logseq.property/deleted-at source')))
+                (is (nil? (:logseq.property.recycle/original-page source')))
+                (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+          (p/finally done)))))
 
 (deftest paste-og-copied-heading-page-refs-creates-journal-pages
   (async done
-    (test-helper/load-test-files [{:page {:block/title "Paste target"}
-                                   :blocks [{:block/title "target"}]}])
     (db/transact! [{:db/ident :logseq.class/Journal
                     :logseq.property.journal/title-format "yyyy-MM-dd"}])
-    (let [target (test-helper/find-block-by-content "target")
-          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"]
+    (let [target {:db/id 10
+                  :block/uuid (random-uuid)
+                  :block/title "target"
+                  :block/page {:db/id 1
+                               :block/name "paste target"}}
+          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"
+          inserted (atom nil)]
       (p/with-redefs [state/get-edit-block (constantly target)
                       state/get-edit-content (constantly (:block/title target))
                       state/get-block-op-type (constantly nil)
                       state/set-block-op-type! (constantly nil)
+                      state/get-current-page (constantly "Paste target")
+                      state/get-date-formatter (constantly "yyyy-MM-dd")
+                      db-async/<get-today-journal-title (fn [_repo]
+                                                         (p/resolved "Today"))
+                      db-async/<get-journal-page-by-day (fn [_repo _journal-day]
+                                                         (p/resolved nil))
+                      state/<invoke-db-worker <pull-page-from-test-db
+                      frontend-outliner-op/insert-blocks! (fn [blocks target opts]
+                                                   (reset! inserted {:blocks blocks
+                                                                     :target target
+                                                                     :opts opts})
+                                                   blocks)
                       editor/edit-block! (constantly nil)]
         (-> (#'paste-handler/paste-text-parseable :markdown clipboard)
             (p/then
              (fn [_]
-               (let [db (db/get-db)
-                     journal-id (ffirst (d/q '[:find ?e
-                                               :where
-                                               [?e :block/journal-day 20260615]]
-                                             db))
-                     journal (d/entity db journal-id)
-                     heading-block (ffirst
-                                    (d/q '[:find (pull ?b [:block/title
-                                                           :logseq.property/heading
-                                                           {:block/refs [:db/id :block/title :block/journal-day]}])
-                                           :where
-                                           [?b :logseq.property/heading 2]
-                                           [?b :block/refs ?r]
-                                           [?r :block/journal-day 20260615]]
-                                         db))]
+               (let [heading-block (first (:blocks @inserted))
+                     journal (first (:block/refs heading-block))]
                  (is (= "2026-06-15" (:block/title journal)))
                  (is (= 20260615 (:block/journal-day journal)))
                  (is (= {:logseq.property/heading 2
@@ -748,6 +1797,7 @@
                         (select-keys heading-block [:block/title :logseq.property/heading])))
                  (is (= [20260615]
                         (mapv :block/journal-day (:block/refs heading-block))))
+                 (is (= target (:target @inserted)))
                  (done))))
             (p/catch
              (fn [e]
@@ -756,33 +1806,35 @@
 
 (deftest paste-og-copied-heading-page-refs-uses-default-journal-title
   (async done
-    (test-helper/load-test-files [{:page {:block/title "Paste target"}
-                                   :blocks [{:block/title "target"}]}])
-    (let [target (test-helper/find-block-by-content "target")
-          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"]
+    (let [target {:db/id 10
+                  :block/uuid (random-uuid)
+                  :block/title "target"
+                  :block/page {:db/id 1
+                               :block/name "paste target"}}
+          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"
+          inserted (atom nil)]
       (p/with-redefs [state/get-edit-block (constantly target)
                       state/get-edit-content (constantly (:block/title target))
                       state/get-block-op-type (constantly nil)
                       state/set-block-op-type! (constantly nil)
+                      state/get-current-page (constantly "Paste target")
+                      state/get-date-formatter (constantly "MMM do, yyyy")
+                      db-async/<get-today-journal-title (fn [_repo]
+                                                         (p/resolved "Today"))
+                      db-async/<get-journal-page-by-day (fn [_repo _journal-day]
+                                                         (p/resolved nil))
+                      state/<invoke-db-worker <pull-page-from-test-db
+                      frontend-outliner-op/insert-blocks! (fn [blocks target opts]
+                                                   (reset! inserted {:blocks blocks
+                                                                     :target target
+                                                                     :opts opts})
+                                                   blocks)
                       editor/edit-block! (constantly nil)]
         (-> (#'paste-handler/paste-text-parseable :markdown clipboard)
             (p/then
              (fn [_]
-               (let [db (db/get-db)
-                     journal-id (ffirst (d/q '[:find ?e
-                                               :where
-                                               [?e :block/journal-day 20260615]]
-                                             db))
-                     journal (d/entity db journal-id)
-                     heading-block (ffirst
-                                    (d/q '[:find (pull ?b [:block/title
-                                                           :logseq.property/heading
-                                                           {:block/refs [:db/id :block/title :block/journal-day]}])
-                                           :where
-                                           [?b :logseq.property/heading 2]
-                                           [?b :block/refs ?r]
-                                           [?r :block/journal-day 20260615]]
-                                         db))]
+               (let [heading-block (first (:blocks @inserted))
+                     journal (first (:block/refs heading-block))]
                  (is (= "Jun 15th, 2026" (:block/title journal)))
                  (is (= 20260615 (:block/journal-day journal)))
                  (is (= {:logseq.property/heading 2
@@ -790,6 +1842,7 @@
                         (select-keys heading-block [:block/title :logseq.property/heading])))
                  (is (= [20260615]
                         (mapv :block/journal-day (:block/refs heading-block))))
+                 (is (= target (:target @inserted)))
                  (done))))
             (p/catch
              (fn [e]
@@ -830,24 +1883,16 @@
 (deftest navigable-sibling-block-skips-comment-items-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment"
-                             "blockid" "6a073572-fefe-44c5-8b43-267ccc715077")
+                             "blockid" "6a073572-fefe-44c5-8b43-267ccc715077"
+                             "data-comment-item" "true")
         target-node (js-obj "id" "target"
                             "blockid" "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")
-        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
-        comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
-        target-uuid #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154"
         sibling-f (fn [node _opts]
                     (cond
                       (= node current-node) comment-node
                       (= node comment-node) target-node))]
-    (with-redefs [db/entity (fn [& args]
-                              (case (second (first args))
-                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
-                                                                              :block/parent comments-area}
-                                #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154" {:block/uuid target-uuid}
-                                nil))]
-      (is (true? (#'editor/comment-item-node? comment-node)))
-      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))))))
+    (is (true? (#'editor/comment-item-node? comment-node)))
+    (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {})))))
 
 (deftest navigable-sibling-block-skips-comments-area-test
   (let [current-node (js-obj "id" "current")
@@ -895,18 +1940,13 @@
                               "data-comments-area" "true")
         comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
         comment-node (js-obj "id" "comment"
-                             "blockid" (str comment-uuid))
+                             "blockid" (str comment-uuid)
+                             "data-comment-item" "true")
         current-node (js-obj "id" "current")
-        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
         sibling-f (fn [node _opts]
                     (when (= node current-node)
                       comment-node))]
-    (with-redefs [db/entity (fn [& args]
-                              (case (second (first args))
-                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
-                                                                              :block/parent comments-area}
-                                nil))
-                  util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+    (with-redefs [util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
           "Left/right navigation from a block below open comments should skip comment items and the comments area"))))
 

@@ -178,7 +178,6 @@
  :cmdk.action/search "Søk"
  :cmdk.action/trigger "Utfør"
 
- :cmdk.create/configure-tag "Konfigurer tagg"
  :cmdk.create/page "Opprett side"
  :cmdk.create/tag "Opprett tagg"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Nylig oppdatert"
  :cmdk.group/themes "Temaer"
 
- :cmdk.info/configure-tag "Konfigurer #{1}"
  :cmdk.info/create-page "Opprett side '{1}'"
  :cmdk.info/create-tag "Opprett tagg '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Innebygde elementer kan ikke slettes."
  :node/new "Ny node"
 
- :notification/clear-all "Fjern alle"
  :notification/copied "Kopiert"
 
  :onboarding.import/desc "Importbeskrivelse"
@@ -1718,7 +1715,6 @@
  :ui/image "bilde"
  :ui/label "Etikett"
  :ui/link "Lenke"
- :ui/load-more "Last inn mer"
  :ui/loading "Laster"
  :ui/login "Logg inn"
  :ui/logout "Logg ut"

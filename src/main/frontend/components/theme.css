@@ -159,6 +159,12 @@ main.ls-fold-button-on-right {
       }
     }
 
+    .block-control-wrap[data-has-children="true"] {
+      .control-hide {
+        display: block !important;
+      }
+    }
+
     .block-content-wrapper {
       width: 100%;
     }

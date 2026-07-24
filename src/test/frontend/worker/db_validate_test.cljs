@@ -2,7 +2,9 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.shared-service :as shared-service]
+            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
@@ -12,6 +14,15 @@
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     conn))
+
+(defn- with-transact-pipeline
+  [f]
+  (let [pipeline-before @ldb/*transact-pipeline-fn]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (f)
+      (finally
+        (reset! ldb/*transact-pipeline-fn pipeline-before)))))
 
 (deftest validate-db-returns-count-fields-without-counts-wrapper
   (let [conn (create-db-graph-conn)]
@@ -48,9 +59,11 @@
                       "block")]
     (is (seq (:errors (db-validate/validate-db @conn))))
     (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
-      (worker-db-validate/validate-db conn)
+      (with-transact-pipeline #(worker-db-validate/validate-db conn))
       (let [repaired-block (d/entity @conn block-id)]
         (is (uuid? (:block/uuid repaired-block)))
+        (is (nat-int? (:block/tx-id repaired-block))
+            "A live repair must make the repaired block canonically readable.")
         (is (= page-id (:db/id (:block/page repaired-block))))
         (is (= page-id (:db/id (:block/parent repaired-block))))
         (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
@@ -79,14 +92,21 @@
                                            :kv/value 1}]))
                       "class")]
     (d/transact! conn [[:db/add :logseq.property.class/extends :block/tags :logseq.class/Tag]
-                       [:db/add :logseq.property.class/extends :logseq.property.class/extends :logseq.class/Root]])
+                       [:db/add :logseq.property.class/extends :logseq.property.class/extends :logseq.class/Root]
+                       [:db/add :logseq.property.class/extends :block/tx-id 1]
+                       [:db/add journal-id :block/tx-id 1]
+                       [:db/add class-id :block/tx-id 1]])
     (is (= 3 (count (:errors (db-validate/validate-db @conn)))))
     (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
-      (let [result (worker-db-validate/validate-db conn)
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))
             journal (d/entity @conn journal-id)
             property (d/entity @conn :logseq.property.class/extends)
             class (d/entity @conn class-id)]
         (is (empty? (:errors result)))
+        (doseq [entity [journal property class]]
+          (is (not= 1 (:block/tx-id entity))
+              (str "Every canonical entity changed by a live repair receives a new revision: "
+                   (select-keys entity [:db/id :db/ident :block/uuid :block/title]))))
         (is (= 1 (:block/updated-at journal)))
         (is (= [:logseq.class/Property] (mapv :db/ident (:block/tags property))))
         (is (nil? (:logseq.property.class/extends property)))

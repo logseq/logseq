@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [datascript.storage :as ds-storage :refer [IStorage]]
             [logseq.db :as ldb]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]))
 
 (defrecord InMemoryStorage [*disk]
@@ -206,6 +207,36 @@
         (is (= "second updated" (:block/title (d/entity @conn (:db/id second-block)))))
         (finally
           (reset! ldb/*transact-pipeline-fn original-pipeline))))))
+
+(deftest fix-db-transact-runs-pipeline-without-recursive-validation-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page 1"}
+                                   :blocks [{:block/title "before"}]}]})
+        block (db-test/find-block-by-content @conn "before")
+        block-id (:db/id block)
+        original-pipeline @ldb/*transact-pipeline-fn]
+    (try
+      (ldb/register-transact-pipeline-fn!
+       (fn [{:keys [db-before db-after tx-data tx-meta]}]
+         (let [stamp-report (d/with db-after
+                                    [{:db/id block-id
+                                      :block/tx-id 42}])]
+           (assoc stamp-report
+                  :db-before db-before
+                  :tx-data (concat tx-data (:tx-data stamp-report))
+                  :tx-meta tx-meta))))
+      (with-redefs [db-validate/validate-tx-report
+                    (fn [& _]
+                      (throw (js/Error. "Repair transactions must not recursively validate")))]
+        (ldb/transact! conn
+                       [{:db/id block-id
+                         :block/title "after"}]
+                       {:fix-db? true}))
+      (is (= "after" (:block/title (d/entity @conn block-id))))
+      (is (= 42 (:block/tx-id (d/entity @conn block-id)))
+          "Repair transactions commit canonical data produced by the pipeline.")
+      (finally
+        (reset! ldb/*transact-pipeline-fn original-pipeline)))))
 
 (deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
   (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"

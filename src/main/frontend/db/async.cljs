@@ -3,22 +3,163 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [datascript.core :as d]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async.util :as db-async-util]
-            [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
+
+(defn- order-block-summaries
+  [ids rows]
+  (let [blocks-by-uuid (into {}
+                             (map (fn [[db-id block-uuid title parent-id]]
+                                    [block-uuid
+                                     {:db/id db-id
+                                      :block/uuid block-uuid
+                                      :block/title title
+                                      :block/parent {:db/id parent-id}}]))
+                             rows)]
+    (vec (keep blocks-by-uuid ids))))
+
+(defn <get-block-summaries
+  [graph ids]
+  (when (seq ids)
+    (p/let [rows (<q graph
+                     {}
+                     '[:find ?e ?uuid ?title ?parent
+                       :in $ [?uuid ...]
+                       :where
+                       [?e :block/uuid ?uuid]
+                       [?e :block/title ?title]
+                       [?e :block/parent ?parent]]
+                     ids)]
+      (order-block-summaries ids rows))))
+
+(defn <invoke-db-worker
+  [api & args]
+  (apply state/<invoke-db-worker api args))
+
+(defn <get-all-properties-from-worker
+  [graph opts]
+  (<invoke-db-worker :thread-api/get-all-properties graph opts))
+
+(defn <get-class-objects-from-worker
+  [graph class-id]
+  (<invoke-db-worker :thread-api/get-class-objects graph class-id))
+
+(defn <get-date-scheduled-or-deadlines-from-worker
+  [graph start-time end-time]
+  (<invoke-db-worker :thread-api/get-date-scheduled-or-deadlines graph start-time end-time))
+
+(defn <get-today-journal-title
+  [graph]
+  (p/let [page (<invoke-db-worker :thread-api/get-journal-page-by-day
+                                  graph
+                                  (date/today-journal-day))]
+    (or (:block/title page) (date/today))))
+
+(defn <get-date-formatter
+  [graph]
+  (p/let [journal-class (<invoke-db-worker
+                         :thread-api/pull
+                         graph
+                         [:logseq.property.journal/title-format]
+                         :logseq.class/Journal)]
+    (or (:logseq.property.journal/title-format journal-class)
+        "MMM do, yyyy")))
+
+(defn <get-journal-page-title
+  [graph journal-title]
+  (p/let [page (<invoke-db-worker :thread-api/get-journal-page-by-day
+                                  graph
+                                  (date/journal-title->int journal-title))]
+    (or (:block/title page) journal-title)))
+
+(defn <get-journal-page-by-day
+  [graph journal-day]
+  (<invoke-db-worker :thread-api/get-journal-page-by-day graph journal-day))
+
+(defn <get-latest-journals
+  ([graph]
+   (<get-latest-journals graph js/Number.MAX_SAFE_INTEGER))
+  ([graph n]
+   (<invoke-db-worker :thread-api/get-latest-journals graph n)))
+
+(defn <get-file-content
+  [graph path]
+  (<invoke-db-worker :thread-api/get-file-content graph path))
+
+(defn <page-exists?
+  [graph page-name tags]
+  (<invoke-db-worker :thread-api/page-exists? graph page-name tags))
+
+(defn <get-case-page
+  [graph page-name-or-uuid]
+  (<invoke-db-worker :thread-api/get-case-page graph page-name-or-uuid))
+
+(defn <get-tags-by-name
+  [graph name]
+  (<invoke-db-worker :thread-api/get-tags-by-name graph name))
+
+(defn <resolve-query-inputs
+  [graph inputs opts]
+  (<invoke-db-worker :thread-api/resolve-query-inputs graph inputs opts))
+
+(defn <get-block-parent
+  [graph block-uuid]
+  (<invoke-db-worker :thread-api/get-block-parent graph block-uuid))
+
+(defn <get-block-page-info
+  [graph block-ref]
+  (<invoke-db-worker :thread-api/get-block-page-info graph block-ref))
+
+(defn <get-block-immediate-children
+  [graph block-uuid]
+  (<invoke-db-worker :thread-api/get-block-immediate-children graph block-uuid))
+
+(defn <get-block-sibling
+  [graph block-id direction]
+  (<invoke-db-worker :thread-api/get-block-sibling graph block-id direction))
+
+(defn <get-page-blocks-tree
+  ([graph page-id-name-or-uuid]
+   (<get-page-blocks-tree graph page-id-name-or-uuid nil))
+  ([graph page-id-name-or-uuid option]
+   (<invoke-db-worker :thread-api/get-page-blocks-tree graph page-id-name-or-uuid option)))
+
+(defn <get-block-class-default-properties
+  [graph block-id]
+  (<invoke-db-worker :thread-api/get-block-class-default-properties graph block-id))
+
+(defn <get-all-classes
+  [graph opts]
+  (<invoke-db-worker :thread-api/get-all-classes graph opts))
+
+(defn <get-structured-children
+  [graph class-id]
+  (<invoke-db-worker :thread-api/get-structured-children graph class-id))
+
+(defn <get-class-extends-children-tree
+  [graph class-id]
+  (<invoke-db-worker :thread-api/get-class-extends-children-tree graph class-id))
+
+(defn <get-alias-source-page
+  [graph page-id]
+  (<invoke-db-worker :thread-api/get-alias-source-page graph page-id))
+
+(defn <get-property-closed-values
+  [graph property-ident]
+  (<invoke-db-worker :thread-api/get-property-closed-values graph property-ident))
+
+(defn <get-property-node-selector-data
+  [graph option]
+  (<invoke-db-worker :thread-api/get-property-node-selector-data graph option))
 
 (defn <get-files
   [graph]
@@ -34,7 +175,7 @@
   :block/title and :db/ident"
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
-    (db-model/get-all-properties graph opts)))
+    (<get-all-properties-from-worker graph opts)))
 
 (defn <get-property-values
   "For db graphs, returns a vec of property value maps for given property
@@ -45,17 +186,44 @@
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
 
-(defn <get-bidirectional-properties
-  [target-id]
-  (when target-id
-    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
-                             {:target-id target-id})))
+(defn <get-view-filter-data
+  [property & {:as opts}]
+  (when-let [repo (state/get-current-repo)]
+    (state/<invoke-db-worker :thread-api/get-view-filter-data repo
+                             (assoc opts
+                                    :property property
+                                    :property-ident (:db/ident property)))))
+
+(defn <get-display-properties
+  [repo block opts show-empty-and-hidden-properties?]
+  (when (and repo (:db/id block))
+    (state/<invoke-db-worker :thread-api/get-display-properties repo
+                             {:block block
+                              :opts opts
+                              :show-empty-and-hidden-properties? show-empty-and-hidden-properties?})))
+
+(defn <get-class-properties
+  [repo class-id]
+  (when (and repo class-id)
+    (state/<invoke-db-worker :thread-api/get-class-properties repo class-id)))
+
+(defn <reorder-display-property!
+  [repo block active-id over-id direction property-idents]
+  (when (and repo (:db/id block) active-id over-id direction)
+    (state/<invoke-db-worker :thread-api/reorder-display-property repo
+                             {:block-id (:db/id block)
+                              :active-ident (keyword active-id)
+                              :over-ident (keyword over-id)
+                              :direction direction
+                              :property-idents property-idents})))
 
 (defn- worker-get-blocks-requests
   [requests]
   (mapv (fn [{:keys [id opts]}]
           {:id id
-           :opts (select-keys opts [:children? :properties :include-collapsed-children?])})
+           :opts (select-keys opts [:all? :children? :properties :render-data? :root-render-data?
+                                    :block-metadata?
+                                    :include-collapsed-children?])})
         requests))
 
 (defn- <invoke-worker-get-blocks
@@ -66,11 +234,25 @@
                                    (ldb/write-transit-str requests))]
     (some-> result-transit-str ldb/read-transit-str)))
 
-(defonce ^:private *get-blocks-batch-enabled? (atom true))
-
 (defonce ^:private *get-blocks-batch-state
   (atom {:scheduled? false
          :queue []}))
+
+(defonce ^:private *get-blocks-in-flight (atom {}))
+
+(def ^:private get-blocks-batch-limit 25)
+
+(defn- complete-tree-entry-group?
+  [entries]
+  (true? (get-in (first entries) [:request :opts :all?])))
+
+(defn- get-blocks-entry-batches
+  [entry-groups]
+  (mapcat (fn [same-kind-groups]
+            (if (complete-tree-entry-group? (first same-kind-groups))
+              (map vector same-kind-groups)
+              (partition-all get-blocks-batch-limit same-kind-groups)))
+          (partition-by complete-tree-entry-group? entry-groups)))
 
 (declare flush-get-blocks-batch!)
 
@@ -79,61 +261,85 @@
   (let [should-schedule? (not (:scheduled? @*get-blocks-batch-state))]
     (when should-schedule?
       (swap! *get-blocks-batch-state assoc :scheduled? true)
-      (util/schedule flush-get-blocks-batch!))))
+      (js/queueMicrotask flush-get-blocks-batch!))))
+
+(defn- get-blocks-request-key
+  [graph request]
+  [graph (first (worker-get-blocks-requests [request]))])
 
 (defn- enqueue-get-blocks-request!
   [graph request]
-  (let [result (p/deferred)]
-    (swap! *get-blocks-batch-state
-           (fn [state]
-             (update state :queue conj {:graph graph
-                                        :request request
-                                        :result result})))
-    (schedule-get-blocks-batch-flush!)
-    result))
+  (let [request-key (get-blocks-request-key graph request)]
+    (or (get @*get-blocks-in-flight request-key)
+        (let [result (p/deferred)]
+          (swap! *get-blocks-in-flight assoc request-key result)
+          (swap! *get-blocks-batch-state
+                 (fn [state]
+                   (update state :queue conj {:graph graph
+                                              :request request
+                                              :request-key request-key
+                                              :result result})))
+          (schedule-get-blocks-batch-flush!)
+          result))))
 
-(defn- resolve-batched-get-blocks!
-  [entries responses]
-  (doseq [[idx {:keys [result]}] (map-indexed vector entries)]
-    (p/resolve! result (nth responses idx nil))))
+(defn- clear-get-blocks-in-flight!
+  [{:keys [request-key result]}]
+  (swap! *get-blocks-in-flight
+         (fn [in-flight]
+           (if (identical? result (get in-flight request-key))
+             (dissoc in-flight request-key)
+             in-flight))))
+
+(defn- resolve-batched-get-block-groups!
+  [entry-groups responses]
+  (doseq [[idx entries] (map-indexed vector entry-groups)
+          {:keys [result] :as entry} entries]
+    (p/resolve! result (nth responses idx nil))
+    (clear-get-blocks-in-flight! entry)))
 
 (defn- reject-batched-get-blocks!
   [entries error]
-  (doseq [{:keys [result]} entries]
-    (p/reject! result error)))
+  (doseq [{:keys [result] :as entry} entries]
+    (p/reject! result error)
+    (clear-get-blocks-in-flight! entry)))
 
 (defn- flush-get-blocks-batch!
   []
   (let [queue (:queue @*get-blocks-batch-state)]
     (swap! *get-blocks-batch-state
            (fn [state] (assoc state :scheduled? false :queue [])))
-    (doseq [[graph entries] (group-by :graph queue)]
-      (let [requests (->> entries (map :request) worker-get-blocks-requests)]
+    (doseq [[graph graph-entries] (group-by :graph queue)
+            entry-batch (->> graph-entries
+                             (group-by :request)
+                             vals
+                             get-blocks-entry-batches)]
+      (let [requests (->> entry-batch
+                          (map (comp :request first))
+                          worker-get-blocks-requests)]
         (->
          (p/let [result (<invoke-worker-get-blocks graph requests)
-                 result (if (= (count result) (count requests))
-                          result
-                          nil)
-                 result (or result
-                            ;; Safety fallback: retry once if response length is unexpected.
-                            (<invoke-worker-get-blocks graph requests))]
-           (resolve-batched-get-blocks! entries result))
+                 _ (when-not (= (count result) (count requests))
+                     (throw (ex-info "Unexpected get-blocks response count"
+                                     {:request-count (count requests)
+                                      :response-count (count result)})))]
+           (resolve-batched-get-block-groups! entry-batch result))
          (p/catch (fn [error]
-                    (reject-batched-get-blocks! entries error))))))))
+                    (reject-batched-get-blocks! (mapcat identity entry-batch) error))))))))
 
 (defn- <fetch-blocks-from-worker-batched
   [graph requests]
   (when (seq requests)
-    (if @*get-blocks-batch-enabled?
-      (-> (p/all (mapv #(enqueue-get-blocks-request! graph %) requests))
-          (p/catch (fn [_]
-                     ;; Fail-open: disable batching for this runtime and fall back to direct fetch.
-                     (reset! *get-blocks-batch-enabled? false)
-                     (<invoke-worker-get-blocks graph (worker-get-blocks-requests requests)))))
-      (<invoke-worker-get-blocks graph (worker-get-blocks-requests requests)))))
+    (p/all (mapv #(enqueue-get-blocks-request! graph %) requests))))
+
+(defn- block-fetch-error
+  [operation block error]
+  (log/error :db/block-fetch-failed {:operation operation
+                                     :block block
+                                     :error error})
+  (ex-info (str (name operation) " error") {:block block} error))
 
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? include-collapsed-children? skip-transact? skip-refresh? properties]
+  [graph id-uuid-or-name & {:keys [children?]
                             :or {children? true}
                             :as opts}]
 
@@ -141,72 +347,40 @@
   ;; (js/console.trace)
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
-        e (cond
-            (number? id-uuid-or-name)
-            (db/entity id-uuid-or-name)
-            (util/uuid-string? name')
-            (db/entity [:block/uuid (uuid name')])
-            :else
-            (db/get-page name'))
-        id (or (and (:block/uuid e) (str (:block/uuid e)))
-               (and (util/uuid-string? name') name')
-               id-uuid-or-name)
-        load-status (:block.temp/load-status e)]
-    (cond
-      (and (or (= load-status :full)
-               (and (= load-status :children) (not include-collapsed-children?))
-               (and (= load-status :self) (not children?)))
-           (not (some #{:block.temp/refs-count} properties)))
-      (p/promise e)
+        id (if (util/uuid-string? name') name' id-uuid-or-name)]
+    (->
+     (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
+       (:block (first result)))
+     (p/catch (fn [error]
+                (throw (block-fetch-error :get-block id-uuid-or-name error)))))))
 
-      :else
-      (->
-       (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])
-               {:keys [block children]} (first result)]
-         (when-not skip-transact?
-           (let [conn (db/get-db graph false)
-                 block-and-children (if block (cons block children) children)
-                 affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                 tx-data (concat
-                          (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b))))
-                                       block-and-children)
-                               (common-util/fast-remove-nils)
-                               (remove empty?))
-                          (when (and (:db/id block) children? include-collapsed-children?
-                                     (not= :full (:block.temp/load-status (some-> (:db/id block) db/entity))))
-                            [{:db/id (:db/id block)
-                              :block.temp/load-status :full}]))]
-             (when (seq tx-data) (d/transact! conn tx-data))
-             (when-not skip-refresh?
-               (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
-
-         (if skip-transact? block (db/entity (:db/id block))))
-       (p/catch (fn [error]
-                  (js/console.error error)
-                  (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
+(defn <get-block-with-children
+  [graph id-uuid-or-name & {:keys [children?]
+                            :or {children? true}
+                            :as opts}]
+  (let [name' (str id-uuid-or-name)
+        opts (cond-> (assoc opts :children? children?)
+               (not (contains? opts :render-data?))
+               (assoc :render-data? true))
+        id (if (util/uuid-string? name') name' id-uuid-or-name)]
+    (->
+     (p/let [result (<fetch-blocks-from-worker-batched graph [{:id id :opts opts}])]
+       (first result))
+     (p/catch (fn [error]
+                (throw (block-fetch-error :get-block-with-children id-uuid-or-name error)))))))
 
 (defn <get-blocks
   [graph ids* & {:as opts}]
-  (let [ids (remove (fn [id] (:block.temp/load-status (db/entity id))) ids*)]
-    (when (seq ids)
-      (p/let [result (<fetch-blocks-from-worker-batched graph
-                                                        (mapv (fn [id]
-                                                                {:id id :opts (assoc opts :children? false)})
-                                                              ids))]
-        (let [conn (db/get-db graph false)
-              result' (keep :block result)]
-          (when (seq result')
-            (d/transact! conn result'))
-          result)))))
+  (when (seq ids*)
+    (<fetch-blocks-from-worker-batched graph
+                                      (mapv (fn [id]
+                                              {:id id :opts (assoc opts :children? false)})
+                                            ids*))))
 
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when (:block/uuid (db/entity graph id))
-    (p/let [result (state/<invoke-db-worker :thread-api/get-block-parents graph id depth)
-            conn (db/get-db graph false)
-            _ (d/transact! conn result)]
-      result)))
+  (<invoke-db-worker :thread-api/get-block-parents graph id depth))
 
 (defn <get-block-source
   [graph id]
@@ -223,7 +397,9 @@
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
+  (p/then (<get-block graph eid {:children? false
+                                 :properties [:block.temp/refs-count]})
+          :block.temp/refs-count))
 
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
@@ -237,40 +413,21 @@
           start-time (date/journal-day->utc-ms date)
           future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
-        (p/let [result (<q repo {}
-                           '[:find [(pull ?block ?block-attrs) ...]
-                             :in $ ?start-time ?end-time ?block-attrs
-                             :where
-                             (or [?block :logseq.property/scheduled ?n]
-                                 [?block :logseq.property/deadline ?n])
-                             [(>= ?n ?start-time)]
-                             [(<= ?n ?end-time)]
-                             [?block :logseq.property/status ?status]
-                             [?status :db/ident ?status-ident]
-                             [(not= ?status-ident :logseq.property/status.done)]
-                             [(not= ?status-ident :logseq.property/status.canceled)]]
-                           start-time
-                           future-time
-                           '[*])]
-          (->> result
-               db-model/sort-by-order-recursive
-               db-utils/group-by-page))))))
+        (<get-date-scheduled-or-deadlines-from-worker repo start-time future-time)))))
 
 (defn <get-tag-objects
   [graph class-id]
-  (let [class-children (db-model/get-structured-children graph class-id)
-        class-ids (distinct (conj class-children class-id))]
-    (<q graph {:transact-db? true}
-        '[:find [(pull ?b [*]) ...]
-          :in $ [?class-id ...]
-          :where
-          [?b :block/tags ?class-id]]
-        class-ids)))
+  (<get-class-objects-from-worker graph class-id))
 
 (defn <get-views
   [graph class-id view-feature-type]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
+  (<q graph {:transact-db? false}
+      '[:find [(pull ?b
+                 [*
+                  {:logseq.property.view/type
+                   [:db/id :db/ident :logseq.property/icon]}
+                  {:logseq.property.view/group-by-property
+                   [:db/id :db/ident :logseq.property/icon]}]) ...]
         :in $ ?class-id ?view-feature-type
         :where
         [?b :logseq.property/view-for ?class-id]
@@ -280,52 +437,20 @@
 
 (defn <get-asset-with-checksum
   [graph checksum]
-  (p/let [result (<q graph {:transact-db? true}
+  (p/let [result (<q graph {:transact-db? false}
                      '[:find [(pull ?b [*]) ...]
                        :in $ ?checksum
                        :where
                        [?b :logseq.property.asset/checksum ?checksum]]
                      checksum)]
-    (some-> (first result)
-            :db/id
-            db/entity)))
+    (first result)))
 
 (defn <get-block-properties-history
   [graph block-id]
-  (p/let [result (<q graph {:transact-db? true}
+  (p/let [result (<q graph {:transact-db? false}
                      '[:find [(pull ?b [*]) ...]
                        :in $ ?block-id
                        :where
                        [?b :logseq.property.history/block ?block-id]]
                      block-id)]
-    (->> (sort-by :block/created-at result)
-         (map (fn [b] (db/entity (:db/id b)))))))
-
-(defn <task-spent-time
-  [graph block-id]
-  (p/let [history (<get-block-properties-history graph block-id)
-          status-history (filter
-                          (fn [b] (= :logseq.property/status (:db/ident (:logseq.property.history/property b))))
-                          history)]
-    (when (seq status-history)
-      (let [time (loop [[last-item item & others] status-history
-                        time 0]
-                   (if item
-                     (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
-                           this-status (:db/ident (:logseq.property.history/ref-value item))]
-                       (if (and (= this-status :logseq.property/status.doing)
-                                (empty? others))
-                         (-> (+ time (- (tc/to-long (t/now)) (:block/created-at item)))
-                             (quot 1000))
-                         (let [time' (if (or
-                                          (= last-status :logseq.property/status.doing)
-                                          (and
-                                           (not (contains? #{:logseq.property/status.canceled
-                                                             :logseq.property/status.backlog
-                                                             :logseq.property/status.done} last-status))
-                                           (= this-status :logseq.property/status.done)))
-                                       (+ time (- (:block/created-at item) (:block/created-at last-item)))
-                                       time)]
-                           (recur (cons item others) time'))))
-                     (quot time 1000)))]
-        [status-history time]))))
+    (sort-by :block/created-at result)))

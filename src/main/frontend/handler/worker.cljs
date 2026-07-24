@@ -66,9 +66,7 @@
 
 (defmethod handle :sync-conflicts-updated [_ _worker {:keys [repo block-uuid conflicts]}]
   (when (and (seq repo) block-uuid)
-    (state/set-state! :sync/block-conflicts
-                      (or conflicts [])
-                      :path-in-sub-atom [repo (str block-uuid)])))
+    (state/set-sync-block-conflicts! repo block-uuid conflicts)))
 
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
