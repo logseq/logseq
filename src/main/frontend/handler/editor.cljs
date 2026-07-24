@@ -605,16 +605,15 @@
   "Won't save previous block content - remember to save!"
   ([state _right-sibling]
    (insert-new-block! state nil nil))
-  ([_state block-value _right-sibling]
+  ([state block-value _right-sibling]
    (when (not config/publishing?)
-      (when-let [state (get-state)]
+      (when state
         (start-pending-new-block!)
         (let [{:keys [block value config]} state
               value (if (string? block-value) block-value value)
               block-id (:block/uuid block)
               block-self? (block-self-alone-when-insert? config block-id)
-              input-id (state/get-edit-input-id)
-              input (gdom/getElement input-id)
+              input (:node state)
               selection-start (util/get-selection-start input)
               selection-end (util/get-selection-end input)
               [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
@@ -2472,11 +2471,10 @@
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
-    (let [{:keys [block config]} (get-state)]
+    (let [{:keys [block config node value]} state]
       (when block
-        (let [input (state/get-input)
-              config (assoc config :keydown-new-block true)
-              content (gobj/get input "value")]
+        (let [config (assoc config :keydown-new-block true)
+              content value]
           (cond
             (and (string/blank? content)
                  (own-order-number-list? block)
@@ -2506,8 +2504,12 @@
   (some? (dom/closest el ".block-editor")))
 
 (defn keydown-new-block-handler [^js e]
-  (let [state (get-state)
-        target (when e (.-target e))]
+  (let [target (when e (.-target e))
+        state (cond-> (get-state)
+                target
+                (assoc :node target
+                       :value (gobj/get target "value")
+                       :pos (util/get-selection-start target)))]
     (when (or (nil? target)
               (inside-of-editor-block target))
       (if (pending-new-block?)

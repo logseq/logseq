@@ -311,3 +311,15 @@
         (is (= [] (second immediate)))
         (util/wait-timeout 500)
         (is (= immediate (editor-state)))))))
+
+(deftest rapid-retype-before-enter-keeps-the-edit-test
+  (testing "Backspace, retype, and Enter keep the retyped content"
+    (b/open-last-block)
+    (k/press "a")
+    (k/press "Backspace")
+    (k/press "a")
+    (k/press "Enter")
+    (util/wait-timeout 700)
+    (util/exit-edit)
+    (is (= ["a"] (remove string/blank?
+                         (util/get-page-blocks-contents))))))
