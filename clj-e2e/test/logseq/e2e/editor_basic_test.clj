@@ -904,6 +904,20 @@
     (p/goto-page "Editing block target")
     (is (contains? (set (util/get-page-blocks-contents)) "editing block"))))
 
+(deftest shift-open-page-in-sidebar
+  (testing "Shift+Enter opens an ordinary page search result in the sidebar"
+    (p/new-page "Ordinary sidebar page")
+    (b/new-blocks ["ordinary page block"])
+    (p/new-page "Sidebar search source")
+    (util/search "Ordinary sidebar page")
+    (let [result (.first (w/get-by-test-id "Ordinary sidebar page"))]
+      (assert/assert-is-visible result)
+      (.hover result))
+    (.focus (w/-query ".cp__cmdk-search-input"))
+    (k/shift+enter)
+    (assert/assert-is-visible
+     ".cp__right-sidebar .sidebar-item :text('Ordinary sidebar page')")))
+
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"
     (p/goto-page "Library")
