@@ -893,6 +893,17 @@
     (choose-move-target! "Target page 2")
     (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
 
+(deftest move-editing-block-cmdk
+  (testing "move the current editing block using cmdk"
+    (p/new-page "Editing block target")
+    (p/new-page "Editing block source")
+    (b/new-blocks ["editing block"])
+    (util/search-and-click "Move blocks to")
+    (choose-move-target! "Editing block target")
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)
+    (p/goto-page "Editing block target")
+    (is (contains? (set (util/get-page-blocks-contents)) "editing block"))))
+
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"
     (p/goto-page "Library")

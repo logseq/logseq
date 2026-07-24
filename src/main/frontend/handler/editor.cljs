@@ -1032,12 +1032,17 @@
 (defn move-selected-blocks
   [e]
   (util/stop e)
-  (let [block-ids (or (seq (state/get-selection-block-ids))
-                      (when-let [id (:block/uuid (state/get-edit-block))]
-                        [id]))]
-    (if (seq block-ids)
-      (p/let [results (db-async/<get-blocks (state/get-current-repo) block-ids {:children? false})
-              loaded-blocks (unwrap-block-results results)
+  (let [block-ids (seq (state/get-selection-block-ids))
+        edit-block (when-not block-ids
+                     (state/get-edit-block))]
+    (if (or block-ids edit-block)
+      (p/let [loaded-blocks (if edit-block
+                              [edit-block]
+                              (p/let [results (db-async/<get-blocks
+                                                       (state/get-current-repo)
+                                                       block-ids
+                                                       {:children? false})]
+                                (unwrap-block-results results)))
               blocks (vec (block-handler/get-top-level-blocks loaded-blocks))]
         (route-handler/go-to-search! :nodes
                                      {:action :move-blocks
