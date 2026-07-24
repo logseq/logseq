@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
+            [frontend.db.subs :as db-subs]
             [frontend.db.transact :as db-transact]
             [frontend.db.utils :as db-utils]
             [frontend.handler.assets :as assets-handler]
@@ -270,6 +271,46 @@
               {:force? true
                :outliner-op :save-block}]
              @tx-calls)))))
+
+(deftest save-current-block-compares-with-latest-renderer-snapshot-test
+  (let [repo "latest-renderer-block"
+        block-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        stale-block {:db/id 1
+                     :block/uuid block-uuid
+                     :block/title "b1"}
+        latest-block (atom (assoc stale-block :block/title "b1 new text"))
+        input #js {:value "b1 new text"}
+        snapshot-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly repo)
+                  state/get-edit-input-id (constantly "editor")
+                  state/get-edit-block (constantly stale-block)
+                  gdom/getElement (constantly input)
+                  db-subs/block-snapshot
+                  (fn [block-id]
+                    (swap! snapshot-calls conj block-id)
+                    {:status :ready :value @latest-block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (constantly nil)
+                  db-transact/apply-outliner-ops
+                  (fn [db ops opts]
+                    (swap! tx-calls conj [db ops opts])
+                    :tx)]
+      (editor/save-current-block!)
+      (is (= [block-uuid] @snapshot-calls))
+      (is (empty? @tx-calls)
+          "Already persisted editor content must not create another undo step")
+      (reset! snapshot-calls [])
+      (reset! tx-calls [])
+      (reset! latest-block stale-block)
+      (editor/save-current-block!)
+      (is (= [block-uuid] @snapshot-calls))
+      (is (= [[nil [] {:outliner-op :save-block}]]
+             @tx-calls)
+          "Content that differs from the persisted block must still be saved"))))
 
 (deftest open-block-in-sidebar-loads-target-through-worker-test
   (async done
