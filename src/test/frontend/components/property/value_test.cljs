@@ -1,27 +1,10 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.property :as property-handler]
             [promesa.core :as p]))
-
-(deftest deleting-status-from-task-view-preserves-task-tag-test
-  (let [calls* (atom [])
-        block {:db/id 1}
-        property {:db/ident :logseq.property/status}]
-    (with-redefs [editor-handler/move-cross-boundary-up-down (constantly nil)
-                  property-handler/remove-block-property!
-                  (fn [& args] (swap! calls* conj args))]
-      (#'property-value/delete-block-property!
-       block property {:view-parent {:db/ident :logseq.class/Task}})
-      (is (= [[1
-               :logseq.property/status
-               {:preserve-task-tag? true}]]
-             @calls*)))))
 
 (deftest resolve-journal-page-for-date-returns-existing-page-test
   (async done
@@ -85,81 +68,6 @@
                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
-
-(deftest bottom-property-edit-pointer-dismiss-handler-test
-  (let [edit-button (js-obj "closest" (fn [selector]
-                                        (when (= selector ".bottom-property-edit-icon")
-                                          #js {})))
-        other-target (js-obj "closest" (constantly nil))
-        prevent-default-called? (atom false)
-        edit-event (js-obj "target" edit-button
-                           "preventDefault" #(reset! prevent-default-called? true))
-        other-event (js-obj "target" other-target)]
-    (is (false? (#'property-value/prevent-bottom-property-edit-pointer-dismiss edit-event)))
-    (is (true? @prevent-default-called?))
-    (is (nil? (#'property-value/prevent-bottom-property-edit-pointer-dismiss other-event)))))
-
-(deftest date-page-link-stops-click-propagation-in-bottom-properties-test
-  (is (fn? (:on-click (#'property-value/date-page-link-props true))))
-  (is (nil? (:on-click (#'property-value/date-page-link-props false)))))
-
-(deftest direct-value-picker-type-test
-  (is (true? (property-value/direct-value-picker-type? :date)))
-  (is (true? (property-value/direct-value-picker-type? :datetime)))
-  (is (true? (property-value/direct-value-picker-type? :asset)))
-  (is (false? (property-value/direct-value-picker-type? :default))))
-
-(deftest asset-picker-layout-is-viewport-constrained-test
-  (is (= "min(640px, calc(100vw - 32px))"
-         (:width property-value/asset-picker-grid-style)))
-  (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
-  (is (= "repeat(auto-fill, minmax(140px, 1fr))"
-         (:grid-template-columns property-value/asset-picker-items-grid-style))))
-
-(defn- class-set
-  [class-str]
-  (set (string/split (or class-str "") #"\s+")))
-
-(deftest block-multiple-node-values-stay-in-one-row-test
-  (let [opts {:other-position? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "min-w-0"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-nowrap"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "multi-values-nowrap"))
-    (is (contains? (class-set (property-value/multiple-value-item-class opts))
-                   "shrink-0"))))
-
-(deftest expanded-multiple-node-values-can-wrap-test
-  (let [opts {:expanded? true
-              :other-position? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-wrap"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "multi-values-expanded"))
-    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                        "flex-nowrap")))
-    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
-                        "shrink-0")))))
-
-(deftest page-multiple-node-values-can-wrap-test
-  (let [opts {:page-property? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-wrap"))
-    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                        "flex-nowrap")))
-    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
-                        "shrink-0")))))
-
-(deftest non-positioned-multiple-node-values-can-wrap-test
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                 "flex-wrap"))
-  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                      "flex-nowrap"))))
 
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]

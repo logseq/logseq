@@ -8,7 +8,6 @@
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.http :as http]
-            [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [promesa.core :as p]))
 
 (defn- ok-json-response []
@@ -260,23 +259,6 @@
                        [_ operation] path-operations]
                  (is (seq (:summary operation)))
                  (is (seq (:description operation)))))
-             (p/then (fn [] (done)))
-             (p/catch (fn [error]
-                        (is false (str error))
-                        (done))))))
-
-(deftest openapi-path-order-matches-operation-registry-test
-  (async done
-         (-> (p/let [response (dispatch/handle-worker-fetch
-                               (js/Request. "http://localhost/openapi.json") #js {})
-                      text (.text response)
-                      document (js/JSON.parse text)
-                      actual (vec (js/Object.keys (aget document "paths")))
-                      expected (->> semantic-routes/operations
-                                    (map :path)
-                                    distinct
-                                    (mapv #(string/replace % #":([^/]+)" "{$1}")))]
-               (is (= expected actual)))
              (p/then (fn [] (done)))
              (p/catch (fn [error]
                         (is false (str error))

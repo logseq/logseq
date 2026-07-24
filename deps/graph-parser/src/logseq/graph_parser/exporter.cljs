@@ -1483,7 +1483,7 @@
                     {:logseq.property.pdf/hl-color :logseq.property/color.yellow
                      :logseq.property.pdf/hl-page 1
                      :block/title ""}
-                    user-attributes
+                    (common-util/remove-nils-non-nested user-attributes)
                     {:block/uuid (:id m)
                      :block/order (db-order/gen-key)
                      :logseq.property/ls-type :annotation
@@ -1495,8 +1495,8 @@
                     (when asset-image-uuid
                       {:logseq.property.pdf/hl-image [:block/uuid asset-image-uuid]
                        :logseq.property.pdf/hl-type :area})
-                    (when md-block
-                      (select-keys md-block [:block/title])))]
+                    (when-some [title (:block/title md-block)]
+                      {:block/title title}))]
     (sqlite-util/block-with-timestamps annotation)))
 
 (defn- build-pdf-annotations-tx*

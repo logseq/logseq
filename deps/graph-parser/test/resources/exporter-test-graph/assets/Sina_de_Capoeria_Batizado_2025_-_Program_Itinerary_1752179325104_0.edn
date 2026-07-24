@@ -26,5 +26,17 @@
                                    :height 573.999986224}),
                           :page 8},
                :content {:text "Duke School"},
-               :properties {:color "blue"}}],
+               :properties {:color "blue"}}
+              {:id #uuid "68702499-159a-4a14-a0cf-cf5f015535c2",
+               :page 2,
+               :position {:bounding {:x1 120,
+                                     :y1 240,
+                                     :x2 360,
+                                     :y2 280,
+                                     :width 574.0000000000001,
+                                     :height 573.999986224},
+                          :rects (),
+                          :page 2},
+               :content {:text nil},
+               :properties {:color "yellow"}}],
  :extra {:page 2}}
