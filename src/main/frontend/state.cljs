@@ -733,10 +733,9 @@ should be done through this fn in order to get global config and config defaults
    (use-enable-journals? (get-current-repo)))
   ([repo]
    (let [db-restoring? (use-sub :db/restoring?)
-         global-value (use-sub [:config ::global-config :feature/enable-journals?])
-         graph-value (use-sub [:config repo :feature/enable-journals?])]
+         journals-enabled? (:feature/enable-journals? (use-sub-config repo))]
      (when (false? db-restoring?)
-       (not (false? (if (some? graph-value) graph-value global-value)))))))
+       (not (false? journals-enabled?))))))
 
 (defn enable-flashcards?
   ([]

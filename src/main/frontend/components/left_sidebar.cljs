@@ -245,7 +245,7 @@
      [:div.sidebar-navigations.flex.flex-col.mt-1
       ;; Custom home page when journals are disabled
       (let [page (:page default-home)]
-        (if (and page (not enable-journals?))
+        (if (and page (false? enable-journals?))
           (sidebar-item
            {:class "home-nav"
             :title page
