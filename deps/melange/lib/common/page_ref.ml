@@ -1,11 +1,13 @@
 let left_brackets = "[["
 let right_brackets = "]]"
 let left_and_right_brackets = left_brackets ^ right_brackets
-let page_ref_re = Js.Re.fromString "\\[\\[(.*?)\\]\\]"
-let page_ref_without_nested_re = Js.Re.fromString "\\[\\[([^\\[\\]]+)\\]\\]"
-let page_ref_any_re = Js.Re.fromString "\\[\\[(.*)\\]\\]"
-let markdown_page_ref_re = Js.Re.fromString "\\[(.*)\\]\\(file:.*\\)"
-let markdown_page_ref_full_re = Js.Re.fromString "^\\[(.*)\\]\\(file:.*\\)$"
+let page_ref_pattern = "\\[\\[(.*?)\\]\\]"
+let page_ref_without_nested_pattern = "\\[\\[([^\\[\\]]+)\\]\\]"
+let page_ref_any_pattern = "\\[\\[(.*)\\]\\]"
+let markdown_page_ref_pattern = "\\[(.*)\\]\\(file:.*\\)"
+
+let markdown_page_ref_full_re =
+  Js.Re.fromString ("^" ^ markdown_page_ref_pattern ^ "$")
 
 let capture_at index result =
   result |> Js.Re.captures |> fun captures ->
@@ -55,9 +57,7 @@ let get_page_name_or_self value =
 let matched_names value =
   if String.starts_with ~prefix:"{{" value then Rrbvec.empty
   else
-    let regexp =
-      Js.Re.fromStringWithFlags "\\[\\[(.*?)\\]\\]" ~flags:"g"
-    in
+    let regexp = Js.Re.fromStringWithFlags page_ref_pattern ~flags:"g" in
     let rec collect result =
       match Js.Re.exec ~str:value regexp with
       | None -> result

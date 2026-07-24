@@ -2,6 +2,8 @@
  (name melange_common)
  (modes melange)
  (libraries melange.js rrbvec)
+ (modules
+  (:standard \ Common_runtime))
  (virtual_modules
   Url_support
   Authorization
@@ -21,5 +23,14 @@
   Util
   Uuid
   Version)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_common_runtime)
+ (modes melange)
+ (modules Common_runtime)
+ (libraries melange.js melange_cljs_runtime_spec rrbvec)
+ (virtual_modules Common_runtime)
  (preprocess
   (pps melange.ppx)))

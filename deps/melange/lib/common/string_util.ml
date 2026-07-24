@@ -117,7 +117,7 @@ let is_url value =
     not (String.equal origin "null")
   with _ -> false
 
-let url_encoded_pattern = Js.Re.fromStringWithFlags "%[0-9a-f]{2}" ~flags:"i"
+let url_encoded_pattern_text = "%[0-9a-f]{2}"
 
 let normalize_format_name value =
   if String.equal value "md" then "markdown" else value
@@ -186,15 +186,6 @@ let is_valid_edn_keyword value =
         | [| Melange_edn_melange.Any (Melange_edn_melange.Map _) |] -> true
         | _ -> false
       with Melange_edn_melange.Parse_error _ -> false
-
-let re_find regexp value =
-  match Js.Re.exec ~str:value regexp with
-  | None -> None
-  | Some result ->
-      result |> Js.Re.captures
-      |> Array.map Js.Nullable.toOption
-      |> Rrbvec.of_array
-      |> fun captures -> Some captures
 
 let uuid_pattern =
   "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"

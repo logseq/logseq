@@ -192,7 +192,13 @@ test('Common and DB interfaces are owned by spec libraries', () => {
     const implementationDirectory = path.join(melangeRoot, 'lib', library)
     const specificationDirectory = path.join(melangeRoot, 'spec', library)
     const implementationModules = moduleNames(implementationDirectory, '.ml')
-    const specificationModules = moduleNames(specificationDirectory, '.mli')
+    const specificationModules = moduleNames(
+      specificationDirectory,
+      '.mli'
+    ).filter(
+      (moduleName) =>
+        moduleName !== 'common_runtime' && moduleName !== 'db_runtime'
+    )
 
     assert.deepEqual(moduleNames(implementationDirectory, '.mli'), [])
     assert.notEqual(specificationModules.length, 0)

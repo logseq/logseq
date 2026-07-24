@@ -2,6 +2,7 @@ module Common_namespace = Melange_common.Namespace
 (** Shared Common JavaScript-boundary representations. *)
 
 module Runtime_codec = Melange_cljs_runtime_spec.Value_codec
+module Common_runtime = Melange_common_runtime.Common_runtime
 
 module Namespace = struct
   let namespacePage = Common_namespace.namespace_page
@@ -14,10 +15,16 @@ module PageRef = struct
   let leftBrackets = Common_page_ref.left_brackets
   let rightBrackets = Common_page_ref.right_brackets
   let leftAndRightBrackets = Common_page_ref.left_and_right_brackets
-  let pageRefRe = Common_page_ref.page_ref_re
-  let pageRefWithoutNestedRe = Common_page_ref.page_ref_without_nested_re
-  let pageRefAnyRe = Common_page_ref.page_ref_any_re
-  let markdownPageRefRe = Common_page_ref.markdown_page_ref_re
+  let pageRefRe = Js.Re.fromString Common_page_ref.page_ref_pattern
+
+  let pageRefWithoutNestedRe =
+    Js.Re.fromString Common_page_ref.page_ref_without_nested_pattern
+
+  let pageRefAnyRe = Js.Re.fromString Common_page_ref.page_ref_any_pattern
+
+  let markdownPageRefRe =
+    Js.Re.fromString Common_page_ref.markdown_page_ref_pattern
+
   let getFileBasename = Common_page_ref.get_file_basename
   let isPageRef = Common_page_ref.is_page_ref
   let toPageRef = Common_page_ref.to_page_ref
@@ -31,7 +38,7 @@ module BlockRef = struct
   let leftParens = Common_block_ref.left_parens
   let rightParens = Common_block_ref.right_parens
   let leftAndRightParens = Common_block_ref.left_and_right_parens
-  let blockRefRe = Common_block_ref.block_ref_re
+  let blockRefRe = Js.Re.fromString Common_block_ref.block_ref_pattern
   let getBlockRefId = Common_block_ref.get_block_ref_id
   let getStringBlockRefId = Common_block_ref.get_string_block_ref_id
   let isBlockRef = Common_block_ref.is_block_ref
@@ -162,7 +169,9 @@ module StringUtil = struct
     value |> Js.Nullable.toOption
     |> Option.fold ~none:false ~some:Common_string_util.is_url
 
-  let urlEncodedPattern = Common_string_util.url_encoded_pattern
+  let urlEncodedPattern =
+    Js.Re.fromStringWithFlags Common_string_util.url_encoded_pattern_text
+      ~flags:"i"
 
   let normalizeFormatName value =
     value |> Js.Nullable.toOption
@@ -187,29 +196,9 @@ module StringUtil = struct
     value |> Js.Nullable.toOption
     |> Option.fold ~none:false ~some:Common_string_util.is_valid_edn_keyword
 
-  type trace_callback = (unit -> unit[@u])
+  type trace_callback = Common_runtime.Regexp_runtime.trace_callback
 
-  let safeReFindValueWith runtime regexp value (trace : trace_callback) =
-    if not (Runtime_codec.value_is_string runtime value) then (
-      trace () [@u];
-      Runtime_codec.nil_value runtime)
-    else
-      match
-        Common_string_util.re_find regexp
-          (Runtime_codec.string_from_value runtime value)
-      with
-      | None -> Runtime_codec.nil_value runtime
-      | Some captures when Rrbvec.length captures = 1 -> (
-          match Rrbvec.nth captures 0 with
-          | Some capture -> Runtime_codec.string_to_value runtime capture
-          | None -> Runtime_codec.nil_value runtime)
-      | Some captures ->
-          captures
-          |> Rrbvec.map (function
-            | Some capture -> Runtime_codec.string_to_value runtime capture
-            | None -> Runtime_codec.nil_value runtime)
-          |> Rrbvec.to_array
-          |> Runtime_codec.array_to_vector runtime
+  let safeReFindValueWith = Common_runtime.Regexp_runtime.safe_find_value
 end
 
 module Common_util = Melange_common.Util
@@ -247,120 +236,26 @@ module Util = struct
         values |> Array.map Js.Nullable.toOption |> Rrbvec.of_array)
     |> Rrbvec.of_array |> Common_util.concat_present_values |> Rrbvec.to_array
 
-  let distinctLazyWith runtime key values =
-    let state = Common_util.create_distinct_state () in
-    let rec step values =
-      Runtime_codec.lazy_sequence runtime (fun[@u] () ->
-          let values = Runtime_codec.sequence runtime values in
-          if Runtime_codec.value_is_nil runtime values then
-            Runtime_codec.nil_value runtime
-          else
-            let value = Runtime_codec.sequence_first runtime values in
-            let remaining = Runtime_codec.sequence_rest runtime values in
-            let derived = Runtime_codec.invoke_callback runtime key value in
-            if
-              Common_util.accept_distinct state
-                ~equal:(Runtime_codec.value_equals runtime)
-                derived
-            then Runtime_codec.sequence_cons runtime value (step remaining)
-            else step remaining)
-    in
-    step values
+  let distinctLazyWith = Common_runtime.Util_runtime.distinct_lazy
+  let fastRemoveNilsWith = Common_runtime.Util_runtime.fast_remove_nils
+  let distinctByLastWinsWith = Common_runtime.Util_runtime.distinct_by_last_wins
 
-  let fastRemoveNilsWith runtime values =
-    let remove_nil_map_values value =
-      value
-      |> Runtime_codec.map_to_entries runtime
-      |> Rrbvec.of_array
-      |> Rrbvec.filter (function
-        | [| _; entry |] -> not (Runtime_codec.value_is_nil runtime entry)
-        | _ -> invalid_arg "Common fast-remove-nils expects map entries")
-      |> Rrbvec.to_array
-      |> Runtime_codec.entries_to_map runtime
-    in
-    let rec step values =
-      Runtime_codec.lazy_sequence runtime (fun[@u] () ->
-          let values = Runtime_codec.sequence runtime values in
-          if Runtime_codec.value_is_nil runtime values then
-            Runtime_codec.nil_value runtime
-          else
-            let value = Runtime_codec.sequence_first runtime values in
-            let remaining = Runtime_codec.sequence_rest runtime values in
-            if Runtime_codec.value_is_nil runtime value then step remaining
-            else
-              let value =
-                if Runtime_codec.value_is_map runtime value then
-                  remove_nil_map_values value
-                else value
-              in
-              Runtime_codec.sequence_cons runtime value (step remaining))
-    in
-    step values
+  let blockWithTimestampsWith =
+    Common_runtime.Util_runtime.block_with_timestamps
 
-  let distinctByLastWinsWith runtime key values =
-    values
-    |> Runtime_codec.collection_to_array runtime
-    |> Rrbvec.of_array
-    |> Common_util.distinct_by_last_wins
-         ~key:(Runtime_codec.invoke_callback runtime key)
-         ~equal:(Runtime_codec.value_equals runtime)
-    |> Rrbvec.to_array
-    |> Runtime_codec.array_to_vector runtime
-
-  let blockWithTimestampsWith runtime (now_ms : now_callback) block =
-    let keyword = Runtime_codec.keyword_from_string runtime in
-    let created_at =
-      Runtime_codec.map_get runtime block (keyword "block/created-at")
-    in
-    let timestamps =
-      Common_util.block_timestamps ~now_ms:(now_ms () [@u])
-        ~created_at:
-          (if Runtime_codec.value_is_nil runtime created_at then None
-           else Some (Runtime_codec.float_from_value runtime created_at))
-    in
-    Runtime_codec.map_assoc runtime block
-      (keyword "block/created-at")
-      (Runtime_codec.float_to_value runtime timestamps.created_at)
-    |> fun block ->
-    Runtime_codec.map_assoc runtime block
-      (keyword "block/updated-at")
-      (Runtime_codec.float_to_value runtime timestamps.updated_at)
-
-  let compareByWith runtime (compare : compare_callback) sorting left right =
+  let compareByWith runtime compare sorting left right =
     sorting
     |> Array.map (fun (criterion : encoded_sort_criterion) ->
         ({
-           Common_util.value =
-             Runtime_codec.invoke_callback runtime criterion.getValue;
+           Common_runtime.Util_runtime.get_value = criterion.getValue;
            ascending = criterion.ascending;
          }
-          : ( Runtime_codec.cljs_value,
-              Runtime_codec.cljs_value )
-            Common_util.sort_criterion))
-    |> Rrbvec.of_array
+          : Common_runtime.Util_runtime.sort_criterion))
     |> fun criteria ->
-    Common_util.compare_by
-      ~compare:(fun left right -> (compare left right [@u]))
-      criteria left right
+    Common_runtime.Util_runtime.compare_by runtime compare criteria left right
 
-  let safeReadStringWith runtime (read : read_callback)
-      (log_error : read_error_callback) options content should_log =
-    try read options content [@u]
-    with error ->
-      (if should_log then
-         match Js.Exn.asJsExn error with
-         | Some error -> log_error error [@u]
-         | None -> Runtime_codec.log_error runtime (Printexc.to_string error));
-      Runtime_codec.nil_value runtime
-
-  let safeReadMapStringWith runtime (read : read_callback)
-      (log_error : read_error_callback) options content =
-    try read options content [@u]
-    with error ->
-      (match Js.Exn.asJsExn error with
-      | Some error -> log_error error [@u]
-      | None -> Runtime_codec.log_error runtime (Printexc.to_string error));
-      Runtime_codec.entries_to_map runtime [||]
+  let safeReadStringWith = Common_runtime.Util_runtime.safe_read_string
+  let safeReadMapStringWith = Common_runtime.Util_runtime.safe_read_map_string
 end
 
 module Common_uuid = Melange_common.Uuid

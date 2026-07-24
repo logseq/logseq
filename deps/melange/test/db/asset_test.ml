@@ -1,4 +1,5 @@
 open Melange_db
+module Asset_runtime = Melange_db_runtime_internal.Asset
 
 let expect_equal label actual expected =
   if actual <> expected then failwith (label ^ ": unexpected value")
@@ -29,7 +30,7 @@ let () =
       expect_equal "path" (Asset.name_title "dir/file.txt") "file");
   Fest.Promise.test "DB asset checksum owns primitive sequencing" (fun () ->
       let calls = ref [] in
-      Asset.checksum
+      Asset_runtime.checksum
         ~buffer_of_value:(fun value ->
           calls := !calls @ [ "buffer:" ^ value ];
           value ^ "-buffer")

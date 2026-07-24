@@ -15,17 +15,13 @@ let () =
       expect_equal "left brackets" Page_ref.left_brackets "[[";
       expect_equal "right brackets" Page_ref.right_brackets "]]";
       expect_equal "combined brackets" Page_ref.left_and_right_brackets "[[]]";
-      expect_equal "page ref regex"
-        (Js.Re.source Page_ref.page_ref_re)
+      expect_equal "page ref regex" Page_ref.page_ref_pattern
         "\\[\\[(.*?)\\]\\]";
       expect_equal "non-nested page ref regex"
-        (Js.Re.source Page_ref.page_ref_without_nested_re)
-        "\\[\\[([^\\[\\]]+)\\]\\]";
-      expect_equal "any page ref regex"
-        (Js.Re.source Page_ref.page_ref_any_re)
+        Page_ref.page_ref_without_nested_pattern "\\[\\[([^\\[\\]]+)\\]\\]";
+      expect_equal "any page ref regex" Page_ref.page_ref_any_pattern
         "\\[\\[(.*)\\]\\]";
-      expect_equal "markdown page ref regex"
-        (Js.Re.source Page_ref.markdown_page_ref_re)
+      expect_equal "markdown page ref regex" Page_ref.markdown_page_ref_pattern
         "\\[(.*)\\]\\(file:.*\\)");
 
   Fest.test "page references preserve wrapping and permissive boundary checks"
@@ -76,7 +72,8 @@ let () =
       |> Array.iter (fun (input, expected) ->
           expect_equal input (Page_ref.get_page_name_or_self input) expected));
 
-  Fest.test "page reference scanning preserves ordered duplicate matches" (fun () ->
+  Fest.test "page reference scanning preserves ordered duplicate matches"
+    (fun () ->
       [|
         ("before [[one]] after [[two words]]", [| "one"; "two words" |]);
         ("[[same]] and [[same]]", [| "same"; "same" |]);
@@ -107,8 +104,7 @@ let () =
       expect_equal "left parens" Block_ref.left_parens "((";
       expect_equal "right parens" Block_ref.right_parens "))";
       expect_equal "combined parens" Block_ref.left_and_right_parens "(())";
-      expect_equal "block ref regex"
-        (Js.Re.source Block_ref.block_ref_re)
+      expect_equal "block ref regex" Block_ref.block_ref_pattern
         "\\(\\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\\)\\)";
       [|
         ( "((550e8400-e29b-41d4-a716-446655440000))",

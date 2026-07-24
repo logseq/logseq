@@ -1,0 +1,23 @@
+(library
+ (name melange_common_runtime_internal)
+ (modes melange)
+ (modules
+  (:standard \ Common_runtime))
+ (libraries
+  melange_common_impl
+  melange_cljs_runtime
+  melange.js
+  rrbvec)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_common_runtime_impl)
+ (modes melange)
+ (implements melange_common_runtime)
+ (modules Common_runtime)
+ (libraries
+  melange_common_impl
+  melange_common_runtime_internal)
+ (preprocess
+  (pps melange.ppx)))

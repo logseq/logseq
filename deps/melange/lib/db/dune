@@ -41,7 +41,6 @@
   Sqlite_build
   Sqlite_export
   Sqlite_gc_workflow
-  Sqlite_lifecycle
   Sqlite_policy
   Tree_read
   Tree_workflow

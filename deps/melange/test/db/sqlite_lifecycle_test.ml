@@ -1,4 +1,4 @@
-open Melange_db
+module Sqlite_lifecycle = Melange_db_runtime_internal.Sqlite_lifecycle.Domain
 
 let () =
   Fest.test "DB SQLite storage connection owns restore-or-create sequencing"

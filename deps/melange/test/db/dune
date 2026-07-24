@@ -56,7 +56,11 @@
   view_workflow_test
   view_query_workflow_test)
  (module_systems commonjs)
- (libraries melange_db_impl melange-fest rrbvec)
+ (libraries
+  melange_db_impl
+  melange_db_runtime_internal
+  melange-fest
+  rrbvec)
  (preprocess
   (pps melange.ppx)))
 

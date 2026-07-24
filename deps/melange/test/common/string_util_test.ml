@@ -1,4 +1,5 @@
 module String_util = Melange_common.String_util
+module Regexp_runtime = Melange_common_runtime.Common_runtime.Regexp_runtime
 module Util = Melange_common.Util
 
 let fail message =
@@ -225,7 +226,9 @@ let () =
       |]
       |> Array.iter (fun (value, expected) ->
           let actual =
-            Js.Re.exec ~str:value String_util.url_encoded_pattern
+            Js.Re.exec ~str:value
+              (Js.Re.fromStringWithFlags String_util.url_encoded_pattern_text
+                 ~flags:"i")
             |> Option.map (fun result ->
                 Js.Re.captures result |> fun captures ->
                 captures.(0) |> Js.Nullable.toOption)
@@ -389,7 +392,7 @@ let () =
   Fest.test "regular expression matching preserves captures and lastIndex"
     (fun () ->
       let captures regexp value =
-        String_util.re_find regexp value
+        Regexp_runtime.find regexp value
         |> Option.map (fun matches -> matches |> Rrbvec.to_array)
       in
       expect_equal "absent match" (captures (Js.Re.fromString "z") "abc") None;

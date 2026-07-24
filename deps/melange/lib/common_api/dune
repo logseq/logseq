@@ -6,6 +6,7 @@
  (libraries
   melange_cljs_runtime
   melange_common_impl
+  melange_common_runtime_impl
   rrbvec)
  (preprocess
   (pps melange.ppx)))
@@ -18,6 +19,7 @@
  (libraries
   melange_cljs_runtime
   melange_common_impl
+  melange_common_runtime_impl
   melange_common_api_internal
   rrbvec)
  (preprocess

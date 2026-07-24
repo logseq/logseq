@@ -6,11 +6,6 @@ let digest_hex bytes =
       result ^ Printf.sprintf "%02x" byte)
     "" bytes
 
-let checksum ~buffer_of_value ~sha256 ~digest_bytes value =
-  value |> buffer_of_value |> sha256
-  |> Js.Promise.then_ (fun digest ->
-      digest |> digest_bytes |> digest_hex |> Js.Promise.resolve)
-
 let basename path =
   let rec skip_trailing_slashes index =
     if index >= 0 && Char.equal path.[index] '/' then

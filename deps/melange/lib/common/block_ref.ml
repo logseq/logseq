@@ -5,7 +5,6 @@ let left_and_right_parens = left_parens ^ right_parens
 let block_ref_pattern =
   "\\(\\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\\)\\)"
 
-let block_ref_re = Js.Re.fromString block_ref_pattern
 let block_ref_full_re = Js.Re.fromString ("^" ^ block_ref_pattern ^ "$")
 
 let get_block_ref_id value =

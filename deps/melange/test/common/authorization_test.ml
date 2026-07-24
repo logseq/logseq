@@ -1,5 +1,8 @@
 module Authorization = Melange_common.Authorization
 
+module Authorization_runtime =
+  Melange_common_runtime.Common_runtime.Authorization_runtime
+
 module Fake_platform = struct
   type t = unit
   type payload = string
@@ -42,7 +45,7 @@ module Fake_platform = struct
     Js.Promise.resolve true
 end
 
-module Authorization_workflow = Authorization.Make (Fake_platform)
+module Authorization_workflow = Authorization_runtime.Make (Fake_platform)
 
 let fail message =
   Fest.expect |> Fest.equal message "";

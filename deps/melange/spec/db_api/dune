@@ -1,7 +1,7 @@
 (library
  (name melange_db_api)
  (modes melange)
- (libraries melange.js melange_cljs_runtime_spec melange_datascript_spec)
+ (libraries melange.js melange_db_runtime)
  (virtual_modules Workflows)
  (preprocess
   (pps melange.ppx)))

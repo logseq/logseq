@@ -1,10 +1,10 @@
 val left_brackets : string
 val right_brackets : string
 val left_and_right_brackets : string
-val page_ref_re : Js.Re.t
-val page_ref_without_nested_re : Js.Re.t
-val page_ref_any_re : Js.Re.t
-val markdown_page_ref_re : Js.Re.t
+val page_ref_pattern : string
+val page_ref_without_nested_pattern : string
+val page_ref_any_pattern : string
+val markdown_page_ref_pattern : string
 val get_file_basename : string -> string option
 val is_page_ref : string -> bool
 val to_page_ref : string -> string

@@ -2,6 +2,8 @@
  (name melange_db)
  (modes melange)
  (libraries melange.js rrbvec)
+ (modules
+  (:standard \ Db_runtime))
  (virtual_modules
   Asset
   Block_title
@@ -41,7 +43,6 @@
   Sqlite_build
   Sqlite_export
   Sqlite_gc_workflow
-  Sqlite_lifecycle
   Sqlite_policy
   Tree_read
   Tree_workflow
@@ -60,5 +61,17 @@
   View_property_values
   View_workflow
   View_query_workflow)
+ (preprocess
+  (pps melange.ppx)))
+
+(library
+ (name melange_db_runtime)
+ (modes melange)
+ (modules Db_runtime)
+ (libraries
+  melange.js
+  melange_cljs_runtime_spec
+  melange_datascript_spec)
+ (virtual_modules Db_runtime)
  (preprocess
   (pps melange.ppx)))
