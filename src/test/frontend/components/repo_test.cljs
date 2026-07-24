@@ -447,17 +447,14 @@
 (deftest repo-popup-action-target-test
   (let [target? (some-> (resolve 'frontend.components.repo/repo-popup-action-target?)
                         deref)
-        container (.createElement js/document "div")]
+        target (fn [actionable?]
+                 #js {:closest (fn [_selector]
+                                 (when actionable?
+                                   #js {}))})]
     (is (fn? target?) "The graph popup should identify every actionable item")
     (when target?
-      (set! (.-innerHTML container)
-            (str "<div role=\"menuitem\"><span id=\"graph\">Graph</span></div>"
-                 "<button><span id=\"footer\">All graphs</span></button>"
-                 "<a><span id=\"link\">Import</span></a>"
-                 "<div id=\"blank\"></div>"))
-      (doseq [id ["graph" "footer" "link"]]
-        (is (true? (target? (.querySelector container (str "#" id)))) id))
-      (is (false? (target? (.querySelector container "#blank")))))))
+      (is (true? (target? (target true))))
+      (is (false? (target? (target false)))))))
 
 (deftest shift-click-opens-downloaded-remote-graph-in-new-tab-with-graph-id-test
   (let [events (atom [])

@@ -9,7 +9,7 @@
             [clojure.core.async :as async]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.rtc.indicator :as indicator]
+            [frontend.components.rtc.download-progress :as download-progress]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -51,7 +51,6 @@
             [lambdaisland.glogi :as log]
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
@@ -375,32 +374,6 @@
    (notification/show! (t :graph/removed-from-sync) :warning false)
    (rtc-handler/<get-remote-graphs)))
 
-(defn- download-graph-progress
-  [graph-name]
-  [:div.flex.flex-col.items-center.justify-center.gap-4
-   [:div (t :sync/downloading-graph graph-name)]
-   (indicator/downloading-logs)])
-
-(defn show-download-graph-progress!
-  [graph-name]
-  (if (mobile-util/native-platform?)
-    (shui/popup-show!
-     nil
-     #(download-graph-progress graph-name)
-     {:id :download-rtc-graph})
-    (shui/dialog-open!
-     #(download-graph-progress graph-name)
-     {:id :download-rtc-graph
-      :content-props
-      {:onPointerDownOutside #(.preventDefault %)
-       :onOpenAutoFocus #(.preventDefault %)}})))
-
-(defn hide-download-graph-progress!
-  []
-  (if (mobile-util/native-platform?)
-    (shui/popup-hide! :download-rtc-graph)
-    (shui/dialog-close! :download-rtc-graph)))
-
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
@@ -409,17 +382,17 @@
   (->
    (p/do!
     (when (util/mobile?)
-      (show-download-graph-progress! graph-name))
+      (download-progress/show! graph-name))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name) {:rtc-download? true}])
     (when (util/mobile?)
-      (hide-download-graph-progress!)))
+      (download-progress/hide!)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
               (when (util/mobile?)
-                (hide-download-graph-progress!))
+                (download-progress/hide!))
               (when (rtc-error/download-decrypt-failed? e)
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 

@@ -82,12 +82,14 @@
         position (cond
                    (vector? event) event
 
-                   (or (instance? js/MouseEvent browser-event)
+                   (or (and (exists? js/MouseEvent)
+                            (instance? js/MouseEvent browser-event))
                        (instance? js/goog.events.BrowserEvent event))
                    (do (vreset! *target (.-target browser-event))
                        [(.-clientX event) (.-clientY event)])
 
-                   (instance? js/Element event)
+                   (and (exists? js/Element)
+                        (instance? js/Element event))
                    (let [^js rect (.getBoundingClientRect event)
                          left (.-left rect)
                          width (.-width rect)

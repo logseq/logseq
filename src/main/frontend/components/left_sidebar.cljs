@@ -4,6 +4,7 @@
             [frontend.components.block :as block]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
+            [frontend.components.left-sidebar-util :as sidebar-util]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -359,15 +360,6 @@
             {:key (str "recent-" (:db/id page))}
             (page-name page true)])])))
 
-(defn mobile-sidebar-navigation-target?
-  [target]
-  (boolean
-   (some (fn [selector] (.closest target selector))
-         [".sidebar-navigations a"
-          ".favorites .bd"
-          ".recent .bd"
-          ".nav-header"])))
-
 (hsx/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
@@ -437,7 +429,7 @@
                               (set-local-closing? false)
                               (close-modal-fn)))
        :on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
-                    (when (mobile-sidebar-navigation-target? target)
+                    (when (sidebar-util/mobile-navigation-target? target)
                       (close-fn)))}
 
       [:div.wrap
