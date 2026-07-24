@@ -948,39 +948,25 @@
                             (and preserve-prev-block? next-block
                                  (= (:db/id prev-block) (:db/id block))) next-block
                             :else block)
-            children (worker-children delete-target)
-            delete-target-uuid (:block/uuid delete-target)
-            document (some-> js/globalThis .-document)
-            delete-target-node (when document
-                                 (.querySelector document
-                                                 (str "[blockid=\"" delete-target-uuid "\"]")))]
-        (when delete-target-node
-          (.add (.-classList delete-target-node) "invisible"))
-        (-> (p/do!
-             (mobile-util/mobile-focus-hidden-input)
-             (when edit-block-f
-               (edit-block-f))
-             (ui-outliner-tx/transact!
-              (merge {:outliner-op :delete-blocks}
-                     (block-handler/outliner-tx-meta delete-target))
-              (when (seq children)
-                (outliner-op/move-blocks! children prev-block {:sibling? false}))
-              (delete-block-aux! delete-target)
-              (save-block-aux! prev-block
-                               new-content
-                               (cond-> {}
-                                 preserve-prev-block?
-                                 (assoc :retract-attributes? false)))))
-            (p/catch (fn [error]
-                       (when (and delete-target-node (.-isConnected delete-target-node))
-                         (.remove (.-classList delete-target-node) "invisible"))
-                       (throw error)))))
+            children (worker-children delete-target)]
+        (p/do!
+         (mobile-util/mobile-focus-hidden-input)
+         (ui-outliner-tx/transact!
+          (cond-> (merge {:outliner-op :delete-blocks}
+                         (block-handler/outliner-tx-meta delete-target))
+            edit-block-f
+            (assoc :editor/edit-block-fn (fn [_rows] (edit-block-f))))
+          (when (seq children)
+            (outliner-op/move-blocks! children prev-block {:sibling? false}))
+          (delete-block-aux! delete-target)
+          (save-block-aux! prev-block
+                           new-content
+                           (cond-> {}
+                             preserve-prev-block?
+                             (assoc :retract-attributes? false))))))
 
       :else
-      (do
-        (when edit-block-f
-          (edit-block-f))
-        (delete-block-aux! block)))))
+      (delete-block-aux! block edit-block-f))))
 
 (defn delete-block-inner!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
@@ -990,10 +976,16 @@
                          current-block
                          nil)]
       (p/let [loaded-previous-edit (loaded-block-edit loaded-block value (:container-id config))
-              block-e (or current-block
-                          block
-                          (p/let [result (db-async/<get-block-with-children repo block-id {:children? true})]
-                            (worker-block-with-children result)))]
+              result (db-async/<get-block-with-children repo block-id {:children? true})
+              persisted-block (worker-block-with-children result)
+              editor-block (or current-block block)
+              block-e (if persisted-block
+                        (merge persisted-block
+                               (dissoc editor-block
+                                       :children
+                                       :block/children
+                                       :block.temp/has-children?))
+                        editor-block)]
         (when (:block/parent block-e)
           (let [has-children? (seq (worker-children block-e))
                 block block-e

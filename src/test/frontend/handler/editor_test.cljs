@@ -15,6 +15,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
@@ -1265,6 +1266,139 @@
                              :save-code-editor? false
                              :skip-load? true}]]
                @calls))))))
+
+(deftest backspace-merge-focuses-after-the-delete-transaction-test
+  (async done
+    (let [block {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title ""
+                 :block/parent {:db/id 10}}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/title "a"
+                    :block/parent {:db/id 10}}
+          calls (atom [])
+          tx-meta (atom nil)
+          edit-block-f (fn [] (swap! calls conj :edit))]
+      (-> (p/with-redefs [mobile-util/mobile-focus-hidden-input (constantly nil)
+                          db-transact/apply-outliner-ops (fn [_ _ opts]
+                                                          (reset! tx-meta opts)
+                                                          (swap! calls conj :transact))
+                          frontend-outliner-op/move-blocks! (fn [& _]
+                                                              (swap! calls conj :move))
+                          editor/delete-block-aux! (fn [& _]
+                                                     (swap! calls conj :delete))
+                          editor/save-block-aux! (fn [& _]
+                                                   (swap! calls conj :save))]
+            (#'editor/delete-block-with-previous!
+             {:block block
+              :current-block block
+              :prev-block previous
+              :new-content "a"
+              :edit-block-f edit-block-f
+              :input-empty? false
+              :delete-concat? false}))
+          (p/then (fn []
+                    (is (= [:delete :save :transact] @calls)
+                        "Backspace must not focus the previous block before deletion is rendered.")
+                    (is (fn? (:editor/edit-block-fn @tx-meta)))
+                    (when-let [edit-f (:editor/edit-block-fn @tx-meta)]
+                      (edit-f []))
+                    (is (= [:delete :save :transact :edit] @calls))))
+          (p/finally done)))))
+
+(deftest empty-block-backspace-focuses-after-the-delete-transaction-test
+  (let [block {:db/id 2
+               :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+               :block/title ""
+               :block/parent {:db/id 10}}
+        calls (atom [])
+        edit-block-f (fn [] (swap! calls conj :edit))
+        delete-edit-f (atom nil)]
+    (with-redefs [editor/delete-block-aux! (fn [_block edit-f]
+                                             (reset! delete-edit-f edit-f)
+                                             (swap! calls conj :delete))]
+      (#'editor/delete-block-with-previous!
+       {:block block
+        :current-block block
+        :edit-block-f edit-block-f
+        :input-empty? true
+        :delete-concat? false})
+      (is (= [:delete] @calls)
+          "Repeated Backspace must not target the parent while the child delete is pending.")
+      (is (fn? @delete-edit-f))
+      (@delete-edit-f)
+      (is (= [:delete :edit] @calls)))))
+
+(deftest backspace-does-not-delete-a-block-that-owns-children-test
+  (async done
+    (let [page {:db/id 10
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000010"}
+          child {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "b"
+                 :block/parent {:db/id 1}}
+          parent {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title ""
+                  :block/parent page}
+          parent-with-children (assoc parent :children [child])
+          delete-calls (atom [])]
+      (-> (p/with-redefs [state/get-edit-content (constantly "")
+                          util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                          db-async/<get-block-with-children
+                          (fn [& _]
+                            (p/resolved parent-with-children))
+                          editor/<left-sibling-or-parent (fn [& _] (p/resolved page))
+                          editor/delete-block-with-previous! (fn [args]
+                                                               (swap! delete-calls conj args))]
+            (editor/delete-block-inner!
+             test-helper/test-db
+             {:block parent
+              :block-id (:block/uuid parent)
+              :value ""
+              :config {}
+              :current-block parent
+              :delete-concat? false}))
+          (p/then (fn []
+                    (is (empty? @delete-calls)
+                        "Backspace on empty a must preserve a and its child b.")))
+          (p/finally done)))))
+
+(deftest backspace-at-the-start-does-not-delete-a-non-empty-block-that-owns-children-test
+  (async done
+    (let [page {:db/id 10
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000010"}
+          child {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "b"
+                 :block/parent {:db/id 1}}
+          parent {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title "a"
+                  :block/parent page}
+          parent-with-children (assoc parent :children [child])
+          delete-calls (atom [])]
+      (-> (p/with-redefs [state/get-edit-content (constantly "a")
+                          util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                          db-async/<get-block-with-children
+                          (fn [& _]
+                            (p/resolved parent-with-children))
+                          editor/<left-sibling-or-parent (fn [& _] (p/resolved page))
+                          editor/delete-block-with-previous! (fn [args]
+                                                               (swap! delete-calls conj args))]
+            (editor/delete-block-inner!
+             test-helper/test-db
+             {:block parent
+              :block-id (:block/uuid parent)
+              :value "a"
+              :config {}
+              :current-block parent
+              :delete-concat? false}))
+          (p/then (fn []
+                    (is (empty? @delete-calls)
+                        "Backspace at the beginning of a must preserve a and its child b.")))
+          (p/finally done)))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done

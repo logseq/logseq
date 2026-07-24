@@ -246,3 +246,68 @@
       (is (block-visible? (get parent "uuid")))
       (is (block-visible? (get child2 "uuid")))
       (is (block-visible? (get child3 "uuid"))))))
+
+(deftest backspace-at-parent-start-keeps-children-test
+  (doseq [[page-name parent-content]
+          [["backspace non-empty parent start" "a"]
+           ["backspace empty parent start" ""]]]
+    (testing (str "Backspace at the start of parent " (pr-str parent-content)
+                  " preserves its child")
+      (p/new-page page-name)
+      (let [page-uuid (get (ls-api-call! :editor.getBlock page-name) "uuid")
+            [parent child]
+            (ls-api-call! :editor.insertBatchBlock
+                          page-uuid
+                          [{:content parent-content
+                            :children [{:content "b"}]}])
+            parent-uuid (get parent "uuid")
+            child-uuid (get child "uuid")
+            block-visible? #(pos? (util/count-elements (str "#ls-block-" %)))]
+        (w/click (str "#block-content-" parent-uuid))
+        (util/wait-editor-visible)
+        (w/eval-js
+         "(() => {
+            const editor = document.querySelector('.editor-wrapper textarea');
+            editor.focus();
+            editor.setSelectionRange(0, 0);
+          })();")
+        (k/backspace)
+        (util/wait-timeout 200)
+        (is (= parent-content (util/get-edit-content)))
+        (is (block-visible? parent-uuid))
+        (is (block-visible? child-uuid))))))
+
+(deftest consecutive-backspace-does-not-restore-deleted-blocks-test
+  (testing "Deleting b and then a never renders stale block content"
+    (p/new-page "consecutive backspace deletion")
+    (let [page-uuid (get (ls-api-call! :editor.getBlock "consecutive backspace deletion") "uuid")
+          [_a b] (ls-api-call! :editor.insertBatchBlock
+                               page-uuid
+                               [{:content "a"}
+                                {:content "b"}])
+          editor-state #(w/eval-js
+                         "(() => {
+                            const editor = document.querySelector('.editor-wrapper textarea');
+                            return [
+                              editor?.value ?? null,
+                              Array.from(document.querySelectorAll(
+                                '.ls-page-blocks .block-title-wrap'))
+                                .map((node) => node.textContent.trim())
+                                .filter(Boolean)
+                            ];
+                          })();")]
+      (w/click (str "#block-content-" (get b "uuid")))
+      (util/wait-editor-visible)
+      (w/eval-js
+       "(() => {
+          const editor = document.querySelector('.editor-wrapper textarea');
+          editor.focus();
+          editor.setSelectionRange(editor.value.length, editor.value.length);
+        })();")
+      (dotimes [_ 4]
+        (k/backspace))
+      (util/wait-timeout 50)
+      (let [immediate (editor-state)]
+        (is (= [] (second immediate)))
+        (util/wait-timeout 500)
+        (is (= immediate (editor-state)))))))
