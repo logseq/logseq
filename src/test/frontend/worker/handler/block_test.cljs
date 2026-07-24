@@ -65,6 +65,7 @@
                    :block/uuid tag-uuid
                    :block/tx-id 10
                    :block/title "Referenced tag title must not be copied"
+                   :logseq.property.class/hide-from-node true
                    :logseq.property/choice-exclusions [-7]}
                   {:db/id -7
                    :block/uuid #uuid "10000000-0000-0000-0000-000000000007"
@@ -106,6 +107,7 @@
           (keyword? (:db/ident reference))))
   (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
                 :block/tags :logseq.property/value :logseq.property/icon
+                :logseq.property.class/hide-from-node
                 :logseq.property/choice-exclusions}
               (keys reference))))
 
@@ -189,6 +191,9 @@
                      [:block/tags 0
                       :logseq.property/choice-exclusions 0
                       :block/uuid])))
+      (is (true? (get-in block
+                         [:block/tags 0
+                          :logseq.property.class/hide-from-node])))
       (is (= "number"
              (get-in block
                      [:logseq.property/order-list-type
