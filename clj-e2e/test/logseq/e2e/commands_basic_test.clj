@@ -144,7 +144,8 @@
     (w/wait-for ".CodeMirror")
     (util/wait-timeout 100)
     ;; create another block
-    (k/shift+enter)))
+    (k/shift+enter)
+    (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
 (deftest math-block-test
   (testing "/math block"
@@ -152,13 +153,15 @@
     (util/input-command "math block")
     (util/press-seq "1 + 2 = 3")
     (util/exit-edit)
-    (w/wait-for ".katex")))
+    (w/wait-for ".katex")
+    (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
 (deftest quote-test
   (testing "/quote"
     (b/new-block "")
     (util/input-command "quote")
-    (w/wait-for "div[data-node-type='quote']")))
+    (w/wait-for "div[data-node-type='quote']")
+    (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
 (deftest quote-heading-test
   (testing "quote headings render consistently"
@@ -356,7 +359,8 @@
     (util/input-command "calculator")
     (util/input "1 + 2")
     (w/wait-for "div.extensions__code-calc-output-line")
-    (is (= "3" (util/get-text "div.extensions__code-calc-output-line")))))
+    (is (= "3" (util/get-text "div.extensions__code-calc-output-line")))
+    (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
 (deftest template-test
   (testing "template"
