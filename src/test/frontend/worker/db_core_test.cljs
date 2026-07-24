@@ -36,7 +36,8 @@
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
           :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/get-blocks
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
-          :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
+          :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/local-tx-applied?
+          :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
           :thread-api/get-initial-data :thread-api/build-publishing-html :thread-api/reset-db
@@ -1478,6 +1479,20 @@
                                 nil)]
          ;; Should return nil (no transaction performed)
          (is (nil? result)))))))
+
+(deftest local-tx-applied-reports-persisted-receipts
+  (let [applied? (get @thread-api/*thread-apis :thread-api/local-tx-applied?)
+        persisted-id (random-uuid)
+        missing-id (random-uuid)]
+    (is (fn? applied?) "worker exposes persisted transaction receipts")
+    (when applied?
+      (with-redefs [client-op/get-local-tx-entry
+                    (fn [repo tx-id]
+                      (when (and (= test-repo repo)
+                                 (= persisted-id tx-id))
+                        {:tx-id tx-id}))]
+        (is (true? (applied? test-repo persisted-id)))
+        (is (false? (applied? test-repo missing-id)))))))
 
 ;; ---- get-initial-data tests ----
 

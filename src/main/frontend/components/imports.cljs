@@ -20,6 +20,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -354,58 +355,99 @@
         (when-not pdf-annotation?
           (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) bytes-array {:skip-transact? true}))))))
 
+(defn- restore-repo-after-import-failure!
+  [previous-repo]
+  (state/set-current-repo! previous-repo)
+  (when previous-repo
+    (state/pub-event! [:graph/switch previous-repo {:persist? false}])))
+
+(defn- <cleanup-failed-file-graph!
+  [repo previous-repo]
+  (-> (if repo
+        (-> (persist-db/<wait-for-db-worker-ready! repo)
+            (p/catch (fn [_] nil))
+            (p/then (fn [_]
+                      (repo-handler/remove-repo! {:url repo} :switch-graph? false))))
+        (p/resolved nil))
+      (p/catch (fn [error]
+                 (log/error :import-file-graph-cleanup-failed
+                            {:repo repo
+                             :error error})))
+      (p/finally (fn []
+                   (restore-repo-after-import-failure! previous-repo)))))
+
 (defn- import-file-graph
   [*files
    {:keys [graph-name tag-classes property-classes property-parent-classes] :as user-options}
    config-file]
-  (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          db-conn (db/get-db repo false)
-          on-tx-report (fn [tx-report]
-                         (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))
-          options {:user-options
-                   (merge
-                    (dissoc user-options :graph-name)
-                    {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
-                     :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
-                     :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
-                   ;; common options
-                   :notify-user show-notification
-                   :set-ui-state state/set-state!
-                   :<read-file (fn <read-file [file] (.text (:file-object file)))
-                   :<get-file-stat (fn <get-file-stat [path]
-                                     ;; Ignore relative paths as we can't get their stats
-                                     (when (and (util/electron?) (path/absolute? path))
-                                       (ipc/ipc :stat path)))
-                   ;; config file options
-                   :default-config config/config-default-content
-                   :<save-config-file (fn save-config-file [_ path content]
-                                        (db-editor-handler/save-file! path content))
-                   ;; logseq file options
-                   :<save-logseq-file (fn save-logseq-file [_ path content]
-                                        (db-editor-handler/save-file! path content))
-                   ;; asset file options
-                   :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
-                   :on-tx-report on-tx-report
-                   ;; doc file options
-                   ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                   :<export-file (fn <export-file [conn m opts]
-                                   (p/let [tx-reports
-                                           (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                     (p/loop [remaining-tx-reports (vec (keep identity tx-reports))]
-                                       (when-let [tx-report (first remaining-tx-reports)]
-                                         (p/let [_ (on-tx-report tx-report)]
-                                           (p/recur (subvec remaining-tx-reports 1)))))))}
-          {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data @db-conn import-state files)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (let [previous-repo (state/get-current-repo)
+        created-repo (atom nil)]
+    (state/set-state! :graph/importing :file-graph)
+    (state/set-state! [:graph/importing-state :current-page] "Config files")
+    (-> (p/let [start-time (t/now)
+                repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                _ (when-not (string? repo)
+                    (throw (ex-info "Failed to create graph for file import"
+                                    {:code :file-import-graph-create-failed
+                                     :graph-name graph-name})))
+                _ (reset! created-repo repo)
+                db-conn (db/get-db repo false)
+                on-tx-report (fn [tx-report]
+                               (persist-db/<retry-db-worker-transaction!
+                                repo
+                                (fn [tx-id]
+                                  (db-browser/transact!
+                                   repo
+                                   (:tx-data tx-report)
+                                   (assoc (:tx-meta tx-report) :db-sync/tx-id tx-id)))))
+                options {:user-options
+                         (merge
+                          (dissoc user-options :graph-name)
+                          {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
+                           :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
+                           :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
+                         ;; common options
+                         :notify-user show-notification
+                         :set-ui-state state/set-state!
+                         :<read-file (fn <read-file [file] (.text (:file-object file)))
+                         :<get-file-stat (fn <get-file-stat [path]
+                                           ;; Ignore relative paths as we can't get their stats
+                                           (when (and (util/electron?) (path/absolute? path))
+                                             (ipc/ipc :stat path)))
+                         ;; config file options
+                         :default-config config/config-default-content
+                         :<save-config-file (fn save-config-file [_ path content]
+                                              (db-editor-handler/save-file! path content))
+                         ;; logseq file options
+                         :<save-logseq-file (fn save-logseq-file [_ path content]
+                                              (db-editor-handler/save-file! path content))
+                         ;; asset file options
+                         :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
+                         :on-tx-report on-tx-report
+                         ;; doc file options
+                         ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
+                         :<export-file (fn <export-file [conn m opts]
+                                         (p/let [tx-reports
+                                                 (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                           (p/loop [remaining-tx-reports (vec (keep identity tx-reports))]
+                                             (when-let [tx-report (first remaining-tx-reports)]
+                                               (p/let [_ (on-tx-report tx-report)]
+                                                 (p/recur (subvec remaining-tx-reports 1)))))))}
+                {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
+          (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+          (validate-imported-data @db-conn import-state files)
+          (state/pub-event! [:graph/ready (state/get-current-repo)])
+          (finished-cb))
+        (p/catch (fn [error]
+                   (log/error :import-file-graph-failed
+                              {:repo @created-repo
+                               :error error})
+                   (p/let [_ (<cleanup-failed-file-graph! @created-repo previous-repo)]
+                     (throw error))))
+        (p/finally (fn []
+                     (state/set-state! :graph/importing nil)
+                     (state/set-state! :graph/importing-state nil)
+                     (shui/dialog-close! :import-indicator))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"

@@ -1136,6 +1136,10 @@
         (log/error ::worker-transact-failed e)
         (throw e)))))
 
+(def-thread-api :thread-api/local-tx-applied?
+  [repo tx-id]
+  (boolean (client-op/get-local-tx-entry repo tx-id)))
+
 (def-thread-api :thread-api/undo-redo-set-pending-editor-info
   [repo editor-info]
   (worker-undo-redo/set-pending-editor-info! repo editor-info)

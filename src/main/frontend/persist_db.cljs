@@ -18,11 +18,14 @@
             [promesa.core :as p]))
 
 (def db-worker-recovery-failure-threshold 1)
+(def ^:private db-worker-retry-min-delay-ms 100)
+(def ^:private db-worker-retry-max-delay-ms 5000)
 
 (defonce opfs-db (browser/->InBrowser))
 (defonce remote-db (atom nil))
 (defonce remote-repo (atom nil))
 (defonce remote-runtime-state (atom nil))
+(defonce remote-runtime-recovery (atom nil))
 
 (declare <ensure-remote!)
 
@@ -89,7 +92,14 @@
         (= :connection-refused code)
         (= :fetch-failed code)
         (= :network-error code)
+        (= :db-worker-not-ready code)
         (= 0 status))))
+
+(defn- db-worker-retry-delay-ms
+  [retry-count]
+  (min db-worker-retry-max-delay-ms
+       (* db-worker-retry-min-delay-ms
+          (js/Math.pow 2 (min retry-count 6)))))
 
 (defn- event-stream-error-loggable?
   [failure-count]
@@ -114,35 +124,65 @@
 
 (defn- <trigger-db-worker-runtime-recovery!
   [repo remote-client session-id]
-  (log/warn :event :db-worker-runtime-recovering :repo repo)
-  (-> (p/do!
-       (when remote-client
-         (-> (remote/stop! remote-client)
-             (p/catch (fn [error]
-                        (log/warn :event :db-worker-runtime-stop-error
-                                  :repo repo
-                                  :error error))))))
-      (p/then (fn [_]
-                (<release-active-runtime! repo remote-client session-id)))
-      (p/then (fn [released?]
-                (if (and released?
-                         (same-remote-repo? repo (state/get-current-repo)))
-                  (<ensure-remote! repo {:only-if-current? true})
-                  (when-not released?
-                    (log/info :event :db-worker-runtime-recovery-skipped
-                              :repo repo
-                              :reason :release-skipped)))))
-      (p/then (fn [client]
-                (when client
-                  (log/info :event :db-worker-runtime-recovered :repo repo))))
-      (p/catch (fn [error]
-                 (log/error :event :db-worker-runtime-recovery-failed
-                            :repo repo
-                            :error error)
-                 (notification/show!
-                  (t :graph/db-worker-recovery-failed-error
-                     (text-util/get-graph-name-from-path repo))
-                  :error)))))
+  (if-let [completion (when (and (same-remote-repo? repo (:repo @remote-runtime-recovery))
+                                 (= session-id (:session-id @remote-runtime-recovery)))
+                        (:completion @remote-runtime-recovery))]
+    completion
+    (let [ready (p/deferred)
+          recovery-id (random-uuid)]
+      ;; A recovery may have no active waiters, so keep its rejected readiness
+      ;; promise handled while still allowing callers to observe the rejection.
+      (p/catch ready (fn [_] nil))
+      (reset! remote-runtime-recovery {:repo repo
+                                       :session-id session-id
+                                       :recovery-id recovery-id
+                                       :ready ready})
+      (log/warn :event :db-worker-runtime-recovering :repo repo)
+      (let [completion
+            (-> (p/do!
+                 (when remote-client
+                   (-> (remote/stop! remote-client)
+                       (p/catch (fn [error]
+                                  (log/warn :event :db-worker-runtime-stop-error
+                                            :repo repo
+                                            :error error))))))
+                (p/then (fn [_]
+                          (<release-active-runtime! repo remote-client session-id)))
+                (p/then (fn [released?]
+                          (if (and released?
+                                   (same-remote-repo? repo (state/get-current-repo)))
+                            (<ensure-remote! repo {:only-if-current? true})
+                            (when-not released?
+                              (log/info :event :db-worker-runtime-recovery-skipped
+                                        :repo repo
+                                        :reason :release-skipped)))))
+                (p/then (fn [client]
+                          (if client
+                            (do
+                              (log/info :event :db-worker-runtime-recovered :repo repo)
+                              (p/resolve! ready true))
+                            (p/reject! ready
+                                       (ex-info "db-worker runtime recovery was cancelled"
+                                                {:code :db-worker-recovery-cancelled
+                                                 :repo repo})))))
+                (p/catch (fn [error]
+                           (p/reject! ready error)
+                           (log/error :event :db-worker-runtime-recovery-failed
+                                      :repo repo
+                                      :error error)
+                           (when-not (:graph/importing @state/state)
+                             (notification/show!
+                              (t :graph/db-worker-recovery-failed-error
+                                 (text-util/get-graph-name-from-path repo))
+                              :error))))
+                (p/finally (fn []
+                             (swap! remote-runtime-recovery
+                                    (fn [recovery]
+                                      (if (= recovery-id (:recovery-id recovery))
+                                        nil
+                                        recovery))))))]
+        (swap! remote-runtime-recovery assoc :completion completion)
+        completion))))
 
 (defn- record-active-request-failure!
   [repo session-id error]
@@ -176,6 +216,75 @@
   []
   (and (not (node-runtime?))
        (util/electron?)))
+
+(defn <wait-for-db-worker-ready!
+  [repo]
+  (let [recovery @remote-runtime-recovery]
+    (cond
+      (and (same-remote-repo? repo (:repo recovery))
+           (:ready recovery))
+      (:ready recovery)
+
+      (and @state/*db-worker
+           (or (not (electron-runtime?))
+               (same-remote-repo? repo @remote-repo)))
+      (p/resolved true)
+
+      :else
+      (p/rejected
+       (ex-info "db-worker is not ready"
+                {:code :db-worker-not-ready
+                 :repo repo})))))
+
+(defn- <ensure-db-worker-ready!
+  [repo]
+  (let [recovery @remote-runtime-recovery]
+    (cond
+      (and (same-remote-repo? repo (:repo recovery))
+           (:ready recovery))
+      (:ready recovery)
+
+      (and @state/*db-worker
+           (or (not (electron-runtime?))
+               (same-remote-repo? repo @remote-repo)))
+      (p/resolved true)
+
+      (and (electron-runtime?)
+           (same-remote-repo? repo (state/get-current-repo)))
+      (p/let [client (<ensure-remote! repo {:only-if-current? true})]
+        (if client
+          true
+          (throw (ex-info "db-worker runtime recovery was cancelled"
+                          {:code :db-worker-recovery-cancelled
+                           :repo repo}))))
+
+      :else
+      (p/rejected
+       (ex-info "db-worker is not ready"
+                {:code :db-worker-not-ready
+                 :repo repo})))))
+
+(defn <retry-db-worker-transaction!
+  [repo transact-fn]
+  (let [tx-id (random-uuid)]
+    (letfn [(<attempt! [confirm-previous-attempt? retry-count]
+              (-> (p/let [_ (<ensure-db-worker-ready! repo)
+                          applied? (when confirm-previous-attempt?
+                                     (state/<invoke-db-worker
+                                      :thread-api/local-tx-applied?
+                                      repo
+                                      tx-id))]
+                    (if applied?
+                      nil
+                      (transact-fn tx-id)))
+                  (p/catch
+                   (fn [error]
+                     (if (and (electron-runtime?)
+                              (server-unavailable-error? error))
+                       (p/let [_ (p/delay (db-worker-retry-delay-ms retry-count))]
+                         (<attempt! true (inc retry-count)))
+                       (throw error))))))]
+      (<attempt! false 0))))
 
 (defn- current-db-sync-config
   []
@@ -248,6 +357,7 @@
                                                   :repo repo
                                                   :event-handler worker-handler/handle
                                                   :on-invoke-success (fn [_method _args _result]
+                                                                       (reset! event-stream-failures 0)
                                                                        (reset-active-request-failures! repo session-id))
                                                   :on-invoke-failure (fn [_method _args error]
                                                                        (record-active-request-failure! repo session-id error))
@@ -258,13 +368,22 @@
                                                                                   :repo repo
                                                                                   :failures failure-count
                                                                                   :error error))
-                                                                      (record-active-request-failure!
-                                                                       repo
-                                                                       session-id
-                                                                       (ex-info "db-worker event stream unavailable"
-                                                                                {:code :db-worker-unavailable
-                                                                                 :event-stream? true
-                                                                                 :cause error}))))))]
+                                                                      (-> (remote/<healthy? runtime)
+                                                                          (p/then
+                                                                           (fn [healthy?]
+                                                                             (if healthy?
+                                                                               (do
+                                                                                 (reset! event-stream-failures 0)
+                                                                                 (reset-active-request-failures! repo session-id)
+                                                                                 (log/info :event :db-worker-event-stream-runtime-healthy
+                                                                                           :repo repo))
+                                                                               (record-active-request-failure!
+                                                                                repo
+                                                                                session-id
+                                                                                (ex-info "db-worker event stream unavailable"
+                                                                                         {:code :db-worker-unavailable
+                                                                                          :event-stream? true
+                                                                                          :cause error}))))))))))]
                (if (and only-if-current? (not (current-for-repo?)))
                  (do
                    (log/warn :event :db-worker-ensure-remote-stale

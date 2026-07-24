@@ -69,7 +69,8 @@
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
-      (throw (ex-info "db-worker has not been initialized" {})))
+      (throw (ex-info "db-worker has not been initialized"
+                      {:code :db-worker-not-ready})))
     (apply worker qkw args)))
 
 (def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
