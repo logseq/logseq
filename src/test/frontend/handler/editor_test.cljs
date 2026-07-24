@@ -653,6 +653,47 @@
                    (is false (str error))))))
           (p/finally done)))))
 
+(deftest move-selected-blocks-uses-current-edit-block-test
+  (async done
+    (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+          edit-block {:db/id 1
+                      :block/uuid block-id
+                      :block/title "Editing block"}
+          event #js {}
+          calls (atom [])]
+      (-> (p/with-redefs [util/stop (fn [e]
+                                      (swap! calls conj [:stop e]))
+                          state/get-selection-block-ids (constantly [])
+                          state/get-edit-block (constantly edit-block)
+                          state/get-current-repo (constantly "test")
+                          db-async/<get-blocks
+                          (fn [repo ids opts]
+                            (swap! calls conj [:get-blocks repo ids opts])
+                            (p/resolved []))
+                          block-handler/get-top-level-blocks
+                          (fn [blocks]
+                            (let [blocks (vec blocks)]
+                              (swap! calls conj [:top-level blocks])
+                              blocks))
+                          route-handler/go-to-search!
+                          (fn [route opts]
+                            (swap! calls conj [:go-to-search route (:action opts)
+                                               (mapv :block/uuid (:blocks opts))]))]
+            (-> (try
+                  (editor/move-selected-blocks event)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [[:stop event]
+                           [:top-level [edit-block]]
+                           [:go-to-search :nodes :move-blocks [block-id]]]
+                          @calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
+
 (deftest cycle-todo-loads-selected-blocks-through-worker-test
   (async done
     (let [block-id-a #uuid "11111111-1111-1111-1111-111111111111"
