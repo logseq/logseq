@@ -91,6 +91,22 @@
          "document.querySelectorAll('.ui__toast-close').forEach((button) => button.click())")
         (util/wait-timeout 600)))))
 
+(deftest favorites-and-recents-load-after-refresh-test
+  (let [page-name (str "sidebar-startup-" (random-uuid))
+        favorite-item (loc/filter ".favorites .favorite-item" :has-text page-name)
+        recent-item (loc/filter ".recent .recent-item" :has-text page-name)]
+    (p/new-page page-name)
+    (k/press "ControlOrMeta+Shift+f")
+    (assert/assert-is-visible favorite-item)
+    (assert/assert-is-visible recent-item)
+
+    (util/refresh-until-graph-loaded)
+
+    (util/wait-timeout 500)
+    (is (= [1 1]
+           [(.count favorite-item)
+            (.count recent-item)]))))
+
 (defn- choose-move-target!
   [target]
   (w/fill "input[placeholder=\"Move blocks to\"]" target)

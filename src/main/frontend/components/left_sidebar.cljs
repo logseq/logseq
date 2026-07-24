@@ -322,16 +322,17 @@
 
 (hsx/defc sidebar-favorites
   []
-  (let [_current-repo (rfx/use-sub [:git/current-repo])
-        _db-restoring? (rfx/use-sub [:db/restoring?])
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        db-restoring? (rfx/use-sub [:db/restoring?])
         _favorites-updated? (rfx/use-sub [:favorites/updated?])
         [favorite-entities set-favorite-entities!] (hooks/use-state [])]
     (hooks/use-effect!
      (fn []
-       (p/let [favorites (page-handler/<get-favorites)]
-         (set-favorite-entities! (vec favorites)))
+       (when (and current-repo (false? db-restoring?))
+         (p/let [favorites (page-handler/<get-favorites)]
+           (set-favorite-entities! (vec favorites))))
        nil)
-     [_current-repo _favorites-updated?])
+     [current-repo db-restoring? _favorites-updated?])
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -357,15 +358,16 @@
 (hsx/defc sidebar-recent-pages
   []
   (let [current-repo (rfx/use-sub [:git/current-repo])
-        _db-restoring? (rfx/use-sub [:db/restoring?])
+        db-restoring? (rfx/use-sub [:db/restoring?])
         _recent-page-ids (rfx/use-sub [:ui/recent-pages current-repo])
         [pages set-pages!] (hooks/use-state [])]
     (hooks/use-effect!
      (fn []
-       (p/let [recent-pages (recent-handler/get-recent-pages)]
-         (set-pages! (vec recent-pages)))
+       (when (and current-repo (false? db-restoring?))
+         (p/let [recent-pages (recent-handler/get-recent-pages)]
+           (set-pages! (vec recent-pages))))
        nil)
-     [current-repo _recent-page-ids])
+     [current-repo db-restoring? _recent-page-ids])
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
