@@ -515,6 +515,8 @@
            view-inner-source
            "(if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]")
           "Imported tables without hidden-columns must derive visibility from ordered-columns.")
+      (is (string/includes? view-inner-source "(assoc :id false)")
+          "The internal row ID column must stay hidden for every table.")
       (doseq [local-state-binding ["[visible-columns set-visible-columns!] (hooks/use-state"
                                    "[ordered-columns set-ordered-columns!] (hooks/use-state"
                                    "[sized-columns set-sized-columns!] (hooks/use-state"]]
