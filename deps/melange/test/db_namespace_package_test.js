@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { createRequire } = require('node:module')
@@ -17,6 +19,7 @@ function findRepoRoot(start) {
 
 const repoRoot = findRepoRoot(__dirname)
 const consumerRequire = createRequire(path.join(repoRoot, 'package.json'))
+const transit = consumerRequire('transit-js')
 const bridgeContractRoot = path.join(
   repoRoot,
   'deps/melange/bridge/test/package_contract'
@@ -252,4 +255,60 @@ test('graph-human export uses the attribute index for attribute datoms', () => {
     index === 'avet' && components[0] === 'logseq.property.history/block'))
   assert.equal(datomCalls.some(([index, components]) =>
     index === 'eavt' && components.length === 0), false)
+})
+
+test('node GC commits deletions through a better-sqlite3 transaction', () => {
+  const Database = consumerRequire('better-sqlite3')
+  const { SqliteGcWorkflow } = consumerRequire('@logseq/melange-js-api/db')
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'logseq-melange-gc-'))
+  const databasePath = path.join(directory, 'graph.sqlite')
+  const schemaContent = transit.writer('json').write(transit.map([
+    transit.keyword('eavt'), 10,
+    transit.keyword('avet'), 20,
+    transit.keyword('aevt'), 30,
+  ]))
+  const expectedAddresses = [0, 1, 10, 11, 20, 30]
+  let database = new Database(databasePath)
+
+  try {
+    database.exec(
+      'CREATE TABLE kvs (addr INTEGER PRIMARY KEY, content TEXT NOT NULL, addresses TEXT NOT NULL)'
+    )
+    const insert = database.prepare(
+      'INSERT INTO kvs (addr, content, addresses) VALUES (?, ?, ?)'
+    )
+    const insertRows = database.transaction(rows => {
+      for (const row of rows) {
+        insert.run(row.addr, row.content, JSON.stringify(row.addresses))
+      }
+    })
+    insertRows([
+      { addr: 0, content: schemaContent, addresses: [] },
+      { addr: 1, content: 'internal', addresses: [] },
+      { addr: 10, content: 'eavt', addresses: [11] },
+      { addr: 11, content: 'eavt child', addresses: [] },
+      { addr: 20, content: 'avet', addresses: [] },
+      { addr: 30, content: 'aevt', addresses: [] },
+      { addr: 98, content: 'garbage', addresses: [] },
+      { addr: 99, content: 'garbage with missing child', addresses: [999] },
+    ])
+
+    SqliteGcWorkflow.collectNodeDefault(database, true)
+    assert.deepEqual(
+      database.prepare('SELECT addr FROM kvs ORDER BY addr').pluck().all(),
+      expectedAddresses
+    )
+    database.close()
+
+    database = new Database(databasePath)
+    assert.deepEqual(
+      database.prepare('SELECT addr FROM kvs ORDER BY addr').pluck().all(),
+      expectedAddresses
+    )
+  } finally {
+    if (database.open) {
+      database.close()
+    }
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
 })

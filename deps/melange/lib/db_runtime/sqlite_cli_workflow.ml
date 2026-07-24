@@ -10,7 +10,6 @@ type optional_string_callback = (unit -> string Js.Nullable.t[@u])
 type unit_string_callback = (unit -> string[@u])
 type open_callback = (string -> sqlite[@u])
 type sqlite_unit_callback = (sqlite -> unit[@u])
-type storage_callback = (sqlite -> storage[@u])
 type connection_callback = (storage -> connection[@u])
 
 type value_string_callback =
@@ -73,9 +72,6 @@ external open_sqlite_fn : adapter -> open_callback = "openSqlite" [@@mel.get]
 external create_table_fn : adapter -> sqlite_unit_callback = "createTable"
 [@@mel.get]
 
-external create_storage_fn : adapter -> storage_callback = "createStorage"
-[@@mel.get]
-
 external storage_connection_fn : adapter -> connection_callback
   = "storageConnection"
 [@@mel.get]
@@ -123,21 +119,6 @@ let open_path graphs_dir db_name =
   match Js.Nullable.toOption graphs_dir with
   | None -> db_name
   | Some graphs_dir -> database_path graphs_dir db_name
-
-let openWith adapter graphs_dir db_name =
-  let path = open_path graphs_dir db_name in
-  let open_sqlite = open_sqlite_fn adapter in
-  let create_table = create_table_fn adapter in
-  let create_storage = create_storage_fn adapter in
-  let storage_connection = storage_connection_fn adapter in
-  let sqlite = (open_sqlite path [@u]) in
-  create_table sqlite [@u];
-  let storage = (create_storage sqlite [@u]) in
-  let conn = (storage_connection storage [@u]) in
-  { sqlite; conn }
-
-let openConnectionWith adapter graphs_dir db_name =
-  (openWith adapter graphs_dir db_name).conn
 
 let openArgsWith adapter graph_dir_or_path =
   let is_absolute = is_absolute_fn adapter in

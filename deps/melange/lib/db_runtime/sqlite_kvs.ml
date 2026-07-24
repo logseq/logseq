@@ -4,6 +4,7 @@ module Transit = Transit_melange.Transit.Json
 type database = Js.Json.t
 type statement
 type exec_options
+type node_transaction = (int array -> unit[@u])
 
 let non_referenced_addresses_sql =
   "WITH all_referenced AS (\n\
@@ -42,8 +43,8 @@ external get : statement -> Js.Json.t = "get" [@@mel.send]
 external all : statement -> Js.Json.t array = "all" [@@mel.send]
 external run : statement -> int -> unit = "run" [@@mel.send]
 
-external transaction_node :
-  database -> ((int array -> unit)[@u]) -> int array -> unit = "transaction"
+external transaction_node : database -> node_transaction -> node_transaction
+  = "transaction"
 [@@mel.send]
 
 let fail message = invalid_arg ("SQLite kvs: " ^ message)
@@ -178,7 +179,7 @@ let node_delete database addresses =
     transaction_node database (fun[@u] values ->
         Array.iter (run statement) values)
   in
-  delete (Rrbvec.to_array addresses)
+  (delete (Rrbvec.to_array addresses) [@u])
 
 let node_address_count database =
   prepare database count_sql |> get |> fun row ->

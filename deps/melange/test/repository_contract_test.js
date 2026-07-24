@@ -147,6 +147,27 @@ test('the JavaScript package has no unexported compatibility wrappers', () => {
   }
 })
 
+test('SQLite CLI workflow keeps only adapter-supported storage constructors', () => {
+  const workflow = fs.readFileSync(
+    path.join(melangeRoot, 'lib/db_runtime/sqlite_cli_workflow.ml'),
+    'utf8'
+  )
+  const bridge = fs.readFileSync(
+    path.join(
+      melangeRoot,
+      'bridge/src/logseq/melange/bridge/db/sqlite_cli.cljs'
+    ),
+    'utf8'
+  )
+
+  assert.doesNotMatch(workflow, /"createStorage"/)
+  assert.doesNotMatch(workflow, /^let openWith\b/m)
+  assert.doesNotMatch(workflow, /^let openConnectionWith\b/m)
+  assert.match(workflow, /"createDatascriptStorage"/)
+  assert.doesNotMatch(bridge, /:createStorage\b/)
+  assert.match(bridge, /:createDatascriptStorage\b/)
+})
+
 test('the ClojureScript runtime boundary names opaque values explicitly', () => {
   const valueCodecSpec = fs.readFileSync(
     path.join(melangeRoot, 'spec/cljs_runtime/value_codec.mli'),
