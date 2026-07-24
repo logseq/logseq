@@ -362,7 +362,7 @@
                            (p/catch (fn [_error]
                                       (notification/show! (t :block.comments/save-error) :error)))))})
         [:div.ls-comment-body
-         (block-content-or-editor
+         [block-content-or-editor
           config
           parsed-block
           {:edit-input-id edit-input-id
@@ -371,8 +371,8 @@
            :refs-count nil
            :*hide-block-refs? *hide-block-refs?
            :hide-block-refs-count? true
-           :*show-query? *show-query?})
-         (block-reactions comment-block)])]
+           :*show-query? *show-query?}]
+         [block-reactions comment-block]])]
      (when-not config/publishing?
        [:div.ls-comment-actions
         (shui/button
@@ -460,9 +460,11 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing? (or (boolean (rfx/use-sub [:editor/editing? [container-id block-uuid]]))
-                     (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-uuid]])))]
-    (and block-uuid editing?)))
+        editing-in-container? (boolean (rfx/use-sub [:editor/editing? [container-id block-uuid]]))
+        editing-in-unknown-container? (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-uuid]]))]
+    (and block-uuid
+         (or editing-in-container?
+             editing-in-unknown-container?))))
 
 (defn- comments-area-title-view
   [config block editing? *hide-block-refs? *show-query? {:keys [block-content-or-editor]}]
@@ -470,7 +472,7 @@
         edit-input-id (str "edit-block-" block-uuid)]
     (if (and editing? block-content-or-editor)
       [:div.ls-comments-title-editor
-       (block-content-or-editor
+       [block-content-or-editor
         (assoc config :table-block-title? true)
         (merge block (block/parse-title-and-body block-uuid
                                                  (get block :block/format :markdown)
@@ -481,7 +483,7 @@
          :refs-count nil
          :*hide-block-refs? *hide-block-refs?
          :hide-block-refs-count? true
-         :*show-query? *show-query?})]
+         :*show-query? *show-query?}]]
       [:button.ls-comments-label
        {:type "button"
         :title (t :editor/click-to-edit)
