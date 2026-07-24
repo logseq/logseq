@@ -64,7 +64,12 @@
                    :db/ident :user.class/Test
                    :block/uuid tag-uuid
                    :block/tx-id 10
-                   :block/title "Referenced tag title must not be copied"}
+                   :block/title "Referenced tag title must not be copied"
+                   :logseq.property/choice-exclusions [-7]}
+                  {:db/id -7
+                   :block/uuid #uuid "10000000-0000-0000-0000-000000000007"
+                   :block/tx-id 10
+                   :block/title "Excluded choice"}
                   {:db/id -6
                    :block/uuid #uuid "10000000-0000-0000-0000-000000000006"
                    :block/tx-id 10
@@ -100,7 +105,8 @@
   (is (or (uuid? (:block/uuid reference))
           (keyword? (:db/ident reference))))
   (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
-                :block/tags :logseq.property/value :logseq.property/icon}
+                :block/tags :logseq.property/value :logseq.property/icon
+                :logseq.property/choice-exclusions}
               (keys reference))))
 
 (deftest canonical-property-reference-values-keep-type-tags-test
@@ -178,6 +184,11 @@
       (is (= 5 (count references)))
       (doseq [reference references]
         (assert-shallow-identity-ref reference))
+      (is (= #uuid "10000000-0000-0000-0000-000000000007"
+             (get-in block
+                     [:block/tags 0
+                      :logseq.property/choice-exclusions 0
+                      :block/uuid])))
       (is (= "number"
              (get-in block
                      [:logseq.property/order-list-type

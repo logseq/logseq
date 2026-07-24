@@ -116,7 +116,7 @@
                        {:outliner-op :save-block})
     (when-not (string/blank? description)
       (db-property-handler/set-block-property!
-       (:db/id property)
+       (:block/uuid property)
        :logseq.property/description description))))
 
 (defn- <create-class-if-not-exists!
@@ -423,7 +423,7 @@
        {:key "default value"
         :on-click #(let [value (if default-value? nil (:db/id block))]
                      (db-property-handler/set-block-property!
-                      (:db/ident property) :logseq.property/default-value value))}
+                      (:block/uuid property) :logseq.property/default-value value))}
        (shui/checkbox {:id "default value"
                        :size :sm
                        :title (t :property/set-default-choice)
@@ -439,9 +439,9 @@
           toggle-exclusion! (fn []
                               (if excluded?
                                 (db-property-handler/delete-property-value!
-                                 (:db/id owner-block) :logseq.property/choice-exclusions (:db/id block))
+                                 (:block/uuid owner-block) :logseq.property/choice-exclusions (:db/id block))
                                 (db-property-handler/set-block-property!
-                                 (:db/id owner-block) :logseq.property/choice-exclusions (:db/id block))))]
+                                 (:block/uuid owner-block) :logseq.property/choice-exclusions (:db/id block))))]
       (shui/dropdown-menu-item
        {:key "exclude for tag"
         :on-click toggle-exclusion!}
@@ -657,43 +657,47 @@
 (hsx/defc choices-sub-pane
   [property {:keys [disabled? owner-block] :as opts}]
   (let [*show-hidden? (hooks/use-memo #(atom false) [])
-           [show-hidden?] (hooks/use-atom *show-hidden?)
-           {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
-           values (:property/closed-values property)
-           choices (vec values)
-           scoped-choices (db-property/scoped-closed-values property owner-block {:values choices})
-           scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
-           excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
-           hidden-excluded-choices (filter (partial hidden-excluded-choice? excluded-ids) scoped-choices)
-           hidden-choices (concat hidden-excluded-choices scoped-from-other-tags)
-           visible-choices (remove (partial hidden-excluded-choice? excluded-ids) scoped-choices)
-           list-choices (if show-hidden?
-                          (concat visible-choices hidden-choices)
-                          visible-choices)
-           choice-items (map (partial ->choice-item property owner-block opts) list-choices)]
-       [:div.ls-property-dropdown.ls-property-choices-sub-pane
-        (when (seq scoped-choices)
-          [:<>
-           (when (and (seq hidden-choices) owner-class?)
-             (shui/button
-              {:size :sm
-               :variant :ghost
-               :class "text-muted-foreground"
-               :on-click (fn []
-                           (swap! *show-hidden? not))}
-              (if show-hidden? (t :property/hide-hidden-choices) (t :property/show-hidden-choices))))
-           [:ul.choices-list
-            (dnd/items
-             choice-items
-             {:sort-by-inner-element? false
-              :on-drag-end
-              (fn [_ data]
-                (on-choice-drag-end property data))})]
-           (shui/dropdown-menu-separator)])
+        [show-hidden?] (hooks/use-atom *show-hidden?)
+        {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
+        choices (or (db-hooks/use-resource
+                     [:property-choices (:block/uuid property)])
+                    (vec (:property/closed-values property)))
+        property-with-choices (assoc property :property/closed-values choices)
+        scoped-choices (db-property/scoped-closed-values
+                        property-with-choices owner-block {:values choices})
+        scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
+        excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
+        hidden-excluded-choices (filter (partial hidden-excluded-choice? excluded-ids) scoped-choices)
+        hidden-choices (concat hidden-excluded-choices scoped-from-other-tags)
+        visible-choices (remove (partial hidden-excluded-choice? excluded-ids) scoped-choices)
+        list-choices (if show-hidden?
+                       (concat visible-choices hidden-choices)
+                       visible-choices)
+        choice-items (map (partial ->choice-item property-with-choices owner-block opts)
+                          list-choices)]
+    [:div.ls-property-dropdown.ls-property-choices-sub-pane
+     (when (seq scoped-choices)
+       [:<>
+        (when (and (seq hidden-choices) owner-class?)
+          (shui/button
+           {:size :sm
+            :variant :ghost
+            :class "text-muted-foreground"
+            :on-click (fn []
+                        (swap! *show-hidden? not))}
+           (if show-hidden? (t :property/hide-hidden-choices) (t :property/show-hidden-choices))))
+        [:ul.choices-list
+         (dnd/items
+          choice-items
+          {:sort-by-inner-element? false
+           :on-drag-end
+           (fn [_ data]
+             (on-choice-drag-end property-with-choices data))})]
+        (shui/dropdown-menu-separator)])
 
-        ;; add choice
-        (when-not disabled?
-          (add-choice-menuitem property owner-block))]))
+     ;; add choice
+     (when-not disabled?
+       (add-choice-menuitem property-with-choices owner-block))]))
 
 (hsx/defc checkbox-state-mapping
   [choices]
@@ -747,7 +751,7 @@
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (db-property-handler/set-block-property!
-                            (:db/id property)
+                            (:block/uuid property)
                             :logseq.property/ui-position
                             (keyword v))
                            (set-sub-open! false)
@@ -946,7 +950,7 @@
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
-                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
+                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:block/uuid property)
                                                                                                                             :logseq.property/hide?
                                                                                                                             %)}))
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
@@ -955,7 +959,7 @@
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
                                :disabled? config/publishing?
                                :on-toggle-checked-change (fn []
-                                                           (db-property-handler/set-block-property! (:db/id property)
+                                                           (db-property-handler/set-block-property! (:block/uuid property)
                                                                                                     :logseq.property/hide-empty-value
                                                                                                     (not (:logseq.property/hide-empty-value property))))}))]
                           (remove nil?))]
@@ -991,8 +995,8 @@
                           :on-checked-change
                           (fn [value]
                             (if value
-                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                              (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+                              (db-property-handler/set-block-property! (:block/uuid owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                              (db-property-handler/delete-property-value! (:block/uuid owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
       (when (and owner-block
                 ;; Any property should be removable from Tag Properties
