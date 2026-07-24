@@ -656,6 +656,75 @@ test("Node JS API bundle does not depend on local runtime shims", () => {
   }
 });
 
+test("Browser storage exportFile wraps the synchronous result in a Promise", async () => {
+  const payload = new Uint8Array([1, 2, 3]);
+  const pool = {
+    exportFile: () => payload,
+  };
+
+  const exported = BrowserPlatform.browser.storage.exportFile(
+    pool,
+    "/db.sqlite",
+  );
+
+  assert.equal(typeof exported.then, "function");
+  assert.strictEqual(await exported, payload);
+});
+
+test("Browser storage exportFile turns synchronous errors into rejections", async () => {
+  const exportError = new Error("exportFile failed");
+  const pool = {
+    exportFile: () => {
+      throw exportError;
+    },
+  };
+  let exported;
+
+  assert.doesNotThrow(() => {
+    exported = BrowserPlatform.browser.storage.exportFile(pool, "/db.sqlite");
+  });
+  await assert.rejects(exported, exportError);
+});
+
+test("Browser storage importDb wraps the synchronous result in a Promise", async () => {
+  let importCalls = 0;
+  const pool = {
+    importDb: () => {
+      importCalls += 1;
+      return 512;
+    },
+  };
+
+  const imported = BrowserPlatform.browser.storage.importDb(
+    pool,
+    "/db.sqlite",
+    new Uint8Array(),
+  );
+
+  assert.equal(typeof imported.then, "function");
+  assert.equal(await imported, undefined);
+  assert.equal(importCalls, 1);
+});
+
+test("Browser storage importDb turns synchronous errors into rejections", async () => {
+  const importError = new Error("importDb failed");
+  const pool = {
+    importDb: () => {
+      throw importError;
+    },
+  };
+  let imported;
+
+  assert.doesNotThrow(() => {
+    imported = BrowserPlatform.browser.storage.importDb(
+      pool,
+      "/db.sqlite",
+      new Uint8Array(),
+    );
+  });
+  await assert.rejects(imported, importError);
+});
+
 test("Browser storage removeVfs waits for the underlying Promise", async () => {
   let finishRemoval;
   let removalFinished = false;

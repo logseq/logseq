@@ -286,12 +286,10 @@ module Browser = struct
       = "installOpfsSAHPoolVfs"
     [@@mel.send]
 
-    external export_file : storage_pool -> string -> binary Js.Promise.t
-      = "exportFile"
+    external export_file_ : storage_pool -> string -> binary = "exportFile"
     [@@mel.send]
 
-    external import_db : storage_pool -> string -> binary -> unit Js.Promise.t
-      = "importDb"
+    external import_db_ : storage_pool -> string -> binary -> int = "importDb"
     [@@mel.send]
 
     external remove_vfs_ : storage_pool -> bool Js.Promise.t = "removeVfs"
@@ -300,6 +298,17 @@ module Browser = struct
     let install_opfs_pool sqlite pool_name =
       install_opfs_pool_ sqlite
         (pool_options ~name:pool_name ~initialCapacity:20 ())
+
+    let export_file pool path =
+      Js.Promise.resolve ()
+      |> Js.Promise.then_ (fun () ->
+          Js.Promise.resolve (export_file_ pool path))
+
+    let import_db pool path payload =
+      Js.Promise.resolve ()
+      |> Js.Promise.then_ (fun () ->
+          ignore (import_db_ pool path payload : int);
+          Js.Promise.resolve ())
 
     let replace_all text pattern replacement =
       let pattern_len = String.length pattern in
