@@ -264,13 +264,19 @@
      opts'
      (outliner-save-block! block'))))
 
+(defn- latest-renderer-block
+  [block]
+  (let [{:keys [status value]} (db-subs/block-snapshot (:block/uuid block))]
+    (if (= :ready status) value block)))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [content (:block/title block)]
+   (let [block (latest-renderer-block block)
+         content (:block/title block)]
      (cond
        force?
        (save-block-inner! block value opts)
