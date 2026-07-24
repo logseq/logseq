@@ -32,3 +32,14 @@
     (b/redo)
     (util/exit-edit)
     (is (= ["b1" "b2" "b1" "b2"] (util/get-page-blocks-contents)))))
+
+(deftest undo-latest-saved-block-content-once
+  (testing "Undo reverts the latest saved block content on the first attempt"
+    (b/new-blocks ["b1"])
+    (util/wait-timeout 2000)
+    (util/move-cursor-to-end)
+    (util/press-seq " new text" :delay 20)
+    (util/wait-timeout 1000)
+    (b/undo)
+    (util/exit-edit)
+    (is (= ["b1"] (util/get-page-blocks-contents)))))
