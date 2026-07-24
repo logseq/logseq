@@ -200,6 +200,7 @@
                                        [:strong.font-normal property-title
                                         (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" _plugin-name)])]]))
                            :value (or (:block/uuid x) (:db/ident x))
+                           :property x
                            :db/ident (:db/ident x)
                            :block/title (or (db-property/built-in-display-title x t)
                                             (:block/title x))
@@ -262,11 +263,9 @@
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property? view-parent]}]
-  (fn [{:keys [value label convert-page-to-property?]}]
-    (p/let [repo (state/get-current-repo)
-            property (cond
-                       (uuid? value) (db-async/<get-block repo value {:children? false})
-                       (keyword? value) (db-async/<get-block repo value {:children? false}))
+  (fn [{:keys [value label convert-page-to-property?]
+        selected-property :property}]
+    (p/let [property selected-property
             _ (reset! *property-key (if property
                                       (if convert-page-to-property? (:block/title property) label)
                                       value))

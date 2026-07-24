@@ -82,6 +82,20 @@
     (when (and start end)
       (subs source start end))))
 
+(deftest available-choices-subscribe-to-current-choice-data-test
+  (let [source (.toString
+                (fs/readFileSync
+                 (node-path/join
+                  (.cwd js/process)
+                  "src/main/frontend/components/property/config.cljs")
+                 "utf8"))
+        choices-source (form-source source "(hsx/defc choices-sub-pane")]
+    (is (some? choices-source))
+    (when choices-source
+      (is (string/includes? choices-source "db-hooks/use-resource"))
+      (is (string/includes? choices-source
+                            "[:property-choices (:block/uuid property)]")))))
+
 (def ^:private local-derived-read-markers
   ["block.temp/"
    "db-async/"
@@ -118,12 +132,44 @@
                            property-handler/batch-remove-block-property!
                            (fn [& args] (swap! calls* conj args))
                            shui/popup-hide! (constantly nil)]
-             (-> (on-chosen {:value :logseq.property/status})
+             (-> (on-chosen {:value :logseq.property/status
+                             :property status-property})
                  (p/then (fn []
                            (is (= [[[block-id]
                                    :logseq.property/status
                                    {:preserve-task-tag? true}]]
                                   @calls*))))
+                 (p/catch (fn [error]
+                            (is false (str error))))
+                 (p/finally done))))))
+
+(deftest choosing-existing-closed-value-property-reuses-picker-data-test
+  (async done
+         (let [block {:block/uuid (random-uuid)}
+               property {:block/uuid (random-uuid)
+                         :db/ident :user.property/priority
+                         :block/tags [{:db/ident :logseq.class/Property}]
+                         :logseq.property/type :default
+                         :property/closed-values
+                         [{:block/uuid (random-uuid)
+                           :block/title "High"}]}
+               *property (atom nil)
+               *property-key (atom nil)
+               *show-new-property-config? (atom true)
+               on-chosen (#'property-component/property-input-on-chosen
+                          block *property *property-key
+                          *show-new-property-config? {})]
+           (p/with-redefs [db-async/<get-block
+                           (fn [& _]
+                             (throw (js/Error. "Picker data must avoid a second block fetch")))
+                           property-value/batch-operation? (constantly false)]
+             (-> (on-chosen {:value (:block/uuid property)
+                             :label "Priority"
+                             :property property})
+                 (p/then (fn []
+                           (is (= property @*property))
+                           (is (= "Priority" @*property-key))
+                           (is (false? @*show-new-property-config?))))
                  (p/catch (fn [error]
                             (is false (str error))))
                  (p/finally done))))))

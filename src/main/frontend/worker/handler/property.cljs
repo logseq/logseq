@@ -299,6 +299,8 @@
           (and (entity-util/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident property)))
           (and class-schema? (db-property/public-built-in-property? property) (:logseq.property/view-context property))))))
 
+(declare display-property-map)
+
 (defn- get-all-properties
   [db {:keys [remove-built-in-property? remove-non-queryable-built-in-property? remove-ui-non-suitable-properties?
               class-schema? block]
@@ -327,7 +329,9 @@
       (remove (fn [property]
                 (ui-non-suitable-property? block property {:class-schema? class-schema?})))
       true
-      (map entity-util/entity->map))))
+      (map (fn [property]
+             (merge (entity-util/entity->map property)
+                    (display-property-map db (:db/id property))))))))
 
 (def-thread-api :thread-api/get-all-properties
   [repo opts]
@@ -370,6 +374,7 @@
    :block/uuid
    :block/name
    :block/order
+   :block/tags
    :db/cardinality
    :logseq.property/type
    :logseq.property/public?
@@ -386,8 +391,11 @@
    :db/ident
    :block/title
    :block/uuid
+   :block/order
    :logseq.property/value
    :logseq.property/icon
+   :logseq.property/choice-checkbox-state
+   :logseq.property/choice-classes
    :logseq.property/deleted-at])
 
 (defn- entity-direct-values

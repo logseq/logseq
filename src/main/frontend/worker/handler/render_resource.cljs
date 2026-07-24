@@ -180,6 +180,20 @@
   [#{[:journals]}
    (mapv :block/uuid (ldb/get-latest-journals db))])
 
+(defn- property-choices
+  [db resource-key]
+  (require-shape! resource-key :property-choices 2)
+  (let [property-uuid (require-uuid! :property-uuid (second resource-key))
+        property (entity-by-uuid! db :property-uuid property-uuid)
+        choices (:property/closed-values
+                 (property-handler/display-property-map db (:db/id property)))
+        watch-keys (into #{[:entity property-uuid]
+                           [:property-membership :block/closed-value-property]}
+                         (map (fn [choice]
+                                [:entity (:block/uuid choice)]))
+                         choices)]
+    [watch-keys (vec choices)]))
+
 (defn- collect-flat-journal
   [db root-uuid]
   (loop [pending [root-uuid]
@@ -1149,6 +1163,7 @@
     :page-preview-source (page-preview-source db resource-key)
     :block-breadcrumb (block-breadcrumb db resource-key)
     :journals (journals db resource-key)
+    :property-choices (property-choices db resource-key)
     :journal-bundle (journal-bundle db resource-key)
     :block-reactions (block-reactions db resource-key)
     :block-display-properties (block-display-properties db resource-key)

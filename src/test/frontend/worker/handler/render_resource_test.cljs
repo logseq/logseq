@@ -566,6 +566,31 @@
      :block/parent (when-let [parent (:block/parent entity)]
                      {:db/id (:db/id parent)})}))
 
+(deftest property-choices-resource-tracks-choice-entity-updates-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          property-uuid (random-uuid)
+          choice-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid property-uuid
+                     :block/tx-id 1
+                     :block/title "Priority"
+                     :db/ident :user.property/priority
+                     :block/tags :logseq.class/Property}
+                    {:block/uuid choice-uuid
+                     :block/tx-id 1
+                     :block/title "High"
+                     :block/closed-value-property -1
+                     :block/order "a0"}])
+      (let [resource-key [:property-choices property-uuid]
+            response (call-resource api conn resource-key)]
+        (is (= #{[:entity property-uuid]
+                 [:entity choice-uuid]
+                 [:property-membership :block/closed-value-property]}
+               (:watch-keys response)))
+        (is (= ["High"] (mapv :block/title (:value response))))))))
+
 (deftest render-resources-returns-one-compact-snapshot-envelope-test
   (when-let [api (render-resources-api)]
     (let [{:keys [conn page journal-a journal-b resource-block]}
