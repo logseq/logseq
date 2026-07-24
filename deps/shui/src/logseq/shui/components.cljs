@@ -470,7 +470,7 @@
   (let [variant (or (prop-name (prop props "variant")) "default")
         size (or (prop-name (prop props "size")) "default")]
     (cn
-     "ui__button inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none"
+     "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none"
      (case variant
        "default" "bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-solid"
        "solid" "bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-solid"
@@ -743,7 +743,7 @@
 (def DropdownMenuItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)]
+     (let [props' (with-class-props props "ui__dropdown-menu-item relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)]
        (adapt-menu-item-props! props')
        (when ref (set-prop! props' "ref" ref))
        (react/createElement MenuItemPart props')))))
@@ -780,7 +780,7 @@
 (def DropdownMenuSubTrigger
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-sub-trigger flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[open]:bg-muted" (when (prop props "inset") "pl-8"))
+     (let [props' (with-class-props props "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[open]:bg-muted" (when (prop props "inset") "pl-8"))
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "inset" "children")
