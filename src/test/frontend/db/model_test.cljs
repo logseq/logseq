@@ -7,6 +7,7 @@
             [frontend.db.utils]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.op :as outliner-op]
             [logseq.outliner.property :as outliner-property]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -90,6 +91,172 @@
       (is alias-page)
       (is (= #{(:db/id alias-page)}
              (set (map :db/id (:block/alias canonical'))))))))
+
+(deftest clear-status-updates-task-tag
+  (testing "removes Task when status is the only task property"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "task"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.todo}}]}])
+          block-id (:block/uuid (db-test/find-block-by-content @conn "task"))]
+      (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id] :logseq.property/status]]] {})
+      (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id] :logseq.property/status]]] {})
+      (let [block (d/entity @conn [:block/uuid block-id])]
+        (is (not (contains? (d/pull @conn [:logseq.property/status] [:block/uuid block-id])
+                            :logseq.property/status)))
+        (is (not (contains? (set (map :db/ident (:block/tags block)))
+                            :logseq.class/Task))))))
+
+  (testing "keeps Task for other task properties and in the Task view"
+    (doseq [[properties opts] [[{:logseq.property/priority :logseq.property/priority.high} {}]
+                               [{:logseq.property/deadline 20260715} {}]
+                               [{:logseq.property/scheduled 20260716} {}]
+                               [{} {:preserve-task-tag? true}]]]
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "task"
+                              :build/tags [:logseq.class/Task]
+                              :build/properties (assoc properties
+                                                       :logseq.property/status
+                                                       :logseq.property/status.todo)}]}])
+            block-id (:block/uuid (db-test/find-block-by-content @conn "task"))]
+        (outliner-op/apply-ops! conn [[:batch-set-property [[block-id]
+                                                            :logseq.property/status
+                                                            nil
+                                                            opts]]] {})
+        (let [block (d/entity @conn [:block/uuid block-id])]
+          (is (= :logseq.property/empty-placeholder
+                 (:db/ident (:logseq.property/status block))))
+          (is (contains? (set (map :db/ident (:block/tags block)))
+                         :logseq.class/Task)))))))
+
+(deftest clear-status-handles-default-and-class-provided-status
+  (testing "removes Task when clearing its implicit default status"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "implicit task"
+                            :build/tags [:logseq.class/Task]}]}])
+          block-id (:block/uuid (db-test/find-block-by-content @conn "implicit task"))]
+      (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id] :logseq.property/status]]] {})
+      (let [block (d/entity @conn [:block/uuid block-id])]
+        (is (not (contains? (d/pull @conn [:logseq.property/status] [:block/uuid block-id])
+                            :logseq.property/status)))
+        (is (not (contains? (set (map :db/ident (:block/tags block)))
+                            :logseq.class/Task))))))
+
+  (testing "stores an empty placeholder when a non-Task class provides status"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Project {:build/class-properties [:logseq.property/status]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "project task"
+                             :build/tags [:Project]
+                             :build/properties {:logseq.property/status
+                                                :logseq.property/status.doing}}]}]})
+          block-id (:block/uuid (db-test/find-block-by-content @conn "project task"))]
+      (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id] :logseq.property/status]]] {})
+      (let [block (d/entity @conn [:block/uuid block-id])]
+        (is (= :logseq.property/empty-placeholder
+               (:db/ident (:logseq.property/status block))))
+        (is (= [:user.class/Project]
+               (mapv :db/ident (:block/tags block))))))))
+
+(deftest clear-status-uses-task-class-properties
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "task"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/status :logseq.property/status.todo
+                                             :logseq.property/description "details"}}]}])
+        block-id (:block/uuid (db-test/find-block-by-content @conn "task"))]
+    (d/transact! conn [[:db/add :logseq.class/Task
+                        :logseq.property.class/properties
+                        :logseq.property/description]])
+    (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id]
+                                                           :logseq.property/status]]] {})
+    (let [block (d/entity @conn [:block/uuid block-id])]
+      (is (= :logseq.property/empty-placeholder
+             (:db/ident (:logseq.property/status block))))
+      (is (contains? (set (map :db/ident (:block/tags block)))
+                     :logseq.class/Task)))))
+
+(deftest clear-status-public-remove-ops
+  (testing "keeps Task when the public remove-property op clears status with another task property"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "task"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.todo
+                                               :logseq.property/scheduled 20260716}}]}])
+          block-id (:block/uuid (db-test/find-block-by-content @conn "task"))]
+      (outliner-op/apply-ops! conn [[:remove-block-property [block-id :logseq.property/status]]] {})
+      (let [block (d/entity @conn [:block/uuid block-id])]
+        (is (= :logseq.property/empty-placeholder
+               (:db/ident (:logseq.property/status block))))
+        (is (contains? (set (map :db/ident (:block/tags block)))
+                       :logseq.class/Task)))))
+
+  (testing "applies the same Task cleanup through the public batch-remove op"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "status only"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.todo}}
+                           {:block/title "scheduled task"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.todo
+                                               :logseq.property/scheduled 20260716}}]}])
+          block-ids (mapv #(-> (db-test/find-block-by-content @conn %) :block/uuid)
+                          ["status only" "scheduled task"])]
+      (outliner-op/apply-ops! conn [[:batch-remove-property [block-ids :logseq.property/status]]] {})
+      (let [[status-only scheduled-task] (map #(d/entity @conn [:block/uuid %]) block-ids)]
+        (is (not (contains? (set (map :db/ident (:block/tags status-only)))
+                            :logseq.class/Task)))
+        (is (= :logseq.property/empty-placeholder
+               (:db/ident (:logseq.property/status scheduled-task))))
+        (is (contains? (set (map :db/ident (:block/tags scheduled-task)))
+                       :logseq.class/Task)))))
+
+  (testing "handles mixed blocks independently and keeps unrelated tags"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Project {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "status only"
+                             :build/tags [:logseq.class/Task :Project]
+                             :build/properties {:logseq.property/status :logseq.property/status.todo}}
+                            {:block/title "scheduled task"
+                             :build/tags [:logseq.class/Task]
+                             :build/properties {:logseq.property/status :logseq.property/status.todo
+                                                :logseq.property/scheduled 20260716}}]}]})
+          block-ids (mapv #(-> (db-test/find-block-by-content @conn %) :block/uuid)
+                          ["status only" "scheduled task"])]
+      (outliner-op/apply-ops! conn [[:batch-remove-property [block-ids :logseq.property/status]]] {})
+      (let [[status-only scheduled-task] (map #(d/entity @conn [:block/uuid %]) block-ids)]
+        (is (= #{"Project"}
+               (set (map :block/title (:block/tags status-only)))))
+        (is (= :logseq.property/empty-placeholder
+               (:db/ident (:logseq.property/status scheduled-task))))
+        (is (contains? (set (map :db/ident (:block/tags scheduled-task)))
+                       :logseq.class/Task))))))
+
+(deftest clear-status-retracts-direct-status-without-provider
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "plain block"}]}])
+        block-id (:block/uuid (db-test/find-block-by-content @conn "plain block"))]
+    (d/transact! conn [[:db/add [:block/uuid block-id]
+                        :logseq.property/status
+                        :logseq.property/status.doing]])
+    (outliner-op/apply-ops! conn [[:batch-remove-property [[block-id]
+                                                           :logseq.property/status]]] {})
+    (let [block (d/entity @conn [:block/uuid block-id])]
+      (is (not (contains? (d/pull @conn [:logseq.property/status]
+                                  [:block/uuid block-id])
+                          :logseq.property/status)))
+      (is (not (contains? (set (map :db/ident (:block/tags block)))
+                          :logseq.class/Task))))))
 
 (deftest page-alias-invariants-reject-invalid-via-batch-set-property
   (testing "batch path: duplicate owner is rejected"

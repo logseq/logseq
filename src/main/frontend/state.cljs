@@ -72,6 +72,21 @@
       (throw (ex-info "db-worker has not been initialized" {})))
     (apply worker qkw args)))
 
+(def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
+
+(def ^:private legacy-export-block-text-indent-styles
+  {"indent-style-dashes" "dashes"
+   "indent-style-spaces" "spaces"
+   "indent-style-none" "no-indent"})
+
+(defn- normalize-export-block-text-indent-style
+  [v]
+  (cond
+    (nil? v) nil
+    (contains? export-block-text-indent-styles v) v
+    (contains? legacy-export-block-text-indent-styles v) (get legacy-export-block-text-indent-styles v)
+    :else (throw (ex-info "Invalid export block text indent style" {:value v}))))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -270,7 +285,8 @@
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
 
-      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
+      :copy/export-block-text-indent-style   (or (normalize-export-block-text-indent-style
+                                                  (storage/get :copy/export-block-text-indent-style))
                                                  "dashes")
       :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                  #{})
@@ -380,7 +396,8 @@
              :inputs [:today :7d-after]
              :group-by-page? false
              :collapsed? true}]}
-          :ui/hide-empty-properties? false}))
+          :ui/hide-empty-properties? false
+          :ui/mask-email? true}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo set-state!)
@@ -705,12 +722,6 @@ should be done through this fn in order to get global config and config defaults
   (let [_ (use-sub :ui/viewport)]
     (enable-fold-button-right?)))
 
-(defn enable-journals?
-  ([]
-   (enable-journals? (get-current-repo)))
-  ([_repo]
-   true))
-
 (defn enable-flashcards?
   ([]
    (enable-flashcards? (get-current-repo)))
@@ -834,6 +845,63 @@ should be done through this fn in order to get global config and config defaults
       path-coll? (swap! state update-in path f)
       :else      (swap! state update path f)))
   nil)
+
+(defn- edit-block-fn-entry
+  [value]
+  (cond
+    (fn? value)
+    {:f value}
+
+    (and (map? value) (fn? (:f value)))
+    value
+
+    :else
+    nil))
+
+(defn- edit-block-fn-queue
+  [value]
+  (cond
+    (vector? value) (into [] (keep edit-block-fn-entry) value)
+    :else (if-let [entry (edit-block-fn-entry value)]
+            [entry]
+            [])))
+
+(defn- take-edit-block-fn-entry
+  [queue pred]
+  (let [[before [entry & after]] (split-with (complement pred) queue)]
+    (when entry
+      [entry (vec (concat before after))])))
+
+(defn queue-edit-block-fn!
+  ([f]
+   (queue-edit-block-fn! nil f))
+  ([tx-id f]
+   (when (fn? f)
+     (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %)
+                                                 {:tx-id tx-id
+                                                  :f f})))))
+
+(defn remove-edit-block-fn!
+  [tx-id]
+  (when tx-id
+    (update-state! :editor/edit-block-fn
+                   #(->> (edit-block-fn-queue %)
+                         (remove (fn [entry] (= tx-id (:tx-id entry))))
+                         vec))))
+
+(defn take-edit-block-fn!
+  ([]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))]
+     (when-let [[entry more] (take-edit-block-fn-entry queue #(nil? (:tx-id %)))]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry))))
+  ([tx-id]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))
+         match (and tx-id
+                    (take-edit-block-fn-entry queue #(= tx-id (:tx-id %))))]
+     (when-let [[entry more] match]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry)))))
 
 ;; State getters and setters
 ;; =========================
@@ -962,11 +1030,12 @@ should be done through this fn in order to get global config and config defaults
 (defn set-edit-content!
   ([value] (set-edit-content! (get-edit-input-id) value))
   ([input-id value] (set-edit-content! input-id value true))
-  ([input-id value set-input-value?]
+  ([input-id value set-input-value?] (set-edit-content! input-id value set-input-value? nil))
+  ([input-id value set-input-value? caret-pos]
    (when input-id
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
-         (util/set-change-value input value)))
+         (util/set-change-value input value caret-pos)))
      (set-state! :editor/content value :path-in-sub-atom
                  (or (:block/uuid (get-edit-block)) input-id)))))
 
@@ -1133,11 +1202,18 @@ should be done through this fn in order to get global config and config defaults
         selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
-        removed (set/difference selected-ids new-ids)]
+        removed (set/difference selected-ids new-ids)
+        next-blocks (set (remove nil? blocks))
+        removed-nodes-without-blockid (->> selected-blocks
+                                           (remove nil?)
+                                           (remove #(contains? next-blocks %))
+                                           (remove #(dom/attr % "blockid")))]
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (unselect-node node)))))
+        (unselect-node node)))
+    (doseq [node removed-nodes-without-blockid]
+      (unselect-node node))))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1351,7 +1427,7 @@ should be done through this fn in order to get global config and config defaults
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
-    (set-edit-content! edit-input-id content)
+    (set-edit-content! edit-input-id content true new-pos)
     (set-editor-last-pos! new-pos)))
 
 (defn apply-theme-to-dom!
@@ -1612,7 +1688,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-plugin-resource
   [pid type key]
   (when-let [resources (get-plugin-resources-with-type pid type)]
-    (get resources key)))
+    (some->> key (keyword) (get resources))))
 
 (defn upt-plugin-resource
   [pid type key attr val]
@@ -1779,12 +1855,13 @@ should be done through this fn in order to get global config and config defaults
             (util/scroll-to elem 0)))))))
 
 (defn get-export-block-text-indent-style []
-  (:copy/export-block-text-indent-style @state))
+  (normalize-export-block-text-indent-style (:copy/export-block-text-indent-style @state)))
 
 (defn set-export-block-text-indent-style!
   [v]
-  (set-state! :copy/export-block-text-indent-style v)
-  (storage/set :copy/export-block-text-indent-style v))
+  (let [v* (normalize-export-block-text-indent-style v)]
+    (set-state! :copy/export-block-text-indent-style v*)
+    (storage/set :copy/export-block-text-indent-style v*)))
 
 (defn get-recent-pages
   []
@@ -2067,10 +2144,12 @@ should be done through this fn in order to get global config and config defaults
   (:auth/refresh-token @state))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [{:keys [type protocol host port] :as agent-opts} (get-state [:electron/user-cfgs :settings/agent])]
-    (when (and  (not (contains? #{"system"} type))
-                (every? not-empty (vals agent-opts)))
-      (str protocol "://" host ":" port))))
+  (when-let [{:keys [type protocol host port]} (get-state [:electron/user-cfgs :settings/agent])]
+    ;; Older saved proxy settings may only have :protocol.
+    (let [proxy-type (or type protocol)]
+      (when (and (contains? #{"http" "socks5"} proxy-type)
+                 (every? not-empty [proxy-type host port]))
+        (str proxy-type "://" host ":" port)))))
 
 (defn get-current-pdf
   []

@@ -13,6 +13,18 @@
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     conn))
 
+(deftest validate-db-returns-count-fields-without-counts-wrapper
+  (let [conn (create-db-graph-conn)]
+    (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
+      (let [result (worker-db-validate/validate-db conn :fix false)
+            validation-result (db-validate/validate-db @conn)
+            expected-counts (assoc (db-validate/graph-counts @conn (:entities validation-result))
+                                   :datoms (:datom-count validation-result))]
+        (is (= expected-counts (select-keys result (keys expected-counts))))
+        (is (not (contains? result :counts)))
+        (is (not (contains? result :datom-count)))
+        (is (every? number? (map result (keys expected-counts))))))))
+
 (deftest validate-db-repairs-block-missing-uuid
   (let [conn (create-db-graph-conn)
         page-uuid (random-uuid)

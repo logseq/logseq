@@ -208,26 +208,45 @@
   [& graphs]
   (mapv (fn [graph] {:url graph}) graphs))
 
-(deftest search-index-build-progress-normalizes-index-stages-in-ui-state
+(deftest search-index-build-progress-ignores-vector-stage-in-ui-state
   (let [repo "logseq_db_graph_a"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
         original-state @state/state]
     (try
-      (reset! state/state (assoc original-state :git/current-repo repo))
+      (reset! state/state (assoc original-state
+                                  :git/current-repo repo
+                                  :search/index-build {:visible? false
+                                                       :running? false
+                                                       :status :idle}))
       (progress! repo {:status :running
                        :stage :vector-index
                        :progress 42
                        :processed 420
                        :total 1000})
-      (is (= {:visible? true
-              :running? true
-              :status :running
-              :repo repo
-              :stage :search-index
-              :progress 42
-              :processed 420
-              :total 1000}
+      (is (= {:visible? false
+              :running? false
+              :status :idle}
              (:search/index-build @state/state)))
+      (finally
+        (reset! state/state original-state)))))
+
+(deftest search-index-build-progress-marks-current-graph-ready-after-fts-completed
+  (let [repo "logseq_db_graph_a"
+        progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
+        original-state @state/state
+        events (atom [])]
+    (try
+      (reset! state/state (assoc original-state :git/current-repo repo))
+      (with-redefs [state/pub-event! (fn [event]
+                                       (swap! events conj event)
+                                       (p/resolved nil))]
+        (progress! repo {:build-id "build-1"
+                         :status :completed
+                         :stage :search-index
+                         :progress 100
+                         :processed 1
+                         :total 1})
+        (is (= [[:graph/ready repo]] @events)))
       (finally
         (reset! state/state original-state)))))
 

@@ -5,10 +5,11 @@
   (:refer-clojure :exclude [run!])
   (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
+            [cljs-time.core :as t]
             [clojure.core.async :as async]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.rtc.indicator :as indicator]
+            [frontend.components.rtc.download-progress :as download-progress]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -19,8 +20,8 @@
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
-            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -50,9 +51,7 @@
             [lambdaisland.glogi :as log]
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [cljs-time.core :as t]))
+            [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
 
@@ -61,7 +60,11 @@
 (defonce ^:private *search-index-build-timeout (atom nil))
 (defn- <build-search-index!
   [repo]
-  (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+  (-> (p/let [result (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+        (when (and (not= :started result)
+                   (= repo (state/get-current-repo)))
+          (state/pub-event! [:graph/ready repo]))
+        result)
       (p/catch (fn [error]
                  (js/console.error "Search index build error:" error)))))
 
@@ -95,6 +98,7 @@
   (page-handler/init-commands!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
+  (st/refresh!)
   (route-handler/redirect-to-home!)
   (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
@@ -122,13 +126,12 @@
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [t1 (t/now)]
     (p/do!
-    (export/cancel-db-backup!)
-    (state/set-state! :db/async-queries {})
-    (st/refresh!)
-    (graph-switch-on-persisted graph opts)
-    (export/backup-db-graph (state/get-current-repo))
-    (let [t2 (t/now)]
-      (log/info ::graph-switch-spent (- t2 t1))))))
+     (export/cancel-db-backup!)
+     (state/set-state! :db/async-queries {})
+     (graph-switch-on-persisted graph opts)
+     (export/backup-db-graph (state/get-current-repo))
+     (let [t2 (t/now)]
+       (log/info ::graph-switch-spent (- t2 t1))))))
 
 (defmethod handle :graph/open-new-window [[_ev target]]
   (ui-handler/open-new-window-or-tab! target))
@@ -243,8 +246,7 @@
   (export/auto-db-backup! graph)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
-  (when-not (mobile-util/native-platform?)
-    (state/pub-event! [:graph/ready graph])))
+  nil)
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! :succ-notification? true))
@@ -380,22 +382,17 @@
   (->
    (p/do!
     (when (util/mobile?)
-      (shui/popup-show!
-       nil
-       (fn []
-         [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (t :sync/downloading-graph graph-name)]
-          (indicator/downloading-logs)])
-       {:id :download-rtc-graph}))
+      (download-progress/show! graph-name))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name) {:rtc-download? true}])
     (when (util/mobile?)
-      (shui/popup-hide! :download-rtc-graph)))
+      (download-progress/hide!)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
-              (shui/popup-hide! :download-rtc-graph)
+              (when (util/mobile?)
+                (download-progress/hide!))
               (when (rtc-error/download-decrypt-failed? e)
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 

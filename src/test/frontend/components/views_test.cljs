@@ -1,7 +1,36 @@
 (ns frontend.components.views-test
   (:require [cljs.test :refer [deftest is]]
+            [datascript.impl.entity :as de]
+            [frontend.components.property.value :as property-value]
             [frontend.db]
             [frontend.components.views :as views]))
+
+(deftest table-property-value-receives-view-parent
+  (let [view-parent {:db/ident :logseq.class/Task}
+        property {:db/ident :logseq.property/status
+                  :block/title "Status"
+                  :logseq.property/type :default}
+        row {:db/id 1}
+        calls* (atom [])]
+    (with-redefs [de/entity? map?
+                  property-value/property-value
+                  (fn [& args] (swap! calls* conj args))]
+      (let [columns (views/build-columns {:view-parent view-parent}
+                                         [property]
+                                         {:with-object-name? false
+                                          :add-tags-column? false})
+            column (some #(when (= :logseq.property/status (:id %)) %) columns)]
+        ((:cell column) nil row column {})
+        (is (= view-parent
+               (some #(get-in (vec %) [2 :view-parent]) @calls*))
+            (pr-str @calls*))))))
+
+(deftest gallery-property-value-receives-view-parent
+  (let [view-parent {:db/ident :logseq.class/Task}]
+    (is (= {:view? true
+            :gallery-view? true
+            :view-parent view-parent}
+           (#'views/gallery-property-value-opts {:view-parent view-parent})))))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
   "When with-object-name? is false, the user property 'Name' should be kept"
@@ -9,9 +38,17 @@
                           :block/title "Name"
                           :logseq.property/type :default}]
         columns (views/build-columns {} mock-properties {:with-object-name? false
-                                                          :add-tags-column? false})]
+                                                         :add-tags-column? false})]
     ;; Without built-in title column, user 'Name' property should exist
     (is (some #(= :user.property/name-abc (:id %)) columns))))
+
+(deftest build-columns-should-include-page-column-when-requested
+  (let [columns (views/build-columns {} [] {:add-tags-column? false
+                                            :add-page-column? true})]
+    (is (some #(= :block/page (:id %)) columns))
+    (is (false? (:sortable? (some #(when (= :block/page (:id %)) %) columns))))
+    (is (not (some #(= :block/page (:id %))
+                   (views/build-columns {} [] {:add-tags-column? false}))))))
 
 (deftest sort-columns-should-deduplicate-ordered-ids
   "Reproduces db-test#837 amplification: When ordered-column-ids contains
@@ -70,5 +107,6 @@
                                        :block/title {:logseq.property/type :string}
                                        :block/tags {:logseq.property/type :class
                                                     :db/cardinality :db.cardinality/many}))]
+    (is (views/group-by-column? {:id :block/page}))
     (is (not (views/group-by-column? {:id :block/title})))
     (is (views/group-by-column? {:id :block/tags}))))

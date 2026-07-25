@@ -18,6 +18,21 @@
            (db-content/title-ref->id-ref "some page ref [[page1]]" [{:block/title "page1" :block/uuid page-uuid}]))
         "Replaces page ref name with uuid"))
 
+  (testing "uses original page name when journal title is normalized"
+    (let [journal-uuid #uuid "00000001-2026-0615-0000-000000000000"]
+      (is (= (str "some page ref " (page-ref/->page-ref journal-uuid))
+             (db-content/title-ref->id-ref
+              "some page ref [[2026-06-15]]"
+              [{:block/title "Jun 15th, 2026"
+                :block.temp/original-page-name "2026-06-15"
+                :block/uuid journal-uuid}])))))
+
+  (testing "ignores refs without uuid"
+    (is (= "some page ref [[2026-06-15]]"
+           (db-content/title-ref->id-ref
+            "some page ref [[2026-06-15]]"
+            [{:block/title "2026-06-15"}]))))
+
   (testing "does replace tag with :replace-tag? true"
     (is (= "some #[[5c6cd067-c602-4955-96b8-74b62e08113c]] tag"
            (db-content/title-ref->id-ref "some #test tag"

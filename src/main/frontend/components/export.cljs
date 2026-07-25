@@ -136,18 +136,26 @@
 (def *export-block-type (atom :text))
 
 (def text-indent-style-options [{:title-key :export/indent-style-dashes
-                                 :selected false}
+                                 :value "dashes"}
                                 {:title-key :export/indent-style-spaces
-                                 :selected false}
+                                 :value "spaces"}
                                 {:title-key :export/indent-style-none
-                                 :selected false}])
+                                 :value "no-indent"}])
 
 (defn- export-helper
-  [top-level-ids]
+  ([top-level-ids]
+   (export-helper top-level-ids {}))
+  ([top-level-ids export-options]
   (let [current-repo (state/get-current-repo)
-        text-indent-style (state/get-export-block-text-indent-style)
-        text-remove-options (set (state/get-export-block-text-remove-options))
-        text-other-options (state/get-export-block-text-other-options)
+        text-indent-style (if (contains? export-options :indent-style)
+                            (:indent-style export-options)
+                            (state/get-export-block-text-indent-style))
+        text-remove-options (if (contains? export-options :remove-options)
+                              (:remove-options export-options)
+                              (set (state/get-export-block-text-remove-options)))
+        text-other-options (if (contains? export-options :other-options)
+                             (:other-options export-options)
+                             (state/get-export-block-text-other-options))
         tp @*export-block-type]
     (case tp
       :text (export-text/export-blocks-as-markdown
@@ -157,7 +165,7 @@
              current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
       :html (export-html/export-blocks-as-html
              current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
-      "")))
+      ""))))
 
 (defn- <export-edn-helper
   [root-block-uuids-or-page-uuid export-type]
@@ -234,11 +242,17 @@
         tp @*export-block-type]
     (hooks/use-effect!
      (fn []
-       (reset! *export-block-type :text)
-       (reset! *content (export-helper top-level-uuids))
-       (reset! *text-remove-options (set (state/get-export-block-text-remove-options)))
-       (reset! *text-indent-style (state/get-export-block-text-indent-style))
-       (reset! *text-other-options (state/get-export-block-text-other-options)))
+       (let [current-remove-options (set (state/get-export-block-text-remove-options))
+             current-indent-style (state/get-export-block-text-indent-style)
+             current-other-options (state/get-export-block-text-other-options)]
+         (reset! *export-block-type :text)
+         (reset! *text-remove-options current-remove-options)
+         (reset! *text-indent-style current-indent-style)
+         (reset! *text-other-options current-other-options)
+         (reset! *content (export-helper top-level-uuids
+                                         {:indent-style current-indent-style
+                                          :remove-options current-remove-options
+                                          :other-options current-other-options}))))
      [top-level-uuids])
     [:div.export.resize
      {:class "-m-5"}
@@ -285,28 +299,26 @@
                        :on-change (fn [e]
                                     (reset! *content nil)
                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
-        (let [options (->> text-indent-style-options
-                           (mapv (fn [opt]
-                                   (if (= text-indent-style (:title-key opt))
-                                     (assoc opt :selected true)
-                                     opt))))]
+        (let [options text-indent-style-options]
           [:div [:div.flex.items-center
                  [:label.mr-4
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}}
                   (t :export/indent-style-label)]
                  [:select.block.my-2.text-lg.rounded.border.py-0.px-1
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}
+                   :value text-indent-style
                    :on-change (fn [e]
-                                (let [value (util/evalue e)]
-                                  (state/set-export-block-text-indent-style! value)
-                                  (reset! *text-indent-style value)
-                                  (reset! *content (export-helper top-level-uuids))))}
-                  (for [{:keys [title-key value selected]} options]
-                    [:option (cond->
-                              {:key title-key
-                               :value (or value (name title-key))}
-                               selected
-                               (assoc :selected selected))
+                                (let [next-indent-style (util/evalue e)]
+                                  (state/set-export-block-text-indent-style! next-indent-style)
+                                  (reset! *text-indent-style next-indent-style)
+                                  (reset! *content
+                                          (export-helper top-level-uuids
+                                                         {:indent-style next-indent-style
+                                                          :remove-options text-remove-options
+                                                          :other-options text-other-options}))))}
+                  (for [{:keys [title-key value]} options]
+                    [:option {:key title-key
+                              :value value}
                      (t title-key)])]]
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"

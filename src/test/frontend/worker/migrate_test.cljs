@@ -46,6 +46,58 @@
           :logseq.property.embedding/hnsw-label {:db/index true}
           :logseq.property.embedding/hnsw-label-updated-at {:db/index true}}))
 
+(def ^:private delete-property-schema
+  (merge db-schema/schema
+         {:user.property/obsolete {:db/index true}
+          :logseq.property/view-for {:db/valueType :db.type/ref}
+          :logseq.property.view/type {:db/valueType :db.type/ref}
+          :logseq.property.view/feature-type {}
+          :logseq.property.history/block {:db/valueType :db.type/ref}
+          :logseq.property.history/property {:db/valueType :db.type/ref}
+          :logseq.property.history/scalar-value {}}))
+
+(deftest delete-property-cleans-property-usages
+  (let [conn (d/create-conn delete-property-schema)
+        target-block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        view-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        history-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        view-history-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (d/transact! conn
+                 [{:db/ident :logseq.class/Property
+                   :block/title "Property"}
+                  {:db/ident :logseq.property.view/type.table
+                   :block/title "Table View"}
+                  {:db/ident :user.property/obsolete
+                   :block/title "Obsolete property"
+                   :block/tags #{:logseq.class/Property}}
+                  {:block/uuid target-block-uuid
+                   :block/title "target block"
+                   :user.property/obsolete "stale value"}
+                  {:block/uuid view-uuid
+                   :block/title "view block"
+                   :logseq.property/view-for :user.property/obsolete
+                   :logseq.property.view/type :logseq.property.view/type.table
+                   :logseq.property.view/feature-type :property}
+                  {:block/uuid history-uuid
+                   :block/title "history"
+                   :logseq.property.history/block [:block/uuid target-block-uuid]
+                   :logseq.property.history/property :user.property/obsolete
+                   :logseq.property.history/scalar-value "stale value"}
+                  {:block/uuid view-history-uuid
+                   :block/title "view history"
+                   :logseq.property.history/block [:block/uuid view-uuid]
+                   :logseq.property.history/property :user.property/obsolete
+                   :logseq.property.history/scalar-value "stale value"}])
+
+    (d/transact! conn (db-migrate/delete-property @conn :user.property/obsolete))
+
+    (let [db @conn]
+      (is (nil? (d/entity db :user.property/obsolete)))
+      (is (nil? (:user.property/obsolete (d/entity db [:block/uuid target-block-uuid]))))
+      (is (nil? (d/entity db [:block/uuid view-uuid])))
+      (is (nil? (d/entity db [:block/uuid history-uuid])))
+      (is (nil? (d/entity db [:block/uuid view-history-uuid]))))))
+
 (deftest ensure-built-in-data-exists!
   (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
         db (ldb/read-transit-str db-transit)
@@ -210,6 +262,24 @@
                      (:logseq.property.comments/blocks
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
+
+(deftest migrate-65-27-with-missing-comments-built-ins-does-not-crash
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 27}}
+                       {:db/ident :logseq.class/Root
+                        :block/title "Root Tag"}])
+
+    (is (nil? (d/entity @conn :logseq.class/Comments)))
+    (is (nil? (d/entity @conn :logseq.property.comments/blocks)))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 33})
+
+    (is (= {:major 65 :minor 33}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn :logseq.class/Comments)))
+    (is (some? (d/entity @conn :logseq.class/Comment)))
+    (is (some? (d/entity @conn :logseq.property.comments/blocks)))))
 
 (deftest migrate-65-30-adds-assignee-property
   (let [conn (d/create-conn db-schema/schema)]

@@ -235,7 +235,7 @@
           }
 
           > strong {
-            @apply sm:text-xs text-base font-medium;
+            @apply sm:text-xs text-sm font-medium;
           }
         }
 
@@ -577,7 +577,7 @@
   }
 
   &-btn {
-    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100;
+    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100 z-[var(--ls-z-index-level-3)];
 
     > .inner {
       @apply rounded-full h-8 w-8 flex items-center justify-center
@@ -588,7 +588,7 @@
   }
 
   &-menu-popup {
-    @apply fixed bottom-14 right-8 z-10 border rounded-lg min-w-[260px] shadow;
+    @apply fixed bottom-14 right-8 z-[var(--ls-z-index-level-3)] border rounded-lg min-w-[260px] shadow;
 
     background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 
@@ -850,9 +850,7 @@ html[data-theme='dark'] {
   }
 }
 
-.blocks-selection-mode .page-title,
-.blocks-selection-mode .block-content-inner,
-.blocks-selection-mode .block-body,
-.blocks-selection-mode .ls-properties-area {
-  @apply select-none;
+.ls-block.selected,
+.ls-block.selected * {
+  user-select: none;
 }

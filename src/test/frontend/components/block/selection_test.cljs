@@ -54,3 +54,14 @@
     {:direction :down :block-ids [:c]} :c :c
     nil :missing :c
     nil :a :missing))
+
+(deftest mounted-node-range-uses-current-rendered-order
+  (let [upper #js {:isConnected true}
+        middle #js {:isConnected true}
+        lower #js {:isConnected true}]
+    (is (true? (selection/mounted-nodes? lower upper)))
+    (is (= {:direction :up
+            :nodes [lower middle upper]}
+           (selection/mounted-node-range [upper middle lower] lower upper)))
+    (set! (.-isConnected lower) false)
+    (is (false? (selection/mounted-nodes? lower upper)))))

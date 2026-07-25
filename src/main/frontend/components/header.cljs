@@ -7,6 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
+            [frontend.components.email :as email-component]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -29,6 +30,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.email :as email-util]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -63,6 +65,23 @@
               graph))
           (state/get-repos))))
 
+(defn- current-remote-rtc-graph
+  [current-repo rtc-graphs]
+  (some #(when (= current-repo (:url %)) %) rtc-graphs))
+
+(defn- rtc-indicator-visible?
+  [{:keys [current-repo rtc-graphs db-rtc-uuid rtc-state logged-in? rtc-group?]}]
+  (let [remote-graph (current-remote-rtc-graph current-repo rtc-graphs)
+        remote-graph-uuid (some-> (:GraphUUID remote-graph) str)
+        state-graph-uuid (some-> (:graph-uuid rtc-state) str)]
+    (and current-repo
+         logged-in?
+         rtc-group?
+         remote-graph
+         (or db-rtc-uuid
+             (and (seq state-graph-uuid)
+                  (= state-graph-uuid remote-graph-uuid))))))
+
 (defn local-graph-sync-button
   [graph]
   (ui/tooltip
@@ -75,6 +94,7 @@
 (hsx/defc rtc-collaborators
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
+        config (state/use-sub-config)
         online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
@@ -94,7 +114,7 @@
              (avatar/user-avatar
               {:class "w-5 h-5"
                :style {:app-region "no-drag"}
-               :title user-email
+               :title (email-util/display-email user-email config)
                :name user-name
                :uuid user-uuid
                :fallback-props {:style {:font-size 11}}}))))])))
@@ -123,6 +143,11 @@
          "labels=from:in-app&"
          "platform="
          (js/encodeURIComponent platform))))
+
+(defn- stop-event!
+  [^js e]
+  (.preventDefault e)
+  (.stopPropagation e))
 
 (hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
@@ -197,11 +222,23 @@
                   (when login?
                     {:item [:span.flex.flex-col.relative.group.pt-1.w-full
                             [:b.leading-none (user-handler/username)]
-                            [:small.opacity-70 (user-handler/email)]
-                            [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                             {:class "right-1 top-3" :title (t :ui/logout)}
-                             (ui/icon "logout")]]
-                     :options {:on-click #(user-handler/logout)
+                            [:small.opacity-70
+                             (email-component/email-address {:email (user-handler/email)})]
+                            (ui/tooltip
+                             (shui/button
+                              {:type "button"
+                               :variant :ghost
+                               :size :icon
+                               :class "absolute right-1 top-3 h-auto w-auto min-w-0 border-0 bg-transparent p-0 text-red-rx-09 opacity-0 group-hover:opacity-100"
+                               :aria-label (t :ui/logout)
+                               :on-pointer-down stop-event!
+                               :on-click (fn [e]
+                                           (stop-event! e)
+                                           (user-handler/logout)
+                                           (shui/popup-hide!))}
+                              (ui/icon "logout"))
+                             (t :ui/logout))]
+                     :options {:on-select (fn [^js e] (.preventDefault e))
                                :class "w-full"}})]
                  (concat (page-menu-items) [{:hr true}])
                  (remove nil?)))]
@@ -397,6 +434,8 @@
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
         rtc-graphs (state/use-sub :rtc/graphs)
+        rtc-state (state/use-sub :rtc/state)
+        db-rtc-uuid (ldb/get-graph-rtc-uuid (db/get-db))
         default-home-page (state/use-sub-default-home-page)
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
@@ -444,11 +483,13 @@
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
       [:div.flex.items-center
-       (when (and current-repo
-                  (ldb/get-graph-rtc-uuid (db/get-db))
-                  (user-handler/logged-in?)
-                  (user-handler/rtc-group?)
-                  (some #(= current-repo (:url %)) rtc-graphs))
+       (when (rtc-indicator-visible?
+              {:current-repo current-repo
+               :rtc-graphs rtc-graphs
+               :db-rtc-uuid db-rtc-uuid
+               :rtc-state rtc-state
+               :logged-in? (user-handler/logged-in?)
+               :rtc-group? (user-handler/rtc-group?)})
          [:<>
           (recent-slider)
           ^{:key (str "collab-" current-repo)}

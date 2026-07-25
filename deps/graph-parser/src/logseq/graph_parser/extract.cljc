@@ -100,11 +100,13 @@
     (if (string/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
-            property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
-                            (let [properties-ast (second (first ast))
-                                  properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
-                                                     (map second properties-ast))]
-                              (:title properties)))
+            property-name (some (fn [ast-node]
+                                  (when (contains? #{"Properties" "Property_Drawer"} (first ast-node))
+                                    (let [properties-ast (second ast-node)
+                                          properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
+                                                             (map second properties-ast))]
+                                      (:title properties))))
+                                ast)
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
@@ -147,7 +149,8 @@
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
-  [properties invalid-properties properties-text-values file page page-name {:keys [date-formatter db from-page]}]
+  [properties invalid-properties properties-text-values file page page-name
+   {:keys [date-formatter db from-page skip-journal?]}]
   (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
@@ -158,7 +161,8 @@
                 (common-util/remove-nils-non-nested
                  (assoc
                   (gp-block/page-name->map page db true date-formatter
-                                           :from-page from-page)
+                                           :from-page from-page
+                                           :skip-journal? skip-journal?)
                   :block/file {:file/path (common-util/path-normalize file)}))
                 (extract-page-alias-and-tags page-name properties))]
     (cond->
@@ -223,13 +227,16 @@
        returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
        Implemented in reset-file-handler/diff-merge-uuids-2ways for IoC
        Called in gp-extract/extract as AST is being parsed and properties are extracted there"
-  [format ast properties file content {:keys [date-formatter db filename-format resolve-uuid-fn]
+  [format ast properties file content {:keys [date-formatter db filename-format resolve-uuid-fn skip-journal?]
                                        :or {resolve-uuid-fn (constantly nil)}
                                        :as options}]
   (assert db "Datascript DB is required")
   (try
     (let [page (get-page-name file ast false filename-format)
-          [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
+          [page page-name _journal-day]
+          (if skip-journal?
+            [page (common-util/page-name-sanity-lc page) nil]
+            (gp-block/convert-page-if-journal page date-formatter))
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
           override-uuids (resolve-uuid-fn format ast content options')

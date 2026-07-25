@@ -51,6 +51,32 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest semantic-graphs-list-is-bounded-and-excludes-e2ee-test
+  (async done
+         (let [call (atom nil)
+               rows #js [#js {"graph_id" "graph-1" "graph_name" "test-mcp"
+                              "updated_at" 20 "created_at" 10 "schema_version" "65"
+                              "graph_ready_for_use" 1 "role" "manager" "invited_by" nil}
+                         #js {"graph_id" "graph-2" "graph_name" "test-mcp-2"
+                              "updated_at" 19 "created_at" 11 "schema_version" "65"
+                              "graph_ready_for_use" 1 "role" "member" "invited_by" "u2"}]]
+           (-> (p/with-redefs [common/<d1-all
+                               (fn [_db sql & args]
+                                 (reset! call {:sql sql :args args})
+                                 (p/resolved #js {:results rows}))
+                               common/get-sql-rows (fn [result] (aget result "results"))]
+                 (index/<semantic-graphs-list :db "user-1" {:name "test-mcp" :limit 1 :cursor nil}))
+               (p/then (fn [{:keys [graphs next-cursor]}]
+                         (is (= 1 (count graphs)))
+                         (is (string? next-cursor))
+                         (is (string/includes? (:sql @call) "g.graph_e2ee = 0"))
+                         (is (string/includes? (:sql @call) "limit ?"))
+                         (is (= 2 (last (:args @call))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest index-upsert-persists-graph-e2ee-flag-test
   (async done
          (let [called (atom nil)]

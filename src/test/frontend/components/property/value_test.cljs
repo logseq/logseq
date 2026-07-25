@@ -69,19 +69,6 @@
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
 
-(deftest direct-value-picker-type-test
-  (is (true? (property-value/direct-value-picker-type? :date)))
-  (is (true? (property-value/direct-value-picker-type? :datetime)))
-  (is (true? (property-value/direct-value-picker-type? :asset)))
-  (is (false? (property-value/direct-value-picker-type? :default))))
-
-(deftest asset-picker-layout-is-viewport-constrained-test
-  (is (= "min(640px, calc(100vw - 32px))"
-         (:width property-value/asset-picker-grid-style)))
-  (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
-  (is (= "repeat(auto-fill, minmax(140px, 1fr))"
-         (:grid-template-columns property-value/asset-picker-items-grid-style))))
-
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]
     (is (= #{1}

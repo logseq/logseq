@@ -77,18 +77,6 @@
     :else
     nil))
 
-(defn- ordered-siblings
-  [block]
-  (some->> (sibling-entities block)
-           (sort-by :block/order)))
-
-(defn- right-ordered-siblings
-  [block]
-  (when-let [siblings (seq (ordered-siblings block))]
-    (->> siblings
-         (drop-while #(not= (:db/id %) (:db/id block)))
-         rest)))
-
 (defn- collect-right-order-list-sibling-keys
   [siblings target-order-list-type]
   (when target-order-list-type
@@ -96,14 +84,47 @@
          (take-while #(= target-order-list-type (order-list-type %)))
          (map block-key))))
 
-(defn- affected-right-order-list-sibling-keys
-  [db block-id]
-  (when-let [block (and db (d/entity db block-id))]
-    (let [right-siblings (right-ordered-siblings block)
-          right-sibling (first right-siblings)]
-      (concat
-       (collect-right-order-list-sibling-keys right-siblings (order-list-type block))
-       (collect-right-order-list-sibling-keys right-siblings (order-list-type right-sibling))))))
+(defn- sibling-group-key
+  [block]
+  (cond
+    (:block/parent block)
+    [:parent (:db/id (:block/parent block))]
+
+    (:block/page block)
+    [:page (:db/id (:block/page block))]
+
+    :else
+    nil))
+
+(defn- affected-right-order-list-sibling-keys-for
+  [db block-ids]
+  (when db
+    (let [blocks (keep #(d/entity db %) block-ids)
+          groups (group-by sibling-group-key blocks)
+          siblings-by-group (->> groups
+                                 (map (fn [[group-key blocks']]
+                                        [group-key
+                                         (some->> (first blocks')
+                                                  sibling-entities
+                                                  (sort-by :block/order))]))
+                                 (into {}))]
+      (mapcat
+       (fn [[group-key blocks']]
+         (let [siblings (get siblings-by-group group-key)
+               sibling-index (->> siblings
+                                  (map-indexed (fn [idx block]
+                                                 [(:db/id block) idx]))
+                                  (into {}))]
+           (mapcat
+            (fn [block]
+              (when-let [idx (get sibling-index (:db/id block))]
+                (let [right-siblings (drop (inc idx) siblings)
+                      right-sibling (first right-siblings)]
+                  (concat
+                   (collect-right-order-list-sibling-keys right-siblings (order-list-type block))
+                   (collect-right-order-list-sibling-keys right-siblings (order-list-type right-sibling))))))
+            blocks')))
+       groups))))
 
 (defn- affected-order-list-descendant-keys
   [db block-id]
@@ -199,12 +220,13 @@
 
                        (mapcat
                         (fn [block-id]
-                          (concat
-                           (affected-right-order-list-sibling-keys db-before block-id)
-                           (affected-right-order-list-sibling-keys db-after block-id)
+                         (concat
                            (affected-order-list-descendant-keys db-before block-id)
                            (affected-order-list-descendant-keys db-after block-id)))
                         order-list-affected-blocks)
+
+                       (affected-right-order-list-sibling-keys-for db-before order-list-affected-blocks)
+                       (affected-right-order-list-sibling-keys-for db-after order-list-affected-blocks)
 
                        (keep
                         (fn [tag]

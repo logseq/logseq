@@ -185,8 +185,7 @@
            (when home-page?
              (p/do!
               (config-handler/set-config! :default-home (dissoc default-home :page))
-              (config-handler/set-config! :feature/enable-journals? true)
-              (notification/show! (t :settings.features/journals-enable-success) :success)))
+              (notification/show! (t :settings.features/home-default-page-update-success) :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
                              {:outliner-op :delete-page}
                              (outliner-op/delete-page! page-uuid))]

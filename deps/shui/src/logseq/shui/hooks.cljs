@@ -121,8 +121,43 @@
 (def create-ref react/createRef)
 (defn deref [ref] (.-current ref))
 (defn set-ref! [ref value] (set! (.-current ref) value))
-(def use-state react/useState)
-(def use-reducer react/useReducer)
+(defn- choose-value [nv cv]
+  (if (= nv cv)
+    cv
+    nv))
+
+;; borrowed from https://github.com/pitch-io/uix/blob/master/core/src/uix/hooks/alpha.cljs
+(defn- use-clojure-aware-updater
+  "Replicates React's behaviour when updating state with identical JS value,
+  but using Clojure's value equality here"
+  [updater]
+  (react/useCallback
+   (fn [v & args]
+     (updater
+      (fn [cv]
+        (if (fn? v)
+          (choose-value (apply v cv args) cv)
+          (choose-value v cv)))))
+   #js [updater]))
+
+(defn use-state [value]
+  (let [[state set-state] (react/useState value)
+        set-state (use-clojure-aware-updater set-state)]
+    #js [state set-state]))
+
+(defn- clojure-aware-reducer-updater
+  "Same as `use-clojure-primitive-aware-updater` but for `use-reducer`"
+  [f]
+  (fn [state action]
+    (choose-value (f state action) state)))
+
+(defn use-reducer
+  ([f value]
+   (let [updater (clojure-aware-reducer-updater f)]
+     (react/useReducer updater value)))
+  ([f value init-state]
+   (let [updater (clojure-aware-reducer-updater f)]
+     (react/useReducer updater value init-state))))
 
 ;;; other custom hooks
 

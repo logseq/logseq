@@ -27,7 +27,6 @@
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
             [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
@@ -361,7 +360,6 @@
      (when show-action-bar?
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
-     (ui-component/install-notifications)
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
      [:div.download

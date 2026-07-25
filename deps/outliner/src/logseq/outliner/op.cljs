@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
@@ -131,6 +132,11 @@
      [:op :keyword]
      [:args [:tuple ::uuid ::option]]]]
 
+   [:restore-recycled
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid]]]]
+
    [:recycle-delete-permanently
     [:catn
      [:op :keyword]
@@ -199,17 +205,22 @@
 
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
-  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
+  (let [{:keys [error] :as txs}
         (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
              (catch :default e
                (js/console.error "Import EDN error: " e)
-               {:error "An unexpected error occurred building the import. See the javascript console for details."}))]
-    ;; (cljs.pprint/pprint _txs)
-    (if error
-      (reset! *result {:error error})
+               {:error "An unexpected error occurred building the import. See the javascript console for details."}))
+        validation (when-not error
+                     (sqlite-export/validate-import-txs txs @conn))]
+    ;; (cljs.pprint/pprint txs)
+    (if (or error (:error validation))
+      (reset! *result {:error (or error (:error validation))})
       (try
-        (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
-                       (merge {::sqlite-export/imported-data? true} tx-meta))
+        ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
+        (ldb/transact! conn (:tx-data validation)
+                       (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
+                         (= :datoms (::sqlite-export/graph-format export-map))
+                         (assoc :initial-db? true)))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
@@ -234,11 +245,24 @@
                      (assoc (into {} block) :db/id (:db/id block)))
                    (rest template-blocks)))))))
 
+(defn- journal-title
+  [db journal-day]
+  (date-time-util/int->journal-title
+   journal-day
+   (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
+
+(defn- ensure-template-journal-pages!
+  [conn blocks]
+  (doseq [journal-day (outliner-template/dynamic-template-journal-days blocks)]
+    (when-not (ldb/get-journal-page-by-day @conn journal-day)
+      (outliner-page/create! conn (journal-title @conn journal-day) {:journal? true}))))
+
 (defn- apply-template-op!
   [conn *result [template-id target-block-id opts]]
   (when-let [target (d/entity @conn [:block/uuid target-block-id])]
     (let [blocks (or (some-> (:template-blocks opts) seq vec)
                      (template-children-blocks @conn [:block/uuid template-id]))
+          _ (ensure-template-journal-pages! conn blocks)
           blocks (outliner-template/resolve-dynamic-template-blocks @conn target blocks)]
       (when (seq blocks)
         (let [sibling? (:sibling? opts)
@@ -363,13 +387,26 @@
     (let [[page-uuid opts] args]
       (reset! *result (outliner-page/delete! conn page-uuid (merge opts opts'))))
 
+    :restore-recycled
+    (let [[root-uuid] args]
+      (reset! *result (outliner-recycle/restore! conn root-uuid)))
+
     :recycle-delete-permanently
     (let [[root-uuid] args]
-      (outliner-recycle/permanently-delete! conn root-uuid))
+      (reset! *result (outliner-recycle/permanently-delete! conn root-uuid)))
 
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))
     nil))
+
+(defn- import-edn-op?
+  [[op _args]]
+  (= :batch-import-edn op))
+
+(defn- datom-import-op?
+  [[op args]]
+  (and (= :batch-import-edn op)
+       (= :datoms (::sqlite-export/graph-format (first args)))))
 
 (defn apply-ops!
   [conn ops opts]
@@ -384,7 +421,13 @@
                              :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
-                (assoc :outliner-op single-op-outliner-op))
+                (assoc :outliner-op single-op-outliner-op)
+
+                (some import-edn-op? ops)
+                (assoc ::sqlite-export/imported-data? true)
+
+                (some datom-import-op? ops)
+                (assoc :initial-db? true))
         *result (atom nil)]
 
     (outliner-tx/transact!

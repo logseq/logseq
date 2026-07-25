@@ -194,6 +194,11 @@
    (op-transact!
     [:delete-page [page-uuid (current-user-delete-opts opts)]])))
 
+(defn restore-recycled!
+  [root-uuid]
+  (op-transact!
+   [:restore-recycled [root-uuid]]))
+
 (defn recycle-delete-permanently!
   [root-uuid]
   (op-transact!

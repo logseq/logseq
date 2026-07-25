@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.components.dnd :as dnd]
+            [frontend.components.email :as email-component]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -48,7 +49,9 @@
           initial]
          [:div.flex.flex-col.items-start
           [:span.text-base.font-semibold (or username (t :mobile.settings/account))]
-          [:span.text-xs email]]]])]))
+          (email-component/email-address {:email email
+                                          :class "text-xs"
+                                          :tooltip? false})]]])]))
 
 (defn theme-select
   [{:keys [value on-change]}]

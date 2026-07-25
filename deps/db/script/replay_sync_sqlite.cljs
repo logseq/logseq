@@ -704,6 +704,12 @@
       v)
     v))
 
+(defn ref-attr?
+  [db attr]
+  (= :db.type/ref
+     (or (get-in (d/schema db) [attr :db/valueType])
+         (:db/valueType (d/entity db attr)))))
+
 (defn resolve-temp-id
   [db datom-v]
   (if (and (vector? datom-v)
@@ -711,7 +717,9 @@
            (= (first datom-v) :db/add))
     (let [[op e a v t] datom-v
           e' (replace-uuid-str-with-eid db e)
-          v' (replace-uuid-str-with-eid db v)]
+          v' (if (ref-attr? db a)
+               (replace-uuid-str-with-eid db v)
+               v)]
       [op e' a v' t])
     datom-v))
 

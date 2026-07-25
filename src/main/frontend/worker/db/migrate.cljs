@@ -8,11 +8,13 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.page :as outliner-page]))
 
 ;; Frontend migrations
 ;; ===================
@@ -34,26 +36,29 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn- delete-property
+(defn delete-property
   [db property-key]
-  (if (d/entity db property-key)
-    (let [remove-datoms (->> (d/datoms db :avet property-key)
-                             (map :e)
-                             (distinct)
-                             (mapv (fn [id]
-                                     [:db/retract id property-key])))]
-      (conj remove-datoms [:db/retractEntity property-key]))
-    (let [eids (d/q
-                '[:find [?e ...]
-                  :in $ ?property-key
-                  :where
-                  [?e ?property-key ?v]]
-                db
-                property-key)]
-      (map
-       (fn [eid]
-         [:db/retract eid property-key])
-       eids))))
+  (let [property-entity (d/entity db property-key)
+        property-page? (ldb/property? property-entity)
+        direct-property-datoms (map
+                                (fn [eid]
+                                  [:db/retract eid property-key])
+                                (d/q '[:find [?e ...]
+                                       :in $ ?property-key
+                                       :where
+                                       [?e ?property-key ?v]]
+                                     db
+                                     property-key))
+        remove-datoms (if property-page?
+                        (outliner-page/build-page-retract-tx db property-entity)
+                        (concat direct-property-datoms
+                                (when property-entity
+                                  [[:db/retractEntity property-key]])))]
+    (->>
+     (concat
+      (delete-blocks/update-refs-history db remove-datoms {})
+      remove-datoms)
+     distinct)))
 
 (defn remove-block-path-refs
   [db]
@@ -72,25 +77,27 @@
 
 (defn- tag-comment-blocks
   [db]
-  (->> (d/q '[:find [?comment ...]
-              :where
-              [?comments-area :block/tags :logseq.class/Comments]
-              [?comment :block/parent ?comments-area]]
-            db)
-       (map (fn [comment-id]
-              [:db/add comment-id :block/tags :logseq.class/Comment]))))
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find [?comment ...]
+                :where
+                [?comments-area :block/tags :logseq.class/Comments]
+                [?comment :block/parent ?comments-area]]
+              db)
+         (map (fn [comment-id]
+                [:db/add comment-id :block/tags :logseq.class/Comment])))))
 
 (defn- add-single-block-comment-targets
   [db]
-  (->> (d/q '[:find ?comments-area-id ?parent-id
-              :where
-              [?comments-area-id :block/tags :logseq.class/Comments]
-              [?comments-area-id :block/parent ?parent-id]]
-            db)
-       (keep (fn [[comments-area-id parent-id]]
-               (let [comments-area (d/entity db comments-area-id)]
-                 (when-not (seq (:logseq.property.comments/blocks comments-area))
-                   [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find ?comments-area-id ?parent-id
+                :where
+                [?comments-area-id :block/tags :logseq.class/Comments]
+                [?comments-area-id :block/parent ?parent-id]]
+              db)
+         (keep (fn [[comments-area-id parent-id]]
+                 (let [comments-area (d/entity db comments-area-id)]
+                   (when-not (seq (:logseq.property.comments/blocks comments-area))
+                     [:db/add comments-area-id :logseq.property.comments/blocks parent-id])))))))
 
 (defn- fix-asset-source-url-property-type
   "65.34 mistakenly registered :logseq.property.asset/source-url with type :url

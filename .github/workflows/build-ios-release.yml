@@ -62,7 +62,7 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Setup build tools
-        run: brew install fastlane
+        run: sudo gem install fastlane -v 2.236.1 --no-document
 
       - name: Set Build Environment Variables
         run: |

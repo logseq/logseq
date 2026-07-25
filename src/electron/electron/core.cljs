@@ -105,12 +105,19 @@
                            (string/starts-with? url HOST_PLUGIN_URL))
            external-plugin-url? (or (string/starts-with? url EXTERNAL_PLUGIN_URL)
                                     (string/starts-with? url HOST_EXTERNAL_PLUGIN_URL))
+           compatible-plugin-url? (and (string/starts-with? url (str LSP_PROTOCOL "logseq.io/"))
+                                       (not external-plugin-url?))
            path' (.-pathname url')
            path' (cond
                    plugin-url?
                    (->> path'
                         (utils/safe-decode-uri-component)
                         (#(string/replace-first % #"^/plugins" ""))
+                        (.join node-path PLUGINS_ROOT))
+
+                   compatible-plugin-url?
+                   (->> path'
+                        (utils/safe-decode-uri-component)
                         (.join node-path PLUGINS_ROOT))
 
                    external-plugin-url?
@@ -367,7 +374,6 @@
       :read-file! #(.readFileSync fs % "utf8")
       :write-file! #(.writeFileSync fs %1 %2 "utf8")
       :chmod! #(fs/chmodSync %1 %2)
-      :show-message-box! #(.showMessageBox dialog (clj->js %))
       :show-error-box! #(.showErrorBox dialog %1 %2)
       :t t
       :log-info! logger/info

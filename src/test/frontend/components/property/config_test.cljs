@@ -80,3 +80,36 @@
          (property-config/choice-scoped-from-other-tags?
           {:choice {:logseq.property/choice-classes [{:db/id 21} {:db/id 22}]}
            :owner-block {:db/id 22 :block/tags [{:db/ident :logseq.class/Tag}]}})))))
+
+(deftest choice-deletable?-test
+  (testing "Non-class choices are deletable"
+    (is (true?
+         (property-config/choice-deletable?
+          {:owner-class? false
+           :global-choice? true
+           :scoped-choice-from-other-tags? false
+           :choice {:db/id 11 :block/title "Quick Tip"}}))))
+
+  (testing "Global non-empty choices stay protected in a tag panel"
+    (is (false?
+         (property-config/choice-deletable?
+          {:owner-class? true
+           :global-choice? true
+           :scoped-choice-from-other-tags? false
+           :choice {:db/id 11 :block/title "Quick Tip"}}))))
+
+  (testing "Global empty choices can be deleted from a tag panel"
+    (is (true?
+         (property-config/choice-deletable?
+          {:owner-class? true
+           :global-choice? true
+           :scoped-choice-from-other-tags? false
+           :choice {:db/id 11 :block/title ""}}))))
+
+  (testing "Choices scoped to other tags are not deletable"
+    (is (false?
+         (property-config/choice-deletable?
+          {:owner-class? true
+           :global-choice? false
+           :scoped-choice-from-other-tags? true
+           :choice {:db/id 11 :block/title ""}})))))

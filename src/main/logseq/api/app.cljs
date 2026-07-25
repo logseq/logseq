@@ -62,7 +62,6 @@
        :preferred-start-of-week (state/get-start-of-week)
        :current-graph           (state/get-current-repo)
        :show-brackets           (state/show-brackets?)
-       :enabled-journals        (state/enable-journals?)
        :enabled-flashcards      (state/enable-flashcards?)
        :me                      (state/get-me)}))))
 

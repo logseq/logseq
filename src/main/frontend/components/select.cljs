@@ -46,7 +46,8 @@
 
 (hsx/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
-  (let [[input set-input!] (hooks/use-state @*input)]
+  (let [[input set-input!] (hooks/use-state @*input)
+        *input-el (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
        (reset! *input input)
@@ -59,9 +60,20 @@
          (set-input! "")))
      [(hooks/use-debounced-value @*input 100)])
 
+    (hooks/use-effect!
+     (fn []
+       (when-not (util/mobile?)
+         (js/setTimeout
+          (fn []
+            (some-> (hooks/deref *input-el) (.focus)))
+          0))
+       (fn []))
+     [])
+
     [:div.input-wrap
      [:input.cp__select-input.w-full
       (merge {:type "text"
+              :ref *input-el
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
               :auto-focus (not (util/mobile?))
@@ -119,6 +131,11 @@
            (fn []
              #(shui/dialog-close! :ls-select-modal))
            [])
+        _ (hooks/use-effect!
+           (fn []
+             (when (fn? tap-*input-val)
+               (tap-*input-val *input)))
+           [tap-*input-val *input])
         full-choices (cond->>
                       (remove nil? items)
                        (seq input)
@@ -222,8 +239,6 @@
                                                                             (when @*toggle (@*toggle))
                                                                             (on-apply selected-choices)
                                                                             (when close-modal? (state/close-modal!)))})])]))]
-    (when (fn? tap-*input-val)
-      (tap-*input-val *input))
     [:div.cp__select
      (merge {:class "cp__select-main"}
             host-opts)

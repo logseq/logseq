@@ -103,39 +103,6 @@
     (is (some #{"far"} ids))
     (is (not (some #{"nearby"} ids)))))
 
-(deftest label-text-defaults-to-short-and-expands-on-hover
-  (let [label "This is a very long title for a graph node label"
-        short-text (logic/label-display-text label false)
-        hover-text (logic/label-display-text label true)]
-    (is (= "This is a very long..." short-text))
-    (is (= label hover-text))
-    (is (= "Short" (logic/label-display-text "Short" false)))))
-
-(deftest label-surfaces-occlude-crossing-links
-  (is (= 1.0 (logic/label-surface-fill-alpha :node false)))
-  (is (= 1.0 (logic/label-surface-fill-alpha :node true)))
-  (is (= 1.0 (logic/label-surface-fill-alpha :edge false))))
-
-(deftest renderer-init-options-enable-smooth-strokes
-  (is (= true (:antialias (logic/renderer-init-options 2)))))
-
-(deftest graph-ticker-targets-120-fps
-  (let [ticker #js {:maxFPS 0}]
-    (is (identical? ticker (logic/apply-graph-ticker-frame-rate! ticker)))
-    (is (= 120 (.-maxFPS ticker)))))
-
-(deftest fps-overlay-position-anchors-in-lower-right-corner
-  (let [position-fn (resolve 'frontend.extensions.graph.pixi.logic/fps-overlay-position)
-        actual (when position-fn
-                 (position-fn 1000 768 78 22 {:margin 12}))]
-    (is (fn? position-fn))
-    (is (= {:x 902 :y 730} actual))))
-
-(deftest fps-overlay-is-dev-only
-  (is (true? (logic/fps-overlay-enabled? true)))
-  (is (false? (logic/fps-overlay-enabled? false)))
-  (is (false? (logic/fps-overlay-enabled? nil))))
-
 (deftest edge-label-angle-stays-aligned-and-readable
   (is (= 0 (logic/readable-edge-label-angle 0 0 100 0)))
   (is (= 0 (logic/readable-edge-label-angle 100 0 0 0)))
@@ -342,31 +309,6 @@
           :next-click nil}
          (logic/node-click-action {:node-id "a" :time 1000} "a" {:open? true} 1210))))
 
-(deftest layout-tick-count-scales-with-graph-size
-  (testing "Small graphs still get enough settling passes"
-    (is (= 160 (logic/layout-tick-count 80 :all-pages))))
-  (testing "Medium all-pages graphs avoid the old fixed 220 tick cost"
-    (is (= 90 (logic/layout-tick-count 643 :all-pages))))
-  (testing "Large tags-and-objects graphs keep d3 force under the first-render budget"
-    (is (= 3 (logic/layout-tick-count 3887 :tags-and-objects))))
-  (testing "Large graphs stay bounded"
-    (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
-
-(deftest layout-mode-switches-to-fast-layout-for-large-graphs
-  (is (= :force (logic/layout-mode 2499 :all-pages)))
-  (is (= :fast (logic/layout-mode 2500 :all-pages)))
-  (is (= :force (logic/layout-mode 2200 :tags-and-objects)))
-  (is (= :force (logic/layout-mode 3887 :tags-and-objects)))
-  (is (= :fast (logic/layout-mode 50000 :all-pages))))
-
-(deftest draw-edge-limit-is-bounded-for-large-graphs
-  (is (= 712 (logic/draw-edge-limit 643 712 :all-pages)))
-  (is (= 3600 (logic/draw-edge-limit 50000 120000 :all-pages))))
-
-(deftest render-node-limit-is-bounded-for-large-graphs
-  (is (= 643 (logic/render-node-limit 643 :all-pages)))
-  (is (= 2200 (logic/render-node-limit 50000 :all-pages))))
-
 (deftest label-render-state-does-not-expand-labels-while-fading-out
   (testing "Zoomed-in labels are shown without hover"
     (is (= {:target-alpha 1.0
@@ -383,11 +325,6 @@
             :update? false
             :hovered-only? true}
            (logic/label-render-state nil {:label-visible? false} 0.35)))))
-
-(deftest labels-are-visible-by-default-for-page-graphs
-  (is (true? (logic/labels-visible-by-default? :page)))
-  (is (false? (logic/labels-visible-by-default? :all-pages)))
-  (is (false? (logic/labels-visible-by-default? :tags-and-objects))))
 
 (deftest label-render-state-filters-labels-in-select-mode
   (is (= {:target-alpha 1.0
@@ -650,18 +587,6 @@
                       {:grid-layout? false})]
     (is (= 179 (:x background)))
     (is (= 149 (:y background)))))
-
-(deftest tag-cluster-background-colors-come-from-tag-title
-  (let [backgrounds (logic/tag-cluster-backgrounds
-                     [{:id "tag-a" :kind "tag" :label "Design" :cluster-id "tag-a" :x 0 :y 0 :radius 10}
-                      {:id "tag-b" :kind "tag" :label "Research" :cluster-id "tag-b" :x 180 :y 0 :radius 10}
-                      {:id "tag-c" :kind "tag" :label "Design" :cluster-id "tag-c" :x 360 :y 0 :radius 10}]
-                     :tags-and-objects)
-        color-by-id (into {} (map (juxt :id :color-int) backgrounds))]
-    (is (not= (get color-by-id "tag-a")
-              (get color-by-id "tag-b")))
-    (is (= (get color-by-id "tag-a")
-           (get color-by-id "tag-c")))))
 
 (deftest layout-nodes-ignores-links-with-missing-nodes
   (let [nodes [{:id 168 :kind "page" :label "Existing page"}

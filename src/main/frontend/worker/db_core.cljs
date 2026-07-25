@@ -83,6 +83,7 @@
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
 (defonce ^:private *search-index-build-ids (atom {}))
+(defonce ^:private *vector-index-rebuild-ids (atom {}))
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
@@ -633,18 +634,50 @@
    :embedding-dimension (platform/embedding-dimension (platform/current))
    :context-version search/vector-context-version})
 
-(defn- vector-index-current?
-  [repo]
-  (if-let [vector-index (worker-state/get-vector-index repo)]
-    (if-let [metadata-fn (:metadata vector-index)]
-      (= (expected-vector-index-metadata) (metadata-fn))
-      false)
-    true))
-
 (defn- persist-vector-index-metadata!
   [repo]
   (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
     (set-metadata! (expected-vector-index-metadata))))
+
+(declare <embed-index-batches vector-embedding-batches)
+
+(defn- start-vector-index-rebuild!
+  [repo build-id]
+  (swap! *vector-index-rebuild-ids assoc repo build-id))
+
+(defn- active-vector-index-rebuild?
+  [repo build-id]
+  (= build-id (get @*vector-index-rebuild-ids repo)))
+
+(defn- clear-vector-index-rebuild!
+  [repo build-id]
+  (swap! *vector-index-rebuild-ids
+         (fn [builds]
+           (if (= build-id (get builds repo))
+             (dissoc builds repo)
+             builds))))
+
+(defn- schedule-vector-index-rebuild!
+  [repo build-id indexed-blocks]
+  (when (worker-state/get-vector-index repo)
+    (start-vector-index-rebuild! repo build-id)
+    (let [indexed-blocks (vec indexed-blocks)]
+      (-> (if (seq indexed-blocks)
+            (p/let [vector-blocks (<embed-index-batches (vector-embedding-batches indexed-blocks))]
+              (when (active-vector-index-rebuild? repo build-id)
+                (when-let [vector-index (worker-state/get-vector-index repo)]
+                  (search/upsert-vector-blocks! vector-index vector-blocks))))
+            (p/resolved nil))
+          (p/then (fn [_]
+                    (when (active-vector-index-rebuild? repo build-id)
+                      (persist-vector-index-metadata! repo))))
+          (p/catch (fn [error]
+                     (when (active-vector-index-rebuild? repo build-id)
+                       (log/error :search/vector-index-rebuild-failed {:repo repo
+                                                                       :error error}))))
+          (p/finally (fn []
+                       (clear-vector-index-rebuild! repo build-id))))))
+  nil)
 
 (defn- start-search-index-build!
   [repo]
@@ -696,9 +729,19 @@
   [repo]
   (db-sync/status repo))
 
+(defn- db-sync-dbs-open?
+  [repo]
+  (and (some? (worker-state/get-datascript-conn repo))
+       (some? (worker-state/get-client-ops-conn repo))))
+
+(declare start-db!)
 (def-thread-api :thread-api/db-sync-start
   [repo]
-  (db-sync/start! repo))
+  (if (db-sync-dbs-open? repo)
+    (db-sync/start! repo)
+    (p/do!
+     (start-db! repo {:close-other-db? false})
+     (db-sync/start! repo))))
 
 (def-thread-api :thread-api/db-sync-stop
   []
@@ -711,6 +754,14 @@
 (def-thread-api :thread-api/db-sync-request-asset-download
   [repo asset-uuid]
   (db-sync/request-asset-download! repo asset-uuid))
+
+(def-thread-api :thread-api/db-sync-download-missing-assets
+  [repo graph-id]
+  (db-sync/download-missing-assets! repo graph-id))
+
+(def-thread-api :thread-api/db-sync-retry-asset-upload
+  [repo]
+  (db-sync/retry-asset-upload! repo))
 
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
@@ -821,6 +872,16 @@
                (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+
+(defn- sanitize-block-result
+  [result]
+  (cond-> result
+    (:block result)
+    (update :block common-util/remove-nils-non-nested)
+
+    (:children result)
+    (update :children common-util/fast-remove-nils)))
+
 (def ^:private get-blocks-with-cache
   (common.cache/cache-fn
    *get-blocks-cache
@@ -834,6 +895,7 @@
             (mapv (fn [{:keys [id opts]}]
                     (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
                       (-> (common-initial-data/get-block-and-children db id' opts)
+                          sanitize-block-result
                           (assoc :id id)))))
             ldb/write-transit-str)))))
 
@@ -1314,17 +1376,13 @@
                     (keep #(d/entity db (:e %)))
                     (remove search/hidden-entity?)
                     vec)
-        vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
-        vector-index? (boolean vector-index)
-        fts-progress-scale (if vector-index? 50 100)
-        vector-progress-base (if vector-index? 50 100)
+        index-opts {:include-vector-title? (some? vector-index)}
         progress-for-fts (fn [processed]
                            (if (zero? total)
-                             vector-progress-base
-                             (min vector-progress-base
-                                  (int (* fts-progress-scale (/ processed total))))))
+                             100
+                             (min 100 (int (* 100 (/ processed total))))))
         report-progress! (fn [progress processed total]
                            (report-search-index-progress! repo {:build-id build-id
                                                                 :status :running
@@ -1353,7 +1411,7 @@
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (vec (keep #(search/block->index-with-context vector-context %) batch))
+               indexed (vec (keep #(search/block->index % index-opts) batch))
                indexed-blocks' (into indexed-blocks indexed)
                progress (progress-for-fts processed')
                should-report? (> progress last-progress)]
@@ -1365,22 +1423,8 @@
              (p/recur remaining' processed' (if should-report? progress last-progress) indexed-blocks')))
          (do
            (ensure-active-search-index-build! repo build-id)
-           (p/let [_ (when (and vector-index? (seq indexed-blocks))
-                       (let [vector-total (count indexed-blocks)
-                             vector-processed (atom 0)
-                             vector-batches (vector-embedding-batches indexed-blocks)]
-                         (p/let [vector-blocks (<embed-index-batches
-                                                vector-batches
-                                                (fn [embedded-count]
-                                                  (let [processed' (swap! vector-processed + embedded-count)
-                                                        progress (+ vector-progress-base
-                                                                    (if (zero? vector-total)
-                                                                      50
-                                                                      (min 50 (int (* 50 (/ processed' vector-total))))))]
-                                                    (report-progress! progress processed' vector-total))))]
-                           (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
-                   _ (do
-                       (persist-vector-index-metadata! repo)
+           (schedule-vector-index-rebuild! repo build-id indexed-blocks)
+           (p/let [_ (do
                        (.exec search-db (str "PRAGMA user_version = " search-db-version))
                        (report-search-index-progress! repo {:build-id build-id
                                                             :status :completed
@@ -1396,7 +1440,6 @@
     (when search-db
       (let [version (search-index-version search-db)]
         (if (and (= version search-db-version)
-                 (vector-index-current? repo)
                  (not force?))
           version
          (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1521,15 +1564,18 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (when-not conn
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
-    (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
-          tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta (cond-> {::sqlite-export/imported-data? true}
-                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
-                    ;; to keep pipeline from reverting their import
-                    (= :datoms (::sqlite-export/graph-format export-edn))
-                    (assoc :initial-db? true))]
-      (ldb/transact! conn tx-data tx-meta)
-      {:tx-count (count tx-data)})))
+    (let [txs (sqlite-export/build-import export-edn @conn {})
+          validation (sqlite-export/validate-import-txs txs @conn)]
+      (if-let [error (:error validation)]
+        {:error error}
+        (let [tx-data (:tx-data validation)
+              tx-meta (cond-> {::sqlite-export/imported-data? true}
+                        ;; :datoms format imports all datoms including built-in ones. Add :initial-db?
+                        ;; to keep pipeline from reverting their import
+                        (= :datoms (::sqlite-export/graph-format export-edn))
+                        (assoc :initial-db? true))]
+          (ldb/transact! conn tx-data tx-meta)
+          {:tx-count (count tx-data)})))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]

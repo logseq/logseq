@@ -24,6 +24,7 @@
 (defonce *detail-info
   (atom {:pending-local-ops 0
          :pending-asset-ops 0
+         :missing-asset-upload-files []
          :pending-server-ops 0
          :graph-uuid nil
          :local-tx nil
@@ -57,6 +58,7 @@
                                   (swap! *detail-info assoc
                                          :pending-local-ops (:unpushed-block-update-count state)
                                          :pending-asset-ops (:pending-asset-ops-count state)
+                                         :missing-asset-upload-files (:missing-asset-upload-files state)
                                          :pending-server-ops (or (:pending-server-ops-count state)
                                                                  (when (and (number? (:remote-tx state))
                                                                             (number? (:local-tx state)))
@@ -93,12 +95,18 @@
    (or progress {})))
 
 (defn asset-status-rows
-  [{:keys [pending-asset-ops]
+  [{:keys [pending-asset-ops missing-asset-upload-files]
     transfer-counts :asset-transfer-counts}]
-  (let [{:keys [upload download]} transfer-counts]
+  (let [{:keys [upload download]} transfer-counts
+        missing-count (count missing-asset-upload-files)
+        pending-upload-count (max 0 (- (or pending-asset-ops 0) missing-count))]
     (cond-> []
-      (pos? (or pending-asset-ops 0))
-      (conj {:count pending-asset-ops
+      (pos? missing-count)
+      (conj {:count missing-count
+             :label-key :sync/missing-asset-files})
+
+      (pos? pending-upload-count)
+      (conj {:count pending-upload-count
              :label-key :sync/pending-asset-uploads})
 
       (pos? (or upload 0))
@@ -112,9 +120,23 @@
 (defn- asset-status-label
   [label-key]
   (case label-key
+    :sync/missing-asset-files (t :sync/missing-asset-files)
     :sync/pending-asset-uploads (t :sync/pending-asset-uploads)
     :sync/assets-uploading (t :sync/assets-uploading)
     :sync/assets-downloading (t :sync/assets-downloading)))
+
+(hsx/defc missing-asset-files
+  [files]
+  (when (seq files)
+    [:details.assets-missing-files
+     [:summary
+      (t :sync/missing-asset-files-count (count files))]
+     [:div.flex.flex-col.gap-1.text-sm
+      (for [{:keys [file]} files]
+        [:div.flex.flex-row.gap-1.items-center
+         {:key file}
+         (ui/icon "alert-triangle" {:size 14})
+         [:span.truncate file]])]]))
 
 (hsx/defc assets-progressing
   [progress]
@@ -163,9 +185,11 @@
         [expand-debug? set-expand-debug!] (hooks/use-state false)
         show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
-                download-logs upload-logs misc-logs pending-local-ops pending-asset-ops pending-server-ops]}
+                download-logs upload-logs misc-logs pending-local-ops pending-asset-ops
+                missing-asset-upload-files pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))
         asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
+                                       :missing-asset-upload-files missing-asset-upload-files
                                        :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
@@ -176,6 +200,7 @@
         (asset-status-label label-key)])
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] (t :sync/pending-server-changes)]
+     (missing-asset-files missing-asset-upload-files)
      (assets-progressing asset-progress)
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
