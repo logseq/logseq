@@ -140,6 +140,7 @@
 (def dialog-confirm! dialog-core/confirm!)
 (def dialog-close! dialog-core/close!)
 (def dialog-close-all! dialog-core/close-all!)
+(def dialog-transition-to! dialog-core/transition-to!)
 (def dialog-get dialog-core/get-modal)
 (def popup-show! popup-core/show!)
 (def popup-hide! popup-core/hide!)

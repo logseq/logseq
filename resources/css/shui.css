@@ -604,3 +604,20 @@ kbd.shui-shortcut-key-pressed,
     fill: none;
   }
 }
+
+/* Dialog content crossfade for dialog-transition-to! (ported from design-improvements) */
+@keyframes dialogContentFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes dialogContentFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.dialog-phase-exit {
+  animation: dialogContentFadeOut 200ms ease-out forwards;
+}
+.dialog-phase-enter {
+  opacity: 0;
+  animation: dialogContentFadeIn 200ms ease-in 100ms forwards;
+}

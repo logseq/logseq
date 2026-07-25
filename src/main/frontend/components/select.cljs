@@ -4,6 +4,7 @@
   new select-type, create an event that calls `select/dialog-select!` with the
   select-type. See the :graph/open command for a full example."
   (:require [clojure.string :as string]
+            [frontend.components.combobox :as combobox]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -18,6 +19,32 @@
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
+
+(defn- create-item-renderer-config
+  "Create unified item renderer config for select component."
+  [multiple-choices? *selected-choices extract-value-fn]
+  {:multi-select? multiple-choices?
+   :selected-choices *selected-choices
+   :extract-value-fn extract-value-fn
+   :icon-fn (fn [item]
+              (or (:icon item)
+                  (let [label (if (string? (:label item)) (:label item) "")]
+                    (cond
+                      (string/starts-with? label "New option:") "plus"
+                      (string/starts-with? label "New tag:") "plus"
+                      (string/starts-with? label "Convert") "file"
+                      :else "property"))))
+   :icon-variant-fn (fn [item]
+                      (let [label (if (string? (:label item)) (:label item) "")]
+                        (if (or (string/starts-with? label "New option:")
+                                (string/starts-with? label "New tag:"))
+                          :create
+                          :default)))
+   :new-item-patterns ["New option:" "New tag:" "Convert"]
+   :show-breadcrumbs? true
+   :breadcrumb-fn (fn [item] (:header item))
+   :on-pointer-down util/stop-propagation
+   :gap-size 3})
 
 (hsx/defc render-item
   [result chosen? multiple-choices? *selected-choices]
@@ -221,15 +248,17 @@
                                  (ui/loading (t :ui/loading))]
                                 [:div
                                  {:class (when (seq search-result) "py-1")}
-                                 [:div.item-results-wrap
-                                  (ui/auto-complete
-                                   search-result
-                                   {:grouped? grouped?
-                                    :item-render       (or item-cp (fn [result chosen?]
-                                                                     (render-item result chosen? multiple-choices? *selected-choices)))
-                                    :class             "cp__select-results"
-                                    :on-chosen         choose-result!
-                                    :empty-placeholder (empty-placeholder t)})]
+                                 (combobox/combobox
+                                  search-result
+                                  {:show-search-input? true
+                                   :show-separator? false
+                                   :grouped? grouped?
+                                   :width :default
+                                   :item-render item-cp
+                                   :item-renderer-config (when (not item-cp)
+                                                           (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
+                                   :on-chosen choose-result!
+                                   :empty-placeholder (empty-placeholder t)})
 
                                  (when (and multiple-choices? (fn? on-apply))
                                    [:div.p-4 (ui/button (t :ui/apply)
