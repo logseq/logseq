@@ -197,8 +197,7 @@
    ["65.37" {:properties [:logseq.property/assignee
                           :logseq.property.agent/session-id]
              :fix fix-asset-source-url-property-type
-             :delete-properties [:logseq.property/wikidata-id
-                                 :logseq.property/property-key-width]}]
+             :delete-properties [:logseq.property/property-key-width]}]
    ;; 65.38 — re-run master's repair for dev DBs that crossed past 65.32 on
    ;; this branch before the merge (e.g. ours was 65.36 before renumber, so
    ;; the runner would consider 65.32 already done and skip master's repair).
@@ -214,7 +213,11 @@
                           :logseq.property.view/gallery-display-properties
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
-                          :logseq.property.view/gallery-card-height]}]])
+                          :logseq.property.view/gallery-card-height]}]
+   ;; 65.40 — re-register wikidata-id (carried from design-improvements; the Wikidata
+   ;; entity-import feature persists it, and 65.37's delete-list above no longer removes it).
+   ;; Idempotent: skipped if the ident already resolves.
+   ["65.40" {:properties [:logseq.property/wikidata-id]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

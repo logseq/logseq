@@ -30,4 +30,7 @@ RTC won't start when major-schema-versions don't match"
      :logseq.kv/graph-last-gc-at             {:doc "Last time graph gc at"
                                               :rtc {:rtc/ignore-entity-when-init-upload true}}
      :logseq.kv/graph-rtc-e2ee?              {:doc "true if it's a rtc graph with E2EE enabled"}
-     :logseq.kv/graph-remote?                {:doc "true if it's a remote graph"})))
+     :logseq.kv/graph-remote?                {:doc "true if it's a remote graph"}
+     :logseq.kv/property-key-width           {:doc "Global property key column width in pixels"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}})))
