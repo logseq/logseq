@@ -801,7 +801,8 @@
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
                                                                        :not-text-or-page? true
-                                                                       :size icon-size})]
+                                                                       :size icon-size
+                                                                       :avatar-size 20})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
 

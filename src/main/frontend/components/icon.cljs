@@ -937,16 +937,6 @@
                     "arrow-narrow-right"
                     :else
                     (get-node-icon entity))
-        ;; Photo-based custom icons (avatar/image) default to 20px but respect caller's :size.
-        ;; Callers can also pass `:avatar-size` to override only the photo branch — e.g. a
-        ;; table cell can keep tabler glyphs at 16 while letting avatars breathe at 20.
-        ;; Symbolic icons (emoji, tabler, text, defaults) use caller's :size or 14.
-        photo-icon? (and (map? node-icon)
-                         (contains? #{:avatar :image} (:type node-icon)))
-        effective-size (if photo-icon?
-                         (or (:avatar-size opts) (:size opts) 20)
-                         (or (:size opts) 14))
-        opts' (assoc opts :size effective-size)
         ;; Hover preview from icon-picker — overrides node's icon and/or
         ;; color while the user is hovering tiles in the picker. The state
         ;; can carry `:icon` (full normalized item override), `:color`
@@ -1014,7 +1004,16 @@
                                (string/starts-with? effective-color "#")
                                page-bg)
                         (colors/adjust-for-contrast effective-color page-bg 3.0)
-                        effective-color)]
+                        effective-color)
+        ;; Size + photo-branch decision uses the effective icon
+        ;; (preview or committed) so a hover-previewed avatar takes the
+        ;; 20px photo branch instead of the 14/16px symbolic branch.
+        photo-icon? (and (map? base-icon)
+                         (contains? #{:avatar :image} (:type (normalize-icon base-icon))))
+        effective-size (if photo-icon?
+                         (or (:avatar-size opts) (:size opts) 20)
+                         (or (:size opts) 14))
+        opts' (assoc opts :size effective-size)]
     (when-not (and (nil? preview-icon)
                    (or (string/blank? node-icon)
                        (and (contains? #{"letter-n" "file"} node-icon)
@@ -6815,7 +6814,11 @@
                                    (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
                                      (let [^js tgt (.-target e)]
                                        (when (and (not= tgt input)
-                                                  (not (.contains picker tgt)))
+                                                  (not (.contains picker tgt))
+                                                  ;; Ignore focus moving onto a sibling submenu trigger
+                                                  ;; (role=menuitem); otherwise the "Add reaction" and
+                                                  ;; "Set icon" sub-pickers both stay open at once.
+                                                  (not (some-> tgt (.closest "[role=menuitem]"))))
                                          (.focus input)))))))]
                  (.addEventListener js/document "focusin" handler true)
                  (js/setTimeout

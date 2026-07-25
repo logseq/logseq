@@ -689,7 +689,8 @@
 
 (def ^:private class-page-metadata-properties
   [:logseq.property.class/extends
-   :logseq.property.class/enable-bidirectional?])
+   :logseq.property.class/enable-bidirectional?
+   :logseq.property.class/default-icon])
 
 (defn- properties-for-display
   [block]
