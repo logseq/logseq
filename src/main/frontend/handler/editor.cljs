@@ -1230,27 +1230,29 @@
 
 (defn cut-selection-blocks
   [copy? & {:keys [mobile-action-bar?]}]
-  (when copy? (copy-selection-blocks true))
-  (state/set-block-op-type! :cut)
-  (when-let [blocks (->> (get-selected-blocks)
-                         (remove #(dom/has-class? % "property-value-container"))
-                         (remove (fn [block] (or (= "true" (dom/attr block "data-query"))
-                                                 (= "true" (dom/attr block "data-transclude")))))
-                         seq)]
-    ;; remove queries
-    (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
-      (when (seq dom-blocks)
-        (let [repo (state/get-current-repo)
-              block-uuids (distinct (keep #(when-let [id (dom/attr % "blockid")] (uuid id)) dom-blocks))]
-          (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
-            (let [blocks (unwrap-block-results results)
-                  top-level-blocks (block-handler/get-top-level-blocks blocks)]
-              (when-not (every? ldb/recycled? top-level-blocks)
-                (when (seq top-level-blocks)
-                  (p/let [sorted-blocks* (p/all (map #(<sorted-block-and-children repo %) top-level-blocks))
-                          sorted-blocks (mapcat identity sorted-blocks*)]
-                    (when (seq sorted-blocks)
-                      (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks mobile-action-bar?))))))))))))
+  (let [selected-blocks (->> (get-selected-blocks)
+                             (remove #(dom/has-class? % "property-value-container"))
+                             (remove (fn [block] (or (= "true" (dom/attr block "data-query"))
+                                                     (= "true" (dom/attr block "data-transclude")))))
+                             seq)]
+    (p/do!
+     (when copy? (copy-selection-blocks true))
+     (state/set-block-op-type! :cut)
+     (when-let [blocks selected-blocks]
+       ;; remove queries
+       (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
+         (when (seq dom-blocks)
+           (let [repo (state/get-current-repo)
+                 block-uuids (distinct (keep #(when-let [id (dom/attr % "blockid")] (uuid id)) dom-blocks))]
+             (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
+               (let [blocks (unwrap-block-results results)
+                     top-level-blocks (block-handler/get-top-level-blocks blocks)]
+                 (when-not (every? ldb/recycled? top-level-blocks)
+                   (when (seq top-level-blocks)
+                     (p/let [sorted-blocks* (p/all (map #(<sorted-block-and-children repo %) top-level-blocks))
+                             sorted-blocks (mapcat identity sorted-blocks*)]
+                       (when (seq sorted-blocks)
+                         (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks mobile-action-bar?))))))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
