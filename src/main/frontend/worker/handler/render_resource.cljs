@@ -180,6 +180,20 @@
   [#{[:journals]}
    (mapv :block/uuid (ldb/get-latest-journals db))])
 
+(defn- recycle-roots
+  [db resource-key]
+  (require-shape! resource-key :recycle-roots 1)
+  (let [roots (->> (d/q '[:find [?e ...]
+                           :where
+                           [?e :logseq.property/deleted-at]]
+                         db)
+                   (map #(d/entity db %))
+                   (sort-by :logseq.property/deleted-at #(compare %2 %1)))
+        root-uuids (mapv :block/uuid roots)
+        blocks (:blocks (block-handler/canonical-blocks db root-uuids))]
+    [#{[:recycle-roots]}
+     (mapv blocks root-uuids)]))
+
 (defn- property-choices
   [db resource-key]
   (require-shape! resource-key :property-choices 2)
@@ -1164,6 +1178,7 @@
     :page-preview-source (page-preview-source db resource-key)
     :block-breadcrumb (block-breadcrumb db resource-key)
     :journals (journals db resource-key)
+    :recycle-roots (recycle-roots db resource-key)
     :property-choices (property-choices db resource-key)
     :journal-bundle (journal-bundle db resource-key)
     :block-reactions (block-reactions db resource-key)

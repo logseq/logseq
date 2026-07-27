@@ -220,8 +220,28 @@
              [:entity page-uuid]
              [:attr :logseq.property/deleted-at]
              [:property-membership :logseq.property/deleted-at]
-             [:page-membership]}
+             [:page-membership]
+             [:recycle-roots]}
            (affected-keys db [[:db/add 10 :logseq.property/deleted-at 1000]])))))
+
+(deftest recycle-root-membership-follows-deleted-at-test
+  (let [block-uuid (random-uuid)
+        db (db-with [{:db/id 10
+                      :block/uuid block-uuid
+                      :block/title "Recycled block"}])]
+    (is (contains?
+         (affected-keys db [[:db/add 10 :logseq.property/deleted-at 1000]])
+         [:recycle-roots]))
+    (let [recycled-db
+          (db-with [{:db/id 10
+                     :block/uuid block-uuid
+                     :block/title "Recycled block"
+                     :logseq.property/deleted-at 1000}])]
+      (is (contains?
+           (affected-keys
+            recycled-db
+            [[:db/retract 10 :logseq.property/deleted-at 1000]])
+           [:recycle-roots])))))
 
 (deftest journal-membership-follows-journal-identity-and-visibility-test
   (let [journal-tag-uuid (random-uuid)
@@ -248,7 +268,8 @@
                [:attr :logseq.property/deleted-at]
                [:property-membership :logseq.property/deleted-at]
                [:page-membership]
-               [:journals]}
+               [:journals]
+               [:recycle-roots]}
              (affected-keys db [[:db/add 10 :logseq.property/deleted-at 1000]]))))))
 
 (deftest reaction-invalidation-resolves-targets-from-both-databases-test
@@ -422,7 +443,8 @@
       (is (= (into common
                    #{[:attr :logseq.property/deleted-at]
                      [:property-membership :logseq.property/deleted-at]
-                     [:children parent-before-uuid]})
+                     [:children parent-before-uuid]
+                     [:recycle-roots]})
              (affected-keys db [[:db/add 13 :logseq.property/deleted-at 1000]]))))))
 
 (deftest comments-invalidation-resolves-old-and-new-thread-targets-test
