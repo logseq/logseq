@@ -118,6 +118,20 @@
    ".ui__select-trigger .ui__select-icon svg"
    1))
 
+(deftest main-scrollbar-track-uses-main-background-test
+  (is (true?
+       (w/eval-js
+        "(() => {
+           const main = document.querySelector('#main-content-container');
+           const style = getComputedStyle(main);
+           const probe = document.createElement('span');
+           probe.style.color = style.getPropertyValue('--ls-primary-background-color');
+           document.body.appendChild(probe);
+           const mainBackground = getComputedStyle(probe).color;
+           probe.remove();
+           return style.scrollbarColor.endsWith(mainBackground);
+         })()"))))
+
 (defn- choose-move-target!
   [target]
   (w/fill "input[placeholder=\"Move blocks to\"]" target)
