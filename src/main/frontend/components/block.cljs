@@ -1270,20 +1270,21 @@
 (hsx/defc page-reference
   "Component for page reference"
   [config uuid-or-title* label]
-  (let [uuid-or-title (if (string? uuid-or-title*)
-                        (let [str-id (string/trim uuid-or-title*)]
-                          (if (util/uuid-string? str-id)
-                            (parse-uuid str-id)
-                            str-id))
-                        uuid-or-title*)
-        page-uuid (or (when (uuid? uuid-or-title) uuid-or-title)
-                      (referenced-block-uuid (:block config) uuid-or-title))
-        self-reference? (when (set? (:ref-set config))
-                          (contains? (:ref-set config) uuid-or-title))]
-    (when-not self-reference?
-      (if page-uuid
-        (subscribed-page-reference config uuid-or-title label page-uuid)
-        (looked-up-page-reference config uuid-or-title label)))))
+  (when uuid-or-title*
+    (let [uuid-or-title (if (string? uuid-or-title*)
+                          (let [str-id (string/trim uuid-or-title*)]
+                            (if (util/uuid-string? str-id)
+                              (parse-uuid str-id)
+                              str-id))
+                          uuid-or-title*)
+          page-uuid (or (when (uuid? uuid-or-title) uuid-or-title)
+                        (referenced-block-uuid (:block config) uuid-or-title))
+          self-reference? (when (set? (:ref-set config))
+                            (contains? (:ref-set config) uuid-or-title))]
+      (when-not self-reference?
+        (if page-uuid
+          (subscribed-page-reference config uuid-or-title label page-uuid)
+          (looked-up-page-reference config uuid-or-title label))))))
 
 (defn- latex-environment-content
   [name option content]

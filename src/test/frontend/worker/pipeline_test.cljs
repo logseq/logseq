@@ -313,6 +313,7 @@
     (is (= #{[:graph]
              [:entity block-uuid]
              [:attr :block/title]
+             [:display-properties block-uuid]
              [:property-membership :block/title]}
            (:affected-keys result)))
     (is (not (contains? result :render-invalidated-block-uuids)))

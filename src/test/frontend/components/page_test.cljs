@@ -362,6 +362,8 @@
     (is (some? preview-content-source))
     (when reference-source
       (is (string/includes? reference-source "referenced-block-uuid"))
+      (is (string/includes? reference-source "(when uuid-or-title*")
+          "Transient removed references must not subscribe with a nil page identity.")
       (is (not (string/includes? reference-source "db-hooks/use-resource")))
       (doseq [forbidden ["set-block!"
                          "db-async/<get-block"]]

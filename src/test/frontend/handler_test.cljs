@@ -24,10 +24,10 @@
 (deftest startup-header-defers-page-queries-until-the-graph-is-ready-test
   (let [source (source-for "src/main/frontend/components/header.cljs")]
     (is (string/includes? source
-                          "[current-repo current-page db-restoring?]")
+                          "(let [db-restoring? (rfx/use-sub [:db/restoring?])]")
         "Toolbar page queries must rerun after graph restoration.")
     (is (string/includes? source
-                          "(if db-restoring?\n         (do\n           (set-page! nil)")
+                          "(if db-restoring?\n      (toolbar-dots-menu-content opts nil false false)\n      (toolbar-dots-menu-ready opts))")
         "Toolbar page queries must not reach the worker during graph restoration.")))
 
 (deftest date-watch-queries-the-journal-only-when-the-day-changes-test

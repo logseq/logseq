@@ -30,11 +30,16 @@
                  source
                  "(hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu-content")
         loaded-page (form-source source "(hsx/defc toolbar-dots-menu-page")
-        lookup (form-source source "(hsx/defc toolbar-dots-menu-lookup")]
+        lookup (form-source source "(hsx/defc toolbar-dots-menu-lookup")
+        ready (form-source source "(hsx/defc toolbar-dots-menu-ready")]
     (is (string/includes? loaded-page "db-hooks/use-block"))
     (is (string/includes? loaded-page ":favorite-status"))
     (is (string/includes? lookup "db-hooks/use-resource"))
     (is (string/includes? lookup ":page-identity"))
+    (is (string/includes? ready "(rfx/use-sub [:route-match])")
+        "The component that reads current-page must rerender when the route changes.")
+    (is (not (string/includes? content "(rfx/use-sub [:route-match])"))
+        "A child route subscription cannot refresh the current-page prop chosen by its parent.")
     (is (not (string/includes? content "hooks/use-effect")))
     (is (not (string/includes? content "db-async/<get-block")))))
 

@@ -103,10 +103,10 @@
         child-a (random-uuid)
         child-b (random-uuid)
         current-block (block block-uuid 1 "parent")
-        compare (loaded-block-row-compare)
+        compare-props (loaded-block-row-compare)
         previous-props #js {:args [nil current-block [child-a] nil nil]}
         next-props #js {:args [nil current-block [child-a child-b] nil nil]}]
-    (is (false? (compare previous-props next-props))
+    (is (false? (compare-props previous-props next-props))
         "A child membership change must rerender the loaded block row.")))
 
 (deftest the-same-uuid-shares-one-load-across-main-and-sidebar-test
