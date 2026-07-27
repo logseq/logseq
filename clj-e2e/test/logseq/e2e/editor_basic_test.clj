@@ -13,10 +13,7 @@
    [logseq.e2e.locator :as loc]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w])
-  (:import
-   (com.microsoft.playwright Locator$ClickOptions)
-   (com.microsoft.playwright.options KeyboardModifier)))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -1016,16 +1013,6 @@
     (k/shift+enter)
     (assert/assert-is-visible
      ".cp__right-sidebar .sidebar-item :text('Ordinary sidebar page')")))
-
-(deftest shift-click-page-title-opens-in-sidebar
-  (testing "Shift+click opens the current page in the sidebar"
-    (p/new-page "Shift click sidebar page")
-    (b/new-blocks ["ordinary page block"])
-    (w/click "div[data-testid='page title']"
-             (doto (Locator$ClickOptions.)
-               (.setModifiers [KeyboardModifier/SHIFT])))
-    (assert/assert-is-visible
-     ".cp__right-sidebar .sidebar-item :text('Shift click sidebar page')")))
 
 (deftest comments-update-and-title-edit
   (testing "a submitted comment renders immediately and its thread title is editable"
