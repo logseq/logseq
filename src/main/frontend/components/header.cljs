@@ -168,8 +168,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu-content
   [{:keys [current-repo t]} page favorited? recycle-page?]
-  (let [_route-match (rfx/use-sub [:route-match])
-        db-restoring? (rfx/use-sub [:db/restoring?])
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])
         working-page? (not db-restoring?)
         page-menu (when page
                     (if (and working-page? (entity/page? page))
@@ -309,7 +308,8 @@
 
 (hsx/defc toolbar-dots-menu-ready
   [opts]
-  (let [current-page (sidebar/get-current-page)
+  (let [_route-match (rfx/use-sub [:route-match])
+        current-page (sidebar/get-current-page)
         page-lookup (when current-page
                       (if (util/uuid-string? current-page)
                         (uuid current-page)

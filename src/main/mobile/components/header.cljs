@@ -206,16 +206,18 @@
                                    (when (common-util/uuid-string? id)
                                      (p/let [block (db-async/<get-block (state/get-current-repo)
                                                                         (uuid id)
-                                                                        {:children? false})]
+                                                                        {:children? false})
+                                             favorited? (when block
+                                                          (page-handler/<favorited?
+                                                           (str (:block/uuid block))))]
                                        (when block
-                                         (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
-                                           (p/do!
-                                            (if favorited?
-                                              (page-handler/<unfavorite-page! id)
-                                              (page-handler/<favorite-page! id))
-                                            (let [favorited? (not favorited?)]
-                                              (when-let [f @*configure-top-bar-f]
-                                                (f favorited?)))))))))
+                                         (p/do!
+                                          (if favorited?
+                                            (page-handler/<unfavorite-page! id)
+                                            (page-handler/<favorite-page! id))
+                                          (let [favorited? (not favorited?)]
+                                            (when-let [f @*configure-top-bar-f]
+                                              (f favorited?))))))))
                       "page-setting" (when-let [id (state/get-current-page)]
                                        (when (common-util/uuid-string? id)
                                          (p/let [block (db-async/<get-block (state/get-current-repo)
@@ -384,24 +386,23 @@
                 (common-util/uuid-string? route-id))
          (let [cancelled? (atom false)
                page-id (uuid route-id)]
-           (-> (db-async/<get-block current-repo page-id {:children? false})
-               (p/then
-                (fn [block]
-                  (when (and block (not @cancelled?))
-                    (let [favorited? (page-handler/favorited? (str (:block/uuid block)))
-                          title (:block/title block)
-                          f (fn [favorited?]
-                              (configure-native-top-bar!
-                               {:tab tab
-                                :title title
-                                :route-name route-name
-                                :route-view route-view
-                                :sync-color sync-color
-                                :show-sync? show-sync?
-                                :show-local-upload? show-local-upload?
-                                :favorited? favorited?}))]
-                      (reset! *configure-top-bar-f f)
-                      (f favorited?)))))
+           (-> (p/let [block (db-async/<get-block current-repo page-id {:children? false})
+                       favorited? (when block
+                                    (page-handler/<favorited? (str (:block/uuid block))))]
+                 (when (and block (not @cancelled?))
+                   (let [title (:block/title block)
+                         f (fn [favorited?]
+                             (configure-native-top-bar!
+                              {:tab tab
+                               :title title
+                               :route-name route-name
+                               :route-view route-view
+                               :sync-color sync-color
+                               :show-sync? show-sync?
+                               :show-local-upload? show-local-upload?
+                               :favorited? favorited?}))]
+                     (reset! *configure-top-bar-f f)
+                     (f favorited?))))
                (p/catch (fn [_] nil)))
            #(reset! cancelled? true))
          nil))
