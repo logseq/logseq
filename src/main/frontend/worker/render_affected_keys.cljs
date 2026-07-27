@@ -103,9 +103,10 @@
 
 (defn- property-entity?
   [entity]
-  (when-let [ident (:db/ident entity)]
-    (and (qualified-keyword? ident)
-         (string/includes? (namespace ident) ".property"))))
+  (or (tagged-with-ident? entity :logseq.class/Property)
+      (when-let [ident (:db/ident entity)]
+        (and (qualified-keyword? ident)
+             (string/includes? (namespace ident) ".property")))))
 
 (defn- recycled?
   [entity]

@@ -367,7 +367,12 @@
                      {:db/id 11 :block/uuid parent-before-uuid}
                      {:db/id 12 :block/uuid parent-after-uuid}
                      {:db/id 13 :block/uuid alias-before-uuid}
-                     {:db/id 14 :block/uuid alias-after-uuid}])]
+                     {:db/id 14 :block/uuid alias-after-uuid}
+                     {:db/id 15
+                      :db/ident :block/alias
+                      :block/tags 16}
+                     {:db/id 16
+                      :db/ident :logseq.class/Property}])]
     (testing "class hierarchy"
       (is (= #{[:graph]
                [:entity class-uuid]
@@ -382,6 +387,7 @@
                [:entity class-uuid]
                [:attr :block/alias]
                [:property-membership :block/alias]
+               [:display-properties class-uuid]
                [:ref-scope]}
              (affected-keys db [[:db/retract 10 :block/alias 13]
                                 [:db/add 10 :block/alias 14]]))))))
