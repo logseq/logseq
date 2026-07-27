@@ -296,6 +296,9 @@
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
   (let [many? (property-multiple-values? property)
+        entity-id? (or entity-id?
+                       (and (= :db.type/ref (:db/valueType property))
+                            (integer? value)))
         blocks (get-operating-blocks block)
         current-block-ref (or (:block/uuid (first blocks))
                               (:db/id (first blocks))

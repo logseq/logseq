@@ -1,11 +1,45 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.components.property.value :as property-value]
+            [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest alias-node-selection-preserves-entity-id-semantics-test
+  (async done
+         (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               block {:db/id 1
+                      :block/uuid block-uuid
+                      :block/alias []}
+               property {:db/ident :block/alias
+                         :db/valueType :db.type/ref
+                         :db/cardinality :db.cardinality/many}
+               calls* (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [])
+                               state/get-state (constantly nil)
+                               db-async/<get-block (fn [_repo _block-ref _opts]
+                                                     (p/resolved block))
+                               db-property-handler/batch-set-property!
+                               (fn [block-ids property-ident value opts]
+                                 (swap! calls* conj [(vec block-ids) property-ident value opts])
+                                 (p/resolved nil))]
+               (#'property-value/add-or-remove-property-value
+                  block property 42 false {}))
+               (p/then (fn [_]
+                         (is (= [[[block-uuid]
+                                  :block/alias
+                                  42
+                                  {:entity-id? true}]]
+                                @calls*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?
