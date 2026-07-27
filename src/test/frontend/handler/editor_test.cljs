@@ -312,6 +312,28 @@
              @tx-calls)
           "Content that differs from the persisted block must still be saved"))))
 
+(deftest save-block-does-not-drop-a-revert-while-the-previous-save-is-pending-test
+  (let [block-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title "b"}
+        first-save (p/deferred)
+        tx-calls (atom [])]
+    (with-redefs [db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (constantly nil)
+                  db-transact/apply-outliner-ops
+                  (fn [db ops opts]
+                    (swap! tx-calls conj [db ops opts])
+                    first-save)]
+      (editor/save-block-if-changed! block "bx")
+      (editor/save-block-if-changed! block "b")
+      (is (= 2 (count @tx-calls))
+          "A revert must be queued behind an in-flight save instead of being compared with stale canonical data.")
+      (p/resolve! first-save nil))))
+
 (deftest open-block-in-sidebar-loads-target-through-worker-test
   (async done
     (let [page-id #uuid "11111111-1111-1111-1111-111111111111"
