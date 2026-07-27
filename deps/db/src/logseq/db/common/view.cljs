@@ -542,7 +542,7 @@
                        (conj {:get-value (fn [[page _blocks]] (:block/title page))
                               :asc? (not desc?)}))
         sorted-page-groups (sort (common-util/by-sorting page-sorters)
-                                 (group-by :block/page entities))
+                                 (group-by #(or (:block/page %) %) entities))
         block-row (fn [block]
                     {:db/id (:db/id block)
                      :block/parent (:block/uuid (:block/parent block))})
