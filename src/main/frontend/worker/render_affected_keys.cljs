@@ -229,6 +229,11 @@
               datoms)
     #{[:journals]}))
 
+(defn- recycle-key
+  [datoms]
+  (when (some #(= :logseq.property/deleted-at (:a %)) datoms)
+    #{[:recycle-roots]}))
+
 (defn- reaction-keys
   [db-before db-after entity-ids]
   (into #{}
@@ -533,6 +538,7 @@
            (page-lookup-keys datoms)
            (page-membership-key db-before db-after datoms)
            (journal-key db-before db-after datoms)
+           (recycle-key datoms)
            (reaction-keys db-before db-after touched-entity-ids)
            (comments-keys db-before db-after datoms)
            (task-time-keys db-before db-after touched-entity-ids)

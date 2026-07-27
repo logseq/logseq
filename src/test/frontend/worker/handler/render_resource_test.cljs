@@ -591,6 +591,28 @@
                (:watch-keys response)))
         (is (= ["High"] (mapv :block/title (:value response))))))))
 
+(deftest recycle-roots-resource-returns-newest-first-canonical-blocks-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          older-uuid (random-uuid)
+          newer-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:block/uuid older-uuid
+                     :block/tx-id 1
+                     :block/title "Older recycled page"
+                     :block/name "older recycled page"
+                     :logseq.property/deleted-at 1000}
+                    {:block/uuid newer-uuid
+                     :block/tx-id 1
+                     :block/title "Newer recycled block"
+                     :logseq.property/deleted-at 2000}])
+      (let [resource-key [:recycle-roots]
+            response (call-resource api conn resource-key)]
+        (is (= #{[:recycle-roots]} (:watch-keys response)))
+        (is (= [newer-uuid older-uuid]
+               (mapv :block/uuid (:value response))))
+        (run! assert-canonical-block (:value response))))))
+
 (deftest render-resources-returns-one-compact-snapshot-envelope-test
   (when-let [api (render-resources-api)]
     (let [{:keys [conn page journal-a journal-b resource-block]}
