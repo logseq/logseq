@@ -192,6 +192,48 @@
     (is (number? (:count result)))
     (is (contains? (set (:data result)) bar-id))))
 
+(deftest get-view-data-groups-page-level-linked-references-under-the-referring-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Target"}}
+                {:page {:block/title "Referring page"}}]})
+        target-id (d/q '[:find ?e .
+                         :in $ ?title
+                         :where [?e :block/title ?title]]
+                       @conn
+                       "Target")
+        referring-page-id (d/q '[:find ?e .
+                                 :in $ ?title
+                                 :where [?e :block/title ?title]]
+                               @conn
+                               "Referring page")
+        target (d/entity @conn target-id)
+        referring-page (d/entity @conn referring-page-id)
+        view-id (create-view-id conn :linked-references
+                                :view-for-id (:db/id target))
+        _ (d/transact! conn
+                       [[:db/add (:db/id referring-page)
+                         :block/refs
+                         (:db/id target)]
+                        [:db/add view-id
+                         :logseq.property.view/type
+                         :logseq.property.view/type.list]
+                        [:db/add view-id
+                         :logseq.property.view/group-by-property
+                         :block/page]])
+        result (db-view/get-view-data
+                @conn view-id
+                {:view-feature-type :linked-references
+                 :view-for-id (:db/id target)})
+        [[group partitions]] (:data result)]
+    (is (= (:block/uuid referring-page) (:block/uuid group)))
+    (is (= [[(:block/uuid referring-page)
+             [{:db/id (:db/id referring-page)
+               :block/parent nil}]]]
+           (mapv (fn [[breadcrumb rows]]
+                   [breadcrumb (vec rows)])
+                 partitions)))))
+
 (deftest get-view-data-class-objects-ref-filter-fast-path-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}
