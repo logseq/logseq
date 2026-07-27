@@ -281,7 +281,7 @@ export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
   copiedBlocksMemoryCache.text = text
   copiedBlocksMemoryCache.blocks = blocks || null
 
-  navigator.permissions.query({
+  return navigator.permissions.query({
     name: "clipboard-write"
   }).then((result) => {
     if (result.state != "granted" && result.state != "prompt"){
@@ -322,7 +322,7 @@ export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
       console.debug("Degraded copy without `ClipboardItem` support:", text)
       promise_written = navigator.clipboard.writeText(text)
     }
-    promise_written.then(() => {
+    return promise_written.then(() => {
       /* success */
     }).catch(e => {
       console.log(e, "fail")

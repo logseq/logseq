@@ -1558,26 +1558,53 @@
 (deftest cutting-selected-blocks-waits-for-the-structured-copy-test
   (async done
     (let [copy-finished (p/deferred)
-          calls (atom [])]
+          calls (atom [])
+          selected-ids [#uuid "11111111-1111-1111-1111-111111111111"]]
       (-> (p/with-redefs [editor/copy-selection-blocks
-                          (fn [& _]
-                            (swap! calls conj :copy-started)
+                          (fn [& args]
+                            (swap! calls conj [:copy-started args])
                             copy-finished)
                           editor/get-selected-blocks
                           (fn []
                             (swap! calls conj :selection-captured)
                             nil)
+                          state/get-selection-block-ids
+                          (constantly selected-ids)
                           state/set-block-op-type!
                           (fn [_]
                             (swap! calls conj :cut))]
             (let [cut-request (editor/cut-selection-blocks true)]
               (p/let [_ (p/delay 0)
-                      _ (is (= [:selection-captured :copy-started] @calls)
+                      _ (is (= [:selection-captured
+                                [:copy-started
+                                 [true :selected-ids selected-ids]]]
+                               @calls)
                             "Cut must not delete blocks while the structured copy is pending.")
                       _ (p/resolve! copy-finished nil)
                       _ cut-request]
-                (is (= [:selection-captured :copy-started :cut] @calls)))))
+                (is (= [:selection-captured
+                        [:copy-started
+                         [true :selected-ids selected-ids]]
+                        :cut]
+                       @calls)))))
           (p/finally done)))))
+
+(deftest copied-blocks-exclude-render-only-identity-fields-test
+  (let [parent-uuid (random-uuid)
+        block (#'editor/copied-block-canonical-attrs
+               {:db/id 10
+                :block/uuid (random-uuid)
+                :block/title "child"
+                :block/raw-title "child"
+                :block/parent {:db/id 9 :block/uuid parent-uuid}
+                :block/parent-id 9
+                :block/parent-uuid parent-uuid
+                :block/page-id 1
+                :block/page-uuid (random-uuid)
+                :block.temp/has-children? false})]
+    (is (= #{:db/id :block/uuid :block/title :block/parent}
+           (set (keys block))))
+    (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done

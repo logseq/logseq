@@ -5,16 +5,20 @@
 
 (deftest copy-to-clipboard-uses-passed-block-raw-titles-test
   (let [copy-call (atom nil)
+        clipboard-result (js/Promise.resolve true)
         block {:db/id 1
                :block/title "rendered title"
                :block/raw-title "raw title"}]
     (with-redefs [util/copy-to-clipboard! (fn [raw-text & {:as opts}]
-                                            (reset! copy-call [raw-text opts]))]
-      (common-handler/copy-to-clipboard-without-id-property!
-       "logseq_db_common"
-       "markdown"
-       "<p>html</p>"
-       [block])
+                                            (reset! copy-call [raw-text opts])
+                                            clipboard-result)]
+      (is (identical?
+           clipboard-result
+           (common-handler/copy-to-clipboard-without-id-property!
+            "logseq_db_common"
+            "markdown"
+            "<p>html</p>"
+            [block])))
       (is (= ["markdown"
               {:html "<p>html</p>"
                :graph "logseq_db_common"
