@@ -107,8 +107,6 @@
       (page-common-handler/<db-favorited? page-block-uuid)
       false)))
 
-(def favorited? <favorited?)
-
 (defn <get-favorites
   "return page-block entities"
   []

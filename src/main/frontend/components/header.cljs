@@ -21,6 +21,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler :as handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -165,20 +166,16 @@
   (.preventDefault e)
   (.stopPropagation e))
 
-(hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
-  [{:keys [current-repo t]}]
+(hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu-content
+  [{:keys [current-repo t]} page favorited? recycle-page?]
   (let [_route-match (rfx/use-sub [:route-match])
-        current-page (sidebar/get-current-page)
         db-restoring? (rfx/use-sub [:db/restoring?])
-        [page set-page!] (hooks/use-state nil)
-        [recycle-page? set-recycle-page?!] (hooks/use-state false)
         working-page? (not db-restoring?)
         page-menu (when page
                     (if (and working-page? (entity/page? page))
-                      (page-menu/page-menu page)
+                      (page-menu/page-menu page favorited?)
                       (when-not config/publishing?
-                      (let [block-id-str (str (:block/uuid page))
-                            favorited? (page-handler/favorited? block-id-str)]
+                      (let [block-id-str (str (:block/uuid page))]
                         [{:title   (if favorited?
                                      (t :page/unfavorite)
                                      (t :page/add-to-favorites))
@@ -257,28 +254,6 @@
                                :class "w-full"}})]
                  (concat page-menu-and-hr)
                  (remove nil?)))]
-    (hooks/use-effect!
-     (fn []
-       (if db-restoring?
-         (do
-           (set-page! nil)
-           (set-recycle-page?! false))
-         (p/do!
-          (if (and current-repo current-page)
-            (p/let [page (db-async/<get-block current-repo
-                                              (if (util/uuid-string? current-page)
-                                                (uuid current-page)
-                                                current-page)
-                                              {:children? false})]
-              (set-page! page))
-            (set-page! nil))
-          (if current-repo
-            (p/let [recycle-page (db-async/<get-block current-repo common-config/recycle-page-name {:children? false})]
-              (set-recycle-page?! (boolean recycle-page)))
-            (set-recycle-page?! false))))
-       nil)
-     [current-repo current-page db-restoring?])
-
     (ui/tooltip
      (shui/button-ghost-icon
       :dots {:class "toolbar-dots-btn"
@@ -318,6 +293,40 @@
                                                             :align-offset -32}}))})
      (t :header/more)
      {:trigger-props {:as-child true}})))
+
+(hsx/defc toolbar-dots-menu-page
+  [opts page-uuid recycle-page?]
+  (let [page (db-hooks/use-block page-uuid)
+        favorited? (db-hooks/use-resource [:favorite-status page-uuid])]
+    (toolbar-dots-menu-content opts page favorited? recycle-page?)))
+
+(hsx/defc toolbar-dots-menu-lookup
+  [opts page-lookup recycle-page?]
+  (let [page-uuid (db-hooks/use-resource [:page-identity page-lookup])]
+    (if page-uuid
+      (toolbar-dots-menu-page opts page-uuid recycle-page?)
+      (toolbar-dots-menu-content opts nil false recycle-page?))))
+
+(hsx/defc toolbar-dots-menu-ready
+  [opts]
+  (let [current-page (sidebar/get-current-page)
+        page-lookup (when current-page
+                      (if (util/uuid-string? current-page)
+                        (uuid current-page)
+                        current-page))
+        recycle-page-uuid
+        (db-hooks/use-resource [:page-identity common-config/recycle-page-name])
+        recycle-page? (some? recycle-page-uuid)]
+    (if page-lookup
+      (toolbar-dots-menu-lookup opts page-lookup recycle-page?)
+      (toolbar-dots-menu-content opts nil false recycle-page?))))
+
+(hsx/defc toolbar-dots-menu
+  [opts]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (if db-restoring?
+      (toolbar-dots-menu-content opts nil false false)
+      (toolbar-dots-menu-ready opts))))
 
 (hsx/defc back-and-forward
   []

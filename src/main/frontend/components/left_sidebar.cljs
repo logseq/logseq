@@ -8,10 +8,10 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.rfx :as rfx]
@@ -320,19 +320,9 @@
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
 
-(hsx/defc sidebar-favorites
+(hsx/defc sidebar-favorites-loaded
   []
-  (let [current-repo (rfx/use-sub [:git/current-repo])
-        db-restoring? (rfx/use-sub [:db/restoring?])
-        _favorites-updated? (rfx/use-sub [:favorites/updated?])
-        [favorite-entities set-favorite-entities!] (hooks/use-state [])]
-    (hooks/use-effect!
-     (fn []
-       (when (and current-repo (false? db-restoring?))
-         (p/let [favorites (page-handler/<get-favorites)]
-           (set-favorite-entities! (vec favorites))))
-       nil)
-     [current-repo db-restoring? _favorites-updated?])
+  (let [favorite-entities (db-hooks/use-resource [:favorites])]
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -355,19 +345,17 @@
                                               (page-handler/<reorder-favorites! favorites'))
                                :parent-node :ul.favorites.text-sm}))))))
 
-(hsx/defc sidebar-recent-pages
+(hsx/defc sidebar-favorites
+  []
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-favorites-loaded))))
+
+(hsx/defc sidebar-recent-pages-loaded
   []
   (let [current-repo (rfx/use-sub [:git/current-repo])
-        db-restoring? (rfx/use-sub [:db/restoring?])
-        _recent-page-ids (rfx/use-sub [:ui/recent-pages current-repo])
-        [pages set-pages!] (hooks/use-state [])]
-    (hooks/use-effect!
-     (fn []
-       (when (and current-repo (false? db-restoring?))
-         (p/let [recent-pages (recent-handler/get-recent-pages)]
-           (set-pages! (vec recent-pages))))
-       nil)
-     [current-repo db-restoring? _recent-page-ids])
+        recent-page-ids (vec (rfx/use-sub [:ui/recent-pages current-repo]))
+        pages (db-hooks/use-resource [:recent-pages recent-page-ids])]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
@@ -379,6 +367,12 @@
            [:li.recent-item.select-none.font-medium
             {:key (str "recent-" (:db/id page))}
             (page-name page true)])])))
+
+(hsx/defc sidebar-recent-pages
+  []
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-recent-pages-loaded))))
 
 (hsx/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?

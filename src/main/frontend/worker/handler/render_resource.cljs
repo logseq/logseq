@@ -104,6 +104,72 @@
    :watch-keys watch-keys
    :value value})
 
+(defn- sidebar-page-summary
+  [page]
+  (select-keys page
+               [:db/id
+                :block/uuid
+                :block/title
+                :block/raw-title
+                :block/name
+                :block/journal-day
+                :logseq.property/icon]))
+
+(defn- favorites-page
+  [db]
+  (or (ldb/get-page db common-config/favorites-page-name)
+      (fail! "Missing favorites page" {})))
+
+(defn- favorite-targets
+  [db]
+  (->> (favorites-page db)
+       :db/id
+       (ldb/get-page-blocks db)
+       ldb/sort-by-order
+       (keep :block/link)
+       (map #(d/entity db (:db/id %)))
+       (remove ldb/recycled?)
+       vec))
+
+(defn- favorites
+  [db resource-key]
+  (require-shape! resource-key :favorites 1)
+  (let [favorites-page-uuid (:block/uuid (favorites-page db))
+        targets (favorite-targets db)]
+    [(into #{[:children favorites-page-uuid]}
+           (map (fn [page] [:entity (:block/uuid page)]))
+           targets)
+     (mapv sidebar-page-summary targets)]))
+
+(defn- favorite-status
+  [db resource-key]
+  (require-shape! resource-key :favorite-status 2)
+  (let [page-uuid (require-uuid! :page-uuid (second resource-key))
+        favorites-page-uuid (:block/uuid (favorites-page db))]
+    [#{[:children favorites-page-uuid]}
+     (boolean (some #(= page-uuid (:block/uuid %))
+                    (favorite-targets db)))]))
+
+(defn- recent-pages
+  [db resource-key]
+  (require-shape! resource-key :recent-pages 2)
+  (let [page-ids (second resource-key)]
+    (when-not (and (vector? page-ids) (every? integer? page-ids))
+      (fail! "Invalid recent page IDs" {:page-ids page-ids}))
+    (let [pages (->> page-ids
+                     distinct
+                     (take 20)
+                     (keep #(d/entity db %))
+                     (filter ldb/page?)
+                     (remove ldb/hidden?)
+                     (remove (fn [page]
+                               (or (and (ldb/property? page)
+                                        (true? (:logseq.property/hide? page)))
+                                   (string/blank? (:block/title page)))))
+                     vec)]
+      [(into #{} (map (fn [page] [:entity (:block/uuid page)])) pages)
+       (mapv sidebar-page-summary pages)])))
+
 (defn- page-identity
   [db resource-key]
   (require-shape! resource-key :page-identity 2)
@@ -1174,6 +1240,9 @@
     (fail! "Renderer resource keys cannot contain graph entities"
            {:resource-key resource-key}))
   (case (first resource-key)
+    :favorites (favorites db resource-key)
+    :favorite-status (favorite-status db resource-key)
+    :recent-pages (recent-pages db resource-key)
     :page-identity (page-identity db resource-key)
     :page-preview-source (page-preview-source db resource-key)
     :block-breadcrumb (block-breadcrumb db resource-key)
