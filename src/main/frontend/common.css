@@ -315,6 +315,10 @@ li p:last-child,
 .heading-bg {
   @apply rounded-full w-[18px] h-[18px];
 
+  a:hover > & {
+    box-shadow: 0 0 0 2px var(--lx-gray-09, var(--ls-secondary-text-color));
+  }
+
   &.remove {
     @apply border flex items-center justify-center border-gray-07 hover:border-gray-09;
   }

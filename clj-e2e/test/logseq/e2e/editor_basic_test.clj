@@ -69,6 +69,15 @@
     (is (= "pointer"
            (.evaluate sub-trigger "element => getComputedStyle(element).cursor")))))
 
+(deftest block-context-menu-color-hover-shows-ring-test
+  (open-block-context-menu!)
+  (let [color (w/-query "a[title='Yellow'] .heading-bg")
+        before (.evaluate color "element => getComputedStyle(element).boxShadow")]
+    (.hover color)
+    (let [after (.evaluate color "element => getComputedStyle(element).boxShadow")]
+      (is (not= before after))
+      (is (not= "none" after)))))
+
 (deftest notification-appears-at-top-right-test
   (let [message-key "notification-position-test"]
     (ls-api-call! :show_msg
