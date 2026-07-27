@@ -711,6 +711,84 @@
                                 page
                                 response))))
 
+(deftest sidebar-page-resources-track-favorites-status-and-recent-page-content-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          favorite-page (or (ldb/get-page @conn common-config/favorites-page-name)
+                            (let [favorite-page-uuid (random-uuid)]
+                              (d/transact! conn
+                                           [{:block/uuid favorite-page-uuid
+                                             :block/tx-id 1
+                                             :block/title common-config/favorites-page-name
+                                             :block/name common-config/favorites-page-name}])
+                              (ldb/get-page @conn common-config/favorites-page-name)))
+          favorite-page-id (:db/id favorite-page)
+          favorite-page-uuid (:block/uuid favorite-page)
+          first-page-uuid (random-uuid)
+          second-page-uuid (random-uuid)
+          favorite-block-uuid (random-uuid)
+          _ (d/transact! conn
+                         [{:db/id -1
+                           :block/uuid first-page-uuid
+                           :block/tx-id 2
+                           :block/title "First"
+                           :block/name "first"
+                           :block/tags :logseq.class/Page}
+                          {:db/id -2
+                           :block/uuid second-page-uuid
+                           :block/tx-id 2
+                           :block/title "Second"
+                           :block/name "second"
+                           :block/tags :logseq.class/Page}
+                          {:block/uuid favorite-block-uuid
+                           :block/tx-id 2
+                           :block/title ""
+                           :block/link -1
+                           :block/page favorite-page-id
+                           :block/parent favorite-page-id
+                           :block/order "a0"}])
+          first-page-id (entity-id @conn first-page-uuid)
+          second-page-id (entity-id @conn second-page-uuid)
+          favorites-response (call-resource api conn [:favorites])
+          status-response (call-resource api conn
+                                         [:favorite-status first-page-uuid])
+          recent-response (call-resource api conn
+                                         [:recent-pages
+                                          [second-page-id first-page-id]])]
+      (assert-resource-envelope
+       @conn
+       [:favorites]
+       #{[:children favorite-page-uuid]
+         [:entity first-page-uuid]}
+       [{:db/id first-page-id
+         :block/uuid first-page-uuid
+         :block/title "First"
+         :block/raw-title "First"
+         :block/name "first"}]
+       favorites-response)
+      (assert-resource-envelope
+       @conn
+       [:favorite-status first-page-uuid]
+       #{[:children favorite-page-uuid]}
+       true
+       status-response)
+      (assert-resource-envelope
+       @conn
+       [:recent-pages [second-page-id first-page-id]]
+       #{[:entity first-page-uuid]
+         [:entity second-page-uuid]}
+       [{:db/id second-page-id
+         :block/uuid second-page-uuid
+         :block/title "Second"
+         :block/raw-title "Second"
+         :block/name "second"}
+        {:db/id first-page-id
+         :block/uuid first-page-uuid
+         :block/title "First"
+         :block/raw-title "First"
+         :block/name "first"}]
+       recent-response))))
+
 (deftest missing-page-identity-keeps-a-creation-watch-key-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
