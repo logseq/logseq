@@ -272,26 +272,26 @@
       @apply block w-[92px] rounded overflow-hidden bg-gray-04;
       aspect-ratio: 160 / 110;
 
-      background: url('/static/img/light-theme.png') no-repeat center / cover;
+      background: url('../img/light-theme.png') no-repeat center / cover;
 
       &.mode-dark {
-        background: url('/static/img/dark-theme.png') no-repeat center / cover;
+        background: url('../img/dark-theme.png') no-repeat center / cover;
       }
 
       &.mode-system {
-        background: url('/static/img/system-theme.png') no-repeat center / cover;
+        background: url('../img/system-theme.png') no-repeat center / cover;
       }
 
       &.mode-dark.radix {
-        background: url('/static/img/dark-theme.png') no-repeat center / cover;
+        background: url('../img/dark-theme.png') no-repeat center / cover;
       }
 
       &.mode-light.radix {
-        background: url('/static/img/light-theme.png') no-repeat center / cover;
+        background: url('../img/light-theme.png') no-repeat center / cover;
       }
 
       &.mode-system.radix {
-        background: url('/static/img/system-theme.png') no-repeat center / cover;
+        background: url('../img/system-theme.png') no-repeat center / cover;
       }
     }
 
