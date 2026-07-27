@@ -1533,6 +1533,30 @@
                         "Backspace at the beginning of a must preserve a and its child b.")))
           (p/finally done)))))
 
+(deftest cutting-selected-blocks-waits-for-the-structured-copy-test
+  (async done
+    (let [copy-finished (p/deferred)
+          calls (atom [])]
+      (-> (p/with-redefs [editor/copy-selection-blocks
+                          (fn [& _]
+                            (swap! calls conj :copy-started)
+                            copy-finished)
+                          editor/get-selected-blocks
+                          (fn []
+                            (swap! calls conj :selection-captured)
+                            nil)
+                          state/set-block-op-type!
+                          (fn [_]
+                            (swap! calls conj :cut))]
+            (let [cut-request (editor/cut-selection-blocks true)]
+              (p/let [_ (p/delay 0)
+                      _ (is (= [:selection-captured :copy-started] @calls)
+                            "Cut must not delete blocks while the structured copy is pending.")
+                      _ (p/resolve! copy-finished nil)
+                      _ cut-request]
+                (is (= [:selection-captured :copy-started :cut] @calls)))))
+          (p/finally done)))))
+
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
     (let [asset-block {:db/id 1
