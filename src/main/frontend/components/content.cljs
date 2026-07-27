@@ -10,6 +10,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -425,22 +426,28 @@
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
       (t :reference/replace-with-embed))]))
 
+(hsx/defc page-title-custom-context-menu-items
+  [page popup-id]
+  (let [favorited? (db-hooks/use-resource
+                    [:favorite-status (:block/uuid page)])
+        page-menu-options (page-menu/page-menu page favorited?)]
+    [:<>
+     (for [[idx {:keys [title options]}] (map-indexed vector page-menu-options)]
+       (let [on-click (:on-click options)
+             key (or (:key options) (str "page-menu-" idx))]
+         (react/cloneElement
+          (shui/dropdown-menu-item
+           (assoc options
+                  :on-click (fn [e]
+                              (when-not (false? (when on-click (on-click e)))
+                                (shui/popup-hide! popup-id))))
+           title)
+          #js {:key (str key)})))]))
+
 (hsx/defc page-title-custom-context-menu-content
   [page popup-id]
   (when page
-    (let [page-menu-options (page-menu/page-menu page)]
-      [:<>
-       (for [[idx {:keys [title options]}] (map-indexed vector page-menu-options)]
-         (let [on-click (:on-click options)
-               key (or (:key options) (str "page-menu-" idx))]
-           (react/cloneElement
-            (shui/dropdown-menu-item
-             (assoc options
-                    :on-click (fn [e]
-                                (when-not (false? (when on-click (on-click e)))
-                                  (shui/popup-hide! popup-id))))
-             title)
-            #js {:key (str key)})))])))
+    (page-title-custom-context-menu-items page popup-id)))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
