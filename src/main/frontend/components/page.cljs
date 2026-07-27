@@ -295,6 +295,15 @@
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class "title"
       "data-testid" "page title"
+      :on-pointer-down-capture
+      (fn [e]
+        (when (and (gobj/get e "shiftKey")
+                   (not (util/right-click? e)))
+          (util/stop e)
+          (state/sidebar-add-block!
+           (state/get-current-repo)
+           (:db/id page)
+           :page)))
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
