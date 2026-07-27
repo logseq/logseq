@@ -103,14 +103,13 @@
      (not (true? (:logseq.property/publishing-public? page'))))))
 
 (defn ^:large-vars/cleanup-todo page-menu
-  [page]
+  [page favorited?]
   (when-let [page' (latest-page page)]
     (when-let [page-name (and (entity/page? page') (:block/name page'))]
       (let [page-title (str (:block/uuid page'))
             block? (util/uuid-string? page-name)
             contents? (= page-name "contents")
             public? (true? (:logseq.property/publishing-public? page'))
-            favorited? (page-handler/favorited? page-title)
             developer-mode? (state/developer-mode?)]
         (when (not block?)
           (->>
