@@ -970,9 +970,9 @@
          option))))))
 
 (hsx/defc more-actions
-  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
-  (let [display-type (:logseq.property.view/type-ident view-entity)
-        table? (= display-type :logseq.property.view/type.table)
+  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}
+   {:keys [display-type group-by-property-ident]}]
+  (let [table? (= display-type :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
         group-by-columns (->> (concat (when (or
                                              (contains? #{:linked-references :unlinked-references}

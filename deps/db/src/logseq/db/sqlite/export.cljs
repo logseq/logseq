@@ -657,7 +657,7 @@
   "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
   [db rows {:keys [group-by?]}]
   (let [eids (if group-by? (mapcat second rows) rows)
-        nodes (map #(d/entity db %) eids)
+        nodes (map #(d/entity db (if (uuid? %) [:block/uuid %] %)) eids)
         property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
                                           vals
                                           (filter de/entity?))
