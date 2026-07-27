@@ -93,7 +93,8 @@
 
 (defn- element?
   [target]
-  (instance? js/Element target))
+  (and (exists? js/Element)
+       (instance? js/Element target)))
 
 (defn- native-event [^js event]
   (or (some-> event (.-nativeEvent)) event))
@@ -192,7 +193,8 @@
         id (or provided-id (gen-id))
         ;; _ (prn :debug :show :id id)
         *target (volatile! nil)
-        pointer-event? (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
+        pointer-event? (or (and (exists? js/MouseEvent)
+                                (instance? js/MouseEvent (or (.-nativeEvent event) event)))
                            (instance? js/goog.events.BrowserEvent event))
         position (cond
                    (vector? event) event
@@ -207,7 +209,8 @@
                                                 first))
                      [(.-clientX event') (.-clientY event')])
 
-                   (instance? js/Element event)
+                   (and (exists? js/Element)
+                        (instance? js/Element event))
                    (let [^js rect (.getBoundingClientRect event)
                          left (.-left rect)
                          width (.-width rect)

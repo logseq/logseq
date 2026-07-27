@@ -401,11 +401,8 @@
                                              (state/pub-event! [:graph/switch url])
 
                                              (and rtc-graph? remote?)
-                                             (do
-                                               (state/pub-event!
-                                                [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
-                                               (when (util/mobile?)
-                                                 false))
+                                             (state/pub-event!
+                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
 
                                              :else
                                              nil))))}})))
@@ -437,6 +434,15 @@
                                  (state/pub-event! [:mobile/set-tab "graphs"])
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
+
+(defn close-sidebar-after-repo-popup-action!
+  []
+  (when (util/sm-breakpoint?)
+    (js/setTimeout #(state/set-left-sidebar-open! false) 0)))
+
+(defn repo-popup-action-target?
+  [target]
+  (boolean (.closest target "a, button, [role='menuitem']")))
 
 (hsx/defc repos-dropdown-content
   [& {:keys [contentid footer?] :as opts
@@ -536,10 +542,17 @@
                           (t :graph.switch/select-prompt))
         selector-opts (cond-> {:on-click (fn [^js e]
                                            (shui/popup-show! (.closest (.-target e) "a")
-                                                             (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
+                                                             (fn [{:keys [id]}]
+                                                               (repos-dropdown-content
+                                                                {:contentid id}))
                                                              {:as-dropdown? true
                                                               :focus-trigger? false
-                                                              :content-props {:class "repos-list"}
+                                                              :content-props
+                                                              {:class "repos-list"
+                                                               :on-click
+                                                               (fn [^js e]
+                                                                 (when (repo-popup-action-target? (.-target e))
+                                                                   (close-sidebar-after-repo-popup-action!)))}
                                                               :align :start}))}
                         (and (util/electron?) (:root current-repo'))
                         (assoc :on-context-menu
