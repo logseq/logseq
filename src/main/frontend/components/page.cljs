@@ -433,8 +433,7 @@
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
         page-display-title (when (entity/page? page)
-                             (or (route-handler/built-in-page-title (:block/title page))
-                                 (:block/title page)))
+                             (route-handler/built-in-page-title (:block/title page)))
         show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))]
     (if page
       (when (or title block?)
