@@ -19,6 +19,14 @@
     (throw (ex-info "Invalid code editor component" {:editor editor})))
   (reset! *editor editor))
 
+(defn- editor-placeholder-height
+  [rect attr code]
+  (let [estimated-height (* 23.2 (count (string/split-lines code)))]
+    (or (some-> rect .-height)
+        (if (= (:data-lang attr) "calc")
+          estimated-height
+          (min estimated-height 1024)))))
+
 (defn load-code-editor!
   []
   (when-not util/node-test?
@@ -46,14 +54,14 @@
   [config id attr code options codemirror-loaded?]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)
+        [set-size-ref rect] (hooks/use-bounding-client-rect)
         placeholder [:div
-                     {:style {:height (min
-                                       (* 23.2 (count (string/split-lines code)))
-                     600)}}]]
+                     {:style {:height (editor-placeholder-height rect attr code)}}]]
     [:div {:ref (.-ref state)}
-     (if (and codemirror-loaded? in-view?)
-       (@*editor config id attr code options)
-       placeholder)]))
+     [:div {:ref set-size-ref}
+      (if (and codemirror-loaded? in-view?)
+        (@*editor config id attr code options)
+        placeholder)]]))
 
 (hsx/defc editor
   [config id attr code options]
