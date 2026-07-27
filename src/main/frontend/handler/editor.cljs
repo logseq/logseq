@@ -269,6 +269,34 @@
   (let [{:keys [status value]} (db-subs/block-snapshot (:block/uuid block))]
     (if (= :ready status) value block)))
 
+(defonce ^:private *pending-block-save-titles (atom {}))
+
+(defn- clear-pending-block-save-title!
+  [block-uuid value]
+  (swap! *pending-block-save-titles
+         (fn [pending-titles]
+           (if (= value (get pending-titles block-uuid))
+             (dissoc pending-titles block-uuid)
+             pending-titles))))
+
+(defn- save-block-with-pending-title!
+  [block value opts]
+  (let [block-uuid (:block/uuid block)]
+    (swap! *pending-block-save-titles assoc block-uuid value)
+    (try
+      (let [result (save-block-inner! block value opts)]
+        (if (p/promise? result)
+          (-> result
+              (p/then (fn [_]
+                        (clear-pending-block-save-title! block-uuid value)))
+              (p/catch (fn [_]
+                         (clear-pending-block-save-title! block-uuid value))))
+          (clear-pending-block-save-title! block-uuid value))
+        result)
+      (catch :default error
+        (clear-pending-block-save-title! block-uuid value)
+        (throw error)))))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
@@ -276,16 +304,18 @@
     {:keys [force?]
      :as opts}]
    (let [block (latest-renderer-block block)
-         content (:block/title block)]
+         content (get @*pending-block-save-titles
+                      (:block/uuid block)
+                      (:block/title block))]
      (cond
        force?
-       (save-block-inner! block value opts)
+       (save-block-with-pending-title! block value opts)
 
        :else
        (when content
          (let [content-changed? (not= (string/trim content) (string/trim value))]
            (when content-changed?
-             (save-block-inner! block value opts))))))))
+             (save-block-with-pending-title! block value opts))))))))
 
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
@@ -1602,13 +1632,6 @@
   (when @*auto-save-timeout
     (js/clearTimeout @*auto-save-timeout)))
 
-(defn- block-title-for-editor-compare
-  [block]
-  (when-let [title (:block/title block)]
-    (if (number? (:block/level block))
-      (common-util/safe-subs title (:block/level block))
-      title)))
-
 (defn- current-editor-value
   [input-id current-block edit-block]
   (if (= (:block/uuid current-block) (:block/uuid edit-block))
@@ -1616,16 +1639,10 @@
     (when-let [elem (and input-id (gdom/getElement input-id))]
       (gobj/get elem "value"))))
 
-(defn- editor-title-changed?
-  [block value]
-  (when-let [title (block-title-for-editor-compare block)]
-    (not= (string/trim title)
-          (string/trim value))))
-
 (defn save-current-block!
   ([]
    (save-current-block! {}))
-  ([{:keys [force? current-block] :as opts}]
+  ([{:keys [current-block] :as opts}]
    (clear-block-auto-save-timeout!)
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
@@ -1636,12 +1653,7 @@
                block (state/get-edit-block)
                value (current-editor-value input-id current-block block)]
            (when value
-             (cond
-               force?
-               (save-block-aux! block value opts)
-
-               (editor-title-changed? block value)
-               (save-block-aux! block value opts))))
+             (save-block-aux! block value opts)))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
