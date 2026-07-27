@@ -16,7 +16,8 @@
    [wally.main :as w])
   (:import
    (com.microsoft.playwright Locator$ClickOptions)
-   (com.microsoft.playwright.options KeyboardModifier)))
+   (com.microsoft.playwright.options KeyboardModifier)
+   (java.util.function Consumer)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -34,6 +35,12 @@
   (loc/filter ".ls-recycle-page-content section > div > div"
               :has-text page-name))
 
+(defn- open-left-sidebar!
+  []
+  (when-not (w/visible? "#left-sidebar.is-open")
+    (w/click "#left-menu")
+    (w/wait-for "#left-sidebar.is-open")))
+
 (deftest recycle-restore-removes-row-immediately-test
   (let [page-name (str "recycle-restore-" (random-uuid))]
     (p/new-page page-name)
@@ -43,6 +50,34 @@
       (assert/assert-is-visible root)
       (w/click (.locator root "button:text('Restore')"))
       (assert/assert-have-count root 0)
+      (w/eval-js
+       "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
+
+(deftest recycle-delete-removes-row-and-recent-entry-test
+  (let [page-name (str "recycle-delete-" (random-uuid))
+        recent-item (loc/filter ".recent .recent-item" :has-text page-name)]
+    (open-left-sidebar!)
+    (p/new-page page-name)
+    (b/save-block "recycle delete content")
+    (p/delete-page page-name)
+    (open-recycle!)
+    (let [root (recycle-root page-name)]
+      (assert/assert-is-visible root)
+      (let [dialog* (atom nil)
+            handler (reify Consumer
+                      (accept [_ dialog]
+                        (reset! dialog* {:type (.type dialog)
+                                         :message (.message dialog)})
+                        (.accept dialog)))]
+        (.onDialog (w/get-page) handler)
+        (try
+          (w/click (.locator root "button:text('Delete')"))
+          (finally
+            (.offDialog (w/get-page) handler)))
+        (is (= "confirm" (:type @dialog*)))
+        (is (string/includes? (:message @dialog*) "cannot be undone")))
+      (assert/assert-have-count root 0)
+      (assert/assert-have-count recent-item 0)
       (w/eval-js
        "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
 
@@ -118,6 +153,87 @@
     (is (= [1 1]
            [(.count favorite-item)
             (.count recent-item)]))))
+
+(deftest favorite-menu-and-sidebar-follow-page-updates-test
+  (let [page-name (str "favorite-reactivity-" (random-uuid))
+        renamed-page (str "renamed-favorite-" (random-uuid))
+        favorite-item #(loc/filter ".favorites .favorite-item" :has-text %)
+        recent-item #(loc/filter ".recent .recent-item" :has-text %)]
+    (p/new-page page-name)
+    (util/exit-edit)
+    (open-left-sidebar!)
+    (k/press "ControlOrMeta+Shift+f")
+    (assert/assert-is-visible (favorite-item page-name))
+
+    (w/click ".toolbar-dots-btn")
+    (w/click (loc/filter "[role='menuitem']" :has-text "Unfavorite page"))
+    (assert/assert-have-count (favorite-item page-name) 0)
+
+    (w/click ".toolbar-dots-btn")
+    (w/click (loc/filter "[role='menuitem']" :has-text "Add to Favorites"))
+    (assert/assert-is-visible (favorite-item page-name))
+
+    (p/rename-page page-name renamed-page)
+    (assert/assert-is-visible (favorite-item renamed-page))
+    (assert/assert-is-visible (recent-item renamed-page))
+    (assert/assert-have-count (favorite-item page-name) 0)
+    (assert/assert-have-count (recent-item page-name) 0)))
+
+(deftest page-alias-can-be-added-and-removed-from-the-property-picker-test
+  (let [target-page (str "alias-target-" (random-uuid))
+        source-page (str "alias-source-" (random-uuid))
+        target-result (format ".property-select :text-is('%s')" target-page)
+        target-value (loc/filter ".ls-page-properties .property-value"
+                                 :has-text target-page)]
+    (p/new-page target-page)
+    (b/save-block "alias target content")
+    (util/exit-edit)
+    (p/new-page source-page)
+    (b/save-block "alias source content")
+    (util/exit-edit)
+
+    (w/click "button:text('Set property')")
+    (w/click (loc/and "strong" (util/get-by-text "Alias" true)))
+    (w/fill "input[placeholder='Set Alias']" target-page)
+    (w/click target-result)
+    (k/esc)
+    (is (= [target-page]
+           (mapv #(get % "title")
+                 (get (ls-api-call! :editor.getPage source-page) "alias"))))
+    (assert/assert-is-visible target-value)
+
+    (.press (.locator target-value ".multi-values.jtrigger") "Enter")
+    (w/fill "input[placeholder='Set Alias']" target-page)
+    (w/click target-result)
+    (assert/assert-have-count target-value 0)
+    (w/click (w/get-by-test-id "page title"))))
+
+(deftest theme-preview-images-load-test
+  (w/click ".toolbar-dots-btn")
+  (w/click (loc/filter "[role='menuitem']" :has-text "Settings"))
+  (assert/assert-is-visible ".cp__theme-modes-options")
+  (is
+   (true?
+    (w/eval-js
+     "(async () => {
+        const previews = Array.from(
+          document.querySelectorAll('.cp__theme-modes-options > li > i')
+        );
+        const urls = previews.map((preview) => {
+          const match = getComputedStyle(preview).backgroundImage.match(/^url\\([\"']?(.*?)[\"']?\\)$/);
+          return match?.[1];
+        });
+        if (urls.length !== 3 || urls.some((url) => !url)) {
+          return false;
+        }
+        const loaded = await Promise.all(urls.map((url) => new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve(image.naturalWidth > 0);
+          image.onerror = () => resolve(false);
+          image.src = url;
+        })));
+        return loaded.every(Boolean);
+      })()"))))
 
 (deftest language-select-shows-dropdown-indicator-test
   (w/click ".toolbar-dots-btn")
@@ -742,7 +858,7 @@
 
 (deftest copy-blocks-selected-while-scrolling-virtualized-list
   (testing "copy includes virtualized blocks selected by dragging while the page scrolls"
-    (let [blocks (mapv #(format "virtual-scroll-copy-block-%02d" %) (range 1 31))]
+    (let [blocks (mapv #(format "virtual-scroll-copy-block-%03d" %) (range 1 101))]
       (b/new-blocks blocks)
       (util/exit-edit)
       (enable-virtualized-rendering!)
@@ -917,6 +1033,53 @@
   (let [block-titles (:blockTitles (editor-input-state))]
     (is (some #{"rapid delete start tail"} block-titles) block-titles)))
 
+(deftest parent-and-child-rapid-edits-keep-the-latest-child-title
+  (p/new-page "parent child pending edits")
+  (let [page-uuid (get (ls-api-call! :editor.getBlock "parent child pending edits") "uuid")
+        [parent child]
+        (ls-api-call! :editor.insertBatchBlock
+                      page-uuid
+                      [{:content "a"
+                        :children [{:content "b"}]}])
+        parent-uuid (get parent "uuid")
+        child-uuid (get child "uuid")]
+    (w/click (str "#block-content-" parent-uuid))
+    (w/fill util/editor-q "ax")
+    (w/click (str "#block-content-" child-uuid))
+    (w/fill util/editor-q "bx")
+    (w/fill util/editor-q "b")
+    (k/arrow-up)
+    (util/wait-timeout 800)
+    (is (= "b" (get (ls-api-call! :editor.getBlock child-uuid) "content")))))
+
+(deftest page-level-node-reference-renders-linked-references
+  (let [target-name (str "linked-reference-target-" (random-uuid))
+        source-name (str "linked-reference-source-" (random-uuid))]
+    (p/new-page target-name)
+    (let [target-uuid (get (ls-api-call! :editor.getBlock target-name) "uuid")]
+      (p/new-page source-name)
+      (b/save-block (str "[[" target-name "]]"))
+      (util/exit-edit)
+      (let [source-uuid (get (ls-api-call! :editor.getBlock source-name) "uuid")]
+        (ls-api-call! :editor.upsertBlockProperty
+                      source-uuid
+                      "linked-reference-node"
+                      target-uuid
+                      {:schema {:type "node"}})
+        (let [source (ls-api-call! :editor.getBlock source-uuid)]
+          (is (some (fn [[key value]]
+                      (when (and (string/ends-with? key "/linked-reference-node")
+                                 value)
+                        value))
+                    source)
+              source))
+        (p/goto-page target-name)
+        (assert/assert-is-visible
+         (loc/filter ".references" :has-text source-name))
+        (assert/assert-have-count
+         (loc/filter ".references" :has-text "Unexpected error")
+         0)))))
+
 (deftest consecutive-enter-and-delete-ops-stay-within-render-budget
   (util/wait-timeout 500)
   (let [old-logs (set (console-logs))]
@@ -1007,24 +1170,28 @@
 
 (deftest move-blocks-cmdk
   (testing "move blocks using cmdk"
-    (p/new-page "Target page 2")
-    (p/new-page "Source page 2")
-    (b/new-blocks ["b1" "b2" "b3"])
-    (b/select-blocks 3)
-    (util/search-and-click "Move blocks to")
-    (choose-move-target! "Target page 2")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)))
+    (let [target-page (str "Target page " (random-uuid))
+          source-page (str "Source page " (random-uuid))]
+      (p/new-page target-page)
+      (p/new-page source-page)
+      (b/new-blocks ["b1" "b2" "b3"])
+      (b/select-blocks 3)
+      (util/search-and-click "Move blocks to")
+      (choose-move-target! target-page)
+      (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0))))
 
 (deftest move-editing-block-cmdk
   (testing "move the current editing block using cmdk"
-    (p/new-page "Editing block target")
-    (p/new-page "Editing block source")
-    (b/new-blocks ["editing block"])
-    (util/search-and-click "Move blocks to")
-    (choose-move-target! "Editing block target")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)
-    (p/goto-page "Editing block target")
-    (is (contains? (set (util/get-page-blocks-contents)) "editing block"))))
+    (let [target-page (str "Editing block target " (random-uuid))
+          source-page (str "Editing block source " (random-uuid))]
+      (p/new-page target-page)
+      (p/new-page source-page)
+      (b/new-blocks ["editing block"])
+      (util/search-and-click "Move blocks to")
+      (choose-move-target! target-page)
+      (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)
+      (p/goto-page target-page)
+      (is (contains? (set (util/get-page-blocks-contents)) "editing block")))))
 
 (deftest shift-open-page-in-sidebar
   (testing "Shift+Enter opens an ordinary page search result in the sidebar"
