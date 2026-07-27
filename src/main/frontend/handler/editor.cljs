@@ -1011,16 +1011,18 @@
                          current-block
                          nil)]
       (p/let [loaded-previous-edit (loaded-block-edit loaded-block value (:container-id config))
-              result (db-async/<get-block-with-children repo block-id {:children? true})
-              persisted-block (worker-block-with-children result)
               editor-block (or current-block block)
-              block-e (if persisted-block
-                        (merge persisted-block
-                               (dissoc editor-block
-                                       :children
-                                       :block/children
-                                       :block.temp/has-children?))
-                        editor-block)]
+              block-e (if delete-concat?
+                        editor-block
+                        (p/let [result (db-async/<get-block-with-children repo block-id {:children? true})
+                                persisted-block (worker-block-with-children result)]
+                          (if persisted-block
+                            (merge persisted-block
+                                   (dissoc editor-block
+                                           :children
+                                           :block/children
+                                           :block.temp/has-children?))
+                            editor-block)))]
         (when (:block/parent block-e)
           (let [has-children? (seq (worker-children block-e))
                 block block-e
@@ -1179,36 +1181,71 @@
             (p/recur (remove (set (map :block/uuid result)) (rest ids)) result))
           result)))))
 
+(def ^:private copied-block-derived-attrs
+  #{:block/alias-source-page-class?
+    :block/alias-source-page-id
+    :block/alias-source-page-uuid
+    :block/comment-threads
+    :block/link-id
+    :block/page-id
+    :block/page-name
+    :block/page-uuid
+    :block/parent-id
+    :block/parent-uuid
+    :block/raw-title
+    :logseq.property/description-title
+    :logseq.property/query-block?
+    :logseq.property/query-id
+    :logseq.property.recycle/original-page-title
+    :logseq.property/view-for-id
+    :logseq.property/views
+    :logseq.property.view/gallery-asset-property-ident
+    :logseq.property.view/type-id
+    :logseq.property.view/type-ident})
+
+(defn- copied-block-canonical-attrs
+  [block]
+  (into {}
+        (remove (fn [[attr]]
+                  (or (contains? copied-block-derived-attrs attr)
+                      (= "block.temp" (namespace attr)))))
+        block))
+
 (defn copy-selection-blocks
-  [html? & {:keys [selected-blocks] :as opts}]
+  [html? & {:keys [selected-blocks selected-ids] :as opts}]
   (let [repo (state/get-current-repo)
-        selected-ids (state/get-selection-block-ids)
+        selected-ids (or (seq selected-ids)
+                         (state/get-selection-block-ids))
         ids (or (seq selected-ids) (map :block/uuid selected-blocks))]
     (when (seq selected-ids)
       (copy-cached-selection-text! selected-ids))
-    (p/let [[top-level-block-uuids content blocks] (compose-copied-blocks-contents repo ids (assoc opts :quick-copy? true))]
+    (p/let [[top-level-block-uuids content blocks]
+            (compose-copied-blocks-contents
+             repo ids (assoc (dissoc opts :selected-blocks :selected-ids)
+                             :quick-copy? true))]
       (when (seq blocks)
         (util/copy-to-clipboard! content)
         (p/let [copied-source-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
-                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
-          (let [copied-blocks (cond->> copied-source-blocks
+                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+                _ (let [copied-blocks (cond->> copied-source-blocks
                                 true
                                 (map (fn [block]
-                                       (let [b block]
+                                       (let [b (copied-block-canonical-attrs block)]
                                          (->
-                                          (->> (map (fn [[k v]]
-                                                      (let [v' (cond
-                                                                 (and (map? v) (:db/id v))
-                                                                 [:block/uuid (:block/uuid v)]
-                                                                 (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
-                                                                 (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
-                                                                 :else
-                                                                 v)]
-                                                        [k v'])) b)
-                                               (into {}))
-                                          (assoc :db/id (:db/id b)))))))]
-            (common-handler/copy-to-clipboard-without-id-property! repo content (when html? html) copied-blocks)))
-        (state/set-block-op-type! :copy)
+                                                  (->> (map (fn [[k v]]
+                                                              (let [v' (cond
+                                                                         (and (map? v) (:db/id v))
+                                                                         [:block/uuid (:block/uuid v)]
+                                                                         (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                                                         (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
+                                                                         :else
+                                                                         v)]
+                                                                [k v'])) b)
+                                                       (into {}))
+                                                  (assoc :db/id (:db/id b)))))))]
+                    (common-handler/copy-to-clipboard-without-id-property!
+                     repo content (when html? html) copied-blocks))]
+          (state/set-block-op-type! :copy))
         ;; (notification/show! "Copied!" :success)
         ))))
 
@@ -1260,13 +1297,15 @@
 
 (defn cut-selection-blocks
   [copy? & {:keys [mobile-action-bar?]}]
-  (let [selected-blocks (->> (get-selected-blocks)
+  (let [selected-ids (state/get-selection-block-ids)
+        selected-blocks (->> (get-selected-blocks)
                              (remove #(dom/has-class? % "property-value-container"))
                              (remove (fn [block] (or (= "true" (dom/attr block "data-query"))
                                                      (= "true" (dom/attr block "data-transclude")))))
                              seq)]
     (p/do!
-     (when copy? (copy-selection-blocks true))
+     (when copy?
+       (copy-selection-blocks true :selected-ids selected-ids))
      (state/set-block-op-type! :cut)
      (when-let [blocks selected-blocks]
        ;; remove queries
@@ -2308,7 +2347,8 @@
       (let [existing-blocks (filter :block/uuid blocks)
             move-from-recycle? (and keep-uuid?
                                     (seq existing-blocks)
-                                    (every? ldb/recycled? existing-blocks))
+                                    (or (seq revert-cut-txs)
+                                        (every? ldb/recycled? existing-blocks)))
             sibling? (cond
                        (and paste-nested-blocks? empty-target?)
                        (= (block-parent-id target-block') (block-parent-id target-block))
@@ -2496,7 +2536,7 @@
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
-    (let [{:keys [block config node value]} state]
+    (let [{:keys [block config value]} state]
       (when block
         (let [config (assoc config :keydown-new-block true)
               content value]

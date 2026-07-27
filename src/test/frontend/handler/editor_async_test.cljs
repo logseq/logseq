@@ -263,7 +263,7 @@
                               (some-> @edit-calls last :block :block/uuid))
                            "Backspace must keep the current block focused, matching master.")))})))
 
-(deftest-async backspace-uses-the-loaded-editor-block-before-worker-persistence
+(deftest-async backspace-falls-back-to-the-loaded-editor-block-before-worker-persistence
   (let [page {:db/id 10}
         previous-block {:db/id 1
                         :block/uuid (random-uuid)
@@ -303,11 +303,11 @@
             :block-container #js {}}))
         (p/then
          (fn []
-           (is (zero? @worker-fetches)
-               "Backspace must not wait for an optimistic editor block to reach the worker.")
+           (is (= 1 @worker-fetches)
+               "Backspace should check the worker for the canonical child structure.")
            (is (= [[:delete-blocks [[(:block/uuid previous-block)] {}]]]
                   @applied-ops)
-               "The loaded tree should provide enough state for the immediate optimistic delete.")))
+               "The loaded editor block should remain usable until worker persistence catches up.")))
         (p/finally (fn [] nil)))))
 
 (deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
@@ -641,7 +641,7 @@
                         (fn [_config _block _value]
                           (p/resolved [true true next-block]))
                         editor/clear-when-saved! #(reset! cleared? true)]
-          (p/let [_ (editor/insert-new-block! nil nil)]
+          (p/let [_ (editor/insert-new-block! (editor/get-state) nil)]
             (is @cleared? "Insert above should await the async insert helper")))
         (p/finally (fn []
                      (set! (.-document js/globalThis) previous-document))))))
