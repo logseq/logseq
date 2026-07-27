@@ -320,10 +320,10 @@
                                        (:block/title comment-block)))))
 
 (hsx/defc comment-row-view
-  [config comment-block *hide-block-refs? *show-query? {:keys [block-content-or-editor block-reactions]}]
+  [config comment-block current-user-uuid *hide-block-refs? *show-query?
+   {:keys [block-content-or-editor block-reactions]}]
   (let [[editing? set-editing!] (hooks/use-state false)
         {:keys [author avatar-src author-uuid body created-at]} (comments-model/comment-row comment-block)
-        current-user-uuid (user-handler/user-uuid)
         show-author? (comments-model/comment-author-visible? current-user-uuid)
         comment-uuid (:block/uuid comment-block)
         edit-input-id (str "edit-block-" comment-uuid)
@@ -411,9 +411,12 @@
 
 (hsx/defc subscribed-comment-row
   [config comment-uuid *hide-block-refs? *show-query? renderers]
-  (let [comment-block (db-hooks/use-block comment-uuid)]
+  (let [comment-block (db-hooks/use-block comment-uuid)
+        id-token (rfx/use-sub [:auth/id-token])
+        current-user-uuid (some-> id-token user-handler/parse-jwt :sub)]
     (when comment-block
-      (comment-row-view config comment-block *hide-block-refs? *show-query? renderers))))
+      (comment-row-view config comment-block current-user-uuid
+                        *hide-block-refs? *show-query? renderers))))
 
 (hsx/defc add-comment-button
   [config comments-block {:keys [focus-on-mount?]}]

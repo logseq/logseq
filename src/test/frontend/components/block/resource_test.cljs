@@ -158,6 +158,7 @@
     (when row-source
       (is (string/includes? row-source "comment-uuid"))
       (is (string/includes? row-source "(db-hooks/use-block comment-uuid)"))
+      (is (string/includes? row-source "(rfx/use-sub [:auth/id-token])"))
       (is (= #{"db-hooks/use-block"} (hook-names row-source))))))
 
 (deftest task-time-subscribes-and-hydrates-status-uuids-at-row-boundaries-test
