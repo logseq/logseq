@@ -3,6 +3,7 @@
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
    [goog.string :as gstring]
+   [frontend.components.list-item-icon :as list-item-icon]
    [logseq.shui.ui :as shui]
    [io.factorhouse.hsx.core :as hsx]))
 
@@ -210,7 +211,7 @@
     nil))
 
 (hsx/defc root [{:keys [icon icon-theme query text text-tags info shortcut value-label value title highlighted header hoverable
-                        compact rounded on-mounted on-click on-mouse-move source-block
+                        compact rounded on-mounted on-click on-mouse-move source-block source-create icon-extension?
                         source-wikidata preview-image-url preview-icon-type preview-initials] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
@@ -243,7 +244,9 @@
         header-badge])
      ;; main row
      [:div.flex.items-start.gap-3
-      [:div.w-5.h-5.rounded.flex.items-center.justify-center
+      (if source-create
+        (list-item-icon/root {:variant :create :icon icon :extension? icon-extension?})
+        [:div.w-5.h-5.rounded.flex.items-center.justify-center
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
         ;; `cp__cmdk-list-item-icon` is a hook for the chip-suppression
@@ -266,7 +269,7 @@
          (string? icon)
          (shui/tabler-icon icon {:size "14" :class ""})
 
-         :else icon)]
+         :else icon)])
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])

@@ -8,6 +8,7 @@
             [dommy.core :as dom]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
@@ -122,6 +123,11 @@
                        [_page-name page-uuid] (ui-outliner-tx/transact!
                                                {:outliner-op :create-page}
                                                (outliner-op/create-page! title' options'))
+                       ;; Await the worker->main broadcast so the just-created page is
+                       ;; a live entity before callers (e.g. the CMD+K quick-edit morph)
+                       ;; read it; otherwise db/get-page can return a stale/nil entity.
+                       _ (when page-uuid
+                           (db-async/<get-block (state/get-current-repo) page-uuid {:children? false}))
                        page (db/get-page (or page-uuid title'))]
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)

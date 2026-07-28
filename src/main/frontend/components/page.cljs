@@ -495,7 +495,7 @@
                           :on-tagged-nodes-rendered #(when-not (= linked-refs-tagged-ready-page-id page-id)
                                                        (reset! linked-refs-tagged-ready-page-id* page-id))}))
 
-            (when (not tag-dialog?)
+            (when (or (not tag-dialog?) (not class-page?))
               (if recycle-page?
                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
                 [:div.ls-page-blocks

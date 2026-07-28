@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.page :as component-page]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
@@ -118,26 +119,41 @@
              (not (#{"config.edn" "custom.js" "custom.css"} q))
              (not config/publishing?))
     (let [class? (string/starts-with? q "#")
+          has-inline-tag? (and (not class?) (string/includes? q " #"))
+          [object-page-name object-tag-names]
+          (when has-inline-tag?
+            (let [parts (string/split q #" #")
+                  pn (string/trim (first parts))
+                  tns (->> (rest parts) (map string/trim) (remove string/blank?) vec)]
+              (when (and (not (string/blank? pn)) (seq tns)) [pn tns])))
+          create-object? (some? object-page-name)
           class-name (get-class-from-input q)
-          class (let [class (db/get-case-page class-name)]
+          class (let [class (db/get-page class-name)]
                   (when (ldb/class? class)
                     class))]
-      (->> [{:text (cond
-                     class (t :cmdk.create/configure-tag)
-                     class? (t :cmdk.create/tag)
-                     :else (t :cmdk.create/page))
-             :icon (if class "settings" "new-page")
-             :icon-theme :gray
-             :info (cond
-                     class
-                     (t :cmdk.info/configure-tag class-name)
-                     class?
-                     (t :cmdk.info/create-tag class-name)
-                     :else
-                     (t :cmdk.info/create-page q))
-             :source-create :page
-             :class class}]
-           (remove nil?)))))
+      (if create-object?
+        [{:text (t :cmdk.create/as-tags (str "#" (string/join ", #" object-tag-names)))
+          :icon "new-object"
+          :icon-extension? true
+          :icon-theme :gray
+          :info (t :cmdk.info/create-page object-page-name)
+          :source-create :page
+          :create-object? true
+          :page-name object-page-name
+          :tag-names object-tag-names}]
+        (when (or class? class (nil? (db/get-page q)))
+          [{:text (cond
+                    class (t :cmdk.create/configure-tag)
+                    class? (t :cmdk.create/tag)
+                    :else (t :cmdk.create/page))
+            :icon (cond class "settings" class? "new-class" :else "new-page")
+            :icon-theme :gray
+            :info (cond
+                    class (t :cmdk.info/configure-tag class-name)
+                    class? (t :cmdk.info/create-tag class-name)
+                    :else (t :cmdk.info/create-page q))
+            :source-create :page
+            :class class}])))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered
@@ -976,26 +992,96 @@
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
+(declare action-bar contextual-tip <ensure-class-exists!)
+
+(hsx/defc page-dialog-footer
+  "Footer for the inline-create → quick-edit morph: Done (Esc), Open page (mod+shift+o),
+   Open in sidebar (mod+shift+enter). A document keydown listener handles the shortcuts,
+   incl. plain Escape (trunk's modal-inner swallows Escape after the morph)."
+  [block {:keys [open-label]}]
+  (let [open-label (or open-label (t :cmdk.action/open-tag-page))]
+    (hooks/use-effect!
+     (fn []
+       (let [handler (fn [e]
+                       (let [meta? (util/meta-key? e)
+                             shift? (.-shiftKey e)
+                             key (.-key e)]
+                         (cond
+                           (and meta? shift? (= key "o"))
+                           (do (.preventDefault e) (.stopPropagation e)
+                               (shui/dialog-close!)
+                               (route-handler/redirect-to-page! (:block/uuid block)))
+
+                           (and meta? shift? (= key "Enter"))
+                           (do (.preventDefault e) (.stopPropagation e)
+                               (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                               (shui/dialog-close!))
+
+                           (= key "Escape")
+                           (do (.preventDefault e)
+                               (shui/dialog-close! :ls-dialog-cmdk)))))]
+         (.addEventListener js/document "keydown" handler)
+         (fn [] (.removeEventListener js/document "keydown" handler))))
+     [])
+    (action-bar
+     {:tip (contextual-tip)
+      :primary {:text (t :cmdk.action/done) :shortcut "esc"
+                :on-click #(shui/dialog-close! :ls-dialog-cmdk)}
+      :secondary [{:text open-label
+                   :icon "open-as-page" :icon-extension? true
+                   :shortcut ["cmd" "shift" "o"]
+                   :on-click (fn []
+                               (shui/dialog-close!)
+                               (route-handler/redirect-to-page! (:block/uuid block)))}
+                  {:text (t :cmdk.action/open-in-sidebar)
+                   :icon "move-to-sidebar-right" :icon-extension? true
+                   :shortcut ["cmd" "shift" "return"]
+                   :on-click (fn []
+                               (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                               (shui/dialog-close!))}]})))
+
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
         !input (::input state)
-        input @!input
         create-class? (string/starts-with? @!input "#")
-        create-page? (= :page (:source-create item))
-        class (when create-class? (get-class-from-input @!input))]
-    (if (:class item)
-      (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}])
+        create-object? (:create-object? item)
+        create-page? (and (= :page (:source-create item)) (not create-object?) (not create-class?))
+        class (when create-class? (get-class-from-input @!input))
+        page-dialog-content (fn [block opts]
+                              [:div.w-full.h-full.flex.flex-col.bg-gray-02
+                               [:div.px-16.py-8.flex-1.min-h-0.overflow-y-auto
+                                (component-page/page-container block {:tag-dialog? true})]
+                               (page-dialog-footer block opts)])]
+    (cond
+      ;; Configure an existing tag — synchronous morph
+      (:class item)
+      (shui/dialog-transition-to! :ls-dialog-cmdk
+                                  (page-dialog-content (:class item) {})
+                                  {:close-btn? true})
+
+      ;; Create an object page ("Name #Tag") — async create + tag, then morph
+      create-object?
+      (let [page-name (:page-name item)
+            tag-names (:tag-names item)]
+        (p/let [tag-entities (p/all (mapv <ensure-class-exists! tag-names))
+                page (page-handler/<create! page-name
+                                            {:redirect? false
+                                             :tags (vec (keep :block/uuid tag-entities))})]
+          (when page
+            (shui/dialog-transition-to! :ls-dialog-cmdk
+                                        (page-dialog-content page {:open-label (t :cmdk.action/open-page)})
+                                        {:close-btn? true}))))
+
+      ;; Create a new tag or page — async
+      :else
       (p/let [result (cond
-                       create-class?
-                       (db-page-handler/<create-class! class
-                                                       {:redirect? false})
-                       create-page? (page-handler/<create! input {:redirect? true
-                                                                  :edit? false}))]
-        (shui/dialog-close! :ls-dialog-cmdk)
-        (when create-page?
-          (page-handler/edit-page-when-present! (or (:block/uuid result) input)))
-        (when (and create-class? result)
-          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
+                       create-class? (db-page-handler/<create-class! class {:redirect? false})
+                       create-page? (page-handler/<create! @!input {:redirect? false}))]
+        (if result
+          (shui/dialog-transition-to! :ls-dialog-cmdk
+                                      (page-dialog-content result (when create-page? {:open-label (t :cmdk.action/open-page)}))
+                                      {:close-btn? true})
+          (shui/dialog-close! :ls-dialog-cmdk))))))
 
 (defn- get-filter-user-input
   [input]
@@ -1043,7 +1129,7 @@
   "Ensure a class with the given title exists, creating it (with its Wikidata
    default-icon) if needed. Returns the class entity."
   [class-title]
-  (let [existing-class (db/get-case-page class-title)]
+  (let [existing-class (db/get-page class-title)]
     (if (and existing-class (ldb/class? existing-class))
       (p/resolved existing-class)
       (p/let [new-class (db-page-handler/<create-class! class-title {:redirect? false})]
@@ -1848,7 +1934,9 @@
 
 (hsx/defc hints
   [state fallback-item]
-  (let [action (state->action state fallback-item)
+  (let [[_highlighted] (hooks/use-atom (::highlighted-item state))
+        item (state->highlighted-item state fallback-item)
+        action (state->action state fallback-item)
         make-button (fn [text shortcut & {:as opts}]
                       {:text text :shortcut shortcut
                        :on-click #(handle-action action (assoc state :opts opts) %)})
@@ -1861,10 +1949,10 @@
                         (conj (make-button (t :cmdk.action/copy-ref) ["cmd" "c"])))}
           :search {:primary (make-button (t :cmdk.action/search) ["return"]) :secondary []}
           :trigger {:primary (make-button (t :cmdk.action/trigger) ["return"]) :secondary []}
-          :create {:primary (make-button (t :cmdk.action/create) ["return"]) :secondary []}
+          :create {:primary (make-button (or (:text item) (t :cmdk.action/create)) ["return"]) :secondary []}
           :filter {:primary (make-button (t :cmdk.action/filter) ["return"]) :secondary []}
           :theme {:primary (make-button (t :cmdk.action/apply-theme) ["return"]) :secondary []}
-          :create-from-wikidata {:primary (make-button (t :cmdk.action/create) ["return"]) :secondary []}
+          :create-from-wikidata {:primary (make-button (or (:text item) (t :cmdk.action/create)) ["return"]) :secondary []}
           {:primary nil :secondary []})]
     (when (and action primary)
       (action-bar
