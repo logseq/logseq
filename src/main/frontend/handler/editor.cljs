@@ -1029,26 +1029,27 @@
                 current-block (or current-block block)
                 sibling-or-parent-node (previous-block-node block-container config)
                 previous-block (mounted-block sibling-or-parent-node)]
-            (p/let [left (<left-sibling-or-parent repo block previous-block)]
-              (let [left-has-children? (and left
-                                            (or (= (:db/id left) (block-parent-id block))
-                                                (worker-has-children? left)))
-                    delete-empty-parent? (and delete-concat?
-                                              (= (:db/id current-block) (block-parent-id next-block))
-                                              (not (worker-has-children? next-block)))]
-                (when-not (and has-children? left-has-children? (not delete-empty-parent?))
-                  (p/let [{:keys [prev-block new-content edit-block-f]}
-                          (or loaded-previous-edit
-                              (move-to-prev-block repo sibling-or-parent-node value))]
-                    (delete-block-with-previous!
-                     {:block block
-                      :current-block current-block
-                      :next-block next-block
-                      :prev-block prev-block
-                      :new-content new-content
-                      :edit-block-f edit-block-f
-                      :input-empty? input-empty?
-                      :delete-concat? delete-concat?})))))))))))
+            (when-not (and has-children? (not delete-concat?))
+              (p/let [left (<left-sibling-or-parent repo block previous-block)]
+                (let [left-has-children? (and left
+                                              (or (= (:db/id left) (block-parent-id block))
+                                                  (worker-has-children? left)))
+                      delete-empty-parent? (and delete-concat?
+                                                (= (:db/id current-block) (block-parent-id next-block))
+                                                (not (worker-has-children? next-block)))]
+                  (when-not (and has-children? left-has-children? (not delete-empty-parent?))
+                    (p/let [{:keys [prev-block new-content edit-block-f]}
+                            (or loaded-previous-edit
+                                (move-to-prev-block repo sibling-or-parent-node value))]
+                      (delete-block-with-previous!
+                       {:block block
+                        :current-block current-block
+                        :next-block next-block
+                        :prev-block prev-block
+                        :new-content new-content
+                        :edit-block-f edit-block-f
+                        :input-empty? input-empty?
+                        :delete-concat? delete-concat?}))))))))))))
 
 (defn move-blocks!
   [blocks target opts]

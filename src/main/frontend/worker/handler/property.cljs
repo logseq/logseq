@@ -84,6 +84,26 @@
   (and (= :node (:logseq.property/type property))
        (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
 
+(defn- property-node-selector-values
+  [db property option]
+  (let [values (db-view/get-property-values db (:db/ident property) option)]
+    (if (= :db.type/ref (:db/valueType property))
+      (mapv
+       (fn [choice]
+         (if-let [entity (some->> (get-in choice [:value :db/id])
+                                  (d/entity db))]
+           (assoc choice :value
+                  (cond->
+                   (worker-plain/entity-forward-map
+                    db entity
+                    {:properties [:db/ident :block/uuid :block/tags :block/alias]})
+                    (seq (:block/_alias entity))
+                    (assoc :block/alias-source-page-id
+                           (:db/id (first (:block/_alias entity))))))
+           choice))
+       values)
+      values)))
+
 (defn- property-node-selector-initial-choices
   [db property non-root-classes option]
   (cond
@@ -92,14 +112,14 @@
 
     (seq non-root-classes)
     (if (broad-scoped-node-property? property non-root-classes)
-      (db-view/get-property-values db (:db/ident property) option)
+      (property-node-selector-values db property option)
       (->> non-root-classes
            (mapcat (fn [class] (db-class/get-class-objects db (:db/id class))))
            distinct
            (mapv #(worker-plain/worker-plain-value db %))))
 
     :else
-    (db-view/get-property-values db (:db/ident property) option)))
+    (property-node-selector-values db property option)))
 
 (defn property-node-selector-data
   [db {:keys [property block] :as option}]
