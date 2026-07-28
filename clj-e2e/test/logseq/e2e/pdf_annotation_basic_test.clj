@@ -2,8 +2,11 @@
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [jsonista.core :as json]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.keyboard :as k]
+   [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
@@ -257,3 +260,56 @@
       (is (pos? (:highlight-count area-highlight)) area-highlight)
       (is (:in-viewport area-jump) area-jump)
       (util/wait-timeout 1300))))
+
+(deftest pdf-open-navigation-find-highlight-and-close-test
+  (testing "PDF open/find/page navigation/highlight/close state is isolated and reusable"
+    (upload-pdf-asset!)
+    (assert/assert-is-visible ".extensions__pdf-viewer")
+    (let [initial-page
+          (w/eval-js
+           "document.querySelector('.extensions__pdf-viewer .page')?.dataset.pageNumber")]
+      (k/press "Alt+n")
+      (is (not= initial-page
+                (w/eval-js
+                 "document.querySelector('.extensions__pdf-viewer .page')?.dataset.pageNumber"))))
+    (k/press "Alt+f")
+    (assert/assert-is-visible
+     ".extensions__pdf-viewer input[type='search'], .pdf-find-bar input")
+    (w/fill
+     ".extensions__pdf-viewer input[type='search'], .pdf-find-bar input"
+     "test")
+    (k/press "Enter")
+    (assert/assert-is-visible ".highlight.selected, .textLayer .highlight")
+    (k/press "Escape")
+    (let [{highlight-selector :highlight-selector} (create-text-highlight! "blue")]
+      (assert/assert-is-visible highlight-selector)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks" :has-text "blue")))
+    (k/press "Alt+x")
+    (assert/assert-is-hidden ".extensions__pdf-viewer")
+    (w/click ".ls-page-blocks a.asset-ref.is-pdf")
+    (assert/assert-is-visible ".extensions__pdf-viewer")
+    (assert/assert-have-count ".extensions__pdf-viewer" 1)))
+
+(deftest pdf-annotation-update-and-delete-test
+  (testing "changing annotation color updates both surfaces and deleting clears both"
+    (upload-pdf-asset!)
+    (let [{annotation-index :annotation-index
+           highlight-selector :highlight-selector} (create-text-highlight! "yellow")
+          annotation-block (.nth
+                            (w/-query
+                             ".ls-page-blocks .page-blocks-inner .ls-block:has(.prefix-link)")
+                            annotation-index)]
+      (w/click highlight-selector)
+      (w/click ".extensions__pdf-hls-ctx-menu [data-action='red']")
+      (w/wait-for
+       ".extensions__pdf-hls-text-region .hls-text-region-item[data-color='red']")
+      (w/wait-for
+       (.locator annotation-block "[data-hl-color*='red'], .color-red"))
+
+      (w/click
+       ".extensions__pdf-hls-text-region .hls-text-region-item[data-color='red']")
+      (w/click ".extensions__pdf-hls-ctx-menu [data-action='del']")
+      (w/wait-for-not-visible
+       ".extensions__pdf-hls-text-region .hls-text-region-item[data-color='red']")
+      (is (= 0 (annotation-prefix-count))))))

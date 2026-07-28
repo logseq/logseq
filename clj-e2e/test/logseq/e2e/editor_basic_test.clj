@@ -1285,3 +1285,521 @@
     (b/indent)
     (b/new-block "another nested child")
     (b/indent)))
+
+(defn- selection-range
+  []
+  (w/eval-js
+   "(() => {
+      const editor = document.querySelector('.editor-wrapper textarea');
+      return `${editor.selectionStart}:${editor.selectionEnd}`;
+    })()"))
+
+(defn- clipboard-text!
+  [text]
+  (w/eval-js "text => navigator.clipboard.writeText(text)" text))
+
+(deftest editor-exit-and-unicode-persistence-test
+  (testing "Esc, outside click and navigation save Unicode once and clear transient editor state"
+    (let [content "中文🙂 e\u0301 editor persistence"
+          page-name (p/get-page-name)]
+      (b/new-block content)
+      (k/esc)
+      (assert/assert-have-count util/editor-q 0)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks" :has-text content))
+      (w/click "#main-content-container")
+      (assert/assert-have-count ".ui__popover-content, .autocomplete" 0)
+      (p/new-page "editor exit destination")
+      (p/goto-page page-name)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks" :has-text content))
+      (util/refresh-until-graph-loaded)
+      (is (= content
+             (get (ls-api-call! :editor.getBlock content) "content"))))))
+
+(deftest empty-enter-and-soft-line-break-test
+  (testing "empty Enter obeys tree rules while Shift+Enter stays inside one block"
+    (b/new-block "")
+    (let [before (util/page-blocks-count)]
+      (k/enter)
+      (is (= before (util/page-blocks-count)))
+      (assert/assert-have-count util/editor-q 1))
+    (b/save-block "first line second line")
+    (k/press "Home")
+    (dotimes [_ 10] (k/arrow-right))
+    (k/press "Shift+Enter")
+    (is (= "first line\n second line" (util/get-edit-content)))
+    (is (= 1
+           (count (filter #(string/includes? % "first line")
+                          (util/get-page-blocks-contents)))))
+    (b/new-blocks ["empty parent" ""])
+    (b/indent)
+    (k/enter)
+    (is (= 1 (count (filter string/blank?
+                            (util/get-page-blocks-contents)))))))
+
+(deftest backspace-character-and-tree-merge-test
+  (testing "Backspace distinguishes character deletion from structural merge"
+    (b/new-block "abc")
+    (k/press "ArrowLeft")
+    (k/backspace)
+    (is (= "ac" (util/get-edit-content)))
+    (b/new-blocks ["merge previous" "merge next"])
+    (k/press "Home")
+    (k/backspace)
+    (is (= "merge previousmerge next" (util/get-edit-content)))
+    (let [merged-uuid (get (ls-api-call! :editor.getBlock
+                                         "merge previousmerge next")
+                           "uuid")]
+      (ls-api-call! :editor.insertBlock merged-uuid "merge preserved child"
+                    {:sibling false})
+      (assert/assert-is-visible
+       (loc/filter ".ls-block" :has-text "merge preserved child")))))
+
+(deftest cursor-boundaries-word-motion-and-kill-test
+  (testing "cursor motion follows boundaries and range deletion is one undoable edit"
+    (b/new-blocks ["first cursor line" "second cursor line\ncontinued"])
+    (k/press "Home")
+    (is (= "0:0" (selection-range)))
+    (k/arrow-up)
+    (is (= "first cursor line" (util/get-edit-content)))
+    (util/move-cursor-to-end)
+    (let [before (util/get-edit-content)]
+      (k/press "ControlOrMeta+ArrowLeft")
+      (is (not= (str (count before) ":" (count before))
+                (selection-range))))
+    (k/press "ControlOrMeta+Backspace")
+    (let [after-kill (util/get-edit-content)]
+      (is (not= "first cursor line" after-kill))
+      (b/undo)
+      (is (= "first cursor line" (util/get-edit-content))))
+    (k/press "ControlOrMeta+a")
+    (k/backspace)
+    (is (= "" (util/get-edit-content)))
+    (b/undo)
+    (is (= "first cursor line" (util/get-edit-content)))))
+
+(deftest text-format-shortcuts-and-source-roundtrip-test
+  (testing "format shortcuts wrap only the selection and rendered text round-trips"
+    (doseq [[shortcut source rendered-selector]
+            [["ControlOrMeta+b" "bold" "strong"]
+             ["ControlOrMeta+i" "italic" "em"]
+             ["ControlOrMeta+Shift+h" "highlight" "mark"]]]
+      (b/new-block source)
+      (k/press "ControlOrMeta+a")
+      (k/press shortcut)
+      (let [formatted (util/get-edit-content)]
+        (is (string/includes? formatted source))
+        (util/exit-edit)
+        (assert/assert-is-visible
+         (format ".ls-page-blocks %s:text('%s')" rendered-selector source))
+        (w/click (loc/filter ".block-title-wrap" :has-text source))
+        (is (= formatted (util/get-edit-content)))))
+    (b/new-block "escape \\* literal 🙂 longwordwithoutbreak0123456789")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     (loc/filter ".block-title-wrap" :has-text "longwordwithoutbreak"))))
+
+(deftest page-and-tag-autocomplete-test
+  (testing "page and tag autocomplete update, insert and open existing/new targets"
+    (p/new-page "autocomplete existing page")
+    (p/new-page "autocomplete host")
+    (b/new-block "")
+    (util/press-seq "[[autocomplete existing")
+    (assert/assert-is-visible
+     (loc/filter ".ui__popover-content" :has-text "autocomplete existing page"))
+    (k/enter)
+    (is (string/includes? (util/get-edit-content)
+                          "[[autocomplete existing page]]"))
+    (util/exit-edit)
+    (w/click (loc/filter ".page-reference" :has-text "autocomplete existing page"))
+    (is (= "autocomplete existing page" (p/get-page-name)))
+    (p/goto-page "autocomplete host")
+    (b/new-block "")
+    (util/press-seq "#autocomplete-new-tag")
+    (assert/assert-is-visible ".ui__popover-content")
+    (k/enter)
+    (assert/assert-is-visible
+     (loc/filter ".block-tag" :has-text "autocomplete-new-tag"))))
+
+(deftest slash-menu-filter-scroll-and-cleanup-test
+  (testing "slash search keeps one highlighted result and Esc clears its state"
+    (b/new-block "")
+    (util/press-seq "/")
+    (assert/assert-is-visible ".ui__popover-content")
+    (util/press-seq "property")
+    (assert/assert-is-visible
+     (loc/filter ".ui__popover-content" :has-text "property"))
+    (k/arrow-down)
+    (k/arrow-up)
+    (assert/assert-have-count
+     ".ui__popover-content a.menu-link.chosen, .ui__popover-content [data-kb-highlighted]"
+     1)
+    (k/esc)
+    (assert/assert-is-hidden ".ui__popover-content")
+    (is (= "/property" (util/get-edit-content)))
+    (util/press-seq "/")
+    (assert/assert-is-visible ".ui__popover-content")))
+
+(deftest task-date-and-priority-slash-lifecycle-test
+  (testing "task commands add, update and clear visible properties immediately"
+    (b/new-block "sample task")
+    (doseq [command ["TODO" "Priority A" "Scheduled" "Today"]]
+      (util/input-command command)
+      (k/esc))
+    (util/exit-edit)
+    (assert/assert-is-visible
+     (loc/filter ".ls-block" :has-text "TODO"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-block" :has-text "Priority"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-block" :has-text "Scheduled"))
+    (w/click (loc/filter ".block-title-wrap" :has-text "sample task"))
+    (util/input-command "No priority")
+    (util/exit-edit)
+    (assert/assert-have-count
+     (loc/filter ".property-pair" :has-text "Priority")
+     0)))
+
+(deftest virtualized-late-editor-and-code-editor-test
+  (testing "late-mounted rows and CodeMirror keep separate targets and persisted content"
+    (let [page-name (p/get-page-name)
+          page-uuid (get (ls-api-call! :editor.getPage page-name) "uuid")]
+      (ls-api-call! :editor.insertBatchBlock
+                    page-uuid
+                    (mapv #(hash-map :content (str "late editor row " %))
+                          (range 180)))
+      (w/eval-js
+       "document.querySelector('#main-content-container').scrollTop =
+          document.querySelector('#main-content-container').scrollHeight")
+      (w/click (loc/filter ".block-title-wrap" :has-text "late editor row 179"))
+      (util/move-cursor-to-end)
+      (util/press-seq " edited")
+      (is (= "late editor row 179 edited" (util/get-edit-content))))
+    (b/new-block "")
+    (util/input-command "Code block")
+    (assert/assert-is-visible ".CodeMirror, .cm-editor")
+    (w/click ".CodeMirror textarea, .cm-content")
+    (util/press-seq "const value = 1;\nvalue + 1;")
+    (k/esc)
+    (util/refresh-until-graph-loaded)
+    (assert/assert-is-visible
+     (loc/filter ".extensions__code" :has-text "const value = 1"))))
+
+(deftest multi-selection-indent-roundtrip-test
+  (testing "multi-indent preserves order/subtrees and is one undo step"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["multi a" "multi a child" "multi b" "multi b child"])
+      (b/indent)
+      (k/arrow-up)
+      (k/arrow-up)
+      (b/indent)
+      (util/exit-edit)
+      (w/click (loc/filter ".block-title-wrap" :has-text "multi b"))
+      (b/select-blocks 2)
+      (k/tab)
+      (let [indented (ls-api-call! :editor.getPageBlocksTree page-name)]
+        (is (= 1 (count indented))))
+      (b/undo)
+      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
+      (b/redo)
+      (is (= 1 (count (ls-api-call! :editor.getPageBlocksTree page-name)))))))
+
+(deftest collapse-single-multiple-and-sidebar-test
+  (testing "single and selected collapse states update mounted containers predictably"
+    (let [page-name (p/get-page-name)
+          parent (ls-api-call! :editor.appendBlockInPage page-name "collapse parent")
+          uuid (get parent "uuid")]
+      (ls-api-call! :editor.insertBlock uuid "collapse child" {:sibling false})
+      (w/click (format "#ls-block-%s .bullet-container" uuid))
+      (assert/assert-is-hidden
+       (loc/filter (format "#ls-block-%s" uuid) :has-text "collapse child"))
+      (ls-api-call! :editor.openInRightSidebar uuid)
+      (assert/assert-is-visible (format ".cp__right-sidebar #ls-block-%s" uuid))
+      (w/click (format ".cp__right-sidebar #ls-block-%s .bullet-container" uuid))
+      (assert/assert-is-visible
+       (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
+      (util/refresh-until-graph-loaded)
+      (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
+
+(deftest selection-direction-and-hierarchical-select-all-test
+  (testing "range and select-all remain inside the current visible container"
+    (b/new-blocks ["select a" "select b" "select c" "select d"])
+    (util/exit-edit)
+    (w/click ".ls-page-blocks .ls-block:last-of-type .bullet-container")
+    (b/select-blocks 3)
+    (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 3)
+    (is (= ["select b" "select c" "select d"]
+           (mapv string/trim
+                 (w/all-text-contents
+                  ".ls-page-blocks .ls-block.selected .block-title-wrap"))))
+    (k/press "ControlOrMeta+a")
+    (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 4)
+    (assert/assert-have-count ".cp__right-sidebar .ls-block.selected" 0)))
+
+(deftest structured-and-plain-text-copy-test
+  (testing "structured copy preserves trees while plain copy exposes readable indentation"
+    (let [target-page "copy target"]
+      (b/new-blocks ["copy parent" "copy child" "copy sibling"])
+      (b/indent)
+      (b/select-blocks 3)
+      (b/copy)
+      (p/new-page target-page)
+      (b/paste)
+      (util/exit-edit)
+      (let [tree (ls-api-call! :editor.getPageBlocksTree target-page)]
+        (is (= ["copy parent" "copy sibling"]
+               (mapv #(get % "content") tree)))
+        (is (= ["copy child"]
+               (mapv #(get % "content") (get (first tree) "children")))))
+      (w/click (loc/filter ".block-title-wrap" :has-text "copy sibling"))
+      (b/select-blocks 2)
+      (k/press "ControlOrMeta+Shift+c")
+      (let [text (w/eval-js "navigator.clipboard.readText()")]
+        (is (string/includes? text "copy parent"))
+        (is (string/includes? text "copy child"))))))
+
+(deftest plain-multiline-and-html-paste-test
+  (testing "paste mode preserves cursor text, multiline structure and safe rich content"
+    (b/new-block "before-after")
+    (k/press "Home")
+    (dotimes [_ 7] (k/arrow-right))
+    (clipboard-text! "middle")
+    (b/paste)
+    (is (= "before-middleafter" (util/get-edit-content)))
+    (clipboard-text! "root\n  child\nsibling")
+    (b/new-block "")
+    (b/paste)
+    (util/exit-edit)
+    (assert/assert-is-visible (loc/filter ".ls-page-blocks" :has-text "child"))
+    (b/new-block "")
+    (w/eval-js
+     "(() => {
+        const transfer = new DataTransfer();
+        transfer.setData('text/html',
+          '<h2>Rich title</h2><ul><li><strong>Bold item</strong></li></ul><script>window.__e2eInjected=true</script>');
+        transfer.setData('text/plain', 'Rich title\\nBold item');
+        document.querySelector('.editor-wrapper textarea').dispatchEvent(
+          new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: transfer})
+        );
+      })()")
+    (util/exit-edit)
+    (assert/assert-is-visible (loc/filter ".ls-page-blocks" :has-text "Rich title"))
+    (is (not (true? (w/eval-js "window.__e2eInjected === true"))))))
+
+(deftest structural-operation-undo-redo-steps-test
+  (testing "insert, indent, move and delete each have a reversible UI/worker state"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["history a" "history b" "history c"])
+      (b/indent)
+      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
+      (b/undo)
+      (is (= 3 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
+      (b/redo)
+      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
+      (b/delete-blocks)
+      (b/undo)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks" :has-text "history c"))
+      (b/redo)
+      (assert/assert-have-count
+       (loc/filter ".ls-page-blocks" :has-text "history c")
+       0))))
+
+(deftest ten-thousand-block-page-remains-directly-navigable-test
+  (testing "a 10k top-level page can reach top, middle and bottom without walking every window"
+    (let [block-count 10000
+          title-prefix "ten-thousand-block-"
+          blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
+      (insert-current-page-blocks! blocks)
+      (enable-virtualized-rendering!)
+      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
+        (let [target-title (format "%s%05d" title-prefix target-index)]
+          (is (= target-title
+                 (scroll-page-to-block!
+                  title-prefix block-count target-index)))
+          (assert/assert-is-visible
+           (format ".ls-page-blocks .ls-block[data-block-title='%s']"
+                   target-title))))
+      (let [last-title (format "%s%05d" title-prefix (dec block-count))]
+        (w/click
+         (format ".ls-page-blocks .ls-block[data-block-title='%s']"
+                 last-title))
+        (util/input " edited")
+        (util/exit-edit)
+        (is (= (str last-title " edited")
+               (get (ls-api-call! :editor.getBlock (str last-title " edited"))
+                    "title")))))))
+
+(deftest mixed-height-virtual-page-keeps-blocks-separated-test
+  (testing "mixed text, code and headings do not overlap after fast scrolling"
+    (let [long-text (apply str (repeat 40 "long mixed-height content "))
+          blocks (vec
+                  (mapcat
+                   (fn [index]
+                     [(format "mixed plain %03d" index)
+                      (str "## mixed heading " index)
+                      (str "```clojure\n(+ " index " 1)\n```")
+                      (str long-text index)])
+                   (range 60)))]
+      (insert-current-page-blocks! blocks)
+      (enable-virtualized-rendering!)
+      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (doseq [position [1.0 0.0 0.5 0.9 0.1]]
+        (w/eval-js
+         "position => {
+            const scroller = document.querySelector(
+              '.ls-page-blocks [data-virtuoso-scroller]'
+            );
+            scroller.scrollTop =
+              Math.max(0, (scroller.scrollHeight - scroller.clientHeight) * position);
+            scroller.dispatchEvent(new Event('scroll'));
+          }"
+         position)
+        (util/wait-timeout 100)
+        (let [{:strs [overlap visibleCount]}
+              (w/eval-js
+               "(() => {
+                  const blocks = Array.from(
+                    document.querySelectorAll('.ls-page-blocks .ls-block')
+                  ).filter((node) => {
+                    const rect = node.getBoundingClientRect();
+                    return rect.bottom > 0 && rect.top < innerHeight;
+                  });
+                  const rects = blocks.map((node) => node.getBoundingClientRect());
+                  return {
+                    visibleCount: rects.length,
+                    overlap: rects.some(
+                      (rect, index) => index > 0 && rect.top < rects[index - 1].bottom
+                    )
+                  };
+                })()")]
+          (is (pos? visibleCount))
+          (is (false? overlap)))))))
+
+(deftest hundred-level-tree-can-expand-and-zoom-test
+  (testing "a 100-level tree remains readable and the deepest block can be opened"
+    (let [page-name (p/get-page-name)
+          page-uuid (get (ls-api-call! :editor.getBlock page-name) "uuid")
+          nested-tree
+          (reduce
+           (fn [children depth]
+             [{:content (format "deep-level-%03d" depth)
+               :children children}])
+           []
+           (reverse (range 1 101)))]
+      (ls-api-call! :editor.insertBatchBlock page-uuid nested-tree)
+      (letfn [(tree-depth [nodes]
+                (if-let [node (first nodes)]
+                  (inc (tree-depth (get node "children")))
+                  0))]
+        (is (= 100
+               (tree-depth
+                (ls-api-call! :editor.getPageBlocksTree page-name)))))
+      (util/search "deep-level-100")
+      (w/click (loc/filter ".ui__ac-inner" :has-text "deep-level-100"))
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks" :has-text "deep-level-100"))
+      (assert/assert-have-count ".ui__loading, .loading-graph" 0))))
+
+(defn- block-uuid
+  [title]
+  (get (ls-api-call! :editor.getBlock title) "uuid"))
+
+(deftest journals-consecutive-input-test
+  (testing "consecutive journal input creates one stable editor and distinct blocks"
+    (util/goto-journals)
+    (b/new-blocks ["journal e2e first" "journal e2e second" "journal e2e third"])
+    (is (= ["journal e2e first" "journal e2e second" "journal e2e third"]
+           (take-last 3 (util/get-page-blocks-contents))))
+    (assert/assert-have-count util/editor-q 1)
+    (is (= "journal e2e third" (util/get-edit-content)))))
+
+(deftest worker-read-error-is-recoverable-test
+  (testing "a missing worker entity reports the error without poisoning a later read"
+    (let [missing-uuid (str (random-uuid))]
+      (b/new-block (str "((" missing-uuid "))"))
+      (util/exit-edit)
+      (w/click (format "a[data-ref='%s'], .block-ref" missing-uuid))
+      (assert/assert-is-visible
+       (loc/filter ".ui__toast" :has-text "does not exist")))
+    (assert/assert-is-hidden ".ui__loading, .loading-graph")
+    (b/new-block "worker recovery target")
+    (let [uuid (block-uuid "worker recovery target")]
+      (is (string? uuid))
+      (is (= "worker recovery target"
+             (get (ls-api-call! :editor.getBlock uuid) "content"))))))
+
+(deftest enter-splits-block-at-cursor-test
+  (testing "Enter in the middle preserves both halves and moves focus to the second"
+    (b/new-block "alphaomega")
+    (k/press "Home")
+    (dotimes [_ 5] (k/arrow-right))
+    (k/enter)
+    (util/press-seq "middle-")
+    (is (= ["alpha" "middle-omega"]
+           (take-last 2 (util/get-page-blocks-contents))))
+    (assert/assert-have-count util/editor-q 1)
+    (is (= "middle-omega" (util/get-edit-content)))))
+
+(deftest block-reference-autocomplete-and-refresh-test
+  (testing "block reference search inserts a UUID reference and rerenders target updates"
+    (let [source-page (p/get-page-name)]
+      (b/new-block "reference autocomplete unique target")
+      (let [target-uuid (block-uuid "reference autocomplete unique target")]
+        (b/new-block "")
+        (util/press-seq "((reference autocomplete unique")
+        (assert/assert-is-visible ".ac-block-search")
+        (w/click (.first (loc/filter ".ac-block-search a" :has-text
+                                     "reference autocomplete unique target")))
+        (util/exit-edit)
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-blocks" :has-text "reference autocomplete unique target"))
+        (ls-api-call! :editor.updateBlock target-uuid "reference autocomplete updated target")
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-blocks" :has-text "reference autocomplete updated target"))
+        (is (= source-page (p/get-page-name)))))))
+
+(deftest quick-add-moves-all-blocks-to-today-test
+  (testing "Quick add moves every temporary block to today's journal exactly once"
+    (k/press (if util/mac? "Meta+e" "Control+Alt+e"))
+    (assert/assert-is-visible ".ls-dialog-quick-add")
+    (b/new-blocks ["quick add first" "quick add second"])
+    (w/click (util/get-by-text "Add to today" true))
+    (w/wait-for-not-visible ".ls-dialog-quick-add")
+    (util/goto-journals)
+    (let [contents (util/get-page-blocks-contents)]
+      (is (= 1 (count (filter #{"quick add first"} contents))))
+      (is (= 1 (count (filter #{"quick add second"} contents)))))
+    (assert/assert-have-count util/editor-q 1)))
+
+(deftest external-property-update-preserves-edit-buffer-test
+  (testing "an external property/child delta does not replace unrelated active text"
+    (b/new-block "active editor text")
+    (let [uuid (block-uuid "active editor text")]
+      (util/move-cursor-to-end)
+      (util/press-seq " local draft")
+      (ls-api-call! :editor.upsertBlockProperty uuid "external-property" "updated")
+      (ls-api-call! :editor.insertBlock uuid "external child" {:sibling false})
+      (is (= "active editor text local draft" (util/get-edit-content)))
+      (assert/assert-is-visible
+       (loc/filter ".property-pair" :has-text "external-property"))
+      (assert/assert-is-visible
+       (loc/filter ".ls-block" :has-text "external child")))))
+
+(deftest operation-completion-restores-mounted-focus-test
+  (testing "completed insert/update/delete operations expose their DOM result immediately"
+    (let [page-name (p/get-page-name)
+          inserted (ls-api-call! :editor.appendBlockInPage page-name "completion inserted")
+          uuid (get inserted "uuid")]
+      (assert/assert-have-count (str "#ls-block-" uuid) 1)
+      (ls-api-call! :editor.updateBlock uuid "completion updated")
+      (assert/assert-is-visible
+       (format "#ls-block-%s .block-title-wrap:text('completion updated')" uuid))
+      (w/click (format "#ls-block-%s .block-content" uuid))
+      (util/move-cursor-to-end)
+      (util/press-seq " and focused")
+      (is (= "completion updated and focused" (util/get-edit-content)))
+      (ls-api-call! :editor.removeBlock uuid)
+      (assert/assert-have-count (str "#ls-block-" uuid) 0))))
