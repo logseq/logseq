@@ -83,18 +83,16 @@
         (let [block-uuid (:block/uuid entity)
               parent-uuid (:block/uuid parent)
               order (:block/order entity)]
-          (when-not (uuid? block-uuid)
-            (fail! "Invalid child UUID"
-                   {:entity-id entity-id :block-uuid block-uuid}))
-          (when-not (uuid? parent-uuid)
-            (fail! "Invalid parent UUID"
-                   {:entity-id entity-id :parent-uuid parent-uuid}))
-          (when (nil? order)
-            (fail! "Missing child order"
-                   {:entity-id entity-id :block-uuid block-uuid}))
-          {:block-uuid block-uuid
-           :parent-uuid parent-uuid
-           :order order})))))
+          (when (some? order)
+            (when-not (uuid? block-uuid)
+              (fail! "Invalid child UUID"
+                     {:entity-id entity-id :block-uuid block-uuid}))
+            (when-not (uuid? parent-uuid)
+              (fail! "Invalid parent UUID"
+                     {:entity-id entity-id :parent-uuid parent-uuid}))
+            {:block-uuid block-uuid
+             :parent-uuid parent-uuid
+             :order order}))))))
 
 (defn- append-membership-op
   [operations operation membership]
