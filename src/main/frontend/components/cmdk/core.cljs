@@ -19,7 +19,7 @@
             [frontend.storage :as storage]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [frontend.context.i18n :refer [interpolate-rich-text t t-en t-locale]]
+            [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t t-en t-locale]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
@@ -605,7 +605,7 @@
        [:div.preview-block-content.flex.items-baseline.gap-2.text-gray-11
         [:span.preview-bullet]
         (shui/tabler-icon "search" {:size 14})
-        [:span.italic "Query"]]]
+        [:span.italic (t :cmdk.preview/query)]]]
 
       ;; Regular block
       :else
@@ -682,7 +682,7 @@
                         seq))))]
     [:div.preview-blocks
      (or (walk page-entity 1)
-         [:div.p-4.text-gray-11.text-sm.italic "Empty page"])]))
+         [:div.p-4.text-gray-11.text-sm.italic (t :cmdk.preview/empty-page)])]))
 
 (defn- preview-class-objects-list
   "Renders the object list once data is available. Pure render function."
@@ -695,13 +695,13 @@
         remaining (- total max-items)]
     [:div.preview-blocks
      (if (zero? total)
-       [:div.p-4.text-gray-11.text-sm.italic "No objects"]
+       [:div.p-4.text-gray-11.text-sm.italic (t :cmdk.preview/no-objects)]
        [:<>
         [:div.px-3.pt-2.pb-1.text-xs.text-gray-11
-         (str total " " (if (= total 1) "object" "objects"))]
+         (if (= total 1) (t :cmdk.preview/object-count-one total) (t :cmdk.preview/object-count-many total))]
         (for [obj sorted]
           (let [node-icon (icon-component/get-node-icon obj)
-                title (or (:block/title obj) "Untitled")]
+                title (or (:block/title obj) (t :ui/untitled))]
             [:div.preview-block {:key (str (:block/uuid obj))}
              [:div.preview-block-content.flex.items-start.gap-2
               [:span.flex-shrink-0.flex.items-center.justify-center.mt-0.5
@@ -715,7 +715,7 @@
               [:span.flex-1.min-w-0 title]]]))
         (when (pos? remaining)
           [:div.px-3.py-1.text-xs.text-gray-11.italic
-           (str "+" remaining " more")])])]))
+           (t :cmdk.preview/more-count remaining)])])]))
 
 (hsx/defc preview-class-objects
   "Async-loads objects tagged with a class from the DB worker, then renders a
@@ -736,7 +736,7 @@
      [class-id])
     (if (nil? objects)
       [:div.preview-blocks
-       [:div.p-4.text-gray-11.text-sm.italic "Loading..."]]
+       [:div.p-4.text-gray-11.text-sm.italic (t :ui/loading)]]
       (preview-class-objects-list objects))))
 
 (defn- block-search-result->items
@@ -1280,8 +1280,10 @@
                                 (shui/toast!
                                  (fn [{:keys [dismiss!]}]
                                    [:span
-                                    (str "Added " n " " (if (= 1 n) "detail" "details")
-                                         " from Wikidata ")
+                                    (if (= 1 n)
+                                      (t :wikidata/added-one n)
+                                      (t :wikidata/added-many n))
+                                    " "
                                     (shui/button
                                      {:size :sm :variant :secondary
                                       :on-click (fn []
@@ -1290,7 +1292,7 @@
                                                   (page-handler/<delete!
                                                    page-uuid
                                                    (fn [] (route-handler/redirect-to-home!))))}
-                                     "Undo")])
+                                     (t :wikidata/undo))])
                                  :default
                                  {:duration 8000}))))))))))
               (p/catch (fn [_err] nil))))))))
@@ -2023,11 +2025,11 @@
           (when to-move
             (let [page-title (:block/title target)]
               (notification/show!
-               [:span "Blocks added to "
-                [:a.font-medium
-                 {:on-click #(route-handler/redirect-to-page! (:block/uuid target))}
-                 page-title]
-                "!"]
+               (interpolate-rich-text-node
+                (t :editor.quick-add/commit-success)
+                [[:a.font-medium
+                  {:on-click #(route-handler/redirect-to-page! (:block/uuid target))}
+                  page-title]])
                :success)))))))))
 
 (hsx/defc capture-page-blocks
@@ -2069,8 +2071,8 @@
         (cond
           (and class? (seq class-name))
           [{:value "create-class"
-            :label (str "New tag: \"" class-name "\"")
-            :create-label "New tag:"
+            :label (str (t :editor.quick-add/new-tag) " \"" class-name "\"")
+            :create-label (t :editor.quick-add/new-tag)
             :create-quoted (str "\"" class-name "\"")
             :icon "new-class"
             :create-type :class
@@ -2078,9 +2080,9 @@
 
           (some? object-page-name)
           [{:value "create-object"
-            :label (str "New page: \"" object-page-name "\" as #" (string/join ", #" object-tag-names))
-            :create-label "New page:"
-            :create-quoted (str "\"" object-page-name "\" as #" (string/join ", #" object-tag-names))
+            :label (str (t :editor.quick-add/new-page) " \"" object-page-name "\" " (t :editor.quick-add/as-tags) " #" (string/join ", #" object-tag-names))
+            :create-label (t :editor.quick-add/new-page)
+            :create-quoted (str "\"" object-page-name "\" " (t :editor.quick-add/as-tags) " #" (string/join ", #" object-tag-names))
             :icon "new-object"
             :create-type :object
             :create-name object-page-name
@@ -2088,8 +2090,8 @@
 
           :else
           [{:value "create-page"
-            :label (str "New page: \"" effective-name "\"")
-            :create-label "New page:"
+            :label (str (t :editor.quick-add/new-page) " \"" effective-name "\"")
+            :create-label (t :editor.quick-add/new-page)
             :create-quoted (str "\"" effective-name "\"")
             :icon "new-page"
             :create-type :page
@@ -2113,23 +2115,23 @@
                                   :label label
                                   :icon "calendar"
                                   :data page
-                                  :group "Dates"}))
-                             [[today-page (str "Today — " (:block/title today-page))]
-                              [tomorrow-page (str "Tomorrow — " (:block/title tomorrow-page))]
-                              [yesterday-page (str "Yesterday — " (:block/title yesterday-page))]])
+                                  :group (t :editor.quick-add/group-dates)}))
+                             [[today-page (t :editor.quick-add/date-today (:block/title today-page))]
+                              [tomorrow-page (t :editor.quick-add/date-tomorrow (:block/title tomorrow-page))]
+                              [yesterday-page (t :editor.quick-add/date-yesterday (:block/title yesterday-page))]])
             fav-items (map (fn [page]
                              {:value (:db/id page)
                               :label (:block/title page)
                               :icon (get-page-icon page)
                               :data page
-                              :group "Favorites"})
+                              :group (t :editor.quick-add/group-favorites)})
                            favorites)
             recent-items (map (fn [page]
                                 {:value (:db/id page)
                                  :label (:block/title page)
                                  :icon (get-page-icon page)
                                  :data page
-                                 :group "Recent"})
+                                 :group (t :editor.quick-add/group-recent)})
                               (take 8 recent-pages))]
         (vec (concat date-items fav-items recent-items)))
       ;; Search mode: fuzzy match all pages + optional create item
@@ -2159,7 +2161,7 @@
     [:div.target-page-picker
      [:div.px-1.pt-1
       (shui/input {:ref *input-ref
-                   :placeholder "Search pages..."
+                   :placeholder (t :editor.quick-add/search-placeholder)
                    :value input
                    :class "h-8 text-sm bg-transparent border-0 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none focus:outline-none shadow-none"
                    :on-change #(set-input! (util/evalue %))
@@ -2216,7 +2218,7 @@
                          (icon-component/icon (or (:icon item) "file") {:size 14})
                          [:span (:label item)]]))
        :empty-placeholder [:div.px-3.py-2.text-sm.text-gray-11
-                           "No pages found"]})]))
+                           (t :editor.quick-add/no-pages)]})]))
 
 (hsx/defc capture-toolbar
   "Top toolbar for capture mode: target page picker."
@@ -2235,7 +2237,7 @@
     [:div.capture-toolbar
      ;; Target page picker
      [:div.flex.items-center.gap-1.5
-      [:span.target-label "Add to:"]
+      [:span.target-label (t :editor.quick-add/add-to)]
       (shui/button {:variant :ghost :size :sm
                     :class (str "target-pill" (when-not default-target? " target-pill-active"))
                     :on-click (fn [e]
@@ -2254,24 +2256,24 @@
   [target-page]
   (action-bar
    {:tip (contextual-tip)
-    :primary {:text "Done" :shortcut ["mod" "e"]
+    :primary {:text (t :cmdk.action/done) :shortcut ["mod" "e"]
               :on-click #(capture-commit-blocks!
                           (or target-page (db/get-page (date/today))))}
-    :secondary [{:text "Open target page"
+    :secondary [{:text (t :editor.quick-add/open-target)
                  :icon "open-as-page" :icon-extension? true
                  :shortcut ["cmd" "shift" "o"]
                  :on-click (fn []
                              (shui/dialog-close! :ls-dialog-cmdk)
                              (when target-page
                                (route-handler/redirect-to-page! (:block/uuid target-page))))}
-                {:text "Open in sidebar"
+                {:text (t :cmdk.action/open-in-sidebar)
                  :icon "move-to-sidebar-right" :icon-extension? true
                  :shortcut ["cmd" "shift" "return"]
                  :on-click (fn []
                              (when target-page
                                (state/sidebar-add-block! (state/get-current-repo) (:db/id target-page) :page))
                              (shui/dialog-close! :ls-dialog-cmdk))}
-                {:text "Discard draft"
+                {:text (t :editor.quick-add/discard-draft)
                  :icon "trash"
                  :on-click #(editor-handler/discard-capture-draft!)}]}))
 

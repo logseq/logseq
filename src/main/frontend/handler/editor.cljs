@@ -4040,12 +4040,13 @@
                                              (let [success-count (count (filter some? results))]
                                                (when (pos? success-count)
                                                  (notification/show!
-                                                  (str "Uploaded " success-count " asset"
-                                                       (when (> success-count 1) "s") " to #Asset")
+                                                  (if (= success-count 1)
+                                                    (t :asset/upload-success-one)
+                                                    (t :asset/upload-success-many success-count))
                                                   :success)))))
                                    (p/catch (fn [e]
                                               (js/console.error e)
-                                              (notification/show! "Failed to upload asset" :error)))))))))
+                                              (notification/show! (t :asset/upload-failed) :error)))))))))
     (.click input)))
 
 (defn quick-add-ensure-new-block-exists!
