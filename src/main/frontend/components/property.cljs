@@ -2,6 +2,8 @@
   "Block properties management."
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [cljs-bean.core :as bean]
+            [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
@@ -359,6 +361,55 @@
        key-title
        [:div.max-w-96.whitespace-pre-wrap description]))))
 
+(defn- property-type-icon
+  "Icon for the property type; fallback when no custom icon is set."
+  [property property-type]
+  (let [type (or (:logseq.property/type property) property-type :default)
+        ident (:db/ident property)
+        icon (cond
+               (= ident :logseq.property.class/extends) "child-node"
+               (= ident :logseq.property.class/properties) "page-property"
+               (= ident :block/tags) "hash"
+               (string/starts-with? (str ident) ":plugin.") "puzzle"
+               :else
+               (case type
+                 :number "number"
+                 :date "calendar"
+                 :datetime "calendar"
+                 :checkbox "checkbox"
+                 :url "link"
+                 :property "property"
+                 :page "page"
+                 :node "node"
+                 :default nil
+                 nil))
+        extension? (#{"child-node" "page-property" "node" "property"} icon)]
+    (when icon (ui/icon icon (cond-> {:class "opacity-50" :size 16}
+                               extension? (assoc :extension? true
+                                                 :class "text-gray-10"))))))
+
+(defn property-key-bullet
+  "Property key bullet: filled square if no icon, else the property icon/emoji/image."
+  [property property-type]
+  (let [icon (:logseq.property/icon property)
+        default-icon (property-type-icon property property-type)]
+    [:a.bullet-link-wrap
+     [:span.bullet-container
+      (if icon
+        [:span.property-icon (icon-component/icon icon {:size 16 :color? true})]
+        (if (and default-icon (not= (:logseq.property/type property) :default))
+          default-icon
+          [:span.property-bullet.property-bullet-filled-square]))]]))
+
+(defn property-value-bullet
+  "Property value bullet: bordered square, or regular bullet for text."
+  [{:keys [type]}]
+  [:a.bullet-link-wrap
+   [:span.bullet-container
+    (cond
+      (= type :default) [:span.bullet]
+      :else [:span.property-bullet.property-bullet-bordered-square])]])
+
 (hsx/defc property-key-cp
   [block property {:keys [other-position? class-schema?]}]
   (let [icon (:logseq.property/icon property)]
@@ -387,9 +438,7 @@
                                                 {:as-dropdown? true :auto-focus? true
                                                  :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
                (assoc :class "flex items-center"))
-           (if icon
-             (icon-component/icon icon {:size 15 :color? true})
-             (property-icon property nil)))]))
+           (property-key-bullet property (:logseq.property/type property)))]))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
@@ -622,8 +671,167 @@
         (not (contains? #{:default :url} type))
         (empty-panel-property-value? value))))
 
+(hsx/defc property-row-resizer
+  "Per-row draggable resize handle for the property key-column width.
+  Drag state lives in plain atoms (React-invisible); on-resize! is called via a ref to
+  dodge React batching. All handles in the area sync during drag via querySelectorAll so
+  the divider reads as one continuous line. Keyboard (Arrow) + double-click work without
+  interact.js; only mouse-drag depends on it."
+  [on-resize!]
+  (let [*el (hooks/use-ref nil)
+        *on-resize-ref (hooks/use-ref on-resize!)
+        add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
+        remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
+
+    ;; Keep on-resize! ref in sync with the latest prop
+    (set! (.-current *on-resize-ref) on-resize!)
+
+    ;; Setup interact.js draggable — ONE TIME
+    (hooks/use-effect!
+     (fn []
+       (when-let [el (and (fn? js/window.interact) (.-current *el))]
+         (let [*start-width (atom nil)
+               *dx (atom 0)
+               *effective-max (atom 500)
+               min-width 124
+               max-width 500
+               sync-handles! (fn [dx-val]
+                               (let [transform (if (zero? dx-val)
+                                                 ""
+                                                 (str "translate3D(" dx-val "px, 0, 0)"))]
+                                 (doseq [handle (array-seq (.querySelectorAll js/document ".property-row-resizer"))]
+                                   (dom/set-style! handle :transform transform))))
+               interact-instance
+               (-> (js/interact el)
+                   (.draggable
+                    (bean/->js
+                     {:listeners
+                      {:start (fn []
+                                (let [property-key-el (.closest el ".property-key-panel")
+                                      ;; Read base width from the CSS var (not offsetWidth,
+                                      ;; which reflects calc() indent adjustments).
+                                      properties-area (.closest el ".ls-properties-area")
+                                      css-var (when properties-area
+                                                (.getPropertyValue (.-style properties-area)
+                                                                   "--ls-property-key-width"))
+                                      current-w (or (when (and css-var (not (string/blank? css-var)))
+                                                      (let [v (js/parseInt css-var 10)]
+                                                        (when (js/isFinite v) v)))
+                                                    (when property-key-el
+                                                      (.-offsetWidth property-key-el))
+                                                    160)
+                                      container-w (if properties-area (.-offsetWidth properties-area) 1000)
+                                      in-block? (some? (.closest el ".ls-block .ls-properties-area"))
+                                      pct-cap (if in-block? 0.4 0.5)
+                                      ;; clamp eff-max >= min-width so a narrow container never
+                                      ;; persists a sub-124 width (EC1).
+                                      eff-max (max min-width (min max-width (js/Math.floor (* container-w pct-cap))))]
+                                  (reset! *start-width current-w)
+                                  (reset! *effective-max eff-max)
+                                  (reset! *dx 0)
+                                  (dom/add-class! el "is-active")))
+                       :move (fn [^js e]
+                               (let [raw-dx (.-dx e)
+                                     prev-dx @*dx
+                                     to-dx (+ prev-dx raw-dx)
+                                     start-w @*start-width
+                                     max-dx (- @*effective-max start-w)
+                                     min-dx (- min-width start-w)
+                                     clamped (cond
+                                               (< to-dx min-dx) min-dx
+                                               (> to-dx max-dx) max-dx
+                                               :else to-dx)
+                                     at-limit? (not= clamped to-dx)]
+                                 (if at-limit?
+                                   (dom/add-class! el "at-limit")
+                                   (dom/remove-class! el "at-limit"))
+                                 (reset! *dx clamped)
+                                 (sync-handles! clamped)))
+                       :end (fn []
+                              (let [dx-val @*dx
+                                    start-w @*start-width]
+                                (when (number? start-w)
+                                  (let [w (js/Math.round (+ dx-val start-w))
+                                        eff-max @*effective-max
+                                        final-w (cond
+                                                  (< w min-width) min-width
+                                                  (> w eff-max) eff-max
+                                                  :else w)]
+                                    ;; Optimistic: set the var on ALL property areas (global setting)
+                                    (let [width-str (str final-w "px")]
+                                      (doseq [area (array-seq (.querySelectorAll js/document ".ls-properties-area"))]
+                                        (.setProperty (.-style area) "--ls-property-key-width" width-str)))
+                                    ;; Persist: localStorage (instant, survives reload) + DB KV (via callback)
+                                    (js/localStorage.setItem "ls-property-key-width" (str final-w))
+                                    ((.-current *on-resize-ref) final-w)))
+                                ;; Always cleanup
+                                (sync-handles! 0)
+                                (reset! *start-width nil)
+                                (reset! *dx 0)
+                                (dom/remove-class! el "is-active")
+                                (dom/remove-class! el "at-limit")))}}))
+                   (.styleCursor false)
+                   (.on "dragstart" add-resizing-class)
+                   (.on "dragend" remove-resizing-class)
+                   (.on "mousedown" util/stop-propagation))]
+           ;; Cleanup on unmount — also clear the global drag-feedback class in case a drag
+           ;; was interrupted by the unmount (else it sticks on <html>) (EC5).
+           (fn []
+             (.unset interact-instance)
+             (remove-resizing-class)))))
+     [])
+
+    ;; Render
+    [:span.property-row-resizer
+     {:ref *el
+      :role "separator"
+      :aria-orientation "vertical"
+      :aria-label "Resize property key column"
+      :tab-index 0
+      :data-no-dnd true
+      ;; @dnd-kit's MouseSensor activates on onMouseDown (TouchSensor on onTouchStart); stop
+      ;; THOSE so a resize never starts a reorder. Do NOT stop pointerdown: interact.js delegates
+      ;; its drag on document via pointer events, and killing pointerdown here kills the resize
+      ;; entirely. mousedown/pointerdown are separate native events, so this is safe.
+      :on-mouse-down (fn [e] (.stopPropagation e))
+      :on-touch-start (fn [e] (.stopPropagation e))
+      :on-click (fn [e] (.stopPropagation e))
+      :on-double-click (fn [e]
+                         (.stopPropagation e)
+                         (js/localStorage.removeItem "ls-property-key-width")
+                         ((.-current *on-resize-ref) nil))
+      :on-key-down (fn [^js e]
+                     (let [step 10
+                           code (.-code e)
+                           delta (case code
+                                   "ArrowLeft" (- step)
+                                   "ArrowRight" step
+                                   nil)]
+                       (when delta
+                         (.preventDefault e)
+                         (let [current-el (.-currentTarget e)
+                               property-key-el (.closest current-el ".property-key-panel")
+                               properties-area (.closest current-el ".ls-properties-area")
+                               css-var (when properties-area
+                                         (.getPropertyValue (.-style properties-area)
+                                                            "--ls-property-key-width"))
+                               current-w (or (when (and css-var (not (string/blank? css-var)))
+                                               (let [v (js/parseInt css-var 10)]
+                                                 (when (js/isFinite v) v)))
+                                             (when property-key-el
+                                               (.-offsetWidth property-key-el))
+                                             160)
+                               container-w (if properties-area (.-offsetWidth properties-area) 1000)
+                               in-block? (some? (.closest current-el ".ls-block .ls-properties-area"))
+                               pct-cap (if in-block? 0.4 0.5)
+                               eff-max (max 124 (min 500 (js/Math.floor (* container-w pct-cap))))
+                               new-w (+ current-w delta)]
+                           (when (and (>= new-w 124) (<= new-w eff-max))
+                             (js/localStorage.setItem "ls-property-key-width" (str new-w))
+                             ((.-current *on-resize-ref) new-w))))))}]))
+
 (hsx/defc property-cp
-  [block k v {:keys [sortable-opts] :as opts}]
+  [block k v {:keys [sortable-opts resize-handle] :as opts}]
   (let [property-id (when (keyword? k) (:db/id (db/entity k)))
         property (db/sub-block property-id)]
     (when (and (keyword? k) property)
@@ -639,16 +847,17 @@
          (if (seq sortable-opts)
            (dnd/sortable-item
             (assoc sortable-opts :class "property-key-panel")
-            property-key-cp')
+            [:<> property-key-cp'
+             (when resize-handle (property-row-resizer (:on-resize! resize-handle)))])
            [:div.property-key-panel
-            property-key-cp'])
+            property-key-cp'
+            (when resize-handle (property-row-resizer (:on-resize! resize-handle)))])
 
          (let [block' (assoc block (:db/ident property) v)]
            [:div.ls-block.property-value-container.property-value-panel
             (when show-panel-bullet?
               [:div.property-panel-bullet {:aria-hidden true}
-               [:span.bullet-container
-                [:span.bullet]]])
+               (property-value-bullet {:type type})])
             [:div.property-value.property-value-panel-inner.flex.flex-1
              (if (:class-schema? opts)
                (pv/property-value property (db/entity :logseq.property/description) opts)
@@ -1071,7 +1280,18 @@
                                           (or (:page-title? opts)
                                               sidebar-properties?
                                               tag-dialog?))
-               opts' (assoc opts :page-property? page-properties-area?)
+               stored-width (let [ls (some-> (js/localStorage.getItem "ls-property-key-width") (js/parseInt 10))]
+                              (if (and (number? ls) (js/isFinite ls))
+                                ls
+                                (ldb/get-key-value (db/get-db) :logseq.kv/property-key-width)))
+               resize-handle (when-not config/publishing?
+                               {:on-resize! (fn [w]
+                                              (if (some? w)
+                                                (db/transact! (state/get-current-repo)
+                                                  [(ldb/kv :logseq.kv/property-key-width w)])
+                                                (db/transact! (state/get-current-repo)
+                                                  [[:db/retractEntity :logseq.kv/property-key-width]])))})
+               opts' (assoc opts :page-property? page-properties-area? :resize-handle resize-handle)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [[k _v]] (= k :logseq.property.class/properties)))
                                       (into {}))
@@ -1107,6 +1327,7 @@
                {:id id
                 :class (util/classnames [{:ls-page-properties page?
                                           :ls-block-properties (not page?)}])
+                :style (when stored-width {"--ls-property-key-width" (str stored-width "px")})
                 :tab-index 0}
                [:<>
                 (mapv (fn [r]
