@@ -5,6 +5,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- replace-ref-with-deleted-block-title
@@ -157,7 +158,9 @@
       (if (or (nil? (:db/id entity))
               (contains? seen-ids (:db/id entity)))
         (recur (rest pending) seen-ids result)
-        (recur (concat (rest pending) (filter block-entity? (:block/_parent entity)))
+        (recur (concat (rest pending)
+                       (filter block-entity?
+                               (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)))
                (conj seen-ids (:db/id entity))
                (conj result entity)))
       result)))
