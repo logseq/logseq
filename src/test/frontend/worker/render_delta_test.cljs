@@ -120,6 +120,23 @@
                            {:blocks {child-uuid (block child-uuid 11 "after")}})]
     (is (empty? (:children delta)))))
 
+(deftest unordered-parent-reference-has-no-children-patch-test
+  (let [parent-uuid (random-uuid)
+        page-uuid (random-uuid)
+        db-before (db-with-blocks [{:db/id 1
+                                    :block/uuid parent-uuid
+                                    :block/tx-id 10}])
+        report (tx-report db-before [{:block/uuid page-uuid
+                                      :block/name "nested page"
+                                      :block/parent [:block/uuid parent-uuid]
+                                      :block/tx-id 11}])
+        delta (build-delta
+               report
+               {:blocks {page-uuid
+                         (block page-uuid 11 "Nested page")}})]
+    (is (empty? (:children delta))
+        "A parent reference without outliner order is not child membership.")))
+
 (deftest direct-child-visibility-builds-remove-and-upsert-patches-test
   (doseq [[label attr value]
           [["recycled child" :logseq.property/deleted-at 1000]

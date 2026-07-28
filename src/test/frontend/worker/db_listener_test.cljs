@@ -1,5 +1,5 @@
 (ns frontend.worker.db-listener-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
@@ -9,7 +9,8 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.sync :as db-sync]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [promesa.core :as p]))
 
 (def ^:private forbidden-renderer-payload-keys
   #{:affected-keys
@@ -202,13 +203,12 @@
            (#'db-listener/canonical-replacements report))
         "A tx-id datom must not publish an entity absent from db-after.")))
 
-(deftest imported-replacements-override-same-uuid-tombstones-test
+(deftest canonical-replacements-override-same-uuid-tombstones-test
   (let [conn (db-test/create-conn)
         block-uuid (random-uuid)
         report (d/transact! conn [{:block/uuid block-uuid
                                    :block/title "imported"
-                                   :block/tx-id 1}])
-        report (assoc report :tx-meta {:logseq.db.sqlite.export/imported-data? true})]
+                                   :block/tx-id 1}])]
     (with-redefs [render-delta/build identity]
       (let [delta (#'db-listener/build-render-delta
                    "repo"
@@ -217,24 +217,30 @@
                     :deleted-block-uuids #{block-uuid}})]
         (is (= #{block-uuid} (set (keys (:blocks delta)))))
         (is (empty? (:deleted-block-uuids delta))
-            "A canonical import replacement must win over its old tombstone.")))))
+            "A canonical replacement must win over its old tombstone.")))))
 
-(deftest remote-replacements-override-same-uuid-tombstones-test
+(deftest imported-structural-changes-include-children-patches-test
   (let [conn (db-test/create-conn)
-        block-uuid (random-uuid)
-        report (d/transact! conn [{:block/uuid block-uuid
-                                   :block/title "remote"
-                                   :block/tx-id 1}])
-        report (assoc report :tx-meta {:transact-remote? true})]
-    (with-redefs [render-delta/build identity]
-      (let [delta (#'db-listener/build-render-delta
-                   "repo"
-                   report
-                   {:affected-keys #{}
-                    :deleted-block-uuids #{block-uuid}})]
-        (is (= #{block-uuid} (set (keys (:blocks delta)))))
-        (is (empty? (:deleted-block-uuids delta))
-            "A canonical remote replacement must win over an earlier tombstone.")))))
+        parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid parent-uuid
+                              :block/title "parent"
+                              :block/tx-id 1}])
+        report (d/transact! conn [{:block/uuid child-uuid
+                                   :block/title "child"
+                                   :block/parent [:block/uuid parent-uuid]
+                                   :block/order "a0"
+                                   :block/tx-id 2}])
+        report (assoc report :tx-meta
+                      {:logseq.db.sqlite.export/imported-data? true})
+        delta (#'db-listener/build-render-delta
+               "repo"
+               report
+               {:affected-keys #{}
+                :deleted-block-uuids #{}})]
+    (is (= [[child-uuid "a0"]]
+           (get-in delta [:children parent-uuid :upsert]))
+        "Imported structural changes must update renderer child membership.")))
 
 (deftest db-listener-does-not-publish-incomplete-graph-render-deltas-test
   (doseq [tx-meta [{:rtc-download-graph? true}
@@ -368,3 +374,79 @@
           (is (= 1 (count @captured-errors)))
           (is (= [:checksum :persist :build-ui-refresh :broadcast-ui-refresh]
                  @calls)))))))
+
+(deftest deferred-listener-failures-do-not-block-ui-sync-test
+  (let [conn (db-test/create-conn)
+        calls (atom [])
+        captured-errors (atom [])]
+    (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  worker-pipeline/invoke-hooks
+                  (fn [_conn tx-report _context]
+                    {:tx-report tx-report})
+                  render-delta/build (constantly {:rev 1})
+                  markdown-mirror/<handle-tx-report!
+                  (fn [& _]
+                    (swap! calls conj :deferred-listener)
+                    (throw (js/Error. "deferred listener failed")))
+                  shared-service/broadcast-to-clients!
+                  (fn [event _payload]
+                    (when (= :sync-db-changes event)
+                      (swap! calls conj :broadcast-ui-refresh)))
+                  platform/post-message!
+                  (fn [_platform event payload]
+                    (when (= :capture-error event)
+                      (swap! captured-errors conj payload)))
+                  platform/current (constantly :test)]
+      (db-listener/listen-db-changes!
+       "repo" conn
+       :handler-keys [:sync-db-to-main-thread :markdown-mirror])
+      (let [error (try
+                    (d/transact! conn [{:db/id -1 :block/title "hello"}])
+                    nil
+                    (catch :default error
+                      error))]
+        (is (nil? error))
+        (is (= [:deferred-listener :broadcast-ui-refresh] @calls))
+        (is (= :markdown-mirror
+               (get-in (first @captured-errors) [:payload :stage])))))))
+
+(deftest rejected-deferred-listener-promises-are-reported-test
+  (async done
+         (let [conn (db-test/create-conn)
+               captured-errors (atom [])
+               broadcasts (atom 0)]
+           (-> (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  worker-pipeline/invoke-hooks
+                  (fn [_conn tx-report _context]
+                    {:tx-report tx-report})
+                  render-delta/build (constantly {:rev 1})
+                  markdown-mirror/<handle-tx-report!
+                  (fn [& _]
+                    (p/rejected
+                     (js/Error. "async deferred listener failed")))
+                  shared-service/broadcast-to-clients!
+                  (fn [event _payload]
+                    (when (= :sync-db-changes event)
+                      (swap! broadcasts inc)))
+                  platform/post-message!
+                  (fn [_platform event payload]
+                    (when (= :capture-error event)
+                      (swap! captured-errors conj payload)))
+                  platform/current (constantly :test)]
+                 (db-listener/listen-db-changes!
+                  "repo" conn
+                  :handler-keys [:sync-db-to-main-thread :markdown-mirror])
+                 (d/transact! conn [{:db/id -1 :block/title "hello"}])
+                 (p/delay 0))
+               (p/then
+                (fn [_]
+                  (is (= 1 @broadcasts))
+                  (is (= :markdown-mirror
+                         (get-in (first @captured-errors)
+                                 [:payload :stage])))
+                  (done)))
+               (p/catch
+                (fn [error]
+                  (is false (str error))
+                  (done)))))))

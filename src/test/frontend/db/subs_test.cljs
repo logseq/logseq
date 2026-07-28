@@ -1300,6 +1300,50 @@
                          (subs/block-snapshot inserted-uuid)))
                   (unsubscribe))))))))
 
+(deftest inserted-child-delta-batches-seeded-block-gc-test
+  (let [parent-uuid (random-uuid)
+        seeded-uuids (vec (repeatedly 1000 random-uuid))
+        [collected-uuid mounted-uuid replaced-uuid] seeded-uuids
+        callbacks (atom [])
+        blocks (into {}
+                     (map-indexed
+                      (fn [index block-uuid]
+                        [block-uuid
+                         (block block-uuid 1 (str "block " index))]))
+                     seeded-uuids)
+        upserts (mapv (fn [index block-uuid]
+                        [block-uuid (str "a" index)])
+                      (range)
+                      seeded-uuids)]
+    (with-redefs [subs/set-seeded-block-gc-timeout!
+                  (fn [callback _delay-ms]
+                    (swap! callbacks conj callback))]
+      (subs/apply-delta!
+       (delta 1
+              {:blocks blocks
+               :children {parent-uuid
+                          {:base-rev 0
+                           :rev 1
+                           :remove []
+                           :upsert upserts}}}))
+      (let [unsubscribe-mounted
+            (subs/subscribe-block! mounted-uuid (fn []))]
+        (subs/apply-delta!
+         (delta 2
+                {:blocks {replaced-uuid
+                          (block replaced-uuid 2 "replacement")}}))
+        (is (= 1 (count @callbacks))
+            "One delta must schedule one seeded-block cleanup.")
+        ((first @callbacks))
+        (is (= {:status :loading}
+               (subs/block-snapshot collected-uuid)))
+        (is (= :ready
+               (:status (subs/block-snapshot mounted-uuid))))
+        (is (= {:status :ready
+                :value (block replaced-uuid 2 "replacement")}
+               (subs/block-snapshot replaced-uuid)))
+        (unsubscribe-mounted)))))
+
 (deftest last-unsubscribe-gc-is-deferred-for-a-same-tick-remount-test
   (async done
          (let [block-uuid (random-uuid)

@@ -7,6 +7,7 @@
             [frontend.test.helper :as test-helper :include-macros true]
             [frontend.util :as util]
             [frontend.worker.query-dsl :as query-dsl]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.build :as sqlite-build]))
 
@@ -649,6 +650,28 @@
 
     (is (empty? (dsl-query "[[blarg]]"))
         "Nonexistent page returns no results"))
+
+  (testing "dynamic page variables use the query resource context"
+    (let [today-title (date-time-util/int->journal-title
+                       20240704
+                       date-time-util/default-journal-title-formatter)]
+      (load-test-files
+       [{:page {:block/title "context page"}
+         :blocks [{:block/title "current [[context page]]"}
+                  {:block/title (str "today [[" today-title "]]")}]}])
+      (let [db (conn/get-db test-helper/test-db)
+            execute (fn [query opts]
+                      (->> (query-dsl/execute-query
+                            query db
+                            (assoc opts :block-attrs db-block-attrs))
+                           (map first)
+                           (map testable-content)))]
+        (is (= ["current"]
+               (execute "<% current page %>"
+                        {:current-page-title "context page"})))
+        (is (= ["today"]
+               (execute "<% today %>"
+                        {:today-day 20240704}))))))
 
   (testing "basic boolean queries"
     (is (= ["b2"]
