@@ -6,6 +6,7 @@
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.graph :as graph]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
@@ -323,3 +324,108 @@
     (util/exit-edit)
     (is (= ["a"] (remove string/blank?
                          (util/get-page-blocks-contents))))))
+
+(defn- block-tree
+  [page-name]
+  (ls-api-call! :editor.getPageBlocksTree page-name))
+
+(defn- content-tree
+  [nodes]
+  (mapv (fn [node]
+          [(get node "content")
+           (content-tree (get node "children"))])
+        nodes))
+
+(defn- drag-block!
+  [source-title target-title placement]
+  (w/eval-js
+   (format
+    "(async () => {
+       const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+       const find = (title) => Array.from(
+         document.querySelectorAll('.ls-page-blocks .ls-block[data-block-title]')
+       ).find((block) => block.dataset.blockTitle === title);
+       const source = find(%s);
+       const target = find(%s);
+       if (!source || !target) throw new Error('drag source or target missing');
+       const handle = source.querySelector('.bullet-container');
+       const targetRect = target.getBoundingClientRect();
+       const sourceRect = handle.getBoundingClientRect();
+       const destinationY = %s === 'before'
+         ? targetRect.top + 2
+         : (%s === 'after' ? targetRect.bottom - 2 : targetRect.top + targetRect.height / 2);
+       const init = (x, y, buttons) => ({
+         bubbles: true, cancelable: true, button: 0, buttons,
+         clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse'
+       });
+       handle.dispatchEvent(new PointerEvent(
+         'pointerdown', init(sourceRect.left + 4, sourceRect.top + 4, 1)
+       ));
+       await delay(120);
+       target.dispatchEvent(new PointerEvent(
+         'pointermove', init(targetRect.left + 30, destinationY, 1)
+       ));
+       target.dispatchEvent(new MouseEvent(
+         'mouseover', init(targetRect.left + 30, destinationY, 1)
+       ));
+       await delay(120);
+       document.dispatchEvent(new PointerEvent(
+         'pointerup', init(targetRect.left + 30, destinationY, 0)
+       ));
+       await delay(250);
+     })();"
+    (pr-str source-title)
+    (pr-str target-title)
+    (pr-str placement)
+    (pr-str placement))))
+
+(deftest drag-reorders-once-and-is-undoable-test
+  (testing "same-level drag changes order once and undo restores the original order"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["drag first" "drag second" "drag third"])
+      (util/exit-edit)
+      (drag-block! "drag third" "drag first" "before")
+      (is (= ["drag third" "drag first" "drag second"]
+             (mapv #(get % "content") (block-tree page-name))))
+      (b/undo)
+      (is (= ["drag first" "drag second" "drag third"]
+             (mapv #(get % "content") (block-tree page-name)))))))
+
+(deftest drag-indents-and-outdents-test
+  (testing "dragging into and out of a parent updates both sides of the tree"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["drag parent" "drag child candidate" "drag tail"])
+      (util/exit-edit)
+      (drag-block! "drag child candidate" "drag parent" "inside")
+      (is (= [["drag parent" [["drag child candidate" []]]]
+              ["drag tail" []]]
+             (content-tree (block-tree page-name))))
+      (drag-block! "drag child candidate" "drag tail" "after")
+      (is (= ["drag parent" "drag tail" "drag child candidate"]
+             (mapv #(get % "content") (block-tree page-name)))))))
+
+(deftest drag-rejects-parent-into-descendant-test
+  (testing "dragging a parent into its descendant leaves the tree unchanged"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["cycle parent" "cycle child"])
+      (b/indent)
+      (util/exit-edit)
+      (let [before (content-tree (block-tree page-name))]
+        (drag-block! "cycle parent" "cycle child" "inside")
+        (is (= before (content-tree (block-tree page-name))))))))
+
+(deftest undo-history-is-scoped-to-current-graph-test
+  (testing "Undo in a newly switched graph cannot consume the previous graph history"
+    (let [graph-a (str "undo-a-" (random-uuid))
+          graph-b (str "undo-b-" (random-uuid))]
+      (graph/new-graph graph-a false)
+      (p/new-page "undo graph a page")
+      (b/new-block "graph a history")
+      (graph/new-graph graph-b false)
+      (p/new-page "undo graph b page")
+      (b/new-block "graph b history")
+      (b/undo)
+      (is (nil? (ls-api-call! :editor.getBlock "graph b history")))
+      (graph/switch-graph graph-a false false)
+      (is (= "graph a history"
+             (get (ls-api-call! :editor.getBlock "graph a history") "content"))))))
