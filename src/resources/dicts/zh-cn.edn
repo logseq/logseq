@@ -164,6 +164,7 @@
  :bug-report.issue/title "或..."
 
  :class/add-property "添加标签属性"
+ :class/inherited-from "继承自"
  :class/tag-properties-desc "标签属性会被所有使用该标签的节点继承。例如，每个 #Task 节点都会继承“Status”和“Priority”。"
  :class/tagged-nodes "已标记节点"
 

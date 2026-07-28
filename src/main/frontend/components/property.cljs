@@ -831,9 +831,10 @@
                              ((.-current *on-resize-ref) new-w))))))}]))
 
 (hsx/defc property-cp
-  [block k v {:keys [sortable-opts resize-handle] :as opts}]
+  [block k v {:keys [sortable-opts resize-handle inherited?] :as opts}]
   (let [property-id (when (keyword? k) (:db/id (db/entity k)))
-        property (db/sub-block property-id)]
+        property (db/sub-block property-id)
+        sortable-opts (when-not inherited? sortable-opts)]
     (when (and (keyword? k) property)
       (let [type (get property :logseq.property/type :default)
             empty-value? (empty-panel-property-value? v)
@@ -1208,6 +1209,31 @@
   (when (and show-hidden-properties? (seq hidden-properties))
     (properties-section block hidden-properties opts)))
 
+(defn- inherited-properties-by-class
+  "For a class block, inherited properties grouped by source ancestor (dedup across
+   ancestors). Intentionally does NOT subscribe per-ancestor via db/sub-block (a hook,
+   illegal in a loop under HSX); trades ancestor-edit live-refresh for correctness."
+  [block]
+  (let [extends (ldb/get-class-extends block)]
+    (loop [remaining extends
+           seen #{}
+           result []]
+      (if-let [ancestor (first remaining)]
+        (let [props (->> (db-property/get-class-ordered-properties ancestor)
+                         (map :db/ident)
+                         (remove seen)
+                         (remove #{:logseq.property/icon :logseq.property/query
+                                   :logseq.property.class/properties
+                                   :logseq.property.class/extends
+                                   :logseq.property.class/enable-bidirectional?
+                                   :logseq.property.class/default-icon}))]
+          (recur (rest remaining)
+                 (into seen (set props))
+                 (if (seq props)
+                   (conj result {:class ancestor :properties (vec props)})
+                   result)))
+        result))))
+
 (hsx/defc load-bidirectional-properties
   [block root-block-or-page? set-bidirectional-properties!]
   (hooks/use-effect!
@@ -1235,6 +1261,8 @@
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
         [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
+        *collapsed-parents (hooks/use-memo #(atom #{}) [])
+        [collapsed-parents] (hooks/use-atom *collapsed-parents)
         id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
         show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
@@ -1372,18 +1400,58 @@
                 (when class?
                   (let [properties (->> (:logseq.property.class/properties block)
                                         (map (fn [e] [(:db/ident e)])))
-                        opts' (assoc opts :class-schema? true)]
+                        opts' (assoc opts :class-schema? true :resize-handle resize-handle)
+                        inherited-groups (inherited-properties-by-class block)
+                        has-meaningful-extends? (and (seq (:logseq.property.class/extends block))
+                                                     (not-every? #(contains? #{:logseq.class/Root :logseq.class/Tag} (:db/ident %))
+                                                                 (:logseq.property.class/extends block)))]
                     [:div.flex.flex-col.gap-1.mt-2
                      [:div {:style {:font-size 15}}
                       [:div.property-key.text-sm
                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]
                       [:div.text-muted-foreground.ml-5
                        (t :class/tag-properties-desc)]]
-                     [:div.gap-1.flex.flex-col
+                     [:div.tag-properties-content.flex.flex-col.gap-1 {:style {:margin-left 22}}
+                      ;; Inherited properties, grouped by source ancestor, per-group collapsible
+                      (when (and has-meaningful-extends? (seq inherited-groups))
+                        (into [:<>]
+                              (for [{:keys [class properties]} inherited-groups]
+                                (let [class-title (:block/title class)
+                                      class-uuid (:block/uuid class)
+                                      class-id (:db/id class)
+                                      collapsed? (contains? collapsed-parents class-id)]
+                                  ^{:key (str "inherited-" class-id)}
+                                  [:div.inherited-group
+                                   [:div.inherited-group-header
+                                    [:a.inherited-collapse-toggle
+                                     {:on-click (fn [e]
+                                                  (util/stop-propagation e)
+                                                  (swap! *collapsed-parents
+                                                         (fn [set'] (if (contains? set' class-id)
+                                                                      (disj set' class-id)
+                                                                      (conj set' class-id)))))}
+                                     [:span.control-show.cursor-pointer
+                                      (ui/rotating-arrow collapsed?)]]
+                                    [:span.text-xs.text-muted-foreground
+                                     (t :class/inherited-from) " "
+                                     [:a.cursor-pointer
+                                      {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
+                                       :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
+                                      (str "#" class-title)]
+                                     (when (pos? (count properties))
+                                       [:<> [:span " \u00b7 "] [:span {:style {:font-size "0.7rem"}} (count properties)]])]]
+                                   [:div.ls-foldable-content
+                                    {:class (when collapsed? "is-collapsed")}
+                                    [:div.ls-foldable-content-inner
+                                     [:div.inherited-properties-scaffold
+                                      [:div {:aria-readonly "true"}
+                                       (properties-section block
+                                                           (mapv (fn [pk] [pk (get block pk)]) properties)
+                                                           (assoc opts' :inherited? true))]]]]]))))
                       (properties-section block properties opts')
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts :show-hidden-properties? show-hidden-properties?))
                       ^{:key (str id "-class-add-property")}
-                      [:div.ml-5 [new-property block opts']]]]))]])
+                      [:div.mt-2 [new-property block opts']]]]))]])
             (when-not skip-bidirectional-properties?
               (bidirectional-properties-section bidirectional-properties))])))]))
