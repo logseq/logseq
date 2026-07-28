@@ -43,9 +43,126 @@
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]
-                                 [:mark.p-0.rounded-none seg]))
+                                 [:span {:class "ui__list-item-highlighted-span"} seg]))
                              segs))
           [:span normal-text])))))
+
+;; =============================================================================
+;; Wikilink Styling for [[Page References]]
+;; =============================================================================
+
+(defn- find-wikilink-regions
+  "Find all non-nested [[...]] positions in text.
+   Returns [{:start N :open-end N :close-start N :end N} ...]"
+  [text]
+  (let [re (js/RegExp. "\\[\\[([^\\[\\]]*?)\\]\\]" "g")]
+    (loop [results []]
+      (if-let [m (.exec re text)]
+        (let [start (.-index m)
+              end (+ start (.-length (aget m 0)))]
+          (recur (conj results {:start start
+                                :open-end (+ start 2)
+                                :close-start (- end 2)
+                                :end end})))
+        results))))
+
+(defn- extract-segments
+  "Extract text segments with positions from hiccup children."
+  [children]
+  (loop [cs (seq children), pos 0, result []]
+    (if-not cs
+      result
+      (let [c (first cs)
+            [text attrs] (cond
+                           (string? c) [c nil]
+                           (and (vector? c) (= :span (first c)))
+                           (if (map? (second c))
+                             [(nth c 2 "") (second c)]
+                             [(second c) nil])
+                           :else ["" nil])
+            text (or text "")
+            end (+ pos (count text))]
+        (recur (next cs) end (conj result {:text text :attrs attrs :start pos :end end}))))))
+
+(defn- style-wikilinks
+  "Post-process hiccup to style [[wikilinks]] with .page-reference, .bracket, and .page-ref classes.
+   Works on output from both highlight-query* and highlight-content-query."
+  [hiccup]
+  (if-not (and (vector? hiccup) (= :span (first hiccup)))
+    hiccup
+    (let [;; Normalize: handle both [:span a b c] and [:span (lazy-seq)] forms
+          has-attrs? (map? (second hiccup))
+          outer-attrs (when has-attrs? (second hiccup))
+          raw (if has-attrs? (subvec hiccup 2) (subvec hiccup 1))
+          children (if (and (= 1 (count raw))
+                            (sequential? (first raw))
+                            (not (vector? (first raw)))
+                            (not (string? (first raw))))
+                     (vec (first raw))
+                     (vec raw))
+          segments (extract-segments children)
+          full-text (apply str (map :text segments))
+          regions (find-wikilink-regions full-text)]
+      (if (empty? regions)
+        hiccup
+        (let [;; Build zones partitioning full text into typed intervals
+              zones (loop [pos 0, rs (seq regions), ri 0, zones []]
+                      (if-not rs
+                        (cond-> zones
+                          (< pos (count full-text))
+                          (conj {:start pos :end (count full-text) :type :plain :wl nil}))
+                        (let [{:keys [start open-end close-start end]} (first rs)]
+                          (recur end (next rs) (inc ri)
+                                 (cond-> zones
+                                   (< pos start)
+                                   (conj {:start pos :end start :type :plain :wl nil})
+                                   true
+                                   (conj {:start start :end open-end :type :bracket :wl ri})
+                                   (< open-end close-start)
+                                   (conj {:start open-end :end close-start :type :page-ref :wl ri})
+                                   true
+                                   (conj {:start close-start :end end :type :bracket :wl ri}))))))
+              ;; Two-pointer: slice segments at zone boundaries
+              pieces (loop [si 0, zi 0, pieces []]
+                       (if (or (>= si (count segments)) (>= zi (count zones)))
+                         pieces
+                         (let [seg (nth segments si)
+                               zone (nth zones zi)
+                               os (max (:start seg) (:start zone))
+                               oe (min (:end seg) (:end zone))]
+                           (if (>= os oe)
+                             (if (< (:end seg) (:end zone))
+                               (recur (inc si) zi pieces)
+                               (recur si (inc zi) pieces))
+                             (recur (if (>= oe (:end seg)) (inc si) si)
+                                    (if (>= oe (:end zone)) (inc zi) zi)
+                                    (conj pieces {:text (subs (:text seg)
+                                                              (- os (:start seg))
+                                                              (- oe (:start seg)))
+                                                  :attrs (:attrs seg)
+                                                  :type (:type zone)
+                                                  :wl (:wl zone)}))))))
+              ;; Group by wikilink and emit hiccup
+              new-children
+              (mapcat
+               (fn [group]
+                 (if (nil? (:wl (first group)))
+                   (keep (fn [{:keys [text attrs]}]
+                           (when (seq text)
+                             (if attrs [:span attrs text] [:span text])))
+                         group)
+                   (let [inner (keep (fn [{:keys [text attrs type]}]
+                                       (when (seq text)
+                                         (if (= :bracket type)
+                                           [:span.bracket text]
+                                           (if attrs
+                                             [:span.page-ref attrs text]
+                                             [:span.page-ref text]))))
+                                     group)]
+                     (when (seq inner)
+                       [(into [:span.page-reference] inner)]))))
+               (partition-by :wl pieces))]
+          (into (if outer-attrs [:span outer-attrs] [:span]) new-children))))))
 
 (def current-page-badge-label "Current Page")
 
@@ -92,7 +209,7 @@
 
     nil))
 
-(hsx/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
+(hsx/defc root [{:keys [icon icon-theme query text text-tags info shortcut value-label value title highlighted header hoverable
                         compact rounded on-mounted on-click on-mouse-move source-block
                         source-wikidata preview-image-url preview-icon-type preview-initials] :as props
                  :or {hoverable true rounded true}}
@@ -162,8 +279,10 @@
         ;; diverge from their class default. Inheriting rows would mask
         ;; the bug since the inline render is nil when the block has no
         ;; own icon.
-        (or (highlight-query text) (:block/title source-block))
+        (or (style-wikilinks (highlight-query text)) (:block/title source-block))
         text-badge
+        (when text-tags
+          [:span.page-tag-suffix.whitespace-nowrap.ml-1 (highlight-query text-tags)])
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)

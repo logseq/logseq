@@ -1,12 +1,79 @@
-.cp__cmdk {
-  > .hints {
-    @apply flex w-full px-3 py-2 gap-2 justify-between
-    bg-gray-03 border-t border-gray-05;
+/* Action bar: shared by CMD+K search hints, page-dialog footer, and capture footer */
+.hints {
+  @apply flex w-full px-3 py-2 gap-2 justify-between items-center
+  bg-gray-03 border-t border-gray-05;
+  min-height: 45px;
+}
+
+.hints-actions {
+  @apply flex items-center gap-2;
+  flex-shrink: 0;
+}
+
+/* Tip text: never wraps, truncates only the trailing text (.hints-tip-tail).
+   Every flex ancestor in the chain needs overflow:hidden + min-width:0
+   so the width constraint propagates down to the ellipsis element. */
+.hints-tip {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.hints-tip,
+.hints-tip * {
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.hints-tip > *,
+.hints-tip > * > *,
+.hints-tip > * > * > * {
+  overflow: hidden;
+}
+
+/* Leaf text spans and shortcut badges never shrink; only .hints-tip-tail does.
+   The .hints-tip prefix (specificity 0,0,2,0) beats .hints-tip span (0,0,1,1). */
+.hints-tip span:not(.hints-tip-tail) {
+  flex-shrink: 0;
+}
+
+.hints-tip .hints-tip-tail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+/* Rotating / contextual tip fade-in */
+@keyframes tipFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tip-rotate {
+  animation: tipFadeIn 300ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-rotate {
+    animation: none;
   }
 }
 
 .ls-dialog-cmdk {
-  @apply p-0 w-auto !max-w-fit overflow-hidden;
+  @apply p-0 overflow-hidden flex flex-col;
+  /* Current master's base .ui__dialog-content is `grid` with p-6/gap-4 — force
+     flex-column with no padding/gap so the height chain (dialog → main-content →
+     modal → cp__cmdk) propagates and the .hints footer stays pinned at the bottom. */
+  display: flex !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  width: 90dvw !important;
+  max-width: 56rem !important; /* 4xl */
+  height: 75dvh !important;
+
+  > .ui__dialog-main-content {
+    @apply flex-1 min-h-0;
+  }
 }
 
 /* Remove input focus glow/ring for cmdk search box only */
@@ -100,3 +167,184 @@
 .cp__cmdk-list-item-icon:has(> .icon-cp-container.photo-icon) {
   background: transparent !important;
 }
+
+/* De-emphasized tag suffix after a result title (DI's "de-emphasize tags in page
+   titles" design): dimmer, normal weight, and slightly smaller than the bold title. */
+.page-tag-suffix {
+  @apply opacity-50 font-normal;
+  font-size: 0.85em;
+}
+
+/* ============================================================
+   Preview split layout
+   ============================================================ */
+.cmdk-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.cmdk-results-list {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-y: auto;
+  transition: flex-basis 100ms ease-out;
+}
+
+.cmdk-has-preview .cmdk-results-list {
+  flex-basis: 50%;
+}
+
+.cmdk-preview-container {
+  flex: 0 1 50%;
+  min-width: 0;
+  max-width: 50%;
+  border-left: 1px solid var(--lx-gray-06, var(--ls-border-color));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  background: var(--lx-gray-02, var(--ls-secondary-background-color));
+}
+
+.cmdk-preview-pane {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Suppress clicks on content but allow scrolling on the pane */
+.cmdk-preview-pane > * {
+  pointer-events: none;
+}
+
+/* Page title */
+.preview-page-title {
+  background: linear-gradient(to top, transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%);
+}
+
+/* Block list. Left padding is 0.25rem less than the 1rem sides so the wider
+   bullet→text gap (gap-2) keeps the block text aligned with the page title. */
+.preview-blocks {
+  padding: 0 1rem 1rem 0.75rem;
+}
+
+.preview-block {
+  padding: 1px 0;
+}
+
+.preview-block-content {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.preview-bullet {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lx-gray-08, var(--ls-block-bullet-color));
+  flex-shrink: 0;
+  margin-top: 0.45em;
+}
+
+.preview-bullet.collapsed {
+  background: var(--lx-accent-09, var(--ls-link-text-color));
+}
+
+.preview-block-body {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: var(--lx-gray-11, var(--ls-secondary-text-color));
+}
+
+.preview-block-body .is-paragraph {
+  margin: 0.25em 0;
+}
+
+/* Code blocks in preview */
+.preview-block-body .cp__fenced-code-block {
+  margin: 0.25em 0;
+}
+
+.preview-block-body .cp__fenced-code-block pre {
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: var(--lx-gray-03, var(--ls-secondary-background-color));
+  overflow-x: auto;
+}
+
+/* Block highlight for auto-scroll target.
+   Uses a keyframe animation that flashes brighter then settles to a persistent
+   subtle tint.  The class is never removed, so the highlight stays visible no
+   matter how long the user pauses before reading -- essential during rapid
+   arrow-key scanning where a fade-out would leave nothing visible. */
+@keyframes cmdk-highlight-settle {
+  0%   { background: var(--lx-accent-04-alpha, rgba(59, 130, 246, 0.22)); }
+  100% { background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
+}
+
+/* The highlight is drawn as a background layer ~8px wider than the block on
+   each side (via ::before) so the bullet/text aren't flush against the box
+   edge. Using a pseudo-element leaves the block's box model untouched, so the
+   content stays put at every depth and the title<->block alignment holds. */
+.cmdk-preview-highlight {
+  position: relative;
+  z-index: 0;
+}
+
+.cmdk-preview-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0 -0.5rem;
+  border-radius: 4px;
+  z-index: -1;
+  animation: cmdk-highlight-settle 600ms ease-out forwards;
+}
+
+/* Fade-in when content replaces skeleton */
+@keyframes cmdk-content-appear {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.cmdk-preview-content {
+  animation: cmdk-content-appear 150ms ease-out;
+}
+
+/* Soft bottom fade – only shown when content overflows (JS toggles .has-overflow) */
+.cmdk-preview-pane.has-overflow::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 40px;
+  background: linear-gradient(to top,
+    var(--lx-gray-02, var(--ls-secondary-background-color)) 0%,
+    transparent 100%);
+  pointer-events: none;
+  margin-top: -40px;
+}
+
+/* Wikilink styling in CMD+K results: grey by default, accent when the row is
+   selected/hovered — re-expressed on master's data-attr model (not DI's .is-hovered). */
+.cmdk-results-list .page-reference:hover {
+  background: transparent;
+}
+.cmdk-results-list .page-ref {
+  color: var(--lx-gray-11);
+}
+.cmdk-results-list [data-cmdk-item][data-highlighted] .page-ref,
+.cmdk-results-list [data-cmdk-item][data-hoverable]:hover .page-ref {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmdk-results-list { transition: none; }
+  .cmdk-preview-highlight::before { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
+  .cmdk-preview-content { animation: none; }
+}
+

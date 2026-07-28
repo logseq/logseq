@@ -206,6 +206,7 @@
  :cmdk.action/copy-ref "复制引用"
  :cmdk.action/create "创建"
  :cmdk.action/filter "筛选"
+ :cmdk.action/more "更多"
  :cmdk.action/open "打开"
  :cmdk.action/open-in-sidebar "在侧边栏打开"
  :cmdk.action/search "搜索"
@@ -246,10 +247,15 @@
  :cmdk.input/move-blocks-placeholder "移动块到"
  :cmdk.input/type-page-name-placeholder "输入要创建的页面名称"
 
+ :cmdk.preview/hide "隐藏预览"
+ :cmdk.preview/show "显示预览"
+
  :cmdk.tip/clear-filter "按 {1} 以清除搜索筛选"
  :cmdk.tip/filter-results "按 {1} 以筛选搜索结果"
+ :cmdk.tip/jump-to-property "按 {1} 跳转到属性"
  :cmdk.tip/label "提示："
  :cmdk.tip/open-sidebar "按 {1} 以在侧边栏中打开搜索"
+ :cmdk.tip/saved "更改已自动保存"
 
  :collaboration/email-address "邮箱地址"
  :collaboration/invite "邀请"

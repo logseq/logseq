@@ -206,6 +206,7 @@
  :cmdk.action/copy-ref "Copy ref"
  :cmdk.action/create "Create"
  :cmdk.action/filter "Filter"
+ :cmdk.action/more "More"
  :cmdk.action/open "Open"
  :cmdk.action/open-in-sidebar "Open in sidebar"
  :cmdk.action/search "Search"
@@ -246,10 +247,15 @@
  :cmdk.input/move-blocks-placeholder "Move blocks to"
  :cmdk.input/type-page-name-placeholder "Type a page name to create"
 
+ :cmdk.preview/hide "Hide preview"
+ :cmdk.preview/show "Show preview"
+
  :cmdk.tip/clear-filter "Press {1} to clear search filter"
  :cmdk.tip/filter-results "Press {1} to filter search results"
+ :cmdk.tip/jump-to-property "Press {1} to jump to a property"
  :cmdk.tip/label "Tip:"
  :cmdk.tip/open-sidebar "Press {1} to open search in the sidebar"
+ :cmdk.tip/saved "Changes saved automatically"
 
  :collaboration/email-address "Email address"
  :collaboration/invite "Invite"

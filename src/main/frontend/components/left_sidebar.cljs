@@ -80,9 +80,15 @@
             untitled? (db-model/untitled-page? title)
             display-title (cond
                             (not (db/page? page))
-                            (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
-                            untitled? (t :ui/untitled)
-                            :else (block-handler/block-unique-title page))
+                            [:span.title-text (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))]
+                            untitled? [:span.title-text (t :ui/untitled)]
+                            :else (let [tags (block-handler/visible-tags page)]
+                                    (if (seq tags)
+                                      [:<>
+                                       [:span.title-text (block-handler/block-unique-title page :with-tags? false)]
+                                       [:span.page-tag-suffix
+                                        (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))]]
+                                      [:span.title-text (block-handler/block-unique-title page)])))
             tooltip-title (or (block-handler/block-unique-title page)
                               (when untitled? (t :ui/untitled)))
             ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})

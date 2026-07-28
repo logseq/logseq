@@ -4,6 +4,7 @@
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -354,3 +355,24 @@
   (let [target (.-target e)
         block-container (util/rec-get-node target "ls-block")]
     (dom/set-style! block-container :transform "translateX(0)")))
+
+(defn visible-tags
+  "Returns visible (non-inline, non-private) tag entities for a block.
+   Returns nil for built-in blocks or class/tag pages.
+   Used to render tags separately from the page title."
+  [block]
+  (when-not (or (ldb/built-in? block) (ldb/class? block))
+    (let [block-e (cond
+                    (de/entity? block)
+                    block
+                    (uuid? (:block/uuid block))
+                    (db/entity [:block/uuid (:block/uuid block)])
+                    :else
+                    block)]
+      (seq
+       (->> (:block/tags block)
+            (map (fn [tag] (if (number? tag) (db/entity tag) tag)))
+            (remove (fn [t]
+                      (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                          (ldb/private-tags (:db/ident t))))))))))
+
