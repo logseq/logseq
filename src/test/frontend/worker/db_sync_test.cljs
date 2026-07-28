@@ -36,6 +36,7 @@
    [logseq.db-sync.storage :as sync-storage]
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
+   [logseq.db.common.delete-blocks :as delete-blocks]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
@@ -6545,6 +6546,45 @@
           (let [validation (db-validate/validate-local-db! @conn)]
             (is (empty? (non-recycle-validation-entities validation))
                 (str (:errors validation)))))))))
+
+(deftest delete-expansion-includes-generated-property-value-children-test
+  (testing "physical delete expansion includes generated property value children"
+    (let [property-value-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/delete-expansion {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/properties
+                             {:user.property/delete-expansion
+                              {:build/property-value :block
+                               :block/title "property value"
+                               :block/uuid property-value-uuid
+                               :build/keep-uuid? true
+                               :build/children [{:block/title "nested property child"}]}}}]}]})
+          parent (db-test/find-block-by-content @conn "parent")
+          property-value (d/entity @conn [:block/uuid property-value-uuid])
+          nested-child (db-test/find-block-by-content @conn "nested property child")
+          root-retract [:db/retractEntity (:db/id parent)]
+          generic-expanded (delete-blocks/expand-delete-blocks-tx
+                            @conn [root-retract] {:outliner-op :delete-blocks})
+          sync-expanded (#'sync-apply/expand-block-retracts-to-descendants
+                         @conn [root-retract])
+          property-value-retract [:db/retractEntity (:db/id property-value)]
+          nested-child-retract [:db/retractEntity (:db/id nested-child)]
+          sync-retracted-ids (->> sync-expanded
+                                  (keep (fn [[op ref]]
+                                          (when (= :db/retractEntity op)
+                                            (:db/id (d/entity @conn ref)))))
+                                  set)]
+      (is (some? (:logseq.property/created-from-property property-value)))
+      (is (empty? (:block/_parent parent)))
+      (is (= [(:db/id property-value)]
+             (mapv :db/id (:block/_raw-parent parent))))
+      (is (some #{property-value-retract} generic-expanded))
+      (is (some #{nested-child-retract} generic-expanded))
+      (is (contains? sync-retracted-ids (:db/id property-value)))
+      (is (contains? sync-retracted-ids (:db/id nested-child))))))
 
 (deftest apply-remote-txs-computes-remote-deletes-once-per-batch-test
   (testing "a large remote batch keeps delete filtering without repeatedly rescanning the pull"
