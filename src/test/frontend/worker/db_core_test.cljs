@@ -2858,40 +2858,71 @@
                 (mapv :block/title page-b))))))))
 
 (deftest get-property-node-selector-data-prepares-worker-owned-db-data-test
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [get-selector-data! (get-thread-api :thread-api/get-property-node-selector-data)
-                  conn (d/create-conn db-schema/schema)
-                  page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
-              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-              (d/transact! conn [{:db/id -1
-                                  :db/ident :user.class/Topic
-                                  :block/title "Topic"
-                                  :block/name "topic"
-                                  :block/tags :logseq.class/Tag}
-                                 {:block/title "Page A"
-                                  :block/name "page-a"
-                                  :block/uuid page-uuid
-                                  :block/tags -1}])
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (->
-               (p/let [topic-class (select-keys (d/entity @conn :user.class/Topic)
-                                                [:db/id :db/ident :block/title])
-                       topic-class-id (:db/id topic-class)
-                       property {:db/ident :block/tags
-                                 :logseq.property/type :node
-                                 :logseq.property/classes [topic-class]}
-                       data (get-selector-data! test-repo {:property property
-                                                           :block {:db/id (:db/id (d/entity @conn [:block/uuid page-uuid]))}})]
-                 (is (some #(= :user.class/Topic (:db/ident %)) (:all-classes data)))
-                 (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:class-options data)))
-                 (is (contains? (:structured-children-by-class-id data) topic-class-id))
-                 (is (= ["Page A"] (map :block/title (:initial-choices data)))))
-               (p/catch
-                (fn [error]
-                  (is false (str error))))
-               (p/finally done)))))))
+  (restoring-worker-state
+   (fn []
+     (let [get-selector-data! (get-thread-api :thread-api/get-property-node-selector-data)
+           conn (d/create-conn db-schema/schema)
+           page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id -1
+                           :db/ident :user.class/Topic
+                           :block/title "Topic"
+                           :block/name "topic"
+                           :block/tags :logseq.class/Tag}
+                          {:block/title "Page A"
+                           :block/name "page-a"
+                           :block/uuid page-uuid
+                           :block/tags -1}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [topic-class (select-keys (d/entity @conn :user.class/Topic)
+                                      [:db/id :db/ident :block/title])
+             topic-class-id (:db/id topic-class)
+             property {:db/ident :block/tags
+                       :logseq.property/type :node
+                       :logseq.property/classes [topic-class]}
+             data (get-selector-data! test-repo {:property property
+                                                 :block {:db/id (:db/id (d/entity @conn [:block/uuid page-uuid]))}})]
+         (is (some #(= :user.class/Topic (:db/ident %)) (:all-classes data)))
+         (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:class-options data)))
+         (is (contains? (:structured-children-by-class-id data) topic-class-id))
+         (is (= ["Page A"] (map :block/title (:initial-choices data)))))))))
+
+(deftest alias-selector-initial-choice-keeps-page-and-owner-data-test
+  (restoring-worker-state
+   (fn []
+     (let [get-selector-data! (get-thread-api :thread-api/get-property-node-selector-data)
+           conn (d/create-conn db-schema/schema)
+           source-uuid #uuid "11111111-1111-1111-1111-111111111112"
+           alias-uuid #uuid "22222222-2222-2222-2222-222222222223"]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id -1
+                           :block/title "Source"
+                           :block/name "source"
+                           :block/uuid source-uuid
+                           :block/tags :logseq.class/Page
+                           :block/alias [-2]}
+                          {:db/id -2
+                           :block/title "Alias"
+                           :block/name "alias"
+                           :block/uuid alias-uuid
+                           :block/tags :logseq.class/Page}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [source (d/entity @conn [:block/uuid source-uuid])
+             alias (d/entity @conn [:block/uuid alias-uuid])
+             data (get-selector-data!
+                   test-repo
+                   {:property {:db/ident :block/alias
+                               :db/valueType :db.type/ref
+                               :logseq.property/type :page}
+                    :block {:db/id (:db/id source)}})
+             choice (first (:initial-choices data))
+             value (:value choice)]
+         (is (= "Alias" (:label choice)))
+         (is (= (:db/id alias) (:db/id value)))
+         (is (= #{:logseq.class/Page}
+                (set (map :db/ident (:block/tags value)))))
+         (is (= (:db/id source)
+                (:block/alias-source-page-id value))))))))
 
 (deftest get-view-filter-data-prepares-operators-and-values-test
   (restoring-worker-state

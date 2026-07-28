@@ -41,6 +41,17 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest alias-value-click-opens-property-selector-test
+  (let [popup-event* (atom nil)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}
+        open-selector! (#'property-value/alias-value-on-pointer-down
+                        {:db/ident :block/alias}
+                        #(reset! popup-event* %))]
+    (is (fn? open-selector!))
+    (open-selector! event)
+    (is (= event @popup-event*))))
+
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?
        {:property/closed-values

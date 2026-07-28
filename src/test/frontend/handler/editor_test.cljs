@@ -1520,6 +1520,67 @@
                         "Backspace on empty a must preserve a and its child b.")))
           (p/finally done)))))
 
+(defn- delete-parent-with-children-calls
+  [left]
+  (let [page {:db/id 10
+              :block/uuid #uuid "00000000-0000-0000-0000-000000000010"}
+        child {:db/id 2
+               :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+               :block/title "child"
+               :block/parent {:db/id 1}}
+        parent {:db/id 1
+                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                :block/title ""
+                :block/parent page}
+        delete-calls (atom [])]
+    (-> (p/with-redefs [state/get-edit-content (constantly "")
+                        util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                        db-async/<get-block-with-children
+                        (fn [& _]
+                          (p/resolved {:block parent
+                                       :children [child]}))
+                        editor/<left-sibling-or-parent
+                        (fn [& _]
+                          (p/resolved left))
+                        editor/delete-block-with-previous!
+                        (fn [args]
+                          (swap! delete-calls conj args))]
+          (editor/delete-block-inner!
+           test-helper/test-db
+           {:block parent
+            :block-id (:block/uuid parent)
+            :value ""
+            :config {}
+            :current-block parent
+            :delete-concat? false}))
+        (p/then (fn [] @delete-calls)))))
+
+(deftest backspace-preserves-parent-with-children-after-commented-sibling-test
+  (async done
+    (-> (p/let [delete-calls
+                (delete-parent-with-children-calls
+                 {:db/id 3
+                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                  :block/title "previous"
+                  :block/parent {:db/id 10}
+                  :block/comment-threads
+                  [#uuid "44444444-4444-4444-4444-444444444444"]})]
+          (is (empty? delete-calls)
+              "A comment on the previous sibling must not allow deleting a parent block."))
+        (p/finally done))))
+
+(deftest backspace-preserves-higher-level-parent-with-children-test
+  (async done
+    (-> (p/let [delete-calls
+                (delete-parent-with-children-calls
+                 {:db/id 3
+                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                  :block/title "previous group"
+                  :block/parent {:db/id 10}})]
+          (is (empty? delete-calls)
+              "A canonical left sibling without loaded children must not allow deleting a parent block."))
+        (p/finally done))))
+
 (deftest backspace-at-the-start-does-not-delete-a-non-empty-block-that-owns-children-test
   (async done
     (let [page {:db/id 10

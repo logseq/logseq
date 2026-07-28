@@ -124,6 +124,14 @@
     (not (or (d/has-class? node "page-ref")
              (d/has-class? node "tag")))))
 
+(defn- alias-value-on-pointer-down
+  [property show-popup!]
+  (when (and (= (:db/ident property) :block/alias)
+             (fn? show-popup!))
+    (fn [e]
+      (util/stop e)
+      (show-popup! e))))
+
 (hsx/defc property-empty-btn-value
   [property & [opts]]
   (let [text (if (= (:db/ident property) :logseq.property/description)
@@ -1480,6 +1488,7 @@
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
+        alias? (= (:db/ident property) :block/alias)
         inline-text-cp (fn [content]
                          [:div.flex.flex-row.items-center
                           (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))])]
@@ -1501,7 +1510,9 @@
                      :property-position property-position
                      :other-position? other-position?
                      :table-view? table-view?
-                     :ignore-alias? (= :block/alias (:db/ident property))
+                     :ignore-alias? alias?
+                     :on-pointer-down (alias-value-on-pointer-down
+                                       property (:show-popup! opts))
                      :on-context-menu
                      (fn [e]
                        (util/stop e)
