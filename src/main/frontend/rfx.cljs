@@ -24,25 +24,12 @@
 (defonce ^:private !state-path-listener-paths
   (atom {}))
 
-(defonce ^:private !state-write-profile
-  (volatile! {:last-log-ms 0}))
-
 (def ^:private fast-state-sub-ids
   #{:db/async-queries
     :sync/block-conflicts
     :ui/container-id
     :ui/cached-key->container-id
     :command-palette/commands})
-
-(defn- now-ms
-  []
-  (.now js/performance))
-
-(defn- state-path-key
-  [path]
-  (if (seq path)
-    (pr-str path)
-    "<unknown>"))
 
 (defn- state-path-prefixes
   [path]
@@ -106,51 +93,6 @@
                        listener-paths
                        (state-path-prefixes path)))))))
 
-(defn- profile-state-write!
-  [{:keys [path total-ms store-ms notify-ms checked-listeners notified-listeners]}]
-  (let [now (now-ms)
-        path-key (state-path-key path)
-        profile' (vswap! !state-write-profile
-                          (fn [{:keys [last-log-ms] :as profile}]
-                            (-> profile
-                                (assoc :last-log-ms (or last-log-ms 0))
-                                (update :calls (fnil inc 0))
-                                (update :total-ms (fnil + 0) total-ms)
-                                (update :store-ms (fnil + 0) store-ms)
-                                (update :notify-ms (fnil + 0) notify-ms)
-                                (update :checked-listeners (fnil + 0) checked-listeners)
-                                (update :notified-listeners (fnil + 0) notified-listeners)
-                                (update-in [:paths path-key :calls] (fnil inc 0))
-                                (update-in [:paths path-key :total-ms] (fnil + 0) total-ms)
-                                (update-in [:paths path-key :store-ms] (fnil + 0) store-ms)
-                                (update-in [:paths path-key :notify-ms] (fnil + 0) notify-ms)
-                                (update-in [:paths path-key :checked-listeners] (fnil + 0) checked-listeners)
-                                (update-in [:paths path-key :notified-listeners] (fnil + 0) notified-listeners))))]
-    (when (> (- now (:last-log-ms profile')) 1000)
-      ;; Uncomment when profiling rfx state writes locally.
-      #_(let [paths (->> (:paths profile')
-                         (map (fn [[path {:keys [calls total-ms store-ms notify-ms checked-listeners notified-listeners]}]]
-                                {:path path
-                                 :calls calls
-                                 :total-ms (.toFixed total-ms 2)
-                                 :store-ms (.toFixed store-ms 2)
-                                 :notify-ms (.toFixed notify-ms 2)
-                                 :checked-listeners checked-listeners
-                                 :notified-listeners notified-listeners}))
-                         (sort-by (fn [{:keys [total-ms]}]
-                                    (- (js/parseFloat total-ms))))
-                         (take 10))]
-          (js/console.log
-           "[rfx-state-profile]"
-           (clj->js {:calls (:calls profile')
-                     :total-ms (.toFixed (:total-ms profile') 2)
-                     :store-ms (.toFixed (:store-ms profile') 2)
-                     :notify-ms (.toFixed (:notify-ms profile') 2)
-                     :checked-listeners (:checked-listeners profile')
-                     :notified-listeners (:notified-listeners profile')
-                     :top-paths paths})))
-      (vreset! !state-write-profile {:last-log-ms now}))))
-
 (defn- pub-event-deferred
   [event]
   (-> event meta ::deferred))
@@ -199,7 +141,6 @@
     (reset! !state-sub-ids #{})
     (reset! !state-path-listeners {})
     (reset! !state-path-listener-paths {})
-    (vreset! !state-write-profile {:last-log-ms 0})
     ctx))
 
 (defn current-registry
@@ -211,29 +152,18 @@
   @!app-db)
 
 (defn- sync-wrapper-state-paths!
-  [prev-db next-db changed-paths started-at store-ms]
+  [prev-db next-db changed-paths]
   (reset! !app-db next-db)
-  (let [notify-started-at (now-ms)
-        path-listeners (affected-state-path-listeners-for-paths @!state-path-listeners
-                                                                @!state-path-listener-paths
-                                                                changed-paths)
-        checked-listeners (count path-listeners)
-        notified-listeners (volatile! 0)]
+  (let [path-listeners
+        (affected-state-path-listeners-for-paths @!state-path-listeners
+                                                 @!state-path-listener-paths
+                                                 changed-paths)]
     (doseq [listener (vals @!state-listeners)]
       (listener next-db))
     (doseq [{:keys [path listener]} path-listeners
             :when (not= (get-in prev-db path)
                         (get-in next-db path))]
-      (vswap! notified-listeners inc)
       (listener))
-    (profile-state-write! {:path (if (= 1 (count changed-paths))
-                                   (first changed-paths)
-                                   changed-paths)
-                           :total-ms (- (now-ms) started-at)
-                           :store-ms store-ms
-                           :notify-ms (- (now-ms) notify-started-at)
-                           :checked-listeners checked-listeners
-                           :notified-listeners @notified-listeners})
     next-db))
 
 (defn- fast-state-path?
@@ -242,16 +172,13 @@
 
 (defn replace-state-paths!
   [db changed-paths]
-  (let [started-at (now-ms)
-        prev-db (snapshot)
-        store-started-at (now-ms)
+  (let [prev-db (snapshot)
         fast-state? (and (seq changed-paths)
                          (every? fast-state-path? changed-paths))
         next-db (if fast-state?
                   db
-                  (store/next-state! (:store (context)) db))
-        store-ms (- (now-ms) store-started-at)]
-    (sync-wrapper-state-paths! prev-db next-db changed-paths started-at store-ms)))
+                  (store/next-state! (:store (context)) db))]
+    (sync-wrapper-state-paths! prev-db next-db changed-paths)))
 
 (defn replace-state!
   ([db]
@@ -284,9 +211,7 @@
     (when-not (= prev-db next-db)
       (sync-wrapper-state-paths! prev-db
                                  next-db
-                                 (top-level-changed-paths prev-db next-db)
-                                 (now-ms)
-                                 0))
+                                 (top-level-changed-paths prev-db next-db)))
     result))
 
 (defn use-sub

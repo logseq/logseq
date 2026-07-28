@@ -856,18 +856,24 @@
                   (map first (:upsert patch))))
         children))
 
-(defn- schedule-seeded-block-gc!
-  [block-uuid basis-rev]
+(defn- schedule-seeded-blocks-gc!
+  [block-uuids basis-rev]
   (set-seeded-block-gc-timeout!
    (fn []
-     (when-not (mounted? :blocks block-uuid)
-       (swap! *store
-              (fn [store]
-                (let [slot (get-in store [:blocks block-uuid])]
-                  (if (and (:seeded? slot)
-                           (= basis-rev (:basis-rev slot)))
-                    (update store :blocks dissoc block-uuid)
-                    store))))))
+     (swap! *store
+            update
+            :blocks
+            (fn [blocks]
+              (reduce
+               (fn [blocks block-uuid]
+                 (let [slot (get blocks block-uuid)]
+                   (if (and (not (mounted? :blocks block-uuid))
+                            (:seeded? slot)
+                            (= basis-rev (:basis-rev slot)))
+                     (dissoc blocks block-uuid)
+                     blocks)))
+               blocks
+               block-uuids))))
    2000))
 
 (defn- apply-tombstone
@@ -1044,8 +1050,8 @@
       (notify-keys! :children @changed-children)
       (notify-keys! :blocks @changed-blocks)
       (notify-keys! :resources @changed-resources)
-      (doseq [block-uuid @seeded-blocks]
-        (schedule-seeded-block-gc! block-uuid rev))
+      (when (seq @seeded-blocks)
+        (schedule-seeded-blocks-gc! @seeded-blocks rev))
       (doseq [parent-uuid @stale-children]
         (request-reload! [:children parent-uuid]
                          #(start-children-load! parent-uuid)))

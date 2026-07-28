@@ -58,9 +58,12 @@
 
 (def ^:private template-re #"<%([^%].*?)%>")
 
+(def ^:private journal-title-formatter
+  (tf/formatter date-time-util/default-journal-title-formatter))
+
 (defn- journal-name
   [date-time]
-  (tf/unparse (tf/formatter date-time-util/default-journal-title-formatter) date-time))
+  (tf/unparse journal-title-formatter date-time))
 
 (defn- nld-parse
   [s]
@@ -72,30 +75,39 @@
   (tf/unparse (tf/formatter "h:mm a") (t/now)))
 
 (defn- variable-rules
-  [{:keys [current-page-title]}]
-  (let [today (journal-name (t/today))]
+  [{:keys [current-page-title today-day]}]
+  (let [today-date (if today-day
+                     (tc/from-long
+                      (date-time-util/journal-day->ms today-day))
+                     (t/today))
+        today (journal-name today-date)]
     {"today" (page-ref/->page-ref today)
-     "yesterday" (page-ref/->page-ref (journal-name (t/yesterday)))
-     "tomorrow" (page-ref/->page-ref (journal-name (t/plus (t/today) (t/days 1))))
+     "yesterday" (page-ref/->page-ref
+                  (journal-name (t/minus today-date (t/days 1))))
+     "tomorrow" (page-ref/->page-ref
+                 (journal-name (t/plus today-date (t/days 1))))
      "time" (current-time)
      "current page" (page-ref/->page-ref (or current-page-title today))}))
 
 (defn- resolve-dynamic-template
   [content opts]
-  (string/replace content template-re
-                  (fn [[_ match]]
-                    (let [match (string/trim match)]
-                      (cond
-                        (string/blank? match)
-                        ""
+  (let [rules (delay (variable-rules opts))]
+    (string/replace content template-re
+                    (fn [[_ match]]
+                      (let [match (string/trim match)
+                            match-key (string/lower-case match)]
+                        (cond
+                          (string/blank? match)
+                          ""
 
-                        (get (variable-rules opts) (string/lower-case match))
-                        (get (variable-rules opts) (string/lower-case match))
+                          (contains? @rules match-key)
+                          (get @rules match-key)
 
-                        :else
-                        (if-let [parsed (nld-parse match)]
-                          (page-ref/->page-ref (journal-name (tc/from-date parsed)))
-                          match))))))
+                          :else
+                          (if-let [parsed (nld-parse match)]
+                            (page-ref/->page-ref
+                             (journal-name (tc/from-date parsed)))
+                            match)))))))
 
 (defn- ->journal-day-int [input]
   (let [input (string/lower-case (name input))]
@@ -802,9 +814,9 @@ Some bindings in this fn:
           tuples)))
 
 (defn execute-query
-  [query-string db {:keys [cards? block-attrs]}]
+  [query-string db {:keys [cards? block-attrs] :as opts}]
   (when (and (string? query-string) (not= "\"\"" query-string))
-    (let [{query* :query :keys [rules sample]} (parse-query query-string db {:cards? cards?})
+    (let [{query* :query :keys [rules sample]} (parse-query query-string db opts)
           query* (if cards?
                    (let [card-id (:db/id (d/entity db :logseq.class/Card))]
                      (common-util/concat-without-nil
