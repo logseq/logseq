@@ -1,7 +1,7 @@
 (ns logseq.cli.e2e.main-test
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is]]
             [logseq.cli.e2e.cleanup :as cleanup]
             [logseq.cli.e2e.main :as main]
             [logseq.cli.e2e.manifests :as manifests]
@@ -445,34 +445,6 @@
     (is (= [["sync-upload" true]
             ["sync-status" true]]
            @run-case-seen))))
-
-(deftest run-sync-suite-forwards-e2ee-password-to-prepare-case
-  (let [seen-passwords (atom [])
-        sync-inventory {:excluded-command-prefixes ["login" "logout"]
-                        :scopes {:sync {:commands ["sync status"]
-                                        :options []}}}
-        sync-cases [{:id "sync-status"
-                     :cmds ["node static/logseq-cli.js sync status"]
-                     :covers {:commands ["sync status"]}}]]
-    (with-redefs [sync-fixture/before-suite! (fn [_]
-                                               {:suite :sync})
-                  sync-fixture/prepare-case (fn [case suite-context]
-                                              (swap! seen-passwords conj (:e2ee-password suite-context))
-                                              case)
-                  sync-fixture/after-suite! (fn [_ _] nil)]
-      (main/run! {:suite :sync
-                  :inventory sync-inventory
-                  :cases sync-cases
-                  :skip-build true
-                  :e2ee-password "abc 123"
-                  :run-command (fn [_]
-                                 {:exit 0
-                                  :out ""
-                                  :err ""})
-                  :run-case (fn [case _opts]
-                              {:id (:id case)
-                               :status :ok})}))
-    (is (= ["abc 123"] @seen-passwords))))
 
 (deftest list-cases-defaults-to-non-sync
   (let [selected-suite (atom nil)

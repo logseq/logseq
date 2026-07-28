@@ -266,7 +266,7 @@
 	       [:span.bullet]])))
 
 (defn- property-input-on-chosen
-  [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
+  [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property? view-parent]}]
   (fn [{:keys [value label convert-page-to-property?]}]
     (let [property (cond
                      (uuid? value) (db/entity [:block/uuid value])
@@ -277,7 +277,10 @@
           batch? (pv/batch-operation?)]
       (if (and property remove-property?)
         (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
-          (property-handler/batch-remove-block-property! block-ids (:db/ident property))
+          (property-handler/batch-remove-block-property!
+           block-ids
+           (:db/ident property)
+           {:preserve-task-tag? (= :logseq.class/Task (:db/ident view-parent))})
           (shui/popup-hide!))
         (do
           (when (and *show-new-property-config? (not (ldb/property? property)))

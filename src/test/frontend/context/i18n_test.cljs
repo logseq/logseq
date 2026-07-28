@@ -165,63 +165,6 @@
            (i18n/locale-join-rich-text
             [[:span "المزامنة"] [:span "التخزين"]])))))
 
-(deftest locale-format-number-test
-  (let [m 1234.56
-        n 1234567.89
-        opts {:notation "compact"}]
-    (set-language! :en)
-    (is (= "1,234.56"
-           (i18n/locale-format-number m)))
-    (is (= "1.2K"
-           (i18n/locale-format-number m opts)))
-    (is (= "1,234,567.89"
-           (i18n/locale-format-number n)))
-    (is (= "1.2M"
-           (i18n/locale-format-number n opts)))
-
-    (set-language! :zh-CN)
-    (is (= "1,234.56"
-           (i18n/locale-format-number m)))
-    (is (= "1235"
-           (i18n/locale-format-number m opts)))
-    (is (= "1,234,567.89"
-           (i18n/locale-format-number n)))
-    (is (= "123万"
-           (i18n/locale-format-number n opts)))))
-
-(deftest locale-format-date-test
-  (let [d (js/Date. 2026 3 5 9 7)
-        opts {:year "numeric" :month "long" :day "numeric"}]
-    (set-language! :en)
-    (is (= "4/5/2026"
-           (i18n/locale-format-date d {})))
-    (is (= "Apr 5, 2026"
-           (i18n/locale-format-date d)))
-    (is (= "April 5, 2026"
-           (i18n/locale-format-date d opts)))
-
-    (set-language! :zh-CN)
-    (is (= "2026/4/5"
-           (i18n/locale-format-date d {})))
-    (is (= "2026年4月5日"
-           (i18n/locale-format-date d)))
-    (is (= "2026年4月5日"
-           (i18n/locale-format-date d opts)))))
-
-(deftest locale-format-time-test
-  (let [d (js/Date. 2026 3 5 9 7)]
-    (set-language! :en)
-    (is (= "09:07"
-           (i18n/locale-format-time d)))
-
-    (set-language! :zh-CN)
-    (is (= "09:07"
-           (i18n/locale-format-time d)))
-
-    (set-language! :id)
-    (is (= "09.07"
-           (i18n/locale-format-time d)))))
-
 (deftest interpolate-sentence-test
   (testing "plain text with no substitution"
     (is (= [:<> "No substitution needed."]

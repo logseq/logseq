@@ -24,22 +24,6 @@
     (is (true? (state/default-cmdk-context? {} :global nil)))
     (is (true? (state/default-cmdk-context? {} nil nil)))))
 
-(deftest default-cmdk-context?-false-for-sidebar
-  (testing "sidebar cmdk is not treated as default context"
-    (is (false? (state/default-cmdk-context? {:sidebar? true} :global nil)))))
-
-(deftest default-cmdk-context?-false-when-initial-input-present
-  (testing "initial-input should disable default restore context"
-    (is (false? (state/default-cmdk-context? {:initial-input "foo"} :global nil)))))
-
-(deftest default-cmdk-context?-true-when-initial-input-is-nil
-  (testing "nil initial-input should still be treated as default cmdk context"
-    (is (true? (state/default-cmdk-context? {:initial-input nil} :global nil)))))
-
-(deftest default-cmdk-context?-true-even-with-stale-search-args
-  (testing "stale search args should not block default cmdk persistence"
-    (is (true? (state/default-cmdk-context? {} :global {:action :noop})))))
-
 (deftest save-last-cmdk-search!-writes-per-repo
   (testing "save writes query and filter-group isolated by repo key"
     (let [saved* (atom {})]

@@ -9,7 +9,7 @@
             [clojure.core.async :as async]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.rtc.indicator :as indicator]
+            [frontend.components.rtc.download-progress :as download-progress]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -51,7 +51,6 @@
             [lambdaisland.glogi :as log]
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
@@ -383,22 +382,17 @@
   (->
    (p/do!
     (when (util/mobile?)
-      (shui/popup-show!
-       nil
-       (fn []
-         [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (t :sync/downloading-graph graph-name)]
-          (indicator/downloading-logs)])
-       {:id :download-rtc-graph}))
+      (download-progress/show! graph-name))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name) {:rtc-download? true}])
     (when (util/mobile?)
-      (shui/popup-hide! :download-rtc-graph)))
+      (download-progress/hide!)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
-              (shui/popup-hide! :download-rtc-graph)
+              (when (util/mobile?)
+                (download-progress/hide!))
               (when (rtc-error/download-decrypt-failed? e)
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 

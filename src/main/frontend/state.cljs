@@ -1030,11 +1030,12 @@ should be done through this fn in order to get global config and config defaults
 (defn set-edit-content!
   ([value] (set-edit-content! (get-edit-input-id) value))
   ([input-id value] (set-edit-content! input-id value true))
-  ([input-id value set-input-value?]
+  ([input-id value set-input-value?] (set-edit-content! input-id value set-input-value? nil))
+  ([input-id value set-input-value? caret-pos]
    (when input-id
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
-         (util/set-change-value input value)))
+         (util/set-change-value input value caret-pos)))
      (set-state! :editor/content value :path-in-sub-atom
                  (or (:block/uuid (get-edit-block)) input-id)))))
 
@@ -1426,7 +1427,7 @@ should be done through this fn in order to get global config and config defaults
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
-    (set-edit-content! edit-input-id content)
+    (set-edit-content! edit-input-id content true new-pos)
     (set-editor-last-pos! new-pos)))
 
 (defn set-theme-mode!

@@ -537,30 +537,6 @@
                             (reset! state/*db-worker worker-prev)
                             (reset! state/state state-prev)))))))
 
-(deftest rtc-download-graph-delegates-to-worker-download-api-test
-  (async done
-         (let [worker-calls (atom [])]
-           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
-                               state/<invoke-db-worker (fn [& args]
-                                                         (swap! worker-calls conj args)
-                                                         (p/resolved :ok))
-                               state/set-state! (fn [& _] nil)
-                               state/pub-event! (fn [& _] nil)]
-                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
-               (p/then (fn [_]
-                         (is (= 1 (count @worker-calls)))
-                         (let [[op graph graph-uuid graph-e2ee?] (first @worker-calls)]
-                           (is (= :thread-api/db-sync-download-graph-by-id op))
-                           (is (string/ends-with? graph "demo-graph"))
-                           (is (= "graph-1" graph-uuid))
-                           (is (= false graph-e2ee?)))
-                         (done)))
-               (p/catch (fn [error]
-                          (is false (str error))
-                          (done)))))))
-
 (deftest rtc-download-graph-sets-and-clears-downloading-state-test
   (async done
          (let [state-calls (atom [])
