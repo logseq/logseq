@@ -275,25 +275,13 @@
                                    "ui/virtualized-list"))
           "The outer journal stream is the only virtualizer."))))
 
-(deftest journal-slot-observer-and-residency-layer-is-deleted-test
+(deftest unloaded-journal-preserves-its-last-measured-height-test
   (let [source (source-for "src/main/frontend/components/journal.cljs")
-        journal-state-path
-        (node-path/join (.cwd js/process)
-                        "src/main/frontend/components/journal_state.cljs")]
-    (testing "Virtuoso lifecycle replaces the manual slot/window subsystem"
-      (doseq [forbidden ["journal-state"
-                         "IntersectionObserver"
-                         "ResizeObserver"
-                         "js/setTimeout"
-                         "journal-item-height"
-                         "journal-slot"
-                         "rootMargin"
-                         "metadata-hydration-delay"
-                         "keep-tree-resident"
-                         "recent?"
-                         "resident-block-tree"
-                         "slot-load-now?"]]
-        (is (not (string/includes? source forbidden))
-            (str "Superseded journal lifecycle remains: " forbidden))))
-    (is (false? (fs/existsSync journal-state-path))
-        "The obsolete journal-state compatibility namespace is deleted.")))
+        item-source (form-source source "(hsx/defc journal-item")]
+    (testing "an asynchronous bundle reload must not collapse a remounted journal"
+      (is (string/includes? source "journal-item-height-by-key*"))
+      (is (string/includes? item-source "ResizeObserver"))
+      (is (string/includes? item-source ":min-height"))
+      (is (string/includes? item-source "(when bundle"))
+      (is (not (string/includes? source "js/setTimeout"))
+          "The placeholder lasts only until the bundle is ready."))))

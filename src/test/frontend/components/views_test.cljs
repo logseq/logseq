@@ -168,17 +168,6 @@
   (is (= :db.cardinality/many
          (:db/cardinality (#'views/built-in-property :block/tags)))))
 
-(deftest journal-virtualized-items-use-the-master-css-placeholder-height
-  (let [source (source-for "src/main/frontend/components/journal.cljs")
-        journal-item-source (form-source source "(hsx/defc journal-item")
-        css (source-for "src/main/frontend/components/journal.css")]
-    (is (some? journal-item-source))
-    (is (string/includes? journal-item-source
-                          "[:div.journal-item.content.relative"))
-    (is (not (string/includes? journal-item-source ":min-height")))
-    (is (string/includes? css "min-h-[250px]"))
-    (is (string/includes? css "min-h-[500px]"))))
-
 (deftest view-type-button-uses-the-contextual-display-type
   (let [view {:db/id 1}
         all-pages-view (#'views/view-with-display-type
