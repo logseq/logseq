@@ -1,4 +1,5 @@
-{:account/authentication "身份验证"
+{
+ :account/authentication "身份验证"
  :account/benefits-desc "使用 Logseq 帐户，您可以访问 Logseq Sync 等云服务和 alpha/beta 功能。"
  :account/billing "订阅计费"
  :account/billing-expired-on-label "Pro 计划过期时间：{1}"
@@ -2082,6 +2083,19 @@
  :view.table/total-refs-count "总引用数"
  :view.table/unpin "取消固定"
 
+ :wikidata/add-all "全部添加"
+ :wikidata/add-to-page "添加到页面"
+ :wikidata/add-to-page-named "将 {1} 添加到页面"
+ :wikidata/added "已添加 {1}"
+ :wikidata/collapse-suggestions "折叠建议"
+ :wikidata/dismiss "忽略"
+ :wikidata/dismiss-suggestions "忽略建议"
+ :wikidata/resolve-failed "无法从 Wikidata 解析该条目，请重试。"
+ :wikidata/suggested-count "来自 Wikidata 的建议 • {1}"
+ :wikidata/suggested-from "来自 Wikidata 的建议"
+ :wikidata/suggestions-chip "来自 Wikidata 的 {1} 条建议"
+ :wikidata/undo "撤销"
+
  :window/close "关闭"
  :window/exit-fullscreen "退出全屏"
  :window/maximize "最大化"
@@ -2095,4 +2109,5 @@
  :zotero/attachments "附件"
  :zotero/imported-file-warning "这是一个从 Zotero 导入的文件，设置 Zotero 数据目录 后即可在 Logseq 中打开该文件。"
  :zotero/linked-file-warning "这是一个 Zotero 链接文件，设置 Zotero 链接附件基础目录 后即可在 Logseq 中打开该文件。"
- :zotero/notes "笔记"}
+ :zotero/notes "笔记"
+}

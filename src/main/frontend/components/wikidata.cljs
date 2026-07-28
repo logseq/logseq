@@ -118,29 +118,29 @@
 
 (def wikidata-property->logseq
   "Maps Wikidata property IDs to Logseq property definitions"
-  {"P50" {:ident :user.property/author :title "Author" :type :node}
+  {"P50" {:ident :user.property/author :title "Author" :type :node :many? true}
    "P577" {:ident :user.property/published :title "Published" :type :datetime}
    "P123" {:ident :user.property/publisher :title "Publisher" :type :node}
-   "P136" {:ident :user.property/genre :title "Genre" :type :node}
-   "P112" {:ident :user.property/founder :title "Founder" :type :node}
+   "P136" {:ident :user.property/genre :title "Genre" :type :node :many? true}
+   "P112" {:ident :user.property/founder :title "Founder" :type :node :many? true}
    "P571" {:ident :user.property/founded :title "Founded" :type :datetime}
    "P159" {:ident :user.property/headquarters :title "Headquarters" :type :node}
    "P856" {:ident :user.property/website :title "Website" :type :url}
    "P17" {:ident :user.property/country :title "Country" :type :node}
    "P495" {:ident :user.property/origin :title "Country of Origin" :type :node}
    "P364" {:ident :user.property/language :title "Language" :type :node}
-   "P57" {:ident :user.property/director :title "Director" :type :node}
-   "P58" {:ident :user.property/screenwriter :title "Screenwriter" :type :node}
-   "P162" {:ident :user.property/producer :title "Producer" :type :node}
-   "P175" {:ident :user.property/performer :title "Performer" :type :node}
+   "P57" {:ident :user.property/director :title "Director" :type :node :many? true}
+   "P58" {:ident :user.property/screenwriter :title "Screenwriter" :type :node :many? true}
+   "P162" {:ident :user.property/producer :title "Producer" :type :node :many? true}
+   "P175" {:ident :user.property/performer :title "Performer" :type :node :many? true}
    ;; --- Person (public figures) ---
    "P569" {:ident :user.property/date-of-birth  :title "Date of birth"  :type :datetime}
    "P570" {:ident :user.property/date-of-death  :title "Date of death"  :type :datetime}
-   "P106" {:ident :user.property/occupation     :title "Occupation"     :type :node}
-   "P27"  {:ident :user.property/nationality    :title "Nationality"    :type :node}
+   "P106" {:ident :user.property/occupation     :title "Occupation"     :type :node :many? true}
+   "P27"  {:ident :user.property/nationality    :title "Nationality"    :type :node :many? true}
    "P19"  {:ident :user.property/place-of-birth :title "Place of birth" :type :node}
    "P20"  {:ident :user.property/place-of-death :title "Place of death" :type :node}
-   "P108" {:ident :user.property/employer       :title "Employer"       :type :node}})
+   "P108" {:ident :user.property/employer       :title "Employer"       :type :node :many? true}})
 
 ;; =============================================================================
 ;; Preview Icon Type Resolution
@@ -528,9 +528,13 @@
    midnight so a :datetime property renders as a clean date with no timezone-offset
    time (\"Nov 7th, 1867\" not \"... 00:53\")."
   [claim]
-  (let [time-str (get-in claim ["mainsnak" "datavalue" "value" "time"])
+  (let [precision (get-in claim ["mainsnak" "datavalue" "value" "precision"])
+        time-str (get-in claim ["mainsnak" "datavalue" "value" "time"])
         date (parse-wikidata-time time-str)]
-    (when (and date (not (js/isNaN (.getTime date))))
+    ;; Only day-or-finer precision (11+) becomes a date; year/decade/century
+    ;; (precision < 11) would render a misleading "Jan 1st", so skip it.
+    (when (and date (not (js/isNaN (.getTime date)))
+               (or (nil? precision) (>= precision 11)))
       (.getTime (js/Date. (.getUTCFullYear date) (.getUTCMonth date) (.getUTCDate date))))))
 
 (defn- extract-string-value

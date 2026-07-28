@@ -1,4 +1,5 @@
-{:account/authentication "Authentication"
+{
+ :account/authentication "Authentication"
  :account/benefits-desc "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."
  :account/billing "Billing"
  :account/billing-expired-on-label "Pro plan expired on: {1}"
@@ -2082,6 +2083,19 @@
  :view.table/total-refs-count "Total refs count"
  :view.table/unpin "Unpin"
 
+ :wikidata/add-all "Add all"
+ :wikidata/add-to-page "Add to page"
+ :wikidata/add-to-page-named "Add {1} to page"
+ :wikidata/added "Added {1}"
+ :wikidata/collapse-suggestions "Collapse suggestions"
+ :wikidata/dismiss "Dismiss"
+ :wikidata/dismiss-suggestions "Dismiss suggestions"
+ :wikidata/resolve-failed "Couldn't resolve this entity from Wikidata - try again."
+ :wikidata/suggested-count "Suggested from Wikidata • {1}"
+ :wikidata/suggested-from "Suggested from Wikidata"
+ :wikidata/suggestions-chip "{1} suggestions from Wikidata"
+ :wikidata/undo "Undo"
+
  :window/close "Close"
  :window/exit-fullscreen "Exit full screen"
  :window/maximize "Maximize"
@@ -2095,4 +2109,5 @@
  :zotero/attachments "Attachments"
  :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
  :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
- :zotero/notes "Notes"}
+ :zotero/notes "Notes"
+}

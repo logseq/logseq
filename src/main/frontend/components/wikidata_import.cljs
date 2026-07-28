@@ -4,6 +4,7 @@
    select which properties to import (Author, Publisher, etc.)."
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.property :as property]
             [frontend.components.wikidata :as wikidata]
             [frontend.context.i18n :refer [t]]
@@ -13,9 +14,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.shui.ui :as shui]
-            [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; =============================================================================
@@ -56,48 +57,99 @@
 ;; Property & Page Creation
 ;; =============================================================================
 
+(declare node-value-resolved?)
+
 (defn- get-or-create-property!
-  "Get existing property by ident, or create it with the given title/type.
+  "Get existing property by ident, or create/upgrade it to the given title/type.
    Uses the explicit ident (not a title-derived slug, which diverges for e.g.
    \"Country of Origin\") and passes :property-name so the display title
-   persists (upsert-property! reads :property-name, not :title).
+   persists (upsert-property! reads :property-name, not :title). When many? is set,
+   the property is created (or migrated in place) as cardinality-many so a person's
+   several occupations accumulate instead of overwriting one another.
    Returns the property entity."
-  [property-ident property-title property-type]
-  (let [existing (db/entity property-ident)]
-    (if (and existing (= property-type (:logseq.property/type existing)))
+  [property-ident property-title property-type & [many?]]
+  (let [existing (db/entity property-ident)
+        type-ok? (and existing (= property-type (:logseq.property/type existing)))
+        card-ok? (or (not many?)
+                     (= :db.cardinality/many (:db/cardinality existing)))]
+    (if (and existing type-ok? card-ok?)
       existing
-      ;; Absent, OR exists with the WRONG type (e.g. an earlier import created it as
-      ;; :default because the schema key was wrong). upsert-property! reads the type
-      ;; from :logseq.property/type (NOT :type); update-property changes the type of an
-      ;; existing property that has no data yet, self-healing the bad ones.
-      (do
-        (db-property-handler/upsert-property! property-ident
-                                              {:logseq.property/type property-type}
+      ;; Absent, wrong TYPE (an earlier import created it as :default because the
+      ;; schema key was wrong), or single-cardinality where we now need many.
+      ;; upsert-property! reads the type from :logseq.property/type (NOT :type);
+      ;; update-property self-heals a data-less property's type, and a one->many
+      ;; cardinality change is always safe (the existing value is kept).
+      (let [schema (if many?
+                     {:logseq.property/type property-type
+                      :db/cardinality :db.cardinality/many}
+                     {:logseq.property/type property-type})]
+        (db-property-handler/upsert-property! property-ident schema
                                               {:property-name property-title})
         (db/entity property-ident)))))
 
+(defn- get-page-by-wikidata-id
+  "Find an existing page carrying the given Wikidata QID (dedup key)."
+  [qid]
+  (try
+    (when-let [db (db/get-db)]
+      (some->> (d/q '[:find [?p ...]
+                      :in $ ?qid
+                      :where [?p :logseq.property/wikidata-id ?qid]]
+                    db qid)
+               (map db/entity)
+               (remove :logseq.property/deleted-at) ; skip recycled pages (re-import after undo)
+               first))
+    (catch :default _e nil)))
+
 (defn- <ensure-page-for-entity!
-  "Ensure a page exists for an entity reference.
-   Creates the page if it doesn't exist.
-   Returns the page entity."
-  [label]
-  (if-let [existing (db/get-case-page label)]
-    (p/resolved existing)
-    (page-handler/<create! label {:redirect? false})))
+  "Get/create the page for a node value, keyed by its Wikidata QID so an ambiguous
+   label (e.g. \"Georgia\") doesn't attach to an unrelated existing page. Stamps
+   :wikidata-id on the page (new, or an adopted exact-title match) for future dedup.
+   Returns a promise of {:page entity :created? bool}; :created? is true only when a
+   brand-new page was made, so undo can clean it up without touching pre-existing pages."
+  [label qid]
+  (if-let [by-qid (and qid (get-page-by-wikidata-id qid))]
+    (p/resolved {:page by-qid :created? false})
+    (p/let [found (db/get-case-page label)
+            ;; A recycled page still resolves by title; treat it as absent so a
+            ;; re-import after an undo makes a fresh page instead of a trashed one.
+            existing (when (and found (not (:logseq.property/deleted-at found))) found)
+            page (or existing (page-handler/<create! label {:redirect? false}))]
+      (when (and qid page (not (:logseq.property/wikidata-id page)))
+        (db-property-handler/set-block-property!
+         (:block/uuid page) :logseq.property/wikidata-id qid))
+      {:page page :created? (nil? existing)})))
 
 (defn- <import-property-value!
-  "Import a single property value to the page.
-   Handles different value types (string, datetime, entity ref)."
+  "Import a single property value to the page. Handles different value types
+   (string, datetime, entity ref). Returns a promise of the vector of page uuids
+   newly CREATED for node values (for orphan cleanup on undo); empty for scalars."
   [page-uuid property-ident value logseq-type]
-  (p/let [;; For entity references, create/get the linked page
-          final-value (if (and (= logseq-type :node) (:label value))
-                        (p/let [linked-page (<ensure-page-for-entity! (:label value))]
-                          (:db/id linked-page))
-                        ;; For simple values, use directly
-                        (if (:qid value)
+  (if (and (= logseq-type :node) (:label value))
+    (p/let [{:keys [page created?]} (<ensure-page-for-entity! (:label value) (:qid value))]
+      (db-property-handler/set-block-property! page-uuid property-ident (:db/id page))
+      (if created? [(:block/uuid page)] []))
+    (p/let [final-value (if (:qid value)
                           (:label value) ; Use label if it's a resolved entity
-                          value))]
-    (db-property-handler/set-block-property! page-uuid property-ident final-value)))
+                          value)]
+      (db-property-handler/set-block-property! page-uuid property-ident final-value)
+      [])))
+
+(defn- <import-property-values!
+  "Write one suggestion's value(s). For a cardinality-many node property, resolve
+   every value to a page :db/id and set them as one vector (replace-all so re-accept
+   stays idempotent); otherwise fall back to the single-value path. Node values that
+   never resolved to a real label are skipped so we never link a page titled Q123.
+   Returns a promise of the vector of page uuids newly CREATED (for undo cleanup)."
+  [page-uuid property-ident values logseq-type many?]
+  (if (and many? (= logseq-type :node))
+    (p/let [results (p/all (for [v values :when (node-value-resolved? v)]
+                             (<ensure-page-for-entity! (:label v) (:qid v))))
+            ids (vec (keep (comp :db/id :page) results))]
+      (when (seq ids)
+        (db-property-handler/set-block-property! page-uuid property-ident ids))
+      (vec (keep (fn [r] (when (:created? r) (:block/uuid (:page r)))) results)))
+    (<import-property-value! page-uuid property-ident (first values) logseq-type)))
 
 (defn- <import-selected-properties!
   "Import all selected properties to the page."
@@ -178,6 +230,10 @@
 (def ^:private suggestion-visible-limit
   "How many ranked suggestions to show initially when progressive disclosure applies." 4)
 
+(def ^:private multi-value-limit
+  "Cap on node values resolved / shown / written per multi-valued suggestion (e.g. a
+   person's occupations); the long tail past this is usually low-signal noise." 6)
+
 (defn stash-suggestions!
   "Store the SUGGEST-tier properties for a page (ranked, high-value first); the
    inline band reads them and resolves node labels lazily on mount. No suggestions
@@ -192,6 +248,7 @@
                                  :ident (:ident logseq)
                                  :title (:title logseq)
                                  :type (:type logseq)
+                                 :many? (:many? logseq)
                                  :values values
                                  :status :suggested}))
                         (sort-by #(get suggestion-priority (:pid %) 99))
@@ -228,26 +285,29 @@
 
 (declare format-value-display)
 
+(defn- patch-suggestion-value!
+  "Swap the resolved (label-bearing) value into position idx of item pid."
+  [page-uuid pid idx resolved]
+  (swap! *wikidata-suggestions update-in [page-uuid :items]
+         (fn [items]
+           (mapv (fn [it]
+                   (if (= (:pid it) pid)
+                     (update it :values (fn [vs] (assoc (vec vs) idx resolved)))
+                     it))
+                 items))))
+
 (defn- <resolve-item-labels!
-  "Resolve the PRIMARY node value's label for one item, THROUGH the rate-limit
-   queue (spaced, one at a time), patching the atom. Only the first value is ever
-   shown/accepted, so we resolve just that one instead of the whole vector."
+  "Resolve every unresolved node value's label for one item (capped at
+   multi-value-limit), each THROUGH the rate-limit queue (spaced, one at a time),
+   patching the atom in place. Covers multi-valued properties like a person's
+   several occupations, not only the primary value."
   [page-uuid pid values]
-  (let [primary (first values)]
-    (if (:qid primary)
+  (doseq [[idx v] (map-indexed vector (take multi-value-limit values))]
+    (when (and (map? v) (:qid v) (not (:label v)))
       (wikidata/enqueue-wikidata-fetch!
        (fn []
-         (p/let [resolved (<fetch-entity-label (:qid primary))]
-           (swap! *wikidata-suggestions update-in [page-uuid :items]
-                  (fn [items]
-                    (mapv (fn [it]
-                            (if (= (:pid it) pid)
-                              (assoc it :values (assoc (vec values) 0 resolved) :resolved? true)
-                              it))
-                          items))))))
-      (swap! *wikidata-suggestions update-in [page-uuid :items]
-             (fn [items]
-               (mapv (fn [it] (if (= (:pid it) pid) (assoc it :resolved? true) it)) items))))))
+         (p/let [resolved (<fetch-entity-label (:qid v))]
+           (patch-suggestion-value! page-uuid pid idx resolved)))))))
 
 (defn- resolve-pending-labels!
   "Resolve any suggestion whose primary value is an unresolved entity ref
@@ -255,9 +315,9 @@
    raw Q-id never leaks into the UI."
   [page-uuid]
   (doseq [{:keys [pid values]} (get-in @*wikidata-suggestions [page-uuid :items])]
-    (let [primary (first values)]
-      (when (and (map? primary) (:qid primary) (not (:label primary)))
-        (<resolve-item-labels! page-uuid pid values)))))
+    (when (some (fn [v] (and (map? v) (:qid v) (not (:label v))))
+                (take multi-value-limit values))
+      (<resolve-item-labels! page-uuid pid values))))
 
 (defn- remove-suggestion-item!
   "Drop one suggested row; clear the page entry when the last row is gone."
@@ -274,30 +334,65 @@
    #(some-> (js/document.querySelector ".wikidata-suggestion-row") (.focus))
    60))
 
+(defn- node-value-resolved?
+  "A node value is writable once it carries a real (non-blank, non-Q-id) label."
+  [v]
+  (let [l (str (:label v))]
+    (and (not (string/blank? l)) (not (re-matches #"^Q[0-9]+$" l)))))
+
+(defn- page-content-empty?
+  "The page holds no authored, non-blank content block of its own."
+  [page]
+  (not (some (fn [b] (not (string/blank? (:block/title b))))
+             (:block/_page page))))
+
+(defn- <undo-accept!
+  "Undo an accepted suggestion: retract the property, then delete any pages THIS
+   accept created that the retract orphans. The orphan set is computed BEFORE the
+   retract — a created page whose SOLE referencer is this host and that has no
+   authored content of its own — so we never race the worker→main-thread db sync,
+   and never touch pre-existing pages or ones the user has since linked/edited.
+   (Node property values do populate :block/_refs, so a page still referenced by
+   another entity's property is correctly spared.)"
+  [page-uuid ident created-uuids]
+  (let [host-id (:db/id (db/entity [:block/uuid page-uuid]))
+        ;; Realize eagerly (vec) so the :block/_refs reads happen NOW, against the
+        ;; pre-retract db — a lazy seq would defer them until p/all consumes it inside
+        ;; p/do!, i.e. after the retract, reintroducing the sync race.
+        to-delete (vec (for [uuid created-uuids
+                             :let [page (db/entity [:block/uuid uuid])]
+                             :when (and page
+                                        (= #{host-id} (set (map :db/id (:block/_refs page))))
+                                        (page-content-empty? page))]
+                         uuid))]
+    (p/do!
+     (db-property-handler/remove-block-property! page-uuid ident)
+     (p/all (for [uuid to-delete] (page-handler/<delete! uuid nil))))))
+
 (defn- <accept-suggestion!
-  "Accept one suggested property: ensure the property exists, write the primary
-   value, drop the row, and offer an Undo. Blocks node values whose label did not
-   resolve so we never create a page titled Q123."
-  [page-uuid {:keys [pid ident title type values]}]
-  (let [value (first values)]
-    (when value
-      (if (and (= type :node)
-               (let [label (str (:label value))]
-                 (or (string/blank? label) (re-matches #"^Q[0-9]+$" label))))
-        (shui/toast! "Couldn't resolve this entity from Wikidata - try again." :warning)
-        (p/let [_ (get-or-create-property! ident title type)
-                _ (<import-property-value! page-uuid ident value type)]
+  "Accept one suggested property: ensure the property exists (cardinality-many when
+   the suggestion is multi-valued), write its value(s), drop the row, and offer an
+   Undo. For node values, blocks only when NOTHING resolved (so a single stuck
+   secondary value can't wedge the row); unresolved node values are skipped on write."
+  [page-uuid {:keys [pid ident title type values many?]}]
+  (let [vals (filterv some? (if many? (vec (take multi-value-limit values))
+                                [(first values)]))]
+    (when (seq vals)
+      (if (and (= type :node) (not (some node-value-resolved? vals)))
+        (shui/toast! (t :wikidata/resolve-failed) :warning)
+        (p/let [_ (get-or-create-property! ident title type many?)
+                created-uuids (<import-property-values! page-uuid ident vals type many?)]
           (remove-suggestion-item! page-uuid pid)
           (focus-first-suggestion!)
           (shui/toast!
            (fn [{:keys [dismiss!]}]
-             [:span (str "Added " title " ")
+             [:span (str (t :wikidata/added title) " ")
               (shui/button {:size :sm :variant :text
                             :class "!px-1 !h-6 !text-xs"
                             :on-click (fn []
                                         (dismiss!)
-                                        (db-property-handler/remove-block-property! page-uuid ident))}
-                           "Undo")])
+                                        (<undo-accept! page-uuid ident created-uuids))}
+                           (t :wikidata/undo))])
            :default {:duration 5000}))))))
 
 (defn- suggestion-value-label
@@ -340,21 +435,20 @@
    value is an INERT node-styled chip (not a live link, so it never spawns a stray
    page), a key icon + value bullet mirror real rows for alignment, and a compact
    cursor-adjacent cue names the action without adding a permanent third column."
-  [page-uuid {:keys [pid ident type values] :as item}]
-  (let [primary (first values)
-        entity-ref? (and (map? primary) (:qid primary))
-        pending? (and entity-ref? (not (:label primary)))
-        label (suggestion-value-label primary type)
+  [page-uuid {:keys [pid ident type values many?] :as item}]
+  (let [display-vals (if many? (vec (take multi-value-limit values)) [(first values)])
+        primary (first values)
+        primary-pending? (and (map? primary) (:qid primary) (not (:label primary)))
         prop-entity (db/entity ident)
         show-bullet? (not (contains? #{:default :url} type))
-        accept! (fn [] (when-not pending? (<accept-suggestion! page-uuid item)))]
+        accept! (fn [] (when-not primary-pending? (<accept-suggestion! page-uuid item)))]
     [:div.property-pair.property-panel-row.group.wikidata-suggestion-row.select-none
      {:key (str pid)
       :data-property-type (name type)
       :tab-index 0
       :role "button"
-      :aria-label (str "Add " (:title item) " to page" (when label (str " (" label ")")))
-      :aria-disabled (when pending? "true")
+      :aria-label (t :wikidata/add-to-page-named (:title item))
+      :aria-disabled (when primary-pending? "true")
       :class "rounded cursor-pointer transition-colors hover:bg-gray-05 focus-visible:bg-gray-05 focus-visible:outline-none"
       :on-mouse-move position-add-cue-at-pointer!
       :on-focus position-add-cue-at-row!
@@ -374,18 +468,30 @@
       (when show-bullet?
         [:div.property-panel-bullet {:aria-hidden true}
          [:span.bullet-container [:span.bullet]]])
-      [:div.property-value.property-value-panel-inner.flex.flex-1.items-center
-       (cond
-         pending?
-         [:span.inline-block.w-24.h-4.rounded {:class "bg-gray-04 animate-pulse" :aria-busy "true"}]
-         entity-ref?
-         [:span.wikidata-suggestion-chip {:style {:color "var(--ls-link-text-color)"}} (or label "")]
-         :else
-         [:span (str label)])]]
+      ;; Comma-separate exactly like a committed multi-value property does
+      ;; (property/value.cljs interposes [:span.opacity-50.-ml-1 ","]), so the band
+      ;; and the added property read identically.
+      (into [:div.property-value.property-value-panel-inner.flex.flex-1.items-center.gap-1.flex-wrap]
+            (mapcat
+             (fn [idx v]
+               (let [v-pending? (and (map? v) (:qid v) (not (:label v)))
+                     v-ref? (and (map? v) (:qid v))
+                     lbl (suggestion-value-label v type)
+                     chip (cond
+                            v-pending?
+                            [:span.inline-block.w-16.h-4.rounded {:key idx :class "bg-gray-04 animate-pulse" :aria-busy "true"}]
+                            v-ref?
+                            [:span.wikidata-suggestion-chip {:key idx :style {:color "var(--ls-link-text-color)"}} (or lbl "")]
+                            :else
+                            [:span {:key idx} (str lbl)])]
+                 (if (pos? idx)
+                   [[:span.opacity-50.-ml-1 {:key (str "sep-" idx) :aria-hidden true} ","] chip]
+                   [chip])))
+             (range) display-vals))]
      [:div.wikidata-add-cursor-bubble
       {:aria-hidden true}
       (ui/icon "plus" {:size 12})
-      [:span "Add to page"]]]))
+      [:span (t :wikidata/add-to-page)]]]))
 
 (hsx/defc wikidata-suggestions
   "Inline band of SUGGEST-tier Wikidata properties, above 'Add property' on a
@@ -420,46 +526,46 @@
         [:button.wikidata-suggestions-chip
          {:class "my-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           :on-click #(set-band-open! true)}
-         [:span (str (count items) " suggestions from Wikidata")]
+         [:span (t :wikidata/suggestions-chip (count items))]
          (ui/icon "chevron-right" {:size 14})]
         (let [collapsed? (and (not expanded?)
-                            (>= (count items) suggestion-collapse-threshold))
-            visible (if collapsed? (take suggestion-visible-limit items) items)
-            hidden-n (- (count items) (count visible))]
-        [:div.wikidata-suggestions.rounded-lg.my-1.py-2
-         {:role "region"
-          :aria-label "Suggested from Wikidata"
-          :class "bg-gray-03"
-          :style {:margin-left "-12px" :margin-right "-12px"
-                  :padding-left "12px" :padding-right "12px"}}
-         [:div.flex.items-center.gap-2.mb-1
+                              (>= (count items) suggestion-collapse-threshold))
+              visible (if collapsed? (take suggestion-visible-limit items) items)
+              hidden-n (- (count items) (count visible))]
+          [:div.wikidata-suggestions.rounded-lg.my-1.py-2
+           {:role "region"
+            :aria-label (t :wikidata/suggested-from)
+            :class "bg-gray-03"
+            :style {:margin-left "-12px" :margin-right "-12px"
+                    :padding-left "12px" :padding-right "12px"}}
+           [:div.flex.items-center.gap-2.mb-1
           ;; Chevron + count: click the header to collapse back to the chip
           ;; (distinct from the X, which dismisses the band entirely).
-          [:button.flex.items-center.gap-1
-           {:aria-label "Collapse suggestions"
-            :class "text-muted-foreground hover:text-foreground"
-            :on-click #(set-band-open! false)}
-           (ui/icon "chevron-down" {:size 14})
-           [:span.text-xs (str "Suggested from Wikidata • " (count items))]]
-          [:div.flex-1]
-          (shui/button {:variant :text :size :sm
-                        :disabled any-pending?
-                        :class "!px-1 !h-6 !text-xs text-muted-foreground hover:text-foreground"
-                        :on-click (fn [] (when-not any-pending?
-                                           (run! #(<accept-suggestion! page-uuid %) items)))}
-                       "Add all")
-          (shui/button {:variant :ghost :size :sm
-                        :title "Dismiss"
-                        :aria-label "Dismiss suggestions"
-                        :class "!px-1 !h-6 text-muted-foreground opacity-60 hover:opacity-100 hover:text-foreground"
-                        :on-click #(clear-suggestions! page-uuid)}
-                       (ui/icon "x" {:size 14}))]
-         (into [:div] (map #(suggestion-row page-uuid %) visible))
-         (when (pos? hidden-n)
-           [:button.wikidata-show-more.text-xs.text-muted-foreground.mt-1
-            {:class "hover:text-foreground"
-             :on-click #(set-expanded! true)}
-            (str (t :ui/show-more) " (" hidden-n ")")])])))))
+            [:button.flex.items-center.gap-1
+             {:aria-label (t :wikidata/collapse-suggestions)
+              :class "text-muted-foreground hover:text-foreground"
+              :on-click #(set-band-open! false)}
+             (ui/icon "chevron-down" {:size 14})
+             [:span.text-xs (t :wikidata/suggested-count (count items))]]
+            [:div.flex-1]
+            (shui/button {:variant :text :size :sm
+                          :disabled any-pending?
+                          :class "!px-1 !h-6 !text-xs text-muted-foreground hover:text-foreground"
+                          :on-click (fn [] (when-not any-pending?
+                                             (run! #(<accept-suggestion! page-uuid %) items)))}
+                         (t :wikidata/add-all))
+            (shui/button {:variant :ghost :size :sm
+                          :title (t :wikidata/dismiss)
+                          :aria-label (t :wikidata/dismiss-suggestions)
+                          :class "!px-1 !h-6 text-muted-foreground opacity-60 hover:opacity-100 hover:text-foreground"
+                          :on-click #(clear-suggestions! page-uuid)}
+                         (ui/icon "x" {:size 14}))]
+           (into [:div] (map #(suggestion-row page-uuid %) visible))
+           (when (pos? hidden-n)
+             [:button.wikidata-show-more.text-xs.text-muted-foreground.mt-1
+              {:class "hover:text-foreground"
+               :on-click #(set-expanded! true)}
+              (str (t :ui/show-more) " (" hidden-n ")")])])))))
 
 ;; =============================================================================
 ;; UI Components

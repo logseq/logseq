@@ -932,6 +932,34 @@
 
 (defonce ^:private *avatar-fetch-attempted (atom #{}))
 (defonce ^:private *image-fetch-attempted (atom #{}))
+
+;; Persistent (localStorage) record of pages whose icon was auto-fetched at least
+;; once, keyed by STABLE page UUID. The in-memory *…-fetch-attempted sets above are
+;; db-id-keyed and per-session; this survives restart, so a user who DELETES an
+;; auto-fetched avatar isn't handed it back on the next launch.
+(def ^:private auto-fetched-storage-key "wikidata-auto-fetched-pages-v1")
+
+(defn- load-auto-fetched []
+  (try (set (js->clj (js/JSON.parse
+                      (or (.getItem js/localStorage auto-fetched-storage-key) "[]"))))
+       (catch :default _ #{})))
+
+(defonce ^:private *auto-fetched-pages (atom (load-auto-fetched)))
+
+(defn- auto-fetched? [page-uuid]
+  (contains? @*auto-fetched-pages (str page-uuid)))
+
+(defn- record-auto-fetched!
+  "Persistently remember a page's icon was auto-fetched, so removing the fetched
+   avatar doesn't bring it back after a restart."
+  [page-uuid]
+  (when page-uuid
+    (let [k (str page-uuid)]
+      (when-not (contains? @*auto-fetched-pages k)
+        (swap! *auto-fetched-pages conj k)
+        (try (.setItem js/localStorage auto-fetched-storage-key
+                       (js/JSON.stringify (clj->js (vec @*auto-fetched-pages))))
+             (catch :default _ nil))))))
 (defonce ^:private *wikipedia-fetch-queue (atom #queue []))
 (defonce ^:private *wikipedia-fetch-in-flight (atom 0))
 
@@ -971,7 +999,9 @@
   [db-id]
   (when db-id
     (swap! *avatar-fetch-attempted conj db-id)
-    (swap! *image-fetch-attempted conj db-id)))
+    (swap! *image-fetch-attempted conj db-id)
+    (when-let [uuid (:block/uuid (db/entity db-id))]
+      (record-auto-fetched! uuid))))
 
 (defn- should-auto-fetch-avatar?
   [page-entity]
@@ -982,8 +1012,9 @@
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
         not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
-        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))]
-    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
+        never-fetched? (not (auto-fetched? (:block/uuid page-entity)))]
+    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset? never-fetched?)))
 
 (defn- <auto-fetch-avatar-image!
   [page-entity]
@@ -1005,7 +1036,8 @@
                 {:type :avatar
                  :data {:value (derive-avatar-initials title)
                         :asset-uuid (str (:block/uuid asset))
-                        :asset-type (:logseq.property.asset/type asset)}})))))))))
+                        :asset-type (:logseq.property.asset/type asset)}})
+               (record-auto-fetched! (:block/uuid page-entity))))))))))
 
 (hsx/defc auto-fetch-avatar-effect
   "Renders nothing; runs the avatar auto-fetch side effect on mount. Conditionally
@@ -1028,8 +1060,9 @@
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*image-fetch-attempted page-id))
         not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
-        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))]
-    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
+        never-fetched? (not (auto-fetched? (:block/uuid page-entity)))]
+    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset? never-fetched?)))
 
 (defn- <auto-fetch-image!
   [page-entity]
@@ -1050,7 +1083,8 @@
                 :logseq.property/icon
                 {:type :image
                  :data {:asset-uuid (str (:block/uuid asset))
-                        :asset-type (:logseq.property.asset/type asset)}})))))))))
+                        :asset-type (:logseq.property.asset/type asset)}})
+               (record-auto-fetched! (:block/uuid page-entity))))))))))
 
 (hsx/defc auto-fetch-image-effect
   "Renders nothing; runs the image auto-fetch side effect on mount."
