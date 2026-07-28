@@ -66,6 +66,32 @@
       :close-btn? false
       :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
+(defmethod events/handle :go/capture [[_ opts]]
+  (let [dialog-open? (editor-handler/dialog-exists? :ls-dialog-cmdk)
+        ;; feature A passes :initial-target (highlighted page); feature B derives it
+        ;; from the current page, but only on a fresh open (an open palette is itself a
+        ;; "pick a target" gesture — declining there means today, not the backdrop page).
+        target (or (:initial-target opts)
+                   (when-not dialog-open?
+                     (when-let [pn (state/get-current-page)]
+                       (db/get-page pn))))]
+    (p/do!
+     (editor-handler/quick-add-ensure-new-block-exists!)
+     (if dialog-open?
+       ;; CMD+K already open — morph content into capture mode
+       (shui/dialog-transition-to! :ls-dialog-cmdk
+                                   (fn [_] (cmdk/capture-mode-content target))
+                                   {:close-btn? false
+                                    :onEscapeKeyDown (fn [e] (.preventDefault e))})
+       ;; Open CMD+K fresh with capture mode content
+       (shui/dialog-open!
+        (fn [_] (cmdk/capture-mode-content target))
+        {:id :ls-dialog-cmdk
+         :align :top
+         :content-props {:class "ls-dialog-cmdk"}
+         :close-btn? false
+         :onEscapeKeyDown (fn [e] (.preventDefault e))})))))
+
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 

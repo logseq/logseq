@@ -176,6 +176,52 @@
 }
 
 /* ============================================================
+   Capture mode (Cmd+E quick-capture)
+   ============================================================ */
+/* Toolbar with the gradient "header" shade fading down into the editor */
+.capture-toolbar {
+  @apply flex items-center gap-2 px-4 py-2.5;
+  min-height: 48px;
+  background: linear-gradient(to top, transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%);
+}
+
+.capture-toolbar .target-label {
+  @apply text-sm text-gray-11;
+}
+
+.capture-toolbar .target-pill {
+  @apply flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm;
+  @apply bg-gray-04 hover:bg-gray-05 cursor-pointer transition-colors;
+}
+
+/* Loud pill: the target is NOT today's journal (feature A/B preset a page), so make
+   the destination unmistakable before the user hits Done. */
+.capture-toolbar .target-pill.target-pill-active {
+  color: var(--lx-accent-11, var(--ls-link-text-color));
+  background: var(--lx-accent-03, rgba(59, 130, 246, 0.12));
+  box-shadow: inset 0 0 0 1px var(--lx-accent-06, rgba(59, 130, 246, 0.4));
+}
+
+.capture-toolbar .target-pill.target-pill-active:hover {
+  background: var(--lx-accent-04, rgba(59, 130, 246, 0.18));
+}
+
+/* Capture editor area */
+.capture-editor {
+  @apply flex-1 min-h-0 overflow-y-auto px-6 py-4;
+}
+
+/* Target page picker popover */
+.target-page-picker {
+  min-width: 280px;
+  max-width: 360px;
+  padding-bottom: 4px;
+}
+
+/* ============================================================
    Preview split layout
    ============================================================ */
 .cmdk-body {

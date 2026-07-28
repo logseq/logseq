@@ -210,6 +210,9 @@
       :editor/raw-mode-block                 (atom nil)
       :editor/virtualized-scroll-fn          nil
       :editor/edit-block-fn                  (atom nil)
+      ;; Quick capture: uuids of just-committed blocks (transient flash highlight)
+      :capture/highlighted-uuids             (atom #{})
+      :capture/highlighted-page              (atom nil)
 
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
@@ -1166,6 +1169,34 @@ should be done through this fn in order to get global config and config defaults
 
 (def use-sub-block-selected? sub-block-selected?)
 
+;; Quick capture highlight
+(defn set-captured-uuids!
+  ([uuids] (set-captured-uuids! uuids nil))
+  ([uuids page-uuid]
+   (reset! (:capture/highlighted-uuids @state) (set uuids))
+   (reset! (:capture/highlighted-page @state) page-uuid)))
+
+(defn clear-captured-uuids! []
+  (reset! (:capture/highlighted-uuids @state) #{})
+  (reset! (:capture/highlighted-page @state) nil))
+
+(defn get-captured-page-uuid []
+  @(:capture/highlighted-page @state))
+
+(def ^:private block-captured-flow
+  (m/watch (:capture/highlighted-uuids @state)))
+
+(defn sub-block-captured?
+  [block-id]
+  (assert (uuid? block-id))
+  (sub-flow-state block-captured-flow
+                  (:capture/highlighted-uuids @state)
+                  (fn [uuids]
+                    (contains? uuids block-id))
+                  [block-id]))
+
+(def use-sub-block-captured? sub-block-captured?)
+
 (defn dom-clear-selection!
   []
   (doseq [node (dom/by-class "selected")]
@@ -1957,6 +1988,9 @@ should be done through this fn in order to get global config and config defaults
             content (string/trim (or content ""))]
         (assert (and container-id (:block/uuid block))
                 "container-id or block uuid is missing")
+        ;; Editing a just-captured block clears its flash highlight.
+        (when (contains? @(:capture/highlighted-uuids @state) (:block/uuid block))
+          (clear-captured-uuids!))
         (set-state! :editor/block-refs #{})
         (set-state! :editor/block block)
         (if property-block

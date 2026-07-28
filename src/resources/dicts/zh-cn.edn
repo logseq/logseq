@@ -203,6 +203,7 @@
  :class.validation/tag-with-non-tag "无法使用不是标签“{1}”的内置页面设置标签。"
 
  :cmdk.action/apply-theme "应用主题"
+ :cmdk.action/capture-to "添加到 {1}"
  :cmdk.action/copy-ref "复制引用"
  :cmdk.action/create "创建"
  :cmdk.action/done "完成"
@@ -359,6 +360,8 @@
  :command.editor/up "向上移动光标 / 向上选择"
  :command.editor/zoom-in "聚焦"
  :command.editor/zoom-out "退出聚焦"
+
+ :command.editor.asset/upload "上传附件"
 
  :command.go/all-graphs "所有图谱"
  :command.go/all-pages "全部页面"

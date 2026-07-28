@@ -6,12 +6,15 @@
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
+            [frontend.components.combobox :as combobox]
+            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.components.icon :as icon-component]
             [frontend.components.wikidata :as wikidata]
             [frontend.components.wikidata-import :as wikidata-import]
             [datascript.core :as d]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.format.block :as format-block]
             [frontend.storage :as storage]
             [logseq.common.config :as common-config]
@@ -23,6 +26,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.command-palette :as cp-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -281,6 +285,9 @@
            :else nil))))
 
 ;; Each result group has it's own load-results function
+;; forward refs: defined below but used in early load-results methods
+(declare tags->hashtag-str strip-trailing-tags)
+
 (defmulti load-results (fn [group _state] group))
 
 (defmethod load-results :initial [_ state]
@@ -506,6 +513,20 @@
            page))
        ;; Entity itself as final fallback (objects without :block/name)
        entity))))
+
+(defn- capture-target-of-highlight
+  "Page entity to use as the Cmd+E capture target for the highlighted CMD+K row,
+   or nil (→ today's journal). Gated to protect the reflexive
+   'Cmd+K then Cmd+E to journal' habit: only fires when the row is a page/tag/object
+   AND the user has genuinely engaged (typed a query, or explicitly arrowed/hovered),
+   never on the passive auto-highlight of an empty query."
+  [state]
+  (let [explicit? (some? (some-> (::highlighted-item state) deref))
+        active-query? (not (string/blank? @(::input state)))
+        item (when (or explicit? active-query?)
+               (state->highlighted-item state))]
+    (when (= :page (:result-type item))
+      (preview-page-entity item))))
 
 ;; ---------------------------------------------------------------------------
 ;; Lightweight preview renderer
@@ -1668,6 +1689,12 @@
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))
       (open-current-item-link state)
+      ;; Cmd+E: morph the open palette into capture, carrying the highlighted page
+      ;; as target (feature A). Guarded to the modal palette — the sidebar palette
+      ;; never unlistens, so its global mod+e still fires and would double-dispatch.
+      (and meta? (= keyname "e") (not (::sidebar? state)))
+      (do (util/stop e)
+          (state/pub-event! [:go/capture {:initial-target (capture-target-of-highlight state)}]))
       :else nil)))
 
 (defn- keyup-handler
@@ -1932,6 +1959,407 @@
       (hint-button (:text primary) (:shortcut primary)
                    {:primary? true :on-click (:on-click primary)})]]))
 
+;; ============================================================
+;; Quick-capture mode (Cmd+E): staging page + target picker
+;; Ported from scheinriese/cmd-k-ux. capture-commit-blocks! lives here
+;; (not in editor.cljs) because it needs common.page/<create!, and
+;; common.page already requires editor -> putting it in editor would cycle.
+;; ============================================================
+
+(defn- get-page-icon
+  "Returns a string icon name for the entity type."
+  [entity]
+  (cond
+    (ldb/class? entity) "hash"
+    (ldb/property? entity) "property"
+    :else "file"))
+
+(defn capture-commit-blocks!
+  "Move blocks from the staging page to a target page.
+   `target-page` can be a db entity or a string (page will be created).
+   Preserves intentional empty blocks between content, but strips trailing
+   empty blocks (cursor placeholders) from the end."
+  [target-page]
+  (p/do!
+   (editor-handler/save-current-block!)
+   (p/let [target (if (string? target-page)
+                    (page-common-handler/<create! target-page {:redirect? false})
+                    target-page)]
+     (when target
+       (let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)
+             children (:block/_parent (db/entity (:db/id add-page)))
+             ;; Sort by visual order and trim trailing empty blocks (cursor placeholders),
+             ;; but keep sandwiched empty blocks (intentional spacers)
+             sorted (vec (ldb/sort-by-order children))
+             to-move (seq (loop [blocks sorted]
+                            (if (and (seq blocks)
+                                     (let [last-block (peek blocks)]
+                                       (and (string/blank? (:block/title last-block))
+                                            (empty? (:block/_parent last-block)))))
+                              (recur (pop blocks))
+                              blocks)))]
+         (p/do!
+          (when to-move
+            (let [captured-uuids (letfn [(walk [b]
+                                           (cons (:block/uuid b)
+                                                 (mapcat walk (:block/_parent b))))]
+                                   (vec (mapcat walk to-move)))
+                  ;; Detect sole placeholder block BEFORE moving
+                  target-children (:block/_parent target)
+                  placeholder-block (when (= 1 (count target-children))
+                                      (let [only-child (first target-children)]
+                                        (when (and (string/blank? (:block/title only-child))
+                                                   (empty? (:block/_parent only-child)))
+                                          only-child)))]
+              (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
+                (editor-handler/move-blocks! to-move last-child {:sibling? true})
+                (editor-handler/move-blocks! to-move target {:sibling? false}))
+              ;; Remove the placeholder only if the page had exactly one empty block
+              (when placeholder-block
+                (editor-handler/delete-block-aux! placeholder-block))
+              (state/set-captured-uuids! captured-uuids (:block/uuid target))))
+          (shui/dialog-close! :ls-dialog-cmdk)
+          (shui/popup-hide!)
+          (when to-move
+            (let [page-title (:block/title target)]
+              (notification/show!
+               [:span "Blocks added to "
+                [:a.font-medium
+                 {:on-click #(route-handler/redirect-to-page! (:block/uuid target))}
+                 page-title]
+                "!"]
+               :success)))))))))
+
+(hsx/defc capture-page-blocks
+  "Renders the full block editor for the staging page."
+  [page]
+  (let [[scroll-container set-scroll-container] (hooks/use-state nil)
+        *ref (hooks/use-ref nil)]
+    (hooks/use-effect!
+     #(set-scroll-container (.-current *ref))
+     [])
+    [:div.capture-editor
+     {:ref *ref}
+     (when scroll-container
+       (component-page/page-blocks-cp page {:scroll-container scroll-container}))]))
+
+(defn- make-target-create-items
+  "When input doesn't match an existing page, return a create item for the combobox.
+   Supports: plain page, #ClassName tag, PageName #Tag1 #Tag2 object."
+  [input]
+  (when (and (not (string/blank? input))
+             (not (#{"config.edn" "custom.js" "custom.css"} input))
+             (not config/publishing?))
+    (let [class?          (string/starts-with? input "#")
+          has-inline-tag? (and (not class?) (string/includes? input " #"))
+          class-name      (when class? (get-class-from-input input))
+          [object-page-name object-tag-names]
+          (when has-inline-tag?
+            (let [parts (string/split input #" #")
+                  pn    (string/trim (first parts))
+                  tns   (->> (rest parts) (map string/trim) (remove string/blank?) vec)]
+              (when (and (not (string/blank? pn)) (seq tns))
+                [pn tns])))
+          effective-name (cond
+                           (and class? (seq class-name)) class-name
+                           (some? object-page-name) object-page-name
+                           :else input)]
+      (when (and (not (string/blank? effective-name))
+                 (nil? (db/get-page effective-name)))
+        (cond
+          (and class? (seq class-name))
+          [{:value "create-class"
+            :label (str "New tag: \"" class-name "\"")
+            :create-label "New tag:"
+            :create-quoted (str "\"" class-name "\"")
+            :icon "new-class"
+            :create-type :class
+            :create-name class-name}]
+
+          (some? object-page-name)
+          [{:value "create-object"
+            :label (str "New page: \"" object-page-name "\" as #" (string/join ", #" object-tag-names))
+            :create-label "New page:"
+            :create-quoted (str "\"" object-page-name "\" as #" (string/join ", #" object-tag-names))
+            :icon "new-object"
+            :create-type :object
+            :create-name object-page-name
+            :create-tags object-tag-names}]
+
+          :else
+          [{:value "create-page"
+            :label (str "New page: \"" effective-name "\"")
+            :create-label "New page:"
+            :create-quoted (str "\"" effective-name "\"")
+            :icon "new-page"
+            :create-type :page
+            :create-name effective-name}])))))
+
+(defn- make-target-page-items
+  "Build grouped items for the target page picker combobox.
+   When input is blank: Dates + Favorites + Recent.
+   When searching: flat fuzzy-matched results + optional create item."
+  [input]
+  (let [blank? (string/blank? input)]
+    (if blank?
+      (let [today-page (db/get-page (date/today))
+            yesterday-page (db/get-page (date/yesterday))
+            tomorrow-page (db/get-page (date/tomorrow))
+            favorites (page-handler/get-favorites)
+            recent-pages (ldb/get-recent-updated-pages (db/get-db))
+            date-items (keep (fn [[page label]]
+                               (when page
+                                 {:value (:db/id page)
+                                  :label label
+                                  :icon "calendar"
+                                  :data page
+                                  :group "Dates"}))
+                             [[today-page (str "Today — " (:block/title today-page))]
+                              [tomorrow-page (str "Tomorrow — " (:block/title tomorrow-page))]
+                              [yesterday-page (str "Yesterday — " (:block/title yesterday-page))]])
+            fav-items (map (fn [page]
+                             {:value (:db/id page)
+                              :label (:block/title page)
+                              :icon (get-page-icon page)
+                              :data page
+                              :group "Favorites"})
+                           favorites)
+            recent-items (map (fn [page]
+                                {:value (:db/id page)
+                                 :label (:block/title page)
+                                 :icon (get-page-icon page)
+                                 :data page
+                                 :group "Recent"})
+                              (take 8 recent-pages))]
+        (vec (concat date-items fav-items recent-items)))
+      ;; Search mode: fuzzy match all pages + optional create item
+      (let [results (search/fuzzy-search (ldb/get-all-pages (db/get-db)) input
+                                         {:extract-fn :block/title :limit 12})
+            search-items (mapv (fn [page]
+                                 {:value (:db/id page)
+                                  :label (:block/title page)
+                                  :icon (get-page-icon page)
+                                  :data page})
+                               results)]
+        (into search-items (make-target-create-items input))))))
+
+(hsx/defc target-page-picker-content
+  "Popover content for selecting a target page using the combobox component."
+  [set-target-page! popup-id]
+  (let [[input set-input!] (hooks/use-state "")
+        *input-ref (hooks/use-ref nil)
+        items (make-target-page-items input)]
+    ;; Radix dropdown menu steals focus on open, so autoFocus alone doesn't work.
+    ;; Delay .focus() to run after Radix's focus management settles.
+    (hooks/use-effect!
+     (fn []
+       (let [t (js/setTimeout #(some-> (.-current *input-ref) (.focus)) 50)]
+         #(js/clearTimeout t)))
+     [])
+    [:div.target-page-picker
+     [:div.px-1.pt-1
+      (shui/input {:ref *input-ref
+                   :placeholder "Search pages..."
+                   :value input
+                   :class "h-8 text-sm bg-transparent border-0 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none focus:outline-none shadow-none"
+                   :on-change #(set-input! (util/evalue %))
+                   :on-key-down (fn [e]
+                                  (when (= (util/ekey e) "Escape")
+                                    (util/stop e)
+                                    (shui/popup-hide! popup-id)))})]
+     (shui/select-separator)
+     (combobox/combobox
+      items
+      {:grouped? (string/blank? input)
+       :show-search-input? false
+       :on-chosen (fn [item _e]
+                    (if-let [create-type (:create-type item)]
+                      (let [name (:create-name item)]
+                        (case create-type
+                          :page
+                          (p/let [page (page-common-handler/<create! name {:redirect? false})]
+                            (when page
+                              (set-target-page! page)
+                              (shui/popup-hide! popup-id)))
+
+                          :class
+                          (-> (p/let [page (db-page-handler/<create-class! name {:redirect? false})]
+                                (when page
+                                  (set-target-page! page)
+                                  (shui/popup-hide! popup-id)))
+                              (p/catch (fn [_] nil)))
+
+                          :object
+                          (p/let [tag-entities (p/all (mapv #(<ensure-class-exists! %) (:create-tags item)))
+                                  page (page-common-handler/<create! name
+                                                                     {:redirect? false
+                                                                      :tags (vec (keep :block/uuid tag-entities))})]
+                            (when page
+                              (set-target-page! page)
+                              (shui/popup-hide! popup-id)))
+
+                          nil))
+                      ;; Existing page selected
+                      (when-let [page (:data item)]
+                        (set-target-page! page)
+                        (shui/popup-hide! popup-id))))
+       :item-render (fn [item _chosen?]
+                      (if (:create-type item)
+                        [:div.flex.flex-row.items-center.gap-3
+                         (list-item-icon/root {:variant :create
+                                               :icon (:icon item)
+                                               :extension? true})
+                         [:div.flex.flex-row.items-center.whitespace-nowrap.gap-1
+                          [:span.text-gray-12 (:create-label item)]
+                          [:span.text-gray-11 (:create-quoted item)]]]
+                        [:div.flex.items-center.gap-2
+                         (icon-component/icon (or (:icon item) "file") {:size 14})
+                         [:span (:label item)]]))
+       :empty-placeholder [:div.px-3.py-2.text-sm.text-gray-11
+                           "No pages found"]})]))
+
+(hsx/defc capture-toolbar
+  "Top toolbar for capture mode: target page picker."
+  [target-page set-target-page!]
+  (let [target-title (if (string? target-page)
+                       target-page
+                       (:block/title target-page))
+        target-icon (if (string? target-page)
+                      "file"
+                      (get-page-icon target-page))
+        today-page (db/get-page (date/today))
+        default-target? (or (nil? target-page)
+                            (and (not (string? target-page))
+                                 today-page
+                                 (= (:db/id target-page) (:db/id today-page))))]
+    [:div.capture-toolbar
+     ;; Target page picker
+     [:div.flex.items-center.gap-1.5
+      [:span.target-label "Add to:"]
+      (shui/button {:variant :ghost :size :sm
+                    :class (str "target-pill" (when-not default-target? " target-pill-active"))
+                    :on-click (fn [e]
+                                (shui/popup-show!
+                                 (.-currentTarget e)
+                                 (fn [{:keys [id]}]
+                                   (target-page-picker-content set-target-page! id))
+                                 {:id :target-page-picker
+                                  :align :start}))}
+                   (icon-component/icon target-icon {:size 14})
+                   [:span target-title]
+                   (icon-component/icon "chevron-down" {:size 12}))]]))
+
+(hsx/defc capture-action-bar
+  "Bottom action bar for capture mode."
+  [target-page]
+  (action-bar
+   {:tip (contextual-tip)
+    :primary {:text "Done" :shortcut ["mod" "e"]
+              :on-click #(capture-commit-blocks!
+                          (or target-page (db/get-page (date/today))))}
+    :secondary [{:text "Open target page"
+                 :icon "open-as-page" :icon-extension? true
+                 :shortcut ["cmd" "shift" "o"]
+                 :on-click (fn []
+                             (shui/dialog-close! :ls-dialog-cmdk)
+                             (when target-page
+                               (route-handler/redirect-to-page! (:block/uuid target-page))))}
+                {:text "Open in sidebar"
+                 :icon "move-to-sidebar-right" :icon-extension? true
+                 :shortcut ["cmd" "shift" "return"]
+                 :on-click (fn []
+                             (when target-page
+                               (state/sidebar-add-block! (state/get-current-repo) (:db/id target-page) :page))
+                             (shui/dialog-close! :ls-dialog-cmdk))}
+                {:text "Discard draft"
+                 :icon "trash"
+                 :on-click #(editor-handler/discard-capture-draft!)}]}))
+
+(hsx/defc capture-mode-content
+  "Main capture mode view rendered inside the CMD+K dialog shell.
+   Uses dialog-transition-to! to morph the CMD+K content in place.
+   `initial-target` (page entity or nil) presets the capture destination
+   (feature A: highlighted CMD+K page; feature B: current page); nil = today."
+  [initial-target]
+  (let [[target-page set-target-page!] (hooks/use-state nil)
+        ;; Mirror the latest target into a ref so the keydown handler (registered
+        ;; once) always reads the current value.
+        *target-page (hooks/use-ref nil)
+        _ (set! (.-current *target-page) target-page)
+        add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+
+    ;; Initialize target: preset (feature A/B) else today's journal
+    (hooks/use-effect!
+     (fn []
+       (when-not target-page
+         (when-let [seed (or initial-target (db/get-page (date/today)))]
+           (set-target-page! seed))))
+     [])
+
+    ;; NOTE: Unlike CMD+K search mode, capture mode does NOT call
+    ;; shortcut/unlisten-all! — the block editor needs shortcuts like
+    ;; Enter (new-block), Tab (indent), Shift+Tab (outdent) to work.
+    ;; Our capture-phase keydown handler (below) intercepts Cmd+E, Esc,
+    ;; etc. before the shortcut system sees them.
+
+    ;; Auto-focus block editor on mount
+    (hooks/use-effect!
+     (fn []
+       (js/setTimeout #(editor-handler/quick-add-open-last-block!) 150))
+     [])
+
+    ;; Capture-mode keydown handler
+    (hooks/use-effect!
+     (fn []
+       (let [handler (fn [e]
+                       (let [meta? (util/meta-key? e)
+                             shift? (.-shiftKey e)
+                             key (.-key e)]
+                         (cond
+                           ;; Cmd+E = Done (commit blocks to target)
+                           (and meta? (= key "e"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (capture-commit-blocks!
+                                (or (.-current *target-page) (db/get-page (date/today)))))
+
+                           ;; Esc = close without committing (draft preserved)
+                           (= key "Escape")
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (shui/dialog-close! :ls-dialog-cmdk))
+
+                           ;; Cmd+Shift+O = open target page
+                           (and meta? shift? (= key "o"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (shui/dialog-close! :ls-dialog-cmdk)
+                               (when-let [page (.-current *target-page)]
+                                 (route-handler/redirect-to-page! (:block/uuid page))))
+
+                           ;; Cmd+Shift+Enter = open target in sidebar
+                           (and meta? shift? (= key "Enter"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (when-let [page (.-current *target-page)]
+                                 (state/sidebar-add-block! (state/get-current-repo) (:db/id page) :page))
+                               (shui/dialog-close! :ls-dialog-cmdk)))))]
+         (.addEventListener js/document "keydown" handler true)
+         #(.removeEventListener js/document "keydown" handler true)))
+     [])
+
+    ;; Render
+    [:div.w-full.h-full.flex.flex-col.bg-gray-02.rounded-lg
+     {:data-keep-selection true}
+     ;; Toolbar: "Add to:" + target page picker
+     (capture-toolbar target-page set-target-page!)
+     ;; Block editor area
+     [:div.flex-1.min-h-0.overflow-y-auto
+      (when add-page
+        (capture-page-blocks add-page))]
+     ;; Action bar
+     (capture-action-bar target-page)]))
+
 (hsx/defc hints
   [state fallback-item]
   (let [[_highlighted] (hooks/use-atom (::highlighted-item state))
@@ -1944,7 +2372,16 @@
         (case action
           :open
           {:primary (make-button (t :cmdk.action/open) ["return"])
-           :secondary (cond-> [(make-button (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true})]
+           :secondary (cond-> []
+                        ;; Feature A discoverability: capture-into-this-page for page rows
+                        (= :page (:result-type item))
+                        (conj {:text (t :cmdk.action/capture-to (:text item))
+                               :shortcut ["mod" "e"]
+                               :on-click (fn [_]
+                                           (state/pub-event!
+                                            [:go/capture {:initial-target (preview-page-entity item)}]))})
+                        true
+                        (conj (make-button (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true}))
                         (:source-block (state->highlighted-item state fallback-item))
                         (conj (make-button (t :cmdk.action/copy-ref) ["cmd" "c"])))}
           :search {:primary (make-button (t :cmdk.action/search) ["return"]) :secondary []}
@@ -2124,7 +2561,8 @@
      ::focus-source (atom :keyboard)
      ::results (atom default-results)
      ::preview-enabled? (atom (boolean (storage/get :cmdk-preview-pane?)))
-     ::preview-debounced-item (atom nil)}))
+     ::preview-debounced-item (atom nil)
+     ::sidebar? (:sidebar? opts)}))
 
 (defn- cmdk-will-unmount
   "Clean up cmdk component: persist state, clear search mode."

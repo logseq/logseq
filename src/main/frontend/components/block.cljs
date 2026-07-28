@@ -2255,7 +2255,7 @@
          :fallback-props {:style {:font-size 9}}})])))
 
 (hsx/defc ^:large-vars/cleanup-todo block-control
-  [config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
+  [config block {:keys [uuid block-id collapsed? *control-show? edit? selected? captured? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
         doc-mode? (state/use-sub :document/mode?)
         [control-show?] (hooks/use-atom *control-show?)
@@ -2344,8 +2344,9 @@
                         icon
                         [:span.bullet (cond->
                                        {:blockid (str uuid)}
-                                        selected?
-                                        (assoc :class "selected"))
+                                        (or selected? captured?)
+                                        (assoc :class (str (when selected? "selected")
+                                                           (when captured? " captured-bullet"))))
                          (when
                           order-list?
                            [:label (str order-list-idx ".")])])]]
@@ -4252,7 +4253,7 @@
    view))
 
 (hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux
-  [container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
+  [container-state repo config* block {:keys [navigating-block navigated? editing? selected? captured?] :as opts}]
   (let [current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
         embed-self? (and (:embed? config*)
                          (= (:block/uuid block) (:block/uuid (:block config*))))
@@ -4490,6 +4491,7 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? (boolean has-child?))
        :class (str (when selected? "selected")
+                   (when captured? " recently-captured")
                    (when (ldb/recycled? block) " line-through opacity-70")
                    (when order-list? " is-order-list")
                    (when comments-area? " is-comments-area")
@@ -4707,10 +4709,12 @@
         v1 (state/use-sub-editing? [container-id block-id])
         v2 (state/use-sub-editing? [:unknown-container block-id])
         selected? (state/use-sub-block-selected? block-id)
+        captured? (state/use-sub-block-captured? block-id)
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
-                                                                         :selected? selected?))))
+                                                                         :selected? selected?
+                                                                         :captured? captured?))))
 
 (def ^:private block-render-config-keys
   [:show-cloze?

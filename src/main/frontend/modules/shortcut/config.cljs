@@ -63,6 +63,10 @@
    :pdf/find                                {:binding "alt+f"
                                              :fn      pdf-utils/open-finder}
 
+   :editor.asset/upload                     {:binding "mod+u"
+                                             :fn      (fn [_ _]
+                                                        (editor-handler/upload-global-asset!))}
+
    :auto-complete/complete                  {:binding "enter"
                                              :fn      ui-handler/auto-complete-complete}
 
@@ -442,7 +446,7 @@
 
    :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
                                              :inactive config/publishing?
-                                             :fn      editor-handler/quick-add}
+                                             :fn      editor-handler/quick-add-or-capture}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
 
@@ -696,6 +700,7 @@
           :publish/open-dialog
           :command-palette/toggle
           :editor/add-property
+          :editor.asset/upload
           :window/close])
         (with-meta {:before m/prevent-default-behavior}))
 

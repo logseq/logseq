@@ -203,6 +203,7 @@
  :class.validation/tag-with-non-tag "Can't set tag with built-in page that isn't a tag \"{1}\"."
 
  :cmdk.action/apply-theme "Apply theme"
+ :cmdk.action/capture-to "Capture to {1}"
  :cmdk.action/copy-ref "Copy ref"
  :cmdk.action/create "Create"
  :cmdk.action/done "Done"
@@ -359,6 +360,8 @@
  :command.editor/up "Move cursor up / Select up"
  :command.editor/zoom-in "Zoom in editing block / Forwards otherwise"
  :command.editor/zoom-out "Zoom out editing block / Backwards otherwise"
+
+ :command.editor.asset/upload "Upload asset"
 
  :command.go/all-graphs "Go to all graphs"
  :command.go/all-pages "Go to all pages"

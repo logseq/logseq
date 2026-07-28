@@ -4020,7 +4020,40 @@
            (save-block-inner! query-block current-query {}))
          (save-block-inner! block "" {})))))))
 
+(defn upload-global-asset!
+  "Opens file picker and uploads selected files to #Asset page.
+   Does NOT insert into current block - just saves to Asset class.
+   Accepts all file types. Called from CMD K or mod+u shortcut."
+  []
+  (let [input (js/document.createElement "input")]
+    (set! (.-type input) "file")
+    (set! (.-multiple input) true)
+    (set! (.-accept input) "*/*")
+    (.addEventListener input "change"
+                       (fn [e]
+                         (let [files (array-seq (.-files (.-target e)))]
+                           (when (seq files)
+                             (let [repo (state/get-current-repo)
+                                   asset-class (db/entity :logseq.class/Asset)]
+                               (-> (db-based-save-assets! repo (js->clj files) {:save-to-page asset-class})
+                                   (p/then (fn [results]
+                                             (let [success-count (count (filter some? results))]
+                                               (when (pos? success-count)
+                                                 (notification/show!
+                                                  (str "Uploaded " success-count " asset"
+                                                       (when (> success-count 1) "s") " to #Asset")
+                                                  :success)))))
+                                   (p/catch (fn [e]
+                                              (js/console.error e)
+                                              (notification/show! "Failed to upload asset" :error)))))))))
+    (.click input)))
+
 (defn quick-add-ensure-new-block-exists!
+  "Ensure the staging page has exactly one empty block ready for editing.
+   Cleans up leftover empty childless blocks (e.g. trailing empties from a
+   previous commit) while keeping one so the modal always opens with a clean
+   slate and a focusable block — avoids the async delete-all/create cycle
+   that can race with autofocus."
   []
   (let [graph (state/get-current-repo)]
     (p/do!
@@ -4033,11 +4066,43 @@
                          (filter (fn [block]
                                    (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
                                      (= user-db-id create-by-id))) children)
-                         children)]
-       (when (empty? children')
-         (api-insert-new-block! "" {:page (:block/uuid add-page)
-                                    :container-id :unknown-container
-                                    :replace-empty-target? false}))))))
+                         children)
+             stale-empties (vec (ldb/sort-by-order
+                                 (filter (fn [block]
+                                           (and (string/blank? (:block/title block))
+                                                (empty? (:block/_parent block))))
+                                         children')))
+             has-content? (some (fn [block]
+                                  (or (not (string/blank? (:block/title block)))
+                                      (seq (:block/_parent block))))
+                                children')]
+       (let [to-delete (if has-content?
+                         ;; Content exists: delete all empties (content blocks remain)
+                         stale-empties
+                         ;; No content: keep first empty, delete the rest
+                         (rest stale-empties))]
+         (doseq [block to-delete]
+           (delete-block-aux! block))
+         ;; Only create a new block when no empties existed and no content
+         (when (and (not has-content?) (empty? stale-empties))
+           (api-insert-new-block! "" {:page (:block/uuid add-page)
+                                      :container-id :unknown-container
+                                      :replace-empty-target? false})))))))
+
+(defn discard-capture-draft!
+  "Delete all blocks on the staging page and close the dialog."
+  []
+  (let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)
+        children (:block/_parent (db/entity (:db/id add-page)))]
+    (when (seq children)
+      (doseq [child children]
+        (delete-block-aux! child)))
+    (shui/dialog-close! :ls-dialog-cmdk)))
+
+(defn quick-add-or-capture
+  "Cmd+E handler: opens CMD+K in capture mode."
+  []
+  (state/pub-event! [:go/capture]))
 
 (defn show-quick-add
   []
