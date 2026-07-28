@@ -73,12 +73,17 @@
                   (common-initial-data/get-block-full-children-ids db (:db/id block)))]
     (keep #(d/entity db %) ids)))
 
+(defn- block-children
+  [db block]
+  (map #(d/entity db (:e %))
+       (d/datoms db :avet :block/parent (:db/id block))))
+
 (defn- page-descendants
-  [page]
+  [db page]
   (loop [pages [page]
          result []]
     (if-let [page' (first pages)]
-      (let [children (->> (:block/_parent page')
+      (let [children (->> (block-children db page')
                           (filter ldb/page?)
                           ldb/sort-by-order)]
         (recur (concat (rest pages) children)
@@ -88,7 +93,7 @@
 (defn- page-block-subtree-ids
   [db page]
   (let [root-blocks (->> (concat (:block/_page page)
-                                 (remove ldb/page? (:block/_parent page)))
+                                 (remove ldb/page? (block-children db page)))
                          (common-util/distinct-by :db/id)
                          ldb/sort-by-order)]
     (->> root-blocks
@@ -97,7 +102,7 @@
 
 (defn- page-tree-ids
   [db page]
-  (->> (page-descendants page)
+  (->> (page-descendants db page)
        (mapcat (fn [page']
                  (cons (:db/id page')
                        (page-block-subtree-ids db page'))))
