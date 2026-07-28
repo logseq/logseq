@@ -5,6 +5,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]))
 
@@ -74,16 +75,15 @@
     (keep #(d/entity db %) ids)))
 
 (defn- block-children
-  [db block]
-  (map #(d/entity db (:e %))
-       (d/datoms db :avet :block/parent (:db/id block))))
+  [block]
+  (entity-plus/lookup-kv-then-entity block :block/_raw-parent))
 
 (defn- page-descendants
-  [db page]
+  [page]
   (loop [pages [page]
          result []]
     (if-let [page' (first pages)]
-      (let [children (->> (block-children db page')
+      (let [children (->> (block-children page')
                           (filter ldb/page?)
                           ldb/sort-by-order)]
         (recur (concat (rest pages) children)
@@ -93,7 +93,7 @@
 (defn- page-block-subtree-ids
   [db page]
   (let [root-blocks (->> (concat (:block/_page page)
-                                 (remove ldb/page? (block-children db page)))
+                                 (remove ldb/page? (block-children page)))
                          (common-util/distinct-by :db/id)
                          ldb/sort-by-order)]
     (->> root-blocks
@@ -102,7 +102,7 @@
 
 (defn- page-tree-ids
   [db page]
-  (->> (page-descendants db page)
+  (->> (page-descendants page)
        (mapcat (fn [page']
                  (cons (:db/id page')
                        (page-block-subtree-ids db page'))))
