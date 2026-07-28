@@ -6,6 +6,10 @@
             [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
+            [frontend.components.wikidata :as wikidata]
+            [frontend.components.wikidata-import :as wikidata-import]
+            [datascript.core :as d]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text t t-en t-locale]]
             [frontend.db :as db]
@@ -51,9 +55,14 @@
 
 (defn- get-group-limit
   [group]
-  (if (= group :nodes)
-    10
+  (case group
+    :nodes 10
+    :wikidata-entities 1
     5))
+
+(defonce ^:private *wikidata-cancel-token (atom nil))
+(defonce ^:private *wikidata-last-query (atom nil))
+(def ^:private wikidata-search-debounce-ms 400)
 
 (defn filters
   []
@@ -80,6 +89,7 @@
     :recently-updated-pages (t :cmdk.group/recently-updated)
     :commands (t :cmdk.group/commands)
     :themes (t :cmdk.group/themes)
+    :wikidata-entities "From Web"
     (name group)))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
@@ -92,7 +102,8 @@
    :codes          {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
-   :filters        {:status :success :show :less :items nil}})
+   :filters        {:status :success :show :less :items nil}
+   :wikidata-entities {:status :success :show :less :items nil}})
 
 (defn get-class-from-input
   [input]
@@ -177,16 +188,43 @@
                     [(group-label :create)         :create         (create-items input)])]
 
                  :else
-                 (->>
-                  [(when-not node-exists?
-                     [(group-label :create)         :create         (create-items input)])
-                   [(group-label :current-page)     :current-page   (visible-items :current-page)]
-                   [(group-label :nodes)            :nodes          (visible-items :nodes)]
-                   [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
-                   [(group-label :commands)         :commands       (visible-items :commands)]
-                   [(group-label :files)            :files          (visible-items :files)]
-                   [(group-label :filters)          :filters        (visible-items :filters)]]
-                  (remove nil?)))
+                 (let [from-web (let [items (visible-items :wikidata-entities)
+                                      wikidata-status (get-in results [:wikidata-entities :status])]
+                                  (when (or (seq items) (= :loading wikidata-status))
+                                    [(group-label :wikidata-entities) :wikidata-entities items]))
+                       ;; "From Web" is the top result only when NO local PAGE matches the
+                       ;; query (blocks don't count); otherwise graph results come first and
+                       ;; web results after. (ported from design-improvements)
+                       has-local-matches?
+                       (if (< (count (string/trim input)) 3)
+                         true
+                         (let [query-words (string/split (string/lower-case (string/trim input)) #"\s+")]
+                           (boolean
+                            (some (fn [item]
+                                    (when-let [block (:source-block item)]
+                                      (when (:page? block)
+                                        (let [title-lc (string/lower-case (str (:block.temp/original-title block)))
+                                              title-words (string/split title-lc #"[^\w]+")]
+                                          (every? (fn [qw] (some #(string/starts-with? % qw) title-words))
+                                                  query-words)))))
+                                  (visible-items :nodes)))))]
+                   (->>
+                    [(when-not node-exists?
+                       [(group-label :create)         :create         (create-items input)])
+                     (if has-local-matches?
+                       [(group-label :current-page)   :current-page   (visible-items :current-page)]
+                       from-web)
+                     (if has-local-matches?
+                       [(group-label :nodes)          :nodes          (visible-items :nodes)]
+                       [(group-label :current-page)   :current-page   (visible-items :current-page)])
+                     (if has-local-matches?
+                       from-web
+                       [(group-label :nodes)          :nodes          (visible-items :nodes)])
+                     [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
+                     [(group-label :commands)         :commands       (visible-items :commands)]
+                     [(group-label :files)            :files          (visible-items :files)]
+                     [(group-label :filters)          :filters        (visible-items :filters)]]
+                    (remove nil?))))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
       [group-name
@@ -217,6 +255,7 @@
            (:source-search highlighted-item) :search
            (:source-command highlighted-item) :trigger
            (:source-create highlighted-item) :create
+           (:source-wikidata highlighted-item) :create-from-wikidata
            (:filter highlighted-item) :filter
            (:source-theme highlighted-item) :theme
            :else nil))))
@@ -538,6 +577,7 @@
           (load-results :filters state)
           (load-results :files state)
           (load-results :recently-updated-pages state)
+          (js/setTimeout #(load-results :wikidata-entities state) wikidata-search-debounce-ms)
           ;; (load-results :recents state)
           )))))
 
@@ -711,6 +751,160 @@
     (persist-cmdk-query-state! state)
     (load-results :default state)
     (.focus @(::input-ref state))))
+
+
+;; ============================================================================
+;; "From Web" — Wikidata entity search & import (ported from design-improvements)
+;; ============================================================================
+
+(defn- <ensure-class-exists!
+  "Ensure a class with the given title exists, creating it (with its Wikidata
+   default-icon) if needed. Returns the class entity."
+  [class-title]
+  (let [existing-class (db/get-case-page class-title)]
+    (if (and existing-class (ldb/class? existing-class))
+      (p/resolved existing-class)
+      (p/let [new-class (db-page-handler/<create-class! class-title {:redirect? false})]
+        (when-let [default-icon (get wikidata/class->default-icon class-title)]
+          (db-property-handler/set-block-property!
+           (:block/uuid new-class)
+           :logseq.property.class/default-icon
+           default-icon))
+        new-class))))
+
+(defn- get-page-by-wikidata-id
+  "Find an existing page created from the given Wikidata entity (dedup)."
+  [qid]
+  (try
+    (when-let [db (db/get-db)]
+      (some->> (d/q '[:find [?p ...]
+                      :in $ ?qid
+                      :where [?p :logseq.property/wikidata-id ?qid]]
+                    db qid)
+               first
+               (db/entity)))
+    (catch :default _e
+      nil)))
+
+(defn- <set-wikidata-icon!
+  "Download the Wikidata image and set it as the page's icon (avatar for Person,
+   image for others)."
+  [page-id image-info label class-title]
+  (when-let [image-url (:url image-info)]
+    (p/let [repo (state/get-current-repo)
+            asset-name (str "wikidata-" (subs label 0 (min 30 (count label))))
+            asset (icon-component/<save-url-asset! repo image-url asset-name)]
+      (when asset
+        (let [icon-spec (wikidata/get-preview-icon-type class-title)
+              icon-type (or (:type icon-spec) :image)
+              base-data {:asset-uuid (str (:block/uuid asset))
+                         :asset-type (:logseq.property.asset/type asset)}
+              icon-data (if (= icon-type :avatar)
+                          (assoc base-data :value (wikidata/derive-avatar-initials label))
+                          base-data)]
+          (db-property-handler/set-block-property!
+           page-id
+           :logseq.property/icon
+           {:type icon-type
+            :data icon-data}))))))
+
+(defmethod load-results :wikidata-entities [group state]
+  (let [!input (::input state)
+        !results (::results state)
+        input @!input]
+    (if (and (not (string/blank? input)) (>= (count input) 2))
+      (do
+        (when-let [cancel-fn @*wikidata-cancel-token]
+          (cancel-fn))
+        (wikidata/cancel-image-fetches!)
+        (when (not= input @*wikidata-last-query)
+          (reset! *wikidata-last-query input)
+          (swap! !results assoc-in [group :status] :loading)
+          (let [cancelled? (atom false)]
+            (reset! *wikidata-cancel-token #(reset! cancelled? true))
+            (-> (wikidata/<search-and-enrich input)
+                (p/then (fn [results]
+                          (when-not @cancelled?
+                            (let [items (->> results
+                                             (mapv (fn [{:keys [qid label description]}]
+                                                     {:icon "globe"
+                                                      :icon-theme :gray
+                                                      :text label
+                                                      :info description
+                                                      :preview-initials (wikidata/derive-avatar-initials label)
+                                                      :source-wikidata {:qid qid :label label :description description}})))]
+                              (swap! !results update group merge {:status :success :items items})
+                              (wikidata/<enrich-search-results-with-images
+                               (mapv (fn [{:keys [qid]}] {:id qid}) results)
+                               (fn [qid {:keys [image-url class-title icon-type]}]
+                                 (when-not @cancelled?
+                                   (swap! !results update-in [group :items]
+                                          (fn [items]
+                                            (mapv (fn [item]
+                                                    (if (= qid (get-in item [:source-wikidata :qid]))
+                                                      (assoc item :preview-image-url image-url
+                                                             :preview-icon-type icon-type
+                                                             :preview-class-title class-title)
+                                                      item))
+                                                  items))))))))))
+                (p/catch (fn [_err]
+                           (swap! !results assoc-in [group :status] :success)))))))
+      (swap! !results update group merge {:status :success :items nil}))))
+
+(defmethod handle-action :create-from-wikidata [_ state _event]
+  (when-let [item (state->highlighted-item state)]
+    (let [{:keys [qid label]} (:source-wikidata item)]
+      (when (and qid label)
+        (shui/dialog-close! :ls-dialog-cmdk)
+        (if-let [existing-page (get-page-by-wikidata-id qid)]
+          (route-handler/redirect-to-page! (:block/uuid existing-page))
+          (-> (p/let [entity-data (wikidata/<fetch-full-entity qid)]
+                (when entity-data
+                  (let [{:keys [class image properties description]} entity-data
+                        class-title (:title class)
+                        {:keys [auto suggest]} (wikidata-import/split-tiers properties)]
+                    (p/let [class-entity (when class-title (<ensure-class-exists! class-title))
+                            page (page-handler/<create! label {:redirect? false})]
+                      (when page
+                        (let [page-uuid (:block/uuid page)
+                              has-description? (not (string/blank? description))]
+                          (db-property-handler/set-block-property!
+                           page-uuid :logseq.property/wikidata-id qid)
+                          (when class-entity
+                            (db-property-handler/set-block-property!
+                             page-uuid :block/tags (:db/id class-entity)))
+                          ;; D1: description (built-in property, no create-first needed).
+                          (when has-description?
+                            (db-property-handler/set-block-property!
+                             page-uuid :logseq.property/description description))
+                          ;; R1: suppress the auto-fetcher before the page mounts.
+                          (icon-component/mark-fetch-attempted! (:db/id page))
+                          (route-handler/redirect-to-page! page-uuid)
+                          (when image
+                            (<set-wikidata-icon! (:db/id page) image label class-title))
+                          ;; SUGGEST tier -> inline band (rendered in Phase C).
+                          (wikidata-import/stash-suggestions! page-uuid suggest)
+                          ;; AUTO tier -> create+write scalars, then one Undo toast.
+                          (p/let [auto-n (wikidata-import/<write-auto-properties! page-uuid auto)]
+                            (let [n (+ auto-n (if has-description? 1 0))]
+                              (when (pos? n)
+                                (shui/toast!
+                                 (fn [{:keys [dismiss!]}]
+                                   [:span
+                                    (str "Added " n " " (if (= 1 n) "detail" "details")
+                                         " from Wikidata ")
+                                    (shui/button
+                                     {:size :sm :variant :secondary
+                                      :on-click (fn []
+                                                  (dismiss!)
+                                                  (wikidata-import/clear-suggestions! page-uuid)
+                                                  (page-handler/<delete!
+                                                   page-uuid
+                                                   (fn [] (route-handler/redirect-to-home!))))}
+                                     "Undo")])
+                                 :default
+                                 {:duration 8000}))))))))))
+              (p/catch (fn [_err] nil))))))))
 
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)

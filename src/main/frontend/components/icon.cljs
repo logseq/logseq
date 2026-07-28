@@ -922,6 +922,164 @@
           :else
           "point-filled")))))
 
+
+;; ============================================================================
+;; Wikipedia/Commons image auto-fetch (ported from design-improvements)
+;; The manual "Web images" search already exists on trunk; this is the
+;; auto-fetch-on-render layer. Trunk's <search-wikipedia-image returns an
+;; envelope {:status :ok :image {...:url}} so we unwrap it here.
+;; ============================================================================
+
+(defonce ^:private *avatar-fetch-attempted (atom #{}))
+(defonce ^:private *image-fetch-attempted (atom #{}))
+(defonce ^:private *wikipedia-fetch-queue (atom #queue []))
+(defonce ^:private *wikipedia-fetch-in-flight (atom 0))
+
+(def ^:private wikipedia-fetch-delay-ms
+  "Delay before refilling a freed queue slot, to space requests out." 150)
+(def ^:private wikipedia-fetch-concurrency
+  "Max concurrent Wikipedia fetches. Bounded so first-load population of a large
+   graph is a gentle background drip, never a flood that locks the UI." 4)
+
+(defn- process-wikipedia-fetch-queue!
+  "Drain the fetch queue with bounded concurrency: keep up to
+   `wikipedia-fetch-concurrency` fetches in flight; each completion frees its slot
+   and (after a short delay) pulls the next item. Errors are swallowed so one bad
+   fetch never stalls the queue."
+  []
+  (loop []
+    (when (and (< @*wikipedia-fetch-in-flight wikipedia-fetch-concurrency)
+               (peek @*wikipedia-fetch-queue))
+      (let [fetch-fn (peek @*wikipedia-fetch-queue)]
+        (swap! *wikipedia-fetch-queue pop)
+        (swap! *wikipedia-fetch-in-flight inc)
+        (p/let [_ (p/catch (fetch-fn) (fn [_] nil))]
+          (swap! *wikipedia-fetch-in-flight dec)
+          (js/setTimeout process-wikipedia-fetch-queue! wikipedia-fetch-delay-ms)))
+      (recur))))
+
+(defn- enqueue-wikipedia-fetch!
+  [fetch-fn]
+  (swap! *wikipedia-fetch-queue conj fetch-fn)
+  (process-wikipedia-fetch-queue!))
+
+(defn mark-fetch-attempted!
+  "Mark a page's db-id as already-attempted for BOTH avatar and image auto-fetch,
+   so a page whose icon is set explicitly (e.g. a Wikidata import) does not also
+   trigger the background Wikipedia auto-fetcher (avoids a race / duplicate asset).
+   Public so callers outside this ns can suppress the fetch before the page mounts."
+  [db-id]
+  (when db-id
+    (swap! *avatar-fetch-attempted conj db-id)
+    (swap! *image-fetch-attempted conj db-id)))
+
+(defn- should-auto-fetch-avatar?
+  [page-entity]
+  (let [page-id (:db/id page-entity)
+        config (state/get-config)
+        feature-enabled? (or (:feature/auto-fetch-wikipedia-images? config)
+                             (:feature/auto-fetch-avatar-images? config))
+        has-title? (some? (:block/title page-entity))
+        not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
+        not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))]
+    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)))
+
+(defn- <auto-fetch-avatar-image!
+  [page-entity]
+  (let [repo (state/get-current-repo)
+        page-id (:db/id page-entity)
+        title (:block/title page-entity)]
+    (swap! *avatar-fetch-attempted conj page-id)
+    (enqueue-wikipedia-fetch!
+     (fn []
+       (p/let [result (<search-wikipedia-image title)
+               image-data (:image result)]
+         (when (and (= :ok (:status result)) image-data (:url image-data))
+           (p/let [asset (<save-url-asset! repo (:url image-data)
+                                           (str "avatar-" (subs title 0 (min 30 (count title)))))]
+             (when asset
+               (property-handler/set-block-property!
+                page-id
+                :logseq.property/icon
+                {:type :avatar
+                 :data {:value (derive-avatar-initials title)
+                        :asset-uuid (str (:block/uuid asset))
+                        :asset-type (:logseq.property.asset/type asset)}})))))))))
+
+(hsx/defc auto-fetch-avatar-effect
+  "Renders nothing; runs the avatar auto-fetch side effect on mount. Conditionally
+   RENDERED (not a conditional hook) from get-node-icon-cp."
+  [page-entity]
+  (hooks/use-effect!
+   (fn []
+     (when (should-auto-fetch-avatar? page-entity)
+       (<auto-fetch-avatar-image! page-entity))
+     js/undefined)
+   [(:db/id page-entity)])
+  nil)
+
+(defn- should-auto-fetch-image?
+  [page-entity]
+  (let [page-id (:db/id page-entity)
+        config (state/get-config)
+        feature-enabled? (or (:feature/auto-fetch-wikipedia-images? config)
+                             (:feature/auto-fetch-avatar-images? config))
+        has-title? (some? (:block/title page-entity))
+        not-attempted? (not (contains? @*image-fetch-attempted page-id))
+        not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))]
+    (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)))
+
+(defn- <auto-fetch-image!
+  [page-entity]
+  (let [repo (state/get-current-repo)
+        page-id (:db/id page-entity)
+        title (:block/title page-entity)]
+    (swap! *image-fetch-attempted conj page-id)
+    (enqueue-wikipedia-fetch!
+     (fn []
+       (p/let [result (<search-wikipedia-image title)
+               image-data (:image result)]
+         (when (and (= :ok (:status result)) image-data (:url image-data))
+           (p/let [asset (<save-url-asset! repo (:url image-data)
+                                           (str "image-" (subs title 0 (min 30 (count title)))))]
+             (when asset
+               (property-handler/set-block-property!
+                page-id
+                :logseq.property/icon
+                {:type :image
+                 :data {:asset-uuid (str (:block/uuid asset))
+                        :asset-type (:logseq.property.asset/type asset)}})))))))))
+
+(hsx/defc auto-fetch-image-effect
+  "Renders nothing; runs the image auto-fetch side effect on mount."
+  [page-entity]
+  (hooks/use-effect!
+   (fn []
+     (when (should-auto-fetch-image? page-entity)
+       (<auto-fetch-image! page-entity))
+     js/undefined)
+   [(:db/id page-entity)])
+  nil)
+
+(hsx/defc empty-image-icon-cp
+  "Clickable empty-image placeholder that opens the asset picker. Used for pages
+   with an inherited :image default-icon that haven't fetched/set an image yet."
+  [page-entity opts]
+  (let [size (or (:size opts) 20)
+        page-title (:block/title page-entity)
+        page-id (:db/id page-entity)]
+    [:span.ui__icon.image-icon.empty-image-placeholder.cursor-pointer
+     {:style {:width size
+              :height size
+              :border "1px dashed var(--lx-gray-06)"
+              :border-radius "2px"
+              :background "var(--lx-gray-02)"}
+      :title "Click to set image"
+      :on-click (fn [^js e]
+                  (open-image-asset-picker! e page-id page-title nil))}]))
+
 (hsx/defc get-node-icon-cp
   [node-entity opts]
   (let [;; `model/sub-block` wraps `use-query` (a hook), so it must be called
@@ -1013,17 +1171,35 @@
         effective-size (if photo-icon?
                          (or (:avatar-size opts) (:size opts) 20)
                          (or (:size opts) 14))
-        opts' (assoc opts :size effective-size)]
+        opts' (assoc opts :size effective-size)
+        node-icon-map (when (map? node-icon) (normalize-icon node-icon))
+        auto-fetch-enabled? (let [config (state/get-config)]
+                              (or (:feature/auto-fetch-wikipedia-images? config)
+                                  (:feature/auto-fetch-avatar-images? config)))
+        is-auto-fetchable-avatar? (and auto-fetch-enabled?
+                                       (= :avatar (:type node-icon-map))
+                                       (not (get-in node-icon-map [:data :asset-uuid]))
+                                       (not (get-in node-icon-map [:data :no-auto-fetch]))
+                                       (ldb/page? entity))
+        is-auto-fetchable-image? (and auto-fetch-enabled?
+                                      (= :image (:type node-icon-map))
+                                      (get-in node-icon-map [:data :empty?])
+                                      (ldb/page? entity))]
     (when-not (and (nil? preview-icon)
                    (or (string/blank? node-icon)
                        (and (contains? #{"letter-n" "file"} node-icon)
                             (:not-text-or-page? opts))))
-      [:div.icon-cp-container.flex.items-center.justify-center
-       {:style {:color display-color}
-        :class (str (when photo-icon? "photo-icon")
-                    (when (and effective-color (not= effective-color "inherit")) " icon-colored")
-                    (when-let [c (:class opts)] (str " " c)))}
-       (icon effective-node-icon opts')])))
+      [:<>
+       (when is-auto-fetchable-avatar? (auto-fetch-avatar-effect entity))
+       (when is-auto-fetchable-image? (auto-fetch-image-effect entity))
+       [:div.icon-cp-container.flex.items-center.justify-center
+        {:style {:color display-color}
+         :class (str (when photo-icon? "photo-icon")
+                     (when (and effective-color (not= effective-color "inherit")) " icon-colored")
+                     (when-let [c (:class opts)] (str " " c)))}
+        (if is-auto-fetchable-image?
+          (empty-image-icon-cp entity opts')
+          (icon effective-node-icon opts'))]])))
 
 (defn- emoji-char?
   "Check if a string is a single emoji character by checking against known emojis"

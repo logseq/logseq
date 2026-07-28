@@ -362,6 +362,7 @@
 (def common-default-config
   "Common default config for a user's repo config"
   {:feature/enable-search-remove-accents? true
+   :feature/auto-fetch-wikipedia-images? true
    :ui/auto-expand-block-refs? true})
 
 (def db-default-config

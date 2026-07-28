@@ -1132,6 +1132,12 @@
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts' :show-hidden-properties? true))])])
 
+                ;; Wikidata "From Web" suggestion band (renders above Add property when
+                ;; this page has stashed suggestions). Decoupled via get-component.
+                (when page-properties-area?
+                  (when-let [cp (state/get-component :block/wikidata-suggestions)]
+                    (cp block)))
+
                 (when (and page? (not class?))
                   ^{:key (str id "-add-property")}
                   [new-property block opts'])

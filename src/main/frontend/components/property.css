@@ -662,3 +662,55 @@ a.control-link {
     }
   }
 }
+
+.wikidata-suggestion-row {
+  position: relative;
+}
+
+.wikidata-add-cursor-bubble {
+  position: absolute;
+  z-index: var(--ls-z-index-level-5);
+  left: var(--wikidata-add-cue-x);
+  top: var(--wikidata-add-cue-y);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)));
+  color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 18%);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px) scale(0.97);
+  transition:
+    opacity 100ms ease,
+    visibility 0s linear 100ms,
+    transform 100ms ease;
+}
+
+.wikidata-suggestion-row:hover .wikidata-add-cursor-bubble,
+.wikidata-suggestion-row:focus-visible .wikidata-add-cursor-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 120ms;
+}
+
+.wikidata-suggestions:has(.wikidata-suggestion-row:hover) .wikidata-suggestion-row:not(:hover) .wikidata-add-cursor-bubble {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px) scale(0.97);
+  transition-delay: 0s;
+}
+
+@media (hover: none) {
+  .wikidata-add-cursor-bubble {
+    display: none;
+  }
+}

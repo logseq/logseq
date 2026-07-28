@@ -62,8 +62,39 @@
   (when-not (string/blank? label)
     [:span.cp__cmdk-current-page-badge label]))
 
+(defn- wikidata-preview-icon
+  "Photo-icon for Wikidata 'From Web' results, rendered inside the cmdk icon
+   slot. Carries `.icon-cp-container.photo-icon` so cmdk.css suppresses the gray
+   chip (matching real node avatars from `get-node-icon-cp`).
+   - :avatar -> gray circle with initials, portrait image overlaid when loaded
+   - :image  -> square; dashed placeholder until the image loads"
+  [{:keys [icon-type image-url initials]}]
+  (case icon-type
+    :avatar
+    [:div.icon-cp-container.photo-icon.relative.w-5.h-5.flex-shrink-0
+     [:div.absolute.inset-0.rounded-full.bg-gray-06.flex.items-center.justify-center
+      {:class "text-[8px] font-medium text-gray-11"}
+      initials]
+     (when image-url
+       [:img.absolute.inset-0.w-5.h-5.rounded-full.object-cover
+        {:src image-url
+         :loading "lazy"
+         :on-error (fn [e] (set! (.-style (.-target e)) "display:none"))}])]
+
+    :image
+    [:div.icon-cp-container.photo-icon.relative.w-5.h-5.flex-shrink-0
+     (if image-url
+       [:img.w-5.h-5.rounded.object-contain
+        {:src image-url
+         :loading "lazy"
+         :on-error (fn [e] (set! (.-style (.-target e)) "display:none"))}]
+       [:div.w-5.h-5.rounded.border.border-dashed.border-gray-07])]
+
+    nil))
+
 (hsx/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
-                        compact rounded on-mounted on-click on-mouse-move source-block] :as props
+                        compact rounded on-mounted on-click on-mouse-move source-block
+                        source-wikidata preview-image-url preview-icon-type preview-initials] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [highlight-query (partial highlight-query* app-config query)
@@ -109,9 +140,16 @@
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
                                         " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (if (string? icon)
+       (cond
+         (and source-wikidata preview-icon-type)
+         (wikidata-preview-icon {:icon-type preview-icon-type
+                                 :image-url preview-image-url
+                                 :initials preview-initials})
+
+         (string? icon)
          (shui/tabler-icon icon {:size "14" :class ""})
-         icon)]
+
+         :else icon)]
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])

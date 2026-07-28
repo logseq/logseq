@@ -10,6 +10,7 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.components.user.login :as user.login]
+            [frontend.components.wikidata-import :as wikidata-import]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.react :as react]
@@ -115,6 +116,7 @@
   (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :block/asset-cp block/asset-cp)
+  (state/set-component! :block/wikidata-suggestions wikidata-import/wikidata-suggestions)
   (state/set-component! :editor/box editor/box)
   (state/set-component! :selection/context-menu cp-content/custom-context-menu-content)
   (command-palette/register-global-shortcut-commands))
