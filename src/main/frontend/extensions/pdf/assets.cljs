@@ -45,7 +45,10 @@
               (assets-handler/normalize-asset-resource-url (fs/asset-path-normalize href))
 
               protocol-link?
-              href
+              (if (and (util/electron?)
+                       (string/starts-with? href "file://"))
+                (string/replace-first href "file://" "assets://")
+                href)
 
               :else
               (assets-handler/normalize-asset-resource-url original-path))
@@ -214,16 +217,17 @@
   (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
-        relative-path (subs path 14)]
+        relative-path (subs path 14)
+        protocol (if (util/electron?) "assets://" "file://")]
     (cond
       (string/starts-with? path "zotero-link://")
-      (str "file://" (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+      (str protocol (util/node-path.join zotero-linked-attachment-base-directory relative-path))
 
       (string/starts-with? path "zotero-path://")
-      (str "file://" (util/node-path.join zotero-data-directory "storage" relative-path))
+      (str protocol (util/node-path.join zotero-data-directory "storage" relative-path))
 
       :else ;; compatible with commit 33db791
-      (str "file://" (util/node-path.join zotero-data-directory "storage" id path)))))
+      (str protocol (util/node-path.join zotero-data-directory "storage" id path)))))
 
 (defn db-based-open-block-ref!
   [block]

@@ -106,7 +106,10 @@
                             (common-config/protocol-path? path))]
     (cond
       protocol-link?
-      path
+      (if (and (util/electron?)
+               (string/starts-with? path "file://"))
+        (string/replace-first path "file://" "assets://")
+        path)
 
       ;; BUG: avoid double encoding from PDF assets
       (or (path/absolute? path)
@@ -164,7 +167,10 @@
            js-url? (not (nil? js-url))]
        (cond
          js-url?
-         path                                               ;; just return the original
+         (if (and (util/electron?)
+                  (string/starts-with? (.-protocol js-url) "file:"))
+           (string/replace-first path "file://" "assets://")
+           path)                                               ;; just return the original
 
          (and (alias-enabled?)
               (check-alias-path? path))
