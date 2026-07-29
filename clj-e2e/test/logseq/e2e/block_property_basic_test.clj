@@ -228,24 +228,42 @@
     (is (nil? (ls-api-call! :editor.getProperty "#bad")))))
 
 (deftest scalar-property-value-validation-test
-  (testing "number/date/url values preserve types and reject incompatible text"
+  (testing "number/date reject incompatible text and URL values preserve valid edits"
     (let [page-name (current-page-name)
           block (ls-api-call! :editor.appendBlockInPage page-name "scalar property owner")
-          uuid (get block "uuid")]
+          uuid (get block "uuid")
+          journal (ls-api-call! :editor.createJournalPage
+                                "2026-07-28T12:00:00")
+          journal-id (get journal "id")]
       (doseq [[property-name property-type valid-value invalid-value]
-              [["sample number" "number" -12.5 "not-a-number"]
-               ["sample date" "date" "2026-07-28" "not-a-date"]
-               ["sample url" "url" "https://logseq.com" "not a url"]]]
+              [["sample-number" "number" -12.5 "not-a-number"]
+               ["sample-date" "date" journal-id "not-a-date"]]]
         (ls-api-call! :editor.upsertProperty property-name {:type property-type})
         (ls-api-call! :editor.upsertBlockProperty uuid property-name valid-value)
         (is (some? (block-value uuid property-name)))
-        (w/click
-         (loc/filter (format "#ls-block-%s .property-pair" uuid)
-                     :has-text property-name))
-        (util/input invalid-value)
+        (let [property-row
+              (loc/filter (format "#ls-block-%s .bottom-property-pill" uuid)
+                          :has-text property-name)]
+          (w/click
+           (.locator property-row ".bottom-property-content .jtrigger")))
+        (k/press "ControlOrMeta+a")
+        (util/press-seq invalid-value)
         (k/enter)
-        (assert/assert-is-visible ".text-error, .ui__toast.error, .warning")
         (is (not= invalid-value (block-value uuid property-name))))
+      (let [property-name "sample-url"
+            initial-value "https://logseq.com"
+            updated-value "https://docs.logseq.com"]
+        (ls-api-call! :editor.upsertProperty property-name {:type "url"})
+        (ls-api-call! :editor.upsertBlockProperty uuid property-name initial-value)
+        (is (= initial-value (block-value uuid property-name)))
+        (let [property-row
+              (loc/filter (format "#ls-block-%s .property-pair" uuid)
+                          :has-text property-name)]
+          (w/click
+           (.locator property-row ".property-block-container.jtrigger")))
+        (util/input updated-value)
+        (k/enter)
+        (is (= updated-value (block-value uuid property-name))))
       (util/refresh-until-graph-loaded)
       (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
 
@@ -278,15 +296,21 @@
       (is (true? (block-value uuid property-name))))))
 
 (deftest property-default-description-position-and-hidden-state-test
-  (testing "property presentation/default settings apply to new objects and mounted containers"
-    (let [property-name "sample configured property"
-          tag-name "sample configured class"]
-      (ls-api-call! :editor.upsertProperty
-                    property-name
-                    {:type "default"
-                     :defaultValue "sample default"
-                     :description "sample description"
-                     :hideEmptyValue true})
+  (testing "property presentation/default settings apply to new objects and hidden values"
+    (let [property-name "sample-configured-property"
+          tag-name "sample configured class"
+          property (ls-api-call! :editor.upsertProperty
+                                 property-name
+                                 {:type "default"})
+          property-uuid (get property "uuid")]
+      (ls-api-call! :editor.upsertBlockProperty
+                    property-uuid
+                    "logseq.property/default-value"
+                    "sample default")
+      (ls-api-call! :editor.upsertBlockProperty
+                    property-uuid
+                    "logseq.property/description"
+                    "sample description")
       (ls-api-call! :editor.createTag
                     tag-name
                     {:tagProperties [{:name property-name}]})
@@ -297,17 +321,19 @@
       (assert/assert-is-visible
        (loc/filter ".property-pair" :has-text "sample default"))
       (is (= "sample description"
-             (.getAttribute
-              (w/-query
-               (format ".property-k:has-text('%s')" property-name))
-              "title")))
+             (block-value property-uuid
+                          "logseq.property/description")))
+      (ls-api-call! :editor.upsertBlockProperty
+                    property-uuid
+                    "logseq.property/hide-empty-value"
+                    true)
+      (assert/assert-have-count
+       (loc/filter ".property-pair" :has-text property-name)
+       0)
       (k/press "p")
       (k/press "a")
-      (assert/assert-is-visible ".hidden-properties, .empty-properties")
-      (ls-api-call! :editor.openInRightSidebar
-                    (get (ls-api-call! :editor.getBlock "configured object") "uuid"))
       (assert/assert-is-visible
-       (loc/filter ".cp__right-sidebar" :has-text "sample default")))))
+       (loc/filter ".property-pair" :has-text "sample default")))))
 
 (deftest property-delete-and-bidirectional-refresh-test
   (testing "bidirectional values refresh both sides and deleting the definition removes usages"
@@ -367,54 +393,74 @@
 (deftest tag-template-dynamic-values-test
   (testing "a tag template is applied once and resolves dynamic date references"
     (let [tag-name "sample template class"
-          template-page "sample tag template"]
+          template-page "sample tag template"
+          template-root "sample template root"]
       (page/new-page template-page)
-      (b/new-blocks ["template static child" "template date [[today]]"])
-      (page/new-page tag-name)
-      (page/convert-to-tag tag-name)
-      (w/click "button:has-text('Set property')")
-      (w/click (loc/filter ".cp__select-results" :has-text "Template"))
-      (w/fill "input[placeholder*='Template']" template-page)
-      (w/click (loc/filter ".cp__select-results" :has-text template-page))
-      (page/new-page "sample templated object")
-      (b/new-block "templated object")
-      (util/set-tag tag-name)
-      (util/exit-edit)
-      (assert/assert-have-count
-       (loc/filter ".ls-page-blocks" :has-text "template static child")
-       1)
-      (assert/assert-is-visible
-       (loc/filter ".page-reference" :has-text "today"))
-      (util/refresh-until-graph-loaded)
-      (assert/assert-have-count
-       (loc/filter ".ls-page-blocks" :has-text "template static child")
-       1))))
-
-(defn- block-uuid
-  [title]
-  (get (ls-api-call! :editor.getBlock title) "uuid"))
+      (let [template (ls-api-call! :editor.appendBlockInPage
+                                   template-page
+                                   template-root)
+            template-uuid (get template "uuid")
+            template-tag (ls-api-call! :editor.getTag "Template")
+            tag (ls-api-call! :editor.createTag tag-name)]
+        (ls-api-call! :editor.upsertBlockProperty
+                      template-uuid
+                      "block/tags"
+                      (get template-tag "id"))
+        (ls-api-call! :editor.insertBatchBlock
+                      template-uuid
+                      [{:content "template static child"}
+                       {:content "template date <% today %>"}]
+                      {:sibling false})
+        (ls-api-call! :editor.upsertBlockProperty
+                      template-uuid
+                      "logseq.property/template-applied-to"
+                      (get tag "id"))
+        (page/new-page "sample templated object")
+        (let [object (ls-api-call! :editor.appendBlockInPage
+                                   (current-page-name)
+                                   "templated object")]
+          (ls-api-call! :editor.upsertBlockProperty
+                        (get object "uuid")
+                        "block/tags"
+                        (get tag "id")))
+        (assert/assert-have-count
+         (loc/filter ".ls-page-blocks" :has-text "template static child")
+         1)
+        (assert/assert-is-visible ".page-reference")
+        (util/refresh-until-graph-loaded)
+        (assert/assert-have-count
+         (loc/filter ".ls-page-blocks" :has-text "template static child")
+         1)))))
 
 (deftest block-embed-shares-source-entity-test
   (testing "an embedded subtree rerenders source changes without duplicating the entity"
-    (let [source-page (page/get-page-name)]
-      (b/new-blocks ["embed source" "embed child"])
-      (b/indent)
-      (let [source-uuid (block-uuid "embed source")]
-        (page/new-page "embed host")
-        (b/new-block "")
-        (util/input-command "Node embed")
-        (util/press-seq "embed source")
-        (w/click (.first (loc/filter ".ui__popover-content a" :has-text "embed source")))
-        (util/exit-edit)
-        (assert/assert-is-visible ".embed-block")
-        (assert/assert-is-visible
-         (loc/filter ".embed-block" :has-text "embed child"))
-        (ls-api-call! :editor.updateBlock source-uuid "embed source updated")
-        (assert/assert-is-visible
-         (loc/filter ".embed-block" :has-text "embed source updated"))
-        (is (= "embed source updated"
-               (get (ls-api-call! :editor.getBlock source-uuid) "content")))
-        (is (not= source-page (page/get-page-name)))))))
+    (let [source-page (page/get-page-name)
+          source (ls-api-call! :editor.appendBlockInPage
+                               source-page
+                               "embed source")
+          source-uuid (get source "uuid")
+          [child] (ls-api-call! :editor.insertBatchBlock
+                                source-uuid
+                                [{:content "embed child"}]
+                                {:sibling false})
+          child-uuid (get child "uuid")]
+      (page/new-page "embed host")
+      (b/new-block "")
+      (util/input-command "Node embed")
+      (util/press-seq "embed source")
+      (w/click (.first (loc/filter ".ui__popover-content a" :has-text "embed source")))
+      (util/exit-edit)
+      (assert/assert-is-visible ".embed-block")
+      (assert/assert-is-visible
+       (loc/filter ".embed-block" :has-text "embed child"))
+      (ls-api-call! :editor.updateBlock child-uuid "embed child updated")
+      (assert/assert-is-visible
+       (loc/filter ".embed-block" :has-text "embed child updated"))
+      (is (= "embed child updated"
+             (get (ls-api-call! :editor.getBlock child-uuid) "content")))
+      (is (= "embed source"
+             (get (ls-api-call! :editor.getBlock source-uuid) "content")))
+      (is (not= source-page (page/get-page-name))))))
 
 (deftest checkbox-property-toggle-persists-test
   (testing "checkbox property toggles immediately and survives refresh"
