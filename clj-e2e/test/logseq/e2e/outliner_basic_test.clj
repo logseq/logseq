@@ -10,7 +10,9 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w])
+  (:import
+   (com.microsoft.playwright Locator$DragToOptions)))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -338,46 +340,24 @@
 
 (defn- drag-block!
   [source-title target-title placement]
-  (w/eval-js
-   (format
-    "(async () => {
-       const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-       const find = (title) => Array.from(
-         document.querySelectorAll('.ls-page-blocks .ls-block[data-block-title]')
-       ).find((block) => block.dataset.blockTitle === title);
-       const source = find(%s);
-       const target = find(%s);
-       if (!source || !target) throw new Error('drag source or target missing');
-       const handle = source.querySelector('.bullet-container');
-       const targetRect = target.getBoundingClientRect();
-       const sourceRect = handle.getBoundingClientRect();
-       const destinationY = %s === 'before'
-         ? targetRect.top + 2
-         : (%s === 'after' ? targetRect.bottom - 2 : targetRect.top + targetRect.height / 2);
-       const init = (x, y, buttons) => ({
-         bubbles: true, cancelable: true, button: 0, buttons,
-         clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse'
-       });
-       handle.dispatchEvent(new PointerEvent(
-         'pointerdown', init(sourceRect.left + 4, sourceRect.top + 4, 1)
-       ));
-       await delay(120);
-       target.dispatchEvent(new PointerEvent(
-         'pointermove', init(targetRect.left + 30, destinationY, 1)
-       ));
-       target.dispatchEvent(new MouseEvent(
-         'mouseover', init(targetRect.left + 30, destinationY, 1)
-       ));
-       await delay(120);
-       document.dispatchEvent(new PointerEvent(
-         'pointerup', init(targetRect.left + 30, destinationY, 0)
-       ));
-       await delay(250);
-     })();"
-    (pr-str source-title)
-    (pr-str target-title)
-    (pr-str placement)
-    (pr-str placement))))
+  (let [source-block (w/-query
+                      (format ".ls-block[data-block-title='%s']"
+                              source-title))
+        target-block (w/-query
+                      (format ".ls-block[data-block-title='%s']"
+                              target-title))
+        target-height (.-height (.boundingBox target-block))
+        target-y (case placement
+                   "before" 2
+                   "after" (- target-height 2)
+                   "inside" (/ target-height 2))
+        options (doto (Locator$DragToOptions.)
+                  (.setTargetPosition 30 target-y)
+                  (.setSteps 12))]
+    (.dragTo (.locator source-block ".bullet-container")
+             target-block
+             options)
+    (util/wait-timeout 250)))
 
 (deftest drag-reorders-once-and-is-undoable-test
   (testing "same-level drag changes order once and undo restores the original order"

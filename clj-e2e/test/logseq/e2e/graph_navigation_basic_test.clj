@@ -1,5 +1,6 @@
 (ns logseq.e2e.graph-navigation-basic-test
   (:require
+   [clojure.string :as string]
    [clojure.test :refer [deftest is testing use-fixtures]]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
@@ -43,10 +44,10 @@
       (b/new-block "history a content")
       (page/new-page page-b)
       (b/new-block "history b content")
-      (w/eval-js "history.back()")
+      (.goBack (w/get-page))
       (assert/assert-is-visible
        (loc/filter "#main-content-container" :has-text "history a content"))
-      (w/eval-js "history.forward()")
+      (.goForward (w/get-page))
       (assert/assert-is-visible
        (loc/filter "#main-content-container" :has-text "history b content"))
       (util/refresh-until-graph-loaded)
@@ -61,7 +62,7 @@
       (b/new-block "direct route block")
       (let [page-uuid (get (ls-api-call! :editor.getPage page-name) "uuid")
             block-uuid (get (ls-api-call! :editor.getBlock "direct route block") "uuid")
-            base (w/eval-js "location.origin + location.pathname")]
+            base (string/replace (.url (w/get-page)) #"[?#].*$" "")]
         (w/navigate (str base "#/page/" page-uuid))
         (assert/assert-graph-loaded?)
         (is (= page-name (page/get-page-name)))
@@ -97,12 +98,14 @@
   (testing "configured default home opens on startup and invalid home falls back explicitly"
     (page/new-page "sample default home")
     (b/new-block "default home content")
-    (w/eval-js
-     "window.logseq.api.set_state_from_store(['config', 'default-home'], 'sample default home')")
+    (ls-api-call! :set-state-from-store
+                  ["config" "default-home"]
+                  "sample default home")
     (util/refresh-until-graph-loaded)
     (is (= "sample default home" (page/get-page-name)))
-    (w/eval-js
-     "window.logseq.api.set_state_from_store(['config', 'default-home'], 'missing sample home')")
+    (ls-api-call! :set-state-from-store
+                  ["config" "default-home"]
+                  "missing sample home")
     (util/refresh-until-graph-loaded)
     (is (or (= "sample default home" (page/get-page-name))
             (w/visible? "#journals")))
@@ -138,12 +141,8 @@
     (let [slider (w/-query "input[type='range']")]
       (assert/assert-is-visible slider)
       (let [full-count (util/count-elements ".graph-node, [data-node-id]")]
-        (w/eval-js
-         "document.querySelector('input[type=range]').value =
-            document.querySelector('input[type=range]').min;
-          document.querySelector('input[type=range]').dispatchEvent(
-            new Event('input', {bubbles:true})
-          );")
+        (w/click slider)
+        (k/press "Home")
         (is (<= (util/count-elements ".graph-node, [data-node-id]")
                 full-count))
         (w/click "button:has-text('Now')")
@@ -186,8 +185,7 @@
       (is (or loading? editor-visible?))
       (when loading?
         (is (or (not (w/visible? ".block-add-button"))
-                (w/eval-js
-                 "document.querySelector('.block-add-button')?.matches(':disabled') ?? true")))))
+                (.isDisabled (w/-query ".block-add-button"))))))
     (assert/assert-graph-loaded?)
     (assert/assert-is-visible ".toolbar-dots-btn")
     (w/click ".toolbar-dots-btn")

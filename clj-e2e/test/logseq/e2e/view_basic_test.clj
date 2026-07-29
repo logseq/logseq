@@ -218,5 +218,4 @@
   (let [content (w/eval-js "navigator.clipboard.readText()")]
     (is (string/includes? content "Alpha table object"))
     (is (string/includes? content "Beta table object")))
-  (w/eval-js
-   "document.querySelectorAll('.ui__toast.success button').forEach(button => button.click())"))
+  (util/click-all! ".ui__toast.success button"))

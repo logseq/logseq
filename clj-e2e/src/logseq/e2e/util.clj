@@ -118,6 +118,13 @@
   [q]
   (w/count* (w/-query q)))
 
+(defn click-all!
+  [q]
+  (loop []
+    (when (w/visible? q)
+      (w/click (.first (w/-query q)))
+      (recur))))
+
 (defn blocks-count
   "Blocks count including page title"
   []
@@ -195,7 +202,9 @@
   (press-seq "/" {:delay 20})
   (w/wait-for ".ui__popover-content")
   (press-seq command {:delay 20})
-  (w/click "a.menu-link.chosen"))
+  (let [command-item (loc/filter "a.menu-link.chosen" :has-text command)]
+    (assert/assert-is-visible command-item)
+    (w/click command-item)))
 
 (defn set-tag
   "`hidden?`: some tags may be hidden from the UI, e.g. Page"
