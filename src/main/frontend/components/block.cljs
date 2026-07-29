@@ -3280,7 +3280,7 @@
     (when (and refs-count (pos? refs-count))
       (when-let [refs-cp (state/get-component :block/linked-references)]
         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
-         (refs-cp block {})]))))
+         (refs-cp (:block/uuid block) {})]))))
 
 (defn- edit-block-content
   [config block edit-input-id]
