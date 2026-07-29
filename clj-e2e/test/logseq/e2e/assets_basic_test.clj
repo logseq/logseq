@@ -16,23 +16,32 @@
 (use-fixtures :each fixtures/new-logseq-page fixtures/validate-graph)
 
 (defn- asset-path
-  [file-name]
-  (Paths/get (str "../assets/" file-name) (into-array String [])))
+  [relative-path]
+  (-> (Paths/get (str "../" relative-path) (into-array String []))
+      (.toAbsolutePath)
+      (.normalize)))
 
 (deftest image-upload-lightbox-and-resize-test
   (testing "uploaded images create stable asset blocks and retain resized metadata"
     (let [page (w/get-page)
-          files [(asset-path "icon.png")
-                 (asset-path "icon-foreground.png")
-                 (asset-path "icon-background.png")]]
+          files [(asset-path "assets/icon.png")
+                 (asset-path "assets/splash.png")
+                 (asset-path "resources/img/logo.png")]
+          pending-files (atom files)]
       (.onFileChooser
        page
        (reify Consumer
          (accept [_ chooser]
-           (.setFiles chooser (into-array java.nio.file.Path files)))))
+           (let [file (first @pending-files)]
+             (swap! pending-files rest)
+             (.setFiles chooser
+                        (into-array java.nio.file.Path [file]))))))
       (b/new-block "image uploads")
-      (util/input-command "Upload an asset")
-      (w/wait-for ".ls-page-blocks .asset-container img")
+      (doseq [expected-count (range 1 (inc (count files)))]
+        (util/input-command "Upload an asset")
+        (assert/assert-have-count
+         ".ls-page-blocks .asset-container img"
+         expected-count))
       (assert/assert-have-count ".ls-page-blocks .asset-container img" 3)
       (doseq [image (.all (w/-query ".ls-page-blocks .asset-container img"))]
         (is (not (string/blank? (.getAttribute image "src"))))
@@ -42,7 +51,8 @@
             block-uuid (.getAttribute first-block "blockid")]
         (w/click first-image)
         (assert/assert-is-visible ".pswp.pswp--open")
-        (w/click ".pswp__button--close")
+        (.waitForFunction page "() => window.pswp?.opener?.isOpen" nil)
+        (w/click (w/get-by-label "Close"))
         (assert/assert-is-hidden ".pswp.pswp--open")
         (.hover (.first (w/-query ".ls-page-blocks .ls-resize-image")))
         (let [handle (.first (w/-query ".ls-page-blocks .image-resize.handle-right"))
@@ -55,7 +65,11 @@
           (is (some? metadata)))
         (w/refresh)
         (assert/assert-have-count ".ls-page-blocks .asset-container img" 3))
-      (w/click ".tag-view-nav.assets")
+      (let [asset-tag (ls-api-call! :editor.getTag "logseq.class/Asset")]
+        (ls-api-call! :app.pushState
+                      "page"
+                      {"name" (get asset-tag "uuid")}
+                      nil))
       (w/wait-for ".ls-view-body .ls-table-row")
       (assert/assert-have-count ".ls-view-body .ls-table-row" 3)
       (assert/assert-is-visible

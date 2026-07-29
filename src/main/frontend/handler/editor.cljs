@@ -1771,7 +1771,11 @@
         edit-content (when state-edit-block
                        (state/get-edit-content))
         edit-block (when-not target-block
-                     (or state-edit-block last-edit-block))
+                     (if state-edit-block
+                       (assoc state-edit-block :block/title edit-content)
+                       last-edit-block))
+        has-unsaved-edit? (and state-edit-block
+                               (not= (:block/title state-edit-block) edit-content))
         empty-target? (cond
                         target-block false
                         state-edit-block (string/blank? edit-content)
@@ -1783,6 +1787,8 @@
             today-page (if (nil? today-page-e)
                          (state/pub-event! [:page/create today-page-name])
                          today-page-e)
+            _ (when has-unsaved-edit?
+                (save-block-aux! state-edit-block edit-content nil))
             blocks* (p/all
                      (for [^js [idx file] (medley/indexed files)]
                        (new-asset-block repo file
