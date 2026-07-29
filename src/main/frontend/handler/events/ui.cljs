@@ -350,6 +350,7 @@
                         (shui/popup-hide! popup-id))
                       (notification/show! (t :block.reaction/emoji-required-warning) :warning))))]
     (when (and (seq target-block-ids) target')
+      (shui/popup-hide! :selection-action-bar)
       (shui/popup-show!
        target'
        (fn [{:keys [id]}]
