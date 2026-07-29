@@ -50,8 +50,7 @@
       (assert/assert-is-visible root)
       (w/click (.locator root "button:text('Restore')"))
       (assert/assert-have-count root 0)
-      (w/eval-js
-       "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
+      (util/click-all! ".ui__toast.success button"))))
 
 (deftest recycle-delete-removes-row-and-recent-entry-test
   (let [page-name (str "recycle-delete-" (random-uuid))
@@ -78,8 +77,7 @@
         (is (string/includes? (:message @dialog*) "cannot be undone")))
       (assert/assert-have-count root 0)
       (assert/assert-have-count recent-item 0)
-      (w/eval-js
-       "document.querySelectorAll('.ui__toast.success button').forEach((button) => button.click())"))))
+      (util/click-all! ".ui__toast.success button"))))
 
 (defn- open-block-context-menu!
   []
@@ -134,8 +132,7 @@
                })()")))
       (finally
         (ls-api-call! :close_msg message-key)
-        (w/eval-js
-         "document.querySelectorAll('.ui__toast-close').forEach((button) => button.click())")
+        (util/click-all! ".ui__toast-close")
         (util/wait-timeout 600)))))
 
 (deftest favorites-and-recents-load-after-refresh-test
@@ -462,19 +459,14 @@
 
 (defn- insert-current-page-blocks!
   [blocks]
-  (w/eval-js
-   (format
-    "(async () => {
-      const page = await window.logseq.api.get_current_page();
-      await window.logseq.api.insert_batch_block(
-        page.uuid,
-        %s.map((content) => ({ content })),
-        { sibling: false }
-      );
-      await window.logseq.api.exit_editing_mode(false);
-      window.logseq.api.push_state('page', { name: page.uuid }, null);
-    })();"
-    (json/write-value-as-string blocks))))
+  (let [page (ls-api-call! :editor.getCurrentPage)
+        page-uuid (get page "uuid")]
+    (ls-api-call! :editor.insertBatchBlock
+                  page-uuid
+                  (mapv #(hash-map :content %) blocks)
+                  {:sibling false})
+    (ls-api-call! :editor.exitEditingMode false)
+    (ls-api-call! :app.pushState "page" {:name page-uuid} nil)))
 
 (defn- scroll-page-to-block!
   [title-prefix block-count target-index]
@@ -629,46 +621,33 @@
 
 (defn- seed-journals!
   [journals]
-  (w/eval-js
-   (format
-    "(async () => {
-      const journals = %s;
-
-      for (const journal of journals) {
-        const page = await window.logseq.api.create_journal_page(journal.date);
-        await window.logseq.api.insert_batch_block(
-          page.uuid,
-          journal.blocks.map((content) => ({ content })),
-          { sibling: false }
-        );
-      }
-
-      await window.logseq.api.exit_editing_mode(false);
-      window.logseq.api.push_state('all-journals', null, null);
-    })();"
-    (json/write-value-as-string journals))))
+  (doseq [{:keys [date blocks]} journals]
+    (let [page (ls-api-call! :editor.createJournalPage date)]
+      (ls-api-call! :editor.insertBatchBlock
+                    (get page "uuid")
+                    (mapv #(hash-map :content %) blocks)
+                    {:sibling false})))
+  (ls-api-call! :editor.exitEditingMode false)
+  (ls-api-call! :app.pushState "all-journals" nil nil))
 
 (defn- seed-journals-with-linked-ref!
   []
-  (w/eval-js
-   "(async () => {
-      const target = await window.logseq.api.create_journal_page('2026-03-01T12:00:00');
-      const source = await window.logseq.api.create_journal_page('2026-02-28T12:00:00');
-
-      await window.logseq.api.insert_batch_block(
-        target.uuid,
-        [{ content: 'journals linked refs visible target' }],
-        { sibling: false }
-      );
-      await window.logseq.api.insert_batch_block(
-        source.uuid,
-        [{ content: `journals linked refs visible source [[${target.name}]]` }],
-        { sibling: false }
-      );
-
-      await window.logseq.api.exit_editing_mode(false);
-      window.logseq.api.push_state('all-journals', null, null);
-    })();"))
+  (let [target (ls-api-call! :editor.createJournalPage
+                             "2026-03-01T12:00:00")
+        source (ls-api-call! :editor.createJournalPage
+                             "2026-02-28T12:00:00")]
+    (ls-api-call! :editor.insertBatchBlock
+                  (get target "uuid")
+                  [{:content "journals linked refs visible target"}]
+                  {:sibling false})
+    (ls-api-call! :editor.insertBatchBlock
+                  (get source "uuid")
+                  [{:content (format
+                              "journals linked refs visible source [[%s]]"
+                              (get target "name"))}]
+                  {:sibling false})
+    (ls-api-call! :editor.exitEditingMode false)
+    (ls-api-call! :app.pushState "all-journals" nil nil)))
 
 (defn- scroll-journals-to-text!
   [text]
@@ -1109,11 +1088,9 @@
                     logs)))))
 
 (deftest today-queries-render-without-resource-errors
-  (w/eval-js
-   "(async () => {
-      const page = await window.logseq.api.create_journal_page(new Date().toISOString());
-      window.logseq.api.push_state('page', { name: page.uuid }, null);
-    })();")
+  (let [page (ls-api-call! :editor.createJournalPage
+                           (str (java.time.Instant/now)))]
+    (ls-api-call! :app.pushState "page" {:name (get page "uuid")} nil))
   (util/wait-timeout 1500)
   (assert/assert-have-count "#today-queries" 1)
   (assert/assert-have-count "#today-queries .block-content-fallback-ui" 0))
@@ -1381,18 +1358,18 @@
 
 (deftest text-format-shortcuts-and-source-roundtrip-test
   (testing "format shortcuts wrap only the selection and rendered text round-trips"
-    (doseq [[shortcut source rendered-selector]
-            [["ControlOrMeta+b" "bold" "strong"]
-             ["ControlOrMeta+i" "italic" "em"]
-             ["ControlOrMeta+Shift+h" "highlight" "mark"]]]
+    (doseq [[shortcut source expected]
+            [["ControlOrMeta+b" "bold" "**bold**"]
+             ["ControlOrMeta+i" "italic" "*italic*"]
+             ["ControlOrMeta+Shift+h" "highlight" "==highlight=="]]]
       (b/new-block source)
       (k/press "ControlOrMeta+a")
       (k/press shortcut)
       (let [formatted (util/get-edit-content)]
-        (is (string/includes? formatted source))
+        (is (= expected formatted))
         (util/exit-edit)
         (assert/assert-is-visible
-         (format ".ls-page-blocks %s:text('%s')" rendered-selector source))
+         (loc/filter ".block-title-wrap" :has-text source))
         (w/click (loc/filter ".block-title-wrap" :has-text source))
         (is (= formatted (util/get-edit-content)))))
     (b/new-block "escape \\* literal 🙂 longwordwithoutbreak0123456789")
@@ -1405,14 +1382,17 @@
     (p/new-page "autocomplete existing page")
     (p/new-page "autocomplete host")
     (b/new-block "")
-    (util/press-seq "[[autocomplete existing")
+    (util/press-seq "[[autocomplete existing page")
     (assert/assert-is-visible
-     (loc/filter ".ui__popover-content" :has-text "autocomplete existing page"))
+     (loc/filter ".ui__popover-content a.menu-link.chosen"
+                 :has-text "autocomplete existing page"))
     (k/enter)
     (is (string/includes? (util/get-edit-content)
                           "[[autocomplete existing page]]"))
     (util/exit-edit)
-    (w/click (loc/filter ".page-reference" :has-text "autocomplete existing page"))
+    (w/click
+     (loc/filter ".page-reference .page-ref"
+                 :has-text "autocomplete existing page"))
     (is (= "autocomplete existing page" (p/get-page-name)))
     (p/goto-page "autocomplete host")
     (b/new-block "")
@@ -1444,22 +1424,40 @@
 (deftest task-date-and-priority-slash-lifecycle-test
   (testing "task commands add, update and clear visible properties immediately"
     (b/new-block "sample task")
-    (doseq [command ["TODO" "Priority A" "Scheduled" "Today"]]
-      (util/input-command command)
-      (k/esc))
+    (util/input-command "TODO")
     (util/exit-edit)
-    (assert/assert-is-visible
-     (loc/filter ".ls-block" :has-text "TODO"))
-    (assert/assert-is-visible
-     (loc/filter ".ls-block" :has-text "Priority"))
-    (assert/assert-is-visible
-     (loc/filter ".ls-block" :has-text "Scheduled"))
-    (w/click (loc/filter ".block-title-wrap" :has-text "sample task"))
-    (util/input-command "No priority")
-    (util/exit-edit)
-    (assert/assert-have-count
-     (loc/filter ".property-pair" :has-text "Priority")
-     0)))
+    (let [block (loc/filter ".ls-page-blocks .ls-block"
+                            :has-text "sample task")
+          uuid (.getAttribute block "blockid")
+          block-selector (format "#ls-block-%s" uuid)]
+      (assert/assert-is-visible
+       (loc/filter (str block-selector " .block-tag") :has-text "Task"))
+      (w/click (str block-selector " .block-title-wrap"))
+      (util/move-cursor-to-end)
+      (util/input-command "Priority High")
+      (util/exit-edit)
+      (assert/assert-have-count
+       (str block-selector " .positioned-properties.block-left .property-value-inner")
+       2)
+      (is (= "High"
+             (get-in (ls-api-call! :editor.getBlock uuid)
+                     [":logseq.property/priority" "title"])))
+      (w/click (str block-selector " .block-title-wrap"))
+      (util/move-cursor-to-end)
+      (util/input-command "Scheduled")
+      (w/click
+       "[role='gridcell'][aria-selected='true'] button")
+      (util/exit-edit)
+      (assert/assert-is-visible
+       (loc/filter (str block-selector " .bottom-property-pill")
+                   :has-text "Scheduled"))
+      (w/click (str block-selector " .block-title-wrap"))
+      (util/move-cursor-to-end)
+      (util/input-command "No priority")
+      (util/exit-edit)
+      (is (= ":logseq.property/empty-placeholder"
+             (get-in (ls-api-call! :editor.getBlock uuid)
+                     [":logseq.property/priority" "ident"]))))))
 
 (deftest virtualized-late-editor-and-code-editor-test
   (testing "late-mounted rows and CodeMirror keep separate targets and persisted content"
@@ -1469,9 +1467,6 @@
                     page-uuid
                     (mapv #(hash-map :content (str "late editor row " %))
                           (range 180)))
-      (w/eval-js
-       "document.querySelector('#main-content-container').scrollTop =
-          document.querySelector('#main-content-container').scrollHeight")
       (w/click (loc/filter ".block-title-wrap" :has-text "late editor row 179"))
       (util/move-cursor-to-end)
       (util/press-seq " edited")
@@ -1525,8 +1520,6 @@
 (deftest selection-direction-and-hierarchical-select-all-test
   (testing "range and select-all remain inside the current visible container"
     (b/new-blocks ["select a" "select b" "select c" "select d"])
-    (util/exit-edit)
-    (w/click ".ls-page-blocks .ls-block:last-of-type .bullet-container")
     (b/select-blocks 3)
     (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 3)
     (is (= ["select b" "select c" "select d"]
@@ -1583,8 +1576,12 @@
           new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: transfer})
         );
       })()")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks" :has-text "Rich title"))
+    (k/esc)
     (util/exit-edit)
-    (assert/assert-is-visible (loc/filter ".ls-page-blocks" :has-text "Rich title"))
+    (assert/assert-is-visible
+     (loc/filter ".block-title-wrap" :has-text "Rich title"))
     (is (not (true? (w/eval-js "window.__e2eInjected === true"))))))
 
 (deftest structural-operation-undo-redo-steps-test
