@@ -55,8 +55,7 @@
       (ls-api-call! :show_msg message level {"timeout" 0})
       (assert/assert-is-visible
        (loc/filter ".ui__toast" :has-text message)))
-    (w/eval-js
-     "document.querySelectorAll('.ui__toast-close').forEach((button) => button.click())")
+    (util/click-all! ".ui__toast-close")
     (assert/assert-have-count ".ui__toast" 0)
 
     (open-more!)
@@ -155,17 +154,8 @@
     (let [favorites #(w/all-text-contents ".favorites .favorite-item")
           before (favorites)]
       (is (= 3 (count (filter #(string/includes? % "nav sample") before))))
-      (w/eval-js
-       "(() => {
-          const items = document.querySelectorAll('.favorites .favorite-item');
-          const source = items[items.length - 1];
-          const target = items[0];
-          const transfer = new DataTransfer();
-          source.dispatchEvent(new DragEvent('dragstart', {bubbles: true, dataTransfer: transfer}));
-          target.dispatchEvent(new DragEvent('dragover', {bubbles: true, dataTransfer: transfer}));
-          target.dispatchEvent(new DragEvent('drop', {bubbles: true, dataTransfer: transfer}));
-          source.dispatchEvent(new DragEvent('dragend', {bubbles: true, dataTransfer: transfer}));
-        })()")
+      (let [items (w/-query ".favorites .favorite-item")]
+        (.dragTo (.last items) (.first items)))
       (is (= 3 (count (set (filter #(string/includes? % "nav sample")
                                     (favorites))))))
       (util/refresh-until-graph-loaded)
@@ -298,9 +288,10 @@
       (b/save-block (str "[[" target "]]"))
       (util/search-and-click "Go to all pages")
       (assert/assert-is-visible ".ls-all-pages")
-      (let [count-before
-            (w/eval-js
-             "Number(document.querySelector('.ls-all-pages .views .text-xs')?.textContent)")]
+      (let [count-text (util/get-text ".ls-all-pages .views .text-xs")
+            count-before (some->> count-text
+                                  (re-find #"\d+")
+                                  parse-long)]
         (is (pos? count-before)))
       (assert/assert-is-visible
        (loc/filter ".ls-all-pages .ls-table-row" :has-text target))
