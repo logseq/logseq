@@ -164,27 +164,29 @@
     (b/new-blocks ["reaction sample a" "reaction sample b"])
     (b/select-blocks 2)
     (util/search-and-click "Add reaction")
-    (w/click "[data-emoji='👍'], button:text('👍')")
+    (w/fill ".ls-icon-picker input" "thumbs up")
+    (w/click ".ls-icon-picker button:has(em-emoji[id='+1'])")
     (assert/assert-have-count
-     ".ls-page-blocks .ls-block .reaction-item:has-text('👍')"
+     ".ls-page-blocks .ls-block-reactions button:has(em-emoji[id='+1'])"
      2)
     (w/click
-     ".ls-page-blocks .ls-block:first-of-type .reaction-item:has-text('👍')")
+     ".ls-page-blocks .ls-block:has-text('reaction sample a') .ls-block-reactions button:has(em-emoji[id='+1'])")
     (assert/assert-have-count
-     ".ls-page-blocks .ls-block:first-of-type .reaction-item:has-text('👍')"
+     ".ls-page-blocks .ls-block:has-text('reaction sample a') .ls-block-reactions button:has(em-emoji[id='+1'])"
      0)
     (w/click (loc/filter ".block-title-wrap" :has-text "reaction sample b"))
     (util/search-and-click "Add comment")
     (w/fill ".ls-comment-add textarea" "reaction comment")
     (w/click ".ls-comment-submit")
     (w/click ".ls-comment-row button[title='Add reaction']")
-    (w/click "[data-emoji='❤️'], button:text('❤️')")
+    (w/fill ".ls-icon-picker input" "red heart")
+    (w/click ".ls-icon-picker button:has(em-emoji[id='heart'])")
     (assert/assert-have-count
-     ".ls-comment-row .reaction-item:has-text('❤️')"
+     ".ls-comment-row .ls-block-reactions button:has(em-emoji[id='heart'])"
      1)
     (assert/assert-have-count
-     ".ls-block > .reaction-item:has-text('❤️')"
-     0)))
+     ".ls-page-blocks .ls-block-reactions button:has(em-emoji[id='heart'])"
+     1)))
 
 (deftest icon-and-structural-tag-visibility-test
   (testing "icons update mounted references and internal tags stay hidden from user tags"
@@ -338,25 +340,34 @@
 (deftest property-delete-and-bidirectional-refresh-test
   (testing "bidirectional values refresh both sides and deleting the definition removes usages"
     (let [property-name "sample bidirectional"
-          owner-tag "sample owner"
-          target-tag "sample target"]
-      (ls-api-call! :editor.createTag owner-tag)
-      (ls-api-call! :editor.createTag target-tag)
-      (ls-api-call! :editor.upsertProperty
-                    property-name
-                    {:type "node" :bidirectional true})
-      (let [owner (ls-api-call! :editor.createPage "sample owner object"
-                                {:tags [owner-tag]})
-            target (ls-api-call! :editor.createPage "sample target object"
-                                 {:tags [target-tag]})]
+          owner-tag "SampleOwner"
+          container-page "bidirectional refresh host"
+          owner-class (ls-api-call! :editor.createTag
+                                    owner-tag
+                                    {:tagProperties [{:name property-name
+                                                      :schema {:type "node"}}]})
+          property (ls-api-call! :editor.getProperty property-name)]
+      (ls-api-call! :editor.upsertBlockProperty
+                    (get property "id")
+                    "logseq.property/classes"
+                    (get owner-class "id"))
+      (ls-api-call! :editor.upsertBlockProperty
+                    (get owner-class "uuid")
+                    "logseq.property.class/enable-bidirectional?"
+                    true)
+      (ls-api-call! :editor.createPage container-page)
+      (let [owner (ls-api-call! :editor.insertBlock
+                                container-page
+                                (str "sample owner object #" owner-tag))
+            target (ls-api-call! :editor.createPage "sample target object")]
         (ls-api-call! :editor.upsertBlockProperty
-                      (get owner "uuid") property-name (get target "uuid"))
+                      (get owner "uuid") property-name (get target "id"))
         (page/goto-page "sample target object")
         (assert/assert-is-visible
-         (loc/filter ".ls-view-body, .references" :has-text "sample owner object"))
+         (loc/filter ".ls-bidirectional-properties" :has-text "sample owner object"))
         (ls-api-call! :editor.removeBlockProperty (get owner "uuid") property-name)
         (assert/assert-have-count
-         (loc/filter ".ls-view-body, .references" :has-text "sample owner object")
+         (loc/filter ".ls-bidirectional-properties" :has-text "sample owner object")
          0)
         (ls-api-call! :editor.removeProperty property-name)
         (is (nil? (ls-api-call! :editor.getProperty property-name)))))))
