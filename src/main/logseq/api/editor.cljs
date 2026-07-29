@@ -482,6 +482,11 @@
                            own-properties)]
           properties)))))
 
+(defn- property-value->js
+  [value]
+  ;; cljs-bean does not convert ClojureScript sets to plain JavaScript values.
+  (sdk-utils/result->js (if (set? value) (vec value) value)))
+
 (defn get_block_property
   [id key]
   (this-as this
@@ -493,16 +498,16 @@
                                  (get properties (keyword property-name))
                                  (get properties ident))
               property-value (cond-> property-value
-                                     (map? property-value)
-                                     (assoc
-                                       :block/value (or (:logseq.property/value property-value)
-                                                        (:block/title property-value))
-                                       :db/ident ident))]
-          (if (map? property-value)
-            (sdk-utils/result->js property-value)
+                               (map? property-value)
+                               (assoc
+                                :block/value (or (:logseq.property/value property-value)
+                                                 (:block/title property-value))
+                                :db/ident ident))]
+          (if (or (map? property-value) (set? property-value))
+            (property-value->js property-value)
             (p/let [parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
               (or parsed-value
-                  (sdk-utils/result->js property-value)))))))))
+                  (property-value->js property-value)))))))))
 
 (def get_block_properties
   (fn [id]

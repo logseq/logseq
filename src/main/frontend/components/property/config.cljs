@@ -803,7 +803,7 @@
 (hsx/defc property-type-sub-pane
   [property {:keys [id set-sub-open! _position]}]
   (let [handle-select! (fn [^js e]
-                         (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
+                         (when-let [v (some-> (.-currentTarget e) (.-dataset) (.-value))]
                            (p/do!
                             (db-property-handler/upsert-property!
                              (:db/ident property)
