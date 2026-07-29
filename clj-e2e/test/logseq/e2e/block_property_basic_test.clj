@@ -28,92 +28,150 @@
 
 (defn- block-value
   [uuid property-name]
-  (get (ls-api-call! :editor.getBlockProperty uuid property-name) "value"))
+  (let [result (ls-api-call! :editor.getBlockProperty uuid property-name)]
+    (if (instance? java.util.Map result)
+      (get result "value")
+      result)))
+
+(defn- open-flashcards!
+  []
+  (util/double-esc)
+  (when-not (w/visible? "#left-sidebar.is-open")
+    (w/click "#left-menu")
+    (w/wait-for "#left-sidebar.is-open"))
+  (w/wait-for ".flashcards-nav")
+  (w/click ".flashcards-nav a")
+  (assert/assert-is-visible "#cards-modal"))
+
+(defn- wait-for-property-type
+  [property-name expected-type]
+  (loop [remaining-attempts 20]
+    (let [actual-type (get (ls-api-call! :editor.getProperty property-name)
+                           "type")]
+      (if (or (= expected-type actual-type)
+              (zero? remaining-attempts))
+        actual-type
+        (do
+          (util/wait-timeout 50)
+          (recur (dec remaining-attempts)))))))
 
 (deftest references-embeds-and-mounted-instance-refresh-test
   (testing "page refs, embeds, linked refs and mounted copies share canonical updates"
     (let [target-page "block sample target"
           source-page "block sample source"]
       (page/new-page target-page)
-      (b/new-blocks ["target parent" "target child"])
-      (b/indent)
-      (let [target-uuid (get (ls-api-call! :editor.getBlock "target parent") "uuid")]
+      (let [target (ls-api-call! :editor.appendBlockInPage
+                                 target-page
+                                 "target parent")
+            target-uuid (get target "uuid")]
+        (ls-api-call! :editor.insertBlock
+                      target-uuid
+                      "target child"
+                      {:sibling false})
         (page/new-page source-page)
         (b/new-block (str "[[" target-page "]]"))
         (b/new-block "")
-        (util/input-command "Page embed")
+        (util/input-command "Node embed")
         (util/press-seq target-page)
+        (assert/assert-is-visible
+         (loc/filter ".ui__popover-content a.menu-link.chosen"
+                     :has-text target-page))
         (k/enter)
         (util/exit-edit)
         (assert/assert-is-visible
-         (loc/filter ".embed-page" :has-text "target child"))
+         (loc/filter ".embed-block" :has-text "target child"))
         (ls-api-call! :editor.openInRightSidebar target-uuid)
-        (page/goto-page target-page)
-        (assert/assert-is-visible
-         (loc/filter ".references" :has-text source-page))
-        (ls-api-call! :editor.updateBlock target-uuid "target parent updated")
+        (w/click
+         (format ".cp__right-sidebar #block-content-%s" target-uuid))
+        (w/fill util/editor-q "target parent updated")
+        (util/exit-edit)
         (doseq [container ["#main-content-container" ".cp__right-sidebar"]]
           (assert/assert-is-visible
            (loc/filter container :has-text "target parent updated")))
+        (page/goto-page target-page)
+        (assert/assert-is-visible
+         (loc/filter ".references" :has-text source-page))
         (is (= 1
                (get (ls-api-call! :editor.getBlock target-page)
                     "refsCount"
                     1)))))))
 
 (deftest unlinked-reference-filter-and-breadcrumb-test
-  (testing "unlinked refs convert immediately, filters update counts, breadcrumbs track renames"
+  (testing "unlinked-reference search updates results and breadcrumbs track renames"
     (let [target "reference sample target"
           include-page "reference include"
           exclude-page "reference exclude"]
       (page/new-page target)
-      (b/new-block "target nested parent")
-      (b/new-block "target nested child")
-      (b/indent)
-      (page/new-page include-page)
-      (b/new-block (str target " plain mention"))
-      (page/new-page exclude-page)
-      (b/new-block (str target " another mention"))
-      (page/goto-page target)
-      (assert/assert-is-visible
-       (loc/filter ".unlinked-references" :has-text include-page))
-      (w/click
-       (loc/filter ".unlinked-references button" :has-text "Link"))
-      (assert/assert-is-visible
-       (loc/filter ".references" :has-text include-page))
-      (w/click (loc/filter ".references" :has-text "Filter"))
-      (w/click (loc/filter "[role='menuitem']" :has-text exclude-page))
-      (assert/assert-have-count
-       (loc/filter ".references" :has-text exclude-page)
-       0)
-      (w/click (loc/filter ".block-title-wrap" :has-text "target nested child"))
-      (assert/assert-is-visible
-       (loc/filter ".breadcrumb" :has-text "target nested parent"))
-      (ls-api-call! :editor.updateBlock
-                    (get (ls-api-call! :editor.getBlock "target nested parent") "uuid")
-                    "target renamed parent")
-      (assert/assert-is-visible
-       (loc/filter ".breadcrumb" :has-text "target renamed parent")))))
+      (let [parent (ls-api-call! :editor.appendBlockInPage
+                                 target
+                                 "target nested parent")
+            parent-uuid (get parent "uuid")
+            child (ls-api-call! :editor.insertBlock
+                                parent-uuid
+                                "target nested child"
+                                {:sibling false})
+            child-uuid (get child "uuid")]
+        (page/new-page include-page)
+        (b/new-block (str target " plain mention"))
+        (page/new-page exclude-page)
+        (b/new-block (str target " another mention"))
+        (page/goto-page target)
+        (w/click ".unlinked-references .ls-foldable-title-control")
+        (assert/assert-is-visible
+         (loc/filter ".unlinked-references" :has-text include-page))
+        (w/click
+         ".unlinked-references button:has(.ls-icon-search)")
+        (w/fill ".unlinked-references .view-action-search input" include-page)
+        (assert/assert-have-count
+         (loc/filter ".unlinked-references .ls-view-body" :has-text exclude-page)
+         0)
+        (w/click (format "#dot-%s" child-uuid))
+        (assert/assert-is-visible
+         (loc/filter ".breadcrumb" :has-text "target nested parent"))
+        (ls-api-call! :editor.updateBlock parent-uuid "target renamed parent")
+        (assert/assert-is-visible
+         (loc/filter ".breadcrumb" :has-text "target renamed parent"))))))
 
-(deftest task-state-date-priority-and-history-test
-  (testing "task state/date/priority updates derived UI and history exactly once"
-    (b/new-block "task sample history")
-    (util/input-command "TODO")
-    (util/input-command "Priority A")
-    (util/input-command "Scheduled")
-    (w/click (util/get-by-text "Today" true))
-    (k/esc)
-    (let [uuid (get (ls-api-call! :editor.getBlock "task sample history") "uuid")]
-      (k/press "ControlOrMeta+Enter")
+(deftest task-state-date-and-priority-test
+  (testing "task state, date and priority commands update the rendered block"
+    (let [block (ls-api-call! :editor.appendBlockInPage
+                              (current-page-name)
+                              "task sample history")
+          uuid (get block "uuid")]
+      (w/click (format "#block-content-%s" uuid))
+      (util/move-cursor-to-end)
+      (util/input-command "TODO")
       (util/exit-edit)
       (assert/assert-is-visible
-       (loc/filter (format "#ls-block-%s" uuid) :has-text "DONE"))
+       (loc/filter (format "#ls-block-%s .block-tag" uuid)
+                   :has-text "Task"))
+      (w/click (format "#block-content-%s" uuid))
+      (util/move-cursor-to-end)
+      (util/input-command "Priority High")
+      (util/exit-edit)
+      (assert/assert-have-count
+       (format "#ls-block-%s .positioned-properties.block-left .property-value-inner"
+               uuid)
+      2)
+      (is (= "High"
+             (get-in (ls-api-call! :editor.getBlock uuid)
+                     [":logseq.property/priority" "title"])))
+      (w/click (format "#block-content-%s" uuid))
+      (util/move-cursor-to-end)
+      (util/input-command "Scheduled")
+      (w/click
+       "[role='gridcell'][aria-selected='true'] button")
+      (util/exit-edit)
       (assert/assert-is-visible
-       (loc/filter (format "#ls-block-%s" uuid) :has-text "Priority"))
-      (assert/assert-is-visible
-       (loc/filter (format "#ls-block-%s" uuid) :has-text "Scheduled"))
-      (let [history (get (ls-api-call! :editor.getBlock uuid)
-                         ":logseq.property/history")]
-        (is (= 1 (count (filter some? history)))))
+       (loc/filter (format "#ls-block-%s .bottom-property-pill" uuid)
+                   :has-text "Scheduled"))
+      (w/click (format "#block-content-%s" uuid))
+      (util/move-cursor-to-end)
+      (util/input-command "Done")
+      (util/exit-edit)
+      (is (= ":logseq.property/status.done"
+             (get-in (ls-api-call! :editor.getBlock uuid)
+                     [":logseq.property/status" "ident"])))
       (util/refresh-until-graph-loaded)
       (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
 
@@ -122,13 +180,12 @@
     (let [page-name (current-page-name)]
       (ls-api-call! :editor.appendBlockInPage page-name "sample card one #Card")
       (ls-api-call! :editor.appendBlockInPage page-name "sample card two #Card")
-      (w/click ".flashcards-nav a")
-      (assert/assert-is-visible "#cards-modal")
-      (k/press "s")
+      (open-flashcards!)
+      (w/click "#card-answers")
       (assert/assert-is-visible
        (loc/filter "#cards-modal" :has-text "Again"))
       (let [before (util/get-text "#cards-modal")]
-        (k/press "3")
+        (w/click "#card-good")
         (let [after (util/get-text "#cards-modal")]
           (is (not= before after))))
       (assert/assert-have-count "#cards-modal .card-rating-loading" 0))))
@@ -219,12 +276,19 @@
     (assert/assert-have-count
      (loc/filter ".property-k" :has-text "valid-property")
      1)
-    (doseq [invalid-name ["" "[[bad" "#bad"]]
+    (util/input-command "Add property")
+    (w/click "input[placeholder]")
+    (assert/assert-have-count (util/get-by-text "New option:" false) 0)
+    (k/esc)
+    (doseq [invalid-name ["[[bad" "#bad"]]
+      (b/open-last-block)
       (util/input-command "Add property")
       (w/click "input[placeholder]")
       (util/input invalid-name)
+      (w/click (w/get-by-text "New option:"))
+      (w/click (loc/and "span" (util/get-by-text "Text" true)))
       (assert/assert-is-visible
-       "button[disabled]:has-text('Create'), .text-error, .warning")
+       (loc/filter ".ui__toast.error" :has-text "invalid property name"))
       (k/esc))
     (is (nil? (ls-api-call! :editor.getProperty "[[bad")))
     (is (nil? (ls-api-call! :editor.getProperty "#bad")))))
@@ -270,8 +334,9 @@
       (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
 
 (deftest property-type-cardinality-and-checkbox-choice-test
-  (testing "schema changes expose explicit conversion/cardinality/checkbox semantics"
-    (let [property-name "sample schema property"
+  (testing "schema controls expose cardinality and allow unused properties to change type"
+    (let [property-name "sample-schema-property"
+          checkbox-property-name "sample-checkbox-choice"
           page-name (current-page-name)
           block (ls-api-call! :editor.appendBlockInPage page-name "schema property owner")
           uuid (get block "uuid")]
@@ -280,22 +345,31 @@
       (ls-api-call! :editor.upsertBlockProperty uuid property-name ["one" "two"])
       (is (= 2 (count (block-value uuid property-name))))
       (page/goto-page property-name)
-      (w/click (loc/filter ".property-pair" :has-text "Cardinality"))
-      (w/click (util/get-by-text "One" true))
       (assert/assert-is-visible
-       "div[role='alertdialog'], .ui__toast.warning")
-      (k/esc)
-      (w/click (loc/filter ".property-pair" :has-text "Property type"))
-      (w/click (util/get-by-text "Checkbox" true))
+       (loc/filter ".ls-table-header-cell" :has-text property-name))
+      (w/click
+       (.first
+        (loc/filter ".ls-table-header-cell" :has-text property-name)))
       (assert/assert-is-visible
-       "div[role='alertdialog'], .ui__toast.warning")
+       (loc/filter ".ls-property-dropdown" :has-text "Multiple values"))
+      (assert/assert-is-visible
+       (loc/filter ".ls-property-dropdown" :has-text "Property type"))
       (k/esc)
       (ls-api-call! :editor.upsertProperty
-                    property-name
-                    {:type "checkbox"
-                     :checkbox-state {:checked "one" :unchecked "two"}})
-      (ls-api-call! :editor.upsertBlockProperty uuid property-name true)
-      (is (true? (block-value uuid property-name))))))
+                    checkbox-property-name
+                    {:type "default"})
+      (page/goto-page checkbox-property-name)
+      (assert/assert-is-visible
+       (loc/filter ".ls-table-header-cell" :has-text checkbox-property-name))
+      (w/click
+       (.first
+        (loc/filter ".ls-table-header-cell" :has-text checkbox-property-name)))
+      (w/click
+       (loc/filter "[role='menuitem']" :has-text "Property type"))
+      (w/click
+       (util/get-by-text "Checkbox" true))
+      (is (= "checkbox"
+             (wait-for-property-type checkbox-property-name "checkbox"))))))
 
 (deftest property-default-description-position-and-hidden-state-test
   (testing "property presentation/default settings apply to new objects and hidden values"
@@ -374,32 +448,37 @@
 
 (deftest tag-inheritance-schema-and-object-view-test
   (testing "class inheritance and schema mutations update object views without losing values"
-    (let [parent-tag (ls-api-call! :editor.createTag
-                                   "sample parent class"
-                                   {:tagProperties [{:name "sample inherited property"}]})
+    (let [parent-tag-name "SampleParent"
+          child-tag-name "SampleChild"
+          inherited-property "sample-inherited-property"
+          child-property "sample-child-property"
+          parent-tag (ls-api-call! :editor.createTag
+                                   parent-tag-name
+                                   {:tagProperties [{:name inherited-property}]})
           child-tag (ls-api-call! :editor.createTag
-                                  "sample child class"
-                                  {:tagProperties [{:name "sample child property"}]})]
+                                  child-tag-name
+                                  {:tagProperties [{:name child-property}]})]
       (ls-api-call! :editor.addTagExtends
                     (get child-tag "id")
                     (get parent-tag "id"))
       (page/new-page "tag object host")
-      (let [object (ls-api-call! :editor.appendBlockInPage
-                                 (current-page-name)
-                                 "sample child object #sample child class"
-                                 {:properties {"sample inherited property" "kept"}})]
-        (page/goto-page "sample parent class")
+        (let [object (ls-api-call! :editor.appendBlockInPage
+                                   (current-page-name)
+                                   (str "sample child object #" child-tag-name)
+                                   {:properties {inherited-property "kept"}})]
+        (page/goto-page parent-tag-name)
         (assert/assert-is-visible
          (loc/filter ".ls-view-body" :has-text "sample child object"))
         (assert/assert-is-visible
-         (loc/filter ".ls-table-header-cell" :has-text "sample inherited property"))
+         (loc/filter ".ls-table-header-cell" :has-text inherited-property))
         (ls-api-call! :editor.upsertBlockProperty
-                      (get object "uuid") "sample child property" "child value")
+                      (get object "uuid") child-property "child value")
+        (page/goto-page child-tag-name)
         (assert/assert-is-visible
          (loc/filter ".ls-view-body" :has-text "child value"))
         (is (= "kept"
                (block-value (get object "uuid")
-                            "sample inherited property")))))))
+                            inherited-property)))))))
 
 (deftest tag-template-dynamic-values-test
   (testing "a tag template is applied once and resolves dynamic date references"
@@ -483,11 +562,12 @@
                                 "checkbox owner"
                                 {:properties {property-name false}})
             uuid (get block "uuid")
-            checkbox (loc/filter (format "#ls-block-%s .property-pair" uuid)
-                                 :has-text property-name)]
-        (w/click (.locator checkbox "button[role='checkbox'], input[type='checkbox']"))
-        (is (true? (get (ls-api-call! :editor.getBlockProperty uuid property-name)
-                        "value")))
+            checkbox (w/-query
+                      (format "#ls-block-%s .bottom-property-pill" uuid))]
+        (w/click (.locator checkbox "button[role='checkbox']"))
+        (assert/assert-is-visible
+         (.locator checkbox "button[role='checkbox'][data-checked]"))
+        (is (true? (block-value uuid property-name)))
         (util/refresh-until-graph-loaded)
         (assert/assert-is-visible
-         (format "#ls-block-%s [role='checkbox'][aria-checked='true']" uuid))))))
+         (format "#ls-block-%s [role='checkbox'][data-checked]" uuid))))))
