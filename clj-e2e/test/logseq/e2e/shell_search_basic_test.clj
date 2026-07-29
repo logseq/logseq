@@ -259,22 +259,19 @@
 (deftest sidebar-resize-bounds-and-persistence-test
   (testing "sidebar resize is bounded and leaves one content scrollbar"
     (w/click ".toggle-right-sidebar")
-    (let [handle (w/-query ".cp__right-sidebar .resizer, .cp__right-sidebar-resizer")]
-      (.hover handle)
-      (w/eval-js
-       "(() => {
-          const handle = document.querySelector('.cp__right-sidebar .resizer, .cp__right-sidebar-resizer');
-          const rect = handle.getBoundingClientRect();
-          handle.dispatchEvent(new PointerEvent('pointerdown',
-            {bubbles:true, buttons:1, clientX:rect.left, clientY:rect.top}));
-          document.dispatchEvent(new PointerEvent('pointermove',
-            {bubbles:true, buttons:1, clientX:20, clientY:rect.top}));
-          document.dispatchEvent(new PointerEvent('pointerup',
-            {bubbles:true, buttons:0, clientX:20, clientY:rect.top}));
-        })()"))
-    (let [width (w/eval-js
-                 "document.querySelector('.cp__right-sidebar').getBoundingClientRect().width")]
-      (is (< 200 width (- (w/eval-js "window.innerWidth") 200))))
+    (let [handle (w/-query ".cp__right-sidebar .resizer, .cp__right-sidebar-resizer")
+          box (.boundingBox handle)
+          mouse (.mouse (w/get-page))
+          start-x (+ (.-x box) (/ (.-width box) 2))
+          start-y (+ (.-y box) (/ (.-height box) 2))]
+      (.move mouse start-x start-y)
+      (.down mouse)
+      (.move mouse 20 start-y)
+      (.up mouse))
+    (let [width (.-width (.boundingBox
+                          (w/-query ".cp__right-sidebar")))
+          viewport-width (.-width (.viewportSize (w/get-page)))]
+      (is (< 200 width (- viewport-width 200))))
     (util/refresh-until-graph-loaded)
     (assert/assert-have-count
      ".cp__right-sidebar .sidebar-item-list"
@@ -303,10 +300,12 @@
     (util/exit-edit)
     (doseq [keys [["t" "d"] ["t" "w"]]]
       (doseq [key keys] (k/press key)))
-    (is (or (w/eval-js
-             "document.documentElement.classList.contains('is-wide-mode')")
-            (w/eval-js
-             "document.querySelector('#main-content-container').classList.contains('document-mode')")))
+    (is (or (string/includes?
+             (or (.getAttribute (w/-query "html") "class") "")
+             "is-wide-mode")
+            (string/includes?
+             (or (.getAttribute (w/-query "#main-content-container") "class") "")
+             "document-mode")))
     (util/search-and-click "Highlight recent blocks")
     (assert/assert-is-visible ".recent-block, .is-recent")
     (util/search-and-click "Highlight recent blocks")
@@ -318,16 +317,17 @@
   (testing "general appearance settings repaint, persist and restore default CSS"
     (open-settings!)
     (settings-tab! "general")
-    (let [initial-language (w/eval-js "document.documentElement.lang")]
+    (let [html (w/-query "html")
+          initial-language (.getAttribute html "lang")]
       (w/click ".cp__settings-general .ui__select-trigger")
       (w/click (loc/filter "[role='option']" :has-text "简体中文"))
-      (is (= "zh-CN" (w/eval-js "document.documentElement.lang")))
+      (is (= "zh-CN" (.getAttribute html "lang")))
       (w/click ".cp__settings-general .ui__select-trigger")
       (w/click (loc/filter "[role='option']" :has-text "English"))
-      (is (= initial-language (w/eval-js "document.documentElement.lang"))))
+      (is (= initial-language (.getAttribute html "lang"))))
     (settings-tab! "general")
     (w/click (loc/filter ".cp__theme-modes-options" :has-text "Dark"))
-    (is (= "dark" (w/eval-js "document.documentElement.dataset.theme")))
+    (is (= "dark" (.getAttribute (w/-query "html") "data-theme")))
     (w/click "input[type='color'], button[aria-label*='accent']")
     (w/click "[data-color='purple']")
     (is (not (string/blank?
@@ -336,7 +336,7 @@
                   .getPropertyValue('--ls-link-text-color')"))))
     (k/esc)
     (util/refresh-until-graph-loaded)
-    (is (= "dark" (w/eval-js "document.documentElement.dataset.theme")))
+    (is (= "dark" (.getAttribute (w/-query "html") "data-theme")))
     (open-settings!)
     (settings-tab! "general")
     (w/click (util/get-by-text "Default" true))
@@ -442,7 +442,7 @@
         (assert/assert-is-visible
          (loc/filter ".search-results" :has-text unique-text))
         (w/click (.first (loc/filter ".search-results > div" :has-text unique-text)))
-        (is (string/includes? (w/eval-js "window.location.hash") uuid))))))
+        (is (string/includes? (.url (w/get-page)) uuid))))))
 
 (deftest alias-search-index-updates-test
   (testing "page alias finds the canonical title and disappears after removal"

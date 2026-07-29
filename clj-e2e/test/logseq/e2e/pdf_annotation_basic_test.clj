@@ -265,13 +265,11 @@
   (testing "PDF open/find/page navigation/highlight/close state is isolated and reusable"
     (upload-pdf-asset!)
     (assert/assert-is-visible ".extensions__pdf-viewer")
-    (let [initial-page
-          (w/eval-js
-           "document.querySelector('.extensions__pdf-viewer .page')?.dataset.pageNumber")]
+    (let [page-locator (w/-query ".extensions__pdf-viewer .page")
+          initial-page (.getAttribute page-locator "data-page-number")]
       (k/press "Alt+n")
       (is (not= initial-page
-                (w/eval-js
-                 "document.querySelector('.extensions__pdf-viewer .page')?.dataset.pageNumber"))))
+                (.getAttribute page-locator "data-page-number"))))
     (k/press "Alt+f")
     (assert/assert-is-visible
      ".extensions__pdf-viewer input[type='search'], .pdf-find-bar input")
