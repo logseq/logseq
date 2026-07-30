@@ -1,7 +1,6 @@
 (ns logseq.e2e.graph
   (:require [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
-            [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
@@ -85,9 +84,8 @@
     (maybe-input-e2ee-password)
     (w/wait-for cloud-ready-indicator {:timeout 20000}))
 
-  ;; new graph can blocks the ui because the db need to be created and restored,
-  ;; I have no idea why `search-and-click` failed to auto-wait sometimes.
-  (util/wait-timeout 1000))
+  (w/wait-for-not-visible new-graph-dialog {:timeout 30000})
+  (assert/assert-graph-loaded?))
 
 (defn new-graph
   ([graph-name enable-sync?]
