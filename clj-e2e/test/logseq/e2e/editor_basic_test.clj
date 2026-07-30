@@ -1314,21 +1314,25 @@
     (b/new-block "")
     (let [before (util/page-blocks-count)]
       (k/enter)
-      (is (= before (util/page-blocks-count)))
+      (is (= (inc before) (util/page-blocks-count)))
       (assert/assert-have-count util/editor-q 1))
     (b/save-block "first line second line")
     (k/press "Home")
     (dotimes [_ 10] (k/arrow-right))
     (k/press "Shift+Enter")
     (is (= "first line\n second line" (util/get-edit-content)))
+    (util/exit-edit)
     (is (= 1
            (count (filter #(string/includes? % "first line")
                           (util/get-page-blocks-contents)))))
     (b/new-blocks ["empty parent" ""])
     (b/indent)
-    (k/enter)
-    (is (= 1 (count (filter string/blank?
-                            (util/get-page-blocks-contents)))))))
+    (let [before-count (util/page-blocks-count)
+          [before-x _] (util/bounding-xy (util/get-editor))]
+      (k/enter)
+      (let [[after-x _] (util/bounding-xy (util/get-editor))]
+        (is (= before-count (util/page-blocks-count)))
+        (is (< after-x before-x))))))
 
 (deftest backspace-character-and-tree-merge-test
   (testing "Backspace distinguishes character deletion from structural merge"
