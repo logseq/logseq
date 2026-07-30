@@ -1,5 +1,6 @@
 (ns logseq.e2e.fixtures
-  (:require [com.climate.claypoole :as cp]
+  (:require [clojure.test :as t]
+            [com.climate.claypoole :as cp]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.config :as config]
             [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
@@ -127,15 +128,24 @@
   (new-logseq-page-in-rtc*)
   (f))
 
+(defn- failure-count
+  []
+  (let [{:keys [fail error]} (some-> t/*report-counters* deref)]
+    (+ (or fail 0) (or error 0))))
+
 (defn validate-graph
   [f]
-  (f)
-  (if (and @*page1 @*page2)
-    (doseq [p [@*page1 @*page2]]
-      (w/with-page p
-        (graph/validate-graph)))
+  (let [failures-before (failure-count)]
+    (f)
+    ;; UI-dependent validation can mask the primary failure when a test leaves
+    ;; the page mid-interaction.
+    (when (= failures-before (failure-count))
+      (if (and @*page1 @*page2)
+        (doseq [p [@*page1 @*page2]]
+          (w/with-page p
+            (graph/validate-graph)))
 
-    (graph/validate-graph)))
+        (graph/validate-graph)))))
 
 (def ^:private formatter (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH-mm-ss"))
 (defn- inst-string
