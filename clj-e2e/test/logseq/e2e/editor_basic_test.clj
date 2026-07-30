@@ -50,7 +50,8 @@
       (assert/assert-is-visible root)
       (w/click (.locator root "button:text('Restore')"))
       (assert/assert-have-count root 0)
-      (util/click-all! ".ui__toast.success button"))))
+      (w/wait-for-not-visible
+       (loc/filter ".ui__toast.success" :has-text page-name)))))
 
 (deftest recycle-delete-removes-row-and-recent-entry-test
   (let [page-name (str "recycle-delete-" (random-uuid))
@@ -77,7 +78,8 @@
         (is (string/includes? (:message @dialog*) "cannot be undone")))
       (assert/assert-have-count root 0)
       (assert/assert-have-count recent-item 0)
-      (util/click-all! ".ui__toast.success button"))))
+      (w/wait-for-not-visible
+       (loc/filter ".ui__toast.success" :has-text page-name)))))
 
 (defn- open-block-context-menu!
   []
