@@ -112,14 +112,15 @@
       (is (not= "none" after)))))
 
 (deftest notification-appears-at-top-right-test
-  (let [message-key "notification-position-test"]
+  (let [message-key "notification-position-test"
+        toast (loc/filter ".ui__toast" :has-text "notification position test")]
     (ls-api-call! :show_msg
                   "notification position test"
                   "success"
                   {"key" message-key
                    "timeout" 0})
     (try
-      (w/wait-for ".ui__toast")
+      (w/wait-for toast)
       (is (= "top-right"
              (w/eval-js
               "(() => {
@@ -131,9 +132,8 @@
                  return `${vertical}-${horizontal}`;
                })()")))
       (finally
-        (ls-api-call! :close_msg message-key)
-        (util/click-all! ".ui__toast-close")
-        (util/wait-timeout 600)))))
+        (ls-api-call! :ui.close_msg message-key)
+        (w/wait-for-not-visible toast)))))
 
 (deftest favorites-and-recents-load-after-refresh-test
   (let [page-name (str "sidebar-startup-" (random-uuid))
