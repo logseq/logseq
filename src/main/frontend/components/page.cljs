@@ -560,9 +560,15 @@
 
 (hsx/defc page-resource
   [option resource-key]
-  (let [page-uuid (db-hooks/use-resource resource-key)]
-    (when page-uuid
-      (loaded-page option page-uuid))))
+  (let [{:keys [status value error]}
+        (db-hooks/use-resource-snapshot resource-key)]
+    (case status
+      :loading nil
+      :ready (if value
+               (loaded-page option value)
+               [:div.opacity-75 (t :page/not-found)])
+      :error (throw error)
+      nil)))
 
 (hsx/defc page-aux
   [option]
