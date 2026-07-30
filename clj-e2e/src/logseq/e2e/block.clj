@@ -5,8 +5,7 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [wally.repl :as repl]))
+            [wally.main :as w]))
 
 (defn open-last-block
   "Open the last existing block or pressing add button to create a new block"
@@ -35,28 +34,21 @@
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
 (defn new-block
-  [title & [in-retry?]]
-  (let [editor (util/get-editor)]
-    (when-not editor (open-last-block))
-    (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
-      (is (some? last-id))
-      (k/press "Control+e")
-      (k/enter)
-      (try
-        (assert/assert-is-visible
-         (loc/filter ".editor-wrapper"
-                     :has "textarea"
-                     :has-not (str "#" last-id)))
-        (assert/assert-editor-mode)
-        (save-block title)
-        (catch Throwable e
-          (if in-retry?
-            (throw (ex-info
-                    "new-block exception"
-                    {:current-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")
-                     :last-id last-id}
-                    e))
-            (new-block title true)))))))
+  [title]
+  (when-not (util/get-editor)
+    (open-last-block))
+  (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
+    (is (some? last-id))
+    (util/move-cursor-to-end)
+    (k/enter)
+    (when (seq title)
+      (util/press-seq title))
+    (assert/assert-is-visible
+     (loc/filter ".editor-wrapper"
+                 :has "textarea"
+                 :has-not (str "#" last-id)))
+    (assert/assert-editor-mode)
+    (is (= title (util/get-edit-content)))))
 
 ;; TODO: support tree
 (defn new-blocks
