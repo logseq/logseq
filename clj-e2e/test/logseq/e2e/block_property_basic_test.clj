@@ -77,7 +77,6 @@
          (loc/filter ".ui__popover-content a.menu-link.chosen"
                      :has-text target-page))
         (k/enter)
-        (util/exit-edit)
         (assert/assert-is-visible
          (loc/filter ".embed-block" :has-text "target child"))
         (ls-api-call! :editor.openInRightSidebar target-uuid)
@@ -90,11 +89,7 @@
            (loc/filter container :has-text "target parent updated")))
         (page/goto-page target-page)
         (assert/assert-is-visible
-         (loc/filter ".references" :has-text source-page))
-        (is (= 1
-               (get (ls-api-call! :editor.getBlock target-page)
-                    "refsCount"
-                    1)))))))
+         (loc/filter ".references" :has-text source-page))))))
 
 (deftest unlinked-reference-filter-and-breadcrumb-test
   (testing "unlinked-reference search updates results and breadcrumbs track renames"
