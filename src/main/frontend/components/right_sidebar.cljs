@@ -14,6 +14,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -91,6 +92,13 @@
                                      (state/sidebar-replace-block! [repo input block-type]
                                                                    [repo new-value block-type]))}])
 
+(hsx/defc page-title
+  [page-uuid]
+  (when-let [page (db-hooks/use-block page-uuid)]
+    [:.flex.items-center.page-title.gap-1
+     (icon/get-node-icon-cp page {:class "text-md"})
+     [:span.overflow-hidden.text-ellipsis (:block/title page)]]))
+
 (defn- build-sidebar-item
   [repo idx db-id block-type *db-id init-key entity contents-page]
   (let [page? (entity/page? entity)
@@ -98,9 +106,7 @@
         block-render (fn []
                        (when entity
                          (if page?
-                           [[:.flex.items-center.page-title.gap-1
-                             (icon/get-node-icon-cp entity {:class "text-md"})
-                             [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
+                           [(page-title (:block/uuid entity))
                             (page-cp repo (str (:block/uuid entity)))
                             item-meta]
                            (conj (block-with-breadcrumb repo entity idx [repo db-id block-type] false)
