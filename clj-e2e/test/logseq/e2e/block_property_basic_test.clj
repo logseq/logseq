@@ -186,29 +186,34 @@
       (assert/assert-have-count "#cards-modal .card-rating-loading" 0))))
 
 (deftest multi-target-comment-draft-edit-delete-test
-  (testing "multi-target comments have correct ownership and cancel/edit/delete lifecycle"
+  (testing "multi-target comments preserve drafts and support edit/delete lifecycle"
     (b/new-blocks ["comment sample a" "comment sample b"])
     (b/select-blocks 2)
     (util/search-and-click "Add comment")
     (assert/assert-is-visible
      (loc/filter ".ls-comments-area" :has-text "those blocks"))
-    (w/fill ".ls-comment-add textarea" "discarded comment")
+    (w/fill ".ls-comment-add textarea" "draft sample comment")
     (k/esc)
     (assert/assert-have-count
-     (loc/filter ".ls-comment-row" :has-text "discarded comment")
+     (loc/filter ".ls-comment-row" :has-text "draft sample comment")
      0)
-    (util/search-and-click "Add comment")
+    (let [reply-placeholder
+          (loc/filter ".ls-comment-reply-placeholder"
+                      :has-text "draft sample comment")]
+      (assert/assert-is-visible reply-placeholder)
+      (w/click reply-placeholder))
+    (is (= "draft sample comment"
+           (.inputValue (w/-query ".ls-comment-add textarea"))))
     (w/fill ".ls-comment-add textarea" "saved sample comment")
     (w/click ".ls-comment-submit")
     (assert/assert-is-visible
      (loc/filter ".ls-comment-row" :has-text "saved sample comment"))
-    (w/click ".ls-comment-row button[title='Edit']")
+    (w/click ".ls-comment-row button[aria-label='Click to edit']")
     (w/fill ".ls-comment-row textarea" "edited sample comment")
     (k/enter)
     (assert/assert-is-visible
      (loc/filter ".ls-comment-row" :has-text "edited sample comment"))
     (w/click ".ls-comment-row button[title='Delete']")
-    (w/click "div[role='alertdialog'] button:text('Confirm')")
     (assert/assert-have-count ".ls-comment-row" 0)))
 
 (deftest block-and-comment-reaction-toggle-test
