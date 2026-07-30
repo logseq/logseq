@@ -16,14 +16,16 @@
 (hsx/defc page-blocks
   [page]
   (let [[scroll-container set-scroll-container] (hooks/use-state nil)
-        *ref (hooks/use-ref nil)]
+        *ref (hooks/use-ref nil)
+        container-id (state/use-container-id)]
     (hooks/use-effect!
      #(set-scroll-container (hooks/deref *ref))
      [])
     [:div.content-inner
      {:ref *ref}
      (when scroll-container
-       (page/page-blocks-cp page {:scroll-container scroll-container}))]))
+       (page/page-blocks-cp page {:scroll-container scroll-container
+                                  :container-id container-id}))]))
 
 (hsx/defc quick-add
   []
