@@ -2399,9 +2399,7 @@
         (if ops-only?
           (transact-blocks!)
           (p/let [_ (when has-unsaved-edits
-                      (ui-outliner-tx/transact!
-                       {:outliner-op :save-block}
-                       (outliner-save-block! editing-block)))
+                      (save-block-inner! editing-block (:block/title editing-block) {}))
                   result (transact-blocks!)]
             (state/set-block-op-type! nil)
             (when result
