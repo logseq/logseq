@@ -277,6 +277,7 @@
     (assert/assert-have-count
      (loc/filter ".property-k" :has-text "valid-property")
      1)
+    (b/open-last-block)
     (util/input-command "Add property")
     (w/click "input[placeholder]")
     (assert/assert-have-count (util/get-by-text "New option:" false) 0)
@@ -290,6 +291,11 @@
       (w/click (loc/and "span" (util/get-by-text "Text" true)))
       (assert/assert-is-visible
        (loc/filter ".ui__toast.error" :has-text "invalid property name"))
+      (doseq [message ["Property failed to create"
+                       "invalid property name"]]
+        (let [toast (loc/filter ".ui__toast.error" :has-text message)]
+          (when (w/visible? toast)
+            (w/click (.locator toast ".ui__toast-close")))))
       (k/esc))
     (is (nil? (ls-api-call! :editor.getProperty "[[bad")))
     (is (nil? (ls-api-call! :editor.getProperty "#bad")))))
