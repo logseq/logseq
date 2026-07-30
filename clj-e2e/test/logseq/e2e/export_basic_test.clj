@@ -19,7 +19,7 @@
   []
   (util/double-esc)
   (w/click ".toolbar-dots-btn")
-  (w/click (loc/filter "[role='menuitem']" :has-text "Export"))
+  (w/click (loc/filter "[role='menuitem']" :has-text "Export graph"))
   (w/wait-for ".export"))
 
 (defn- download!
