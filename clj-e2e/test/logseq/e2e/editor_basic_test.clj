@@ -1553,7 +1553,9 @@
   (testing "structured copy preserves trees while plain copy exposes readable indentation"
     (let [target-page "copy target"]
       (b/new-blocks ["copy parent" "copy child" "copy sibling"])
+      (k/arrow-up)
       (b/indent)
+      (k/arrow-down)
       (b/select-blocks 3)
       (b/copy)
       (p/new-page target-page)
@@ -1565,7 +1567,7 @@
         (is (= ["copy child"]
                (mapv #(get % "content") (get (first tree) "children")))))
       (w/click (loc/filter ".block-title-wrap" :has-text "copy sibling"))
-      (b/select-blocks 2)
+      (b/select-blocks 3)
       (k/press "ControlOrMeta+Shift+c")
       (let [text (w/eval-js "navigator.clipboard.readText()")]
         (is (string/includes? text "copy parent"))
