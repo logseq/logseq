@@ -124,7 +124,7 @@
 
 (hsx/defc main-content
   []
-  (let [default-home (app-left-sidebar/get-default-home-if-valid)
+  (let [default-home (app-left-sidebar/use-default-home-if-valid)
         current-repo (rfx/use-sub [:git/current-repo])
         [latest-journals set-latest-journals!] (hooks/use-state nil)
         redirect-target (cond
@@ -463,7 +463,7 @@
         native-titlebar? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
         edit? (state/editing?)
-        default-home (app-left-sidebar/get-default-home-if-valid)
+        default-home (app-left-sidebar/use-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/use-enable-fold-button-right?)
         show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
