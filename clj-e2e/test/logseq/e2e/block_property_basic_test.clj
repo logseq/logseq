@@ -245,9 +245,9 @@
     (let [page-name "icon sample page"]
       (page/new-page page-name)
       (util/exit-edit)
-      (w/click "div[data-testid='page title']")
-      (util/input-command "Set icon")
-      (w/click "[data-emoji='📚'], button:text('📚')")
+      (w/click "button:text('Add icon')")
+      (w/fill ".cp__emoji-icon-picker input" "books")
+      (w/click ".cp__emoji-icon-picker button:has(em-emoji[id='books'])")
       (assert/assert-is-visible ".ls-page-icon")
       (b/new-block "icon sample block")
       (util/set-tag "task")
@@ -259,10 +259,11 @@
        0)
       (ls-api-call! :editor.openInRightSidebar
                     (get (ls-api-call! :editor.getPage page-name) "uuid"))
-      (assert/assert-is-visible ".cp__right-sidebar .ls-page-icon")
-      (w/click ".ls-page-icon")
-      (w/click (loc/filter "[role='menuitem']" :has-text "Remove icon"))
-      (assert/assert-have-count ".ls-page-icon" 0))))
+      (assert/assert-is-visible
+       ".cp__right-sidebar .page-title em-emoji[id='books']")
+      (w/click ".ls-page-icon button")
+      (w/click ".cp__emoji-icon-picker button[data-action='del']")
+      (assert/assert-have-count "em-emoji[id='books']" 0))))
 
 (deftest property-create-and-name-validation-test
   (testing "property creation is unique and invalid names cannot create ghost nodes"
