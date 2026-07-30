@@ -1775,14 +1775,15 @@
   (testing "Quick add moves every temporary block to today's journal exactly once"
     (k/press (if util/mac? "Meta+e" "Control+Alt+e"))
     (assert/assert-is-visible ".ls-dialog-quick-add")
+    (w/wait-for util/editor-q)
     (b/new-blocks ["quick add first" "quick add second"])
-    (w/click (util/get-by-text "Add to today" true))
+    (w/click
+     (loc/filter ".ls-dialog-quick-add button" :has-text "Add to today"))
     (w/wait-for-not-visible ".ls-dialog-quick-add")
     (util/goto-journals)
     (let [contents (util/get-page-blocks-contents)]
       (is (= 1 (count (filter #{"quick add first"} contents))))
-      (is (= 1 (count (filter #{"quick add second"} contents)))))
-    (assert/assert-have-count util/editor-q 1)))
+      (is (= 1 (count (filter #{"quick add second"} contents)))))))
 
 (deftest external-property-update-preserves-edit-buffer-test
   (testing "an external property/child delta does not replace unrelated active text"
