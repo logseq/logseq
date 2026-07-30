@@ -2122,7 +2122,9 @@
                                                         references-view?
                                                         (assoc :ref? true)
                                                         (= :linked-references view-feature-type)
-                                                        (assoc :ref-matched-children-ids ref-matched-children-ids))]
+                                                        (assoc :ref-matched-children-ids ref-matched-children-ids
+                                                               :reference-view-parent-uuid
+                                                               (:view-parent-uuid option)))]
                                           (block-container config' block)))))
         list-cp (fn [rows]
                   (when (seq rows)

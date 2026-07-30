@@ -4898,7 +4898,9 @@
         linked-child-uuids (db-hooks/use-children linked-uuid)]
     (if-not linked-block
       (unloaded-block-placeholder)
-      (let [loop-linked? (contains? (:links config) (:db/id linked-block))
+      (let [loop-linked? (or (contains? (:links config) (:db/id linked-block))
+                             (= (:reference-view-parent-uuid config)
+                                (:block/uuid linked-block)))
             block (if loop-linked? original-block linked-block)
             child-uuids (if loop-linked?
                           original-child-uuids
