@@ -28,13 +28,17 @@
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defn get-default-home-if-valid
+(defn use-default-home-if-valid
   []
-  (when-let [default-home (state/get-default-home)]
-    (let [page (:page default-home)
-          valid-page? (and (string? page)
-                           (not (string/blank? page)))]
-      (if valid-page?
+  (let [default-home (state/get-default-home)
+        page (:page default-home)
+        valid-page? (and (string? page)
+                         (not (string/blank? page)))
+        {:keys [status value]}
+        (db-hooks/use-resource-snapshot
+         (when valid-page? [:page-identity page]))]
+    (when default-home
+      (if (and (= :ready status) value)
         default-home
         (dissoc default-home :page)))))
 
@@ -382,7 +386,7 @@
         [el-rect set-el-rect!] (hooks/use-state nil)
         ref-el (hooks/use-ref nil)
         ref-open? (hooks/use-ref left-sidebar-open?)
-        default-home (get-default-home-if-valid)
+        default-home (use-default-home-if-valid)
         route-name (get-in route-match [:data :name])
         on-contents-scroll #(when-let [^js el (.-target %)]
                               (let [top (.-scrollTop el)
