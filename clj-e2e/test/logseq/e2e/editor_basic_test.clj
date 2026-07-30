@@ -619,6 +619,19 @@
     })();"
     (json/write-value-as-string blocks))))
 
+(defn- wait-for-copied-blocks!
+  [blocks]
+  (loop [remaining-attempts 50]
+    (let [clipboard (w/clipboard-text)
+          missing-blocks (filterv #(not (string/includes? clipboard %)) blocks)]
+      (if (or (empty? missing-blocks)
+              (zero? remaining-attempts))
+        {:clipboard-length (count clipboard)
+         :missing-blocks missing-blocks}
+        (do
+          (util/wait-timeout 100)
+          (recur (dec remaining-attempts)))))))
+
 (defn- seed-journals!
   [journals]
   (doseq [{:keys [date blocks]} journals]
@@ -821,9 +834,9 @@
       (is (= (count blocks)
              (count (select-blocks-while-scrolling! (count blocks)))))
       (b/copy)
-      (let [clipboard (w/clipboard-text)]
-        (doseq [block blocks]
-          (is (string/includes? clipboard block)))))))
+      (let [{:keys [missing-blocks] :as copy-result}
+            (wait-for-copied-blocks! blocks)]
+        (is (empty? missing-blocks) (pr-str copy-result))))))
 
 (deftest multiline-heading-keeps-bullet-on-first-line
   (testing "heading block bullet aligns with the first line when the heading wraps"
@@ -843,9 +856,9 @@
       (enable-virtualized-rendering!)
       (is (pos? (count (select-block-titles-while-scrolling! blocks))))
       (b/copy)
-      (let [clipboard (w/clipboard-text)]
-        (doseq [block blocks]
-          (is (string/includes? clipboard block)))))))
+      (let [{:keys [missing-blocks] :as copy-result}
+            (wait-for-copied-blocks! blocks)]
+        (is (empty? missing-blocks) (pr-str copy-result))))))
 
 (deftest copy-blocks-selected-after-fast-scroll-virtualized-list
   (testing "copy includes virtualized blocks selected after fast scrolling a long page"
@@ -855,9 +868,9 @@
       (is (set/subset? (set blocks)
                        (set (select-block-range-with-fast-scroll! blocks))))
       (b/copy)
-      (let [clipboard (w/clipboard-text)]
-        (doseq [block blocks]
-          (is (string/includes? clipboard block)))))))
+      (let [{:keys [missing-blocks] :as copy-result}
+            (wait-for-copied-blocks! blocks)]
+        (is (empty? missing-blocks) (pr-str copy-result))))))
 
 (deftest page-virtualization-renders-top-middle-and-bottom-of-1k-membership
   (testing "one real 1k top-level membership remains navigable across the full page"
