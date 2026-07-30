@@ -202,7 +202,7 @@
   (press-seq "/" {:delay 20})
   (w/wait-for ".ui__popover-content")
   (press-seq command {:delay 20})
-  (let [command-item (loc/filter "a.menu-link.chosen" :has-text command)]
+  (let [command-item (w/-query "a.menu-link.chosen")]
     (assert/assert-is-visible command-item)
     (w/click command-item)))
 
