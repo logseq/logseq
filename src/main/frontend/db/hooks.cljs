@@ -10,7 +10,7 @@
       (set! (.-current key-ref) key))
     (.-current key-ref)))
 
-(defn- use-external-store
+(defn- use-external-store-snapshot
   [subscribe! snapshot key]
   (let [key (use-stable-key key)
         subscribe (react/useCallback
@@ -19,17 +19,25 @@
         get-snapshot (react/useCallback
                       (fn [] (snapshot key))
                       #js [snapshot key])
-        {:keys [status value error] :as result}
+        {:keys [status] :as result}
         (react/useSyncExternalStore
          subscribe
          get-snapshot
          get-snapshot)]
+    (when-not (contains? #{:ready :loading :missing :error} status)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))
+    result))
+
+(defn- use-external-store
+  [subscribe! snapshot key]
+  (let [{:keys [status value error] :as result}
+        (use-external-store-snapshot subscribe! snapshot key)]
     (case status
       :ready value
       (:loading :missing) nil
       :error (throw error)
-      (throw (ex-info "Invalid renderer subscription snapshot"
-                      {:key key :snapshot result})))))
+      (throw (ex-info "Invalid renderer subscription snapshot" result)))))
 
 (defn- use-external-store-projection
   [subscribe! snapshot key project]
@@ -90,3 +98,24 @@
 (defn use-resource
   [resource-key]
   (use-external-store subs/subscribe-resource! subs/resource-snapshot resource-key))
+
+(defn- subscribe-nothing!
+  [_key _listener]
+  (fn []))
+
+(def ^:private nil-resource-snapshot-value
+  {:status :ready :value nil})
+
+(defn- nil-resource-snapshot
+  [_key]
+  nil-resource-snapshot-value)
+
+(defn use-resource-snapshot
+  [resource-key]
+  (let [subscribe! (if resource-key
+                     subs/subscribe-resource!
+                     subscribe-nothing!)
+        snapshot (if resource-key
+                   subs/resource-snapshot
+                   nil-resource-snapshot)]
+    (use-external-store-snapshot subscribe! snapshot resource-key)))
