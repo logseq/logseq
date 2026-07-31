@@ -1778,8 +1778,8 @@
     (is (= ["alpha" "middle-omega"]
            (take-last 2 (util/get-page-blocks-contents))))))
 
-(deftest node-reference-autocomplete-and-refresh-test
-  (testing "node reference search inserts a reference and rerenders target updates"
+(deftest node-reference-autocomplete-and-label-test
+  (testing "node reference autocomplete keeps its label and opens the updated target"
     (let [source-page (p/get-page-name)]
       (b/new-block "reference autocomplete unique target")
       (let [target-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
@@ -1792,11 +1792,23 @@
         (assert/assert-is-visible
          (loc/filter ".page-reference"
                      :has-text "reference autocomplete unique target"))
-        (ls-api-call! :editor.updateBlock target-uuid "reference autocomplete updated target")
+        (b/jump-to-block "reference autocomplete unique target")
+        (k/press "ControlOrMeta+a")
+        (util/press-seq "reference autocomplete updated target")
+        (util/exit-edit)
+        (assert/assert-is-visible
+         (loc/filter ".block-title-wrap"
+                     :has-text "reference autocomplete updated target"))
         (assert/assert-is-visible
          (loc/filter ".page-reference"
-                     :has-text "reference autocomplete updated target"))
-        (is (= source-page (p/get-page-name)))))))
+                     :has-text "reference autocomplete unique target"))
+        (is (= source-page (p/get-page-name)))
+        (w/click (.first (loc/filter ".page-reference .page-ref"
+                                     :has-text "reference autocomplete unique target")))
+        (is (string/includes? (.url (w/get-page)) target-uuid))
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-blocks .block-title-wrap"
+                     :has-text "reference autocomplete updated target"))))))
 
 (deftest quick-add-moves-all-blocks-to-today-test
   (testing "Quick add moves every temporary block to today's journal exactly once"
