@@ -847,8 +847,10 @@
         (b/new-block title)
         (util/input-command heading)
         (util/exit-edit)
+        (assert/assert-is-visible
+         (loc/filter ".block-title-wrap.as-heading" :has-text title))
         (let [{:keys [delta] :as alignment} (multiline-heading-bullet-alignment title)]
-          (is (<= delta 3) (assoc alignment :heading heading)))))))
+          (is (<= delta 3) (pr-str (assoc alignment :heading heading))))))))
 
 (deftest copy-blocks-selected-while-scrolling-virtualized-list
   (testing "copy includes virtualized blocks selected by dragging while the page scrolls"
