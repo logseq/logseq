@@ -1800,9 +1800,12 @@
      (loc/filter ".ls-dialog-quick-add button" :has-text "Add to today"))
     (w/wait-for-not-visible ".ls-dialog-quick-add")
     (util/goto-journals)
-    (let [contents (util/get-page-blocks-contents)]
-      (is (= 1 (count (filter #{"quick add first"} contents))))
-      (is (= 1 (count (filter #{"quick add second"} contents)))))))
+    (assert/assert-have-count
+     (loc/filter "#journals .block-title-wrap" :has-text "quick add first")
+     1)
+    (assert/assert-have-count
+     (loc/filter "#journals .block-title-wrap" :has-text "quick add second")
+     1)))
 
 (deftest external-property-update-preserves-edit-buffer-test
   (testing "an external property/child delta does not replace unrelated active text"
