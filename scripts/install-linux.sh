@@ -230,7 +230,8 @@ else
     DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": \"[^\"]*Logseq-linux-$ARCH_PATTERN-[^\"]*\.zip\"" | head -1 | cut -d'"' -f4)
     
     if [[ -z "$DOWNLOAD_URL" ]]; then
-        DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+        log_error "Could not find download URL for $VERSION version ($ARCH)"
+        exit 1
     fi
 fi
 
