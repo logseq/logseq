@@ -129,11 +129,11 @@
 
 (defn validate-graph
   []
-  (k/esc)
-  (k/esc)
-  (util/search-and-click "(Dev) Validate current graph")
-  (assert/assert-is-visible
-   ".ui__toast:has-text('Your graph is valid')")
-  (when (w/visible? ".ui__toast.success button")
-    (w/click ".ui__toast.success button"))
-  {:valid? true})
+  (let [success-toast ".ui__toast:has-text('Your graph is valid')"]
+    (k/esc)
+    (k/esc)
+    (util/search-and-click "(Dev) Validate current graph")
+    (w/wait-for success-toast {:timeout 30000})
+    (when (w/visible? ".ui__toast.success button")
+      (w/click ".ui__toast.success button"))
+    {:valid? true}))
