@@ -1646,15 +1646,22 @@
           (assert/assert-is-visible
            (format ".ls-page-blocks .ls-block[data-block-title='%s']"
                    target-title))))
-      (let [last-title (format "%s%05d" title-prefix (dec block-count))]
-        (w/click
-         (format ".ls-page-blocks .ls-block[data-block-title='%s']"
-                 last-title))
-        (util/input " edited")
+      (util/wait-timeout 200)
+      (let [last-title (format "%s%05d" title-prefix (dec block-count))
+            last-block (w/-query
+                        (format
+                         ".ls-page-blocks .ls-block[data-block-title='%s']"
+                         last-title))
+            last-uuid (.getAttribute last-block "blockid")]
+        (is (string? last-uuid))
+        (w/click (.locator last-block ".block-content"))
+        (assert/assert-editor-mode)
+        (util/move-cursor-to-end)
+        (util/press-seq " edited")
+        (is (= (str last-title " edited") (util/get-edit-content)))
         (util/exit-edit)
         (is (= (str last-title " edited")
-               (get (ls-api-call! :editor.getBlock (str last-title " edited"))
-                    "title")))))))
+               (get (ls-api-call! :editor.getBlock last-uuid) "title")))))))
 
 (deftest mixed-height-virtual-page-keeps-blocks-separated-test
   (testing "mixed text, code and headings do not overlap after fast scrolling"
