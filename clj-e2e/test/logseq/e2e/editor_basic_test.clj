@@ -1356,7 +1356,17 @@
 
 (deftest cursor-boundaries-word-motion-and-kill-test
   (testing "cursor motion follows boundaries and range deletion is one undoable edit"
-    (b/new-blocks ["first cursor line" "second cursor line\ncontinued"])
+    (b/new-blocks ["first cursor line" "second cursor line"])
+    (k/shift+enter)
+    (util/press-seq "continued")
+    (let [multiline "second cursor line\ncontinued"
+          second-line-start (inc (count "second cursor line"))]
+      (is (= multiline (util/get-edit-content)))
+      (k/press "Home")
+      (is (= (str second-line-start ":" second-line-start)
+             (selection-range)))
+      (k/arrow-up)
+      (is (= multiline (util/get-edit-content))))
     (k/press "Home")
     (is (= "0:0" (selection-range)))
     (k/arrow-up)
