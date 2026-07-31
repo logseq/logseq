@@ -1297,19 +1297,20 @@
     (let [content "中文🙂 e\u0301 editor persistence"
           page-name (p/get-page-name)]
       (b/new-block content)
-      (k/esc)
-      (assert/assert-have-count util/editor-q 0)
-      (assert/assert-is-visible
-       (loc/filter ".ls-page-blocks" :has-text content))
-      (w/click "#main-content-container")
-      (assert/assert-have-count ".ui__popover-content, .autocomplete" 0)
-      (p/new-page "editor exit destination")
-      (p/goto-page page-name)
-      (assert/assert-is-visible
-       (loc/filter ".ls-page-blocks" :has-text content))
-      (util/refresh-until-graph-loaded)
-      (is (= content
-             (get (ls-api-call! :editor.getBlock content) "content"))))))
+      (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+        (k/esc)
+        (assert/assert-have-count util/editor-q 0)
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-blocks" :has-text content))
+        (w/click "#main-content-container")
+        (assert/assert-have-count ".ui__popover-content, .autocomplete" 0)
+        (p/new-page "editor exit destination")
+        (p/goto-page page-name)
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-blocks" :has-text content))
+        (util/refresh-until-graph-loaded)
+        (is (= content
+               (get (ls-api-call! :editor.getBlock block-uuid) "content")))))))
 
 (deftest empty-enter-and-soft-line-break-test
   (testing "empty Enter obeys tree rules while Shift+Enter stays inside one block"
