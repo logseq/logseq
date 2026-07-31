@@ -1525,12 +1525,13 @@
           parent (ls-api-call! :editor.appendBlockInPage page-name "collapse parent")
           uuid (get parent "uuid")]
       (ls-api-call! :editor.insertBlock uuid "collapse child" {:sibling false})
-      (w/click (format "#ls-block-%s .bullet-container" uuid))
+      (w/click (format ".ls-page-blocks .bullet-container[blockid='%s']" uuid))
       (assert/assert-is-hidden
        (loc/filter (format "#ls-block-%s" uuid) :has-text "collapse child"))
       (ls-api-call! :editor.openInRightSidebar uuid)
       (assert/assert-is-visible (format ".cp__right-sidebar #ls-block-%s" uuid))
-      (w/click (format ".cp__right-sidebar #ls-block-%s .bullet-container" uuid))
+      (w/click
+       (format ".cp__right-sidebar .bullet-container[blockid='%s']" uuid))
       (assert/assert-is-visible
        (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
       (util/refresh-until-graph-loaded)
