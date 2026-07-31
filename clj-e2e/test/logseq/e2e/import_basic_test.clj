@@ -4,6 +4,7 @@
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.graph :as graph]
    [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
    [wally.main :as w])
@@ -43,7 +44,6 @@
       (w/wait-for ".ui__toast")
       (assert/assert-is-hidden ".ui__loading, .loading-graph")
       (is (= current-graph (ls-api-call! :app.getCurrentGraph)))
-      (w/click ".toolbar-dots-btn")
-      (w/click (loc/filter "[role='menuitem']" :has-text "All graphs"))
+      (graph/goto-all-graphs)
       (assert/assert-is-hidden
        (loc/filter "#main-content-container" :has-text graph-name)))))
