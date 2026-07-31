@@ -1504,12 +1504,13 @@
   (testing "multi-indent preserves order/subtrees and is one undo step"
     (let [page-name (p/get-page-name)]
       (b/new-blocks ["multi a" "multi a child" "multi b" "multi b child"])
-      (b/indent)
+      (k/tab)
       (k/arrow-up)
       (k/arrow-up)
-      (b/indent)
-      (util/exit-edit)
-      (w/click (loc/filter ".block-title-wrap" :has-text "multi b"))
+      (k/tab)
+      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
+      (k/arrow-down)
+      (k/arrow-down)
       (b/select-blocks 2)
       (k/tab)
       (let [indented (ls-api-call! :editor.getPageBlocksTree page-name)]
