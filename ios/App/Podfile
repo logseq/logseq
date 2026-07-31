@@ -1,6 +1,6 @@
-require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+require_relative '../../node_modules/.pnpm/@capacitor+ios@8.3.1_@capacitor+core@8.3.1/node_modules/@capacitor/ios/scripts/pods_helpers'
 
-platform :ios, '14.0'
+platform :ios, '15.0'
 use_frameworks!
 
 # workaround to avoid Xcode caching of Pods that requires
@@ -9,26 +9,26 @@ use_frameworks!
 install! 'cocoapods', :disable_input_output_paths => true
 
 def capacitor_pods
-  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
-  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
-  pod 'AparajitaCapacitorSecureStorage', :path => '../../node_modules/@aparajita/capacitor-secure-storage'
-  pod 'CapacitorCommunitySafeArea', :path => '../../node_modules/@capacitor-community/safe-area'
-  pod 'CapacitorActionSheet', :path => '../../node_modules/@capacitor/action-sheet'
-  pod 'CapacitorApp', :path => '../../node_modules/@capacitor/app'
-  pod 'CapacitorCamera', :path => '../../node_modules/@capacitor/camera'
-  pod 'CapacitorClipboard', :path => '../../node_modules/@capacitor/clipboard'
-  pod 'CapacitorDevice', :path => '../../node_modules/@capacitor/device'
-  pod 'CapacitorDialog', :path => '../../node_modules/@capacitor/dialog'
-  pod 'CapacitorFilesystem', :path => '../../node_modules/@capacitor/filesystem'
-  pod 'CapacitorHaptics', :path => '../../node_modules/@capacitor/haptics'
-  pod 'CapacitorKeyboard', :path => '../../node_modules/@capacitor/keyboard'
-  pod 'CapacitorNetwork', :path => '../../node_modules/@capacitor/network'
-  pod 'CapacitorShare', :path => '../../node_modules/@capacitor/share'
-  pod 'CapacitorSplashScreen', :path => '../../node_modules/@capacitor/splash-screen'
-  pod 'CapacitorStatusBar', :path => '../../node_modules/@capacitor/status-bar'
-  pod 'CapgoCapacitorNavigationBar', :path => '../../node_modules/@capgo/capacitor-navigation-bar'
-  pod 'SendIntent', :path => '../../node_modules/send-intent'
-  pod 'JcesarmobileSslSkip', :path => '../../node_modules/@jcesarmobile/ssl-skip'
+  pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@8.3.1_@capacitor+core@8.3.1/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@8.3.1_@capacitor+core@8.3.1/node_modules/@capacitor/ios'
+  pod 'AparajitaCapacitorSecureStorage', :path => '../../node_modules/.pnpm/@aparajita+capacitor-secure-storage@8.0.0/node_modules/@aparajita/capacitor-secure-storage'
+  pod 'CapacitorCommunitySafeArea', :path => '../../node_modules/.pnpm/@capacitor-community+safe-area@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor-community/safe-area'
+  pod 'CapacitorActionSheet', :path => '../../node_modules/.pnpm/@capacitor+action-sheet@8.1.1_@capacitor+core@8.3.1/node_modules/@capacitor/action-sheet'
+  pod 'CapacitorApp', :path => '../../node_modules/.pnpm/@capacitor+app@8.1.0_@capacitor+core@8.3.1/node_modules/@capacitor/app'
+  pod 'CapacitorCamera', :path => '../../node_modules/.pnpm/@capacitor+camera@8.2.0_@capacitor+core@8.3.1/node_modules/@capacitor/camera'
+  pod 'CapacitorClipboard', :path => '../../node_modules/.pnpm/@capacitor+clipboard@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor/clipboard'
+  pod 'CapacitorDevice', :path => '../../node_modules/.pnpm/@capacitor+device@8.0.2_@capacitor+core@8.3.1/node_modules/@capacitor/device'
+  pod 'CapacitorDialog', :path => '../../node_modules/.pnpm/@capacitor+dialog@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor/dialog'
+  pod 'CapacitorFilesystem', :path => '../../node_modules/.pnpm/@capacitor+filesystem@8.1.2_@capacitor+core@8.3.1/node_modules/@capacitor/filesystem'
+  pod 'CapacitorHaptics', :path => '../../node_modules/.pnpm/@capacitor+haptics@8.0.2_@capacitor+core@8.3.1/node_modules/@capacitor/haptics'
+  pod 'CapacitorKeyboard', :path => '../../node_modules/.pnpm/@capacitor+keyboard@8.0.3_@capacitor+core@8.3.1/node_modules/@capacitor/keyboard'
+  pod 'CapacitorNetwork', :path => '../../node_modules/.pnpm/@capacitor+network@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor/network'
+  pod 'CapacitorShare', :path => '../../node_modules/.pnpm/@capacitor+share@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor/share'
+  pod 'CapacitorSplashScreen', :path => '../../node_modules/.pnpm/@capacitor+splash-screen@8.0.1_@capacitor+core@8.3.1/node_modules/@capacitor/splash-screen'
+  pod 'CapacitorStatusBar', :path => '../../node_modules/.pnpm/@capacitor+status-bar@8.0.2_@capacitor+core@8.3.1/node_modules/@capacitor/status-bar'
+  pod 'CapgoCapacitorNavigationBar', :path => '../../node_modules/.pnpm/@capgo+capacitor-navigation-bar@8.1.5_@capacitor+core@8.3.1/node_modules/@capgo/capacitor-navigation-bar'
+  pod 'SendIntent', :path => '../../node_modules/.pnpm/send-intent@7.0.0_@capacitor+core@8.3.1/node_modules/send-intent'
+  pod 'JcesarmobileSslSkip', :path => '../../node_modules/.pnpm/@jcesarmobile+ssl-skip@0.9.0/node_modules/@jcesarmobile/ssl-skip'
 end
 
 target 'Logseq' do

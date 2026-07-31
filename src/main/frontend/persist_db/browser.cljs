@@ -22,35 +22,90 @@
   [repo diff]
   (state/input-idle? repo :diff diff))
 
+(defonce ^:private *search-index-progress-hide-timeout (atom nil))
+
+(defn- clear-search-index-progress-hide-timeout!
+  []
+  (when-let [timeout-id @*search-index-progress-hide-timeout]
+    (js/clearTimeout timeout-id)
+    (reset! *search-index-progress-hide-timeout nil)))
+
+(defn- hide-search-index-progress-later!
+  [repo build-id]
+  (clear-search-index-progress-hide-timeout!)
+  (reset! *search-index-progress-hide-timeout
+          (js/setTimeout
+           (fn []
+             (let [{current-repo :repo current-build-id :build-id}
+                   (get @state/state :search/index-build)]
+               (when (and (= repo current-repo)
+                          (= build-id current-build-id))
+                 (state/set-state! :search/index-build
+                                   (assoc (get @state/state :search/index-build)
+                                          :visible? false)))))
+           1500)))
+
+(defn- maybe-notify-search-index-rebuilt!
+  [repo]
+  (when (true? (get-in @state/state [:search/index-build-notify-repos repo]))
+    (state/set-state! [:search/index-build-notify-repos repo] false)
+    (notification/show! (t :search/indices-rebuilt-success) :success)))
+
 (def-thread-api :thread-api/search-index-build-progress
-  [repo {:keys [status progress processed total]}]
+  [repo {:keys [build-id status progress processed total]
+         input-stage :stage}]
   (let [prev-state (get @state/state :search/index-build)
         current-repo (state/get-current-repo)
+        stage :search-index
         visible-repo? (or (= repo current-repo)
                           (= repo (:repo prev-state)))]
-    (when visible-repo?
+    (when (and visible-repo?
+               (not= :vector-index input-stage))
       (case status
         :idle
-        (state/set-state! :search/index-build
-                          (assoc (or prev-state {})
-                                 :running? false
-                                 :repo repo))
+        (when-not (= :completed (:status prev-state))
+          (clear-search-index-progress-hide-timeout!)
+          (state/set-state! :search/index-build
+                            (cond-> (assoc (or prev-state {})
+                                           :visible? false
+                                           :running? false
+                                           :status status
+                                           :stage stage
+                                           :repo repo)
+                              build-id (assoc :build-id build-id))))
 
         :running
-        (state/set-state! :search/index-build
-                          {:running? true
-                           :repo repo
-                           :progress (or progress 0)
-                           :processed (or processed 0)
-                           :total (or total 0)})
+        (do
+          (clear-search-index-progress-hide-timeout!)
+          (state/set-state! :search/index-build
+                            (cond-> {:visible? true
+                                     :running? true
+                                     :status status
+                                     :repo repo
+                                     :stage stage
+                                     :progress (or progress 0)
+                                     :processed (or processed 0)
+                                     :total (or total 0)}
+                              build-id (assoc :build-id build-id))))
 
         :completed
-        (state/set-state! :search/index-build
-                          {:running? false
-                           :repo repo
-                           :progress (or progress 0)
-                           :processed (or processed 0)
-                           :total (or total 0)})
+        (do
+          (state/set-state! :search/index-build
+                            (cond-> {:visible? true
+                                     :running? false
+                                     :status status
+                                     :repo repo
+                                     :stage stage
+                                     :progress (or progress 0)
+                                     :processed (or processed 0)
+                                     :total (or total 0)}
+                              build-id (assoc :build-id build-id)))
+          (when (and (= :search-index input-stage)
+                     (= repo current-repo))
+            (state/pub-event! [:graph/ready repo]))
+          (maybe-notify-search-index-rebuilt! repo)
+          (hide-search-index-progress-later! repo build-id))
+
         nil))
     nil))
 
@@ -147,15 +202,18 @@
                         "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
-           wrapped-worker (fn [qkw direct-pass? & args]
-                            (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                          (str (namespace qkw) "/" (name qkw))
-                                                          direct-pass?
-                                                          (if direct-pass?
-                                                            (into-array args)
-                                                            (ldb/write-transit-str args)))]
-                              (if direct-pass?
-                                result
+           wrapped-worker (fn [qkw & args]
+                            (if (contains? #{:thread-api/export-db-binary
+                                             :thread-api/export-client-ops-db-binary
+                                             :thread-api/import-db-binary}
+                                           qkw)
+                              (let [method (str (namespace qkw) "/" (name qkw))]
+                                (if (= :thread-api/import-db-binary qkw)
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
+                              (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                            (str (namespace qkw) "/" (name qkw))
+                                                            (ldb/write-transit-str args))]
                                 (ldb/read-transit-str result))))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
@@ -198,10 +256,20 @@
       (log/error :sqlite-error error)
       (notification/show! (t :storage/sqlitedb-error error) :error))))
 
+(defn- <sync-markdown-mirror-setting!
+  [repo]
+  (if (and (util/electron?) repo)
+    (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                             repo
+                             (true? (:feature/markdown-mirror? (state/get-graph-config repo))))
+    (p/resolved nil)))
+
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
+    (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+            _ (<sync-markdown-mirror-setting! repo)]
+      result))
 
   (<list-db [_this]
     (-> (state/<invoke-db-worker :thread-api/list-db)
@@ -214,24 +282,24 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+                _ (<sync-markdown-mirror-setting! repo)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-db repo)]
-          (when data
-            (if (:return-data? opts)
-              data
-              (<export-db! repo))))
+    (-> (if (util/electron?)
+          (<export-db! repo)
+          (p/let [data (state/<invoke-db-worker :thread-api/export-db-binary repo)]
+            (when (:return-data? opts)
+              data)))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
     (->
-     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
-       (ldb/read-transit-str result-str))
+     (state/<invoke-db-worker :thread-api/import-db-binary repo data)
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

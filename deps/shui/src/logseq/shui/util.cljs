@@ -2,21 +2,20 @@
   (:require
    [cljs-bean.core :as bean]
    [clojure.set :refer [rename-keys]]
-   [clojure.string :as s]
+   [clojure.string :as string]
    [clojure.walk :as w]
-   [goog.dom :as gdom]
-   [goog.object :refer [getValueByKeys] :as gobj]
-   [logseq.shui.rum :as shui-rum]
-   [rum.core :refer [use-state use-effect!] :as rum]))
+   [goog.object :as gobj]
+   [io.factorhouse.hsx.core :as hsx]
+   [logseq.shui.hooks :as hooks]))
 
 (goog-define NODETEST false)
 
 (defn kebab-case->camel-case
   "Converts from kebab case to camel case, eg: on-click to onClick"
   [input]
-  (let [words (s/split input #"-")
+  (let [words (string/split input #"-")
         capitalize (->> (rest words)
-                        (map #(apply str (s/upper-case (first %)) (rest %))))]
+                        (map #(apply str (string/upper-case (first %)) (rest %))))]
     (apply str (first words) capitalize)))
 
 (defn map-keys->camel-case
@@ -27,8 +26,8 @@
   [data & {:keys [html-props]}]
   (let [convert-to-camel (fn [[key value]]
                            (let [k (name key)]
-                             [(if-not (or (s/starts-with? k "data-")
-                                          (s/starts-with? k "aria-"))
+                             [(if-not (or (string/starts-with? k "data-")
+                                          (string/starts-with? k "aria-"))
                                 (kebab-case->camel-case k) k) value]))]
     (w/postwalk (fn [x]
                   (if (map? x)
@@ -54,73 +53,45 @@
 (defn get-path
   "Returns the component path."
   [component-name]
-  (s/split (name component-name) #"\."))
+  (string/split (name component-name) #"\."))
 
 (defn adapt-class [react-class & args]
   (let [[opts children] (if (map? (first args))
                           [(first args) (rest args)]
                           [{} args])
         children (some->> children (remove nil?))
-        type# (first children)
-        children# (daiquiri.interpreter/interpret children)
-        children# (if (= 1 (count children#)) (first children#) children#)
-        ;; we have to make sure to check if the children is sequential
-        ;; as a list can be returned, eg: from a (for)
-        new-children (if (and (not (nil? children#))
-                              (not (empty? children))
-                              (or (not (array? children#))
-                             ;; maybe list children
-                                  (not (vector? type#))))
-                       [children#] children#)
+        children (map hsx/create-element children)
 
         ;; convert any options key value to a React element, if
-        ;; a valid html element tag is used, using sablono (rum.daiquiri)
+        ;; a valid html element tag is used.
         vector->react-elems (fn [[key val]]
                               (if (sequential? val)
-                                [key (daiquiri.interpreter/interpret val)]
+                                [key (hsx/create-element val)]
                                 [key val]))
         new-options (into {} (map vector->react-elems opts))
         react-class (if dev? (react-class) react-class)]
     (apply js/React.createElement react-class
       ;; sablono html-to-dom-attrs does not work for nested hash-maps
            (bean/->js (map-keys->camel-case new-options :html-props true))
-           new-children)))
+           children)))
 
-(defn use-atom-fn
-  [a getter-fn setter-fn]
-  (let [[val set-val] (use-state (getter-fn @a))]
-    (use-effect!
-     (fn []
-       (let [id (str (random-uuid))]
-         (add-watch a id (fn [_ _ prev-state next-state]
-                           (let [prev-value (getter-fn prev-state)
-                                 next-value (getter-fn next-state)]
-                             (when-not (= prev-value next-value)
-                               (set-val next-value)))))
-         #(remove-watch a id)))
-     [])
-    [val #(swap! a setter-fn %)]))
+(def use-atom hooks/use-atom)
+(def use-mounted hooks/use-mounted)
 
-(defn use-atom
-  "(use-atom my-atom)"
-  [a]
-  (use-atom-fn a identity (fn [_ v] v)))
+(defn- same-args?
+  [^js prev-props ^js next-props]
+  (= (.-args prev-props)
+     (.-args next-props)))
 
-(defn use-mounted
-  []
-  (let [*mounted (rum/use-ref false)]
-    (use-effect!
-     (fn []
-       (rum/set-ref! *mounted true)
-       #(rum/set-ref! *mounted false))
-     [])
-    #(rum/deref *mounted)))
-
-(defn react->rum [c static?]
+(defn react->component [c static?]
   (if static?
-    (rum/defc react->rum' < rum/static
-      [& args]
-      (apply adapt-class c args))
+    (let [class (fn [^js props]
+                  (apply adapt-class c (.-args props)))
+          memo-class (if-some [memo (.-memo js/React)]
+                       (memo class same-args?)
+                       class)]
+      (fn [& args]
+        (js/React.createElement memo-class #js {:args args})))
     (partial adapt-class c)))
 
 (defn component-wrap
@@ -129,7 +100,7 @@
   (let [path (get-path name)
         ;; lazy calculating is for HMR from ts
         cp #(gobj/getValueByKeys ns (clj->js path))]
-    (react->rum (if dev? cp (cp)) static?)))
+    (react->component (if dev? cp (cp)) static?)))
 
 (def lsui-wrap
   (partial component-wrap js/window.LSUI))

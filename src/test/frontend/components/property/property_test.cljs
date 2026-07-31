@@ -1,6 +1,11 @@
 (ns frontend.components.property.property-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.components.property :as property-component]))
+            [frontend.components.property :as property-component]
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.property :as outliner-property]))
 
 (deftest sanitize-property-values-for-display-filters-recycled-entity-values-test
   (let [active-value {:db/id 101
@@ -33,3 +38,37 @@
     (is (nil? (:user.property/nodes properties)))
     (is (= #{:user.property/nodes}
            recycled-only-property-ids))))
+
+(deftest toggle-hidden-properties-visibility-test
+  (let [block-uuid (random-uuid)]
+    (is (false? (property-component/hidden-properties-visible? block-uuid)))
+    (property-component/toggle-hidden-properties-visibility! block-uuid)
+    (is (true? (property-component/hidden-properties-visible? block-uuid)))
+    (property-component/toggle-hidden-properties-visibility! block-uuid)
+    (is (false? (property-component/hidden-properties-visible? block-uuid)))))
+
+(deftest display-properties-keeps-other-position-properties-for-page-properties-test
+  (let [property-id :user.property/date
+        property {:db/id 2
+                  :db/ident property-id
+                  :logseq.property/type :date}
+        block {:db/id 1
+               :block/uuid (random-uuid)
+               :block/properties {property-id "Jun 23rd, 2026"}
+               :page? true}]
+    (with-redefs [db/get-db (constantly ::db)
+                  db/entity (fn [id]
+                              (when (= id property-id)
+                                property))
+                  db-property/get-class-ordered-properties (constantly [])
+                  entity-util/page? :page?
+                  outliner-property/get-block-classes-properties (constantly {:all-classes []
+                                                                              :classes-properties []})
+                  outliner-property/property-with-other-position? (constantly true)
+                  state/get-config (constantly {})]
+      (is (= [[property-id "Jun 23rd, 2026"]]
+             (vec (:full-properties
+                   (#'property-component/display-properties block {:page-title? true} false)))))
+      (is (empty?
+           (:full-properties
+            (#'property-component/display-properties block {:in-block-container? true} false)))))))

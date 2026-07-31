@@ -8,6 +8,7 @@
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
             [logseq.common.config :as common-config]
+            [logseq.common.version :as version]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
@@ -92,6 +93,36 @@
   [config]
   (normalize-owner-source (or (:owner-source config) :cli)))
 
+(defn- expected-revision
+  [config]
+  (or (:expected-revision config)
+      (version/revision)))
+
+(defn- revision-match?
+  [expected server-revision]
+  (and (some? server-revision)
+       (= expected server-revision)))
+
+(defn- revision-mismatch?
+  [expected server-revision]
+  (not (revision-match? expected server-revision)))
+
+(defn- server-revision-mismatch-error
+  [code repo expected {:keys [revision owner-source]}]
+  {:code code
+   :message (case code
+              :server-revision-mismatch-restart-failed
+              "db-worker-node revision mismatch and restart failed"
+              :server-revision-mismatch-after-restart
+              (str "db-worker-node revision still does not match after restart"
+                   "; db-worker-node path: "
+                   (db-worker-script-path))
+              "db-worker-node revision does not match requester revision")
+   :repo repo
+   :expected-revision expected
+   :actual-revision revision
+   :owner-source owner-source})
+
 (defn- lock-owner-source
   [lock]
   (normalize-owner-source (:owner-source lock)))
@@ -154,12 +185,14 @@
     (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo root-dir owner-source create-empty-db?]}]
+  [{:keys [repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :root-dir root-dir
                          :owner-source owner-source
-                         :create-empty-db? create-empty-db?}))
+                         :create-empty-db? create-empty-db?
+                         :embedding-endpoint embedding-endpoint
+                         :embedding-model-id embedding-model-id}))
 
 (defn- rewrite-lock-owner-source!
   [path lock owner-source]
@@ -195,8 +228,10 @@
 
 (defn- repo-server
   [config servers repo]
-  (first (filter #(= repo (:repo %))
+  (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
+
+(def ^:private server-discovery-timeout-ms 30000)
 
 (defn discover-servers
   [config]
@@ -216,9 +251,12 @@
                                                       (update :owner-source normalize-owner-source))}))
                                (p/catch (fn [_]
                                           {:entry entry :retain? true})))))))
-            retained-results (filter :retain? results)
-            cleaned-entries (mapv :entry retained-results)
-            _ (server-list/rewrite-entries! path cleaned-entries)]
+            retained-results (filterv :retain? results)
+            stale-entries (->> results
+                               (remove :retain?)
+                               (mapv :entry))
+            _ (when (seq stale-entries)
+                (server-list/remove-entries! path stale-entries))]
       (->> retained-results
            (keep :server)
            vec))))
@@ -231,11 +269,11 @@
                             server (repo-server config servers repo)]
                       (reset! server* server)
                       (some? server)))
-                  {:timeout-ms 8000
+                  {:timeout-ms server-discovery-timeout-ms
                    :interval-ms 50})
         (p/then (fn [_] @server*)))))
 
-(defn- ensure-server-started!
+(defn- ensure-server-started-once!
   [config repo]
   (let [root-dir (resolve-root-dir config)
         path (lock-path root-dir repo)
@@ -255,7 +293,9 @@
                                                   (spawn-server! {:repo repo
                                                                   :root-dir root-dir
                                                                   :owner-source requester-owner
-                                                                  :create-empty-db? (:create-empty-db? config)})))
+                                                                  :create-empty-db? (:create-empty-db? config)
+                                                                  :embedding-endpoint (:embedding-endpoint config)
+                                                                  :embedding-model-id (:embedding-model-id config)})))
                                  (-> (profile/time! profile-session
                                                     "server.wait-lock"
                                                     (fn []
@@ -295,6 +335,47 @@
                                   :owner-source lock-owner
                                   :owned? (owner-manageable? requester-owner lock-owner)))))))))
 
+(declare stop-version-mismatched-server!)
+
+(defn- ensure-server-started!
+  [config repo]
+  (p/let [expected (expected-revision config)
+          server (ensure-server-started-once! config repo)]
+    (if-not (revision-mismatch? expected (:revision server))
+      server
+      (p/let [stop-result (profile/time! (:profile-session config)
+                                          "server.restart-version-mismatch"
+                                          (fn []
+                                            (log/info :cli-server-restart-version-mismatch
+                                                      {:repo repo
+                                                       :expected-revision expected
+                                                       :current-revision (:revision server)
+                                                       :owner-source (:owner-source server)
+                                                       :pid (:pid server)
+                                                       :host (:host server)
+                                                       :port (:port server)
+                                                       :root-dir (:root-dir server)
+                                                       :status (:status server)})
+                                            (stop-version-mismatched-server! config repo server)))]
+        (when-not (:ok? stop-result)
+          (throw (ex-info "db-worker-node revision mismatch and restart failed"
+                          (assoc (server-revision-mismatch-error
+                                  :server-revision-mismatch-restart-failed
+                                  repo
+                                  expected
+                                  server)
+                                 :stop-error (:error stop-result)))))
+        (p/let [server' (ensure-server-started-once! config repo)]
+          (if-not (revision-mismatch? expected (:revision server'))
+            server'
+            (let [error-data (assoc (server-revision-mismatch-error
+                                     :server-revision-mismatch-after-restart
+                                     repo
+                                     expected
+                                     server')
+                                    :after-restart? true)]
+              (throw (ex-info (:message error-data) error-data)))))))))
+
 (defn ensure-server!
   [config repo]
   (p/let [lock (ensure-server-started! config repo)]
@@ -313,8 +394,8 @@
                                           :timeout-ms 1000})]
     (= 200 status)))
 
-(defn stop-server!
-  [config repo]
+(defn- stop-server-target!
+  [config repo {:keys [allow-cross-owner? target-server]}]
   (let [requester-owner (requester-owner-source config)
         root-dir (resolve-root-dir config)
         path (lock-path root-dir repo)
@@ -324,10 +405,13 @@
                    :error {:code :server-not-found
                            :message "server is not running"}})
       (let [lock-owner (lock-owner-source lock)]
-        (if-not (owner-manageable? requester-owner lock-owner)
+        (if-not (or allow-cross-owner?
+                    (owner-manageable? requester-owner lock-owner))
           (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
-          (p/let [servers (discover-servers config)
-                  server (repo-server config servers repo)]
+          (p/let [server (if target-server
+                           target-server
+                           (p/let [servers (discover-servers config)]
+                             (repo-server config servers repo)))]
             (if-not server
               {:ok? false
                :error {:code :server-not-found
@@ -356,6 +440,15 @@
                        {:ok? true
                         :data {:repo repo}})))))))))))
 
+(defn stop-server!
+  [config repo]
+  (stop-server-target! config repo {:allow-cross-owner? false}))
+
+(defn- stop-version-mismatched-server!
+  [config repo server]
+  (stop-server-target! config repo {:allow-cross-owner? true
+                                    :target-server server}))
+
 (defn start-server!
   [config repo]
   (-> (p/let [lock (ensure-server-started! config repo)]
@@ -371,7 +464,12 @@
                                     :message (or (.-message e) "failed to start server")}
                              (:lock data) (assoc :lock (:lock data))
                              (:pids data) (assoc :pids (:pids data))
-                             (:repo data) (assoc :repo (:repo data)))})))))
+                             (:repo data) (assoc :repo (:repo data))
+                             (:expected-revision data) (assoc :expected-revision (:expected-revision data))
+                             (contains? data :actual-revision) (assoc :actual-revision (:actual-revision data))
+                             (:owner-source data) (assoc :owner-source (:owner-source data))
+                             (:stop-error data) (assoc :stop-error (:stop-error data))
+                             (:after-restart? data) (assoc :after-restart? (:after-restart? data)))})))))
 
 (defn restart-server!
   [config repo]

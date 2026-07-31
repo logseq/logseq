@@ -6,6 +6,8 @@
 (def ^:private user-upsert-cache-ttl-ms (* 60 60 1000))
 (def ^:private user-upsert-cache-max 1024)
 (defonce ^:private *user-upsert-cache (atom {}))
+(def ^:private activity-touch-cache-max 8192)
+(defonce ^:private *activity-touch-cache (atom {}))
 
 (defn- prune-user-upsert-cache! [now-ms]
   (swap! *user-upsert-cache
@@ -56,6 +58,19 @@
   "alter table graphs add column graph_e2ee INTEGER DEFAULT 1")
 (def ^:private graph-ready-for-use-migration-sql
   "alter table graphs add column graph_ready_for_use integer default 1")
+(def ^:private user-created-at-migration-sql
+  "alter table users add column created_at integer")
+(def ^:private daily-active-entities-create-table-sql
+  (str "create table if not exists daily_active_entities ("
+       "day_utc TEXT,"
+       "entity_type TEXT,"
+       "entity_id TEXT,"
+       "first_seen_at INTEGER,"
+       "primary key (day_utc, entity_type, entity_id),"
+       "check (entity_type in ('user', 'graph'))"
+       ");"))
+(def ^:private daily-active-entities-create-index-sql
+  "create index if not exists idx_daily_active_entities_type_day on daily_active_entities (entity_type, day_utc)")
 
 (defn- duplicate-column-error?
   [error column-name]
@@ -96,6 +111,22 @@
         (p/catch (fn [_]
                    (<run-migration!))))))
 
+(defn- <ensure-user-created-at-column!
+  [db]
+  (letfn [(<run-migration! []
+            (-> (common/<d1-run db user-created-at-migration-sql)
+                (p/catch (fn [error]
+                           (if (duplicate-column-error? error "created_at")
+                             nil
+                             (p/rejected error))))))]
+    (-> (p/let [result (common/<d1-all db
+                                       "select name from pragma_table_info('users') where name = 'created_at'")
+                rows (common/get-sql-rows result)]
+          (when (empty? rows)
+            (<run-migration!)))
+        (p/catch (fn [_]
+                   (<run-migration!))))))
+
 (defn <index-init! [db]
   (p/do!
    (common/<d1-run db
@@ -116,8 +147,10 @@
                         "id TEXT primary key,"
                         "email TEXT,"
                         "email_verified INTEGER,"
-                        "username TEXT"
+                        "username TEXT,"
+                        "created_at INTEGER"
                         ");"))
+   (<ensure-user-created-at-column! db)
    (common/<d1-run db
                    (str "create table if not exists user_rsa_keys ("
                         "user_id TEXT primary key,"
@@ -145,12 +178,69 @@
                         "updated_at INTEGER,"
                         "primary key (graph_id, user_id)"
                         ");"))
+   (common/<d1-run db daily-active-entities-create-table-sql)
    (common/<d1-run db
                    "create index if not exists idx_graph_members_graph_id_created_at on graph_members (graph_id, created_at)")
    (common/<d1-run db
                    "create index if not exists idx_graphs_user_id_updated_at on graphs (user_id, updated_at desc)")
    (common/<d1-run db
-                   "create index if not exists idx_users_email on users (email)")))
+                   "create index if not exists idx_users_email on users (email)")
+   (common/<d1-run db daily-active-entities-create-index-sql)))
+
+(defn- utc-day-str
+  [timestamp-ms]
+  (-> (.toISOString (js/Date. timestamp-ms))
+      (subs 0 10)))
+
+(defn- prune-activity-touch-cache!
+  [cache]
+  (if (<= (count cache) activity-touch-cache-max)
+    cache
+    (let [drop-count (- (count cache) activity-touch-cache-max)]
+      (->> cache
+           (sort-by val)
+           (drop drop-count)
+           (into {})))))
+
+(defn- cache-activity-touch!
+  [cache-key now-ms]
+  (swap! *activity-touch-cache
+         (fn [cache]
+           (-> cache
+               (assoc cache-key now-ms)
+               (prune-activity-touch-cache!)))))
+
+(defn- activity-touch-cached?
+  [cache-key]
+  (contains? @*activity-touch-cache cache-key))
+
+(defn- <activity-touch!
+  [db entity-type entity-id]
+  (if (and (string? entity-id) (contains? #{"user" "graph"} entity-type))
+    (let [now (common/now-ms)
+          day-utc (utc-day-str now)
+          cache-key [day-utc entity-type entity-id]]
+      (if (activity-touch-cached? cache-key)
+        (p/resolved nil)
+        (p/let [_ (common/<d1-run db
+                                  (str "insert into daily_active_entities (day_utc, entity_type, entity_id, first_seen_at) "
+                                       "values (?, ?, ?, ?) "
+                                       "on conflict(day_utc, entity_type, entity_id) do nothing")
+                                  day-utc
+                                  entity-type
+                                  entity-id
+                                  now)]
+          (cache-activity-touch! cache-key now)
+          nil)))
+    (p/resolved nil)))
+
+(defn <user-activity-touch!
+  [db user-id]
+  (<activity-touch! db "user" user-id))
+
+(defn <graph-activity-touch!
+  [db graph-id]
+  (<activity-touch! db "graph" graph-id))
 
 (defn <index-list [db user-id]
   (if (string? user-id)
@@ -177,6 +267,61 @@
                :updated-at (aget row "updated_at")})
             rows))
     []))
+
+(defn decode-semantic-graph-cursor [cursor]
+  (when (string? cursor)
+    (try
+      (let [value (js->clj (js/JSON.parse (js/atob cursor)))]
+        (when (and (vector? value)
+                   (= 2 (count value))
+                   (number? (first value))
+                   (string? (second value)))
+          value))
+      (catch :default _
+        nil))))
+
+(defn- encode-semantic-graph-cursor [updated-at graph-id]
+  (js/btoa (js/JSON.stringify (clj->js [updated-at graph-id]))))
+
+(defn <semantic-graphs-list
+  [db user-id {:keys [name limit cursor]}]
+  (let [cursor-key (when cursor (decode-semantic-graph-cursor cursor))
+        [cursor-updated-at cursor-graph-id] cursor-key
+        conditions (cond-> [(str "(g.user_id = ? or m.user_id = ?) ")
+                            "g.graph_e2ee = 0"
+                            "g.graph_ready_for_use = 1"]
+                     (string? name) (conj "lower(g.graph_name) = lower(?)")
+                     cursor-key (conj "(g.updated_at < ? or (g.updated_at = ? and g.graph_id > ?))"))
+        args (cond-> [user-id user-id user-id]
+               (string? name) (conj name)
+               cursor-key (conj cursor-updated-at cursor-updated-at cursor-graph-id)
+               true (conj (inc limit)))
+        sql (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_ready_for_use, "
+                 "g.created_at, g.updated_at, m.role, m.invited_by "
+                 "from graphs g "
+                 "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
+                 "where " (string/join " and " conditions) " "
+                 "order by g.updated_at desc, g.graph_id asc limit ?")]
+    (p/let [result (apply common/<d1-all db sql args)
+            rows (vec (common/get-sql-rows result))
+            more? (> (count rows) limit)
+            selected (take limit rows)
+            graphs (mapv (fn [row]
+                           {:graph-id (aget row "graph_id")
+                            :graph-name (aget row "graph_name")
+                            :schema-version (aget row "schema_version")
+                            :graph-e2ee? false
+                            :graph-ready-for-use? (graph-ready-for-use-sql->bool (aget row "graph_ready_for_use"))
+                            :role (aget row "role")
+                            :invited-by (aget row "invited_by")
+                            :created-at (aget row "created_at")
+                            :updated-at (aget row "updated_at")})
+                         selected)]
+      (cond-> {:graphs graphs}
+        more? (assoc :next-cursor
+                     (let [row (nth rows (dec limit))]
+                       (encode-semantic-graph-cursor (aget row "updated_at")
+                                                     (aget row "graph_id"))))))))
 
 (defn <index-upsert!
   ([db graph-id graph-name user-id schema-version graph-e2ee?]
@@ -214,6 +359,15 @@
             rows (common/get-sql-rows result)
             row (first rows)]
       (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
+
+(defn <graph-e2ee?
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select graph_e2ee from graphs where graph_id = ?"
+                                   graph-id)
+            row (first (common/get-sql-rows result))]
+      (graph-e2ee-sql->bool (some-> row (aget "graph_e2ee"))))))
 
 (defn <graph-ready-for-use-set!
   [db graph-id graph-ready-for-use?]
@@ -261,16 +415,18 @@
                  (< (- now (:cached-at cached)) user-upsert-cache-ttl-ms))
           (cache-user-upsert! user-id email email-verified username now)
           (p/let [result (common/<d1-run db
-                                         (str "insert into users (id, email, email_verified, username) "
-                                              "values (?, ?, ?, ?) "
+                                         (str "insert into users (id, email, email_verified, username, created_at) "
+                                              "values (?, ?, ?, ?, ?) "
                                               "on conflict(id) do update set "
                                               "email = excluded.email, "
                                               "email_verified = excluded.email_verified, "
-                                              "username = excluded.username")
+                                              "username = excluded.username, "
+                                              "created_at = coalesce(users.created_at, excluded.created_at)")
                                          user-id
                                          email
                                          email-verified
-                                         username)]
+                                         username
+                                         now)]
             (cache-user-upsert! user-id email email-verified username now)
             result))))))
 

@@ -4,12 +4,13 @@
             [dommy.core :refer-macros [sel1] :as dom]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.table.impl :as impl]
-            [rum.core :as rum]))
+            [logseq.shui.table.impl :as impl]))
 
 (defn- get-head-container
   []
+  #_{:clj-kondo/ignore [:unresolved-namespace]}
   (if (and js/window (gobj/get js/window "isCapacitorNew"))
     (sel1 "ion-header")
     (sel1 "#head")))
@@ -138,12 +139,13 @@
       [prop (rest prop-and-children)]
       [{} prop-and-children])))
 
-(rum/defc table < rum/static
+(hsx/defc table
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
-                 prop)
-     children]))
+    (into
+     [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
+                  prop)]
+     children)))
 
 (defn- remove-sticky-header
   []
@@ -152,16 +154,17 @@
       (dom/remove-class! node "ls-fixed"))))
 
 (defn- use-sticky-element!
-  [^js/HTMLDivElement target-ref container]
+  [target-ref container enabled?]
   (hooks/use-effect!
    (fn []
-     (let [^js target (rum/deref target-ref)
-           ^js container (or (.closest target ".sidebar-item-list") container)
-           ^js table (.closest target ".ls-table-rows")]
-       (when (and container table)
-         (let [^js target-cls (.-classList target)
-               ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
-               ^js page-el (.closest target ".page-inner")
+     (when enabled?
+       (let [^js/HTMLElement target (hooks/deref target-ref)
+             ^js/HTMLElement container (or (.closest target ".sidebar-item-list") container)
+             ^js/HTMLElement table-el (.closest target ".ls-table-rows")]
+         (when (and container table-el)
+         (let [^js/DOMTokenList target-cls (.-classList target)
+               ^js/HTMLElement table-footer (some-> table-el (.querySelector ".ls-table-footer"))
+               ^js/HTMLElement page-el (.closest target ".page-inner")
                *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
                head-height (-> (get-head-container) (.-offsetHeight))
                update-target-top! (fn []
@@ -169,13 +172,13 @@
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
                                                           (.-scrollTop container)))))
                update-footer! (fn []
-                                (let [tw (.-scrollWidth table)]
+                                (let [tw (.-scrollWidth table-el)]
                                   (when (and table-footer (number? tw) (> tw 0))
                                     (set! (. (.-style table-footer) -width) (str tw "px")))))
                update-target! (fn []
                                 (if (.contains target-cls "ls-fixed")
-                                  (let [^js rect (-> table (.getBoundingClientRect))
-                                        width (.-clientWidth table)
+                                  (let [^js/DOMRect rect (-> table-el (.getBoundingClientRect))
+                                        width (.-clientWidth table-el)
                                         left (.-left rect)]
                                     (set! (. (.-style target) -width) (str width "px"))
                                     (set! (. (.-style target) -left) (str left "px")))
@@ -183,14 +186,14 @@
                                     (set! (. (.-style target) -width) "auto")
                                     (set! (. (.-style target) -left) "0px")))
                                 ;; update scroll
-                                (set! (. target -scrollLeft) (.-scrollLeft table)))
+                                (set! (. target -scrollLeft) (.-scrollLeft table-el)))
                ;; target observer
                target-observe! (fn [_e]
                                  (let [first-visible-table (some #(when (util/el-visible-in-viewport? % true) %)
                                                                  (dom/sel container ".ls-table-rows"))]
-                                   (when (= table first-visible-table)
-                                     (let [table-bottom (.-bottom (.getBoundingClientRect table))
-                                           table-top (.-top (.getBoundingClientRect table))]
+                                   (when (= table-el first-visible-table)
+                                     (let [table-bottom (.-bottom (.getBoundingClientRect table-el))
+                                           table-top (.-top (.getBoundingClientRect table-el))]
                                        (if (and (< table-top head-height)
                                                 (> table-bottom 100))
                                          (do
@@ -202,69 +205,72 @@
                page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
            ;; events
            (.observe resize-observer container)
-           (.observe resize-observer table)
+           (.observe resize-observer table-el)
            (some->> page-el (.observe page-resize-observer))
            (.addEventListener container "scroll" target-observe!)
-           (.addEventListener table "scroll" update-target!)
-           (.addEventListener table "resize" update-target!)
+           (.addEventListener table-el "scroll" update-target!)
+           (.addEventListener table-el "resize" update-target!)
            (update-footer!)
 
            ;; teardown
            #(do (.removeEventListener container "scroll" target-observe!)
                 (.disconnect resize-observer)
-                (.disconnect page-resize-observer))))))
-   []))
+                (.disconnect page-resize-observer)))))))
+   [enabled? container]))
 
 (defn- mobile?
   []
   (when-let [user-agent js/navigator.userAgent]
     (re-find #"Mobi" user-agent)))
 
-(rum/defc table-header < rum/static
+(hsx/defc table-header
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
-        el-ref (rum/use-ref nil)
-        _ (when-not (mobile?) (use-sticky-element! el-ref (:main-container prop)))]
-    [:div.ls-table-header
-     (merge {:class "border-y transition-colors bg-gray-01"
-             :ref el-ref
-             :style {:z-index 9}}
-            (dissoc prop :main-container))
-     children]))
+        el-ref (hooks/use-ref nil)
+        _ (use-sticky-element! el-ref (:main-container prop) (not (mobile?)))]
+    (into
+     [:div.ls-table-header
+      (merge {:class "border-y transition-colors bg-gray-01"
+              :ref el-ref
+              :style {:z-index 9}}
+             (dissoc prop :main-container))]
+     children)))
 
-(rum/defc table-footer
-  [children]
-  [:div.ls-table-footer.fade-in.faster
-   children])
+(hsx/defc table-footer
+  [& children]
+  (into [:div.ls-table-footer.fade-in.faster] children))
 
-(rum/defc table-row < rum/static
+(hsx/defc table-row
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-row.ls-block.flex.flex-row.items-center
-     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
-            prop)
-     children]))
+    (into
+     [:div.ls-table-row.ls-block.flex.flex-row.items-center
+      (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+             prop)]
+     children)))
 
-(rum/defc table-cell < rum/static
+(hsx/defc table-cell
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
-     [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
-                        (cond
-                          (:select? prop)
-                          " px-0"
-                          (:add-property? prop)
-                          ""
-                          :else
-                          " border-r px-2"))}
-      children]]))
+     (into
+      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                         (cond
+                           (:select? prop)
+                           " px-0"
+                           (:add-property? prop)
+                           ""
+                           :else
+                           " border-r px-2"))}]
+      children)]))
 
-(rum/defc table-actions < rum/static
+(hsx/defc table-actions
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
-        el-ref (rum/use-ref nil)]
-    [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
-     (merge {:ref el-ref
-             :style {:z-index 101}}
-            prop)
-     children]))
+        el-ref (hooks/use-ref nil)]
+    (into
+     [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
+      (merge {:ref el-ref
+              :style {:z-index 101}}
+             prop)]
+     children)))

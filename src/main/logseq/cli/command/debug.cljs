@@ -85,7 +85,7 @@
 (defn execute-debug-pull
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              entity (transport/invoke cfg :thread-api/pull false
+              entity (transport/invoke cfg :thread-api/pull
                                        [(:repo action) (:selector action) (:lookup action)])]
         (if (some? entity)
           {:status :ok

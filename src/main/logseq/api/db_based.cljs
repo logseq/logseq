@@ -122,7 +122,7 @@
 
 (defn- schema-type-check!
   [type]
-  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :json :string}]
+  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :asset :json :string}]
     (when-not (contains? valid-types type)
       (throw (ex-info (str "Invalid type, type should be one of: " valid-types) {:type type})))))
 
@@ -132,7 +132,7 @@
           property-ident (api-block/get-db-ident-from-property-name k' this)
           _ (api-block/ensure-property-upsert-control this property-ident k')
           schema (or (some-> schema
-                             (update-keys #(if (contains? #{:hide :public} %)
+                             (update-keys #(if (contains? #{:public} %)
                                              (keyword (str (name %) "?")) %)))
                      {})
           _ (when (:type schema)
@@ -140,18 +140,22 @@
           schema (cond-> schema
                    (string? (:cardinality schema))
                    (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
-                       (dissoc :cardinality))
+                     (dissoc :cardinality))
+
+                   (boolean? (:hide schema))
+                   (-> (assoc :logseq.property/hide? (:hide schema))
+                     (dissoc :hide))
 
                    (string? (:type schema))
                    (-> (assoc :logseq.property/type (keyword (:type schema)))
-                       (dissoc :type)))
+                     (dissoc :type)))
           p (db-property-handler/upsert-property! property-ident schema
                                                   (assoc opts :property-name k'))]
     (db/entity (:db/id p))))
 
 (defn upsert-property
   "schema:
-    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :json | :string
+    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :asset | :json | :string
      :cardinality :many | :one
      :hide? true
      :view-context :page
@@ -196,22 +200,23 @@
 
 (defn get-tag-objects
   [class-uuid-or-ident-or-title]
-  (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
-              (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
-                [:block/uuid id])
-              (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
-                (if (qualified-keyword? k)
-                  k
-                  (some-> (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title) :db/id))))
-        class (db/entity eid)]
-    (when-not (ldb/class? class)
-      (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
-    (if-not class
-      (throw (ex-info (str "Tag not exists with id: " eid) {}))
-      (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
-                                              (state/get-current-repo)
-                                              (:db/id class))]
-        (sdk-utils/result->js result)))))
+  (when-let [db (db/get-db)]
+    (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
+               (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
+                 [:block/uuid id])
+               (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
+                 (if (qualified-keyword? k)
+                   k
+                   (some-> (ldb/get-case-page db class-uuid-or-ident-or-title) :db/id))))
+         class (db/entity eid)]
+     (when-not (ldb/class? class)
+       (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
+     (if-not class
+       (throw (ex-info (str "Tag not exists with id: " eid) {}))
+       (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
+                                               (state/get-current-repo)
+                                               (:db/id class))]
+         (sdk-utils/result->js result))))))
 
 (defn create-tag [title ^js opts]
   (this-as this
@@ -296,9 +301,10 @@
                api-block/resolve-property-prefix-for-db))
 
 (defn- get-tags [name]
-  (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
-           (map #(some-> % (first) (db/entity)))
-           (filter ldb/class?)))
+  (when-let [db (db-conn/get-db)]
+    (some->> (entity-util/get-pages-by-name db name)
+            (map #(some-> % (first) (db/entity)))
+            (filter ldb/class?))))
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this

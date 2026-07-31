@@ -1,4 +1,5 @@
 (ns logseq.libs.sdk-generator
+  (:refer-clojure :exclude [run!])
   (:require [babashka.fs :as fs]
             [cheshire.core :as json]
             [clojure.string :as string]))
@@ -7,6 +8,7 @@
 (def default-output-dir "libs/cljs-sdk/src")
 (def default-ns-prefix "com.logseq")
 (def core-namespace "core")
+(def clojure-core-conflict-fns #{"get"})
 
 (defn parse-args
   [args]
@@ -46,12 +48,12 @@
     (str "  " (pr-str doc) "\n")))
 
 (defn param->info
-  [{:keys [name optional rest rest?]}]
+  [{:keys [name optional rest?] rest-param :rest}]
   (let [sym (camel->kebab name)]
     {:name name
      :sym sym
      :optional (boolean optional)
-     :rest (boolean (or rest rest?))}))
+     :rest (boolean (or rest-param rest?))}))
 
 (defn emit-rest-binding [{:keys [sym]}]
   (let [rest-var (str "rest-" sym)
@@ -137,7 +139,7 @@
                method-body))))))
 
 (defn emit-core-namespace
-  [ns-prefix {:keys [methods]}]
+  [ns-prefix {api-methods :methods}]
   (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
@@ -154,7 +156,7 @@
   (normalize-result (.apply method owner (bean/->js args))))\n")
         helpers {:call "call-method"}
         owner "\n(def api-proxy js/logseq)\n"
-        methods-str (->> methods
+        methods-str (->> api-methods
                          (map #(emit-method % helpers))
                          (apply str))]
     [ns (str header owner methods-str)]))
@@ -163,8 +165,14 @@
   [ns-prefix getter-name api]
   (let [ns (getter->namespace ns-prefix getter-name)
         owner-expr (format "(aget js/logseq \"%s\")" getter-name)
+        excluded-core-fns (->> (:methods api)
+                               (map (comp camel->kebab :name))
+                               (filter clojure-core-conflict-fns)
+                               distinct)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
+                    (when (seq excluded-core-fns)
+                      (str "  (:refer-clojure :exclude [" (string/join " " excluded-core-fns) "])\n"))
                     "  (:require [com.logseq.core :as core]))\n")
         helpers {:call "core/call-method"}
         owner (format "\n(def api-proxy %s)\n" owner-expr)

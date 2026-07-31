@@ -6,9 +6,9 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
 (def ^:private levels ["DEBUG" "INFO" "WARN" "ERROR"])
 
@@ -38,11 +38,11 @@
       (util/copy-to-clipboard!))
   (notification/show! (t :plugin/logs-copied) :success))
 
-(rum/defc ^:large-vars/cleanup-todo plugin-logs-panel
+(hsx/defc ^:large-vars/cleanup-todo plugin-logs-panel
   [{:keys [pid name]}]
-  (let [[entries set-entries!] (rum/use-state (or (get-entries pid) []))
-        [level-filter set-level-filter!] (rum/use-state nil)
-        [keyword-filter set-keyword-filter!] (rum/use-state "")
+  (let [[entries set-entries!] (hooks/use-state (or (get-entries pid) []))
+        [level-filter set-level-filter!] (hooks/use-state nil)
+        [keyword-filter set-keyword-filter!] (hooks/use-state "")
         ^js logger (get-plugin-logger pid)
         refresh! (hooks/use-callback
                    (fn [] (set-entries! (or (get-entries pid) [])))
@@ -163,7 +163,6 @@
     {:label "plugin-logs-modal"
      :class "lsp-plugin-logs-dialog"
      :content-props {:on-open-auto-focus #(.preventDefault %)}}))
-
 
 
 

@@ -4,27 +4,16 @@
    [frontend.modules.layout.core :as layout]
    [frontend.state :as state]
    [logseq.shui.hooks :as hooks]
-   [rum.core :as rum]))
+   [io.factorhouse.hsx.core :as hsx]))
 
 ;(def lazy-handbooks (lazy/loadable frontend.extensions.handbooks.core/content))
-;
-;(rum/defc loadable-handbooks
-;  []
-;  (let [[content set-content] (rum/use-state nil)]
-;
-;    (hooks/use-effect!
-;     (fn []
-;       (lazy/load lazy-handbooks #(set-content %))) [])
-;
-;    [:div.cp__handbooks-content
-;     content]))
 
-(rum/defc handbooks-popup
+(hsx/defc handbooks-popup
   []
-  (let [popup-ref (rum/use-ref nil)]
+  (let [popup-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when-let [^js popup-el (rum/deref popup-ref)]
+       (when-let [^js popup-el (hooks/deref popup-ref)]
          (comp
           (layout/setup-draggable-container! popup-el nil))))
      [])

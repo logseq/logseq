@@ -118,6 +118,75 @@
         (set! (.-readFileSync fs) read-file-sync)
         (set! (.-writeFileSync fs) write-file-sync)))))
 
+(deftest test-installed-skill-targets
+  (let [targets (skill-command/installed-skill-targets {:cwd "/tmp/work"
+                                                        :home-dir "/Users/demo"})]
+    (is (= [{:scope :local
+             :path "/tmp/work/.agents/skills/logseq-cli/SKILL.md"
+             :update-command "logseq skill install"}
+            {:scope :global
+             :path "/Users/demo/.agents/skills/logseq-cli/SKILL.md"
+             :update-command "logseq skill install --global"}]
+           targets))))
+
+(deftest test-installed-skill-update-status
+  (let [tmp-root (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-skill-status-"))
+        source-path (node-path/join tmp-root "source" "SKILL.md")
+        cwd (node-path/join tmp-root "work")
+        home-dir (node-path/join tmp-root "home")
+        local-path (path/path-join cwd ".agents" "skills" "logseq-cli" "SKILL.md")
+        global-path (path/path-join home-dir ".agents" "skills" "logseq-cli" "SKILL.md")]
+    (try
+      (fs/mkdirSync (node-path/dirname source-path) #js {:recursive true})
+      (fs/mkdirSync (node-path/dirname local-path) #js {:recursive true})
+      (fs/mkdirSync (node-path/dirname global-path) #js {:recursive true})
+      (fs/writeFileSync source-path "# current skill\n" "utf8")
+
+      (testing "reports no installed skill without warning"
+        (let [status (skill-command/installed-skill-update-status {:cwd cwd
+                                                                    :home-dir home-dir
+                                                                    :source-path source-path})]
+          (is (= {:installed? false
+                  :outdated? false
+                  :outdated-targets []}
+                 (select-keys status [:installed? :outdated? :outdated-targets])))
+          (is (nil? (skill-command/format-installed-skill-warning status)))))
+
+      (testing "reports installed current skill without warning"
+        (fs/writeFileSync local-path "# current skill\n" "utf8")
+        (let [status (skill-command/installed-skill-update-status {:cwd cwd
+                                                                    :home-dir home-dir
+                                                                    :source-path source-path})]
+          (is (true? (:installed? status)))
+          (is (false? (:outdated? status)))
+          (is (empty? (:outdated-targets status)))
+          (is (nil? (skill-command/format-installed-skill-warning status)))))
+
+      (testing "reports stale installed skill and formats one concise warning"
+        (fs/writeFileSync global-path "# old skill\n" "utf8")
+        (let [status (skill-command/installed-skill-update-status {:cwd cwd
+                                                                    :home-dir home-dir
+                                                                    :source-path source-path})
+              warning (skill-command/format-installed-skill-warning status)]
+          (is (true? (:installed? status)))
+          (is (true? (:outdated? status)))
+          (is (= [{:scope :global
+                   :path global-path
+                   :update-command "logseq skill install --global"}]
+                 (:outdated-targets status)))
+          (is (string/includes? warning "Warning: Installed logseq-cli skill is out of date."))
+          (is (string/includes? warning "logseq skill install"))
+          (is (string/includes? warning "logseq skill install --global"))))
+
+      (testing "returns typed error when source cannot be read"
+        (let [status (skill-command/installed-skill-update-status {:cwd cwd
+                                                                    :home-dir home-dir
+                                                                    :source-path (node-path/join tmp-root "missing.md")})]
+          (is (false? (:outdated? status)))
+          (is (= :skill-source-read-failed (get-in status [:error :code])))))
+      (finally
+        (fs/rmSync tmp-root #js {:recursive true :force true})))))
+
 (deftest test-execute-skill-install-preserves-other-skills
   (let [tmp-root (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-skill-test-"))
         source-path (node-path/join tmp-root "source-skill.md")

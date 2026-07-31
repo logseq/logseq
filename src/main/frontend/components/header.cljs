@@ -5,11 +5,13 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
+            [frontend.components.email :as email-component]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
+            [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.components.server :as server]
@@ -28,46 +30,72 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.email :as email-util]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc home-button
-  < {:key-fn #(identity "home-button")}
+(hsx/defc home-button
   []
-  (shui/button-ghost-icon :home
-                          {:title (t :nav/home)
-                           :on-click #(do
-                                        (when (mobile-util/native-iphone?)
-                                          (state/set-left-sidebar-open! false))
-                                        (route-handler/redirect-to-home!))}))
+  (ui/tooltip
+   (shui/button-ghost-icon :home
+                           {:on-click #(do
+                                         (when (mobile-util/native-iphone?)
+                                           (state/set-left-sidebar-open! false))
+                                         (route-handler/redirect-to-home!))})
+   (t :nav/home)
+   {:trigger-props {:as-child true}}))
 
-(rum/defcs rtc-collaborators <
-  rum/reactive
-  (rum/local nil ::online-users)
-  (rum/local nil ::online-users-canceler)
-  {:will-mount (fn [state]
-                 (reset!
-                  (::online-users-canceler state)
-                  (c.m/run-task :fetch-online-users
-                    (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
-                    :succ (constantly nil)))
-                 state)
-   :will-unmount (fn [state]
-                   (when @(::online-users-canceler state) (@(::online-users-canceler state)))
-                   (reset! (::online-users state) nil)
-                   state)}
-  [state]
+(defn current-local-uploadable-graph
+  []
+  (let [current-repo (state/get-current-repo)]
+    (some (fn [{:keys [url] :as graph}]
+            (when (and (= current-repo url)
+                       (repo/local-uploadable-graph?
+                        (assoc graph :rtc-graph?
+                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
+              graph))
+          (state/get-repos))))
+
+(defn- current-remote-rtc-graph
+  [current-repo rtc-graphs]
+  (some #(when (= current-repo (:url %)) %) rtc-graphs))
+
+(defn- rtc-indicator-visible?
+  [{:keys [current-repo rtc-graphs db-rtc-uuid rtc-state logged-in? rtc-group?]}]
+  (let [remote-graph (current-remote-rtc-graph current-repo rtc-graphs)
+        remote-graph-uuid (some-> (:GraphUUID remote-graph) str)
+        state-graph-uuid (some-> (:graph-uuid rtc-state) str)]
+    (and current-repo
+         logged-in?
+         rtc-group?
+         remote-graph
+         (or db-rtc-uuid
+             (and (seq state-graph-uuid)
+                  (= state-graph-uuid remote-graph-uuid))))))
+
+(defn local-graph-sync-button
+  [graph]
+  (ui/tooltip
+   (shui/button-ghost-icon :cloud
+                           {:class "local-graph-sync-btn"
+                            :on-click #(repo/upload-local-graph-with-confirm! graph)})
+   (t :graph/use-sync-beta)
+   {:trigger-props {:as-child true}}))
+
+(hsx/defc rtc-collaborators
+  []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        online-users @(::online-users state)]
+        config (state/use-sub-config)
+        online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
@@ -81,20 +109,17 @@
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
-                user-uuid :user/uuid} online-users
-               :let [color (shui-util/uuid-color user-uuid)]]
+                user-uuid :user/uuid} online-users]
            (when user-name
-             (shui/avatar
+             (avatar/user-avatar
               {:class "w-5 h-5"
                :style {:app-region "no-drag"}
-               :title user-email}
-              (shui/avatar-fallback
-               {:style {:background-color (str color "50")
-                        :font-size 11}}
-               (some-> (subs user-name 0 2) (string/upper-case)))))))])))
+               :title (email-util/display-email user-email config)
+               :name user-name
+               :uuid user-uuid
+               :fallback-props {:style {:font-size 11}}}))))])))
 
-(rum/defc left-menu-button < rum/reactive
-  < {:key-fn #(identity "left-menu-toggle-button")}
+(hsx/defc left-menu-button
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
@@ -106,7 +131,7 @@
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
-                      "Git Revision: " config/REVISION "\n"
+                      "Git Revision: " (build-version/revision) "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]
@@ -119,29 +144,39 @@
          "platform="
          (js/encodeURIComponent platform))))
 
-(rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu < rum/reactive
+(defn- stop-event!
+  [^js e]
+  (.preventDefault e)
+  (.stopPropagation e))
+
+(hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
-  (let [page (some-> (sidebar/get-current-page) db/get-page)
+  (let [_route-match (state/use-sub :route-match)
+        current-page (sidebar/get-current-page)
+        page (or (some-> current-page db/get-page)
+                 (when (util/uuid-string? current-page)
+                   (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (state/sub :db/restoring?)) true)
-        page-menu (if (and working-page? (ldb/page? page))
-                    (page-menu/page-menu page)
-                    (when-not config/publishing?
-                      (let [block-id-str (str (:block/uuid page))
-                            favorited? (page-handler/favorited? block-id-str)]
-                        [{:title   (if favorited?
-                                     (t :page/unfavorite)
-                                     (t :page/add-to-favorites))
-                          :options {:on-click
-                                    (fn []
-                                      (if favorited?
-                                        (page-handler/<unfavorite-page! block-id-str)
-                                        (page-handler/<favorite-page! block-id-str)))}}
-                         {:title   (t :publish/dialog-title)
-                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
-                                                                  {:class "w-auto max-w-md"})}}])))
-        page-menu-and-hr (concat page-menu [{:hr true}])
-        login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
+        db-storing? (state/use-sub :db/restoring?)
+        working-page? (if config/publishing? (not db-storing?) true)
+        page-menu-items (fn []
+                          (if (and working-page? (ldb/page? (or (some-> page :db/id db/entity) page)))
+                            (page-menu/page-menu page)
+                            (when-not config/publishing?
+                              (let [block-id-str (str (:block/uuid page))
+                                    favorited? (page-handler/favorited? block-id-str)]
+                                [{:title   (if favorited?
+                                             (t :page/unfavorite)
+                                             (t :page/add-to-favorites))
+                                  :options {:on-click
+                                            (fn []
+                                              (if favorited?
+                                                (page-handler/<unfavorite-page! block-id-str)
+                                                (page-handler/<favorite-page! block-id-str)))}}
+                                 {:title   (t :publish/dialog-title)
+                                  :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                          {:class "w-auto max-w-md"})}}]))))
+        login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
@@ -187,13 +222,25 @@
                   (when login?
                     {:item [:span.flex.flex-col.relative.group.pt-1.w-full
                             [:b.leading-none (user-handler/username)]
-                            [:small.opacity-70 (user-handler/email)]
-                            [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                             {:class "right-1 top-3" :title (t :ui/logout)}
-                             (ui/icon "logout")]]
-                     :options {:on-click #(user-handler/logout)
+                            [:small.opacity-70
+                             (email-component/email-address {:email (user-handler/email)})]
+                            (ui/tooltip
+                             (shui/button
+                              {:type "button"
+                               :variant :ghost
+                               :size :icon
+                               :class "absolute right-1 top-3 h-auto w-auto min-w-0 border-0 bg-transparent p-0 text-red-rx-09 opacity-0 group-hover:opacity-100"
+                               :aria-label (t :ui/logout)
+                               :on-pointer-down stop-event!
+                               :on-click (fn [e]
+                                           (stop-event! e)
+                                           (user-handler/logout)
+                                           (shui/popup-hide!))}
+                              (ui/icon "logout"))
+                             (t :ui/logout))]
+                     :options {:on-select (fn [^js e] (.preventDefault e))
                                :class "w-full"}})]
-                 (concat page-menu-and-hr)
+                 (concat (page-menu-items) [{:hr true}])
                  (remove nil?)))]
 
     (ui/tooltip
@@ -229,8 +276,7 @@
      (t :header/more)
      {:trigger-props {:as-child true}})))
 
-(rum/defc back-and-forward
-  < {:key-fn #(identity "nav-history-buttons")}
+(hsx/defc back-and-forward
   []
   [:div.flex.flex-row
    (ui/with-shortcut :go/backward "bottom"
@@ -245,9 +291,9 @@
                     :class "it navigation nav-right"})
      (t :header/go-forward))])
 
-(rum/defc updater-tips-new-version
+(hsx/defc updater-tips-new-version
   [t]
-  (let [[downloaded, set-downloaded] (rum/use-state nil)
+  (let [[downloaded, set-downloaded] (hooks/use-state nil)
         _ (hooks/use-effect!
            (fn []
              (when (util/electron?)
@@ -284,10 +330,10 @@
       (doseq [node nodes]
         (d/remove-class! node "recent-block")))))
 
-(rum/defc recent-slider-inner
+(hsx/defc recent-slider-inner
   []
-  (let [[recent-days set-recent-days!] (rum/use-state (state/get-highlight-recent-days))
-        [thumb-ref set-thumb-ref!] (rum/use-state nil)]
+  (let [[recent-days set-recent-days!] (hooks/use-state (state/get-highlight-recent-days))
+        [thumb-ref set-thumb-ref!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (when thumb-ref
@@ -344,51 +390,59 @@
        :on-click (fn [] (state/toggle-highlight-recent-blocks!))}
       (ui/icon "x" {:size 16}))]))
 
-(rum/defc recent-slider < rum/reactive
-  {:will-update (fn [state]
-                  (when-not @(:ui/toggle-highlight-recent-blocks? @state/state)
-                    (clear-recent-highlight!))
-                  state)}
+(hsx/defc recent-slider
   []
-  (when (state/sub :ui/toggle-highlight-recent-blocks?)
-    (recent-slider-inner)))
+  (let [highlight? (state/use-sub :ui/toggle-highlight-recent-blocks?)]
+    (hooks/use-effect!
+     (fn []
+       (when-not highlight?
+         (clear-recent-highlight!)))
+     [highlight?])
+    (when highlight?
+      (recent-slider-inner))))
 
-(rum/defc block-breadcrumb
+(hsx/defc block-breadcrumb
   [page-name]
-  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                    (db/entity [:block/uuid (uuid page-name)]))]
-    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
-               (ldb/page? page) (:block/parent page))
-      [:div.ls-block-breadcrumb
-       [:div.text-sm
-       (component-block/breadcrumb {}
-                                    (state/get-current-repo)
-                                    (:block/uuid page)
-                                    {:header? true})]])))
+  (let [db-restoring? (state/use-sub :db/restoring?)]
+    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                      (db/entity [:block/uuid (uuid page-name)]))]
+      ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+      (when (and (if config/publishing? (not db-restoring?) true)
+                 (ldb/page? page) (:block/parent page))
+        [:div.ls-block-breadcrumb
+         [:div.text-sm
+          (component-block/breadcrumb {}
+                                      (state/get-current-repo)
+                                      (:block/uuid page)
+                                      {:header? true})]]))))
 
-(rum/defc search-index-progress < rum/reactive
+(hsx/defc search-index-progress
   []
   (let [current-repo (state/get-current-repo)
-        {:keys [running? repo progress]} (or (state/sub :search/index-build) {})
+        {:keys [visible? running? repo progress]} (or (state/use-sub :search/index-build) {})
         progress' (-> (or progress 0)
                       (max 0)
                       (min 100))]
-    (when (and running? (= repo current-repo))
+    (when (and (or visible? running?) (= repo current-repo))
       [:div.search-index-progress
-       [ui/loading ""]
+       (ui/loading "")
        [:span.search-index-progress__text (t :search/index-progress progress')]
        [:div.search-index-progress__bar
         [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 
-(rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
+(hsx/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
+        rtc-graphs (state/use-sub :rtc/graphs)
+        rtc-state (state/use-sub :rtc/state)
+        db-rtc-uuid (ldb/get-graph-rtc-uuid (db/get-db))
+        default-home-page (state/use-sub-default-home-page)
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))]
+                               (= default-home-page (state/get-current-page)))
+        electron-server (state/use-sub :electron/server)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -404,40 +458,42 @@
                              (util/scroll-to-top true))))
       :style           {:fontSize 50}}
      [:div.l.flex.items-center.drag-region
-      [left-menu
-       (if (mobile-util/native-platform?)
-         ;; back button for mobile
-         (when-not (or (state/home?) custom-home-page?)
-           (ui/with-shortcut :go/backward "bottom"
-             [:button.it.navigation.nav-left.button.icon.opacity-70
-              {:on-click #(js/window.history.back)}
-              (ui/icon "chevron-left" {:size 26})]
-             (t :header/go-back)))
-                 ;; search button for non-mobile
-         (when current-repo
-           (ui/with-shortcut :go/search "right"
-             [:button.button.icon#search-button
-              {:data-keep-selection true
-               :on-click #(do (when (or (mobile-util/native-android?)
-                                        (mobile-util/native-iphone?))
-                                (state/set-left-sidebar-open! false))
-                              (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})]
-             (t :nav/search))))]]
+      left-menu
+      (if (mobile-util/native-platform?)
+        ;; back button for mobile
+        (when-not (or (state/home?) custom-home-page?)
+          (ui/with-shortcut :go/backward "bottom"
+            [:button.it.navigation.nav-left.button.icon.opacity-70
+             {:on-click #(js/window.history.back)}
+             (ui/icon "chevron-left" {:size 26})]
+            (t :header/go-back)))
+        ;; search button for non-mobile
+        (when current-repo
+          (ui/with-shortcut :go/search "right"
+            [:button.button.icon#search-button
+             {:data-keep-selection true
+              :on-click #(do (when (or (mobile-util/native-android?)
+                                       (mobile-util/native-iphone?))
+                               (state/set-left-sidebar-open! false))
+                             (state/pub-event! [:go/search]))}
+             (ui/icon "search" {:size ui/icon-size})]
+            (t :nav/search))))]
 
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
       [:div.flex.items-center
-       (when (and current-repo
-                  (ldb/get-graph-rtc-uuid (db/get-db))
-                  (user-handler/logged-in?)
-                  (user-handler/rtc-group?)
-                  (some #(= current-repo (:url %)) (state/get-rtc-graphs)))
+       (when (rtc-indicator-visible?
+              {:current-repo current-repo
+               :rtc-graphs rtc-graphs
+               :db-rtc-uuid db-rtc-uuid
+               :rtc-state rtc-state
+               :logged-in? (user-handler/logged-in?)
+               :rtc-group? (user-handler/rtc-group?)})
          [:<>
           (recent-slider)
-          (rum/with-key (rtc-collaborators)
-            (str "collab-" current-repo))
+          ^{:key (str "collab-" current-repo)}
+          [rtc-collaborators]
           (rtc-indicator/indicator)])
 
        (when (user-handler/logged-in?)
@@ -445,6 +501,9 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
        (search-index-progress)
+
+       (when-let [graph (current-local-uploadable-graph)]
+         (local-graph-sync-button graph))
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))
@@ -456,7 +515,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/sub :electron/server)))
+         (server/server-indicator electron-server))
 
        (when (util/electron?)
          (back-and-forward))
@@ -483,7 +542,7 @@
       :rtc-running? rtc-running?})
    (m/watch state/state) rtc-flows/rtc-running-flow))
 
-(rum/defc header
+(hsx/defc header
   [opts]
   (let [_m (hooks/use-flow-state header-related-flow)]
     (header-aux opts)))

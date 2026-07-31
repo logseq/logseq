@@ -17,6 +17,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.embedding-server :as embedding-server]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
             [electron.i18n :as i18n]
@@ -30,10 +31,10 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-registry :as graph-registry]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -195,7 +196,7 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (cli-common-graph/get-db-based-graphs)))
+  (distinct (common-graph/get-db-based-graphs)))
 
 (defn- canonical-repo
   [graph]
@@ -206,17 +207,23 @@
   "Given a graph's name of string, returns the graph's fullname. For example, given
   `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
-  (when-let [repo (canonical-repo graph-identifier)]
-    (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
-      (->> (get-graphs)
-           (some #(when (or
-                         (= (utils/normalize-lc %) (utils/normalize-lc repo))
-                         (string/ends-with? (utils/normalize-lc %)
-                                            (str "/" (utils/normalize-lc graph-name))))
-                    %))))))
+  (or (:repo (graph-registry/resolve-target
+              (cfgs/read-graph-registry)
+              {:graph-identifier graph-identifier}))
+      (when-let [repo (canonical-repo graph-identifier)]
+        (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
+          (->> (get-graphs)
+               (some #(when (or
+                             (= (utils/normalize-lc %) (utils/normalize-lc repo))
+                             (string/ends-with? (utils/normalize-lc %)
+                                                (str "/" (utils/normalize-lc graph-name))))
+                        %)))))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
+
+(defmethod handle :upsertGraphRegistryEntry [_window [_ entry]]
+  (cfgs/upsert-graph-registry-entry! entry))
 
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]
@@ -232,12 +239,28 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
+    (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
+                                 (embedding-server/ensure-endpoint! app))]
+      (db-worker/ensure-runtime! (canonical-repo repo)
+                                 (.-id window)
+                                 (cond-> {}
+                                   embedding-endpoint
+                                   (assoc :embedding-endpoint embedding-endpoint
+                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)))))))
 
-(defmethod handle :db-export [_window [_ repo force-backup?]]
+(defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
+  (if (string/blank? repo)
+    (p/rejected (ex-info "repo is required" {:code :missing-repo}))
+    (db-worker/release-runtime! (canonical-repo repo) (.-id window))))
+
+(defmethod handle :db-export [window [_ repo force-backup?]]
   (when-let [repo (canonical-repo repo)]
     (db/ensure-graph-dir! repo)
-    (db/backup-db! repo {:force-backup? force-backup?})))
+    (db/backup-db-via-worker! repo (.-id window) {:force-backup? force-backup?})))
+
+(defmethod handle :db-export-as [window [_ repo filename]]
+  (when-let [repo (canonical-repo repo)]
+    (db/export-db-to-export-dir-via-worker! repo (.-id window) filename)))
 
 (defmethod handle :db-get [_window [_ repo]]
   (when-let [repo (canonical-repo repo)]
@@ -265,17 +288,15 @@
    (utils/save-proxy-settings options)))
 
 (defmethod handle :testProxyUrl [_win [_ url options]]
-  ;; FIXME: better not to set proxy while testing url
-  (let [_ (utils/<set-proxy options)
-        start-ms (.getTime (js/Date.))]
-    (-> (utils/fetch url)
+  (let [start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url {:proxy options})
         (p/timeout 10000)
         (p/then (fn [resp]
                   (let [code (.-status resp)
                         response-ms (- (.getTime (js/Date.)) start-ms)]
                     (if (<= 200 code 299)
-                      #js {:code code
-                           :response-ms response-ms}
+                      {:code code
+                       :response-ms response-ms}
                       (p/rejected (js/Error. (str "HTTP status " code)))))))
         (p/catch (fn [e]
                    (if (instance? p/TimeoutException e)
@@ -303,20 +324,37 @@
 (defmethod handle :quitApp []
   (.quit app))
 
+(defn- enabling-semantic-search?
+  [k v]
+  (and (= k :feature/enable-semantic-search?)
+       (true? v)))
+
 (defmethod handle :userAppCfgs [window [_ k v]]
   (let [config (cfgs/get-config)]
     (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (do (cfgs/set-item! k v)
-            (when (= k :spell-check)
-              (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
-            (state/set-state! [:config k] v))
+        (p/let [python-available? (if (enabling-semantic-search? k v)
+                                    (embedding-server/python-command-available! "python3")
+                                    true)]
+          (if-not python-available?
+            (p/rejected (ex-info "python3 is required to enable semantic search"
+                                 {:code :missing-python3}))
+            (do (cfgs/set-item! k v)
+                (when (= k :spell-check)
+                  (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
+                (when (and (= k :feature/enable-semantic-search?)
+                           (false? v))
+                  (embedding-server/stop!))
+                (state/set-state! [:config k] v)
+                nil)))
         (cfgs/get-item k))
       config)))
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)
-   :isMaximized (.isMaximized win)})
+   :isMaximized (.isMaximized win)
+   :platform (.-platform js/process)
+   :arch (.-arch js/process)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
@@ -376,43 +414,81 @@
 
 (def *request-abort-signals (atom {}))
 
+(defn- response-headers->map
+  [^js headers]
+  (let [result (atom {})]
+    (when headers
+      (.forEach headers (fn [value key]
+                          (swap! result assoc key value))))
+    @result))
+
+(defn- request-body->js
+  [payload]
+  (cond
+    (nil? payload) nil
+    (string? payload) payload
+    (instance? js/ArrayBuffer payload) payload
+    (js/ArrayBuffer.isView payload) payload
+    :else (js/JSON.stringify (bean/->js payload))))
+
+(defn- read-response-body
+  [^js res type method]
+  (if (or (= :HEAD method) (contains? #{204 205} (.-status res)))
+    (p/resolved nil)
+    (case type
+      :json
+      (.json res)
+
+      :arraybuffer
+      (.arrayBuffer res)
+
+      :base64
+      (-> (.arrayBuffer res)
+          (p/then #(-> (js/Buffer.from %)
+                       (.toString "base64"))))
+
+      :text
+      (.text res))))
+
 (defmethod handle :httpRequest [_ [_ req-id opts]]
-  (let [{:keys [url abortable method data returnType headers]} opts]
+  (let [{:keys [url abortable method data body returnType headers timeout includeResponse]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
                                    (keyword (string/lower-case (or returnType "json")))])]
-      (-> (utils/fetch url
-                       (-> {:method  method
-                            :headers (and headers (bean/->js headers))}
-                           (merge (when (and (not (contains? #{:GET :HEAD} method)) data)
-                                    ;; TODO: support type of arrayBuffer
-                                    {:body (js/JSON.stringify (bean/->js data))})
+      (let [payload (if (some? body) body data)
+            timeout (when (and (number? timeout) (pos? timeout)) timeout)
+            ^js controller (when (or abortable timeout) (AbortController.))
+            timeout-id (when (and timeout controller)
+                         (js/setTimeout #(.abort controller) timeout))]
+        (when controller
+          (swap! *request-abort-signals assoc req-id controller))
+        (-> (utils/fetch url
+                         (-> {:method  method
+                              :headers (and headers (bean/->js headers))}
+                             (merge (when (and (not (contains? #{:GET :HEAD} method)) (some? payload))
+                                      {:body (request-body->js payload)})
 
-                                  (when-let [^js controller (and abortable (AbortController.))]
-                                    (swap! *request-abort-signals assoc req-id controller)
-                                    {:signal (.-signal controller)}))))
-          (p/then (fn [^js res]
-                    (case type
-                      :json
-                      (.json res)
-
-                      :arraybuffer
-                      (.arrayBuffer res)
-
-                      :base64
-                        (-> (.arrayBuffer res)
-                          (p/then #(-> (js/Buffer.from %)
-                                 (.toString "base64"))))
-
-                      :text
-                      (.text res))))
+                                    (when controller
+                                      {:signal (.-signal controller)}))))
+            (p/then (fn [^js res]
+                      (p/let [payload (read-response-body res type method)]
+                        (if includeResponse
+                          {:status (.-status res)
+                           :statusText (.-statusText res)
+                           :ok (.-ok res)
+                           :url (.-url res)
+                           :headers (response-headers->map (.-headers res))
+                           :body payload}
+                          payload))))
           (p/catch
            (fn [^js e]
              ;; TODO: handle special cases
              (throw e)))
           (p/finally
             (fn []
-              (swap! *request-abort-signals dissoc req-id)))))))
+              (when timeout-id
+                (js/clearTimeout timeout-id))
+              (swap! *request-abort-signals dissoc req-id))))))))
 
 (defmethod handle :httpRequestAbort [_ [_ req-id]]
   (when-let [^js controller (get @*request-abort-signals req-id)]

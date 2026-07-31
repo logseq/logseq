@@ -15,7 +15,7 @@
                   :multi-id? false}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/pull
                                                (p/resolved {:db/id 190
@@ -48,7 +48,7 @@
                   :multi-id? true}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ _]
+                          transport/invoke (fn [_ method _]
                                              (case method
                                                :thread-api/pull
                                                (p/resolved {:db/id 190
@@ -79,7 +79,7 @@
                   :multi-id? false}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/pull
                                                (p/resolved {:db/id 190
@@ -110,7 +110,7 @@
           boom (js/Error. "transport exploded")]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ _args]
+                          transport/invoke (fn [_ method _args]
                                              (case method
                                                :thread-api/pull
                                                (p/rejected boom)

@@ -49,7 +49,7 @@ import Capacitor
         }
 
         // 2) Detach from previous parent
-        if let previous = currentParent {
+        if let previous = vc.parent {
             vc.willMove(toParent: nil)
             vc.view.removeFromSuperview()
             vc.removeFromParent()

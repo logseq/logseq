@@ -1,6 +1,7 @@
 (ns frontend.handler.plugin
   "System-component-like ns that provides all high level plugin functionality"
-  (:require [camel-snake-kebab.core :as csk]
+  (:require ["react-dom/client" :as rdc]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -24,7 +25,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- normalize-keyword-for-json
   [input]
@@ -354,6 +355,7 @@
                                             [(t :plugin/up-to-date ":)") :success]
 
                                             [error-code :error])
+                               rate-limit-error? (some-> msg str (string/includes? "API rate limit"))
                                pending? (seq (:plugin/updates-pending @state/state))]
 
                            (if (and only-check pending?)
@@ -365,11 +367,12 @@
                                  (state/consume-updates-from-coming-plugin! payload true))
 
                                ;; notify human tips
-                               (notification/show!
-                                 (str
-                                   (if (= :error type) "[Error]" "")
-                                   "<" (:id payload) "> "
-                                   msg) type)))
+                               (when-not rate-limit-error?
+                                 (notification/show!
+                                   (str
+                                     (if (= :error type) "[Error]" "")
+                                     "<" (:id payload) "> "
+                                     msg) type))))
 
                            (when-not fake-error?
                              (js/console.error "Update Error:" (:error-code payload))))
@@ -411,9 +414,12 @@
       true)))
 
 (defn unregister-plugin-slash-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
-  (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+   (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid cmd]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid) cmd])
+   (state/pub-event! [:rebuild-slash-commands-list])))
 
 (def keybinding-mode-handler-map
   {:global :shortcut.handler/editor-global
@@ -459,8 +465,14 @@
       true)))
 
 (defn unregister-plugin-simple-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid key]
+   (swap! state/state update-in [:plugin/simple-commands (keyword pid)]
+     (fn [commands]
+       (->> commands
+            (remove #(= key (:key (second %))))
+            vec)))))
 
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
@@ -985,7 +997,7 @@
         (if (util/electron?)
           (p/let [_ (fs/create-if-not-exists repo nil filepath (js/JSON.stringify default))
                   json (fs/read-file nil filepath)]
-            [filepath (js/JSON.parse json)])
+            [filepath (js/JSON.parse (if (string/blank? json) (js/JSON.stringify default) json))])
           (p/let [data (idb/get-item filepath)]
             [filepath (or data default)]))))))
 
@@ -1102,20 +1114,31 @@
 (defn call-plugin
   [^js pl type payload]
   (when pl
-    (.call (.-caller pl) (name type) (bean/->js payload))))
+    (.call (.-caller pl) (name type) payload)))
 
 (defn request-callback
-  [^js pl req-id payload]
-  (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+  [^js pl req-id ^js payload]
+  (call-plugin pl :#lsp#request#callback #js {:requestId req-id :payload payload}))
 
 (defn op-pinned-toolbar-item!
   [key op]
-  (let [pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+  (let [pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
         pinned (into #{} pinned)]
     (when-let [op-fn (case op
                        :add conj
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
+
+(defn- remove-pinned-toolbar-items-of-plugin!
+  [pid]
+  (let [prefix (str (name pid) ":")
+        pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
+        pinned (if (sequential? pinned) (vec pinned) [])
+        updated-pinned (->> pinned
+                            (remove #(and (string? %) (string/starts-with? % prefix)))
+                            vec)]
+    (when (not= pinned updated-pinned)
+      (save-plugin-preferences! {:pinnedToolbarItems updated-pinned}))))
 
 (defn hook-lifecycle-fn!
   [type f & args]
@@ -1167,9 +1190,9 @@
       url)))
 
 ;; components
-(rum/defc lsp-indicator < rum/reactive
+(hsx/defc lsp-indicator
   []
-  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
+  (let [text (or (state/use-sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col
@@ -1182,8 +1205,7 @@
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
-    (rum/mount
-      (lsp-indicator) el))
+    (.render (rdc/createRoot el) (lsp-indicator)))
 
   (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
@@ -1223,6 +1245,7 @@
                                         (let [pid (keyword pid)]
                                           ;; effects
                                           (unregister-plugin-themes pid)
+                                          (remove-pinned-toolbar-items-of-plugin! pid)
                                           ;; plugins
                                           (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
                                           ;; commands
@@ -1251,7 +1274,7 @@
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
                                                 url (:url theme)
-                                                mode (or (:mode theme) (state/sub :ui/theme))]
+                                                mode (or (:mode theme) (:ui/theme @state/state))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))

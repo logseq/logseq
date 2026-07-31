@@ -46,6 +46,19 @@ pnpm show-graphs-for-user --user-id us-east-1:example-user-id
 The script uses `worker/wrangler.toml`, runs against the remote D1 binding `DB`,
 defaults to `--env prod`, and prints JSON when `--json` is added.
 
+Show usage totals (total users, total graphs, users created today, graphs created today):
+
+```bash
+cd deps/db-sync
+pnpm show-usage-stats
+pnpm show-usage-stats --days 7
+pnpm show-usage-stats --json
+```
+
+`created today` uses UTC day boundaries from D1 (`date('now')`).
+`active_*_last_n_days` uses deduplicated UTC-day activity rows from
+`daily_active_entities` with the provided `--days` window.
+
 Download a graph snapshot into a local sqlite debug file matching local graph DB schema (`kvs` table only):
 
 ```bash

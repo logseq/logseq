@@ -9,23 +9,28 @@
             [goog.object :as gobj]
             [promesa.core :as p]))
 
-(defn- node-platform-source
-  []
-  (let [source-path (node-path/join (.cwd js/process)
-                                    "src"
-                                    "main"
-                                    "frontend"
-                                    "worker"
-                                    "platform"
-                                    "node.cljs")]
-    (.toString (fs/readFileSync source-path) "utf8")))
-
 (defn- js-bind
   [pairs]
   (let [bind (js-obj)]
     (doseq [[k v] pairs]
       (gobj/set bind k v))
     bind))
+
+(defn- set-process-platform-arch!
+  [platform arch]
+  (let [platform-descriptor (js/Object.getOwnPropertyDescriptor js/process "platform")
+        arch-descriptor (js/Object.getOwnPropertyDescriptor js/process "arch")]
+    (js/Object.defineProperty js/process "platform"
+                              #js {:value platform
+                                   :enumerable true
+                                   :configurable true})
+    (js/Object.defineProperty js/process "arch"
+                              #js {:value arch
+                                   :enumerable true
+                                   :configurable true})
+    (fn []
+      (js/Object.defineProperty js/process "platform" platform-descriptor)
+      (js/Object.defineProperty js/process "arch" arch-descriptor))))
 
 (defn- <open-test-db
   []
@@ -55,15 +60,74 @@
        (gobj/set opts "rowMode" row-mode))
      ((:exec sqlite) db opts))))
 
-(deftest node-platform-runtime-dependency-is-node-sqlite
-  (let [source (node-platform-source)]
-    (is (string/includes? source "\"node:sqlite\""))
-    (is (not (string/includes? source "\"better-sqlite3\"")))))
+(deftest node-platform-disables-vector-embedding-off-macos
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-no-vector-embedding")
+          restore! (set-process-platform-arch! "linux" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
 
-(deftest node-platform-backup-uses-shared-sqlite-backup-implementation
-  (let [source (node-platform-source)]
-    (is (string/includes? source "logseq.db.sqlite.backup"))
-    (is (string/includes? source "sqlite-backup/backup-connection!"))))
+(deftest node-platform-disables-vector-embedding-on-macos-x64
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding-x64")
+          restore! (set-process-platform-arch! "darwin" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-embedding-backend-calls-local-server
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")
+          restore-platform! (set-process-platform-arch! "darwin" "arm64")
+          original-fetch js/fetch
+          calls (atom [])]
+      (set! js/fetch
+            (fn [url opts]
+              (swap! calls conj {:url url
+                                 :method (gobj/get opts "method")
+                                 :headers (js->clj (gobj/get opts "headers"))
+                                 :body (js->clj (js/JSON.parse (gobj/get opts "body"))
+                                                :keywordize-keys true)})
+              (p/resolved #js {:ok true
+                                :status 200
+                                :json (fn []
+                                        (p/resolved
+                                         (clj->js {:data [{:index 1
+                                                           :embedding [4 5 6]}
+                                                          {:index 0
+                                                           :embedding [1 2 3]}]})))})))
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :embedding-endpoint "http://127.0.0.1:8765/v1/embeddings"})
+                  embeddings ((get-in platform [:embedding :embed-texts]) ["hello" "world"])]
+            (is (= [[1 2 3] [4 5 6]] embeddings))
+            (is (= [{:url "http://127.0.0.1:8765/v1/embeddings"
+                     :method "POST"
+                     :headers {"Content-Type" "application/json"}
+                     :body {:model "all-MiniLM-L6-v2"
+                            :input ["hello" "world"]}}]
+                   @calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! js/fetch original-fetch)
+                       (restore-platform!)
+                       (done)))))))
+
+(deftest node-platform-vector-page-query-topks-expand-adaptively
+  (let [topks #'platform-node/vector-query-topks]
+    (is (= [10] (topks 10 nil)))
+    (is (= [40 160 640] (topks 10 "page-1")))))
 
 (deftest node-platform-env-owner-source-is-propagated
   (async done
@@ -73,6 +137,26 @@
                   platform-default (platform-node/node-platform {:root-dir root-dir})]
             (is (= :cli (get-in platform-cli [:env :owner-source])))
             (is (= :unknown (get-in platform-default [:env :owner-source]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest node-platform-writes-text-atomically-and-deletes-files
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-text-files")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  storage (:storage platform)
+                  path "graph-a/mirror/markdown/pages/page.md"
+                  _ ((:write-text-atomic! storage) path "mirror")
+                  content ((:read-text! storage) path)
+                  _ ((:delete-file! storage) path)
+                  deleted-content (-> ((:read-text! storage) path)
+                                      (p/catch (constantly nil)))]
+            (is (= "mirror" content))
+            (is (nil? deleted-content))
+            (is (empty? (filter #(string/includes? % ".tmp-")
+                                (array-seq (fs/readdirSync
+                                            (node-path/join root-dir "graphs" "graph-a" "mirror" "markdown" "pages")))))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

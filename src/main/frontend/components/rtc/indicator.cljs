@@ -15,7 +15,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (comment
   (def rtc-state-schema
@@ -24,6 +24,7 @@
 (defonce *detail-info
   (atom {:pending-local-ops 0
          :pending-asset-ops 0
+         :missing-asset-upload-files []
          :pending-server-ops 0
          :graph-uuid nil
          :local-tx nil
@@ -57,6 +58,7 @@
                                   (swap! *detail-info assoc
                                          :pending-local-ops (:unpushed-block-update-count state)
                                          :pending-asset-ops (:pending-asset-ops-count state)
+                                         :missing-asset-upload-files (:missing-asset-upload-files state)
                                          :pending-server-ops (or (:pending-server-ops-count state)
                                                                  (when (and (number? (:remote-tx state))
                                                                             (number? (:local-tx state)))
@@ -78,11 +80,67 @@
         (keep #(get % repo))
         (dedupe))))
 
-(rum/defc assets-progressing
-  []
-  (let [repo (state/get-current-repo)
-        progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
-        downloading (->>
+(defn asset-transfer-counts
+  [progress]
+  (reduce-kv
+   (fn [counts _id {:keys [direction loaded total]}]
+     (if (and (contains? #{:upload :download} direction)
+              (number? loaded)
+              (number? total)
+              (not= loaded total))
+       (update counts direction inc)
+       counts))
+   {:upload 0
+    :download 0}
+   (or progress {})))
+
+(defn asset-status-rows
+  [{:keys [pending-asset-ops missing-asset-upload-files]
+    transfer-counts :asset-transfer-counts}]
+  (let [{:keys [upload download]} transfer-counts
+        missing-count (count missing-asset-upload-files)
+        pending-upload-count (max 0 (- (or pending-asset-ops 0) missing-count))]
+    (cond-> []
+      (pos? missing-count)
+      (conj {:count missing-count
+             :label-key :sync/missing-asset-files})
+
+      (pos? pending-upload-count)
+      (conj {:count pending-upload-count
+             :label-key :sync/pending-asset-uploads})
+
+      (pos? (or upload 0))
+      (conj {:count upload
+             :label-key :sync/assets-uploading})
+
+      (pos? (or download 0))
+      (conj {:count download
+             :label-key :sync/assets-downloading}))))
+
+(defn- asset-status-label
+  [label-key]
+  (case label-key
+    :sync/missing-asset-files (t :sync/missing-asset-files)
+    :sync/pending-asset-uploads (t :sync/pending-asset-uploads)
+    :sync/assets-uploading (t :sync/assets-uploading)
+    :sync/assets-downloading (t :sync/assets-downloading)))
+
+(hsx/defc missing-asset-files
+  [files]
+  (when (seq files)
+    [:details.assets-missing-files
+     [:summary
+      (t :sync/missing-asset-files-count (count files))]
+     [:div.flex.flex-col.gap-1.text-sm
+      (for [{:keys [file]} files]
+        [:div.flex.flex-row.gap-1.items-center
+         {:key file}
+         (ui/icon "alert-triangle" {:size 14})
+         [:span.truncate file]])]]))
+
+(hsx/defc assets-progressing
+  [progress]
+  (let [downloading (->>
                      (keep (fn [[id {:keys [direction loaded total]}]]
                              (when (and (= direction :download)
                                         (not= loaded total)
@@ -119,20 +177,31 @@
             (ui/indicator-progress-pie percent)
             (:block/title block)])]])]))
 
-(rum/defc details
+(hsx/defc details
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+        repo (state/get-current-repo)
+        asset-progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
         [expand-debug? set-expand-debug!] (hooks/use-state false)
         show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
-                download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
-        (hooks/use-flow-state (m/watch *detail-info))]
+                download-logs upload-logs misc-logs pending-local-ops pending-asset-ops
+                missing-asset-upload-files pending-server-ops]}
+        (hooks/use-flow-state (m/watch *detail-info))
+        asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
+                                       :missing-asset-upload-files missing-asset-upload-files
+                                       :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
+     (for [{:keys [count label-key]} asset-rows]
+       [:div {:key (name label-key)}
+        [:span.font-medium.mr-1 count]
+        (asset-status-label label-key)])
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] (t :sync/pending-server-changes)]
-     (assets-progressing)
+     (missing-asset-files missing-asset-upload-files)
+     (assets-progressing asset-progress)
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
@@ -163,7 +232,7 @@
                                                            {:stop-before-start? true}))}
                      (t :sync/start-sync))])]))
 
-(rum/defc indicator
+(hsx/defc indicator
   []
   (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
         _                           (hooks/use-flow-state flows/current-login-user-flow)
@@ -227,7 +296,7 @@
                  (let [graph-uuid (:graph-uuid first-log)]
                    (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
-(rum/defc downloading-logs
+(hsx/defc downloading-logs
   []
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
@@ -236,7 +305,7 @@
        (for [log download-logs]
          [:div (string/capitalize (:message log))])])))
 
-(rum/defc uploading-logs
+(hsx/defc uploading-logs
   []
   (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
         upload-logs (hooks/use-flow-state upload-logs-flow)]
@@ -250,17 +319,18 @@
        (m/eduction (map (fn [log] (not= :download-completed (:sub-type log)))))
        (c.m/continue-flow false)))
 
-(rum/defc downloading-detail
+(hsx/defc downloading-detail
   []
-  (when (true? (hooks/use-flow-state downloading?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (downloading-logs)
-                                   {:align "end"})}
-     (t :sync/downloading))))
+  (let [downloading? (hooks/use-flow-state downloading?-flow)]
+    (when (true? downloading?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (downloading-logs)
+                                     {:align "end"})}
+       (t :sync/downloading)))))
 
 (def ^:private upload?-flow
   (->> rtc-flows/rtc-upload-log-flow
@@ -275,14 +345,15 @@
                                 (on-success)))))]
     (task (fn []) (fn []))))
 
-(rum/defc uploading-detail
+(hsx/defc uploading-detail
   []
-  (when (true? (hooks/use-flow-state upload?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (uploading-logs)
-                                   {:align "end"})}
-     (t :sync/uploading))))
+  (let [upload? (hooks/use-flow-state upload?-flow)]
+    (when (true? upload?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (uploading-logs)
+                                     {:align "end"})}
+       (t :sync/uploading)))))

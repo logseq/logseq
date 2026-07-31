@@ -65,6 +65,7 @@
 (defn local-relative-asset?
   [s]
   (and (string? s)
+       (not (string/includes? s "://"))
        (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
 
 (defn local-protocol-asset?
@@ -94,7 +95,7 @@
 
 (defn img-formats
   []
-  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
+  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp :avif :cr2})
 
 (defonce block-pattern "-")
 

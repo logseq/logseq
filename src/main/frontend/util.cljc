@@ -23,8 +23,7 @@
                      [goog.userAgent]
                      [logseq.common.config :as common-config]
                      [logseq.common.util :as common-util]
-                     [promesa.core :as p]
-                     [rum.core :as rum]))
+                     [promesa.core :as p]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -103,9 +102,6 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
-#?(:cljs (defonce hsl2hex utils/hsl2hex))
-#?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
-
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
@@ -161,8 +157,10 @@
 #?(:cljs
    (defn set-change-value
      "compatible change event for React"
-     [node value]
-     (utils/triggerInputChange node value)))
+     ([node value]
+      (utils/triggerInputChange node value))
+     ([node value caret-pos]
+      (utils/triggerInputChange node value caret-pos))))
 
 #?(:cljs
    (defn p-handle
@@ -765,10 +763,7 @@
    (defn react
      [ref]
      (when ref
-       #_{:clj-kondo/ignore [:private-call]}
-       (if rum/*reactions*
-         (rum/react ref)
-         @ref))))
+       @ref)))
 
 #?(:cljs
    (def time-ms common-util/time-ms))
@@ -1085,19 +1080,6 @@
        {:y (- (:height viewport-rect) (:bottom target-rect))
         :x (- (:width viewport-rect) (:right target-rect))})))
 
-(def regex-char-esc-smap
-  (let [esc-chars "{}[]()&^%$#!?*.+|\\"]
-    (zipmap esc-chars
-            (map #(str "\\" %) esc-chars))))
-
-(defn regex-escape
-  "Escape all regex meta chars in text."
-  [text]
-  (string/join (replace regex-char-esc-smap text)))
-
-(comment
-  (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
-
 #?(:cljs
    (defn meta-key? [e]
      (if mac?
@@ -1183,7 +1165,9 @@
                          (.-nativeEvent e)
 
                          :else e))]
-       (.-isComposing native-event))))
+       (or (.-isComposing native-event)
+           (= (gobj/get native-event "keyCode") 229)
+           (= (gobj/get native-event "key") "Process")))))
 
 #?(:cljs
    (defn open-url
@@ -1347,7 +1331,7 @@
           ret)
         @last-mem))))
 
-;; from rum
+;; requestAnimationFrame fallback
 #?(:cljs
    (def schedule
      (or (and (exists? js/window)

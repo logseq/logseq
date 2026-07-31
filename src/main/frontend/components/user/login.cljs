@@ -1,16 +1,15 @@
 (ns frontend.components.user.login
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [dommy.core :refer-macros [sel by-id]]
+            [dommy.core :refer-macros [sel]]
             [frontend.config :as config]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :refer [adapt-class]]
             [frontend.state :as state]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
 (declare setupAuthConfigure! LSAuthenticator)
 
@@ -25,8 +24,8 @@
   (defn setupAuthConfigure! [config]
     (.init js/LSAuth (bean/->js {:authCognito (merge config {:loginWith {:email true}})})))
   #_:clj-kondo/ignore
-  (def LSAuthenticator
-    (adapt-class (.-LSAuthenticator js/LSAuth)))
+    (def LSAuthenticator
+      (.-LSAuthenticator js/LSAuth))
 
   (setupAuthConfigure!
    {:region config/REGION,
@@ -35,7 +34,11 @@
     :identityPoolId config/IDENTITY-POOL-ID,
     :oauthDomain config/OAUTH-DOMAIN}))
 
-(rum/defc user-pane
+(defn authenticator
+  [opts & children]
+  (into [:> LSAuthenticator opts] children))
+
+(hsx/defc user-pane
   [_sign-out! user]
   (let [session  (:signInUserSession user)]
 
@@ -51,18 +54,14 @@
 
     nil))
 
-(rum/defc page-impl
+(hsx/defc page-impl
   []
-  (let [*ref-el (rum/use-ref nil)
-        [tab set-tab!] (rum/use-state nil)]
-    [:div.cp__user-login
-     {:ref *ref-el
-      :id (str "user-auth-" tab)}
-     (LSAuthenticator
+  [:div.cp__user-login
+     (authenticator
       {:titleRender (fn [key title]
-                      (set-tab! key)
                       (shui/card-header
-                       {:class "px-0"}
+                       {:class "px-0"
+                        :data-auth-title-key (str key)}
                        (shui/card-title
                         {:class "capitalize"}
                         (string/replace title "-" " "))))
@@ -70,14 +69,14 @@
       (fn [^js op]
         (let [sign-out!' (.-signOut op)
               user' (bean/->clj (.-sessionUser op))]
-          (user-pane sign-out!' user'))))]))
+          (user-pane sign-out!' user'))))])
 
-(rum/defcs modal-inner <
-  shortcut/disable-all-shortcuts
-  [_state]
+(hsx/defc modal-inner
+  []
+  (shortcut/use-disable-all-shortcuts!)
   (page-impl))
 
-(rum/defc page
+(hsx/defc page
   []
   [:div.pt-10 (page-impl)])
 
@@ -86,7 +85,7 @@
   (shui/dialog-open!
    (fn [_close] (modal-inner))
    {:label :user-login
-    :content-props {:onPointerDownOutside #(if (by-id "#user-auth-login")
+    :content-props {:onPointerDownOutside #(if (seq (sel "[data-auth-title-key='login']"))
                                              (let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")
                                                    inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
                                                (when (seq inputs)

@@ -25,6 +25,8 @@
    :options ["--fix"
              "--type"
              "--file"
+             "--edn-options"
+             "--pretty-print"
              "--input"
              "--name"
              "--src"
@@ -82,6 +84,8 @@
              "--update-properties"
              "--remove-tags"
              "--remove-properties"
+             "--add-properties"
+             "--remove-properties"
              "--page"
              "--name"
              "--type"
@@ -117,6 +121,7 @@
    :options ["--id"
              "--uuid"
              "--page"
+             "--page-hierarchy"
              "--linked-references"
              "--level"
              "stdin:--id"]}
@@ -152,6 +157,10 @@
   :doctor
   {:commands ["doctor"]
    :options ["--dev-script"]}
+
+  :agent
+  {:commands ["agent bridge"]
+   :options []}
 
   :completion
   {:commands ["completion"]

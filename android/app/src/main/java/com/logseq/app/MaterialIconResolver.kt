@@ -1,6 +1,7 @@
 package com.logseq.app
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.CloudUpload
@@ -13,10 +14,12 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.AddReaction
 import androidx.compose.material.icons.outlined.DataArray
 import androidx.compose.material.icons.outlined.KeyboardCommandKey
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckBox
@@ -67,6 +70,7 @@ object MaterialIconResolver {
             "camera" -> Icons.Outlined.CameraAlt
             "keyboard-chevron-compact-down", "keyboard-hide" -> Icons.Outlined.KeyboardHide
             "doc-on-doc", "copy" -> Icons.Outlined.ContentCopy
+            "text-bubble", "comment" -> Icons.AutoMirrored.Outlined.Comment
             "trash", "delete" -> Icons.Outlined.Delete
             "r-square", "bookmark-ref" -> Icons.Outlined.BookmarkAdd
             "link" -> Icons.Outlined.Link
@@ -79,6 +83,9 @@ object MaterialIconResolver {
             "go-to", "goto" -> Icons.Outlined.Explore
             "bookmark" -> Icons.Filled.Bookmarks
             "sync" -> Icons.Outlined.Equalizer
+            "cloud", "cloud-upload", "icloud-and-arrow-up" -> Icons.Filled.CloudUpload
+            "paperclip" -> Icons.Outlined.AttachFile
+            "face-smiling" -> Icons.Outlined.AddReaction
             else -> null
         }
     }

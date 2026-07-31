@@ -1,0 +1,10 @@
+# pnpm 11 reads overrides from pnpm-workspace.yaml instead of package.json.
+# Keep this in sync with package.json while pnpm 10 is still supported.
+overrides:
+  jackspeak: ^2
+  string-width: ^8
+  strip-ansi: ^7
+
+allowBuilds:
+  lmdb: false
+  msgpackr-extract: false

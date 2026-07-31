@@ -2,7 +2,7 @@
   "Server-related CLI commands."
   (:require [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
-            [logseq.cli.version :as version]
+            [logseq.common.version :as version]
             [promesa.core :as p]))
 
 (def entries

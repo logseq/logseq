@@ -2,6 +2,7 @@
   "Command parsing and action building for the Logseq CLI."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.command.agent :as agent-command]
             [logseq.cli.command.auth :as auth-command]
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as command-core]
@@ -92,6 +93,7 @@
 
 (def ^:private base-table
   (vec (concat graph-command/entries
+               agent-command/entries
                server-command/entries
                list-command/entries
                upsert-command/entries
@@ -186,9 +188,6 @@
 
 (def ^:private upsert-validation-commands
   #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property :upsert-asset})
-
-(def ^:private search-validation-commands
-  #{:search-block :search-page :search-property :search-tag})
 
 (def ^:private list-validation-commands
   #{:list-page :list-tag :list-property :list-task :list-node :list-asset})
@@ -290,11 +289,11 @@
          (not (seq (some-> (:name opts) string/trim))))
     (missing-query-result summary)
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (seq args))
     (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (not (seq (some-> (:content opts) str string/trim))))
     (assoc (missing-query-text-result summary) :command command)
 
@@ -303,7 +302,8 @@
 
 (defn- validate-option-contracts
   [summary {:keys [command list-invalid-options-message remove-invalid-options-message
-                   show-invalid-options-message debug-invalid-options-message]}]
+                   show-invalid-options-message debug-invalid-options-message
+                   graph-invalid-options-message]}]
   (cond
     (and (list-validation-commands command)
          list-invalid-options-message)
@@ -312,6 +312,9 @@
     (and (remove-validation-commands command)
          remove-invalid-options-message)
     (command-core/invalid-options-result summary remove-invalid-options-message)
+
+    graph-invalid-options-message
+    (command-core/invalid-options-result summary graph-invalid-options-message)
 
     (and (= command :show) show-invalid-options-message)
     (command-core/invalid-options-result summary show-invalid-options-message)
@@ -322,13 +325,23 @@
     :else
     nil))
 
+(defn- validate-agent-bridge
+  [summary {:keys [command args cmds]}]
+  (when (and (= command :agent-bridge)
+             (seq args))
+    (command-core/unknown-command-result
+     summary
+     (str "unknown command: " (string/join " " (concat cmds args))))))
+
 (defn- validate-graph-sync-and-completion
   [summary {:keys [command opts import-export-type completion-shell-error]}]
   (cond
     (and (= command :graph-export) (not (seq import-export-type)))
     (missing-type-result summary)
 
-    (and (= command :graph-export) (not (seq (:file opts))))
+    (and (= command :graph-export)
+         (not= "sqlite" import-export-type)
+         (not (seq (:file opts))))
     (missing-file-result summary)
 
     (and (= command :graph-import) (not (seq import-export-type)))
@@ -353,9 +366,14 @@
          (not (seq (:graph opts))))
     (missing-graph-result summary)
 
-    (and (= command :sync-download)
+    (and (= :sync-download command)
          (not (seq (:graph opts))))
     (missing-graph-result summary)
+
+    (and (= command :sync-asset-download)
+         (not= 1 (count (filter true? [(some? (:id opts))
+                                       (boolean (seq (some-> (:uuid opts) string/trim)))]))))
+    (command-core/invalid-options-result summary "exactly one of --id or --uuid is required")
 
     (and (= command :completion)
          completion-shell-error)
@@ -369,6 +387,7 @@
   (or (validate-write-and-upsert summary validation-context)
       (validate-target-query-and-search summary validation-context)
       (validate-option-contracts summary validation-context)
+      (validate-agent-bridge summary validation-context)
       (validate-graph-sync-and-completion summary validation-context)))
 
 (defn- command-has-content?
@@ -401,6 +420,8 @@
                                      (show-command/invalid-options? opts))
      :debug-invalid-options-message (when (= command :debug-pull)
                                       (debug-command/invalid-options? opts))
+     :graph-invalid-options-message (when (contains? #{:graph-create :graph-export} command)
+                                      (graph-command/invalid-options? command opts))
      :import-export-type (graph-command/normalize-import-export-type (:type opts))
      :completion-shell-error (when (= command :completion)
                                (completion-shell-error-message completion-shell))}))
@@ -576,6 +597,9 @@
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (graph-command/build-graph-action command graph repo options)
 
+        :agent-bridge
+        (agent-command/build-action command options repo graph)
+
         :graph-backup-list
         (graph-command/build-backup-list-action repo)
 
@@ -590,7 +614,7 @@
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
-          (graph-command/build-export-action repo export-type (:file options)))
+          (graph-command/build-export-action repo export-type (:file options) options))
 
         :graph-import
         (let [import-repo (command-core/resolve-repo (:graph options))
@@ -643,7 +667,7 @@
         (doctor-command/build-action options)
 
         (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-         :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+         :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
          :sync-config-set :sync-config-get :sync-config-unset)
         (sync-command/build-action command options args repo)
 
@@ -684,11 +708,13 @@
                        :else
                        (case (:type action)
                          :graph-list (graph-command/execute-graph-list action config)
+                         :agent-bridge (agent-command/execute-bridge action config)
                          :graph-backup-list (graph-command/execute-graph-backup-list action config)
                          :graph-backup-create (graph-command/execute-graph-backup-create action config)
                          :graph-backup-restore (graph-command/execute-graph-backup-restore action config)
                          :graph-backup-remove (graph-command/execute-graph-backup-remove action config)
                          :invoke (graph-command/execute-invoke action config)
+                         :graph-create-enable-sync (graph-command/execute-graph-create-enable-sync action config)
                          :graph-remove (graph-command/execute-graph-remove action config)
                          :graph-switch (graph-command/execute-graph-switch action config)
                          :graph-info (graph-command/execute-graph-info action config)
@@ -732,7 +758,7 @@
                          :server-stop (server-command/execute-stop action config)
                          :server-restart (server-command/execute-restart action config)
                          (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-                          :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+                          :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
                           :sync-config-set :sync-config-get :sync-config-unset)
                          (sync-command/execute action config)
                          (:login :logout)
@@ -749,4 +775,5 @@
                                              :status :priority
                                              :src :dst :backup-name
                                              :export-type :file :import-type :input
+                                             :enable-sync
                                              :graph-id :email :config-key :config-value])))))

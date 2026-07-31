@@ -12,9 +12,9 @@
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
+            [logseq.shui.ui :as shui]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -48,8 +48,9 @@
       [:pre.code (str "ID: " (:db/id result) "\n"
                       pull-data)]
       [:br]
-      (ui/button (t :ui/copy-to-clipboard)
-                 :on-click #(.writeText js/navigator.clipboard pull-data))]
+      (shui/button {:size :sm
+                    :on-click #(.writeText js/navigator.clipboard pull-data)}
+                   (t :ui/copy-to-clipboard))]
      :success
      false)))
 
@@ -62,8 +63,9 @@
     (notification/show!
      [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
-      (ui/button (t :ui/copy-to-clipboard)
-                 :on-click #(.writeText js/navigator.clipboard ast-data))
+      (shui/button {:size :sm
+                    :on-click #(.writeText js/navigator.clipboard ast-data)}
+                   (t :ui/copy-to-clipboard))
       [:br]
       [:pre.code ast-data]]
      :success
@@ -102,24 +104,6 @@
       (string/replace #"^/+" "")
       (string/replace #"[\\/]+" "_")
       (str "_client_ops_" (quot (util/time-ms) 1000))))
-
-(defn- ->uint8array
-  [data]
-  (cond
-    (instance? js/Uint8Array data)
-    data
-
-    (js/ArrayBuffer.isView data)
-    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
-
-    (instance? js/ArrayBuffer data)
-    (js/Uint8Array. data)
-
-    (array? data)
-    (js/Uint8Array. data)
-
-    :else
-    nil))
 
 (defn- <fetch-server-checksum-diagnostics
   [repo]
@@ -229,25 +213,28 @@
 
 (defn ^:export export-client-ops-sqlite
   []
-  (if-let [repo (state/get-current-repo)]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/export-client-ops-db repo)
-        (p/then (fn [data]
-                  (if-let [payload (->uint8array data)]
-                    (let [filename (client-ops-export-file-name repo)
-                          blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
-                      (utils/saveToFile blob filename "sqlite")
+  (if (and util/web-platform? (not (util/electron?)))
+    (if-let [repo (state/get-current-repo)]
+      (-> (state/<invoke-db-worker :thread-api/export-client-ops-db-binary repo)
+          (p/then (fn [data]
+                    (if (instance? js/Uint8Array data)
+                      (let [filename (client-ops-export-file-name repo)
+                            blob (js/Blob. #js [data] (clj->js {:type "application/octet-stream"}))]
+                        (utils/saveToFile blob filename "sqlite")
+                        (notification/show!
+                         (t :graph.diagnostics/client-ops-export-success filename)
+                         :success
+                         false))
                       (notification/show!
-                       (t :graph.diagnostics/client-ops-export-success filename)
-                       :success
-                       false))
-                    (notification/show!
-                     (t :graph.diagnostics/client-ops-export-invalid-payload-warning
-                        (pr-str (type data)))
-                     :warning))))
+                       (t :graph.diagnostics/client-ops-export-invalid-payload-warning
+                          (pr-str (type data)))
+                       :warning))))
         (p/catch (fn [error]
                    (js/console.error "export-client-ops-sqlite failed:" error)
                    (notification/show! (t :graph.diagnostics/client-ops-export-failed-error) :error))))
-    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
+      (notification/show! (t :graph.diagnostics/no-graph-warning) :warning))
+    (notification/show! (t :graph.diagnostics/client-ops-export-invalid-payload-warning "web app only")
+                        :warning)))
 
 (defn import-chosen-graph
   [repo]

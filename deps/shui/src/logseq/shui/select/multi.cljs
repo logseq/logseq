@@ -1,9 +1,9 @@
 (ns logseq.shui.select.multi
   (:require [clojure.string :as string]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.form.core :as form]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.popup.core :as shui-popup]
-            [rum.core :as rum]))
+            [logseq.shui.popup.core :as shui-popup]))
 
 (defn- get-k [item]
   (if (map? item)
@@ -17,15 +17,15 @@
   (if (string? item)
     item (or (:title item) (:value item))))
 
-(rum/defc search-input
+(hsx/defc search-input
   [input-props & {:keys [on-enter valid-search-key?]}]
-  (let [*el (rum/use-ref nil)
-        [down set-down!] (rum/use-state 0)]
+  (let [*el (hooks/use-ref nil)
+        [down set-down!] (hooks/use-state 0)]
 
     (hooks/use-effect!
      (fn []
        (when-let [^js item (and (> down 0)
-                                (some-> (rum/deref *el)
+                                (some-> (hooks/deref *el)
                                         (.closest ".head")
                                         (.-nextSibling)))]
          (some-> (if valid-search-key? (.-nextSibling item) item)
@@ -52,7 +52,7 @@
                        (string/lower-case)
                        (string/includes? q)) items))))
 
-(rum/defc x-select-content
+(hsx/defc x-select-content
   [items selected-items & {:keys [on-chosen item-render value-render
                                   head-render foot-render open? close!
                                   search-enabled? search-key on-search-key-change
@@ -61,8 +61,8 @@
                                   item-props content-props]}]
   (let [x-content shui-popup/dropdown-menu-content
         x-item shui-popup/dropdown-menu-item
-        *head-ref (rum/use-ref nil)
-        [search-key1 set-search-key!] (rum/use-state search-key)
+        *head-ref (hooks/use-ref nil)
+        [search-key1 set-search-key!] (hooks/use-state search-key)
         search-key1' (some-> search-key1 (string/trim) (string/lower-case))
         valid-search-key? (and search-enabled? (not (string/blank? search-key1')))
         get-content-el #(some-> % (.closest "[data-radix-menu-content]"))
@@ -130,7 +130,7 @@
 
            {:on-enter (fn []
                         (when-let [head-el (and (not (string/blank? search-key1'))
-                                                (rum/deref *head-ref))]
+                                                (hooks/deref *head-ref))]
                           (when-let [^js item (.-nextSibling head-el)]
                             (when (contains? #{"menuitemcheckbox" "menuitem"}
                                              (.getAttribute item "role"))

@@ -1,12 +1,14 @@
 import Foundation
 import Capacitor
 import SwiftUI
+import UIKit
 import WebKit
 
 @objc(LiquidTabsPlugin)
 public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     // So SwiftUI can notify JS
     static weak var shared: LiquidTabsPlugin?
+    private static let maxPhoneContentTabs = 4
 
     private let store = LiquidTabsStore.shared
     private var keyboardHackScriptInstalled = false
@@ -18,12 +20,22 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
       CAPPluginMethod(name: "configureTabs", returnType: CAPPluginReturnPromise),
       CAPPluginMethod(name: "selectTab", returnType: CAPPluginReturnPromise),
       CAPPluginMethod(name: "updateNativeSearchResults", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "updateNativeGraphs", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "markTabContentReady", returnType: CAPPluginReturnPromise),
     ]
 
     public override func load() {
         super.load()
         LiquidTabsPlugin.shared = self
         installKeyboardHackScript()
+    }
+
+    private static func visibleContentTabs(_ tabs: [LiquidTab]) -> [LiquidTab] {
+        guard UIDevice.current.userInterfaceIdiom == .phone else {
+            return tabs
+        }
+
+        return Array(tabs.prefix(maxPhoneContentTabs))
     }
 
     // MARK: - Methods from JS
@@ -60,9 +72,14 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         DispatchQueue.main.async {
-            self.store.tabs = tabs
-            if let firstId = tabs.first?.id {
-                self.store.selectedId = firstId
+            let selectedId = self.store.selectedId
+            let visibleTabs = Self.visibleContentTabs(tabs)
+            self.store.tabs = visibleTabs
+            if let selectedId = selectedId,
+               selectedId == "search" || visibleTabs.contains(where: { $0.id == selectedId }) {
+                self.store.selectedId = selectedId
+            } else {
+                self.store.selectedId = visibleTabs.first?.id
             }
         }
 
@@ -107,8 +124,8 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Events to JS
 
-    func notifyTabSelected(id: String) {
-        notifyListeners("tabSelected", data: ["id": id])
+    func notifyTabSelected(id: String, reselected: Bool = false) {
+        notifyListeners("tabSelected", data: ["id": id, "reselected": reselected])
     }
 
     func notifySearchChanged(query: String) {
@@ -119,8 +136,140 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         notifyListeners("keyboardHackKey", data: ["key": key])
     }
 
-    func openResult(id: String) {
-        notifyListeners("openSearchResultBlock", data: ["id": id])
+    func openResult(id: String, nativePush: Bool = true) {
+        notifyListeners("openSearchResultBlock", data: [
+            "id": id,
+            "nativePush": nativePush
+        ])
+    }
+
+    /// Update native graph list from JS.
+    /// { sections: [{ id, title, refreshable?, graphs: [...] }], labels: { refresh, preparing, downloading }, refreshing? }
+    @objc func updateNativeGraphs(_ call: CAPPluginCall) {
+        guard let sectionDicts = call.getArray("sections", JSObject.self) else {
+            call.reject("Missing 'sections'")
+            return
+        }
+
+        let labelDict = call.getObject("labels") ?? [:]
+        let labels = NativeGraphLabels(
+            refresh: labelDict["refresh"] as? String ?? "",
+            preparing: labelDict["preparing"] as? String ?? "",
+            downloading: labelDict["downloading"] as? String ?? ""
+        )
+
+        let sections: [NativeGraphSection] = sectionDicts.compactMap { sectionDict in
+            guard let id = sectionDict["id"] as? String,
+                  let title = sectionDict["title"] as? String else {
+                return nil
+            }
+
+            let graphDicts = sectionDict["graphs"] as? [[String: Any]] ?? []
+            let graphs: [NativeGraphItem] = graphDicts.compactMap { graphDict in
+                guard let itemId = graphDict["id"] as? String,
+                      let displayName = graphDict["displayName"] as? String else {
+                    return nil
+                }
+
+                let actionDicts = graphDict["actions"] as? [[String: Any]] ?? []
+                let actions: [NativeGraphAction] = actionDicts.compactMap { actionDict in
+                    guard let id = actionDict["id"] as? String,
+                          let title = actionDict["title"] as? String,
+                          let confirmTitle = actionDict["confirmTitle"] as? String,
+                          let confirmMessage = actionDict["confirmMessage"] as? String,
+                          let confirmButton = actionDict["confirmButton"] as? String,
+                          let cancelButton = actionDict["cancelButton"] as? String else {
+                        return nil
+                    }
+
+                    return NativeGraphAction(
+                        id: id,
+                        title: title,
+                        destructive: actionDict["destructive"] as? Bool ?? false,
+                        confirmTitle: confirmTitle,
+                        confirmMessage: confirmMessage,
+                        confirmButton: confirmButton,
+                        cancelButton: cancelButton
+                    )
+                }
+
+                return NativeGraphItem(
+                    id: itemId,
+                    url: graphDict["url"] as? String,
+                    displayName: displayName,
+                    subtitle: graphDict["subtitle"] as? String,
+                    remote: graphDict["remote"] as? Bool ?? false,
+                    local: graphDict["local"] as? Bool ?? false,
+                    readyForUse: graphDict["readyForUse"] as? Bool ?? true,
+                    downloading: graphDict["downloading"] as? Bool ?? false,
+                    e2ee: graphDict["e2ee"] as? Bool ?? false,
+                    graphName: graphDict["graphName"] as? String,
+                    graphUUID: graphDict["graphUUID"] as? String,
+                    graphSchemaVersion: graphDict["graphSchemaVersion"] as? String,
+                    actions: actions
+                )
+            }
+
+            return NativeGraphSection(
+                id: id,
+                title: title,
+                refreshable: sectionDict["refreshable"] as? Bool ?? false,
+                graphs: graphs
+            )
+        }
+
+        store.updateGraphs(
+            sections: sections,
+            labels: labels,
+            visible: call.getBool("visible"),
+            refreshing: call.getBool("refreshing")
+        )
+        call.resolve()
+    }
+
+    /// Clear the native transition cover after JS has rendered a WebView-backed tab.
+    /// { id: string }
+    @objc func markTabContentReady(_ call: CAPPluginCall) {
+        guard let id = call.getString("id") else {
+            call.reject("Missing 'id'")
+            return
+        }
+
+        store.markWebTabReady(id)
+        call.resolve()
+    }
+
+    func openGraph(_ graph: NativeGraphItem) {
+        notifyListeners("nativeGraphAction", data: [
+            "action": "open",
+            "url": graph.url ?? ""
+        ])
+    }
+
+    func downloadGraph(_ graph: NativeGraphItem) {
+        notifyListeners("nativeGraphAction", data: [
+            "action": "download",
+            "graphName": graph.graphName ?? "",
+            "graphUUID": graph.graphUUID ?? "",
+            "graphSchemaVersion": graph.graphSchemaVersion ?? "",
+            "graphE2ee": graph.e2ee
+        ])
+    }
+
+    func refreshGraphs() {
+        store.startGraphRefresh()
+        notifyListeners("nativeGraphAction", data: ["action": "refresh"])
+    }
+
+    func performGraphAction(_ action: NativeGraphAction, graph: NativeGraphItem) {
+        notifyListeners("nativeGraphAction", data: [
+            "action": action.id,
+            "url": graph.url ?? "",
+            "graphName": graph.graphName ?? "",
+            "graphUUID": graph.graphUUID ?? "",
+            "graphSchemaVersion": graph.graphSchemaVersion ?? "",
+            "graphE2ee": graph.e2ee
+        ])
     }
 
     private func installKeyboardHackScript() {

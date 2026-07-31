@@ -1,5 +1,7 @@
 package com.logseq.app
 
+import android.content.Context
+import android.os.Build
 import android.graphics.Color
 import android.text.Editable
 import android.text.TextWatcher
@@ -7,12 +9,17 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material3.Icon
@@ -35,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp // New Import for DP units
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -55,7 +63,7 @@ class LiquidTabsPlugin : Plugin() {
     private var searchContainer: LinearLayout? = null
     private var searchInput: EditText? = null
     private var resultsContainer: LinearLayout? = null
-    private var closeButton: TextView? = null
+    private var closeButton: ImageButton? = null
     private var originalBottomPadding: Int? = null
 
     private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
@@ -69,6 +77,11 @@ class LiquidTabsPlugin : Plugin() {
     // 💡 NEW: Define padding for the Tab Bar edges (makes it compact and adds left/right space)
     private val TAB_BAR_HORIZONTAL_PADDING = 12.dp
     private val ACCENT_COLOR_HEX = "#6097c7"
+
+    private fun tabIconResId(tabId: String): Int? = when (tabId) {
+        "flashcards" -> R.drawable.ic_tab_flashcards
+        else -> null
+    }
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -86,7 +99,7 @@ class LiquidTabsPlugin : Plugin() {
             ensureNav()
             currentTabId?.let { id ->
                 tabsState.find { it.id == id }?.let { tab ->
-                    handleSelection(tab, reselected = false)
+                    handleSelection(tab, reselected = false, notify = false)
                 }
             } ?: hideSearchUi()
             adjustWebViewPadding()
@@ -112,7 +125,7 @@ class LiquidTabsPlugin : Plugin() {
         }
         nav.post {
             val reselected = currentTabId == tab.id
-            handleSelection(tab, reselected)
+            handleSelection(tab, reselected, notify = false)
             call.resolve()
         }
     }
@@ -145,6 +158,25 @@ class LiquidTabsPlugin : Plugin() {
         } ?: call.resolve()
     }
 
+    fun handleNativeBackPressed(): Boolean {
+        val container = searchContainer ?: return false
+        if (container.visibility != View.VISIBLE) return false
+
+        val input = searchInput ?: return false
+        val imeVisible = ViewCompat.getRootWindowInsets(input)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        val hasFocus = input.hasFocus()
+
+        if (imeVisible || hasFocus) {
+            moveFocusAwayFromSearchInput(input)
+            hideIme(input)
+            return true
+        }
+
+        dismissSearchUiFromBack()
+        return true
+    }
+
 
     private fun ensureNav(): ComposeView {
         val activity = activity ?: throw IllegalStateException("No activity")
@@ -169,7 +201,7 @@ class LiquidTabsPlugin : Plugin() {
                 currentId = currentTabId,
                 onSelect = { tab ->
                     val reselected = tab.id == currentTabId
-                    handleSelection(tab, reselected)
+                    handleSelection(tab, reselected, notify = true)
                 }
             )
         }
@@ -178,15 +210,20 @@ class LiquidTabsPlugin : Plugin() {
         return nav
     }
 
-    private fun handleSelection(tab: TabSpec, reselected: Boolean) {
+    private fun handleSelection(tab: TabSpec, reselected: Boolean, notify: Boolean) {
         currentTabId = tab.id
         if (tab.role == "search") {
             showSearchUi()
         } else {
+            clearSearchUi()
             hideSearchUi()
         }
 
-        notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
+        if (notify) {
+            notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
+        }
+
+        adjustWebViewPadding()
     }
 
     private fun adjustWebViewPadding() {
@@ -341,17 +378,20 @@ class LiquidTabsPlugin : Plugin() {
             }
 
             // Close Button
-            val button = TextView(activity).apply {
-                text = "X" // Close icon (using simple 'X')
-                setTextColor(secondaryLabelColor)
-                textSize = 18f
-                gravity = Gravity.CENTER
+            val button = ImageButton(activity).apply {
+                setImageDrawable(AppCompatResources.getDrawable(activity, R.drawable.ic_search_clear))
+                background = null
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                contentDescription = "Clear search"
+                alpha = if (theme.isDark) 0.92f else 0.8f
                 setPadding(
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f)
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f)
                 )
+                minimumWidth = NativeUiUtils.dp(activity, 28f)
+                minimumHeight = NativeUiUtils.dp(activity, 28f)
                 visibility = View.GONE // Initially hidden
 
                 setOnClickListener {
@@ -359,7 +399,12 @@ class LiquidTabsPlugin : Plugin() {
                     // TextWatcher will handle notifying the web view and hiding the button
                 }
                 // Set layout params for the button
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = NativeUiUtils.dp(activity, 8f)
+                }
             }
 
             // 1. Add EditText
@@ -416,10 +461,60 @@ class LiquidTabsPlugin : Plugin() {
         }
 
         container.visibility = View.VISIBLE
+        adjustWebViewPadding()
+    }
+
+    private fun clearSearchUi() {
+        searchInput?.setText("")
+        resultsContainer?.removeAllViews()
     }
 
     private fun hideSearchUi() {
+        dismissActiveSearchInput()
         searchContainer?.visibility = View.GONE
+        adjustWebViewPadding()
+    }
+
+    private fun dismissSearchUiFromBack() {
+        hideSearchUi()
+    }
+
+    private fun dismissActiveSearchInput() {
+        searchInput?.let { input ->
+            moveFocusAwayFromSearchInput(input)
+            hideIme(input)
+        }
+    }
+
+    private fun moveFocusAwayFromSearchInput(input: EditText) {
+        val container = searchContainer
+        if (container != null) {
+            container.isFocusableInTouchMode = true
+            container.isFocusable = true
+            container.requestFocus()
+        }
+        input.clearFocus()
+        activity?.currentFocus?.clearFocus()
+    }
+
+    private fun hideIme(target: View) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            target.windowInsetsController?.hide(WindowInsets.Type.ime())
+        }
+        val imm = activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        val windowToken = target.windowToken
+            ?: activity?.currentFocus?.windowToken
+            ?: activity?.window?.decorView?.windowToken
+            ?: searchContainer?.windowToken
+        if (windowToken != null) {
+            imm?.hideSoftInputFromWindow(windowToken, 0)
+        }
+        target.post {
+            val postedToken = activity?.window?.decorView?.windowToken ?: target.windowToken
+            if (postedToken != null) {
+                imm?.hideSoftInputFromWindow(postedToken, 0)
+            }
+        }
     }
 
     private fun makeResultRow(result: SearchResult): View {
@@ -490,6 +585,7 @@ class LiquidTabsPlugin : Plugin() {
                     val icon = remember(tab.systemImage, tab.id) {
                         MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
                     }
+                    val iconResId = remember(tab.id) { tabIconResId(tab.id) }
                     val accent = ComposeColor(NativeUiUtils.parseColor(ACCENT_COLOR_HEX, Color.parseColor(ACCENT_COLOR_HEX)))
 
                     NavigationBarItem(
@@ -503,10 +599,17 @@ class LiquidTabsPlugin : Plugin() {
                             indicatorColor = accent.copy(alpha = 0.12f)
                         ),
                         icon = {
-                            Icon(
-                                imageVector = icon ?: Icons.Filled.Circle,
-                                contentDescription = tab.title
-                            )
+                            if (iconResId != null) {
+                                Icon(
+                                    painter = painterResource(id = iconResId),
+                                    contentDescription = tab.title
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = icon ?: Icons.Filled.Circle,
+                                    contentDescription = tab.title
+                                )
+                            }
                         },
                         // Slightly reduce the default Material3 gap between icon and label.
                         label = { Text(tab.title, modifier = Modifier.offset(y = (-4).dp)) }
@@ -539,7 +642,7 @@ class LiquidTabsPlugin : Plugin() {
             val id = obj.optString("id", "")
             if (id.isBlank()) continue
             val title = obj.optString("title", "")
-            val subtitle = obj.optString("subtitle", null)
+            val subtitle = if (obj.has("subtitle") && !obj.isNull("subtitle")) obj.optString("subtitle") else null
             result.add(SearchResult(id, title, subtitle))
         }
         return result

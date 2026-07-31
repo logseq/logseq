@@ -1,11 +1,11 @@
 (ns logseq.tasks.dev
   "Tasks for general development. For desktop or mobile development see their
   namespaces"
+  (:refer-clojure :exclude [test])
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :refer [shell]]
             [babashka.tasks :refer [clojure]]
-            [clojure.core.async :as async]
             [clojure.data :as data]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -13,6 +13,10 @@
             [clojure.string :as string]
             [logseq.tasks.dev.lint :as dev-lint]
             [logseq.tasks.util :as task-util]))
+
+(defn run-shell
+  [& args]
+  (apply shell args))
 
 (defn test
   "Run tests. Pass args through to cmd 'pnpm cljs:run-test'"
@@ -26,11 +30,87 @@
   (shell "pnpm cljs:test-no-worker")
   (apply shell "pnpm cljs:run-test-no-worker" args))
 
+(def test-jobs 2)
+
+(def default-test-args ["-r" "^(?!logseq.db-sync.).*"])
+
+(defn- run-parallel!
+  ([tasks]
+   (run-parallel! (count tasks) tasks))
+  ([jobs tasks]
+   (let [tasks (vec tasks)]
+     (when (seq tasks)
+       (let [task-queue (atom (seq tasks))
+             next-task! (fn []
+                          (loop []
+                            (let [tasks @task-queue]
+                              (when (seq tasks)
+                                (if (compare-and-set! task-queue tasks (rest tasks))
+                                  (first tasks)
+                                  (recur))))))
+             worker (fn []
+                      (loop [error nil]
+                        (if-let [task (next-task!)]
+                          (recur (try
+                                   (task)
+                                   error
+                                   (catch Throwable e
+                                     (or error e))))
+                          error)))
+             results (->> #(future (worker))
+                          (repeatedly (min jobs (count tasks)))
+                          doall)]
+         (when-let [error (some deref results)]
+           (throw error)))))))
+
+(defn- selected-test-namespaces
+  [args]
+  (->> (:out (apply run-shell {:out :string
+                               :shutdown nil
+                               :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
+                     "node" "static/tests.js" "--list-namespaces" args))
+       string/split-lines
+       (remove string/blank?)
+       vec))
+
+(defn- namespace-buckets
+  [test-namespaces]
+  (let [bucket-count (min test-jobs (count test-namespaces))]
+    (when (pos? bucket-count)
+      (->> test-namespaces
+           (map-indexed (fn [idx test-ns]
+                          [(mod idx bucket-count) test-ns]))
+           (group-by first)
+           (sort-by first)
+           (mapv (fn [[_ indexed-namespaces]]
+                   (mapv second indexed-namespaces)))))))
+
+(defn- namespace-args
+  [test-namespaces]
+  (mapcat (fn [test-ns] ["-n" test-ns]) test-namespaces))
+
+(defn run-test-namespaces
+  "Run compiled tests in parallel by namespace. Pass args through to each static/tests.js namespace run."
+  [& args]
+  (let [test-namespaces (selected-test-namespaces args)]
+    (run-parallel! test-jobs
+                   (mapv (fn [bucket]
+                           #(apply run-shell {:shutdown nil
+                                              :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
+                                   "node" "static/tests.js" (concat (namespace-args bucket) args)))
+                         (namespace-buckets test-namespaces)))))
+
+(defn parallel-test
+  "Compile tests, then run them in parallel by namespace."
+  [& args]
+  (run-shell {:shutdown nil} "pnpm cljs:test")
+  (apply run-test-namespaces (concat default-test-args args)))
+
 (defn lint-and-test
-  "Run all lint tasks, then run tests excluding testcases tagged by :long and :fix-me."
+  "Run all lint tasks and tests excluding testcases tagged by :long and :fix-me."
   []
-  (dev-lint/dev)
-  (test "-e" "long" "-e" "fix-me"))
+  (run-parallel! [dev-lint/dev
+                  #(parallel-test "-e" "long" "-e" "fix-me")]))
 
 (defn e2e-basic-test
   "Run e2e basic tests. HTTP server should be available at localhost:3001"
@@ -64,7 +144,7 @@
               ;; Ignores some attributes by default that are expected to change often
               {:alias :i :coerce #{:keyword} :default #{:block/tx-id :block/order :block/updated-at}}}
         {{:keys [ignored-attributes]} :opts} (cli/parse-args args {:spec spec})
-        datom-filter (fn [[e a _ _ _]] (contains? ignored-attributes a))
+        datom-filter (fn [[_e a _ _ _]] (contains? ignored-attributes a))
         data-diff* (apply data/diff (map (fn [x] (->> x slurp edn/read-string (remove datom-filter))) [file1 file2]))
         data-diff (->> data-diff*
                        ;; Drop common as we're only interested in differences

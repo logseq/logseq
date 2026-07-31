@@ -1,12 +1,12 @@
 (ns frontend.mobile.camera
-  (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
+  (:require ["/frontend/utils" :as utils]
+            ["@capacitor/camera" :refer [Camera CameraResultType]]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -52,15 +52,21 @@
                   (let [filename (str (date/get-date-time-string-2) ".jpeg")
                         base64string (gobj/get photo "base64String")]
                     (when (seq base64string)
-                      (js/File. #js [(util/base64string-to-unit8array base64string)]
+                      (js/File. #js [(utils/base64ToUint8Array base64string)]
                                 filename #js {:type "image/jpeg"}))))))
       (p/catch (fn [error]
                  (log/error :file/write-failed {:error error})
                  nil))))
 
-(defn embed-photo [id]
-  (let [block (state/get-edit-block)
-        format (get block :block/format :markdown)]
-    (p/let [file (take-or-choose-photo)]
-      (when (and id file)
-        (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true)))))
+(defn embed-photo
+  ([id] (embed-photo id nil))
+  ([id {:keys [target-block]}]
+   (let [block (state/get-edit-block)
+         format (get block :block/format :markdown)]
+     (p/let [file (take-or-choose-photo)]
+       (when file
+         (if target-block
+           (editor-handler/db-based-save-assets! (state/get-current-repo) [file]
+                                                 :target-block target-block)
+           (when id
+             (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true))))))))

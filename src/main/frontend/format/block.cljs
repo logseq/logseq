@@ -16,6 +16,36 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
+(defn- standalone-display-block
+  [block]
+  (let [raw-title (:block/title block)
+        title (when (string? raw-title) (string/trim raw-title))
+        display-markup? (and title
+                             (or (re-find #"(?s)^```.*```$" title)
+                                 (re-find #"(?s)^\$\$.*\$\$$" title)))
+        ast-body (when display-markup?
+                   (or (:block.temp/ast-body block)
+                       (map first (mldoc/->edn title :markdown))))
+        [ast-node] ast-body
+        [node-type node-data] ast-node]
+    (if (= 1 (count ast-body))
+      (case node-type
+        "Src"
+        (let [{:keys [language lines]} node-data]
+          (cond-> (assoc block
+                         :block/title (string/replace (apply str lines) #"\r?\n$" "")
+                         :logseq.property.node/display-type :code)
+            (not-empty language)
+            (assoc :logseq.property.code/lang language)))
+
+        "Displayed_Math"
+        (assoc block
+               :block/title (string/trim node-data)
+               :logseq.property.node/display-type :math)
+
+        block)
+      block)))
+
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
@@ -30,12 +60,13 @@ and handles unexpected failure."
                                              :page-name page-name
                                              :db-graph-mode? true})]
         (map (fn [block]
-               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
-                 (:block/properties block)
-                 (merge (update-keys (:block/properties block)
-                                     (fn [k]
-                                       (or ({:heading :logseq.property/heading} k)
-                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {}))))))))
+               (let [block (standalone-display-block block)]
+                 (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
+                   (:block/properties block)
+                   (merge (update-keys (:block/properties block)
+                                       (fn [k]
+                                         (or ({:heading :logseq.property/heading} k)
+                                             (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
              blocks))
       (catch :default e
         (log/error :exception e)
@@ -65,25 +96,35 @@ and handles unexpected failure."
 
 (defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
 
+(defn- markdown-heading-level
+  [content]
+  (when-let [heading (some->> content
+                              string/triml
+                              (re-find #"^(#{1,6})\s+"))]
+    (count (second heading))))
+
 (defn- parse-title-and-body-helper
-  [_format content]
+  [_format raw-content content]
   (let [parse-config (mldoc/get-default-config :markdown)
         ast (->> (format/to-edn content parse-config)
                  (map first))
-        title (when (gp-block/heading-block? (first ast))
-                (:title (second (first ast))))
+        heading (when (gp-block/heading-block? (first ast))
+                  (second (first ast)))
+        title (:title heading)
+        heading-level (markdown-heading-level raw-content)
         body (vec (if title (rest ast) ast))
         body (drop-while gp-property/properties-ast? body)]
     (cond->
      (if (seq body) {:block.temp/ast-body body} {})
       title
-      (assoc :block.temp/ast-title title))))
+      (assoc :block.temp/ast-title title
+             :block.temp/heading heading-level))))
 
 (def ^:private cached-parse-title-and-body-helper
   (common.cache/cache-fn
    *blocks-ast-cache
-   (fn [format content]
-     [[format content] [format content]])
+   (fn [format raw-content content]
+     [[format raw-content content] [format raw-content content]])
    parse-title-and-body-helper))
 
 (defn parse-title-and-body
@@ -95,8 +136,9 @@ and handles unexpected failure."
                                   (:block/title block)))))
   ([_block-uuid format content]
    (when-not (string/blank? content)
-     (let [content (str common-config/block-pattern " " (string/triml content))]
-       (cached-parse-title-and-body-helper format content)))))
+     (let [raw-content content
+           content (str common-config/block-pattern " " (string/triml content))]
+       (cached-parse-title-and-body-helper format raw-content content)))))
 
 (defn break-line-paragraph?
   [[typ break-lines]]

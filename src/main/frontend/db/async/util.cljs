@@ -12,6 +12,7 @@
     (walk/postwalk
      (fn [f]
        (cond
+         ;; TODO: remove :block/content if it's no longer used
          (and (keyword? f) (= f :block/content))
          :block/title
 

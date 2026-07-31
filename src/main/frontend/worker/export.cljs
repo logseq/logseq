@@ -1,7 +1,7 @@
 (ns frontend.worker.export
   "Export data"
   (:require [datascript.core :as d]
-            [logseq.cli.common.file :as common-file]
+            [logseq.common.export.file :as common-file]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]))
 

@@ -5,6 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.common.config :as common-config]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.path :as path]))
 
 (def ^:private win32?
@@ -51,6 +52,11 @@
          (filter #(.isDirectory %))
          (map #(.-name %)))))
 
+(defn- path-at-or-under?
+  [path dir]
+  (or (= path dir)
+      (string/starts-with? path (str dir "/"))))
+
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher
@@ -65,6 +71,7 @@ Rules:
 - Contents in '/logseq/.recycle/' are ignored
 - Contents in '/logseq/bak/' are ignored
 - Contents in  with '/logseq/version-files/' are ignored
+- Contents in '/mirror/markdown/' are ignored
 "
   [dir path]
   (let [dir (path/path-normalize dir)
@@ -72,8 +79,9 @@ Rules:
         rpath (path/trim-dir-prefix dir path)]
     (when (string? path)
       (or
-       (some #(string/starts-with? rpath %)
-             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files"])
+       (string/starts-with? rpath ".")
+       (some #(path-at-or-under? rpath %)
+             ["logseq/.recycle" "logseq/bak" "logseq/version-files" "mirror/markdown"])
        (contains? #{"logseq/graphs-txid.edn" "logseq/pages-metadata.edn"} rpath)
        (some #(string/includes? rpath (str "/" % "/"))
              ["node_modules"])
@@ -111,3 +119,22 @@ Rules:
   (if (and (seq path) (string/starts-with? path "~"))
     (node-path/join (os/homedir) (subs path 1))
     path))
+
+(defn get-db-graphs-dir
+  "Returns the directory where DB graphs are stored."
+  []
+  (expand-home (get-default-graphs-dir)))
+
+(defn get-db-based-graphs
+  "Returns canonical DB graph repo names from the default DB graph directory."
+  []
+  (let [dir (get-db-graphs-dir)]
+    (fs/mkdirSync dir #js {:recursive true})
+    (->> (read-directories dir)
+         (remove (fn [s] (= s common-config/unlinked-graphs-dir)))
+         (map graph-dir/decode-graph-dir-name)
+         (keep (fn [s]
+                 (when (and (string? s)
+                            (not (string/starts-with? s common-config/file-version-prefix)))
+                   (common-config/canonicalize-db-version-repo s))))
+         distinct)))

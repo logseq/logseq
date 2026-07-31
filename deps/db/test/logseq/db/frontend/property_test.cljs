@@ -63,3 +63,27 @@
     (testing "logseq property namespace"
       (is (db-property/logseq-property? :logseq.property.reaction/emoji-id))
       (is (db-property/logseq-property? :logseq.property.reaction/target)))))
+
+(deftest comments-built-in-properties
+  (let [props db-property/built-in-properties
+        property :logseq.property.comments/blocks]
+    (is (contains? props property))
+    (is (= "Commented blocks" (get-in props [property :title])))
+    (is (= :node (get-in props [property :schema :type])))
+    (is (= :many (get-in props [property :schema :cardinality])))
+    (is (= false (get-in props [property :schema :public?])))
+    (is (= true (get-in props [property :schema :hide?])))
+    (is (db-property/logseq-property? property))))
+
+(deftest assignee-built-in-property
+  (let [property (get db-property/built-in-properties :logseq.property/assignee)]
+    (testing "schema"
+      (is (= "Assignee" (:title property)))
+      (is (= :node (get-in property [:schema :type])))
+      (is (= :many (get-in property [:schema :cardinality])))
+      (is (= true (get-in property [:schema :public?]))))
+
+    (testing "queryable built-in logseq property"
+      (is (= true (:queryable? property)))
+      (is (contains? db-property/public-built-in-properties :logseq.property/assignee))
+      (is (db-property/logseq-property? :logseq.property/assignee)))))

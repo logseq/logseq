@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.server :as cli-server]
-            [logseq.cli.version :as cli-version]
+            [logseq.common.version :as cli-version]
             [promesa.core :as p]))
 
 (deftest compute-revision-mismatches-uses-exact-string-compare

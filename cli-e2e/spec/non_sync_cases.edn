@@ -140,6 +140,22 @@
      :graph ["--type" "--file"]}},
    :tags [:graph],
    :extends :non-sync/graph-json-env}
+  {:id "graph-export-edn",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page ExportOptionsHome >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}} --edn-options '{:export-type :graph-human}' --pretty-print"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["{{export-path}}"]},
+   :covers
+   {:commands ["graph export"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--file" "--edn-options" "--pretty-print"]}},
+   :tags [:graph],
+   :extends :non-sync/graph-json-env}
   {:tags [:graph],
    :extends :non-sync/source-graph-json-env,
    :expect
@@ -164,9 +180,9 @@
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page BackupSeed >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup create --graph {{graph-arg}} --name nightly >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup restore --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\" --dst {{restore-graph-arg}} >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup remove --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\""],
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup restore --graph {{graph-arg}} --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}} | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\" --dst {{restore-graph-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup remove --graph {{graph-arg}} --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}} | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\""],
    :id "graph-backup-lifecycle-json",
    :covers
    {:commands
@@ -394,6 +410,120 @@
      :show ["--page" "--level" "--linked-references"]}},
    :tags [:upsert :show :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-page-link-appears-in-linked-references-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page bar_page >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page 'Jul 1st, 2026' --pos last-child --content 'Foo links to [[bar_page]]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page bar_page --linked-references true --level 2"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :linked-references :count] 1}},
+   :covers
+   {:commands ["upsert page" "upsert block" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--page" "--target-page" "--pos" "--content"],
+     :show ["--page" "--linked-references" "--level"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-page-default-content-json",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "FOO_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Foo\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Bar Page\\\" :block/parent {:db/id $FOO_ID}} :blocks [{:block/title \\\"Bar normal content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "BAR_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Hierarchy Bar Page\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Baz Page\\\" :block/parent {:db/id $BAR_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Foo --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Foo",
+     [:data :root :block/children 0 :block/title] "Foo normal content"},
+    :stdout-not-contains ["Hierarchy Bar Page" "Hierarchy Baz Page"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-page-hierarchy-json",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "FOO_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Foo\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Bar Page\\\" :block/parent {:db/id $FOO_ID}} :blocks [{:block/title \\\"Bar normal content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "BAR_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Hierarchy Bar Page\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Baz Page\\\" :block/parent {:db/id $BAR_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Foo --page-hierarchy true --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Foo",
+     [:data :root :block/children 0 :block/title] "Hierarchy Bar Page",
+     [:data :root :block/children 0 :block/children 0 :block/title] "Hierarchy Baz Page"},
+    :stdout-not-contains ["Foo normal content" "Bar normal content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--page-hierarchy" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-library-page-human",
+   :setup
+   ["LIB_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Library\"] [?e :logseq.property/built-in? true]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Project Alpha\\\" :block/parent {:db/id $LIB_ID}} :blocks [{:block/title \\\"Project page content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "PROJECT_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Project Alpha\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Nested Alpha\\\" :block/parent {:db/id $PROJECT_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Library --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Library" "Project Alpha" "Nested Alpha"],
+    :stdout-not-contains ["Project page content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-library-page-json",
+   :setup
+   ["LIB_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Library\"] [?e :logseq.property/built-in? true]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Project Alpha\\\" :block/parent {:db/id $LIB_ID}} :blocks [{:block/title \\\"Project page content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "PROJECT_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Project Alpha\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Nested Alpha\\\" :block/parent {:db/id $PROJECT_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Library --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Library",
+     [:data :root :block/children 0 :block/title] "Project Alpha",
+     [:data :root :block/children 0 :block/children 0 :block/title] "Nested Alpha"},
+    :stdout-not-contains ["Project page content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
   {:id "tag-upsert-and-list-json",
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null"
@@ -409,6 +539,26 @@
      :upsert ["--name"],
      :list ["--with-properties" "--sort" "--order" "--limit"]}},
    :tags [:upsert :list],
+   :extends :non-sync/graph-json-env}
+  {:id "tag-upsert-schema-properties-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name SchemaOwner --type default --cardinality one >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --add-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]' | grep -q SchemaOwner"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --remove-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]'"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-not-contains ["SchemaOwner"]},
+   :covers
+   {:commands ["upsert property" "upsert tag" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--name" "--type" "--cardinality" "--add-properties" "--remove-properties"],
+     :query ["--query"]}},
+   :tags [:upsert :query],
    :extends :non-sync/graph-json-env}
   {:id "property-upsert-and-list-json",
    :cmds
@@ -578,6 +728,77 @@
     {:global ["--config" "--graph" "--root-dir" "--output"],
      :upsert ["--blocks-file" "--target-id" "--pos"]}},
    :tags [:upsert],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-file-inline-property-name-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Correct Answer' --type default --cardinality one --public true >/dev/null"
+    "printf '%s' '[{:block/title \"Question block\" \"Correct Answer\" \"answer\"}]' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks-file {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Question block" "Correct Answer:" "answer"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks-file" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :show ["--page"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-missing-does-not-create-target-page-json",
+   :cmds
+   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]' 2>&1)\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["property-not-found"]},
+   :covers
+   {:commands ["upsert block" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page"],
+     :query ["--query"]}},
+   :tags [:upsert],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-properties-per-block-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Inline Note' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks '[{:block/title \"First inline\" \"Inline Note\" \"First note\"} {:block/title \"Second inline\" \"Inline Note\" \"Second note\"}]' >/dev/null"
+    "first_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"First inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; second_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Second inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; first_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$first_id\")\"; second_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$second_id\")\"; printf '%s\n---\n%s\n' \"$first_show\" \"$second_show\"; printf '%s' \"$first_show\" | grep 'Inline Note: First note' >/dev/null; ! printf '%s' \"$first_show\" | grep 'Second note' >/dev/null; printf '%s' \"$second_show\" | grep 'Inline Note: Second note' >/dev/null; ! printf '%s' \"$second_show\" | grep 'First note' >/dev/null"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["First inline" "Inline Note: First note" "Second inline" "Inline Note: Second note"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--id"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-numeric-id-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Numeric Prop' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["prop_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Numeric Prop\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks \"[{:block/title \\\"Inline numeric\\\" $prop_id \\\"inline\\\"}]\" >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Inline numeric" "Numeric Prop: inline"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--page"]}},
+   :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
   {:id "block-upsert-target-uuid-json",
    :setup
@@ -824,6 +1045,43 @@
    :tags [:example],
    :extends :non-sync/example-edn-command,
    :vars {:example-selector "search block"}}
+  {:id "show-linked-block-id-human",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Targets\"} :blocks [{:block/title \"Target B\" :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\" :build/keep-uuid? true :build/children [{:block/title \"Target child\"}]}]} {:page {:block/title \"Home\"} :blocks [{:block/title \"Source A\" :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\" :build/keep-uuid? true :block/link [:block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"]}]}]}' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human show --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output json query --query '[:find ?e . :where [?e :block/title \"Source A\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["→" "Target B" "Target child"],
+    :stdout-not-contains ["Source A"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--id" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-linked-block-id-json",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Targets\"} :blocks [{:block/title \"Target B\" :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\" :build/keep-uuid? true :build/children [{:block/title \"Target child\"}]}]} {:page {:block/title \"Home\"} :blocks [{:block/title \"Source A\" :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\" :build/keep-uuid? true :block/link [:block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"]}]}]}' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output json show --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output json query --query '[:find ?e . :where [?e :block/title \"Source A\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"
+                        [:data :root :block/title] "Target B"
+                        [:data :root :block/children 0 :block/title] "Target child"}},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--id" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
   {:id "show-id-human",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
@@ -912,21 +1170,6 @@
      :debug ["--ident"]}},
    :tags [:debug],
    :extends :non-sync/graph-json-env}
-  {:id "debug-pull-current-graph-fallback-json",
-   :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
-   :cmds
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json debug pull --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Home\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\""],
-   :expect
-   {:exit 0,
-    :stdout-json-paths
-    {[:status] "ok", [:data :entity :block/title] "Home"}},
-   :covers
-   {:commands ["debug pull"],
-    :options
-    {:global ["--config" "--root-dir" "--output"], :debug ["--id"]}},
-   :tags [:debug],
-   :extends :non-sync/graph-json-env}
   {:id "remove-page-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
@@ -944,8 +1187,7 @@
    :extends :non-sync/graph-json-env}
   {:id "graph-remove-json",
    :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"],
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph remove --graph {{graph-arg}}"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph list"],
@@ -1018,12 +1260,14 @@
    :tags [:server],
    :extends :non-sync/graph-json-env}
   {:id "server-list-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server list"],
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :servers 0 :repo] "{{graph}}"}},
+    {[:status] "ok", [:data :servers 0 :graph] "{{graph}}"}},
    :covers
    {:commands ["server list"],
     :options {:global ["--config" "--root-dir" "--output"]}},
@@ -1035,7 +1279,7 @@
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :repo] "{{graph}}", [:data :owned?] true}},
+    {[:status] "ok", [:data :repo] "logseq_db_{{graph}}", [:data :owned] true}},
    :covers
    {:commands ["server restart"],
     :options
@@ -1045,12 +1289,13 @@
    :extends :non-sync/graph-json-env}
   {:id "server-stop-json",
    :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"],
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
    :expect
    {:exit 0,
-    :stdout-json-paths {[:status] "ok", [:data :repo] "{{graph}}"}},
+    :stdout-json-paths {[:status] "ok", [:data :repo] "logseq_db_{{graph}}"}},
    :covers
    {:commands ["server stop"],
     :options
@@ -1058,14 +1303,12 @@
      :server ["--graph"]}},
    :tags [:server]}
   {:id "server-start-json",
-   :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}}"],
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :repo] "{{graph}}", [:data :owned?] true}},
+    {[:status] "ok", [:data :repo] "logseq_db_{{graph}}", [:data :owned] true}},
    :covers
    {:commands ["server start"],
     :options
@@ -1073,6 +1316,31 @@
      :server ["--graph"]}},
    :tags [:server],
    :extends :non-sync/graph-json-env}
+  {:id "agent-bridge-workflows",
+   :setup
+   ["mkdir -p '{{tmp-dir}}/assigned-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/assigned-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-assigned >/dev/null && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json upsert task --graph cli-e2e-agent-bridge-assigned --target-page AgentBridgeE2E --content 'Test AgentBridge task routing and completion status' --status todo >/dev/null"
+    "mkdir -p '{{tmp-dir}}/parallel-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/parallel-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-parallel >/dev/null"
+    "mkdir -p '{{tmp-dir}}/duplicate-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/duplicate-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-duplicate >/dev/null"
+    "mkdir -p '{{tmp-dir}}/comment-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/comment-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-comment >/dev/null"],
+   :cmds
+   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --graph cli-e2e-agent-bridge-assigned --tmp-dir '{{tmp-dir}}/assigned-work' --repo-root '{{repo-root}}' --assign-after-start"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --graph cli-e2e-agent-bridge-parallel --tmp-dir '{{tmp-dir}}/parallel-work' --repo-root '{{repo-root}}' --parallel-assignment-check"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --graph cli-e2e-agent-bridge-duplicate --tmp-dir '{{tmp-dir}}/duplicate-work' --repo-root '{{repo-root}}' --duplicate-bridge-check"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --graph cli-e2e-agent-bridge-comment --tmp-dir '{{tmp-dir}}/comment-work' --repo-root '{{repo-root}}' --comment-mention-check"
+    "bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["agent bridge"]},
+   :covers
+   {:commands ["agent bridge"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"]}},
+   :cleanup
+   ["{{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-assigned"
+    "{{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-parallel"
+    "{{cli}} --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-duplicate"
+    "{{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-comment"],
+   :tags [:agent]}
   {:id "skill-show-human",
    :cmds ["{{cli}} skill show"],
    :expect
@@ -1088,17 +1356,17 @@
    :covers {:commands ["skill show"], :options {:global ["--output"]}},
    :tags [:skill]}
   ;; Repo root already contains tracked `.agents/skills/logseq-cli/SKILL.md`,
-  ;; so this local-install case must run from an isolated cwd.
+  ;; so this local-install case must run from an isolated cwd and HOME.
   {:id "skill-install-local",
    :setup
-   ["rm -rf ./tmp/cli-e2e-skill-install-local"
-    "mkdir -p ./tmp/cli-e2e-skill-install-local"],
+   ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"
+    "mkdir -p ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :cmds
-   ["cd ./tmp/cli-e2e-skill-install-local && {{cli}} skill install >/dev/null"
+   ["cd ./tmp/cli-e2e-skill-install-local && HOME=\"$(pwd)/../cli-e2e-skill-install-local-home\" {{cli}} skill install"
     "python3 -c 'import pathlib; p=pathlib.Path(\"./tmp/cli-e2e-skill-install-local/.agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"],
    :expect {:exit 0, :stdout-contains ["installed"]},
    :covers {:commands ["skill install"], :options {:skill []}},
-   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local"],
+   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :tags [:skill]}
   {:id "skill-install-global-preserves-other-skills",
    :setup

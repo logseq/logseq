@@ -5,6 +5,7 @@ datas = "datas"
 juxt = "juxt"
 Ded = "Ded"         # Shows up in ANDed
 referer = "referer" # This is a misspelling in the http spec so not much we can do
+WRONLY = "WRONLY"
 
 # False positives
 collapsable = "collapsable" # This an ok alternative to collapsible
@@ -17,8 +18,6 @@ deleteable = "deleteable"
 fom = "fom"
 tne = "tne"
 Damon = "Damon"
-Ede = "Ede"
-
 [files]
 extend-exclude = ["resources/*",
                   "src/resources/*",

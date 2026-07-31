@@ -4,8 +4,10 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest async use-fixtures is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -45,6 +47,17 @@
                   (map first)))
           "Correct file with content is found"))))
 
+(deftest get-initial-data-includes-property-description-datoms
+  (create-graph-dir "tmp/graphs" "test-db")
+  (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
+        _ (d/transact! conn* (sqlite-create-graph/build-db-initial-data "{}"))
+        {:keys [schema initial-data]} (common-initial-data/get-initial-data @conn*)
+        conn (d/conn-from-datoms initial-data schema)
+        description (-> (d/entity @conn :logseq.property/deadline)
+                        :logseq.property/description)]
+    (is (string/includes? (str (db-property/property-value-content description))
+                          "finish something"))))
+
 (deftest restore-initial-data
   (create-graph-dir "tmp/graphs" "test-db")
   (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
@@ -60,3 +73,27 @@
         conn (d/conn-from-datoms initial-data schema)]
     (is (some? (db-test/find-page-by-title @conn "page1"))
         "Restores recently updated page")))
+
+(deftest get-block-and-children-has-children-flag
+  (testing "Top-level block with children has :block.temp/has-children? true"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "test-page"}
+                  :blocks [{:block/title "parent"
+                            :build/children
+                            [{:block/title "child1"}
+                             {:block/title "child2"}]}]}])
+          parent-block (db-test/find-block-by-content @conn "parent")
+          result (common-initial-data/get-block-and-children
+                  @conn (:block/uuid parent-block) {:children? false})]
+      (is (true? (:block.temp/has-children? (:block result)))
+          "Top-level block with children should have :block.temp/has-children? true")))
+
+  (testing "Top-level block without children has :block.temp/has-children? false"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "test-page2"}
+                  :blocks [{:block/title "leaf-block"}]}])
+          leaf-block (db-test/find-block-by-content @conn "leaf-block")
+          result (common-initial-data/get-block-and-children
+                  @conn (:block/uuid leaf-block) {:children? false})]
+      (is (false? (:block.temp/has-children? (:block result)))
+          "Top-level block without children should have :block.temp/has-children? false"))))

@@ -4,12 +4,12 @@
             [frontend.handler.window :as window-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc container < rum/reactive
+(hsx/defc container
   []
-  (let [maximized?  (state/sub :electron/window-maximized?)
-        fullscreen? (state/sub :electron/window-fullscreen?)]
+  (let [maximized?  (state/use-sub :electron/window-maximized?)
+        fullscreen? (state/use-sub :electron/window-fullscreen?)]
     [:div.window-controls.flex
      (if fullscreen?
        (ui/tooltip

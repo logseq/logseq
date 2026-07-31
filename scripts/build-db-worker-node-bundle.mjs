@@ -19,6 +19,7 @@ const builtinModuleSet = new Set([
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
 const externalModuleSet = new Set([
+  "@zvec/zvec",
   "keytar",
   "ws",
 ]);
@@ -89,6 +90,7 @@ async function main() {
 
   await build({
     configFile: false,
+    publicDir: false,
     logLevel: "error",
     build: {
       codeSplitting: false,

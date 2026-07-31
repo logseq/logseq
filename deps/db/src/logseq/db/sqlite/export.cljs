@@ -39,6 +39,29 @@
   (or (block-title pvalue)
       (:logseq.property/value pvalue)))
 
+(defn- referenced-property-value-contents
+  [db property]
+  (if (= :db.type/ref (:db/valueType property))
+    (->> (d/datoms db :avet (:db/ident property))
+         (keep (fn [datom]
+                 (some->> (:v datom)
+                          (d/entity db)
+                          property-value-content)))
+         set)
+    #{}))
+
+(defn- closed-values-for-export
+  [db property]
+  (let [referenced-contents (referenced-property-value-contents db property)]
+    (->> (concat (entity-plus/lookup-kv-then-entity property :property/closed-values)
+                 (filter #(contains? referenced-contents (property-value-content %))
+                         (:block/_closed-value-property property)))
+         (reduce (fn [closed-values value]
+                   (assoc closed-values (:db/id value) value))
+                 {})
+         vals
+         (sort-by :block/order))))
+
 (defn- shallow-copy-page
   "Given a page or journal entity, shallow copies it e.g. no properties or tags info included.
    Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
@@ -147,7 +170,7 @@
         (->> user-property-idents
              (map (fn [ident]
                     (let [property (d/entity db ident)
-                          closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+                          closed-values (closed-values-for-export db property)]
                       [property
                        (cond-> (select-keys property
                                             (-> (disj db-property/schema-properties :logseq.property/classes)
@@ -189,24 +212,26 @@
   "The caller of this fn is responsible for building any classes or properties from this fn
    unless shallow-copy?"
   [class-ent {:keys [include-uuid? shallow-copy? include-timestamps? include-alias?]}]
-  (cond-> (select-keys class-ent [:block/title :block/collapsed?])
-    include-uuid?
-    (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
-    include-timestamps?
-    (merge (select-keys class-ent [:block/created-at :block/updated-at]))
-    (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
-    (assoc :build/class-properties
-           (->> (:logseq.property.class/properties class-ent)
-                (sort-by :block/order)
-                (mapv :db/ident)))
-    (and (not shallow-copy?) include-alias? (:block/alias class-ent))
-    (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
-    ;; It's caller's responsibility to ensure parent is included in final export
-    (and (not shallow-copy?)
-         (:logseq.property.class/extends class-ent)
-         (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
-    (assoc :build/class-extends
-           (set (map :db/ident (:logseq.property.class/extends class-ent))))))
+  (let [class-properties (->> (:logseq.property.class/properties class-ent)
+                              (sort-by :block/order)
+                              (map :db/ident)
+                              (remove (set ignored-properties))
+                              vec)]
+    (cond-> (select-keys class-ent [:block/title :block/collapsed?])
+      include-uuid?
+      (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
+      include-timestamps?
+      (merge (select-keys class-ent [:block/created-at :block/updated-at]))
+      (and (seq class-properties) (not shallow-copy?))
+      (assoc :build/class-properties class-properties)
+      (and (not shallow-copy?) include-alias? (:block/alias class-ent))
+      (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
+      ;; It's caller's responsibility to ensure parent is included in final export
+      (and (not shallow-copy?)
+           (:logseq.property.class/extends class-ent)
+           (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
+      (assoc :build/class-extends
+             (set (map :db/ident (:logseq.property.class/extends class-ent)))))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
@@ -648,7 +673,7 @@
 (defn- build-selected-nodes-export
   "Exports given nodes selected by a user. Nodes can be a mix of blocks and pages"
   [db eids]
-  (let [top-level-nodes (map #(d/entity db %) eids)
+  (let [top-level-nodes (keep #(d/entity db %) eids)
         children-nodes (->> top-level-nodes
                             ;; Remove pages b/c when selected their children are not highlighted
                             (remove entity-util/page?)
@@ -707,6 +732,8 @@
       (seq classes)
       (assoc :classes classes))))
 
+;; :graph-human only fns
+;; =====================
 (defn- get-graph-content-ref-uuids
   [db {:keys [:exclude-built-in-pages?]}]
   (let [;; Add support for exclude-built-in-pages? and block-titles as needed
@@ -772,6 +799,8 @@
   [db {:keys [include-timestamps?]}]
   (->> (d/q '[:find [(pull ?b [:file/path :file/content :file/created-at :file/last-modified-at]) ...]
               :where [?b :file/path]] db)
+       ;; Sort so the export is deterministic across DB backends and import order
+       (sort-by :file/path)
        (mapv #(if include-timestamps?
                 (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
                 (select-keys % [:file/path :file/content])))))
@@ -830,6 +859,8 @@
                                                page-map)]
                             page-map'))
                         pages-and-blocks))))))
+;; end of :graph-human only fns
+;; ============================
 
 (defn- add-ontology-for-include-namespaces
   "Adds :properties to export for given namespace parents. Current use case is for :exclude-namespaces
@@ -848,6 +879,67 @@
     (-> (merge-export-maps (select-keys graph-export [:properties])
                            {:properties used-properties})
         (select-keys [:properties]))))
+
+(defn- datom-export? [export-map]
+  (= :datoms (::graph-format export-map)))
+
+(def ^:private graph-datom-export-excluded-kvs
+  #{:logseq.kv/local-graph-uuid
+    :logseq.kv/graph-uuid
+    :logseq.kv/graph-local-tx
+    :logseq.kv/remote-schema-version
+    :logseq.kv/graph-rtc-e2ee?
+    :logseq.kv/graph-remote?
+    :logseq.kv/import-type
+    :logseq.kv/imported-at
+    :logseq.kv/graph-backup-folder
+    :logseq.kv/graph-last-gc-at
+    :logseq.kv/graph-git-sha})
+
+(def ^:private graph-datom-export-excluded-attrs
+  #{:block/tx-id
+    :logseq.property.embedding/hnsw-label
+    :logseq.property.embedding/hnsw-label-updated-at
+    :logseq.property/created-by-ref
+    :logseq.property.user/email
+    :logseq.property.user/name
+    :logseq.property.user/avatar})
+
+(defn- graph-datom-export-excluded-eids
+  [db]
+  (into #{}
+        (keep #(some-> (d/entity db %) :db/id))
+        graph-datom-export-excluded-kvs))
+
+(defn- exportable-graph-datom?
+  [excluded-eids datom]
+  (and (not (contains? excluded-eids (:e datom)))
+       (not (contains? graph-datom-export-excluded-attrs (:a datom)))))
+
+(defn- lookup-ref?
+  [v]
+  (and (vector? v)
+       (= 2 (count v))
+       (keyword? (first v))))
+
+(defn- export-datom [db datom]
+  [(:e datom)
+   (:a datom)
+   (let [v (:v datom)]
+     (if (lookup-ref? v)
+       (or (:db/id (d/entity db v)) v)
+       v))])
+
+(defn- build-graph-datoms-export
+  [db]
+  (let [excluded-eids (graph-datom-export-excluded-eids db)]
+    {::schema-version db-schema/version
+     ::graph-format :datoms
+     :datoms (->> (d/datoms db :eavt)
+                  (filter #(exportable-graph-datom? excluded-eids %))
+                  (map #(export-datom db %))
+                  (sort-by first)
+                  vec)}))
 
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
@@ -986,20 +1078,28 @@
    as validate-export. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
   [db export-map* {:keys [graph-options]}]
-  (let [export-map (remove-namespaced-keys export-map*)]
-    (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-    (let [undefined-uuids (find-undefined-uuids db export-map)
-          undefined (cond-> {}
-                      (empty? (:exclude-namespaces graph-options))
-                      (merge (find-undefined-classes-and-properties export-map))
-                      (seq undefined-uuids)
-                      (assoc :uuids undefined-uuids))]
-      (when (seq undefined)
-        (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
-                        undefined))))))
+  (when-not (datom-export? export-map*)
+    (let [export-map (remove-namespaced-keys export-map*)]
+      (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
+      (let [undefined-uuids (find-undefined-uuids db export-map)
+            undefined (cond-> {}
+                        (empty? (:exclude-namespaces graph-options))
+                        (merge (find-undefined-classes-and-properties export-map))
+                        (seq undefined-uuids)
+                        (assoc :uuids undefined-uuids))]
+        (when (seq undefined)
+          (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
+                          undefined)))))))
 
 (defn build-export
-  "Handles exporting db by given export-type"
+  "Handles exporting db by given export-type. Most export options are meant for
+  a human to edit and read except for :graph with :datoms.  There are two
+  graph-wide exports, :graph and :graph-human. :graph is designed to be simple,
+  reliable and for machines. :graph-human is designed for humans to read, edit
+  and instill confidence that their full graph's data is accessible to them.
+  :graph-human comes with a number of options to customize the export's
+  granularity including toggling export of timestamps, files and certain
+  namespaces. See build-graph-export for more"
   [db {:keys [export-type] :as options}]
   (let [export-map*
         (case export-type
@@ -1014,6 +1114,8 @@
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph
+          (build-graph-datoms-export db)
+          :graph-human
           (build-graph-export db (:graph-options options))
           (throw (ex-info (str (pr-str export-type) " is an invalid export-type") {})))
         export-map (patch-invalid-keywords export-map*)]
@@ -1088,13 +1190,13 @@
                       (into {})))
           (seq properties)
           (assoc :properties (update-existing-properties db property-conflicts properties))
-          ;; Graph export doesn't use :build/page so this speeds up build
-          (= :graph export-type)
+          ;; Graph exports don't use :build/page so this speeds up build
+          (#{:graph :graph-human} export-type)
           (assoc :translate-property-values? false)
-          (= :graph export-type)
+          (#{:graph :graph-human} export-type)
           ;; Currently all graph-files are created by app so no need to distinguish between user and built-in ones yet
           (merge (dissoc export-map :pages-and-blocks :classes :properties)))
-        export-map' (if (= :graph export-type)
+        export-map' (if (#{:graph :graph-human} export-type)
                       export-map
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
@@ -1123,16 +1225,74 @@
           :blocks [(dissoc block :block/page)]}]]
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
+(defn- current-db-retract-tx
+  [db]
+  (->> (d/datoms db :eavt)
+       (map :e)
+       distinct
+       (mapv (fn [e] [:db/retractEntity e]))))
+
+(def ^:private datom-schema-attrs
+  #{:db/ident
+    :db/cardinality
+    :db/valueType
+    :db/unique
+    :db/index})
+
+(defn- schema-datom-eids
+  [datoms]
+  (let [ident-eids (into #{} (keep (fn [[e a _v]]
+                                     (when (= :db/ident a) e)))
+                         datoms)
+        schema-eids (into #{} (keep (fn [[e a _v]]
+                                      (when (and (not= :db/ident a)
+                                                 (datom-schema-attrs a))
+                                        e)))
+                          datoms)]
+    (set/intersection ident-eids schema-eids)))
+
+(defn- resolve-lookup-refs
+  [datoms]
+  (let [lookup-ref->eid (reduce (fn [m [e a v]]
+                                  (assoc m [a v] e))
+                                {}
+                                datoms)]
+    (map (fn [[e a v]]
+           [e a (if (lookup-ref? v)
+                  (get lookup-ref->eid v v)
+                  v)])
+         datoms)))
+
+(defn- datoms-for-import
+  [datoms]
+  (let [datoms (resolve-lookup-refs datoms)
+        schema-eids (schema-datom-eids datoms)
+        schema-datoms (filter (fn [[e a _v]]
+                                (and (schema-eids e)
+                                     (datom-schema-attrs a)))
+                              datoms)
+        schema-datoms' (set schema-datoms)]
+    (concat schema-datoms (remove schema-datoms' datoms))))
+
+(defn- build-datom-import
+  [export-map db]
+  {:init-tx (into (current-db-retract-tx db)
+                  (map (fn [[e a v]] [:db/add e a v]))
+                  (datoms-for-import (:datoms export-map)))
+   :block-props-tx []
+   :misc-tx []})
+
 (defn build-import
   "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
-   * ::graph-files - Vec of files for a :graph export
-   * ::kv-values - Vec of :kv/value maps for a :graph export
-   * ::property-history - Set of property history blocks for a :graph export
+   * :datoms - Vec of [e a v] datom tuples for a :graph export
+   * ::graph-files - Vec of files for a :graph-human export
+   * ::kv-values - Vec of :kv/value maps for a :graph-human export
+   * ::property-history - Set of property history blocks for a :graph-human export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
-     for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
+     for a :graph-human export. See :exclude-namespaces in build-graph-export for a similar option
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
      * :existing-pages-keep-properties? - Boolean which allows existing pages to keep existing properties
 
@@ -1141,26 +1301,116 @@
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
    * :misc-tx - Txs to transact unrelated to other txs"
   [export-map* db {:keys [current-block]}]
-  (let [export-map (if (and (::block export-map*) current-block)
-                     (build-block-import-options current-block export-map*)
-                     export-map*)
-        export-map' (if (and (= :graph (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
-                      (merge (dissoc export-map :properties ::auto-include-namespaces)
-                             (add-ontology-for-include-namespaces db export-map))
-                      export-map)
-        property-conflicts (atom [])
-        export-map'' (check-for-existing-entities db export-map' property-conflicts)]
-    (if (seq @property-conflicts)
-      (do
-        (js/console.error :property-conflicts @property-conflicts)
-        {:error (str "The following imported properties conflict with the current graph: "
-                     (pr-str (mapv :property-id @property-conflicts)))})
-      (if (= :graph (::export-type export-map''))
-        (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
-            (assoc :misc-tx (vec (concat (::graph-files export-map'')
-                                         (::kv-values export-map'')
-                                         (::property-history export-map'')))))
-        (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
+  (cond
+    (datom-export? export-map*)
+    (build-datom-import export-map* db)
+
+    :else
+    (let [export-map (if (and (::block export-map*) current-block)
+                       (build-block-import-options current-block export-map*)
+                       export-map*)
+          export-map' (if (and (#{:graph :graph-human} (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
+                        (merge (dissoc export-map :properties ::auto-include-namespaces)
+                               (add-ontology-for-include-namespaces db export-map))
+                        export-map)
+          property-conflicts (atom [])
+          export-map'' (check-for-existing-entities db export-map' property-conflicts)]
+      (if (seq @property-conflicts)
+        (do
+          (js/console.error :property-conflicts @property-conflicts)
+          {:error (str "The following imported properties conflict with the current graph: "
+                       (pr-str (mapv :property-id @property-conflicts)))})
+        (if (#{:graph :graph-human} (::export-type export-map''))
+          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
+              (assoc :misc-tx (vec (concat (::graph-files export-map'')
+                                           (::kv-values export-map'')
+                                           (::property-history export-map'')))))
+          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
+
+(defn import-tx-data
+  [{:keys [init-tx block-props-tx misc-tx]}]
+  (vec (concat init-tx block-props-tx misc-tx)))
+
+(defn- disallowed-key-error?
+  [error]
+  (some #(= "disallowed key" %)
+        (tree-seq coll? seq error)))
+
+(defn- disallowed-key-attrs
+  [errors]
+  (into {}
+        (keep (fn [{:keys [entity errors]}]
+                (let [attrs (->> errors
+                                 (keep (fn [[attr error]]
+                                         (when (disallowed-key-error? error)
+                                           attr)))
+                                 set)]
+                  (when (seq attrs)
+                    [(:db/id entity) attrs]))))
+        errors))
+
+(defn- all-disallowed-key-errors?
+  [errors]
+  (every? (fn [{:keys [errors]}]
+            (and (seq errors)
+                 (every? disallowed-key-error? (vals errors))))
+          errors))
+
+(defn- remove-disallowed-key-datoms
+  [tx-data eid->attrs]
+  (remove (fn [tx]
+            (and (vector? tx)
+                 (= :db/add (first tx))
+                 (contains? (get eid->attrs (second tx)) (nth tx 2))))
+          tx-data))
+
+(defn- validate-import-tx-data
+  [txs db edn-label]
+  (loop [tx-data (import-tx-data txs)]
+    (let [db-after (:db-after (d/with db tx-data))
+          validation (db-validate/validate-local-db! db-after)]
+      (if-let [errors (seq (:errors validation))]
+        (let [eid->attrs (disallowed-key-attrs errors)
+              tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
+          (if (and (all-disallowed-key-errors? errors)
+                   (seq eid->attrs)
+                   (not= (count tx-data) (count tx-data')))
+            (recur (vec tx-data'))
+            {:error (str "The " edn-label " has " (count errors) " validation error(s)")
+             :errors errors}))
+        {:db db-after
+         :tx-data tx-data}))))
+
+(defn validate-import-txs
+  "Dry-runs import txs against db and validates the resulting local DB.
+   Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
+  ([txs db]
+   (validate-import-txs txs db {:edn-label "Imported EDN"}))
+  ([txs db {:keys [edn-label]
+            :or {edn-label "Imported EDN"}}]
+   (if-let [error (:error txs)]
+     {:error error}
+     (try
+       (let [result (validate-import-tx-data txs db edn-label)]
+         (if-let [errors (seq (:errors result))]
+           (do
+             (js/console.error (str edn-label " has " (count errors) " validation error(s)"))
+             (pprint/pprint
+              (mapv
+                (fn [{:keys [entity dispatch-key] entity-errors :errors}]
+                 {:entity (select-keys entity
+                                       [:db/id
+                                        :db/ident
+                                        :block/uuid
+                                        :block/title])
+                  :dispatch-key dispatch-key
+                  :errors entity-errors})
+               errors))
+             (dissoc result :errors))
+           result))
+       (catch :default e
+         (js/console.error (str "Unexpected " edn-label " validation error:") e)
+         {:error (str "The " edn-label " is unexpectedly invalid: " (pr-str (ex-message e)))})))))
 
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
@@ -1176,16 +1426,8 @@
   [export-edn]
   (try
     (let [import-conn (create-conn)
-          {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
-          _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
-          validation (db-validate/validate-local-db! @import-conn)]
-      (if-let [errors (seq (:errors validation))]
-        (do
-          (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-          (pprint/pprint errors)
-          {:error (str "The exported EDN has " (count errors) " validation error(s)")
-           :db @import-conn})
-        {:db @import-conn}))
+          txs (build-import export-edn @import-conn {})]
+      (validate-import-txs txs @import-conn {:edn-label "Exported EDN"}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))

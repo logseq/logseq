@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
@@ -16,6 +17,57 @@
 (use-fixtures :each
   fixtures/new-logseq-page
   fixtures/validate-graph)
+
+(def ^:private date-picker-day-selector
+  ".ui__calendar [role='gridcell'] button, .ui__calendar button[role='gridcell']")
+
+(defn- focused-date-picker-day
+  []
+  (json/read-value
+   (w/eval-js
+    (format
+     "(() => {
+       const active = document.activeElement;
+       const dayButton = active?.closest?.(%s);
+       return JSON.stringify({
+         focused: !!dayButton,
+         text: dayButton?.textContent ?? null,
+         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null
+       });
+     })()"
+     (json/write-value-as-string date-picker-day-selector)))
+   json/keyword-keys-object-mapper))
+
+(defn- assert-date-picker-keyboard-navigation
+  [command]
+  (b/new-block (str command " keyboard test"))
+  (util/input-command command)
+  (w/wait-for date-picker-day-selector)
+  (let [initial (focused-date-picker-day)]
+    (is (:focused initial)
+        (str command " should focus a calendar day when opened."))
+    (k/arrow-right)
+    (let [right (focused-date-picker-day)]
+      (is (:focused right)
+          (str command " should keep calendar focus after ArrowRight."))
+      (is (not= (:label initial) (:label right))
+          (str command " should move focused date with ArrowRight."))
+      (k/arrow-left)
+      (is (= (:label initial) (:label (focused-date-picker-day)))
+          (str command " should move focused date back with ArrowLeft.")))
+    (k/arrow-down)
+    (let [down (focused-date-picker-day)]
+      (is (:focused down)
+          (str command " should keep calendar focus after ArrowDown."))
+      (is (not= (:label initial) (:label down))
+          (str command " should move focused date with ArrowDown."))
+      (k/arrow-up)
+      (is (= (:label initial) (:label (focused-date-picker-day)))
+          (str command " should move focused date back with ArrowUp.")))
+    (k/enter)
+    (if (= command "date picker")
+      (w/wait-for-not-visible ".ui__calendar")
+      (assert/assert-is-visible ".ui__calendar"))))
 
 (deftest command-trigger-test
   (testing "/command trigger popup"
@@ -108,6 +160,29 @@
     (util/input-command "quote")
     (w/wait-for "div[data-node-type='quote']")))
 
+(deftest quote-heading-test
+  (testing "quote headings render consistently"
+    (b/new-block "Property quote heading")
+    (util/input-command "quote")
+    (util/input-command "h1")
+    (util/exit-edit)
+    (b/new-block "# Markdown quote heading")
+    (util/input-command "quote")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(h1.block-title-wrap.as-heading:has-text('Property quote heading'))")
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(h1.block-title-wrap.as-heading:has-text('Markdown quote heading'))")
+    (b/jump-to-block "Markdown quote heading")
+    (assert/assert-editor-mode)
+    (is (= "Markdown quote heading" (util/get-edit-content)))
+    (util/exit-edit)
+    (b/new-block "Plain quote")
+    (util/input-command "quote")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(span.block-title-wrap:has-text('Plain quote'))")))
+
 (deftest headings-test
   (testing "/heading"
     (dotimes [i 6]
@@ -154,13 +229,15 @@
         (util/input-command command)
         (k/enter)
         (assert/assert-editor-mode)
-        ;; FIXME: cannot exit edit by k/esc???
-        ;; (util/exit-edit)
-        (k/esc)
-        (b/new-block "temp fix")
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
+
+(deftest date-command-keyboard-navigation-test
+  (testing "date commands focus the calendar and support keyboard navigation"
+    (doseq [command ["date picker" "Scheduled" "Deadline"]]
+      (fixtures/create-page)
+      (assert-date-picker-keyboard-navigation command))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test
@@ -225,7 +302,7 @@
       (w/click btn)
       (util/input "page reference")
       (w/click "a.menu-link:has-text('page reference')")
-      (w/click "a.menu-link:has-text('foo')")
+      (w/click (first (w/query "a.menu-link:has-text('foo')")))
       (assert/assert-is-visible "div:text('Live query (2)')"))))
 
 (deftest advanced-query-test
@@ -298,5 +375,5 @@
     (util/input-command "cloze")
     (util/press-seq "hidden answer")
     (util/exit-edit)
-    (w/click "a.cloze")
-    (w/wait-for "a.cloze-revealed")))
+    (w/click "span.cloze")
+    (w/wait-for "span.cloze-revealed")))

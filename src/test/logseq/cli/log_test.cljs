@@ -29,7 +29,26 @@
     (let [result (cli-log/truncate-preview nil 10)]
       (is (= 3 (:length result)))
       (is (= "nil" (:preview result)))
-      (is (false? (:truncated? result))))))
+      (is (false? (:truncated? result)))))
+
+  (testing "preserves deep values when the preview limit is large enough"
+    (let [value {:a {:b {:c {:d {:e 1}}}}}
+          expected (pr-str value)
+          result (cli-log/truncate-preview value 1000)]
+      (is (= expected (:preview result)))
+      (is (= (count expected) (:length result)))
+      (is (false? (:truncated? result)))))
+
+  (testing "does not realize a full lazy collection for a short preview"
+    (let [realized (atom 0)
+          value (map (fn [n]
+                       (swap! realized inc)
+                       n)
+                     (range 1000))
+          result (cli-log/truncate-preview value 10)]
+      (is (= 10 (count (:preview result))))
+      (is (true? (:truncated? result)))
+      (is (< @realized 100)))))
 
 (deftest test-debug-logging-gated-by-verbose
   (let [records (atom [])

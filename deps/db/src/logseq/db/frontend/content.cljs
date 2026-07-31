@@ -96,7 +96,7 @@
     ;; Safari doesn't support look behind, don't use
     ;; TODO: parse via mldoc
     (string/replace content
-                    (re-pattern (str "(?i)(^|\\s)(" (common-util/escape-regex-chars page-name) ")(?=[,\\.]*($|\\s))"))
+                    (re-pattern (str "(?i)(^|\\s|\\()(" (common-util/escape-regex-chars page-name) ")(?=[,\\.\\)]*($|\\s|\\)))"))
                     ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
                     (fn [[_match lhs _grp2 _grp3]]
                       (str lhs r)))))
@@ -119,6 +119,13 @@
       (replace-tag-ref content' page-name id)
       content')))
 
+(defn- ref-replacement-title
+  [{:block/keys [title] original-page-name :block.temp/original-page-name}]
+  (or (when (and (string? original-page-name)
+                 (not (common-util/uuid-string? original-page-name)))
+        original-page-name)
+      title))
+
 (defn title-ref->id-ref
   "Convert ref to id refs e.g. `[[page name]] -> [[uuid]]."
   [title refs & {:keys [replace-tag?]
@@ -139,10 +146,10 @@
                         ref)))
                    sort-refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title]}]
-       (replace-page-ref-with-id content title uuid' replace-tag?))
+     (fn [content {uuid' :block/uuid :as ref}]
+       (replace-page-ref-with-id content (ref-replacement-title ref) uuid' replace-tag?))
      title
-     (filter :block/title refs'))))
+     (filter #(and (:block/title %) (:block/uuid %)) refs'))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
@@ -189,52 +196,69 @@
     (sort-refs tags))
    (string/trim)))
 
+(defn- title-ref-replacement
+  [id->title matched hash-prefix id]
+  (if-let [ref-title (get id->title id)]
+    (if (and (= "#" hash-prefix)
+             (not (string/includes? ref-title " ")))
+      (str "#" ref-title)
+      (str hash-prefix (page-ref/->page-ref ref-title)))
+    matched))
+
+(defn- replace-title-refs-once
+  [content id->title]
+  (string/replace content id-or-tag-ref-pattern
+                  #(apply title-ref-replacement id->title %)))
+
+(defn- ref->title-entry
+  [replace-block-refs? {:block/keys [title]
+                        block-uuid :block/uuid
+                        :as ref}]
+  (when (and block-uuid
+             (string? title)
+             (or replace-block-refs?
+                 (entity-util/page? ref)))
+    [(str block-uuid) title]))
+
+(defn- block-ref-id->title
+  [ent max-depth replace-block-refs?]
+  (loop [frontier (set (:block/refs ent))
+         seen-ids #{}
+         id->title {}
+         depth 0]
+    (if (or (>= depth max-depth)
+            (empty? frontier))
+      id->title
+      (let [refs (filter map? frontier)
+            new-refs (remove (fn [ref]
+                               (contains? seen-ids (:block/uuid ref)))
+                             refs)
+            seen-ids' (into seen-ids (keep :block/uuid) new-refs)
+            id->title' (into id->title
+                             (keep #(ref->title-entry replace-block-refs? %))
+                             new-refs)
+            next-frontier (->> new-refs
+                               (mapcat :block/refs)
+                               (filter map?)
+                               set)]
+        (recur next-frontier seen-ids' id->title' (inc depth))))))
+
 (defn recur-replace-uuid-in-block-title
   "Convert id ref (recursively) backs to page name refs, returns replaced title"
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
+   (recur-replace-uuid-in-block-title ent max-depth {}))
+  ([ent max-depth {:keys [replace-block-refs?]
+                   :or {replace-block-refs? true}}]
    (let [title (:block/title ent)]
      (if (some->> title (re-find id-ref-pattern))
-       (let [id->title (loop [frontier (set (:block/refs ent))
-                              seen-ids #{}
-                              id->title {}
-                              depth 0]
-                         (if (or (>= depth max-depth)
-                                 (empty? frontier))
-                           id->title
-                           (let [refs (filter map? frontier)
-                                 new-refs (remove (fn [ref]
-                                                    (contains? seen-ids (:block/uuid ref)))
-                                                  refs)
-                                 seen-ids' (into seen-ids
-                                                 (keep :block/uuid)
-                                                 new-refs)
-                                 id->title' (reduce (fn [m {:block/keys [title]
-                                                            block-uuid :block/uuid}]
-                                                      (if (and block-uuid (string? title))
-                                                        (assoc m (str block-uuid) title)
-                                                        m))
-                                                    id->title
-                                                    new-refs)
-                                 next-frontier (->> new-refs
-                                                    (mapcat :block/refs)
-                                                    (filter map?)
-                                                    set)]
-                             (recur next-frontier seen-ids' id->title' (inc depth)))))]
+       (let [id->title (block-ref-id->title ent max-depth replace-block-refs?)]
          (loop [result title depth 0]
            (if (or (>= depth max-depth)
                    (not (re-find id-ref-pattern result)))
              result
-             (let [next-result
-                   (string/replace result id-or-tag-ref-pattern
-                                   (fn [[matched hash-prefix id]]
-                                     (if-let [ref-title (get id->title id)]
-                                       (if (and (= "#" hash-prefix)
-                                                (not (string/includes? ref-title " ")))
-                                         (str "#" ref-title)
-                                         (str hash-prefix (page-ref/->page-ref ref-title)))
-                                       matched)))]
+             (let [next-result (replace-title-refs-once result id->title)]
                (if (= result next-result)
                  result
                  (recur next-result (inc depth)))))))

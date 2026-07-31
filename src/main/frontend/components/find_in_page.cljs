@@ -1,29 +1,29 @@
 (ns frontend.components.find-in-page
-  (:require [rum.core :as rum]
-            [frontend.context.i18n :refer [t]]
+  (:require [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.search :as search-handler :refer [debounced-search, stop-debounced-search!]]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [frontend.mixins :as mixins]
+            [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]
             [clojure.string :as string]))
 
-(rum/defc search-input
+(hsx/defc search-input
   [q matches]
-  (let [*composing? (rum/use-ref false)
+  (let [*composing? (hooks/use-ref false)
         on-change-fn (fn [e]
                        (let [value (util/evalue e)
                              e-type (gobj/getValueByKeys e "type")]
                          (state/set-state! [:ui/find-in-page :q] value)
                          (cond (= e-type "compositionstart")
-                               (do (rum/set-ref! *composing? true)
+                               (do (hooks/set-ref! *composing? true)
                                    (stop-debounced-search!))
 
                                (= e-type "compositionend")
-                               (rum/set-ref! *composing? false))
-                         (when-not (rum/deref *composing?)
+                               (hooks/set-ref! *composing? false))
+                         (when-not (hooks/deref *composing?)
                            (debounced-search))))]
     [:div.flex.w-48.relative
      [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
@@ -42,15 +42,28 @@
           total]))
      [:div#search-in-page-placeholder.absolute.top-2.left-0.p-2.sm:text-sm]]))
 
-(rum/defc search-inner < rum/static
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :node (gdom/getElement "search-in-page")
-      :on-hide (fn []
-                 (search-handler/electron-exit-find-in-page!)))))
+(hsx/defc search-inner
   [{:keys [matches match-case? q]}]
+  (hooks/use-effect!
+   (fn []
+     (let [hide! (fn [_e] (search-handler/electron-exit-find-in-page!))
+           key-handler (fn [e]
+                         (when (= 27 (.-keyCode e))
+                           (hide! e)))
+           mouse-handler (fn [e]
+                           (let [node (gdom/getElement "search-in-page")
+                                 target (.-target e)]
+                             (when (and node
+                                        (not (gdom/contains node target))
+                                        (not (.contains (.-classList target)
+                                                        "ignore-outside-event")))
+                               (hide! e))))]
+       (.addEventListener js/window "keydown" key-handler)
+       (.addEventListener js/window "mousedown" mouse-handler)
+       #(do
+          (.removeEventListener js/window "keydown" key-handler)
+          (.removeEventListener js/window "mousedown" mouse-handler))))
+   [])
   [:div#search-in-page.flex.flex-row.absolute.top-10.right-4.shadow-lg.px-2.py-1.faster.fade-in.items-center
 
    (search-input q matches)
@@ -94,8 +107,8 @@
     :class "text-lg"
     :title (t :ui/close))])
 
-(rum/defc search < rum/reactive
+(hsx/defc search
   []
-  (let [{:keys [active?] :as opt} (state/sub :ui/find-in-page)]
+  (let [{:keys [active?] :as opt} (state/use-sub :ui/find-in-page)]
     (when active?
       (search-inner opt))))

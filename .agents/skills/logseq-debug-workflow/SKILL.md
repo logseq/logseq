@@ -57,6 +57,8 @@ If the environment blocks full verification, report:
 
 check `logseq-repl` skill.
 
+When running under Codex, using the REPL is not enough for `:app` verification. Also use the `chrome` skill, open the `:app` target in the browser, and verify the behavior there.
+
 ### Logs
 
 Logs are evidence. Check them early for Electron, CLI, worker, IPC, async, or persistence issues.

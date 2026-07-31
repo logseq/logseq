@@ -1,6 +1,5 @@
 (ns logseq.shui.form.core
-  (:require [rum.core :as rum]
-            [daiquiri.interpreter :refer [interpret]]
+  (:require [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.util :as util]
             [cljs-bean.core :as bean]))
 
@@ -9,7 +8,7 @@
 (def form-provider (util/lsui-wrap "Form" {:static? false}))
 (def form-field' (util/lsui-wrap "FormField" {:static? false}))
 
-(rum/defc form-field
+(hsx/defc form-field
   [render' & args]
   (let [[props render']
         (if (map? render')
@@ -39,12 +38,12 @@
   ([] (use-form {}))
   ([opts]
    (let [yup-schema (:yupSchema opts)
-         ^js methods (use-form' (bean/->js
-                                  (cond-> opts
-                                    (not (nil? yup-schema))
-                                    (assoc :resolver (yup-resolver yup-schema)))))]
+         ^js form-methods (use-form' (bean/->js
+                                       (cond-> opts
+                                         (not (nil? yup-schema))
+                                         (assoc :resolver (yup-resolver yup-schema)))))]
      ;; NOTE: just shallow convert return object!
-     (bean/bean methods))))
+     (bean/bean form-methods))))
 
 ;; UI
 (def form-item (util/lsui-wrap "FormItem"))

@@ -11,11 +11,17 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [lambdaisland.glogi :as log]
+   [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
    [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
+
+(defonce *repo->missing-asset-upload-files
+  (atom {}))
+
+(def ^:private remote-asset-download-parallelism 10)
 
 (defn graph-aes-key
   [repo graph-id fail-fast-f]
@@ -76,6 +82,43 @@
                :loaded loaded
                :total total}}))
 
+(defn- missing-asset-upload-file
+  [asset-id asset-type]
+  {:asset-id asset-id
+   :asset-type asset-type
+   :file (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))})
+
+(defn- mark-missing-asset-upload-file!
+  [repo asset-id asset-type]
+  (swap! *repo->missing-asset-upload-files
+         update repo
+         (fn [files]
+           (assoc (or files {})
+                  asset-id
+                  (missing-asset-upload-file asset-id asset-type))))
+  nil)
+
+(defn- clear-missing-asset-upload-file!
+  [repo asset-id]
+  (swap! *repo->missing-asset-upload-files
+         (fn [repo->files]
+           (let [files (dissoc (get repo->files repo) asset-id)]
+             (if (seq files)
+               (assoc repo->files repo files)
+               (dissoc repo->files repo)))))
+  nil)
+
+(defn get-missing-asset-upload-files
+  [repo]
+  (->> (vals (get @*repo->missing-asset-upload-files repo))
+       (sort-by :file)
+       vec))
+
+(defn clear-missing-asset-upload-files!
+  [repo]
+  (swap! *repo->missing-asset-upload-files dissoc repo)
+  nil)
+
 (defn- mark-asset-write-finish!
   [repo asset-id]
   (shared-service/broadcast-to-clients!
@@ -109,18 +152,20 @@
                              (throw (ex-info (name tag) data))) )
                   asset-id (str asset-uuid)
                   put-url (sync-large-title/asset-url base graph-id asset-id asset-type)
-                  asset-file (try
+                  asset-bytes (->
                                (<read-asset-bytes repo asset-id asset-type)
-                               (catch :default e
-                                 (log/info :read-asset e)
-                                 (throw (ex-info "read-asset failed"
-                                                 {:type :rtc.exception/read-asset-failed}
-                                                 e))))
-                  asset-file (if aes-key (->uint8 asset-file) asset-file)
+                               (p/catch (fn [e]
+                                          (log/error :read-asset-failed e)
+                                          (mark-missing-asset-upload-file! repo asset-id asset-type)
+                                          (throw (ex-info "read-asset failed"
+                                                          {:type :rtc.exception/read-asset-failed}
+                                                          e)))))
+                  _ (clear-missing-asset-upload-file! repo asset-id)
+                  asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
-                            asset-file
-                            (ldb/write-transit-str
-                             (crypt/<encrypt-uint8array aes-key asset-file)))
+                            asset-bytes
+                            (p/let [encrypted-bytes (crypt/<encrypt-uint8array aes-key asset-bytes)]
+                              (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
                   headers (merge (sync-auth/auth-headers (worker-state/get-id-token))
@@ -154,6 +199,19 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn- drop-asset-op!
+  [repo asset-uuid reason data current-client-f broadcast-rtc-state!-f]
+  (log/warn :db-sync/drop-asset-op
+            (merge data
+                   {:repo repo
+                    :asset-uuid asset-uuid
+                    :reason reason}))
+  (clear-missing-asset-upload-file! repo (str asset-uuid))
+  (client-op/remove-asset-op repo asset-uuid)
+  (when-let [client (current-client-f repo)]
+    (broadcast-rtc-state!-f client))
+  (p/resolved nil))
+
 (defn process-asset-op!
   [repo graph-id asset-op {:keys [current-client-f broadcast-rtc-state!-f fail-fast-f]}]
   (let [asset-uuid (:block/uuid asset-op)
@@ -170,23 +228,27 @@
               asset-type (:logseq.property.asset/type ent)
               checksum (:logseq.property.asset/checksum ent)
               size (:logseq.property.asset/size ent 0)]
-          (when-not asset-type
-            (fail-fast-f :db-sync/missing-field {:repo repo
-                                                 :field :asset-type
-                                                 :op :update-asset
-                                                 :asset-uuid asset-uuid}))
-          (when-not checksum
-            (fail-fast-f :db-sync/missing-field {:repo repo
-                                                 :field :checksum
-                                                 :op :update-asset
-                                                 :asset-uuid asset-uuid
-                                                 :asset-type asset-type}))
           (cond
+            (nil? ent)
+            (drop-asset-op! repo asset-uuid :missing-asset-entity {:op :update-asset}
+                            current-client-f broadcast-rtc-state!-f)
+
+            (not (seq asset-type))
+            (drop-asset-op! repo asset-uuid :missing-asset-type {:op :update-asset}
+                            current-client-f broadcast-rtc-state!-f)
+
+            (not (seq checksum))
+            (drop-asset-op! repo asset-uuid :missing-checksum
+                            {:op :update-asset
+                             :asset-type asset-type}
+                            current-client-f broadcast-rtc-state!-f)
+
             (> size max-asset-size)
             (do
               (log/info :db-sync/asset-too-large {:repo repo
                                                   :asset-uuid asset-uuid
                                                   :size size})
+              (clear-missing-asset-upload-file! repo (str asset-uuid))
               (client-op/remove-asset-op repo asset-uuid)
               (when-let [client (current-client-f repo)]
                 (broadcast-rtc-state!-f client))
@@ -206,11 +268,9 @@
                             (broadcast-rtc-state!-f client))))
                 (p/catch (fn [e]
                            (case (:type (ex-data e))
-                             :rtc.exception/read-asset-failed
-                             (do
-                               (client-op/remove-asset-op repo asset-uuid)
-                               (when-let [client (current-client-f repo)]
-                                 (broadcast-rtc-state!-f client)))
+                            :rtc.exception/read-asset-failed
+                             (when-let [client (current-client-f repo)]
+                               (broadcast-rtc-state!-f client))
 
                              :rtc.exception/upload-asset-failed
                              nil
@@ -222,15 +282,17 @@
         (fail-fast-f :db-sync/missing-db {:repo repo :op :process-asset-op}))
 
       (contains? asset-op :remove-asset)
-      (-> (client-op/remove-asset-op repo asset-uuid)
-          (p/then (fn [_]
-                    (when-let [client (current-client-f repo)]
-                      (broadcast-rtc-state!-f client))))
-          (p/catch (fn [e]
-                     (log/error :db-sync/asset-delete-failed
-                                {:repo repo
-                                 :asset-uuid asset-uuid
-                                 :error e}))))
+      (do
+        (clear-missing-asset-upload-file! repo (str asset-uuid))
+        (-> (client-op/remove-asset-op repo asset-uuid)
+            (p/then (fn [_]
+                      (when-let [client (current-client-f repo)]
+                        (broadcast-rtc-state!-f client))))
+            (p/catch (fn [e]
+                       (log/error :db-sync/asset-delete-failed
+                                  {:repo repo
+                                   :asset-uuid asset-uuid
+                                   :error e})))))
 
       :else
       (p/resolved nil))))
@@ -253,18 +315,20 @@
                                       q)))
                            @selected))
             worker (fn worker []
-                     (when-let [asset-op (pop-queue!)]
-                       (-> (process-asset-op! repo graph-id asset-op
-                                              {:current-client-f current-client-f
-                                               :broadcast-rtc-state!-f broadcast-rtc-state!-f
-                                               :fail-fast-f fail-fast-f})
-                           (p/then (fn [_] (worker)))
+                     (if-let [asset-op (pop-queue!)]
+                       (-> (p/let [_ (process-asset-op! repo graph-id asset-op
+                                                        {:current-client-f current-client-f
+                                                         :broadcast-rtc-state!-f broadcast-rtc-state!-f
+                                                         :fail-fast-f fail-fast-f})]
+                             (worker))
                            (p/catch (fn [e]
                                       (log/error :db-sync/process-asset-op-loop-failed
                                                  {:repo repo
                                                   :asset-op asset-op
-                                                  :error e}))))))]
-        (p/all (repeat (min parallelism (count asset-ops)) (worker))))
+                                                  :error e}))))
+                       (p/resolved nil)))]
+        (p/all (mapv (fn [_] (worker))
+                     (range (min parallelism (count asset-ops))))))
       (p/resolved nil))))
 
 (defn enqueue-asset-sync!
@@ -313,16 +377,8 @@
                   asset-file
                   (if (not aes-key)
                     body
-                    (try
-                      (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
-                        (crypt/<decrypt-uint8array aes-key asset-file-untransited))
-                      (catch js/SyntaxError _
-                        body)
-                      (catch :default e
-                        ;; if decrypt failed, write origin-body
-                        (if (= "decrypt-uint8array" (ex-message e))
-                          body
-                          (throw e)))))]
+                    (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
+                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))]
             (<write-asset-bytes! repo asset-id asset-type asset-file))
           (p/catch
            (fn [e]
@@ -337,6 +393,13 @@
                             :asset-type asset-type
                             :base base
                             :graph-id graph-id})))))
+
+(defn log-request-asset-download-failed!
+  [repo asset-uuid error]
+  (log/error :db-sync/request-asset-download-failed
+             {:repo repo
+              :asset-uuid asset-uuid
+              :error error}))
 
 (defn request-asset-download!
   [repo asset-uuid {:keys [current-client-f enqueue-asset-task-f broadcast-rtc-state!-f]}]
@@ -358,16 +421,87 @@
                           _ (when missing-local?
                               (download-remote-asset! repo graph-id asset-uuid asset-type))
                           _ (when missing-local?
-                              (when-let [target-ent (d/entity @conn [:block/uuid asset-uuid])]
-                                (ldb/transact!
-                                 conn
-                                 [[:db/retract (:db/id target-ent)
-                                   :logseq.property.asset/remote-metadata]]
-                                 {:persist-op? true})))
-                          _ (when missing-local?
                               (client-op/remove-asset-op repo asset-uuid))
                           _ (when missing-local?
                               (broadcast-rtc-state!-f client))]
                     nil)
                   (p/catch (fn [e]
-                             (js/console.error e)))))))))))
+                             (log-request-asset-download-failed! repo asset-uuid e)
+                             (p/rejected e)))))))))))
+
+(defn- remote-asset-download-candidates
+  [db]
+  (->> (d/q '[:find ?e ?asset-uuid ?asset-type
+              :where
+              [?asset-class :db/ident :logseq.class/Asset]
+              [?e :block/tags ?asset-class]
+              [?e :block/uuid ?asset-uuid]
+              [?e :logseq.property.asset/type ?asset-type]
+              [?e :logseq.property.asset/remote-metadata]]
+            db)
+       (keep (fn [[e asset-uuid asset-type]]
+               (let [ent (d/entity db e)]
+                 (when-not (seq (some-> (:logseq.property.asset/external-url ent) str))
+                   {:asset-uuid asset-uuid
+                    :asset-type asset-type}))))
+       (sort-by (comp str :asset-uuid))))
+
+(defn download-remote-assets-if-missing!
+  [repo graph-id candidates]
+  (let [candidates (->> candidates
+                        (filter (fn [{:keys [asset-uuid asset-type]}]
+                                  (and asset-uuid (seq asset-type))))
+                        distinct
+                        (sort-by (juxt (comp str :asset-uuid) :asset-type)))
+        current-platform (platform/current)
+        queue (atom (vec candidates))
+        result (atom {:total (count candidates)
+                      :downloaded 0
+                      :skipped-existing 0})
+        pop-queue! (fn []
+                     (let [selected (atom nil)]
+                       (swap! queue
+                              (fn [q]
+                                (if (seq q)
+                                  (do
+                                    (reset! selected (first q))
+                                    (subvec q 1))
+                                  q)))
+                       @selected))
+        worker (fn worker []
+                 (if-let [{:keys [asset-uuid asset-type]} (pop-queue!)]
+                   (let [asset-id (str asset-uuid)]
+                     (p/let [meta (platform/asset-stat current-platform
+                                                       repo
+                                                       (asset-file-name asset-id asset-type))
+                             _ (if meta
+                                 (do
+                                   (swap! result update :skipped-existing inc)
+                                   nil)
+                                 (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
+                                   (swap! result update :downloaded inc)))]
+                       (worker)))
+                   (p/resolved nil)))]
+    (p/let [_ (p/all (mapv (fn [_] (worker))
+                           (range (min remote-asset-download-parallelism
+                                       (count candidates)))))]
+      @result)))
+
+(defn remote-asset-download-candidates-in-tx
+  [db tx-data]
+  (->> tx-data
+       (keep (fn [d]
+               (when (and (= (:a d) :logseq.property.asset/remote-metadata) (:added d))
+                 (when-let [asset (d/entity db (:e d))]
+                   {:asset-uuid (:block/uuid asset)
+                    :asset-type (:logseq.property.asset/type asset)}))))
+       distinct))
+
+(defn download-missing-remote-assets!
+  [repo graph-id]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (download-remote-assets-if-missing!
+     repo graph-id (remote-asset-download-candidates @conn))
+    (p/rejected (ex-info "datascript connection not found"
+                         {:repo repo
+                          :graph-id graph-id}))))

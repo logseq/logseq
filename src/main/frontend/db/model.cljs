@@ -6,10 +6,11 @@
             [frontend.common.graph-view :as graph-view]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [react]]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
@@ -117,19 +118,20 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  "Used together with rum/reactive db-mixins/query"
+  "Reactive block entity for use from components."
   [id & {:keys [ref?]
          :or {ref? false}}]
-  (when-let [repo (state/get-current-repo)]
-    (when id
-      (let [ref (react/q repo [:frontend.worker.react/block id]
+  (let [ref (when-let [repo (state/get-current-repo)]
+              (when id
+                (react/q repo [:frontend.worker.react/block id]
                          {:query-fn (fn [_]
                                       (db-utils/entity id))}
-                         nil)]
-        (if ref? ref
-            (let [e (-> ref react)]
-              (when-let [id (:db/id e)]
-                (db-utils/entity id))))))))
+                         nil)))]
+    (if ref?
+      ref
+      (when-let [e (db-hooks/use-query ref)]
+        (when-let [id (:db/id e)]
+          (db-utils/entity id))))))
 
 (defn sort-by-order-recursive
   [form]

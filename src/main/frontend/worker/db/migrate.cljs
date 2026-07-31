@@ -8,11 +8,13 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.page :as outliner-page]))
 
 ;; Frontend migrations
 ;; ===================
@@ -34,15 +36,33 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
+(defn delete-property
+  [db property-key]
+  (let [property-entity (d/entity db property-key)
+        property-page? (ldb/property? property-entity)
+        direct-property-datoms (map
+                                (fn [eid]
+                                  [:db/retract eid property-key])
+                                (d/q '[:find [?e ...]
+                                       :in $ ?property-key
+                                       :where
+                                       [?e ?property-key ?v]]
+                                     db
+                                     property-key))
+        remove-datoms (if property-page?
+                        (outliner-page/build-page-retract-tx db property-entity)
+                        (concat direct-property-datoms
+                                (when property-entity
+                                  [[:db/retractEntity property-key]])))]
+    (->>
+     (concat
+      (delete-blocks/update-refs-history db remove-datoms {})
+      remove-datoms)
+     distinct)))
+
 (defn remove-block-path-refs
   [db]
-  (when (d/entity db :block/path-refs)
-    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
-                             (map :e)
-                             (distinct)
-                             (mapv (fn [id]
-                                     [:db/retract id :block/path-refs])))]
-      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
+  (delete-property db :block/path-refs))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -54,6 +74,51 @@
 
 (defn- deprecated-ensure-graph-uuid
   [_db])
+
+(defn- tag-comment-blocks
+  [db]
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find [?comment ...]
+                :where
+                [?comments-area :block/tags :logseq.class/Comments]
+                [?comment :block/parent ?comments-area]]
+              db)
+         (map (fn [comment-id]
+                [:db/add comment-id :block/tags :logseq.class/Comment])))))
+
+(defn- add-single-block-comment-targets
+  [db]
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find ?comments-area-id ?parent-id
+                :where
+                [?comments-area-id :block/tags :logseq.class/Comments]
+                [?comments-area-id :block/parent ?parent-id]]
+              db)
+         (keep (fn [[comments-area-id parent-id]]
+                 (let [comments-area (d/entity db comments-area-id)]
+                   (when-not (seq (:logseq.property.comments/blocks comments-area))
+                     [:db/add comments-area-id :logseq.property.comments/blocks parent-id])))))))
+
+(defn- missing-class-extends?
+  [class]
+  (let [extends (:logseq.property.class/extends class)]
+    (or (nil? extends)
+        (and (coll? extends) (empty? extends)))))
+
+(defn- repair-comment-classes-and-targets
+  [db]
+  (let [root-id (:db/id (d/entity db :logseq.class/Root))]
+    (concat
+     (add-single-block-comment-targets db)
+     (mapcat
+      (fn [class-ident]
+        (when-let [class (d/entity db class-ident)]
+          (concat
+           (when (and root-id (missing-class-extends? class))
+             [[:db/add (:db/id class) :logseq.property.class/extends root-id]])
+           (when (:block/order class)
+             [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
+      [:logseq.class/Comments :logseq.class/Comment]))))
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
@@ -80,7 +145,24 @@
                           :logseq.property/deleted-by-ref
                           :logseq.property.recycle/original-parent
                           :logseq.property.recycle/original-page
-                          :logseq.property.recycle/original-order]}]])
+                          :logseq.property.recycle/original-order]}]
+   ["65.25" {:delete-properties [:block/pre-block?
+                                 :logseq.property.embedding/hnsw-label
+                                 :logseq.property.embedding/hnsw-label-updated-at]}]
+   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
+   ["65.27" {:classes [:logseq.class/Comments]
+             :properties [:logseq.property.comments/blocks]}]
+   ["65.28" {:classes [:logseq.class/Comment]
+             :fix tag-comment-blocks}]
+   ["65.29" {:fix add-single-block-comment-targets}]
+   ["65.30" {:properties [:logseq.property/assignee]}]
+   ["65.31" {:properties [:logseq.property.agent/session-id]}]
+   ["65.32" {:fix repair-comment-classes-and-targets}]
+   ["65.33" {:properties [:logseq.property.view/gallery-asset-property
+                          :logseq.property.view/gallery-display-properties
+                          :logseq.property.view/gallery-card-size
+                          :logseq.property.view/gallery-card-width
+                          :logseq.property.view/gallery-card-height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -172,7 +254,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn version {:keys [properties classes fix] :as migrate-updates}]
+  [conn version {:keys [properties classes fix delete-properties] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -196,7 +278,11 @@
                                    {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (concat new-class-idents new-properties new-classes fixes)
+        delete-properties-tx (mapcat
+                               (fn [property]
+                                 (delete-property db property))
+                               delete-properties)
+        tx-data (concat new-class-idents new-properties new-classes fixes delete-properties-tx)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)

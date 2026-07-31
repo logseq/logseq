@@ -3,7 +3,7 @@
 
  :config-in-ns
  ;; :used-underscored-binding is turned off for components because of false positive
- ;; for rum/defcs and _state.
+ ;; for component macros and _state.
  {all-components
   {:linters {:used-underscored-binding {:level :off}}}
 
@@ -30,7 +30,6 @@
                            fn t ex-data list int? hash range
                            time sort-by namespace count parents exists? min
                            new var ns resolve identity next meta vals keys exists?]}
-  ;; Disable until it doesn't trigger false positives on rum/defcontext
   :earmuffed-var-not-dynamic {:level :off}
   ;; Disable until we decide to use conj! as recommended in docs
   :unused-value {:level :off}
@@ -38,12 +37,6 @@
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
-
-  :discouraged-var
-  {rum.core/use-effect! {:message "Use logseq.shui.hooks/use-effect! instead" :level :info}
-   rum.core/use-memo {:message "Use logseq.shui.hooks/use-memo instead" :level :info}
-   rum.core/use-layout-effect! {:message "Use logseq.shui.hooks/use-layout-effect! instead" :level :info}
-   rum.core/use-callback {:message "Use logseq.shui.hooks/use-callback instead" :level :info}}
   :unused-namespace {:level :warning
                      :exclude [logseq.db.common.entity-plus]}
 
@@ -202,8 +195,7 @@
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}
 
- :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                        rum.core/defcs hooks.rum/defcs
+ :hooks {:analyze-call {io.factorhouse.hsx.core/defc hooks.hsx/defc
                         clojure.string/join hooks.path-invalid-construct/string-join
                         clojure.string/replace hooks.regex-checks/double-escaped-regex
                         logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
@@ -213,9 +205,6 @@
            promesa.core/recur clojure.core/recur
            promesa.core/doseq clojure.core/doseq
            promesa.core/with-redefs clojure.core/with-redefs
-           rum.core/defcc rum.core/defc
-           rum.core/with-context clojure.core/let
-           rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main

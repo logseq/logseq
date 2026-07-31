@@ -2,7 +2,8 @@
   "Compute reactive query affected keys"
   (:require [cljs.spec.alpha :as s]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.frontend.property :as db-property]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -41,6 +42,117 @@
             (= journal-tag-id (:db/id tag)))
           (:block/tags (d/entity db eid)))))
 
+(def ^:private block-query-affecting-attrs
+  #{:logseq.property/order-list-type})
+
+(def ^:private order-list-affecting-attrs
+  #{:block/parent :block/page :block/order :logseq.property/order-list-type})
+
+(defn- block-attr?
+  [attr]
+  (= "block" (namespace attr)))
+
+(defn- block-query-affecting-attr?
+  [attr]
+  (or (block-attr? attr)
+      (contains? block-query-affecting-attrs attr)))
+
+(defn- block-key
+  [block]
+  [::block (:db/id block)])
+
+(defn- order-list-type
+  [block]
+  (db-property/lookup block :logseq.property/order-list-type))
+
+(defn- sibling-entities
+  [block]
+  (cond
+    (:block/parent block)
+    (some-> (:block/parent block) :block/_parent)
+
+    (:block/page block)
+    (some-> (:block/page block) :block/_page)
+
+    :else
+    nil))
+
+(defn- collect-right-order-list-sibling-keys
+  [siblings target-order-list-type]
+  (when target-order-list-type
+    (->> siblings
+         (take-while #(= target-order-list-type (order-list-type %)))
+         (map block-key))))
+
+(defn- sibling-group-key
+  [block]
+  (cond
+    (:block/parent block)
+    [:parent (:db/id (:block/parent block))]
+
+    (:block/page block)
+    [:page (:db/id (:block/page block))]
+
+    :else
+    nil))
+
+(defn- affected-right-order-list-sibling-keys-for
+  [db block-ids]
+  (when db
+    (let [blocks (keep #(d/entity db %) block-ids)
+          groups (group-by sibling-group-key blocks)
+          siblings-by-group (->> groups
+                                 (map (fn [[group-key blocks']]
+                                        [group-key
+                                         (some->> (first blocks')
+                                                  sibling-entities
+                                                  (sort-by :block/order))]))
+                                 (into {}))]
+      (mapcat
+       (fn [[group-key blocks']]
+         (let [siblings (get siblings-by-group group-key)
+               sibling-index (->> siblings
+                                  (map-indexed (fn [idx block]
+                                                 [(:db/id block) idx]))
+                                  (into {}))]
+           (mapcat
+            (fn [block]
+              (when-let [idx (get sibling-index (:db/id block))]
+                (let [right-siblings (drop (inc idx) siblings)
+                      right-sibling (first right-siblings)]
+                  (concat
+                   (collect-right-order-list-sibling-keys right-siblings (order-list-type block))
+                   (collect-right-order-list-sibling-keys right-siblings (order-list-type right-sibling))))))
+            blocks')))
+       groups))))
+
+(defn- affected-order-list-descendant-keys
+  [db block-id]
+  (when-let [block (and db (d/entity db block-id))]
+    (letfn [(collect [parent]
+              (when-let [parent-list-type (order-list-type parent)]
+                (mapcat
+                 (fn [child]
+                   (when (= parent-list-type (order-list-type child))
+                     (cons (block-key child) (collect child))))
+                 (:block/_parent parent))))]
+      (collect block))))
+
+(defn- affected-block-keys
+  [block]
+  (let [page-id (or
+                 (when (:block/name block) (:db/id block))
+                 (:db/id (:block/page block)))
+        blocks [(when-let [parent-id (:db/id (:block/parent block))]
+                  [::block parent-id])
+                [::block (:db/id block)]]
+        refs (->> (keep (fn [ref]
+                          (when-not (= (:db/id ref) page-id)
+                            [[::refs (:db/id ref)]
+                             [::block (:db/id ref)]])) (:block/refs block))
+                  (apply concat))]
+    (concat blocks refs)))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before db-after]}]
@@ -77,8 +189,12 @@
         recycle-roots? (some (fn [datom]
                                (= :logseq.property/deleted-at (:a datom)))
                              tx-data)
-        other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
+        other-blocks (->> (filter (fn [datom] (block-query-affecting-attr? (:a datom))) tx-data)
                           (map :e))
+        order-list-affected-blocks (->> (filter (fn [datom]
+                                                  (contains? order-list-affecting-attrs (:a datom))) tx-data)
+                                        (map :e)
+                                        (distinct))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
                                (let [block-id (if (and (string? block-id) (common-util/uuid-string? block-id))
@@ -87,20 +203,7 @@
                                  (d/entity db-after block-id))) blocks)
         affected-keys (concat
                        (mapcat
-                        (fn [block]
-                          (let [page-id (or
-                                         (when (:block/name block) (:db/id block))
-                                         (:db/id (:block/page block)))
-                                blocks [(when-let [parent-id (:db/id (:block/parent block))]
-                                          [::block parent-id])
-                                        [::block (:db/id block)]]
-                                block-refs (:block/refs block)
-                                refs (->> (keep (fn [ref]
-                                                  (when-not (= (:db/id ref) page-id)
-                                                    [[::refs (:db/id ref)]
-                                                     [::block (:db/id ref)]])) block-refs)
-                                          (apply concat))]
-                            (concat blocks refs)))
+                        affected-block-keys
                         block-entities)
 
                        (mapcat
@@ -114,6 +217,16 @@
                           [[::block-reactions target-id]
                            [::block target-id]])
                         reaction-targets)
+
+                       (mapcat
+                        (fn [block-id]
+                         (concat
+                           (affected-order-list-descendant-keys db-before block-id)
+                           (affected-order-list-descendant-keys db-after block-id)))
+                        order-list-affected-blocks)
+
+                       (affected-right-order-list-sibling-keys-for db-before order-list-affected-blocks)
+                       (affected-right-order-list-sibling-keys-for db-after order-list-affected-blocks)
 
                        (keep
                         (fn [tag]

@@ -1,5 +1,6 @@
 (ns logseq.shui.base.core
   (:require [cljs-bean.core :as bean]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.icon.v2 :as tabler-icon]
             [logseq.shui.util :as util]))
 
@@ -20,7 +21,7 @@
                   (map? props)
                   (merge props))
          children (if (map? props) children (cons props children))]
-     [as props' children])))
+     (into [as props'] children))))
 
 ;; Note: fix the custom trigger content
 ;; for the {:as-child true} menu trigger
@@ -29,11 +30,11 @@
   (let [props (first props-and-children)
         children (rest props-and-children)
         children (if (map? props) children (cons props children))
-        children (when (seq children) (daiquiri.interpreter/interpret children))
+        children (when (seq children) (hsx/create-element children))
         props (if (map? props) props {})]
     (apply js/React.createElement "div" (bean/->js props) children)))
 
-;; Note: don't define component with rum/defc
+;; Note: keep this as a plain function
 ;; to be compatible for the radix as-child option
 (defn button
   [& props-and-children]

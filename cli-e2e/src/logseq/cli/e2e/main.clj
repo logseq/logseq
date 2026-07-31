@@ -12,18 +12,19 @@
 
 (defn select-cases
   [cases {:keys [case include]}]
-  (cond
-    case
-    (filterv #(= case (:id %)) cases)
+  (let [cases (remove :skip cases)]
+    (cond
+      case
+      (filterv #(= case (:id %)) cases)
 
-    (seq include)
-    (let [include-tags (set (map keyword include))]
-      (filterv (fn [{:keys [tags]}]
-                 (not-empty (set/intersection include-tags (set tags))))
-               cases))
+      (seq include)
+      (let [include-tags (set (map keyword include))]
+        (filterv (fn [{:keys [tags]}]
+                   (not-empty (set/intersection include-tags (set tags))))
+                 cases))
 
-    :else
-    (vec cases)))
+      :else
+      (vec cases))))
 
 (def default-suite :non-sync)
 (def default-jobs 1)

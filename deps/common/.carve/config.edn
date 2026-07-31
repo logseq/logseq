@@ -11,5 +11,6 @@
                   logseq.common.cognito-config
                   logseq.common.config
                   logseq.common.defkeywords
-                  logseq.common.graph-dir]
+                  logseq.common.graph-dir
+                  logseq.common.graph-registry]
  :report {:format :ignore}}

@@ -122,15 +122,24 @@
 
 (deftest test-graph-spec-metadata
   (let [entries graph-command/entries
+        create-entry (first (filter #(= :graph-create (:command %)) entries))
         export-entry (first (filter #(= :graph-export (:command %)) entries))
         import-entry (first (filter #(= :graph-import (:command %)) entries))
         backup-create-entry (first (filter #(= :graph-backup-create (:command %)) entries))
         backup-restore-entry (first (filter #(= :graph-backup-restore (:command %)) entries))
         backup-remove-entry (first (filter #(= :graph-backup-remove (:command %)) entries))]
+    (testing "create-spec includes sync enablement options"
+      (is (= :boolean (get-in create-entry [:spec :enable-sync :coerce])))
+      (is (= :string (get-in create-entry [:spec :e2ee-password :coerce]))))
     (testing "export-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in export-entry [:spec :type :validate]))))
     (testing "export-spec :file has :complete :file"
       (is (= :file (get-in export-entry [:spec :file :complete]))))
+    (testing "export-spec includes EDN-only options"
+      (is (= :edn (get-in export-entry [:spec :edn-options :coerce])))
+      (is (= :e (get-in export-entry [:spec :edn-options :alias])))
+      (is (= :boolean (get-in export-entry [:spec :pretty-print :coerce])))
+      (is (= :p (get-in export-entry [:spec :pretty-print :alias]))))
     (testing "import-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in import-entry [:spec :type :validate]))))
     (testing "import-spec :input has :complete :file"
@@ -227,6 +236,17 @@
     (let [token (gen/spec->token [:output {:validate #{"human" "json" "edn"} :desc "Format"}])]
       (is (= :enum (:type token)))
       (is (= ["edn" "human" "json"] (:values token)))))
+  (testing "spec with :validate {:pred set} → :enum type"
+    (let [token (gen/spec->token [:priority {:validate {:pred #{"low" "medium" "high" "urgent"}
+                                                        :ex-msg (fn [_] "bad")}
+                                             :desc "Priority"}])]
+      (is (= :enum (:type token)))
+      (is (= ["high" "low" "medium" "urgent"] (:values token)))))
+  (testing "spec with :validate {:pred fn} → :free type (predicate is not enumerable)"
+    (let [token (gen/spec->token [:id {:validate {:pred number? :ex-msg (fn [_] "bad")}
+                                       :desc "Id"}])]
+      (is (= :free (:type token)))
+      (is (nil? (:values token)))))
   (testing "spec with :complete :graphs → :dynamic type"
     (let [token (gen/spec->token [:graph {:complete :graphs :desc "Graph name"}])]
       (is (= :dynamic (:type token)))
@@ -283,6 +303,12 @@
       (is (string/includes? output "_logseq()")))
     (testing "output ends with compdef _logseq logseq"
       (is (string/includes? output "compdef _logseq logseq")))
+    (testing "graph export completion includes EDN-only options"
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--edn-options" output))
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--pretty-print" output)))
+    (testing "graph create completion includes sync enablement options"
+      (is (re-find #"(?s)_logseq_graph_create\(\).*--enable-sync" output))
+      (is (re-find #"(?s)_logseq_graph_create\(\).*--e2ee-password" output)))
     (testing "boolean flags emit alias grouping"
       (is (string/includes? output "'{-v,--verbose}'[")))
     (testing "global profile flag is present in zsh completion"
@@ -435,9 +461,11 @@
       (is (string/includes? output "_logseq_is_value_opt()")))
     (testing "output ends with complete -F _logseq logseq"
       (is (string/includes? output "complete -F _logseq logseq")))
-    (testing "graph export case includes --type and --file"
+    (testing "graph export case includes --type, --file, and EDN-only options"
       (is (string/includes? output "--type"))
-      (is (string/includes? output "--file")))
+      (is (string/includes? output "--file"))
+      (is (string/includes? output "--edn-options"))
+      (is (string/includes? output "--pretty-print")))
     (testing "graph backup options include --name, --src, and --dst"
       (is (string/includes? output "--name"))
       (is (string/includes? output "--src"))
@@ -601,6 +629,23 @@
             (is (contains? sub-subcmds "create"))
             (is (contains? sub-subcmds "restore"))
             (is (contains? sub-subcmds "remove"))))))))
+
+;; Regression: `logseq list page -g woot -<TAB>` must offer leaf (command-specific) options
+;; e.g. --journal-only, not just globals. _arguments at the dispatcher
+;; level must stop consuming options once the subcommand is identified.
+;; The `(-)` exclusion list on the positional and rest specs delegates
+;; option parsing/completion entirely to the leaf function.
+(deftest test-zsh-dispatchers-disable-option-parsing-after-subcommand
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "top-level dispatcher uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq\(\) \{.*?'\(-\)1:command:->cmds'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "group dispatcher (e.g. _logseq_list) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_list\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "subgroup dispatcher (e.g. _logseq_graph_backup) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_graph_backup\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))))
 
 (deftest test-e2e-generated-header
   (testing "zsh output includes do-not-edit header"

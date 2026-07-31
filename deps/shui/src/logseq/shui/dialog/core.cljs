@@ -1,12 +1,11 @@
 (ns logseq.shui.dialog.core
-  (:require [daiquiri.interpreter :refer [interpret]]
+  (:require [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.base.core :as base]
             [logseq.shui.form.core :as form]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.util :as util]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; provider
 (def dialog (util/lsui-wrap "Dialog"))
@@ -38,7 +37,7 @@
   (reduce (fn [config k]
             (let [v (get config k)
                   v (if (fn? v) (apply v args) v)]
-              (if (vector? v) (assoc config k (interpret v)) config)))
+              (if (vector? v) (assoc config k (hsx/create-element v)) config)))
           config ks))
 
 ;; {:id :title :description :content :footer :open? :on-close ...}
@@ -124,7 +123,7 @@
     (close! id)))
 
 ;; components
-(rum/defc modal-inner
+(hsx/defc modal-inner
   [config]
   (let [{:keys [id title description content footer on-open-change align open?
                 auto-width? close-btn? root-props content-props]} config
@@ -149,13 +148,20 @@
                                    (on-open-change {:value v :set-open! set-open!})
                                    (set-open! v))))})
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
+           onEscapeKeyDown (:onEscapeKeyDown content-props)
+           handle-key-escape! (fn [^js e]
+                                (if (fn? onEscapeKeyDown)
+                                  (onEscapeKeyDown e)
+                                  ;; default handled by global Escape listener
+                                  (.preventDefault e)))
+           handle-pointer-down-outside! (fn [^js e]
+                                          (when (fn? onPointerDownOutside)
+                                            (onPointerDownOutside e))
+                                          (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                            (.preventDefault e)))
            content-props (assoc content-props
-                                :onPointerDownOutside
-                                (fn [^js e]
-                                  (when (fn? onPointerDownOutside)
-                                    (onPointerDownOutside e))
-                                  (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
-                                    (.preventDefault e))))]
+                           :onEscapeKeyDown handle-key-escape!
+                           :onPointerDownOutside handle-pointer-down-outside!)]
        (dialog-content
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
@@ -171,7 +177,7 @@
         (when footer
           (dialog-footer footer)))))))
 
-(rum/defc alert-inner
+(hsx/defc alert-inner
   [config]
   (let [{:keys [id title description content footer deferred open? ok-label]} config
         props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)
@@ -208,14 +214,14 @@
                                  :on-click #(do (close!) (p/resolve! deferred true))
                                  :size :sm} ok-label)]))))))
 
-(rum/defc confirm-inner
+(hsx/defc confirm-inner
   [config]
   (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label
                 cancel-label ok-label]} config
         reminder? (boolean (and id data-reminder))
-        [ready?, set-ready!] (rum/use-state (not reminder?))
-        *ok-ref (rum/use-ref nil)
-        *reminder-ref (rum/use-ref nil)
+        [ready?, set-ready!] (hooks/use-state (not reminder?))
+        *ok-ref (hooks/use-ref nil)
+        *reminder-ref (hooks/use-ref nil)
         cancel-label (or cancel-label "Cancel")
         ok-label (or ok-label "OK")]
 
@@ -223,7 +229,7 @@
      (fn []
        (when ready?
          (let [timeout (js/setTimeout
-                        #(some-> (rum/deref *ok-ref) (.focus)) 128)]
+                        #(some-> (hooks/deref *ok-ref) (.focus)) 128)]
            #(js/clearTimeout timeout))))
      [ready?])
 
@@ -263,15 +269,14 @@
                  {:key "ok"
                   :ref *ok-ref
                   :on-click (fn []
-                              (when-let [^js reminder (and id data-reminder (rum/deref *reminder-ref))]
+                              (when-let [^js reminder (and id data-reminder (hooks/deref *reminder-ref))]
                                 (when (= "checked" (.-state (.-dataset reminder)))
                                   (js/localStorage.setItem (str id) (js/Date.now))))
                               (close!)
                               (p/resolve! deferred true))
                   :size :sm} ok-label)]])))))
 
-(rum/defc install-modals
-  < rum/static
+(hsx/defc install-modals
   []
   (let [[modals _set-modals!] (util/use-atom *modals)]
     (for [config modals
@@ -279,8 +284,8 @@
       (let [id (:id config)
             alert? (:alert? config)
             config (interpret-vals config
-                                   [:title :description :content :footer]
-                                   {:id id})]
+                     [:title :description :content :footer]
+                     {:id id})]
         (case alert?
           :default
           (alert-inner config)

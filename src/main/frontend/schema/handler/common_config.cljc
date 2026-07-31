@@ -9,7 +9,6 @@
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
-    [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:scheduled/future-days :int]
@@ -49,8 +48,6 @@
               [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
-    [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
-    [:graph/forcesettings [:map-of :keyword :int]]
     [:mobile/photo [:map
                     [:allow-editing? {:optional true} :boolean]
                     [:quality {:optional true} :int]]]
@@ -65,4 +62,5 @@
     [:quick-capture-options (mu/optional-keys [:map
                                                [:insert-today? :boolean]
                                                [:redirect-page? :boolean]
-                                               [:default-page :string]])]]))
+                                               [:default-page :string]
+                                               [:prettify-url? :boolean]])]]))

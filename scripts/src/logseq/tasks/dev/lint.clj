@@ -23,7 +23,7 @@
 (defn kondo-git-changes
   "Run clj-kondo across dirs and only for files that git diff detects as unstaged changes"
   []
-  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing" "deps/publish" "deps/cli"]
+  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing" "deps/publish"]
         dir-regex (re-pattern (str "^(" (string/join "|" kondo-dirs) ")"))
         dir-to-files (->> (shell {:out :string :shutdown nil} "git diff --name-only")
                           :out

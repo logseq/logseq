@@ -208,6 +208,12 @@
     :root-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_ROOT_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
+    :server-revision-mismatch "Logseq will restart revision-mismatched db-worker-node servers automatically; retry after stopping any lingering server manually"
+    :server-revision-mismatch-restart-failed "Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry"
+    :server-revision-mismatch-after-restart "Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry"
+    :agent-name-invalid "Set :agent-name in cli.edn to a non-empty string or ensure hostname is available"
+    :codex-not-found "Install Codex CLI and ensure `codex` is on PATH"
+    :bridge-listener-failed "Check db-worker-node event support and retry"
     nil))
 
 (defn- format-candidates
@@ -570,6 +576,12 @@
       (str table "\n\n" warning)
       table)))
 
+(defn- format-agent-bridge
+  [data]
+  (if (seq (:logs data))
+    (string/join "\n" (:logs data))
+    (pr-str data)))
+
 (defn- format-query-results
   [result]
   (let [edn-str (pr-str result)
@@ -794,6 +806,19 @@
     :sync-grant-access (str "Sync access granted: " email " (repo: " repo ")")
     "Sync updated"))
 
+(defn- format-sync-asset-download
+  [{:keys [repo]} {:keys [asset-uuid download-requested? checksum-status hint]}]
+  (cond
+    (= :mismatch checksum-status)
+    (str (or hint "Local asset checksum mismatched; requested re-download.")
+         " " asset-uuid)
+
+    (false? download-requested?)
+    (str "Sync asset already downloaded: " asset-uuid " (repo: " repo ")")
+
+    :else
+    (str "Sync asset download requested: " asset-uuid " (repo: " repo ")")))
+
 (defn- format-sync-config-get
   [{:keys [key value]}]
   (let [display-value (if (contains? #{:auth-token :e2ee-password} key)
@@ -898,14 +923,28 @@
   [_context {:keys [message]}]
   message)
 
+(defn- automatic-backup-source?
+  [source]
+  (contains? #{:electron-auto "electron-auto"} source))
+
+(defn- format-backup-auto-save
+  [backup]
+  (let [source (or (:source backup)
+                   (get-in backup [:metadata :source]))]
+    (cond
+      (automatic-backup-source? source) "yes"
+      (some? source) "no"
+      :else "-")))
+
 (defn- format-graph-backup-list
   [backups now-ms]
   (format-counted-table
-   ["NAME" "CREATED-AT" "SIZE-BYTES"]
-   (mapv (fn [{:keys [name created-at size-bytes]}]
+   ["NAME" "CREATED-AT" "SIZE-BYTES" "AUTO-SAVE"]
+   (mapv (fn [{:keys [name created-at size-bytes] :as backup}]
            [(or name "-")
             (human-ago created-at now-ms)
-            (or size-bytes 0)])
+            (or size-bytes 0)
+            (format-backup-auto-save backup)])
          (or backups []))))
 
 (defn- format-graph-backup-create
@@ -922,15 +961,27 @@
   [{:keys [src]}]
   (str "Removed backup: " (or src "-")))
 
+(defn- format-graph-create-enable-sync
+  [{:keys [graph stages]}]
+  (string/join "\n"
+               ["Graph created and sync enabled"
+                (str "  Graph: " (or graph "-"))
+                (str "  Create: " (if (contains? stages :create) "ok" "-"))
+                (str "  Sync upload: " (if (contains? stages :upload) "ok" "-"))
+                (str "  Sync start: " (if (contains? stages :start) "ok" "-"))]))
+
 (defn- format-graph-action
-  [command {:keys [graph]}]
-  (let [verb (case command
-               :graph-create "Created"
-               :graph-switch "Switched to"
-               :graph-remove "Removed"
-               :graph-validate "Validated"
-               "Updated")]
-    (str verb " graph " (pr-str graph))))
+  [command {:keys [graph]} data]
+  (if (and (= command :graph-create)
+           (map? (:stages data)))
+    (format-graph-create-enable-sync data)
+    (let [verb (case command
+                 :graph-create "Created"
+                 :graph-switch "Switched to"
+                 :graph-remove "Removed"
+                 :graph-validate "Validated"
+                 "Updated")]
+      (str verb " graph " (pr-str graph)))))
 
 (defn- quote-cli-arg
   [value]
@@ -976,9 +1027,10 @@
         :graph-backup-remove (format-graph-backup-remove context)
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
-        (format-graph-action command context)
+        (format-graph-action command context data)
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
+        :agent-bridge (format-agent-bridge data)
         :server-cleanup (format-server-cleanup data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)
@@ -986,6 +1038,7 @@
         :sync-remote-graphs (format-sync-remote-graphs (:graphs data))
         (:sync-start :sync-stop :sync-upload :sync-download :sync-ensure-keys :sync-grant-access)
         (format-sync-action command context)
+        :sync-asset-download (format-sync-asset-download context data)
         :sync-config-get (format-sync-config-get data)
         :sync-config-set (format-sync-config-set data)
         :sync-config-unset (format-sync-config-unset data)

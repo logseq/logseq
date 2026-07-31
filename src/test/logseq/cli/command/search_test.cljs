@@ -48,7 +48,7 @@
   (async done
          (let [calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ [repo [query-text query-input]]]
+                               transport/invoke (fn [_ method [repo [query-text query-input]]]
                                                   (swap! calls* conj {:method method
                                                                       :repo repo
                                                                       :query-text (pr-str query-text)
@@ -89,7 +89,7 @@
          (let [ref-uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
                calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/q
@@ -133,7 +133,7 @@
                live-page-parent {:db/id 51
                                  :block/title "Live Page"}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ _ _ _]
+                               transport/invoke (fn [_ _ _]
                                                   [{:db/id 1 :block/title "alpha live"
                                                     :block/parent live-page-parent}
                                                    {:db/id 2 :block/title "alpha orphan"
@@ -155,7 +155,7 @@
 (deftest test-execute-search-page-skips-recycled-pages
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ _ _ _]
+                             transport/invoke (fn [_ _ _]
                                                 [{:db/id 1 :block/title "Home"}
                                                  {:db/id 2 :block/title "Recycled Home"
                                                   :logseq.property/deleted-at 1712000000000}

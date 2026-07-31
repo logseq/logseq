@@ -1,10 +1,12 @@
 (ns ^:no-doc frontend.handler.export
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
+            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
@@ -15,38 +17,73 @@
             [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.publishing.html :as publish-html]
+            [logseq.common.path :as path]
             [promesa.core :as p]))
+
+(defn- publishing-export-options
+  [repo]
+  {:repo repo
+   :app-state (select-keys @state/state
+                           [:ui/theme
+                            :ui/sidebar-collapsed-blocks])
+   :repo-config (get-in @state/state [:config repo])})
 
 (defn download-repo-as-html!
   "download public pages as html"
   [repo]
-  (when-let [db (db/get-db repo)]
-    (let [{:keys [asset-filenames html]}
-          (publish-html/build-html db
-                                   {:repo repo
-                                    :app-state (select-keys @state/state
-                                                            [:ui/theme
-                                                             :ui/sidebar-collapsed-blocks])
-                                    :repo-config (get-in @state/state [:config repo])})
-          html-str     (str "data:text/html;charset=UTF-8,"
-                            (js/encodeURIComponent html))]
-      (if (util/electron?)
-        (js/window.apis.exportPublishAssets
-         html
-         (config/get-repo-dir repo)
-         (clj->js asset-filenames)
-         (util/mocked-open-dir-path))
+  (p/let [{:keys [asset-filenames html]}
+          (state/<invoke-db-worker :thread-api/build-publishing-html repo (publishing-export-options repo))]
+    (when html
+      (let [html-str (str "data:text/html;charset=UTF-8,"
+                          (js/encodeURIComponent html))]
+        (if (util/electron?)
+          (js/window.apis.exportPublishAssets
+           html
+           (config/get-repo-dir repo)
+           (clj->js asset-filenames)
+           (util/mocked-open-dir-path))
 
-        (when-let [anchor (gdom/getElement "download-as-html")]
-          (.setAttribute anchor "href" html-str)
-          (.setAttribute anchor "download" "index.html")
-          (.click anchor))))))
+          (when-let [anchor (gdom/getElement "download-as-html")]
+            (.setAttribute anchor "href" html-str)
+            (.setAttribute anchor "download" "index.html")
+            (.click anchor)))))))
+
+(defn- file-name [repo extension]
+  (-> repo
+      (string/replace #"^/+" "")
+      (str "_" (quot (util/time-ms) 1000))
+      (str "." (string/lower-case (name extension)))))
+
+(defn- normalize-zip-entry
+  [[filename data]]
+  (try
+    [filename (assets-handler/->uint8 data)]
+    (catch :default e
+      (throw (ex-info "unsupported zip entry payload"
+                      (assoc (or (ex-data e) {})
+                             :filename filename)
+                      e)))))
+
+(defn- <export-db-binary-for-zip
+  [repo]
+  (if (util/electron?)
+    (state/<invoke-db-worker :thread-api/export-db-binary repo)
+    (persist-db/<export-db repo {:return-data? true})))
+
+(defn- <export-zipfile-to-desktop!
+  [repo ^js zipfile]
+  (let [repo-name (common-sqlite/sanitize-db-name repo)
+        export-dir (path/path-join (config/get-repo-dir repo) "export")
+        export-path (path/path-join export-dir (file-name repo-name "zip"))]
+    (p/let [content (.arrayBuffer zipfile)
+            _ (fs/mkdir-if-not-exists export-dir)
+            _ (js/window.apis.writeFileBytes export-path content)]
+      export-path)))
 
 (defn db-based-export-repo-as-zip!
   [repo]
   (state/pub-event! [:dialog/export-zip (t :export/preparing-zip)])
-  (-> (p/let [db-data (persist-db/<export-db repo {:return-data? true})
+  (-> (p/let [db-data (<export-db-binary-for-zip repo)
               filename "db.sqlite"
               repo-name (common-sqlite/sanitize-db-name repo)
               _ (state/set-state! :graph/exporting-state {:total 100
@@ -54,7 +91,8 @@
                                                           :current-page (t :export/collecting-assets)
                                                           :label (t :export/exporting)})
               assets (assets-handler/<get-all-assets)
-              files (cons [filename db-data] assets)
+              files (map normalize-zip-entry
+                         (cons [filename db-data] assets))
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 40
                                                           :current-page (t :export/creating-zip)
@@ -72,10 +110,13 @@
                                                   :current-idx 100
                                                   :current-page (t :export/finalizing)
                                                   :label (t :export/exporting)})
-        (when-let [anchor (gdom/getElement "download-as-zip")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor)))
+        (if (util/electron?)
+          (p/let [export-path (<export-zipfile-to-desktop! repo zipfile)]
+            (notification/show! (t :export/zip-exported export-path) :success false))
+          (when-let [anchor (gdom/getElement "download-as-zip")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor))))
       (p/catch (fn [error]
                  (js/console.error error)
                  (notification/show! (t :export/zip-error) :error)))
@@ -85,12 +126,6 @@
 (defn export-repo-as-zip!
   [repo]
   (db-based-export-repo-as-zip! repo))
-
-(defn- file-name [repo extension]
-  (-> repo
-      (string/replace #"^/+" "")
-      (str "_" (quot (util/time-ms) 1000))
-      (str "." (string/lower-case (name extension)))))
 
 (defn export-repo-as-debug-transit!
   [repo]
@@ -105,16 +140,31 @@
 
 (defn export-repo-as-sqlite-db!
   [repo]
-  (->
-   (p/let [data (persist-db/<export-db repo {:return-data? true})
-           filename (file-name repo "sqlite")
-           url (js/URL.createObjectURL (js/Blob. #js [data]))]
-     (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-       (.setAttribute anchor "href" url)
-       (.setAttribute anchor "download" filename)
-       (.click anchor)))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (let [filename (file-name repo "sqlite")]
+    (->
+     (if (util/electron?)
+       (p/let [result (ipc/ipc :db-export-as repo filename)
+               path (or (:path result) (some-> result .-path))]
+         (when path
+           (notification/show! (t :export/sqlite-db-exported path) :success false)))
+       (p/let [data (persist-db/<export-db repo {:return-data? true})]
+         (if (fn? (.-showSaveFilePicker js/window))
+           (p/let [handle (.showSaveFilePicker
+                           js/window
+                           #js {:suggestedName filename
+                                :types #js [#js {:description "SQLite"
+                                                 :accept #js {"application/vnd.sqlite3" #js [".sqlite"]}}]})
+                   writable (.createWritable handle)
+                   _ (.write writable data)]
+             (.close writable))
+           (let [url (js/URL.createObjectURL (js/Blob. #js [data]))]
+             (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+               (.setAttribute anchor "href" url)
+               (.setAttribute anchor "download" filename)
+               (.click anchor))))))
+     (p/catch (fn [error]
+                (when-not (= "AbortError" (.-name error))
+                  (js/console.error error)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

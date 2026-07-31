@@ -20,6 +20,10 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
@@ -37,9 +41,20 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- <asset-file-ready?
+  [asset file-name]
+  (if (or config/publishing?
+          (seq (:logseq.property.asset/external-url asset)))
+    (p/resolved true)
+    (fs/file-exists?
+     (config/get-repo-dir (state/get-current-repo))
+     (path/path-join common-config/local-assets-dir file-name))))
 
 (defmethod events/handle :go/search [_]
   (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
@@ -103,7 +118,7 @@
 
 (defmethod events/handle :modal/show-cards [[_ cards-id]]
   (shui/dialog-open!
-   (fn [] (fsrs/cards-view cards-id))
+   (fn [] (fsrs/cards-view cards-id nil))
    {:id :srs
     :label :flashcards__cp}))
 
@@ -177,9 +192,14 @@
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
      :warning false (.-id o))))
 
-(defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
-  (let [editing-block (state/get-edit-block)
-        pos (state/get-edit-pos)
+(defn- editor-new-property [block target {:keys [selected-blocks popup-id editing-block editing-pos editing-target] :as opts}]
+  (let [opts (dissoc opts :editing-block :editing-pos :editing-target)
+        editing-block (or editing-block
+                          (some-> (state/get-edit-block)
+                                  :block/uuid
+                                  (->> (vector :block/uuid))
+                                  db/entity))
+        pos (or editing-pos (state/get-edit-pos))
         edit-block-or-selected (cond
                                  editing-block
                                  [editing-block]
@@ -223,6 +243,7 @@
                                                                (assoc :custom-content content'))))))))))]
     (when (seq blocks)
       (let [target' (or target
+                        editing-target
                         (some-> (state/get-edit-input-id)
                                 (gdom/getElement))
                         (first (state/get-selection-blocks)))]
@@ -238,14 +259,34 @@
 
 (defmethod events/handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (when-not config/publishing?
-    (p/do!
-     (editor-handler/save-current-block!)
-     (editor-new-property block target opts))))
+    (let [editing-block (some-> (state/get-edit-block)
+                                :block/uuid
+                                (->> (vector :block/uuid))
+                                db/entity)
+          editing-target (some-> (state/get-edit-input-id)
+                                 (gdom/getElement))
+          opts' (cond-> opts
+                  editing-block
+                  (assoc :editing-block editing-block
+                         :editing-pos (state/get-edit-pos))
+                  editing-target
+                  (assoc :editing-target editing-target))]
+      (p/do!
+       (editor-handler/save-current-block!)
+       (editor-new-property block target opts')))))
 
-(defn- editor-new-reaction [target]
-  (let [editing-block (state/get-edit-block)
-        target-block-id (or (:block/uuid editing-block)
-                            (first (state/get-selection-block-ids)))
+(defn- reaction-target-block-ids [blocks]
+  (let [blocks' (cond
+                  (nil? blocks) nil
+                  (sequential? blocks) blocks
+                  :else [blocks])]
+    (vec
+     (or (seq (keep :block/uuid blocks'))
+         (some-> (state/get-edit-block) :block/uuid vector)
+         (seq (state/get-selection-block-ids))))))
+
+(defn- editor-new-reaction [blocks target]
+  (let [target-block-ids (reaction-target-block-ids blocks)
         target' (or target
                     (some-> (state/get-edit-input-id)
                             (gdom/getElement))
@@ -255,10 +296,11 @@
                         emoji? (= :emoji (:type icon))]
                     (if emoji?
                       (do
-                        (reaction-handler/toggle-reaction! target-block-id emoji-id)
+                        (doseq [target-block-id target-block-ids]
+                          (reaction-handler/toggle-reaction! target-block-id emoji-id))
                         (shui/popup-hide! popup-id))
                       (notification/show! (t :block.reaction/emoji-required-warning) :warning))))]
-    (when (and target-block-id target')
+    (when (and (seq target-block-ids) target')
       (shui/popup-show!
        target'
        (fn [{:keys [id]}]
@@ -271,11 +313,11 @@
        {:align :start
         :content-props {:class "ls-icon-picker"}}))))
 
-(defmethod events/handle :editor/new-reaction [[_ {:keys [target]}]]
+(defmethod events/handle :editor/new-reaction [[_ {:keys [block blocks target]}]]
   (when-not config/publishing?
     (p/do!
      (editor-handler/save-current-block!)
-     (editor-new-reaction target))))
+     (editor-new-reaction (if (seq blocks) blocks block) target))))
 
 (defmethod events/handle :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!
@@ -333,6 +375,58 @@
    {:id :edit-external-asset-source-dialog
     :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
+
+(defmethod events/handle :asset/show-preview [[_ asset]]
+  (when-let [asset-type-str (:logseq.property.asset/type asset)]
+    (let [asset-type (keyword asset-type-str)
+          image? (contains? (common-config/img-formats) asset-type)
+          video? (contains? config/video-formats asset-type)
+          pdf? (= :pdf asset-type)
+          file-name (str (:block/uuid asset) "." asset-type-str)
+          ;; Prefer external-url so plugin-sandboxed assets resolve to their
+          ;; real on-disk path; mirrors the asset-cp render-side fix.
+          rel-path (or (:logseq.property.asset/external-url asset)
+                       (path/path-join (str "../" common-config/local-assets-dir) file-name))]
+      (cond
+        image?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when url
+            (lightbox/preview-images!
+             [{:src url
+               :w (or (:logseq.property.asset/width asset) 1200)
+               :h (or (:logseq.property.asset/height asset) 800)}])))
+
+        video?
+        (p/let [file-ready? (<asset-file-ready? asset file-name)
+                requested? (assets-handler/maybe-request-remote-asset-download!
+                            (state/get-current-repo)
+                            asset
+                            file-ready?)]
+          (if requested?
+            (notification/show! (t :asset/downloading))
+            (p/let [url (assets-handler/<make-asset-url rel-path)]
+              (when url
+                (shui/dialog-open!
+                 (fn []
+                   [:div.flex.flex-col.gap-2.items-center
+                    [:div.font-medium.text-sm.self-start.truncate.max-w-full
+                     (:block/title asset)]
+                    [:video.rounded.max-w-full
+                     {:src url
+                      :controls true
+                      :autoPlay true
+                      :style {:max-height "80vh"}}]])
+                 {:id :asset-video-preview
+                  :auto-width? true
+                  :center? true})))))
+
+        pdf?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when-let [current (pdf-assets/inflate-asset rel-path {:block asset :href url})]
+            (state/set-current-pdf! current)))
+
+        :else
+        (route-handler/redirect-to-page! (:block/uuid asset))))))
 
 (defn ensure-user-rsa-keys-if-possible!
   []

@@ -17,7 +17,7 @@
            (reset! worker-state/*db-sync-config {:ws-url "wss://example.com/sync/%s"})
            (reset! worker-state/*state (assoc state-prev :auth/id-token "state-token"))
            (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
+                   (fn [qkw & _args]
                      (when (= qkw :thread-api/ensure-id&access-token)
                        (swap! refresh-calls inc))
                      (p/resolved {:id-token "refreshed-token"})))

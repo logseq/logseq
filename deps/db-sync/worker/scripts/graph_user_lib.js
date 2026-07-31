@@ -86,8 +86,9 @@ left join users owner on owner.id = g.owner_user_id
 order by g.updated_at desc;`;
 }
 
-function buildWranglerArgs({ database, config, env, sql }) {
-  return [
+function buildWranglerArgs({ database, config, env, sql, local = false }) {
+  const useLocal = local || env === "local";
+  const args = [
     "dlx",
     "wrangler",
     "d1",
@@ -95,13 +96,17 @@ function buildWranglerArgs({ database, config, env, sql }) {
     database,
     "--config",
     config,
-    "--env",
-    env,
-    "--remote",
-    "--json",
-    "--command",
-    sql,
   ];
+
+  if (useLocal) {
+    args.push("--local");
+  } else {
+    args.push("--env", env, "--remote");
+  }
+
+  args.push("--json", "--command", sql);
+
+  return args;
 }
 
 function runWranglerQuery(args) {

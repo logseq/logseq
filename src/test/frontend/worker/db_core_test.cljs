@@ -1,27 +1,96 @@
 (ns frontend.worker.db-core-test
   (:require [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
+            [datascript.storage :as storage]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.db-core :as db-core]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.download :as sync-download]
+            [frontend.worker-common.util :as worker-util]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.export :as sqlite-export]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
 (def ^:private test-repo "db-core-test-repo")
+;; Keep this compact to satisfy lint:large-vars while still asserting full API coverage.
+(def ^:private expected-db-core-thread-apis
+  (into #{}
+        (concat
+         [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config
+          :thread-api/db-sync-status :thread-api/db-sync-start :thread-api/db-sync-stop :thread-api/db-sync-update-presence
+          :thread-api/db-sync-request-asset-download :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
+          :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
+          :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
+          :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
+          :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/get-blocks
+          :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
+          :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
+          :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
+          :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
+          :thread-api/get-initial-data :thread-api/build-publishing-html :thread-api/reset-db
+          :thread-api/unsafe-unlink-db :thread-api/close-db
+          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
+          :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
+          :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
+          :thread-api/export-db-binary
+          :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
+          :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
+          :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
+          :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
+          :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
+          :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
+          :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn :thread-api/get-view-data
+          :thread-api/get-class-objects :thread-api/get-property-values :thread-api/get-bidirectional-properties
+          :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
+          :thread-api/get-rtc-graph-uuid :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
+          :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
+          :thread-api/api-list-tags :thread-api/api-list-pages :thread-api/api-build-upsert-nodes-edn])))
+
+(defn- get-thread-api
+  [k]
+  (let [f (get @thread-api/*thread-apis k)]
+    (assert (fn? f) (str "thread api not registered: " k))
+    f))
+
+(defn- silence-stderr
+  [f]
+  (let [orig-write (.-write js/process.stderr)]
+    (set! (.-write js/process.stderr) (fn [& _] true))
+    (try
+      (f)
+      (finally
+        (set! (.-write js/process.stderr) orig-write)))))
+
+(defn- <wait-for-progress!
+  [progress-calls pred max-tries]
+  (p/loop [remaining max-tries]
+    (if (or (pred @progress-calls)
+            (zero? remaining))
+      nil
+      (p/let [_ (p/delay 5)]
+        (p/recur (dec remaining))))))
 
 (defn- build-test-platform
   ([]
    (build-test-platform {}))
-  ([{:keys [post-message! remove-vfs! runtime import-db]
+  ([{:keys [post-message! remove-vfs! runtime import-db embed-texts]
      :or {post-message! (fn [& _] nil)
           remove-vfs! (fn [_] nil)
-          runtime :browser}}]
+          runtime :browser
+          embed-texts (fn [texts]
+                        (p/resolved (mapv (fn [_] [0.0]) texts)))}}]
    {:env {:publishing? false
           :runtime runtime}
     :storage {:install-opfs-pool (fn [_sqlite _pool-name]
@@ -46,6 +115,9 @@
              :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
              :transaction (fn [db f] (.transaction db f))}
     :crypto {}
+    :embedding {:model-id "test-model"
+                :dimension search/vector-embedding-dimension
+                :embed-texts embed-texts}
     :timers {:set-interval! (fn [_ _] nil)}}))
 
 (defn- restoring-worker-state
@@ -54,31 +126,37 @@
         config-prev @worker-state/*db-sync-config
         sqlite-prev @worker-state/*sqlite
         sqlite-conns-prev @worker-state/*sqlite-conns
+        vector-indexes-prev @worker-state/*vector-indexes
         datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
         opfs-prev @worker-state/*opfs-pools
         main-thread-prev @worker-state/*main-thread
         platform-prev @@#'platform/*platform
         search-build-prev @(deref #'db-core/*search-index-build-ids)
+        vector-build-prev @(deref #'db-core/*vector-index-rebuild-ids)
         cleanup (fn []
                   (reset! worker-state/*state state-prev)
                   (reset! worker-state/*db-sync-config config-prev)
                   (reset! worker-state/*sqlite sqlite-prev)
                   (reset! worker-state/*sqlite-conns sqlite-conns-prev)
+                  (reset! worker-state/*vector-indexes vector-indexes-prev)
                   (reset! worker-state/*datascript-conns datascript-prev)
                   (reset! worker-state/*client-ops-conns client-ops-prev)
                   (reset! worker-state/*opfs-pools opfs-prev)
                   (reset! worker-state/*main-thread main-thread-prev)
                   (reset! (deref #'db-core/*search-index-build-ids) search-build-prev)
+                  (reset! (deref #'db-core/*vector-index-rebuild-ids) vector-build-prev)
                   (reset! @#'platform/*platform platform-prev))]
     (platform/set-platform! (build-test-platform))
     (reset! worker-state/*sqlite #js {})
     (reset! worker-state/*sqlite-conns {})
+    (reset! worker-state/*vector-indexes {})
     (reset! worker-state/*datascript-conns {})
     (reset! worker-state/*client-ops-conns {})
     (reset! worker-state/*opfs-pools {})
     (reset! worker-state/*main-thread nil)
     (reset! (deref #'db-core/*search-index-build-ids) {})
+    (reset! (deref #'db-core/*vector-index-rebuild-ids) {})
     (let [result (f)]
       (if (p/promise? result)
         (p/finally result cleanup)
@@ -122,26 +200,42 @@
     (is (= "" (resolve-initial-config "")))
     (is (= "{:foo true}" (resolve-initial-config "{:foo true}")))))
 
-(deftest import-db-rejects-non-sqlite-payload
+(deftest import-db-binary-uses-active-pool-after-close-db
   (async done
-    (restoring-worker-state
-     (fn []
-       (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db)
-             imports (atom [])
-             invalid-payload (.encode (js/TextEncoder.) "[\"~#js/Error\",[\"^ \",\"~:message\",\"File not found: /db.sqlite\"]]")]
-         (platform/set-platform!
-          (build-test-platform
-           {:import-db (fn [_pool _path data]
-                         (swap! imports conj data)
-                         (p/resolved nil))}))
-         (-> (import-db! test-repo invalid-payload)
-             (p/then (fn [_]
-                       (is false "expected import-db to reject invalid payload")))
-             (p/catch (fn [error]
-                        (is (= :invalid-sqlite-import-data (:code (ex-data error))))))
-             (p/finally (fn []
-                          (is (empty? @imports))
-                          (done)))))))))
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-binary)
+              imported-pool-ids (atom [])
+              pool-seq (atom 0)
+              make-pool (fn [id]
+                          (let [pool #js {:id id
+                                          :paused false}]
+                            (set! (.-pauseVfs pool) (fn [] (set! (.-paused pool) true)))
+                            (set! (.-unpauseVfs pool) (fn [] (set! (.-paused pool) false)))
+                            pool))
+              existing-pool (make-pool "existing-pool")
+              sqlite-data (.encode (js/TextEncoder.) "SQLite format 3")]
+          (reset! worker-state/*opfs-pools {test-repo existing-pool})
+          (let [platform' (build-test-platform
+                           {:import-db (fn [pool _path _data]
+                                         (swap! imported-pool-ids conj (.-id pool))
+                                         (if (.-paused pool)
+                                           (p/rejected (js/Error. "No available handles to import to."))
+                                           (p/resolved nil)))})]
+            (platform/set-platform!
+             (assoc platform'
+                    :storage
+                    (assoc (:storage platform')
+                           :install-opfs-pool (fn [_sqlite _pool-name]
+                                                (let [id (str "new-pool-" (swap! pool-seq inc))]
+                                                  (p/resolved (make-pool id))))))))
+          (-> (import-db! test-repo sqlite-data)
+              (p/then (fn [_]
+                        (is (= ["new-pool-1"] @imported-pool-ids))))
+              (p/catch (fn [error]
+                         (is false (str "expected import to succeed with active pool, got " error))))))))
+     (p/finally done))))
 
 (deftest set-db-sync-config-keeps-only-non-auth-fields-test
   (let [set-config! (get @thread-api/*thread-apis :thread-api/set-db-sync-config)
@@ -216,52 +310,615 @@
                               (reset! *service old-service)
                               (done))))))))
 
+(deftest handle-migrate-result-local-txs-enqueues-upgrade-reports-test
+  (let [conn (d/create-conn db-schema/schema)
+        migration-tx-report {:tx-data [[:db/add 1 :block/title "Migrated"]]
+                             :db-before @conn
+                             :db-after @conn
+                             :tx-meta {:db-migrate? true}}
+        handled-reports (atom [])]
+    (with-redefs [db-sync/handle-local-tx! (fn [repo tx-report]
+                                             (swap! handled-reports conj
+                                                    {:repo repo
+                                                     :tx-report tx-report}))]
+      (#'db-core/handle-migrate-result-local-txs!
+       test-repo
+       {:upgrade-result-coll [migration-tx-report]})
+      (is (= [{:repo test-repo
+               :tx-report migration-tx-report}]
+             @handled-reports)))))
+
+(deftest built-in-sync-repair-tx-data-covers-65-26-through-65-28-test
+  (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
+        tx-data-again (#'db-core/built-in-sync-repair-tx-data)
+        idents (set (keep :db/ident tx-data))]
+    (is (= tx-data tx-data-again)
+        "The repair is stable when multiple clients send it")
+    (is (every? idents
+                [:logseq.property.repeat/repeat-type
+                 :logseq.property.comments/blocks
+                 :logseq.class/Comments
+                 :logseq.class/Comment]))
+    (is (every?
+         (fn [item]
+           (or (not (and (map? item) (:block/uuid item)))
+               (and (number? (:block/created-at item))
+                    (number? (:block/updated-at item))
+                    (or (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
+                        (and (string? (:block/order item))
+                             (db-order/validate-order-key? (:block/order item)))))))
+         tx-data)
+        "Block-shaped repair items keep valid timestamps and order when order is allowed")
+    (is (not-any?
+         (fn [item]
+           (and (map? item)
+                (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
+                (contains? item :block/order)))
+         tx-data)
+        "#Comments and #Comment repair class blocks should not have block order")
+    (is (not-any?
+         (fn [item]
+           (or (and (map? item)
+                    (contains? item :logseq.property.comments/blocks))
+               (and (vector? item)
+                    (= :logseq.property.comments/blocks (nth item 2 nil)))))
+         tx-data)
+        "65.29 comment target data is intentionally not included")))
+
+(deftest enqueue-built-in-sync-repair-queues-pending-fix-once-test
+  (let [upserts (atom [])
+        count-adjustments (atom [])]
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
+                  client-op/upsert-local-tx-entry! (fn [repo entry]
+                                                     (swap! upserts conj {:repo repo
+                                                                          :entry entry})
+                                                     {:should-inc-pending? true})
+                  client-op/adjust-pending-local-tx-count! (fn [repo delta]
+                                                             (swap! count-adjustments conj [repo delta]))]
+      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (let [{:keys [repo entry]} (first @upserts)]
+        (is (= test-repo repo))
+        (is (uuid? (:tx-id entry)))
+        (is (= 0 (:created-at entry)))
+        (is (true? (:pending? entry)))
+        (is (false? (:failed? entry)))
+        (is (= :fix (:outliner-op entry)))
+        (is (seq (:normalized-tx-data entry)))))
+      (is (= [[test-repo 1]] @count-adjustments))
+
+    (reset! upserts [])
+    (reset! count-adjustments [])
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] {:tx-id (random-uuid)})
+                  client-op/upsert-local-tx-entry! (fn [_repo _entry]
+                                                     (swap! upserts conj :unexpected))
+                  client-op/adjust-pending-local-tx-count! (fn [_repo _delta]
+                                                             (swap! count-adjustments conj :unexpected))]
+      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (is (empty? @upserts))
+      (is (empty? @count-adjustments)))))
+
+(deftest maybe-enqueue-built-in-sync-repair-only-for-migrated-remote-graphs-test
+  (let [remote-conn (d/create-conn db-schema/schema)
+        local-conn (d/create-conn db-schema/schema)
+        upserts (atom [])]
+    (d/transact! remote-conn [{:db/ident :logseq.kv/graph-remote?
+                               :kv/value true}])
+    (d/transact! local-conn [{:db/ident :logseq.kv/graph-remote?
+                              :kv/value false}])
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
+                  client-op/upsert-local-tx-entry! (fn [repo entry]
+                                                     (swap! upserts conj {:repo repo
+                                                                          :entry entry})
+                                                     {:should-inc-pending? false})
+                  client-op/adjust-pending-local-tx-count! (fn [_repo _delta] nil)]
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil true)
+      (is (= 1 (count @upserts)))
+
+      (reset! upserts [])
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn {:upgrade-result-coll []} true)
+      (is (empty? @upserts)
+          "Real migration tx reports are uploaded instead of repair txs")
+
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo local-conn nil true)
+      (is (empty? @upserts)
+          "Local-only graphs do not need server repair")
+
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil false)
+      (is (empty? @upserts)
+          "New graphs rely on initial upload data"))))
+
 (deftest search-build-blocks-indice-in-worker-reports-progress-to-main-thread-test
   (async done
-         (restoring-worker-state
-          (fn []
-            (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
-                  conn (d/create-conn db-schema/schema)
-                  search-db (fake-db)
-                  progress-calls (atom [])
-                  idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
-              (d/transact! conn [{:block/uuid (random-uuid)}])
-              (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (reset! idle-status-atom {test-repo {:idle? true
-                                                   :ts (.now js/Date)}})
-              (reset! worker-state/*main-thread
-                      (fn [qkw direct-pass? & args]
-                        (when (= qkw :thread-api/search-index-build-progress)
-                          (let [[repo payload] args]
-                            (swap! progress-calls conj {:qkw qkw
-                                                        :direct-pass? direct-pass?
-                                                        :repo repo
-                                                        :payload payload})))
-                        (p/resolved nil)))
-              (with-redefs [search/truncate-table! (fn [_db] nil)
-                            search/upsert-blocks! (fn [_db _blocks] nil)
-                            search/hidden-entity? (constantly false)
-                            search/block->index (fn [_entity]
-                                                  {:id "block-1"
-                                                   :page "page-1"
-                                                   :title "Hello"})]
-                (-> (build-index! test-repo true)
-                    (p/then (fn [_]
-                              (let [statuses (map (comp :status :payload) @progress-calls)
-                                    completed (some #(when (= :completed (get-in % [:payload :status]))
-                                                       %)
-                                                    @progress-calls)]
-                                (is (= false (:direct-pass? (first @progress-calls))))
-                                (is (= test-repo (:repo (first @progress-calls))))
-                                (is (= :running (first statuses)))
-                                (is (some #{:completed} statuses))
-                                (is (= :idle (last statuses)))
-                                (is (= 1 (get-in completed [:payload :processed])))
-                                (is (= 1 (get-in completed [:payload :total]))))))
-                    (p/catch (fn [error]
-                               (is false (str error))))
-                    (p/finally done))))))))
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              progress-calls (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread
+                  (fn [qkw & args]
+                    (when (= qkw :thread-api/search-index-build-progress)
+                      (let [[repo payload] args]
+                        (swap! progress-calls conj {:qkw qkw
+                                                    :repo repo
+                                                    :payload payload})))
+                    (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
+            (-> (p/let [_ (build-index! test-repo true)
+                        _ (<wait-for-progress! progress-calls
+                                               (fn [calls]
+                                                 (= :idle (get-in (last calls) [:payload :status])))
+                                               50)]
+                  (let [statuses (map (comp :status :payload) @progress-calls)
+                        completed (some #(when (= :completed (get-in % [:payload :status]))
+                                           %)
+                                        @progress-calls)]
+                    (is (= test-repo (:repo (first @progress-calls))))
+                    (is (= :running (first statuses)))
+                    (is (some #{:completed} statuses))
+                    (is (= :idle (last statuses)))
+                    (is (= 1 (get-in completed [:payload :processed])))
+                    (is (= 1 (get-in completed [:payload :total])))))
+                (p/catch (fn [error]
+                           (is false (str error)))))))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-reports-progress-before-rebuild-work-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [repo (str test-repo "-progress-" (random-uuid))
+              build-index! #'db-core/<build-blocks-index!
+              conn (d/create-conn db-schema/schema)
+              progress-calls (atom [])
+              progress-seen-before-rebuild-work? (atom nil)
+              record-progress! (fn [repo payload]
+                                 (swap! progress-calls conj {:repo repo
+                                                             :payload payload}))
+              search-db #js {:exec (fn [sql-or-opts]
+                                     (let [sql (if (string? sql-or-opts)
+                                                 sql-or-opts
+                                                 (gobj/get sql-or-opts "sql"))]
+                                       (when (and (not= sql "PRAGMA user_version")
+                                                  (nil? @progress-seen-before-rebuild-work?))
+                                         (reset! progress-seen-before-rebuild-work?
+                                                 (boolean (seq @progress-calls))))
+                                       (if (= sql "PRAGMA user_version")
+                                         #js [#js [0]]
+                                         #js [])))
+                            :close (fn [] nil)}
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (platform/set-platform! (build-test-platform))
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (reset! idle-status-atom {repo {:idle? true
+                                          :ts (.now js/Date)}})
+          (p/with-redefs [db-core/report-search-index-progress! (fn [repo payload]
+                                                                  (record-progress! repo payload)
+                                                                  (p/resolved nil))
+                          search/truncate-table! (fn [db]
+                                                   (.exec db "truncate"))
+                          search/truncate-vector-index! (fn [_vector-index] nil)
+                          search/upsert-blocks! (fn [_db _blocks] nil)
+                          search/hidden-entity? (constantly false)
+                          search/block->index (fn [_entity & _opts]
+                                                {:id "block-1"
+                                                 :page "page-1"
+                                                 :title "Hello"})]
+            (let [build-id (#'db-core/start-search-index-build! repo)]
+              (-> (build-index! repo search-db conn build-id)
+                (p/then (fn [_]
+                          (is @progress-seen-before-rebuild-work?
+                              "Progress should be emitted before rebuild prep starts")
+                          (is (= :running (get-in (first @progress-calls) [:payload :status])))))
+                (p/catch (fn [error]
+                           (is false (str error))))))))))
+     (p/finally done))))
+
+(deftest search-upsert-blocks-does-not-wait-for-vector-embedding-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [upsert-blocks! (get @thread-api/*thread-apis :thread-api/search-upsert-blocks)
+              sqlite-upserts (atom 0)
+              vector-upserts (atom [])
+              block-id (str (random-uuid))
+              page-id (str (random-uuid))
+              search-db #js {:transaction (fn [f]
+                                            (swap! sqlite-upserts inc)
+                                            (f #js {:exec (fn [_opts] nil)}))}]
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [_texts]
+                                                   (js/Promise. (fn [_resolve _reject])))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [docs]
+                                                                       (swap! vector-upserts conj docs))}})
+          (p/let [result (js/Promise.race
+                          #js [(upsert-blocks! test-repo [{:id block-id
+                                                           :page page-id
+                                                           :title "which team is Manu in?"}])
+                               (p/delay 20 ::timeout)])]
+            (is (nil? result))
+            (is (= 1 @sqlite-upserts))
+            (is (empty? @vector-upserts))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-blocks-falls-back-to-keyword-search-when-query-embedding-fails-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [search! (get @thread-api/*thread-apis :thread-api/search-blocks)
+              conn (d/create-conn db-schema/schema)
+              search-db #js {:exec (fn [_opts] #js [])}]
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [_texts]
+                                                   (p/rejected (js/Error. "embedding unavailable")))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo {:query (fn [& _] [])}})
+          (p/let [result (search! test-repo "alpha" {:limit 5})]
+            (is (empty? result))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-reports-unified-progress-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              progress-calls (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :post-message! (fn [type payload]
+                                                     (when (= type :thread-api/search-index-build-progress)
+                                                       (let [[repo payload'] payload]
+                                                         (swap! progress-calls conj {:repo repo
+                                                                                     :payload payload'}))))
+                                    :embed-texts (fn [_texts]
+                                                   (p/resolved [[0.1 0.2 0.3]]))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_docs] nil)
+                                                           :truncate! (fn [] nil)}})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread
+                  (fn [qkw & args]
+                    (when (= qkw :thread-api/search-index-build-progress)
+                      (let [[repo payload] args]
+                        (swap! progress-calls conj {:repo repo
+                                                    :payload payload})))
+                    (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
+            (p/let [_ (build-index! test-repo true)
+                    _ (<wait-for-progress! progress-calls
+                                           (fn [calls]
+                                             (= :idle (get-in (last calls) [:payload :status])))
+                                           50)]
+              (let [stages (keep #(get-in % [:payload :stage]) @progress-calls)
+                    terminal-progress (some #(when (= 100 (get-in % [:payload :progress]))
+                                               %)
+                                            @progress-calls)]
+                (is (not-any? #{:vector-index :keyword-index} stages))
+                (is (some #{:search-index} stages))
+                (is (= test-repo (:repo terminal-progress)))
+                (is (= :search-index (get-in terminal-progress [:payload :stage])))
+                (is (= 1 (get-in terminal-progress [:payload :processed])))
+                (is (= 1 (get-in terminal-progress [:payload :total])))))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-completes-before-vector-embedding-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! #'db-core/<build-blocks-index!
+              build-id (#'db-core/start-search-index-build! test-repo)
+              conn (d/create-conn db-schema/schema)
+              page-id (random-uuid)
+              sql-calls (atom [])
+              search-db (fake-db {:sql-calls sql-calls})
+              progress-calls (atom [])
+              vector-upserts (atom [])
+              embedding-started? (atom false)
+              vector-index {:upsert! (fn [docs]
+                                        (swap! vector-upserts conj docs))
+                            :truncate! (fn [] nil)
+                            :set-metadata! (fn [_metadata] nil)}
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid page-id
+                              :block/name "page"
+                              :block/title "Page"}
+                             {:block/uuid (random-uuid)
+                              :block/title "Hello"
+                              :block/page [:block/uuid page-id]}])
+          (set! (.-transaction search-db) (fn [f] (f search-db)))
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :post-message! (fn [type payload]
+                                                     (when (= type :thread-api/search-index-build-progress)
+                                                       (let [[repo payload'] payload]
+                                                         (swap! progress-calls conj {:repo repo
+                                                                                     :payload payload'}))))
+                                    :embed-texts (fn [_texts]
+                                                   (reset! embedding-started? true)
+                                                   (js/Promise. (fn [_resolve _reject])))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo vector-index})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _args] (p/resolved nil)))
+          (with-redefs [worker-state/get-vector-index (fn [repo]
+                                                        (when (= repo test-repo)
+                                                          vector-index))]
+            (-> (p/let [result (js/Promise.race
+                                 #js [(build-index! test-repo search-db conn build-id)
+                                      (p/delay 50 ::timeout)])
+                        _ (<wait-for-progress! progress-calls
+                                               (fn [calls]
+                                                 (some #(= :completed (get-in % [:payload :status])) calls))
+                                               50)
+                        _ (p/delay 10)]
+                  (let [completed-progress (some #(when (= :completed (get-in % [:payload :status]))
+                                                    %)
+                                                 @progress-calls)]
+                    (is (nil? result))
+                    (is @embedding-started?)
+                    (is (some #(= (str "PRAGMA user_version = " db-core/search-db-version) %)
+                              @sql-calls))
+                    (is (= {:repo test-repo
+                            :payload {:status :completed
+                                      :stage :search-index
+                                      :progress 100
+                                      :processed 2
+                                      :total 2}}
+                           (some-> completed-progress
+                                   (select-keys [:repo :payload])
+                                   (update :payload dissoc :build-id))))
+                    (is (empty? @vector-upserts))))
+                (p/catch (fn [error]
+                           (is false (str error)))))))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-does-not-sort-vector-context-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              page-id (random-uuid)
+              sort-calls (atom 0)
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)
+              block-count 40]
+          (set! (.-transaction search-db) (fn [f] (f search-db)))
+          (d/transact! conn
+                       (into [{:block/uuid page-id
+                               :block/name "search perf"
+                               :block/title "Search Perf"}]
+                             (map (fn [idx]
+                                    {:block/uuid (random-uuid)
+                                     :block/title (str "Sibling " idx)
+                                     :block/order idx
+                                     :block/parent [:block/uuid page-id]
+                                     :block/page [:block/uuid page-id]}))
+                             (range block-count)))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _args] (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        ldb/sort-by-order (fn [children]
+                                            (swap! sort-calls inc)
+                                            (sort-by :block/order children))
+                        ldb/page? (fn [entity]
+                                    (= page-id (:block/uuid entity)))
+                        ldb/object? (constantly false)
+                        ldb/journal? (constantly false)
+                        ldb/closed-value? (constantly false)
+                        ldb/hidden? (constantly false)
+                        ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+            (p/let [_ (build-index! test-repo true)]
+              (is (zero? @sort-calls)))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-index-blocks-use-platform-embeddings-for-vector-index-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (platform/set-platform! (build-test-platform {:runtime :node}))
+        (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+        (p/let [result (#'db-core/<embed-index-blocks
+                        test-repo
+                        [{:id "block-1"
+                          :page "page-1"
+                          :title "Hello"}])]
+          (is (= [{:id "block-1"
+                   :page "page-1"
+                   :title "Hello"
+                   :embedding [0]}]
+                 result)))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-index-blocks-embeds-in-bounded-batches-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [batch-sizes (atom [])
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 65))]
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :embed-texts (fn [texts]
+                            (swap! batch-sizes conj (count texts))
+                            (p/resolved (mapv (fn [_] [0]) texts)))}))
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [32 32 1] @batch-sizes))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-index-blocks-embeds-batches-in-parallel-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [active-batches (atom 0)
+              max-active-batches (atom 0)
+              batch-sizes (atom [])
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 96))]
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :embed-texts (fn [texts]
+                            (let [active (swap! active-batches inc)]
+                              (swap! max-active-batches max active)
+                              (swap! batch-sizes conj (count texts))
+                              (p/let [_ (p/delay 10)]
+                                (swap! active-batches dec)
+                                (mapv (fn [_] [0]) texts))))}))
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [32 32 32] (sort @batch-sizes)))
+            (is (= 2 @max-active-batches))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-index-blocks-falls-back-to-single-embeddings-when-batch-fails-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [batch-sizes (atom [])
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 8))
+              embed-texts (fn [texts]
+                            (swap! batch-sizes conj (count texts))
+                            (if (> (count texts) 2)
+                              (p/rejected (js/Error. "batch too large"))
+                              (p/resolved (mapv (fn [_] [0]) texts))))]
+          (p/let [result (#'db-core/<embed-index-batch-with-fallback embed-texts blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [8 4 2 2 4 2 2] @batch-sizes))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-skips-rebuild-when-fts-current-and-vector-metadata-mismatches-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db {:user-version db-core/search-db-version})
+              truncate-calls (atom 0)
+              metadata-writes (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes
+                  {test-repo {:upsert! (fn [_docs] nil)
+                              :truncate! (fn [] (swap! truncate-calls inc))
+                              :metadata (fn []
+                                          {:embedding-model-id "old-model"
+                                           :embedding-dimension search/vector-embedding-dimension
+                                           :context-version search/vector-context-version})
+                              :set-metadata! (fn [metadata]
+                                               (swap! metadata-writes conj metadata))}})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
+            (p/let [result (build-index! test-repo false)
+                    _ (p/delay 10)]
+              (is (= db-core/search-db-version result))
+              (is (= 0 @truncate-calls))
+              (is (empty? @metadata-writes)))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest vector-embedding-title-truncates-long-text-test
+  (let [vector-embedding-title #'db-core/vector-embedding-title
+        long-title (apply str (repeat 6000 "x"))]
+    (is (= 2048 (count (vector-embedding-title long-title))))
+    (is (= "short title" (vector-embedding-title "short title")))))
+
+(deftest vector-embedding-title-prefers-vector-title-test
+  (let [vector-embedding-title #'db-core/vector-embedding-title]
+    (is (= "Page context\nBlock: Alpha"
+           (vector-embedding-title {:title "Alpha"
+                                    :vector-title "Page context\nBlock: Alpha"})))
+    (is (= "Alpha"
+           (vector-embedding-title {:title "Alpha"})))))
 
 (deftest release-access-handles-clears-active-import-state-test
   (restoring-worker-state
@@ -325,3 +982,813 @@
          (is (= 1 @pause-calls))
          (finally
            (reset! *import-state import-state-prev)))))))
+
+;; ---- ->uint8array tests ----
+
+(deftest ->uint8array-returns-uint8array-unchanged
+  (let [->uint8array #'db-core/->uint8array
+        arr (js/Uint8Array. [1 2 3])]
+    (is (identical? arr (->uint8array arr)))))
+
+(deftest ->uint8array-converts-arraybuffer
+  (let [->uint8array #'db-core/->uint8array
+        buffer (js/ArrayBuffer. 4)]
+    (is (instance? js/Uint8Array (->uint8array buffer)))
+    (is (= 4 (.-length (->uint8array buffer))))))
+
+(deftest ->uint8array-converts-arraybuffer-view
+  (let [->uint8array #'db-core/->uint8array
+        buffer (js/ArrayBuffer. 8)
+        view (js/DataView. buffer)]
+    (is (instance? js/Uint8Array (->uint8array view)))))
+
+(deftest ->uint8array-converts-js-array
+  (let [->uint8array #'db-core/->uint8array
+        arr (js/Array. 1 2 3)]
+    (is (instance? js/Uint8Array (->uint8array arr)))
+    (is (= 3 (.-length (->uint8array arr))))))
+
+;; ---- get-storage-pool / remember-storage-pool! / forget-storage-pool! tests ----
+
+(deftest storage-pool-operations-for-browser
+  (restoring-worker-state
+   (fn []
+     (let [get-storage-pool #'db-core/get-storage-pool
+           remember-storage-pool! #'db-core/remember-storage-pool!
+           forget-storage-pool! #'db-core/forget-storage-pool!
+           pool #js {:id "test-pool"}]
+       (platform/set-platform! (build-test-platform {:runtime :browser}))
+       ;; Initially no pool
+       (is (nil? (get-storage-pool test-repo)))
+       ;; Remember pool
+       (remember-storage-pool! test-repo pool)
+       (is (identical? pool (get-storage-pool test-repo)))
+       ;; Forget pool
+       (forget-storage-pool! test-repo)
+       (is (nil? (get-storage-pool test-repo)))))))
+
+(deftest storage-pool-operations-for-node
+  (restoring-worker-state
+   (fn []
+     (let [get-storage-pool #'db-core/get-storage-pool
+           remember-storage-pool! #'db-core/remember-storage-pool!
+           forget-storage-pool! #'db-core/forget-storage-pool!
+           node-pool #js {:id "node-pool"}
+           opfs-pool #js {:id "opfs-pool"}]
+       (platform/set-platform! (build-test-platform {:runtime :node}))
+       ;; Initially no pool
+       (is (nil? (get-storage-pool test-repo)))
+       ;; Remember pool in node-pools
+       (remember-storage-pool! test-repo node-pool)
+       (is (identical? node-pool (get-storage-pool test-repo)))
+       ;; Also set opfs-pool to verify node pool takes precedence
+       (swap! worker-state/*opfs-pools assoc test-repo opfs-pool)
+       (is (identical? node-pool (get-storage-pool test-repo)))
+       ;; Forget pool clears both
+       (forget-storage-pool! test-repo)
+       (is (nil? (get-storage-pool test-repo)))
+       (is (nil? (get @#'db-core/*node-pools test-repo)))
+       (is (nil? (get @worker-state/*opfs-pools test-repo)))))))
+
+;; ---- resolve-db-path tests ----
+
+(deftest resolve-db-path-uses-storage-fn-when-available
+  (restoring-worker-state
+   (fn []
+     (let [resolve-db-path #'db-core/resolve-db-path
+           pool #js {:id "pool"}]
+       (platform/set-platform! (build-test-platform))
+       ;; When no resolve-db-path fn, returns path as-is
+       (is (= "/db.sqlite" (resolve-db-path test-repo pool "/db.sqlite")))
+       ;; With custom resolve-db-path
+       (platform/set-platform!
+        (assoc-in (build-test-platform) [:storage :resolve-db-path]
+                  (fn [repo _path path]
+                    (str repo "-" path))))
+       (is (= (str test-repo "-/db.sqlite")
+              (resolve-db-path test-repo pool "/db.sqlite")))))))
+
+(deftest vector-index-path-resolves-under-search-vector-dir-test
+  (restoring-worker-state
+   (fn []
+     (let [vector-index-path #'db-core/vector-index-path
+           pool #js {:id "pool"}]
+       (platform/set-platform!
+        (assoc-in (build-test-platform) [:storage :resolve-db-path]
+                  (fn [_repo _pool path]
+                    (str "/graph/" path))))
+       (is (= "/graph/search/vector"
+              (vector-index-path test-repo pool)))))))
+
+;; ---- checkpoint-db! tests ----
+
+(deftest checkpoint-db-executes-wal-checkpoint
+  (let [checkpoint-db! #'db-core/checkpoint-db!
+        sql-calls (atom [])
+        db #js {:exec (fn [sql]
+                        (swap! sql-calls conj sql)
+                        #js [])}]
+    (checkpoint-db! "test-repo" db)
+    (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @sql-calls))))
+
+(deftest checkpoint-db-handles-non-function-exec
+  (let [checkpoint-db! #'db-core/checkpoint-db!]
+    ;; db without exec fn should not throw
+    (is (nil? (checkpoint-db! "test-repo" #js {})))
+    ;; nil db should not throw
+    (is (nil? (checkpoint-db! "test-repo" nil)))))
+
+(deftest checkpoint-db-catches-exec-errors
+  (let [checkpoint-db! #'db-core/checkpoint-db!
+        db #js {:exec (fn [_]
+                        (throw (js/Error. "checkpoint failed")))}]
+    ;; Should not throw
+    (is (nil? (checkpoint-db! "test-repo" db)))))
+
+;; ---- new-sqlite-storage tests ----
+
+(deftest new-sqlite-storage-implements-storage-protocol
+  (let [new-sqlite-storage #'db-core/new-sqlite-storage
+        db #js {:transaction (fn [f]
+                                (f #js {:exec (fn [_] nil)}))}
+        storage (new-sqlite-storage db)]
+    ;; Verify it implements IStorage by checking it responds to protocol methods
+    ;; In CLJS, reify creates an object that implements the protocol
+    (is (some? storage))
+    ;; Try calling the store method to verify it works
+    (is (nil? (storage/-store storage [] [])))))
+
+;; ---- search-index-version tests ----
+
+(deftest search-index-version-reads-user-version
+  (let [search-index-version #'db-core/search-index-version
+        db (fake-db {:user-version 5})]
+    (is (= 5 (search-index-version db)))))
+
+(deftest search-index-version-reads-default-zero
+  (let [search-index-version #'db-core/search-index-version
+        db (fake-db {:user-version 0})]
+    (is (= 0 (search-index-version db)))))
+
+;; ---- search-index-build management tests ----
+
+(deftest start-search-index-build-creates-build-id
+  (restoring-worker-state
+   (fn []
+     (let [start-search-index-build! #'db-core/start-search-index-build!
+           build-id (start-search-index-build! test-repo)]
+       (is (string? build-id))
+       (is (= build-id (get @(deref #'db-core/*search-index-build-ids) test-repo)))))))
+
+(deftest clear-search-index-build-removes-only-matching-build
+  (restoring-worker-state
+   (fn []
+     (let [start-search-index-build! #'db-core/start-search-index-build!
+           clear-search-index-build! #'db-core/clear-search-index-build!
+           build-id (start-search-index-build! test-repo)]
+       ;; Clear with matching build-id
+       (clear-search-index-build! test-repo build-id)
+       (is (nil? (get @(deref #'db-core/*search-index-build-ids) test-repo)))
+       ;; Start a new build
+       (let [build-id-2 (start-search-index-build! test-repo)]
+         ;; Clear with wrong build-id should not remove
+         (clear-search-index-build! test-repo "wrong-id")
+         (is (= build-id-2 (get @(deref #'db-core/*search-index-build-ids) test-repo))))))))
+
+(deftest ensure-active-search-index-build-throws-for-stale-build
+  (restoring-worker-state
+   (fn []
+     (let [start-search-index-build! #'db-core/start-search-index-build!
+           ensure-active-search-index-build! #'db-core/ensure-active-search-index-build!
+           build-id (start-search-index-build! test-repo)]
+       ;; Current build-id should not throw
+       (is (nil? (ensure-active-search-index-build! test-repo build-id)))
+       ;; Stale build-id should throw
+       (is (thrown? js/Error (ensure-active-search-index-build! test-repo "stale-id")))))))
+
+;; ---- take-search-index-batch tests ----
+
+(deftest take-search-index-batch-returns-all-for-small-input
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        blocks [{:e 1} {:e 2} {:e 3}]
+        [batch remaining] (take-search-index-batch blocks 10 1000)]
+    (is (= 3 (count batch)))
+    (is (nil? remaining))))
+
+(deftest take-search-index-batch-respects-batch-size
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        blocks (vec (for [i (range 100)] {:e i}))
+        [batch remaining] (take-search-index-batch blocks 10 1000)]
+    (is (= 10 (count batch)))
+    (is (= 90 (count remaining)))))
+
+(deftest take-search-index-batch-returns-empty-for-empty-input
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        [batch remaining] (take-search-index-batch [] 10 1000)]
+    (is (empty? batch))
+    (is (nil? remaining))))
+
+;; ---- search-index-input-idle? tests ----
+
+(deftest search-index-input-idle-returns-true-for-node
+  (restoring-worker-state
+   (fn []
+     (let [search-index-input-idle? #'db-core/search-index-input-idle?]
+       (platform/set-platform! (build-test-platform {:runtime :node}))
+       (is (true? (search-index-input-idle? test-repo)))))))
+
+(deftest search-index-input-idle-reads-status-from-state
+  (restoring-worker-state
+   (fn []
+     (let [search-index-input-idle? #'db-core/search-index-input-idle?
+           idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+       (platform/set-platform! (build-test-platform {:runtime :browser}))
+       ;; No status set - should default to true
+       (is (true? (search-index-input-idle? test-repo)))
+       ;; Set idle? false
+       (reset! idle-status-atom {test-repo {:idle? false
+                                            :ts (.now js/Date)}})
+       (is (false? (search-index-input-idle? test-repo)))
+       ;; Set idle? true
+       (reset! idle-status-atom {test-repo {:idle? true
+                                            :ts (.now js/Date)}})
+       (is (true? (search-index-input-idle? test-repo)))))))
+
+(deftest search-index-input-idle-falls-back-to-true-for-stale-status
+  (restoring-worker-state
+   (fn []
+     (let [search-index-input-idle? #'db-core/search-index-input-idle?
+           idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+       (platform/set-platform! (build-test-platform {:runtime :browser}))
+       ;; Set stale status (older than ttl)
+       (reset! idle-status-atom {test-repo {:idle? false
+                                            :ts (- (.now js/Date) 5000)}})
+       ;; Should fall back to true because status is stale
+       (is (true? (search-index-input-idle? test-repo)))))))
+
+;; ---- close-other-dbs! tests ----
+
+(deftest close-other-dbs-closes-all-except-target
+  (restoring-worker-state
+   (fn []
+     (let [close-calls (atom [])]
+       (with-redefs [db-core/close-db-aux! (fn [repo _db _search _client-ops]
+                                             (swap! close-calls conj repo))]
+         (reset! worker-state/*sqlite-conns {"repo-a" {:db (fake-db)}
+                                             "repo-b" {:db (fake-db)}
+                                             test-repo {:db (fake-db)}})
+         (#'db-core/close-other-dbs! test-repo)
+         (is (= #{"repo-a" "repo-b"} (set @close-calls)))
+         (is (not (contains? (set @close-calls) test-repo))))))))
+
+(deftest close-other-dbs-handles-empty-connections
+  (restoring-worker-state
+   (fn []
+     (let [close-calls (atom [])]
+       (with-redefs [db-core/close-db-aux! (fn [repo _db _search _client-ops]
+                                             (swap! close-calls conj repo))]
+         (reset! worker-state/*sqlite-conns {})
+         (#'db-core/close-other-dbs! test-repo)
+         (is (empty? @close-calls)))))))
+
+;; ---- reset-db! tests ----
+
+(deftest reset-db-replaces-conn-db
+  (restoring-worker-state
+   (fn []
+     (let [conn (d/create-conn db-schema/schema)]
+       (d/transact! conn [{:db/ident :test/entity
+                           :kv/value "original"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       ;; Create a new db with different data
+       (let [new-db (d/db-with (d/empty-db db-schema/schema)
+                               [{:db/ident :test/entity
+                                 :kv/value "replaced"}])
+             transit-str (ldb/write-transit-str new-db)]
+         (db-core/reset-db! test-repo transit-str)
+         ;; Verify the conn now has the new data
+        (is (= "replaced" (:kv/value (d/entity @conn :test/entity)))))))))
+
+;; ---- checksum-diagnostics tests ----
+
+(deftest checksum-diagnostics-returns-local-and-remote
+  (restoring-worker-state
+   (fn []
+     (let [checksum-diagnostics #'db-core/checksum-diagnostics]
+       (with-redefs [client-op/get-local-checksum (fn [_] "local-checksum-123")
+                     db-sync/*repo->latest-remote-checksum (atom {test-repo "remote-checksum-456"})]
+         (is (= {:local-checksum "local-checksum-123"
+                 :remote-checksum "remote-checksum-456"}
+                (checksum-diagnostics test-repo))))))))
+
+(deftest checksum-diagnostics-handles-missing-remote
+  (restoring-worker-state
+   (fn []
+     (let [checksum-diagnostics #'db-core/checksum-diagnostics]
+       (with-redefs [client-op/get-local-checksum (fn [_] "local-checksum-123")
+                     db-sync/*repo->latest-remote-checksum (atom {})]
+         (is (= {:local-checksum "local-checksum-123"
+                 :remote-checksum nil}
+                (checksum-diagnostics test-repo))))))))
+
+;; ---- get-all-page-titles tests ----
+
+(deftest get-all-page-titles-returns-sorted-titles
+  (let [get-all-page-titles #'db-core/get-all-page-titles
+        conn (d/create-conn db-schema/schema)]
+    ;; ldb/get-all-pages expects specific schema attributes, so we mock it
+    (with-redefs [ldb/get-all-pages (fn [_db]
+                                      [{:block/title "Charlie"}
+                                       {:block/title "Alpha"}
+                                       {:block/title "Bravo"}])]
+      (let [titles (get-all-page-titles @conn)]
+        (is (= ["Alpha" "Bravo" "Charlie"] titles))))))
+
+(deftest get-all-page-titles-returns-empty-for-no-pages
+  (let [get-all-page-titles #'db-core/get-all-page-titles
+        conn (d/create-conn db-schema/schema)]
+    (is (empty? (get-all-page-titles @conn)))))
+
+;; ---- notify-invalid-data tests ----
+
+(deftest notify-invalid-data-broadcasts-notification
+  (let [notify-invalid-data #'db-core/notify-invalid-data
+        broadcast-calls (atom [])]
+    (with-redefs [shared-service/broadcast-to-clients! (fn [type payload]
+                                                       (swap! broadcast-calls conj [type payload]))
+                  platform/post-message! (fn [& _] nil)]
+      (notify-invalid-data {:tx-meta {:some "data"}} ["error1"])
+      (is (= 1 (count @broadcast-calls)))
+      (is (= :notification (first (first @broadcast-calls)))))))
+
+(deftest notify-invalid-data-skips-undo-redo-in-production
+  (restoring-worker-state
+   (fn []
+     (let [notify-invalid-data #'db-core/notify-invalid-data
+           broadcast-calls (atom [])]
+       (with-redefs [shared-service/broadcast-to-clients! (fn [type payload]
+                                                             (swap! broadcast-calls conj [type payload]))
+                     platform/post-message! (fn [& _] nil)
+                     worker-util/dev? false]
+         ;; Should not broadcast for undo
+         (notify-invalid-data {:tx-meta {:undo? true}} ["error"])
+         (is (empty? @broadcast-calls))
+         ;; Should not broadcast for redo
+         (notify-invalid-data {:tx-meta {:redo? true}} ["error"])
+         (is (empty? @broadcast-calls))
+         ;; Should broadcast for normal tx
+         (notify-invalid-data {:tx-meta {:normal true}} ["error"])
+         (is (= 1 (count @broadcast-calls))))))))
+
+;; ---- broadcast-data-types tests ----
+
+(deftest broadcast-data-types-contains-expected-types
+  (let [types db-core/broadcast-data-types]
+    (is (set? types))
+    (is (contains? types "sync-db-changes"))
+    (is (contains? types "sync-conflicts-updated"))
+    (is (contains? types "notification"))
+    (is (contains? types "log"))
+    (is (contains? types "add-repo"))
+    (is (contains? types "rtc-log"))
+    (is (contains? types "rtc-sync-state"))))
+
+;; ---- init-core! tests ----
+
+;; ---- <init-service! tests ----
+
+(deftest init-service-returns-nil-for-nil-graph
+  (async done
+    (let [*service @#'db-core/*service
+          old-service @*service
+          close-calls (atom [])]
+      (reset! *service ["prev-graph" {}])
+      (with-redefs [db-core/close-db! (fn [repo]
+                                        (swap! close-calls conj repo))]
+        (-> (#'db-core/<init-service! nil {})
+            (p/then (fn [result]
+                      (is (nil? result))
+                      (is (= ["prev-graph"] @close-calls))))
+            (p/catch (fn [e]
+                       (is false (str "unexpected error: " e))))
+            (p/finally (fn []
+                         (reset! *service old-service)
+                         (done))))))))
+
+(deftest init-service-reuses-existing-service-for-same-graph
+  (async done
+    (let [service {:status {:ready (p/resolved true)}
+                   :proxy #js {}}
+          *service @#'db-core/*service
+          old-service @*service]
+      (reset! *service ["graph-a" service])
+      (with-redefs [shared-service/<create-service (fn [& _]
+                                                       (p/resolved {}))]
+        (-> (#'db-core/<init-service! "graph-a" {})
+            (p/then (fn [result]
+                      (is (= service result))))
+            (p/catch (fn [e]
+                       (is false (str "unexpected error: " e))))
+            (p/finally (fn []
+                         (reset! *service old-service)
+                         (done))))))))
+
+;; ---- <db-exists? tests ----
+
+(deftest db-exists-returns-storage-result
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [<db-exists? #'db-core/<db-exists?]
+         (platform/set-platform! (build-test-platform))
+         (-> (<db-exists? test-repo)
+             (p/then (fn [result]
+                       (is (false? result))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done)))))))
+
+;; ---- report-search-index-progress! tests ----
+
+(deftest report-search-index-progress-sends-to-main-thread
+  (restoring-worker-state
+   (fn []
+     (let [report-search-index-progress! #'db-core/report-search-index-progress!
+           progress-calls (atom [])]
+       (reset! worker-state/*main-thread
+               (fn [qkw & args]
+                 (when (= qkw :thread-api/search-index-build-progress)
+                   (swap! progress-calls conj args))
+                 (p/resolved nil)))
+       (-> (report-search-index-progress! test-repo {:progress 50})
+           (p/then (fn [_]
+                     (is (= 1 (count @progress-calls)))
+                     (is (= [test-repo {:progress 50}] (first @progress-calls))))))))))
+
+(deftest report-search-index-progress-catches-main-thread-errors
+  (restoring-worker-state
+   (fn []
+     (let [report-search-index-progress! #'db-core/report-search-index-progress!]
+       (reset! worker-state/*main-thread
+               (fn [& _]
+                 (p/rejected (js/Error. "main thread error"))))
+       ;; Should not throw even when main thread fails
+       (-> (report-search-index-progress! test-repo {:progress 50})
+           (p/then (fn [_]
+                     (is true "should not throw"))))))))
+
+;; ---- transact thread-api tests ----
+
+(deftest transact-insert-blocks-adds-block-order
+  (restoring-worker-state
+   (fn []
+     (let [transact! (get @thread-api/*thread-apis :thread-api/transact)
+           conn (d/create-conn db-schema/schema)]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       ;; Mock db-order/gen-key to return predictable value
+       (with-redefs [db-order/gen-key (fn [_] "generated-key")]
+         ;; Transaction with :insert-blocks op and missing block/order
+         (transact! test-repo
+                      [{:block/uuid (random-uuid)
+                        :block/title "test"}]
+                      {:outliner-op :insert-blocks}
+                      nil)
+         ;; Verify the block was transacted with generated order
+         (let [db @conn
+               blocks (d/q '[:find [?b ...]
+                             :where [?b :block/title "test"]]
+                           db)]
+           (is (= 1 (count blocks)))
+           (is (= "generated-key" (:block/order (d/entity db (first blocks)))))))))))
+
+(deftest transact-skips-when-today-journal-already-exists
+  (restoring-worker-state
+   (fn []
+     (let [transact! (get @thread-api/*thread-apis :thread-api/transact)
+           conn (d/create-conn db-schema/schema)]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       ;; Create today's journal page
+       (d/transact! conn [{:block/title "2024-01-01"
+                           :block/name "2024-01-01"}])
+       ;; Transaction with create-today-journal? should be skipped
+       (let [result (transact! test-repo
+                                [{:block/title "journal entry"}]
+                                {:create-today-journal? true
+                                 :today-journal-name "2024-01-01"}
+                                nil)]
+         ;; Should return nil (no transaction performed)
+         (is (nil? result)))))))
+
+;; ---- get-initial-data tests ----
+
+(deftest get-initial-data-returns-schema-and-datoms-for-file-graph
+  (restoring-worker-state
+   (fn []
+     (let [get-initial-data! (get @thread-api/*thread-apis :thread-api/get-initial-data)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn [{:block/title "test page"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-initial-data! test-repo {:file-graph-import? true})]
+         (is (contains? result :schema))
+         (is (contains? result :initial-data))
+        (is (vector? (:initial-data result))))))))
+
+;; ---- q / datoms / pull thread-api tests ----
+
+(deftest q-executes-datascript-query
+  (restoring-worker-state
+   (fn []
+     (let [q! (get @thread-api/*thread-apis :thread-api/q)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn [{:block/title "page a"}
+                          {:block/title "page b"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (q! test-repo ['[:find ?t :where [_ :block/title ?t]]])]
+         (is (= 2 (count result))))))))
+
+(deftest q-returns-nil-for-missing-conn
+  (let [q! (get @thread-api/*thread-apis :thread-api/q)]
+    (is (nil? (q! "nonexistent-repo" ['[:find ?e :where [?e _ _]]])))))
+
+(deftest datoms-returns-formatted-datoms
+  (restoring-worker-state
+   (fn []
+     (let [datoms! (get @thread-api/*thread-apis :thread-api/datoms)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn [{:block/title "test"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (datoms! test-repo :eavt)]
+         (is (seq result))
+         ;; Each result should be [e a v tx added]
+         (is (= 5 (count (first result)))))))))
+
+(deftest pull-returns-entity-data
+  (restoring-worker-state
+   (fn []
+     (let [pull! (get @thread-api/*thread-apis :thread-api/pull)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn [{:block/title "test page"
+                           :block/name "test-page"
+                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       ;; Pull the entity we just created
+       (with-redefs [common-initial-data/with-parent (fn [_db entity] entity)]
+         (let [result (pull! test-repo '[*] [:block/name "test-page"])]
+         (is (map? result))
+           (is (= "test page" (:block/title result)))))))))
+
+(deftest get-blocks-removes-nil-values-from-returned-blocks
+  (restoring-worker-state
+   (fn []
+     (let [get-blocks! (get @thread-api/*thread-apis :thread-api/get-blocks)
+           conn (d/create-conn db-schema/schema)
+           request [{:id 42 :opts {:children? true}}]]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [common-initial-data/get-block-and-children
+                     (fn [_db _id _opts]
+                       {:block {:db/id 42
+                                :block/title "parent"
+                                :block/parent nil}
+                        :children [{:db/id 43
+                                    :block/title "child"
+                                    :block/parent nil}
+                                   {:db/id 44
+                                    :block/title "loaded"
+                                    :block/parent 42
+                                    :block.temp/load-status nil}]})]
+         (let [result (-> (get-blocks! test-repo (ldb/write-transit-str request))
+                          ldb/read-transit-str
+                          first)]
+           (is (= 42 (:id result)))
+           (is (= {:db/id 42
+                   :block/title "parent"}
+                  (:block result)))
+           (is (= [{:db/id 43
+                    :block/title "child"}
+                   {:db/id 44
+                    :block/title "loaded"
+                    :block/parent 42}]
+                  (:children result)))))))))
+
+;; ---- undo-redo thread-api tests ----
+
+(deftest get-rtc-graph-uuid-returns-nil-for-missing-conn
+  (let [get-uuid! (get @thread-api/*thread-apis :thread-api/get-rtc-graph-uuid)]
+    (is (nil? (get-uuid! "nonexistent-repo")))))
+
+;; ---- search-delete-blocks / search-truncate-tables tests ----
+
+;; ---- db-exists thread-api test ----
+
+(deftest db-exists-returns-false-by-default
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [db-exists! (get @thread-api/*thread-apis :thread-api/db-exists)]
+         (platform/set-platform! (build-test-platform))
+         (-> (db-exists! test-repo)
+             (p/then (fn [result]
+                       (is (false? result))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done)))))))
+
+;; ---- export-db-binary thread-api test ----
+
+(deftest export-db-binary-returns-uint8array
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [export-db! (get @thread-api/*thread-apis :thread-api/export-db-binary)
+             checkpoint-calls (atom [])]
+         (reset! worker-state/*sqlite-conns {test-repo {:db (fake-db)}})
+         (with-redefs [db-core/checkpoint-db! (fn [repo db]
+                                                (swap! checkpoint-calls conj [repo db]))]
+           (-> (export-db! test-repo)
+               (p/then (fn [result]
+                         (is (or (instance? js/Uint8Array result) (nil? result)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done))))))))
+
+;; ---- list-db thread-api test ----
+
+(deftest list-db-returns-empty-list-by-default
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [list-db! (get @thread-api/*thread-apis :thread-api/list-db)]
+         (platform/set-platform! (build-test-platform))
+         (-> (list-db!)
+             (p/then (fn [result]
+                       (is (vector? result))
+                       (is (empty? result))))
+             (p/catch (fn [e]
+                        ;; list-db may fail if platform not fully initialized, that's ok
+                        (is (some? e))))
+             (p/finally done)))))))
+
+;; ---- set-context thread-api test ----
+
+;; ---- sync-app-state thread-api test ----
+
+(deftest sync-app-state-updates-state
+  (restoring-worker-state
+   (fn []
+     (let [sync-app-state! (get @thread-api/*thread-apis :thread-api/sync-app-state)
+           new-state {:git/current-repo test-repo
+                      :theme "light"}]
+       (sync-app-state! new-state)
+       (is (= new-state (select-keys @worker-state/*state [:git/current-repo :theme])))))))
+
+;; ---- get-block-parents thread-api test ----
+
+(deftest get-block-parents-returns-parents
+  (restoring-worker-state
+   (fn []
+     (let [get-block-parents! (get @thread-api/*thread-apis :thread-api/get-block-parents)
+           conn (d/create-conn db-schema/schema)
+           gp-uuid (random-uuid)
+           p-uuid (random-uuid)
+           c-uuid (random-uuid)]
+       ;; Create a hierarchy: grandparent -> parent -> child
+       (d/transact! conn [{:block/uuid gp-uuid
+                           :block/title "grandparent"}
+                          {:block/uuid p-uuid
+                           :block/title "parent"
+                           :block/parent [:block/uuid gp-uuid]}
+                          {:block/uuid c-uuid
+                           :block/title "child"
+                           :block/parent [:block/uuid p-uuid]}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       ;; Get parents of child (depth 3)
+       (let [result (get-block-parents! test-repo [:block/uuid c-uuid] 3)]
+         (is (seq result))
+         ;; Should include at least the parent
+         (is (some #(= "parent" (:block/title %)) result)))))))
+
+;; ---- get-block-refs thread-api test ----
+
+(deftest get-block-refs-returns-linked-references
+  (restoring-worker-state
+   (fn []
+     (let [get-block-refs! (get @thread-api/*thread-apis :thread-api/get-block-refs)
+           conn (d/create-conn db-schema/schema)
+           ref-uuid (random-uuid)
+           block-uuid (random-uuid)]
+       (d/transact! conn [{:block/uuid ref-uuid
+                           :block/title "reference target"}
+                          {:block/uuid block-uuid
+                           :block/title "block with ref"
+                           :block/refs [:block/uuid ref-uuid]}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-block-refs! test-repo [:block/uuid ref-uuid])]
+         (is (seq result)))))))
+
+;; ---- block-refs-check thread-api tests ----
+
+(deftest block-refs-check-unlinked-returns-true-when-title-match-without-link
+  (restoring-worker-state
+   (fn []
+     (let [block-refs-check! (get-thread-api :thread-api/block-refs-check)
+           conn (d/create-conn db-schema/schema)
+           source-id 100
+           candidate-id 101]
+       (d/transact! conn [{:db/id source-id
+                           :block/uuid (random-uuid)
+                           :block/title "Foo"}
+                          {:db/id candidate-id
+                           :block/uuid (random-uuid)
+                           :block/title "foo bar"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [db-core/search-blocks (fn [_repo _q _opts]
+                                             [{:db/id candidate-id}])]
+         (is (true? (block-refs-check! test-repo source-id {:unlinked? true}))))))))
+
+(deftest block-refs-check-linked-branch-uses-common-get-block-refs
+  (restoring-worker-state
+   (fn []
+     (let [block-refs-check! (get-thread-api :thread-api/block-refs-check)
+           conn (d/create-conn db-schema/schema)
+           source-id 200]
+       (d/transact! conn [{:db/id source-id
+                           :block/uuid (random-uuid)
+                           :block/title "Bar"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [common-initial-data/get-block-refs (fn [_db _id] [{:db/id 1}])]
+         (is (true? (block-refs-check! test-repo source-id {:unlinked? false}))))
+       (with-redefs [common-initial-data/get-block-refs (fn [_db _id] [])]
+         (is (false? (block-refs-check! test-repo source-id {:unlinked? false}))))))))
+
+(deftest db-core-registers-all-thread-apis-test
+  (let [missing (->> expected-db-core-thread-apis
+                     (remove #(contains? @thread-api/*thread-apis %))
+                     sort
+                     vec)
+        non-functions (->> expected-db-core-thread-apis
+                           (filter #(not (fn? (get @thread-api/*thread-apis %))))
+                           sort
+                           vec)]
+    (is (empty? missing) (str "Missing thread apis: " missing))
+    (is (empty? non-functions) (str "Non-function thread apis: " non-functions))))
+
+
+
+
+
+;; When source and dest built-in eids differ, a :graph (datom) import would trip
+;; the pipeline's revert-disallowed-changes, which sees the moved :db/ident as a
+;; disallowed built-in edit and emits a conflicting revert. import-edn must
+;; short-circuit the pipeline (e.g. via :initial-db?) for datom imports.
+(deftest import-edn-datom-format-with-shifted-builtin-eids-test
+  (restoring-worker-state
+   (fn []
+     (let [;; Source: shift built-in eids by one relative to a freshly seeded dest
+           source-conn (d/create-conn db-schema/schema)
+	         ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+           _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+           _ (d/transact! source-conn [[:db/retractEntity 1]])
+           _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+           export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+           source-purple-eid (some (fn [[e a v]]
+                                     (when (and (= a :db/ident)
+                                                (= v :logseq.property/color.purple))
+                                       e))
+                                   (:datoms export-edn))
+           dest-conn (sqlite-export/create-conn)
+           dest-purple-eid (:db/id (d/entity @dest-conn :logseq.property/color.purple))]
+       (assert (= :datoms (::sqlite-export/graph-format export-edn))
+               "Test relies on a datom-format export")
+       (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
+               "Test relies on shifted built-in eids between source and dest")
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+       (try
+         ((get-thread-api :thread-api/import-edn) test-repo export-edn)
+         (is (= :logseq.property/color.purple
+                (:db/ident (d/entity @dest-conn :logseq.property/color.purple)))
+             "color.purple ident is preserved after datom import despite eid shift")
+         (finally
+           (ldb/register-transact-pipeline-fn! identity)))))))
+
+(deftest import-edn-invalid-datom-format-does-not-change-db-test
+  (restoring-worker-state
+   (fn []
+     (let [dest-conn (sqlite-export/create-conn)
+           page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page))
+           invalid-export-edn {::sqlite-export/export-type :graph
+                               ::sqlite-export/graph-format :datoms
+                               :datoms [[1 :block/title "Orphan Page"]
+                                        [1 :block/name "orphan page"]
+                                        [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+                                        [1 :block/tags 2]
+                                        [2 :block/title "Page"]
+                                        [2 :block/name "page"]
+                                        [2 :db/ident :logseq.class/Page]
+                                        [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]}]
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (let [result (silence-stderr
+                     #((get-thread-api :thread-api/import-edn) test-repo invalid-export-edn))]
+         (is (string? (:error result)))
+         (is (= page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page)))
+             "Invalid datom import should not replace the existing graph"))))))

@@ -58,6 +58,16 @@
   @apply sm:py-8 py-2 sm:pl-8 sm:pr-4;
 }
 
+#main-content-container[data-is-margin-less-pages='true'] {
+  padding: 0 !important;
+  justify-content: stretch;
+}
+
+#main-content-container[data-is-margin-less-pages='true'] > .cp__sidebar-main-content {
+  max-width: none;
+  width: 100%;
+}
+
 .left-sidebar-inner {
   &.as-container {
     @apply relative h-full pt-3 overflow-y-auto overflow-x-hidden transition-transform;
@@ -175,7 +185,7 @@
           }
 
           > strong {
-            @apply sm:text-xs text-base font-medium;
+            @apply sm:text-xs text-sm font-medium;
           }
         }
 
@@ -200,7 +210,7 @@
             @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
 
             .page-title {
-              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-2;
+              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-8;
 
               * {
                 display: inline !important;
@@ -505,7 +515,7 @@
   }
 
   &-btn {
-    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100;
+    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100 z-[var(--ls-z-index-level-3)];
 
     > .inner {
       @apply rounded-full h-8 w-8 flex items-center justify-center
@@ -516,7 +526,7 @@
   }
 
   &-menu-popup {
-    @apply fixed bottom-14 right-8 z-10 border rounded-lg min-w-[260px] shadow;
+    @apply fixed bottom-14 right-8 z-[var(--ls-z-index-level-3)] border rounded-lg min-w-[260px] shadow;
 
     background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 
@@ -692,6 +702,14 @@
 
 .cp__sidebar-main-content[data-is-margin-less-pages='true'] {
   padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cp__sidebar-main-content[data-is-margin-less-pages='true'] > div {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @supports not (overflow-y: overlay) {
@@ -759,15 +777,18 @@ html[data-theme='dark'] {
   }
 
   .cp__right-sidebar {
+    &-inner,
+    &-topbar {
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-01)));
+    }
+
     .sidebar-item {
-      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
     }
   }
 }
 
-.blocks-selection-mode .page-title,
-.blocks-selection-mode .block-content-inner,
-.blocks-selection-mode .block-body,
-.blocks-selection-mode .ls-properties-area {
-  @apply select-none;
+.ls-block.selected,
+.ls-block.selected * {
+  user-select: none;
 }

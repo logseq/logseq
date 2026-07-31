@@ -21,6 +21,12 @@
   (when-let [byte-length (utf8-byte-length value)]
     (> byte-length large-title-byte-limit)))
 
+(defn large-title-datom?
+  [datom]
+  (and (= :block/title (:a datom))
+       (string? (:v datom))
+       (large-title? (:v datom))))
+
 (defn assoc-datom-value
   [datom new-value]
   (let [[op e a _v & others] datom]
@@ -36,6 +42,27 @@
   (and (map? value)
        (string? (:asset-uuid value))
        (string? (:asset-type value))))
+
+(defn- large-title-object-datoms
+  [db]
+  (if (get-in (:schema db) [large-title-object-attr :db/index])
+    (d/datoms db :avet large-title-object-attr)
+    (filter #(= large-title-object-attr (:a %))
+            (d/datoms db :eavt))))
+
+(defn- find-large-title-object-eid
+  [db obj]
+  (some (fn [datom]
+          (when (= obj (:v datom))
+            (:e datom)))
+        (large-title-object-datoms db)))
+
+(defn- resolve-large-title-item-eid
+  [db {:keys [e obj]}]
+  (or (when (number? e)
+        e)
+      (some-> (d/entity db e) :db/id)
+      (find-large-title-object-eid db obj)))
 
 (defn asset-url
   [base graph-id asset-uuid asset-type]
@@ -106,20 +133,18 @@
            acc []]
     (if (empty? remaining)
       acc
-      (let [item (first remaining)
-            op (nth item 0 nil)
-            attr (nth item 2 nil)
-            value (nth item 3 nil)]
+      (let [item (first remaining)]
         (if (and (vector? item)
-                 (= :db/add op)
-                 (= :block/title attr)
-                 (string? value)
-                 (large-title? value))
-          (p/let [obj (upload-fn repo graph-id value aes-key)
-                  placeholder (assoc-datom-value item "")]
-            (p/recur (rest remaining)
-                     (conj acc placeholder
-                           [:db/add (nth item 1) large-title-object-attr obj])))
+                 (= :db/add (nth item 0 nil))
+                 (= :block/title (nth item 2 nil))
+                 (string? (nth item 3 nil))
+                 (large-title? (nth item 3 nil)))
+          (let [title (nth item 3)]
+            (p/let [obj (upload-fn repo graph-id title aes-key)
+                    placeholder (assoc-datom-value item "")]
+              (p/recur (rest remaining)
+                       (conj acc placeholder
+                             [:db/add (nth item 1) large-title-object-attr obj]))))
           (p/recur (rest remaining) (conj acc item)))))))
 
 (defn rehydrate-large-titles!
@@ -134,7 +159,7 @@
                 fail-fast-f]}]
   (when-let [conn* (or conn (get-conn-f repo))]
     (let [graph-id* (or graph-id (get-graph-id repo))
-          items (if (seq tx-data)
+          items (if (some? tx-data)
                   (->> tx-data
                        (keep (fn [item]
                                (when (and (vector? item)
@@ -144,13 +169,12 @@
                                  {:e (nth item 1)
                                   :obj (nth item 3)})))
                        (distinct))
-                  (->> (d/datoms @conn* :eavt)
+                  (->> (large-title-object-datoms @conn*)
                        (keep (fn [datom]
-                               (when (= large-title-object-attr (:a datom))
-                                 (let [obj (:v datom)]
-                                   (when (large-title-object? obj)
-                                     {:e (:e datom)
-                                      :obj obj})))))
+                               (let [obj (:v datom)]
+                                 (when (large-title-object? obj)
+                                   {:e (:e datom)
+                                    :obj obj}))))
                        (distinct)))]
       (when (seq items)
         (p/let [aes-key* (or aes-key
@@ -160,30 +184,47 @@
                     (fail-fast-f :db-sync/missing-field {:repo repo :field :aes-key}))]
           (p/all
            (mapv (fn [{:keys [e obj]}]
-                   (p/let [title (download-fn repo graph-id* obj aes-key*)]
-                     (ldb/transact! conn*
-                                    [[:db/add e :block/title title]]
-                                    {:rtc-tx? true
-                                     :persist-op? false
-                                     :op :large-title-rehydrate})))
+                   (let [eid (resolve-large-title-item-eid @conn* {:e e :obj obj})]
+                     (when-not eid
+                       (fail-fast-f :db-sync/large-title-entity-missing
+                                     {:repo repo :e e :obj obj}))
+                     (p/let [title (download-fn repo graph-id* obj aes-key*)]
+                       (ldb/transact! conn*
+                                      [[:db/add eid :block/title title]]
+                                      {:rtc-tx? true
+                                       :persist-op? false
+                                       :op :large-title-rehydrate}))))
                  items)))))))
 
 (defn offload-large-titles-in-datoms-batch
-  [repo graph-id datoms aes-key upload-fn]
-  (p/loop [remaining datoms
-           acc []]
-    (if (empty? remaining)
-      acc
-      (let [datom (first remaining)]
-        (if (and (= :block/title (:a datom))
-                 (string? (:v datom))
-                 (large-title? (:v datom)))
-          (p/let [obj (upload-fn repo graph-id (:v datom) aes-key)]
-            (p/recur (rest remaining)
-                     (conj acc
-                           (assoc datom :v "")
-                           (assoc datom :a large-title-object-attr :v obj))))
-          (p/recur (rest remaining) (conj acc datom)))))))
+  ([repo graph-id datoms aes-key upload-fn]
+   (offload-large-titles-in-datoms-batch
+    repo graph-id datoms aes-key upload-fn
+    (into #{}
+          (keep (fn [datom]
+                  (when (large-title-datom? datom)
+                    (:e datom))))
+          datoms)))
+  ([repo graph-id datoms aes-key upload-fn offloaded-title-eids]
+   (p/loop [remaining datoms
+            acc []]
+     (if (empty? remaining)
+       acc
+       (let [datom (first remaining)]
+         (cond
+           (large-title-datom? datom)
+           (p/let [obj (upload-fn repo graph-id (:v datom) aes-key)]
+             (p/recur (rest remaining)
+                      (conj acc
+                            (assoc datom :v "")
+                            (assoc datom :a large-title-object-attr :v obj))))
+
+           (and (= large-title-object-attr (:a datom))
+                (contains? offloaded-title-eids (:e datom)))
+           (p/recur (rest remaining) acc)
+
+           :else
+           (p/recur (rest remaining) (conj acc datom))))))))
 
 (defn take-upload-datoms-batch
   [datoms batch-size]
@@ -221,5 +262,6 @@
   (when-let [conn (get-conn-f repo)]
     (let [tx-data (mapv (fn [datom]
                           [:db/add (:e datom) large-title-object-attr (:v datom)])
-                        (d/datoms @conn :avet large-title-object-attr))]
-      (rehydrate-large-titles!-f repo {:tx-data tx-data :graph-id graph-id}))))
+                        (large-title-object-datoms @conn))]
+      (when (seq tx-data)
+        (rehydrate-large-titles!-f repo {:tx-data tx-data :graph-id graph-id})))))

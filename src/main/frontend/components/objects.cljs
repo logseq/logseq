@@ -4,10 +4,8 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mixins :as mixins]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -15,7 +13,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- add-new-class-object!
   [class properties]
@@ -39,6 +37,33 @@
               (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
 
+(defn build-class-object-columns
+  [config class properties]
+  (let [properties' (remove nil? properties)
+        columns* (views/build-columns (assoc config :view-parent class)
+                                      properties'
+                                      {:add-tags-column? true
+                                       :add-page-column? true})
+        columns (cond
+                  (= (:db/ident class) :logseq.class/Pdf-annotation)
+                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
+                  (= (:db/ident class) :logseq.class/Asset)
+                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
+                  :else
+                  columns*)]
+    (if (= (:db/ident class) :logseq.class/Asset)
+      ;; Insert in front of tag's properties
+      (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
+        (concat before-cols [(build-asset-file-column config)] after-cols))
+      columns)))
+
+(defn build-property-object-columns
+  [config property properties]
+  (let [tags? (= :block/tags (:db/ident property))]
+    (views/build-columns config properties
+                         (cond-> {:add-page-column? true}
+                           tags? (assoc :add-tags-column? false)))))
+
 (comment
   (defn- edit-new-object
     [ref id]
@@ -59,26 +84,13 @@
               full-data (:full-data table)]
           (set-data! (vec (concat full-data ids))))))))
 
-(rum/defc class-objects-inner < rum/static
+(hsx/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
-        ;; Properties can be nil for published private graphs
-        properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? true})
-        columns (cond
-                  (= (:db/ident class) :logseq.class/Pdf-annotation)
-                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
-                  (= (:db/ident class) :logseq.class/Asset)
-                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
-                  :else
-                  columns*)
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
-        columns (if asset?
-                  ;; Insert in front of tag's properties
-                  (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
-                    (concat before-cols [(build-asset-file-column config)] after-cols))
-                  columns)
+        config' (assoc config :view-parent class)
+        columns (build-class-object-columns config' class properties)
         add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
                           (fn [view table {:keys [properties]}]
                             (if (= :logseq.class/Asset (:db/ident class))
@@ -98,7 +110,7 @@
                                   (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
 
     [:div {:ref *ref}
-     (views/view {:config config
+     (views/view {:config config'
                   :view-parent class
                   :view-feature-type :class-objects
                   :columns columns
@@ -110,14 +122,14 @@
                                                                             :class-schema? true
                                                                             :target (.-target e)}]))})]))
 
-(rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class config]
-  (when class
-    (let [class (db/sub-block (:db/id class))
-          config (assoc config :container-id (:container-id state))
-          properties (outliner-property/get-class-properties class)]
-      [:div.ml-1
-       (class-objects-inner config class properties)])))
+(hsx/defc class-objects
+  [class config]
+  (let [class (db/sub-block (:db/id class))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        properties (outliner-property/get-class-properties class)]
+    [:div.ml-1
+     (class-objects-inner config class properties)]))
 
 (defn- add-new-property-object!
   [property properties]
@@ -133,11 +145,9 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(rum/defc property-related-objects-inner < rum/static
+(hsx/defc property-related-objects-inner
   [config property properties]
-  (let [tags? (= :block/tags (:db/ident property))
-        columns (views/build-columns config properties
-                                     (when tags? {:add-tags-column? false}))]
+  (let [columns (build-property-object-columns config property properties)]
     (views/view {:config config
                  :view-parent property
                  :view-feature-type :property-objects
@@ -151,14 +161,14 @@
                  :show-add-property? false})))
 
 ;; Show all nodes containing the given property
-(rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property config]
-  (when property
-    (let [property' (db/sub-block (:db/id property))
-          config (assoc config :container-id (:container-id state))
-          ;; Show tags to help differentiate property rows
-          properties (if (= (:db/ident property) :block/tags)
-                       [property']
-                       [property' (db/entity :block/tags)])]
-      [:div.ml-1
-       (property-related-objects-inner config property' properties)])))
+(hsx/defc property-related-objects
+  [property config]
+  (let [property' (db/sub-block (:db/id property))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        ;; Show tags to help differentiate property rows
+        properties (if (= (:db/ident property) :block/tags)
+                     [property']
+                     [property' (db/entity :block/tags)])]
+    [:div.ml-1
+     (property-related-objects-inner config property' properties)]))

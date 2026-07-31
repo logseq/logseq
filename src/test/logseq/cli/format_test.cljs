@@ -769,24 +769,70 @@
                                                   :input "/tmp/import.sqlite"}
                                         :data {:message "Imported sqlite from /tmp/import.sqlite"}}
                                        {:output-format nil})]
-      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+      (is (= "Imported sqlite from /tmp/import.sqlite" result))))
+
+  (testing "graph create enable-sync renders a multi-line stage summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password "pw"}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format nil})]
+      (is (= "Graph created and sync enabled\n  Graph: demo\n  Create: ok\n  Sync upload: ok\n  Sync start: ok"
+             result))
+      (is (not (string/includes? result "pw")))))
+
+  (testing "graph create enable-sync JSON exposes structured stage data without password"
+    (let [token "secret-password"
+          output (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password token}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format :json})
+          parsed (js->clj (js/JSON.parse output) :keywordize-keys true)]
+      (is (= "demo" (get-in parsed [:data :graph])))
+      (is (= "graph-uuid" (get-in parsed [:data :stages :upload :graph-id])))
+      (is (not (string/includes? output token))))))
 
 (deftest test-human-output-graph-backup
   (testing "graph backup list renders metadata table"
     (let [result (format/format-result {:status :ok
                                         :command :graph-backup-list
-                                        :data {:backups [{:name "demo-nightly"
+                                        :data {:backups [{:name "demo-auto"
                                                           :created-at 90000
-                                                          :size-bytes 2048}]}}
+                                                          :size-bytes 2048
+                                                          :source :electron-auto}
+                                                         {:name "demo-cli"
+                                                          :created-at 90000
+                                                          :size-bytes 4096
+                                                          :source :cli}
+                                                         {:name "demo-legacy"
+                                                          :created-at 90000
+                                                          :size-bytes 8192}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
       (is (string/includes? result "NAME"))
       (is (string/includes? result "CREATED-AT"))
       (is (string/includes? result "SIZE-BYTES"))
-      (is (string/includes? result "demo-nightly"))
+      (is (string/includes? result "AUTO-SAVE"))
+      (is (some? (re-find #"demo-auto\s+10 seconds ago\s+2048\s+yes" result)))
+      (is (some? (re-find #"demo-cli\s+10 seconds ago\s+4096\s+no" result)))
+      (is (some? (re-find #"demo-legacy\s+10 seconds ago\s+8192\s+-" result)))
       (is (string/includes? result "10 seconds ago"))
-      (is (string/includes? result "2048"))
-      (is (string/includes? result "Count: 1"))))
+      (is (string/includes? result "Count: 3"))))
 
   (testing "graph backup create renders a succinct success line"
     (let [result (format/format-result {:status :ok
@@ -914,7 +960,72 @@
                                         :context {:repo "demo-graph"}}
                                        {:output-format nil})]
       (is (string/includes? result "Sync download"))
-      (is (string/includes? result "demo-graph")))))
+      (is (string/includes? result "demo-graph"))))
+
+  (testing "sync asset download renders requested output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :missing}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset download requested"))
+      (is (string/includes? result "asset-uuid"))
+      (is (string/includes? result "demo-graph"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders checksum mismatch hint"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :mismatch
+                                               :hint "Local asset checksum mismatched; requested re-download."}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Local asset checksum mismatched"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders skipped output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? false
+                                               :checksum-status :match
+                                               :skipped-reason :already-downloaded}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset already downloaded"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download structured output keeps raw data"
+    (let [data {:asset-id 123
+                :asset-uuid "asset-uuid"
+                :asset-type "png"
+                :download-requested? false
+                :checksum-status :match
+                :skipped-reason :already-downloaded}
+          json-result (format/format-result {:status :ok
+                                             :command :sync-asset-download
+                                             :data data}
+                                            {:output-format :json})
+          edn-result (format/format-result {:status :ok
+                                            :command :sync-asset-download
+                                            :data data}
+                                           {:output-format :edn})]
+      (is (string/includes? json-result "download-requested?"))
+      (is (string/includes? edn-result ":download-requested?"))
+      (is (not (string/includes? json-result "local-path")))
+      (is (not (string/includes? edn-result "local-path"))))))
 
 (deftest test-human-output-sync-config-get-ws-url
   (testing "sync config get ws-url renders value in human output"
@@ -1392,6 +1503,55 @@
       (is (string/includes? result "2"))
       (is (string/includes? result "Quote"))
       (is (string/includes? result "QUOTE")))))
+
+(deftest test-server-revision-mismatch-error-formatting
+  (testing "revision mismatch restart failure includes recovery hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-restart-failed
+                                                :message "db-worker-node revision mismatch and restart failed"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "old-rev"
+                                                :owner-source :electron}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-restart-failed): db-worker-node revision mismatch and restart failed\n"
+                  "Hint: Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry")
+             result))))
+
+  (testing "revision mismatch after restart includes fail-fast hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-after-restart
+                                                :message "db-worker-node revision still does not match after restart"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "wrong-rev"
+                                                :owner-source :cli}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-after-restart): db-worker-node revision still does not match after restart\n"
+                  "Hint: Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry")
+             result))))
+
+  (testing "revision mismatch structured output preserves revision fields"
+    (let [payload {:status :error
+                   :command :server-start
+                   :error {:code :server-revision-mismatch-after-restart
+                           :message "db-worker-node revision still does not match after restart"
+                           :repo "logseq_db_demo"
+                           :expected-revision "expected-rev"
+                           :actual-revision "wrong-rev"
+                           :owner-source :cli}}
+          json-result (format/format-result payload {:output-format :json})
+          edn-result (format/format-result payload {:output-format :edn})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          edn-parsed (reader/read-string edn-result)]
+      (is (= "expected-rev" (get-in json-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in json-parsed [:error :actual-revision])))
+      (is (= "cli" (get-in json-parsed [:error :owner-source])))
+      (is (= "expected-rev" (get-in edn-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in edn-parsed [:error :actual-revision])))
+      (is (= :cli (get-in edn-parsed [:error :owner-source]))))))
 
 (deftest test-human-output-doctor
   (testing "doctor renders concise check summary"

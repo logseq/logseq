@@ -85,6 +85,7 @@ Load these on demand — do not dump their full contents unless needed:
 | [`guides/AGENTS.md`](./guides/AGENTS.md) | Authoritative overview of SDK namespaces, `package.json > logseq` schema, theme plugins, UI injection, macro renderers, lifecycle. Start here for most plugin tasks. |
 | [`guides/custom_theme_guide.md`](./guides/custom_theme_guide.md) | Building or reviewing Logseq theme plugins, custom theme CSS, `logseq.themes`, `provideTheme`, theme variables, light/dark mode styling, or UI selector/theme-token guidance. |
 | [`guides/starter_guide.md`](./guides/starter_guide.md) | Bootstrapping a new plugin project (Node/TS toolchain, desktop dev-mode loading, hello-world). |
+| [`guides/commands_api_guide.md`](./guides/commands_api_guide.md) | `logseq.Commands` unified command bus, placements, command execution, unregister handlers, and migration from legacy command APIs. |
 | [`guides/db_properties_guide.md`](./guides/db_properties_guide.md) | Conceptual model: file-graph vs DB-graph properties, schema vs values, tag/class modeling. |
 | [`guides/db_properties_references.md`](./guides/db_properties_references.md) | API reference for `upsertProperty`, `upsertBlockProperty`, property schemas/types/cardinality. |
 | [`guides/db_tag_property_idents_guide.md`](./guides/db_tag_property_idents_guide.md) | Ident naming rules (`:logseq.property/*`, `:logseq.class/*`, `:plugin.property.<id>/*`, `:plugin.class.<id>/*`) and when to use them. |

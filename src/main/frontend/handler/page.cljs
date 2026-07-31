@@ -17,6 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -32,11 +33,11 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
-            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+(def edit-page-when-present! page-common-handler/edit-page-when-present!)
 
 (defn get-recycle-page
   []
@@ -49,23 +50,19 @@
 
 (defn restore-recycled!
   [root-uuid]
-  (when-let [root (db/entity [:block/uuid root-uuid])]
-    (when-let [tx-data (seq (outliner-recycle/restore-tx-data (db/get-db) root))]
-      (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :restore-recycled}
-        (outliner-op/transact! tx-data nil))
-       true))))
+  (p/do!
+   (ui-outliner-tx/transact!
+     {:outliner-op :restore-recycled}
+     (outliner-op/restore-recycled! root-uuid))
+   true))
 
 (defn delete-recycled-permanently!
   [root-uuid]
-  (when-let [root (db/entity [:block/uuid root-uuid])]
-    (when (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))
-      (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :recycle-delete-permanently}
-        (outliner-op/recycle-delete-permanently! root-uuid))
-       true))))
+  (p/do!
+   (ui-outliner-tx/transact!
+     {:outliner-op :recycle-delete-permanently}
+     (outliner-op/recycle-delete-permanently! root-uuid))
+   true))
 
 (defn <unfavorite-page!
   [page-name]
@@ -93,9 +90,11 @@
   (when-let [db (conn/get-db)]
     (when-let [page (ldb/get-page db common-config/favorites-page-name)]
       (let [blocks (ldb/sort-by-order (:block/_parent page))]
-        (keep (fn [block]
-                (when-let [block-db-id (:db/id (:block/link block))]
-                  (d/entity db block-db-id))) blocks)))))
+        (->> blocks
+             (keep (fn [block]
+                     (when-let [block-db-id (:db/id (:block/link block))]
+                       (d/entity db block-db-id))))
+             (remove ldb/recycled?))))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -280,23 +279,22 @@
 
 (defn create-today-journal!
   []
-  (when-let [repo (state/get-current-repo)]
-    (when (and (state/enable-journals? repo)
-               ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
-               ;; We should implement an app-wide check rather than list them all here
-               (not (:graph/loading? @state/state))
-               (not (:graph/importing @state/state))
-               (not config/publishing?))
-      (when-let [title (date/today)]
-        (state/set-today! title)
-        (p/let [today-page-lc-title (util/page-name-sanity-lc title)
-                page (db/get-today-journal-page)]
-          (when-not page
-            (p/let [result (<create! title {:redirect? false
-                                            :split-namespace? false
-                                            :today-journal? true})]
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
-              result)))))))
+  (when (and
+         ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
+         ;; We should implement an app-wide check rather than list them all here
+         (not (:graph/loading? @state/state))
+         (not (:graph/importing @state/state))
+         (not config/publishing?))
+    (when-let [title (date/today)]
+      (state/set-today! title)
+      (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+              page (db/get-today-journal-page)]
+        (when-not page
+          (p/let [result (<create! title {:redirect? false
+                                          :split-namespace? false
+                                          :today-journal? true})]
+            (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
+            result))))))
 
 (defn open-today-in-sidebar
   []
@@ -313,5 +311,7 @@
   ([page-uuid]
    (if page-uuid
      (util/copy-to-clipboard!
-      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
+      (url-util/get-logseq-web-page-url config/app-website
+                                        (graph-handler/current-graph-id)
+                                        (str page-uuid)))
      (notification/show! (t :page/no-page-found-to-copy) :warning))))

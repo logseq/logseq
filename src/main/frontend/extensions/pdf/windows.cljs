@@ -1,8 +1,8 @@
 (ns frontend.extensions.pdf.windows
-  (:require [cljs-bean.core :as bean]
+  (:require ["react-dom/client" :as rdc]
+            [cljs-bean.core :as bean]
             [frontend.state :as state]
-            [frontend.storage :as storage]
-            [rum.core :as rum]))
+            [frontend.storage :as storage]))
 
 (def *active-win (atom nil))
 (def *exit-pending? (atom false))
@@ -93,11 +93,11 @@
                   (.appendChild (.-head doc) base)
                   (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
                   (set! (.-dataset doc-el) -theme (str theme-mode))
-                  (set! (.-dataset doc-el) -color (or (some-> (state/sub :ui/radix-color) (name)) "logseq"))
+                  (set! (.-dataset doc-el) -color (or (some-> (:ui/radix-color @state/state) (name)) "logseq"))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)
-                  (rum/mount (pdf-playground pdf-current) main)
+                  (.render (rdc/createRoot main) (pdf-playground pdf-current))
 
                   ;; events
                   (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))

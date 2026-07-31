@@ -2,13 +2,16 @@
   (:require ["/frontend/utils" :as utils]
             [cljs.test :refer [deftest are is testing]]
             [frontend.commands :as commands]
+            [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
+            [frontend.format.block :as block]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
 
 (deftest selection-within-link-test
@@ -171,6 +174,100 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
+(deftest-async editor-on-paste-parses-standalone-display-blocks
+  (let [actual-blocks (atom nil)
+        code-clipboard "```sql\nSELECT value\nFROM records\n```"
+        math-clipboard "$$\nE = mc^2\n$$"
+        parsed-blocks {code-clipboard
+                       [{:block/title "SELECT value\nFROM records"
+                         :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                         :logseq.property.node/display-type :code
+                         :logseq.property.code/lang "sql"
+                         :block/level 1}]
+                       math-clipboard
+                       [{:block/title "E = mc^2"
+                         :block/uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+                         :logseq.property.node/display-type :math
+                         :block/level 1}]}
+        paste-event (fn [clipboard]
+                      #js {:clipboardData #js {:files #js []
+                                               :getData (fn [kind]
+                                                          (if (= kind "text")
+                                                            clipboard
+                                                            ""))}})]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      util/get-selected-text (constantly "")
+      commands/delete-selection! (constantly nil)
+      commands/simple-insert! (fn [_input text] (p/resolved text))
+      state/get-current-repo (constantly "test")
+      state/get-current-page (constantly nil)
+      state/get-edit-block (constantly {:block/page {:db/id 1}})
+      db/entity (fn [id]
+                  (when (= id 1)
+                    {:block/name "paste target"}))
+      paste-handler/get-copied-blocks (constantly (p/resolved nil))
+      html-parser/convert (constantly nil)
+      block/extract-blocks (fn [_ast text & _] (get parsed-blocks text))
+      gp-block/with-parent-and-order (fn [_ blocks] blocks)
+      editor-handler/paste-blocks (fn [blocks _opts]
+                                    (swap! actual-blocks (fnil into []) blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil) (paste-event code-clipboard))
+              _ ((paste-handler/editor-on-paste! nil) (paste-event math-clipboard))]
+       (is (= [{:block/title "SELECT value\nFROM records"
+                :logseq.property.node/display-type :code
+                :logseq.property.code/lang "sql"}
+               {:block/title "E = mc^2"
+                :logseq.property.node/display-type :math}]
+              (mapv #(select-keys % [:block/title
+                                     :logseq.property.node/display-type
+                                     :logseq.property.code/lang])
+                     @actual-blocks)))))))
+
+(deftest paste-text-parseable-preserves-og-copied-heading-page-refs
+  (let [actual-blocks (atom nil)
+        date-page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        parsed-blocks [{:block/title "## [[2026-06-15]]"
+                        :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :block/refs [{:block/title "2026-06-15"
+                                      :block/uuid date-page-uuid}]
+                        :logseq.property/heading 2
+                        :block/level 1}]]
+    (with-redefs [state/get-edit-block (constantly {:block/page {:db/id 1}})
+                  db/entity (fn [id]
+                              (when (= id 1)
+                                {:block/name "paste target"}))
+                  block/extract-blocks (fn [& _] parsed-blocks)
+                  gp-block/with-parent-and-order (fn [_ blocks] blocks)
+                  editor-handler/paste-blocks (fn [blocks _opts]
+                                                (reset! actual-blocks blocks))]
+      (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")
+      (is (= [{:block/title (str "[[" date-page-uuid "]]")
+               :logseq.property/heading 2}]
+             (mapv #(select-keys % [:block/title :logseq.property/heading])
+                   @actual-blocks))))))
+
+(deftest paste-text-parseable-does-not-create-empty-page-ref
+  (let [actual-blocks (atom nil)
+        parsed-blocks [{:block/title "## [[2026-06-15]]"
+                        :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :block/refs [{:block/title "2026-06-15"}]
+                        :logseq.property/heading 2
+                        :block/level 1}]]
+    (with-redefs [state/get-edit-block (constantly {:block/page {:db/id 1}})
+                  db/entity (fn [id]
+                              (when (= id 1)
+                                {:block/name "paste target"}))
+                  block/extract-blocks (fn [& _] parsed-blocks)
+                  gp-block/with-parent-and-order (fn [_ blocks] blocks)
+                  editor-handler/paste-blocks (fn [blocks _opts]
+                                                (reset! actual-blocks blocks))]
+      (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")
+      (is (= [{:block/title "[[00000001-2026-0615-0000-000000000000]]"
+               :logseq.property/heading 2}]
+             (mapv #(select-keys % [:block/title :logseq.property/heading])
+                   @actual-blocks))))))
+
 (deftest-async editor-on-paste-prefers-blocks-from-memory-when-clipboard-custom-type-is-missing
   (let [actual-blocks (atom nil)
         expected-blocks [{:block/title "Memory cache block"}]
@@ -223,3 +320,21 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)
                                           :files files}})]
         (is (= files (js->clj @pasted-file)))))))
+
+(deftest-async editor-on-paste-firefox-html-with-line-breaks
+  (testing "Firefox paste with soft line breaks should not create unwanted line breaks"
+    (let [clipboard-html "<meta charset='utf-8'><p>Delegated access\n management means you can select a subset of roles for a given project \nand allow the granted organization to self-manage those roles for their \nusers.</p>"
+          expected-paste "Delegated access management means you can select a subset of roles for a given project and allow the granted organization to self-manage those roles for their users."]
+      (p/with-redefs
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        state/get-current-page (constantly nil)
+        db/get-page-format (constantly :markdown)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (fn [type]
+                                                            (if (= type "text/html")
+                                                              clipboard-html
+                                                              expected-paste))}})]
+          (is (= expected-paste result)))))))

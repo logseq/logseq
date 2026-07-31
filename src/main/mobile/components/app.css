@@ -11,7 +11,14 @@
 
 html.is-native-ios,
 html.is-ios {
+  --ls-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
+}
+html.is-native-android {
+  #app-container-wrapper {
+    padding-top: 66px;
+    padding-bottom: 36px;
+  }
 }
 
 #app-container-wrapper, #app-container, #main-container {
@@ -23,25 +30,22 @@ html.is-ios {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
-html.is-native-android {
-  #app-container-wrapper {
-    padding-top: 56px;
-    padding-bottom: 0;
-  }
-}
 html.is-native-ios body,
+html.is-native-ios button,
 html.is-native-ios textarea,
 html.is-native-ios input,
 html.is-native-ios select,
 html.is-native-ios .block-content,
 html.is-native-ios .editor-inner,
 html.is-ios body,
+html.is-ios button,
 html.is-ios textarea,
 html.is-ios input,
 html.is-ios select,
 html.is-ios .block-content,
 html.is-ios .editor-inner
 {
+  font-family: inherit;
   font-size: inherit;
 }
 
@@ -133,6 +137,50 @@ ul {
   @apply mx-8 p-0;
 }
 
+.ls-mobile-flashcards {
+  @apply h-full flex flex-col px-1 py-2;
+
+  #cards-modal {
+    @apply h-full min-h-0 gap-2;
+  }
+
+  #cards-modal .ls-card {
+    @apply flex-1 min-h-0 border-0 bg-transparent px-0 py-2 shadow-none;
+  }
+
+  #cards-modal .ls-card > .blocks-container {
+    @apply text-base;
+  }
+
+  #cards-modal .ls-card.content.ml-2 {
+    @apply ml-0 flex-none;
+  }
+
+  #cards-modal button {
+    @apply rounded-md;
+  }
+
+  .ls-mobile-card {
+    @apply min-h-0;
+  }
+
+  .ls-mobile-card .ls-card-scroll > .mb-4 {
+    @apply ml-0 mb-3;
+  }
+
+  .ls-mobile-card-actions {
+    @apply mt-4 pb-6;
+  }
+
+  .ls-mobile-card-rating-buttons {
+    @apply grid grid-cols-2 gap-2 w-full;
+  }
+
+  .ls-mobile-card-rating-buttons > div {
+    @apply w-full;
+  }
+}
+
 .ui__notifications {
   @apply fixed top-8 pointer-events-none w-full;
 
@@ -176,12 +224,6 @@ ul {
 
 .latex.initial {
   @apply pt-1;
-
-  .katex-html {
-    &[aria-hidden="true"] {
-      @apply hidden;
-    }
-  }
 }
 
 .ui__popover-content, .ui__dropdown-menu-content {
@@ -192,11 +234,11 @@ ul {
     max-width: calc(100vw - 40px);
 
     &[data-side=top] {
-      max-height: var(--top-popup-content-max-height, 50vh);
+      max-height: var(--top-popup-content-max-height, 60vh);
     }
 
     &[data-side=bottom] {
-      max-height: var(--bottom-popup-content-max-height, 50vh);
+      max-height: var(--bottom-popup-content-max-height, 60vh);
     }
   }
 }
@@ -275,7 +317,7 @@ ul {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
-      @apply text-base opacity-100;
+      @apply text-sm opacity-100;
       display: flex !important;
     }
   }
@@ -285,7 +327,7 @@ ul {
   }
 
   .hd .wrap-th > strong {
-    @apply !text-base;
+    @apply !text-sm;
   }
 }
 

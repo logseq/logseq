@@ -130,29 +130,37 @@
                  [])
          (join-fn))))
 
+(defn- preserve-file-url-win-drive
+  [scheme encoded-path]
+  (cond-> encoded-path
+    (= scheme "file:")
+    (string/replace #"^/([a-zA-Z])%3[Aa](?=/|$)" "/$1:")))
+
 (defn url-join
   "Segments are not URL-encoded"
   [base-url & segments]
-  (let [^js url (js/URL. (safe-decode-uri-component base-url))
-        scheme (.-protocol url)
+  (let [custom-scheme (re-find #"^[a-zA-Z0-9_+\-\.]+://" base-url)
+        custom-scheme? (and custom-scheme (not= custom-scheme "file://"))
+        base-url (cond-> base-url
+                   custom-scheme? (string/replace-first custom-scheme "file://"))
+        ^js url (try
+                  (js/URL. (safe-decode-uri-component base-url))
+                  (catch :default e
+                    (js/console.error "Failed to construct URL in url-join:" base-url e)
+                    (js/URL. "file:///")))
+        scheme (if custom-scheme?
+                 (string/replace custom-scheme "//" "")
+                 (.-protocol url))
         path (.-pathname url)
         domain (or (not-empty (.-host url))
-                   (if (string/starts-with? path "/") "" "/"))
-        encoded-new-path (apply uri-path-join-internal path segments)]
+                   (if (or custom-scheme? (string/starts-with? path "/")) "" "/"))
+        encoded-new-path (->> (apply uri-path-join-internal path segments)
+                              (preserve-file-url-win-drive scheme))]
     (str scheme "//" domain encoded-new-path)))
 
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-  (cond
-    ;; For debugging
-    ; (nil? base)
-    ; (js/console.log "path join with nil global directory" segments)
-    (= base "")
-    (js/console.error "BUG: should not join with empty dir" segments)
-    :else
-    nil)
-
   (if (is-file-url? base)
     (apply url-join base segments)
     (let [rejoined-path (apply path-join-internal base segments)]
@@ -185,12 +193,20 @@
 
 (defn url-normalize
   [origin-url]
-  (let [^js url (js/URL. (safe-decode-uri-component origin-url))
-        scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "/")
-        path (.-pathname url)
-        encoded-new-path (uri-path-join-internal path)]
-    (str scheme "//" domain encoded-new-path)))
+  (let [^js url (try
+                  (js/URL. (safe-decode-uri-component origin-url))
+                  (catch :default e
+                    (js/console.error "Failed to construct URL in url-normalize:" origin-url e)
+                    nil))
+        scheme (when url (.-protocol url))
+        domain (when url (or (not-empty (.-host url)) "/"))
+        path (when url (.-pathname url))
+        encoded-new-path (when url
+                           (->> (uri-path-join-internal path)
+                                (preserve-file-url-win-drive scheme)))]
+    (if url
+      (str scheme "//" domain encoded-new-path)
+      origin-url)))
 
 (defn path-normalize
   "Normalize path or URL"
@@ -208,25 +224,31 @@
   (if (is-file-url? original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
-    (let [^js url (try
-                    (js/URL. (string/replace (safe-decode-uri-component original-url) "assets://" "file://"))
-                    (catch :default e
-                      (js/console.error "invalid URL:"
-                                        (str "original-url: " original-url
-                                             " url: " (string/replace (safe-decode-uri-component original-url) "assets://" "file://")))
-                      (throw e)))
-          path (.-pathname url)
-          host (.-host url)
-          path (if (string/starts-with? path "///")
-                 (subs path 2)
-                 path)
-          path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
-                 (subs path 1)
-                 path)]
-      (if (string/blank? host)
-        path
-        (str "//" host path)))
+    (if-let [^js url (try
+                       (js/URL. (string/replace (safe-decode-uri-component original-url) "assets://" "file://"))
+                       (catch :default e
+                         (js/console.error "Failed to construct URL in url-to-path:" original-url e)
+                         nil))]
+      (let [path (.-pathname url)
+            host (.-host url)
+            path (if (string/starts-with? path "///")
+                   (subs path 2)
+                   path)
+            path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
+                   (subs path 1)
+                   path)]
+        (if (string/blank? host)
+          path
+          (str "//" host path)))
+      original-url)
     original-url))
+
+(defn file-url-or-path->path
+  "Converts a file URL to a local filesystem path."
+  [s]
+  (if (is-file-url? s)
+    (url-to-path s)
+    s))
 
 (defn trim-dir-prefix
   "Trim dir prefix from path"

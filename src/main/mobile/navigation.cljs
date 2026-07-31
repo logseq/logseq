@@ -20,8 +20,9 @@
 (defonce ^:private hooks-installed? (atom false))
 
 ;; Track whether the latest change came from a native back gesture / popstate.
-(.addEventListener js/window "popstate" (fn [_]
-                                          (reset! navigation-source :pop)))
+(when (fn? (.-addEventListener js/window))
+  (.addEventListener js/window "popstate" (fn [_]
+                                            (reset! navigation-source :pop))))
 
 (defn current-stack
   []
@@ -109,6 +110,30 @@
   [stack]
   (-> @stack-history (get stack) :history last))
 
+(defn- virtual-stack-path?
+  [path]
+  (and (string? path)
+       (string/starts-with? path "/__stack__/")))
+
+(def ^:private browser-routes
+  #{:home :page :import :export})
+
+(defn- sync-browser-route!
+  [stack route route-match path]
+  (when-not (virtual-stack-path? path)
+    (let [route-name (or (:to route)
+                         (get-in route [:data :name])
+                         (get-in route-match [:data :name]))
+          path-params (or (:path-params route)
+                          (get-in route-match [:parameters :path]))
+          query-params (or (:query-params route)
+                           (get-in route-match [:parameters :query]))]
+      (when (contains? browser-routes route-name)
+        (record-navigation-intent! {:type :replace
+                                    :stack stack})
+        (orig-replace-state route-name path-params query-params)
+        true))))
+
 (defn- remember-route!
   [stack nav-type route path route-match]
   (when stack
@@ -132,6 +157,17 @@
                 "push" (if (= last-path path)
                          (conj (vec (butlast history)) entry)
                          (conj history entry))
+
+                "pop" (if-let [idx (->> history
+                                         (map-indexed vector)
+                                         (keep (fn [[idx history-entry]]
+                                                 (when (= path (:path history-entry))
+                                                   idx)))
+                                         last)]
+                        (subvec history 0 (inc idx))
+                        (if (seq history)
+                          (conj (vec (butlast history)) entry)
+                          [entry]))
 
                 history)))]
       (swap! stack-history update stack
@@ -186,17 +222,20 @@
         stack (or stack (current-stack))
         path (-> (or path (current-path))
                  (strip-fragment))
-        path (if (string/blank? path) "/" path)]
-    (set-current-stack! stack)
-    (remember-route! stack navigation-type route path route-match)
-    (when (and (mobile-util/native-platform?)
-               mobile-util/ui-local)
-      (let [payload (cond-> {:navigationType navigation-type
-                             :push push?
-                             :stack stack}
-                      route (assoc :route route)
-                      path (assoc :path (strip-fragment path)))]
-        (notify-route-payload! payload)))))
+        path (if (string/blank? path) "/" path)
+        duplicate-push? (and (= navigation-type "push")
+                             (= path (:path (stack-top stack))))]
+    (when-not duplicate-push?
+      (set-current-stack! stack)
+      (remember-route! stack navigation-type route path route-match)
+      (when (and (mobile-util/native-platform?)
+                 mobile-util/ui-local)
+        (let [payload (cond-> {:navigationType navigation-type
+                               :push push?
+                               :stack stack}
+                        route (assoc :route route)
+                        path (assoc :path (strip-fragment path)))]
+          (notify-route-payload! payload))))))
 
 (comment
   (defn reset-route!
@@ -213,26 +252,23 @@
   "Activate a stack and restore its last known route."
   [stack]
   (when stack
-    (let [stack (ensure-stack stack)
-          current @active-stack]
+    (let [stack (ensure-stack stack)]
       (set-current-stack! stack)
       (when-let [{:keys [path route route-match]} (stack-top stack)]
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
               path        (or path (current-path))]
           (route-handler/set-route-match! route-match)
-          (when (= current "search")
-            ;; reset to :home
-            (orig-replace-state :home nil nil))
-          (notify-route-change!
-           {:route {:to          (or (get-in route [:data :name])
-                                     (get-in route-match [:data :name]))
-                    :path-params (or (:path-params route)
-                                     (get-in route-match [:parameters :path]))
-                    :query-params (or (:query-params route)
-                                      (get-in route-match [:parameters :query]))}
-            :path  path
-            :stack stack
-            :push  false}))))))
+          (when-not (sync-browser-route! stack route route-match path)
+            (notify-route-change!
+             {:route {:to          (or (get-in route [:data :name])
+                                       (get-in route-match [:data :name]))
+                      :path-params (or (:path-params route)
+                                       (get-in route-match [:parameters :path]))
+                      :query-params (or (:query-params route)
+                                        (get-in route-match [:parameters :query]))}
+              :path  path
+              :stack stack
+              :push  false})))))))
 
 (defn pop-modal!
   []
@@ -308,7 +344,7 @@
        (route-handler/set-route-match! route-match)
        (notify-route-change!
         {:route route
-         :route-match route-match
+         :route-match (assoc route-match :navigation-type "reset")
          :path path
          :stack stack
          :push false})))))

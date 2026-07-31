@@ -105,26 +105,26 @@
 
 (defn- fetch-block-by-id
   [config repo id]
-  (transport/invoke config :thread-api/pull false
+  (transport/invoke config :thread-api/pull
                     [repo block-id-selector id]))
 
 (defn- fetch-block-by-uuid
   [config repo uuid-str]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo block-id-selector [:block/uuid (uuid uuid-str)]])]
     (if (:db/id entity)
       entity
-      (transport/invoke config :thread-api/pull false
+      (transport/invoke config :thread-api/pull
                         [repo block-id-selector [:block/uuid uuid-str]]))))
 
 (defn- delete-block-uuids
   [config repo block-uuids]
-  (transport/invoke config :thread-api/apply-outliner-ops false
+  (transport/invoke config :thread-api/apply-outliner-ops
                     [repo [[:delete-blocks [block-uuids {}]]] {}]))
 
 (defn- delete-page-by-uuid
   [config repo page-uuid]
-  (p/let [result (transport/invoke config :thread-api/apply-outliner-ops false
+  (p/let [result (transport/invoke config :thread-api/apply-outliner-ops
                                    [repo [[:delete-page [page-uuid {}]]] {}])]
     (if (nil? result) true result)))
 
@@ -202,7 +202,7 @@
 
 (defn- resolve-page-by-id
   [config repo id]
-  (transport/invoke config :thread-api/pull false
+  (transport/invoke config :thread-api/pull
                     [repo page-id-selector id]))
 
 (defn- item-id
@@ -229,7 +229,7 @@
 (defn- list-matches-by-name
   [config repo method name]
   (let [normalized (normalize-name name)]
-    (p/let [items (transport/invoke config method false [repo {:include-built-in true :expand true}])
+    (p/let [items (transport/invoke config method [repo {:include-built-in true :expand true}])
             matches (->> (or items [])
                          (filter (fn [item]
                                    (= normalized (normalize-name (item-name item)))))
@@ -353,7 +353,7 @@
     (if-not (:ok? resolved)
       {:status :error
        :error (:error resolved)}
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [(:repo action) entity-selector (:lookup resolved)])
               validation (validate-fn entity)]
         (if-not (:ok? validation)

@@ -1,6 +1,7 @@
 (ns frontend.components.cmdk.state
-  "Persist query and filter group from the last cmdk query"
-  (:require [frontend.storage :as storage]))
+  "State helpers for command palette search."
+  (:require [frontend.storage :as storage]
+            [frontend.util :as util]))
 
 (def cmdk-last-search-storage-key :ls-cmdk-last-search)
 (def cmdk-empty-repo-key "__no-repo__")
@@ -43,6 +44,14 @@
     (catch :default _e
       nil)))
 
+(defn consume-open-search-sidebar-keydown!
+  [event open-search!]
+  (when (and (util/meta-key? event)
+             (= "Enter" (.-key event)))
+    (util/stop event)
+    (open-search!)
+    true))
+
 (defn- explicit-mode-filter-group
   [opts search-mode]
   (when (and search-mode
@@ -70,21 +79,27 @@
     (save-last-cmdk-search! repo input (:group filter-state))))
 
 (defn cmdk-block-search-options
-  [{:keys [filter-group dev? action page-uuid]}]
-  (let [nodes-base {:limit 100
+  [{:keys [filter-group dev? action page-uuid expanded?]}]
+  (let [nodes-limit (if expanded? 100 10)
+        nodes-base {:limit nodes-limit
+                    :search-limit 100
                     :dev? dev?
                     :built-in? true
-                    :enable-snippet? true}]
+                    :enable-snippet? true
+                    :include-matched-count? true}]
     (case filter-group
       :code
       (assoc nodes-base
+             :limit 20
              ;; larger limit for code search since most of the results will be filtered out
              :search-limit 300
              :code-only? true)
 
       :current-page
-      (cond-> {:limit 100
-               :enable-snippet? true}
+      (cond-> {:limit nodes-limit
+               :search-limit 100
+               :enable-snippet? true
+               :include-matched-count? true}
         page-uuid
         (assoc :page (str page-uuid)))
 

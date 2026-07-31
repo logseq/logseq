@@ -56,6 +56,26 @@
   (when-let [image (:logseq.property.pdf/hl-image block)]
     (str "./assets/" (:block/uuid image) ".png")))
 
+(defn- windows-drive-absolute-path?
+  [path]
+  (and (string? path)
+       (boolean (re-find #"^[A-Za-z]:[\/\\]" path))))
+
+(defn- protect-windows-drive-in-assets-path
+  [path]
+  (cond-> path
+    (windows-drive-absolute-path? path)
+    (string/replace-first #":" "/logseq__colon/")))
+
+(defn asset-protocol-url->media-url
+  [url]
+  (if (and (common-config/local-protocol-asset? url)
+           (not (util/electron?)))
+    (-> url
+        (common-config/remove-asset-protocol)
+        (string/replace-first "/logseq__colon/" ":/"))
+    url))
+
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -68,26 +88,37 @@
                       encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
                       rpath (if encoded-chars? (js/decodeURI rpath) rpath)
                       graph-root (config/get-repo-dir repo)
-                      has-schema? (string/starts-with? graph-root "file:")]
+                      graph-root (if (util/electron?)
+                                   (protect-windows-drive-in-assets-path graph-root)
+                                   graph-root)
+                      has-schema? (string/starts-with? graph-root "file:")
+                      protocol (if (util/electron?) "assets:" "file:")]
                   (if has-schema?
                     (path/path-join graph-root rpath)
-                    (path/prepend-protocol "file:" (path/path-join graph-root rpath))))]
+                    (path/prepend-protocol protocol (path/path-join graph-root rpath))))]
         ret))))
 
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"
   [path]
-  (let [protocol-link? (common-config/protocol-path? path)]
+  (let [windows-drive-path? (windows-drive-absolute-path? path)
+        protocol-link? (and (not windows-drive-path?)
+                            (common-config/protocol-path? path))]
     (cond
       protocol-link?
       path
 
       ;; BUG: avoid double encoding from PDF assets
-      (path/absolute? path)
-      (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
-        ;; Incoming path might be already URL encoded. from PDF assets
-        (path/path-join "file://" (common-util/safe-decode-uri-component path))
-        (path/path-join "file://" path))
+      (or (path/absolute? path)
+          windows-drive-path?)
+      (let [protocol (if (util/electron?) "assets://" "file://")
+            path (if (util/electron?)
+                   (protect-windows-drive-in-assets-path path)
+                   path)]
+        (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
+          ;; Incoming path might be already URL encoded. from PDF assets
+          (path/path-join protocol (common-util/safe-decode-uri-component path))
+          (path/path-join protocol path)))
 
       :else ;; relative path or alias path
       (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
@@ -139,11 +170,11 @@
               (check-alias-path? path))
          (resolve-asset-real-path-url (state/get-current-repo) path)
 
-         (util/electron?)
-         (let [full-path (if local-asset?
-                           (path/path-join repo-dir path) path)]
-           ;; fullpath will be encoded
-           (path/prepend-protocol "file:" full-path))
+          (util/electron?)
+          (let [full-path (if local-asset?
+                            (path/path-join repo-dir path) path)]
+            ;; fullpath will be encoded
+            (path/prepend-protocol "assets:" (protect-windows-drive-in-assets-path full-path)))
 
          :else
          (p/let [binary (fs/read-file-raw repo-dir path {})
@@ -157,9 +188,37 @@
   (-> (if (string? file) file (.arrayBuffer file))
       (p/then db-asset/<get-file-array-buffer-checksum)))
 
+(defn- field-value
+  [payload field-name]
+  (or (get payload field-name)
+      (get payload (keyword field-name))
+      (when (object? payload)
+        (aget payload field-name))))
+
+(defn- indexed-object->array
+  [payload]
+  (let [keys (->> (js/Object.keys payload)
+                  (js->clj)
+                  (filter #(re-matches #"\d+" %))
+                  (sort-by #(js/parseInt % 10)))]
+    (when (seq keys)
+      (clj->js (map #(aget payload %) keys)))))
+
+(defn- indexed-map->array
+  [payload]
+  (let [keys (->> (keys payload)
+                  (filter #(re-matches #"\d+" (str %)))
+                  (sort-by #(js/parseInt (str %) 10)))]
+    (when (seq keys)
+      (clj->js (map #(get payload %) keys)))))
+
 (defn ->uint8
   [payload]
   (cond
+    (and (exists? js/Blob)
+         (instance? js/Blob payload))
+    payload
+
     (instance? js/Uint8Array payload)
     payload
 
@@ -176,10 +235,32 @@
     (sequential? payload)
     (js/Uint8Array. (clj->js payload))
 
+    (and (= "Buffer" (field-value payload "type"))
+         (some? (field-value payload "data")))
+    (->uint8 (field-value payload "data"))
+
+    (map? payload)
+    (if-let [data (indexed-map->array payload)]
+      (js/Uint8Array. data)
+      (throw (ex-info "unsupported binary payload"
+                      {:payload-type (str (type payload))
+                       :keys (mapv str (keys payload))})))
+
     (and (object? payload)
-         (= "Buffer" (aget payload "type"))
-         (array? (aget payload "data")))
-    (js/Uint8Array. (aget payload "data"))
+         (number? (aget payload "length")))
+    (js/Uint8Array. payload)
+
+    (object? payload)
+    (if-let [data (indexed-object->array payload)]
+      (js/Uint8Array. data)
+      (throw (ex-info "unsupported binary payload"
+                      {:payload-type (str (type payload))
+                       :object-tag (try
+                                     (.call (.-toString (.-prototype js/Object)) payload)
+                                     (catch :default _ nil))
+                       :keys (try
+                               (js->clj (js/Object.keys payload))
+                               (catch :default _ nil))})))
 
     :else
     (throw (ex-info "unsupported binary payload"
@@ -187,13 +268,17 @@
 
 (defn <get-all-assets
   []
-  (when-let [path (config/get-current-repo-assets-root)]
-    (p/let [result (p/catch (fs/readdir path {:path-only? true})
-                            (constantly nil))]
-      (p/all (map (fn [path]
-                    (p/let [data (fs/read-file-raw path "" {})]
-                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
-                        [path' data]))) result)))))
+  (if-let [path (config/get-current-repo-assets-root)]
+    (p/let [exists? (p/catch (fs/stat path)
+                             (constantly nil))]
+      (if exists?
+        (p/let [result (fs/readdir path {:path-only? true})]
+          (p/all (map (fn [path]
+                        (p/let [data (fs/read-file-raw path "" {})]
+                          (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
+                            [path' data]))) result)))
+        (p/resolved [])))
+    (p/resolved [])))
 
 (defn ensure-assets-dir!
   [repo]

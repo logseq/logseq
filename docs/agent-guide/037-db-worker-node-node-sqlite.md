@@ -113,7 +113,7 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 33. Run `bb dev:test -v 'frontend.worker.db-worker-node-test/db-worker-node-daemon-smoke-test'` and expect daemon startup and query path to pass.
 34. Run `bb dev:test -v 'frontend.worker.db-worker-node-test/db-worker-node-import-db-base64'` and expect sqlite export/import behavior to pass.
 35. Run `bb dev:test -v 'logseq.db-worker.ncc-bundle-test'` and expect standalone bundle smoke tests to pass.
-36. Run `bb dev:test -v 'logseq.cli.integration-test/test-cli-graph-export-import-sqlite'` and expect end-to-end CLI sqlite flow to pass.
+36. Run `bb dev:cli-e2e --case graph-import-json --skip-build` and expect end-to-end CLI graph import flow to pass.
 37. Run `clojure -M:cljs compile db-worker-node logseq-cli` and expect successful node-script builds.
 38. Run `pnpm db-worker-node:release:bundle` and verify `dist/db-worker-node.js` still starts with `node ./dist/db-worker-node.js --help`.
 39. Run `bb dev:lint-and-test` and expect full lint and test checks to pass.

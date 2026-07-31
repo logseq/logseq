@@ -1,8 +1,11 @@
 (ns frontend.handler.route-test
   (:require [clojure.test :refer [deftest is use-fixtures testing]]
+            [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [reitit.frontend.easy :as rfe]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -63,3 +66,37 @@
     (is (= {:to :page :path-params {:name "page name"}}
            (#'route-handler/default-page-route "Page name"))
         "Generates a case insensitive page link")))
+
+(deftest redirect-to-page-includes-current-graph-id
+  (testing "page routes always carry graph identity"
+    (let [calls (atom [])]
+      (with-redefs [db/get-page (constantly nil)
+                    db/get-alias-source-page (constantly nil)
+                    graph-handler/current-graph-id (constantly "graph-uuid")
+                    rfe/push-state (fn [& args] (swap! calls conj args))]
+        (route-handler/redirect-to-page! "Page name")
+        (is (= [[:page {:name "page name"} {:graph-id "graph-uuid"}]]
+               @calls)))))
+
+  (testing "existing page route query params are preserved"
+    (let [calls (atom [])]
+      (with-redefs [db/get-page (constantly nil)
+                    db/get-alias-source-page (constantly nil)
+                    graph-handler/current-graph-id (constantly "graph-uuid")
+                    rfe/push-state (fn [& args] (swap! calls conj args))]
+        (route-handler/redirect-to-page! "Page name" {:anchor "ls-block-block-uuid"})
+        (is (= [[:page {:name "page name"}
+                 {:anchor "ls-block-block-uuid"
+                  :graph-id "graph-uuid"}]]
+               @calls))))))
+
+(deftest redirect-to-page-tolerates-missing-current-graph-id
+  (testing "startup redirects do not crash before graph restoration finishes"
+    (let [calls (atom [])]
+      (with-redefs [db/get-page (constantly nil)
+                    db/get-alias-source-page (constantly nil)
+                    graph-handler/current-graph-id (constantly nil)
+                    rfe/push-state (fn [& args] (swap! calls conj args))]
+        (route-handler/redirect-to-page! "Page name")
+        (is (= [[:page {:name "page name"} nil]]
+               @calls))))))

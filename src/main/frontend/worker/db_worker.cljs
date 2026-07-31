@@ -42,14 +42,9 @@
      (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)
-          wrapped-main-thread (fn [qkw direct-pass? & args]
+          wrapped-main-thread (fn [qkw & args]
                                 (p/let [result (.remoteInvoke wrapped-main-thread*
                                                               (str (namespace qkw) "/" (name qkw))
-                                                              direct-pass?
-                                                              (if direct-pass?
-                                                                (into-array args)
-                                                                (ldb/write-transit-str args)))]
-                                  (if direct-pass?
-                                    result
-                                    (ldb/read-transit-str result))))]
+                                                              (ldb/write-transit-str args))]
+                                  (ldb/read-transit-str result)))]
       (reset! worker-state/*main-thread wrapped-main-thread))))

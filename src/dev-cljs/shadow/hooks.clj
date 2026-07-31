@@ -12,19 +12,6 @@
         (string/trim out))
       (println err))))
 
-(defn git-revision-hook
-  {:shadow.build/stage :configure}
-  [build-state & args]
-  (let [defines-in-config (get-in build-state [:shadow.build/config :closure-defines])
-        defines-in-options (get-in build-state [:compiler-options :closure-defines])
-        revision (exec "git" "describe" args)]
-    (prn ::git-revision-hook revision)
-    (-> build-state
-        (assoc-in [:shadow.build/config :closure-defines]
-                  (assoc defines-in-config 'frontend.config/REVISION revision))
-        (assoc-in [:compiler-options :closure-defines]
-                  (assoc defines-in-options 'frontend.config/REVISION revision)))))
-
 (defn- env-or
   [key fallback]
   (or (System/getenv key) fallback))
@@ -33,38 +20,36 @@
   []
   (.format java.time.format.DateTimeFormatter/ISO_INSTANT (java.time.Instant/now)))
 
-(defn logseq-cli-metadata-hook
-  {:shadow.build/stage :configure}
-  [build-state & args]
-  (let [defines-in-config (get-in build-state [:shadow.build/config :closure-defines])
-        defines-in-options (get-in build-state [:compiler-options :closure-defines])
-        revision (env-or "LOGSEQ_REVISION" (or (exec "git" "describe" args) "dev"))
-        build-time (env-or "LOGSEQ_BUILD_TIME" (iso-now))]
-    (prn ::logseq-cli-metadata-hook {:revision revision :build-time build-time})
-    (-> build-state
-        (assoc-in [:shadow.build/config :closure-defines]
-                  (assoc defines-in-config
-                         'logseq.cli.version/REVISION revision
-                         'logseq.cli.version/BUILD_TIME build-time))
-        (assoc-in [:compiler-options :closure-defines]
-                  (assoc defines-in-options
-                         'logseq.cli.version/REVISION revision
-                         'logseq.cli.version/BUILD_TIME build-time)))))
+(defn- hook-options
+  [args]
+  (if (map? (last args))
+    (last args)
+    {}))
 
-(defn db-worker-node-metadata-hook
+(defn- hook-git-args
+  [args]
+  (if (map? (last args))
+    (butlast args)
+    args))
+
+(defn build-metadata-hook
   {:shadow.build/stage :configure}
   [build-state & args]
-  (let [defines-in-config (get-in build-state [:shadow.build/config :closure-defines])
+  (let [{:keys [revision build-time]} (hook-options args)
+        defines-in-config (get-in build-state [:shadow.build/config :closure-defines])
         defines-in-options (get-in build-state [:compiler-options :closure-defines])
-        revision (env-or "LOGSEQ_REVISION" (or (exec "git" "describe" args) "dev"))
-        build-time (env-or "LOGSEQ_BUILD_TIME" (iso-now))]
-    (prn ::db-worker-node-metadata-hook {:revision revision :build-time build-time})
+        revision (or revision
+                     (env-or "LOGSEQ_REVISION"
+                             (or (exec "git" "describe" (hook-git-args args)) "dev")))
+        build-time (or build-time
+                       (env-or "LOGSEQ_BUILD_TIME" (iso-now)))]
+    (prn ::build-metadata-hook {:revision revision :build-time build-time})
     (-> build-state
         (assoc-in [:shadow.build/config :closure-defines]
                   (assoc defines-in-config
-                         'frontend.worker.version/REVISION revision
-                         'frontend.worker.version/BUILD_TIME build-time))
+                         'logseq.common.version/REVISION revision
+                         'logseq.common.version/BUILD_TIME build-time))
         (assoc-in [:compiler-options :closure-defines]
                   (assoc defines-in-options
-                         'frontend.worker.version/REVISION revision
-                         'frontend.worker.version/BUILD_TIME build-time)))))
+                         'logseq.common.version/REVISION revision
+                         'logseq.common.version/BUILD_TIME build-time)))))

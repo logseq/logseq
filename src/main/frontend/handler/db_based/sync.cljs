@@ -117,6 +117,24 @@
     true
     (true? graph-e2ee?)))
 
+(defn- active-graph-operation []
+  (let [{:rtc/keys [downloading-graph-uuid uploading?]} @state/state]
+    (cond
+      downloading-graph-uuid
+      {:active-operation :download
+       :active-graph-uuid downloading-graph-uuid}
+
+      (true? uploading?)
+      {:active-operation :upload})))
+
+(defn- reject-graph-operation-in-progress
+  [requested-operation active-operation]
+  (p/rejected
+   (ex-info "graph operation already in progress"
+            (assoc active-operation
+                   :type :db-sync/graph-operation-in-progress
+                   :requested-operation requested-operation))))
+
 (defn- <ensure-download-runtime-bound!
   [repo]
   (if (util/electron?)
@@ -130,9 +148,10 @@
   (if (not= false server-rsa-keys-exists?)
     (p/resolved nil)
     (if @state/*db-worker
-      (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true
-                                     :server-rsa-keys-exists? false})
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)]
+            (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                     {:ensure-server? true
+                                      :server-rsa-keys-exists? false}))
           (p/catch (fn [error]
                      (log/error :db-sync/ensure-user-rsa-keys-failed
                                 {:error error
@@ -210,26 +229,35 @@
   (debounced-update-presence editing-block-uuid))
 
 (defn <rtc-get-users-info
-  []
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-    (let [base (http-base)
-          repo (state/get-current-repo)]
-      (if base
-        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                resp (fetch-json (str base "/graphs/" graph-uuid "/members")
-                                 {:method "GET"}
-                                 {:response-schema :graph-members/list})
-                members (:members resp)
-                users (mapv (fn [{:keys [user-id role email username]}]
-                              (let [name (or username email user-id)
-                                    user-type (some-> role keyword)]
-                                (cond-> {:user/uuid user-id
-                                         :user/name name
-                                         :graph<->user/user-type user-type}
-                                  (string? email) (assoc :user/email email))))
-                            members)]
-          (state/set-state! :rtc/users-info {repo users}))
-        (p/resolved nil)))))
+  ([] (<rtc-get-users-info false))
+  ([force?]
+   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+     (let [base (http-base)
+           repo (state/get-current-repo)
+           cached-users (get @(:rtc/users-info @state/state) repo)]
+       (cond
+         (and (not force?) (contains? @(:rtc/users-info @state/state) repo))
+         (p/resolved cached-users)
+
+         base
+         (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                 resp (fetch-json (str base "/graphs/" graph-uuid "/members")
+                                  {:method "GET"}
+                                  {:response-schema :graph-members/list})
+                 members (:members resp)
+                 users (mapv (fn [{:keys [user-id role email username]}]
+                               (let [name (or username email user-id)
+                                     user-type (some-> role keyword)]
+                                 (cond-> {:user/uuid user-id
+                                          :user/name name
+                                          :graph<->user/user-type user-type}
+                                   (string? email) (assoc :user/email email))))
+                             members)]
+           (state/set-state! :rtc/users-info users :path-in-sub-atom repo)
+           users)
+
+         :else
+         (p/resolved nil))))))
 
 (defn <rtc-create-graph!
   ([repo]
@@ -257,30 +285,36 @@
   ([graph-name graph-uuid]
    (<rtc-download-graph! graph-name graph-uuid true))
   ([graph-name graph-uuid graph-e2ee?]
-   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
-   (state/pub-event!
-    [:rtc/log {:type :rtc.log/download
-               :sub-type :download-progress
-               :graph-uuid graph-uuid
-               :message "Preparing graph snapshot download"}])
-   (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         base (http-base)]
-     (-> (if (and graph-uuid base)
-           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                   graph (str config/db-version-prefix graph-name)
-                   _ (<ensure-download-runtime-bound! graph)
-                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                              graph graph-uuid graph-e2ee?)]
-             true)
-           (p/rejected (ex-info "db-sync missing graph info"
-                                {:type :db-sync/invalid-graph
-                                 :graph-uuid graph-uuid
-                                 :base base})))
-         (p/catch (fn [error]
-                    (throw error)))
-         (p/finally
-           (fn []
-             (state/set-state! :rtc/downloading-graph-uuid nil)))))))
+   (if-let [operation (active-graph-operation)]
+     (reject-graph-operation-in-progress :download operation)
+     (do
+       (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
+       (state/pub-event!
+        [:rtc/log {:type :rtc.log/download
+                   :sub-type :download-progress
+                   :graph-uuid graph-uuid
+                   :message "Preparing graph snapshot download"}])
+       (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
+             base (http-base)]
+         (-> (if (and graph-uuid base)
+               (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                       graph (str config/db-version-prefix graph-name)
+                       _ (<ensure-download-runtime-bound! graph)
+                       _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
+                                                  graph graph-uuid graph-e2ee?)
+                       _ (when (util/electron?)
+                           (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
+                                                    graph graph-uuid))]
+                 true)
+               (p/rejected (ex-info "db-sync missing graph info"
+                                    {:type :db-sync/invalid-graph
+                                     :graph-uuid graph-uuid
+                                     :base base})))
+             (p/catch (fn [error]
+                        (throw error)))
+             (p/finally
+               (fn []
+                 (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
 
 (defn <get-remote-graphs
   []
@@ -342,7 +376,8 @@
                e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))
                _ (when (and repo e2ee?)
                    (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
-                                            repo graph-uuid email))]
+                                            repo graph-uuid email))
+               _ (<rtc-get-users-info true)]
          (notification/show! (t :sync/invitation-sent) :success))
        (p/catch (fn [e]
                   (if (= "user not found" (get-in (ex-data e) [:body :error]))
@@ -385,10 +420,19 @@
 
 (defn <rtc-upload-graph!
   [repo _graph-e2ee?]
-  (p/do!
-   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-   (<get-remote-graphs)
-   (<rtc-start! repo)))
+  (if-let [operation (active-graph-operation)]
+    (reject-graph-operation-in-progress :upload operation)
+    (do
+      (state/set-state! :rtc/uploading? true)
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)
+                  _ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+                  _ (<get-remote-graphs)
+                  _ (state/set-state! :rtc/uploading? false)
+                  _ (<rtc-start! repo)]
+            true)
+          (p/finally
+            (fn []
+              (state/set-state! :rtc/uploading? false)))))))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

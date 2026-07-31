@@ -4,9 +4,9 @@
             [logseq.shui.form.core :as form-core]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.icon.v2 :as icon-v2]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc toggle-password
+(hsx/defc toggle-password
   [option]
   (let [[visible? set-visible!] (hooks/use-state false)]
     [:div.ls-toggle-password-input.relative

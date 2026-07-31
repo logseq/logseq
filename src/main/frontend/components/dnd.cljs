@@ -1,22 +1,23 @@
 (ns frontend.components.dnd
-  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
+  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor TouchSensor useSensor useSensors]]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
             [cljs-bean.core :as bean]
-            [frontend.rum :as r]
             [frontend.state :as state]
-            [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]))
 
-(def dnd-context (r/adapt-class DndContext))
-(def sortable-context (r/adapt-class SortableContext))
-;; (def drag-overlay (r/adapt-class DragOverlay))
+(hsx/defc dnd-context [opts & children]
+  (into [:> DndContext opts] children))
 
-(rum/defc non-sortable-item
+(hsx/defc sortable-context [opts & children]
+  (into [:> SortableContext opts] children))
+
+(hsx/defc non-sortable-item
   [props children]
   [:div props children])
 
-(rum/defc sortable-item
+(hsx/defc sortable-item
   [props children]
   (let [sortable (useSortable #js {:id (:id props)})
         attributes (.-attributes sortable)
@@ -34,21 +35,24 @@
            (dissoc props :id))
      children]))
 
-(rum/defc items
+(hsx/defc items
   [col* {:keys [on-drag-end parent-node vertical? sort-by-inner-element?]
          :or {vertical? true}}]
   (assert (every? :id col*))
   (when (some #(nil? (:id %)) col*)
     (js/console.error "dnd-kit items without id")
     (prn :col col*))
-  (let [col (filter :id col*)
+  (let [col (filterv :id col*)
         ids (mapv :id col)
+        ids-key (pr-str ids)
         items' (bean/->js ids)
         id->item (zipmap ids col)
-        [items-state set-items] (rum/use-state items')
-        _ (hooks/use-effect! (fn [] (set-items items')) [col])
-        [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
+        [items-state set-items] (hooks/use-state items')
+        _ (hooks/use-effect! (fn [] (set-items items')) [ids-key])
+        [_active-id set-active-id] (hooks/use-state nil)
+        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}}))
+                            (useSensor TouchSensor (bean/->js {:activationConstraint {:delay 120
+                                                                                      :tolerance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [^js event]
@@ -56,7 +60,7 @@
                                    (set-active-id (.-id ^js (.-active event)))))
                   :onDragEnd (fn [^js event]
                                (let [active-id (.-id ^js (.-active event))
-                                     over-id (.-id ^js (.-over event))]
+                                     over-id (some-> ^js (.-over event) .-id)]
                                  (when active-id
                                    (when-not (= active-id over-id)
                                      (let [old-index (.indexOf ids active-id)
@@ -96,9 +100,11 @@
                        [:div {:key id} (:content item)]
 
                        (:disabled? item)
-                       (rum/with-key (non-sortable-item prop (:content item)) id)
+                       ^{:key id}
+                       [non-sortable-item prop (:content item)]
                        :else
-                       (rum/with-key (sortable-item prop (:content item)) id))))
+                       ^{:key id}
+                       [sortable-item prop (:content item)])))
         children' (if parent-node
                     [parent-node {:key "parent-node"} children]
                     children)]

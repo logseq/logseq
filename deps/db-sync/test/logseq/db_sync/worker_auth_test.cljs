@@ -4,6 +4,21 @@
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
 
+(deftest cognito-client-id-allowlist-test
+  (let [env #js {"COGNITO_CLIENT_ID" "web-client"
+                 "COGNITO_CLIENT_IDS" "chatgpt-client, admin-client"}]
+    (is (authorization/client-id-allowed? env "web-client"))
+    (is (authorization/client-id-allowed? env "chatgpt-client"))
+    (is (authorization/client-id-allowed? env "admin-client"))
+    (is (not (authorization/client-id-allowed? env "unknown-client")))))
+
+(deftest cognito-client-id-allowlist-fails-closed-test
+  (is (not (authorization/client-id-allowed? #js {} nil)))
+  (is (not (authorization/client-id-allowed? #js {} "")))
+  (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" ""} "")))
+  (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_IDS" " , "} "chatgpt-client")))
+  (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" "web-client"} nil))))
+
 (deftest auth-claims-uses-jwt-verification-test
   (async done
          (let [request (js/Request. "http://localhost/graphs"

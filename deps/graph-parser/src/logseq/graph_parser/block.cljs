@@ -266,23 +266,30 @@
    (map last)
    (into {})))
 
+(defn- timestamp->scheduled-or-deadline-value
+  [{:keys [date repetition] timestamp-time :time}]
+  (let [{:keys [year month day]} date
+        day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
+    (if (or timestamp-time repetition)
+      (cond-> {:date-int day}
+        timestamp-time
+        (assoc :time timestamp-time)
+        repetition
+        (assoc :repetition repetition))
+      day)))
+
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
   (let [timestamps (update-keys timestamps (comp keyword string/lower-case))
         m (some->> (select-keys timestamps [:scheduled :deadline])
                    (map (fn [[k v]]
-                          (let [{:keys [date repetition]} v
-                                {:keys [year month day]} date
-                                day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
-                            (cond->
-                             (case k
-                               :scheduled
-                               {:scheduled day}
-                               :deadline
-                               {:deadline day})
-                              repetition
-                              (assoc :repeated? true))))))]
+                          (let [value (timestamp->scheduled-or-deadline-value v)]
+                            (case k
+                              :scheduled
+                              {:scheduled value}
+                              :deadline
+                              {:deadline value})))))]
     (apply merge m)))
 
 (defn- convert-page-if-journal-impl
@@ -316,11 +323,15 @@
 
 (defn- page-name-string->map
   [original-page-name db date-formatter
-   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
+   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
-        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
+        [original-page-name' page-name journal-day]
+        (if skip-journal?
+          [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
+          (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
+                        (not journal-day)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
@@ -435,7 +446,9 @@
                                                 p)]
                                         (when (string? p)
                                           (let [p (or (text/get-nested-page-name p) p)]
-                                            (if (and (text/namespace-page? p) (not tag?))
+                                            (if (and (text/namespace-page? p)
+                                                     (not (common-date/valid-journal-title-with-slash? p))
+                                                     (not tag?))
                                               (common-util/split-namespace-pages p)
                                               [p])))))
                                     col)

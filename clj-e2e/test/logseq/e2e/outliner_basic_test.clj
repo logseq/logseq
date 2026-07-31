@@ -1,19 +1,26 @@
 (ns logseq.e2e.outliner-basic-test
   (:require
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
   fixtures/new-logseq-page
   fixtures/validate-graph)
+
+(defn- block-text-position
+  [text]
+  (let [locator (w/find-one-by-text "span" text)]
+    (assert/assert-is-visible locator)
+    (first (util/bounding-xy locator))))
 
 (defn create-test-page-and-insert-blocks []
   ;; a page block and a child block
@@ -34,7 +41,7 @@
     (k/arrow-up)
     (b/indent)
     (util/exit-edit)
-    (let [[x1 x2 x3] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
+    (let [[x1 x2 x3] (map block-text-position ["b1" "b2" "b3"])]
       (is (< x1 x2 x3))))
 
   (testing "unindent a block with its children"
@@ -44,7 +51,7 @@
     (k/arrow-up)
     (b/outdent)
     (util/exit-edit)
-    (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
+    (let [[x2 x3 x4 x5] (map block-text-position ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
 (defn indent-outdent-embed-page []
@@ -54,13 +61,14 @@
   (b/new-blocks ["b3" ""])
   (util/input-command "Node embed")
   (util/press-seq "Page embed" {:delay 60})
+  (w/wait-for "#ac-0.menu-link:has-text('Page embed')")
   (k/press "Enter" {:delay 60})
   (util/exit-edit)
   (b/new-blocks ["b4"])
   (b/outdent)
   (b/indent)
   (util/exit-edit)
-  (let [[x2 x3 x4] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4"])]
+  (let [[x2 x3 x4] (map block-text-position ["b2" "b3" "b4"])]
     (is (= x2 x4))
     (is (< x3 x2))))
 
@@ -75,6 +83,48 @@
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowDown"))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
+
+(defn- zoom-in-shortcut []
+  (k/press (if util/mac? "Meta+Shift+." "Alt+ArrowRight")))
+
+(defn- current-location-hash []
+  (w/eval-js "window.location.hash"))
+
+(defn- current-editing-block-id []
+  (w/eval-js
+   "(() => {
+      const editor = document.querySelector('.editor-wrapper textarea');
+      return editor?.closest('[blockid]')?.getAttribute('blockid') ?? null;
+    })();"))
+
+(deftest focused-root-block-cannot-indent-or-move-test
+  (testing "Focused root block ignores indent/outdent/move-up/move-down commands"
+    (b/new-blocks ["focused-root" "focused-child"])
+    (k/arrow-up)
+    (let [root-id (current-editing-block-id)]
+      (is (string? root-id))
+      (zoom-in-shortcut)
+      (util/wait-timeout 400)
+      ;; Retry once in case the first key event gets swallowed by the editor.
+      (when-not (string/includes? (or (current-location-hash) "") root-id)
+        (zoom-in-shortcut)
+        (util/wait-timeout 400))
+      (is (string/includes? (or (current-location-hash) "") root-id))
+      (util/wait-editor-visible)
+      (is (= "focused-root" (util/get-edit-content)))
+      (let [before-hash (current-location-hash)
+            before-block-contents (util/get-page-blocks-contents)]
+        (k/tab)
+        (util/wait-timeout 100)
+        (k/shift+tab)
+        (util/wait-timeout 100)
+        (k/meta+shift+arrow-up)
+        (util/wait-timeout 100)
+        (k/meta+shift+arrow-down)
+        (util/wait-timeout 100)
+        (is (= "focused-root" (util/get-edit-content)))
+        (is (= before-hash (current-location-hash)))
+        (is (= before-block-contents (util/get-page-blocks-contents)))))))
 
 (defn delete []
   (testing "Delete blocks case 1"
@@ -174,3 +224,25 @@
     (assert/assert-is-visible
      ".ls-block a.tag:has-text('tag1')")
     (is (= ["b2"] (util/get-page-blocks-contents)))))
+
+(deftest backspace-empty-first-child-keeps-empty-parent-subtree-test
+  (testing "Backspace in the first empty child of an empty parent deletes only the child"
+    (p/new-page "backspace empty first child")
+    (let [page-uuid (get (ls-api-call! :editor.getBlock "backspace empty first child") "uuid")
+          [parent first-child child2 child3]
+          (ls-api-call! :editor.insertBatchBlock
+                        page-uuid
+                        [{:content ""
+                          :children [{:content ""}
+                                     {:content "child2"}
+                                     {:content "child3"}]}])
+          block-visible? #(pos? (util/count-elements (str "#ls-block-" %)))]
+      (w/click (str "#ls-block-" (get first-child "uuid") " .block-content"))
+      (util/wait-editor-visible)
+      (is (= "" (util/get-edit-content)))
+      (k/backspace)
+      (util/wait-timeout 100)
+      (is (not (block-visible? (get first-child "uuid"))))
+      (is (block-visible? (get parent "uuid")))
+      (is (block-visible? (get child2 "uuid")))
+      (is (block-visible? (get child3 "uuid"))))))

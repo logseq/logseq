@@ -551,6 +551,105 @@
                           (is (not= ":public-key is not ISeqable" (ex-message e))))))
              (p/finally done))))
 
+(deftest ensure-user-rsa-keys-saves-new-ui-password-test
+  (async done
+         (let [upload-calls (atom [])
+               save-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "http://base")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<fetch-user-rsa-key-pair-raw (fn [_base]
+                                                                         (p/resolved nil))
+                               sync-crypt/<upload-user-rsa-key-pair! (fn [base public-key encrypted-private-key]
+                                                                       (swap! upload-calls conj [base public-key encrypted-private-key])
+                                                                       (p/resolved {:public-key public-key
+                                                                                    :encrypted-private-key encrypted-private-key}))
+                               sync-crypt/<save-e2ee-password (fn [password]
+                                                                (swap! save-calls conj password)
+                                                                (p/resolved nil))
+                               platform/current (fn [] {:env {:runtime :browser}})
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved nil))
+                               platform/kv-set! (fn [_platform' _k _value]
+                                                  (p/resolved nil))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (is (= :request-e2ee-password action))
+                                                     (is (= {:reason :generate-user-rsa-key-pair} payload))
+                                                     (p/resolved {:password "new-password"}))
+                               crypt/<generate-rsa-key-pair (fn []
+                                                              (p/resolved {:publicKey :public-key
+                                                                           :privateKey :private-key}))
+                               crypt/<encrypt-private-key (fn [password private-key]
+                                                            (is (= "new-password" password))
+                                                            (is (= :private-key private-key))
+                                                            (p/resolved :encrypted-private-key))
+                               crypt/<export-public-key (fn [public-key]
+                                                          (is (= :public-key public-key))
+                                                          (p/resolved :exported-public-key))
+                               ldb/write-transit-str pr-str]
+                 (sync-crypt/ensure-user-rsa-keys!))
+               (p/then (fn [result]
+                         (is (= "new-password" (:password result)))
+                         (is (= [["http://base"
+                                  (pr-str :exported-public-key)
+                                  (pr-str :encrypted-private-key)]]
+                                @upload-calls))
+                         (is (= ["new-password"] @save-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest ensure-user-rsa-keys-deduplicates-concurrent-new-user-password-request-test
+  (async done
+         (let [ui-calls (atom 0)
+               upload-calls (atom [])
+               save-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "http://base")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<fetch-user-rsa-key-pair-raw (fn [_base]
+                                                                         (p/let [_ (p/delay 10)]
+                                                                           nil))
+                               sync-crypt/<upload-user-rsa-key-pair! (fn [base public-key encrypted-private-key]
+                                                                       (swap! upload-calls conj [base public-key encrypted-private-key])
+                                                                       (p/resolved {:public-key public-key
+                                                                                    :encrypted-private-key encrypted-private-key}))
+                               sync-crypt/<save-e2ee-password (fn [password]
+                                                                (swap! save-calls conj password)
+                                                                (p/resolved nil))
+                               platform/current (fn [] {:env {:runtime :browser}})
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved nil))
+                               platform/kv-set! (fn [_platform' _k _value]
+                                                  (p/resolved nil))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (is (= :request-e2ee-password action))
+                                                     (is (= {:reason :generate-user-rsa-key-pair} payload))
+                                                     (swap! ui-calls inc)
+                                                     (p/resolved {:password "new-password"}))
+                               crypt/<generate-rsa-key-pair (fn []
+                                                              (p/resolved {:publicKey :public-key
+                                                                           :privateKey :private-key}))
+                               crypt/<encrypt-private-key (fn [password private-key]
+                                                            (is (= "new-password" password))
+                                                            (is (= :private-key private-key))
+                                                            (p/resolved :encrypted-private-key))
+                               crypt/<export-public-key (fn [public-key]
+                                                          (is (= :public-key public-key))
+                                                          (p/resolved :exported-public-key))
+                               ldb/write-transit-str pr-str]
+                 (let [task-1 (sync-crypt/ensure-user-rsa-keys!)
+                       task-2 (sync-crypt/ensure-user-rsa-keys!)]
+                   (p/all [task-1 task-2])))
+               (p/then (fn [results]
+                         (is (= 2 (count results)))
+                         (is (= 1 @ui-calls))
+                         (is (= 1 (count @upload-calls)))
+                         (is (= ["new-password"] @save-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
 (deftest decrypt-private-key-headless-ignores-config-e2ee-password-test
   (async done
          (let [old-sync-config @worker-state/*db-sync-config
@@ -614,6 +713,112 @@
                          (is (empty? @fail-calls))))
                (p/catch (fn [e]
                           (is false (str e))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
+(deftest decrypt-private-key-capacitor-missing-native-secret-prompts-and-saves-test
+  (async done
+         (let [old-state @worker-state/*state
+               fail-calls (atom [])
+               decrypt-calls (atom [])
+               ui-calls (atom [])
+               save-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "refresh-token"))
+           (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :browser
+                                                              :owner-source :capacitor}})
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/rejected (ex-info "should-not-read-worker-secret" {})))
+                               platform/save-secret-text! (fn [_platform' _key _text]
+                                                            (p/rejected (ex-info "should-not-save-worker-secret" {})))
+                               platform/read-text! (fn [_platform' _path]
+                                                     (p/rejected (ex-info "should-not-read-browser-file" {})))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (swap! ui-calls conj {:action action
+                                                                           :payload payload})
+                                                     (case action
+                                                       :native-get-e2ee-password
+                                                       (p/resolved {:supported? true
+                                                                    :encrypted-text nil})
+
+                                                       :request-e2ee-password
+                                                       (p/resolved {:password "ui-password"})
+
+                                                       :native-save-e2ee-password
+                                                       (do
+                                                         (swap! save-calls conj payload)
+                                                         (p/resolved {:supported? true}))))
+                               sync-crypt/fail-missing-e2ee-password! (fn [data]
+                                                                       (swap! fail-calls conj data)
+                                                                       (throw (ex-info "missing-e2ee-password" data)))
+                               ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               crypt/<decrypt-private-key (fn [password encrypted-private-key]
+                                                            (swap! decrypt-calls conj [password encrypted-private-key])
+                                                            (p/resolved :private-key))
+                               crypt/<encrypt-text-by-text-password (fn [refresh-token password]
+                                                                      {:cipher [refresh-token password]})
+                               ldb/write-transit-str pr-str]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [private-key]
+                         (is (= :private-key private-key))
+                         (is (= [{:action :native-get-e2ee-password
+                                  :payload {:key "logseq-encrypted-password"}}
+                                 {:action :request-e2ee-password
+                                  :payload {:reason :decrypt-user-rsa-private-key}}
+                                 {:action :native-save-e2ee-password
+                                  :payload {:key "logseq-encrypted-password"
+                                            :encrypted-text (pr-str {:cipher ["refresh-token" "ui-password"]})}}]
+                                @ui-calls))
+                         (is (= [["ui-password" :encrypted-private-key]] @decrypt-calls))
+                         (is (= [{:key "logseq-encrypted-password"
+                                  :encrypted-text (pr-str {:cipher ["refresh-token" "ui-password"]})}]
+                                @save-calls))
+                         (is (empty? @fail-calls))))
+               (p/catch (fn [e]
+                          (is false (str e " ui-calls=" (pr-str @ui-calls)))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
+(deftest decrypt-private-key-capacitor-wrong-ui-password-prompts-once-test
+  (async done
+         (let [old-state @worker-state/*state
+               ui-calls (atom [])
+               save-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "refresh-token"))
+           (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :browser
+                                                              :owner-source :capacitor}})
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (swap! ui-calls conj {:action action
+                                                                           :payload payload})
+                                                     (case action
+                                                       :native-get-e2ee-password
+                                                       (p/resolved {:supported? true
+                                                                    :encrypted-text nil})
+
+                                                       :request-e2ee-password
+                                                       (p/resolved {:password "wrong-password"})
+
+                                                       :native-save-e2ee-password
+                                                       (do
+                                                         (swap! save-calls conj payload)
+                                                         (p/resolved {:supported? true}))))
+                               ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               crypt/<decrypt-private-key (fn [_password _encrypted-private-key]
+                                                            (p/rejected (ex-info "decrypt-private-key" {})))
+                               crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
+                                                                      {:cipher "should-not-save"})]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [_]
+                         (is false "expected decrypt-private-key failure")))
+               (p/catch (fn [e]
+                          (is (= "decrypt-private-key" (ex-message e)))
+                          (is (= [{:action :native-get-e2ee-password
+                                   :payload {:key "logseq-encrypted-password"}}
+                                  {:action :request-e2ee-password
+                                   :payload {:reason :decrypt-user-rsa-private-key}}]
+                                 @ui-calls))
+                          (is (empty? @save-calls))))
                (p/finally (fn []
                             (reset! worker-state/*state old-state)
                             (done)))))))
@@ -854,6 +1059,35 @@
                           (is (= "decrypt-aes-key" (ex-message e)))
                           (is (zero? @clear-user-rsa-cache-calls*))
                           (done)))))))
+
+(deftest user-rsa-key-pair-cache-is-scoped-by-server-test
+  (async done
+         (let [kv-store (atom {})
+               platform-map {:env {:runtime :node :owner-source :electron}}]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               platform/kv-get (fn [_ k] (p/resolved (get @kv-store k)))
+                               platform/kv-set! (fn [_ k v]
+                                                  (if (nil? v)
+                                                    (swap! kv-store dissoc k)
+                                                    (swap! kv-store assoc k v))
+                                                  (p/resolved nil))]
+                 (p/let [pair-a {:public-key "pk-a" :encrypted-private-key "enc-a"}
+                         pair-b {:public-key "pk-b" :encrypted-private-key "enc-b"}
+                         _ (#'sync-crypt/<set-user-rsa-key-pair-to-idb! "https://server-a.example" "user-1" pair-a)
+                         _ (#'sync-crypt/<set-user-rsa-key-pair-to-idb! "https://server-b.example" "user-1" pair-b)
+                         cached-a (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-a.example" "user-1")
+                         cached-b (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-b.example" "user-1")
+                         cached-c (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-c.example" "user-1")]
+                   (is (= "pk-a" (:public-key cached-a)) "returns server-a's key for server-a")
+                   (is (= "pk-b" (:public-key cached-b)) "returns server-b's key for server-b")
+                   (is (nil? cached-c) "cache miss for unknown server")
+                   (p/let [_ (#'sync-crypt/<clear-user-rsa-key-pair-cache! "https://server-a.example" "user-1")
+                           cleared (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-a.example" "user-1")
+                           intact (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-b.example" "user-1")]
+                     (is (nil? cleared) "server-a cleared")
+                     (is (= "pk-b" (:public-key intact)) "server-b untouched"))))
+               (p/catch (fn [e] (is false (str e))))
+               (p/finally (fn [] (done)))))))
 
 (deftest decrypt-text-value-legacy-plaintext-test
   (async done
