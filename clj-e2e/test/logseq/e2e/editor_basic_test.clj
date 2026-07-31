@@ -1767,10 +1767,11 @@
     (dotimes [_ 5] (k/arrow-right))
     (k/enter)
     (util/press-seq "middle-")
-    (is (= ["alpha" "middle-omega"]
-           (take-last 2 (util/get-page-blocks-contents))))
     (assert/assert-have-count util/editor-q 1)
-    (is (= "middle-omega" (util/get-edit-content)))))
+    (is (= "middle-omega" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["alpha" "middle-omega"]
+           (take-last 2 (util/get-page-blocks-contents))))))
 
 (deftest block-reference-autocomplete-and-refresh-test
   (testing "block reference search inserts a UUID reference and rerenders target updates"
