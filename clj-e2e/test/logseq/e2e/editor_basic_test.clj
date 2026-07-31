@@ -1505,12 +1505,18 @@
     (b/new-block "")
     (util/input-command "Code block")
     (assert/assert-is-visible ".CodeMirror, .cm-editor")
-    (w/click ".CodeMirror textarea, .cm-content")
-    (util/press-seq "const value = 1;\nvalue + 1;")
-    (k/esc)
-    (util/refresh-until-graph-loaded)
-    (assert/assert-is-visible
-     (loc/filter ".extensions__code" :has-text "const value = 1"))))
+    (let [code-block-uuid
+          (.getAttribute (w/-query ".ls-block:has(.CodeMirror)") "blockid")]
+      (w/click (.first (w/-query "pre.CodeMirror-line")))
+      (util/input "const value = 1;\nvalue + 1;")
+      (k/esc)
+      (util/exit-edit)
+      (assert/assert-is-visible
+       (loc/filter ".extensions__code" :has-text "const value = 1"))
+      (util/refresh-until-graph-loaded)
+      (is (string/includes?
+           (get (ls-api-call! :editor.getBlock code-block-uuid) "content")
+           "const value = 1")))))
 
 (deftest multi-selection-indent-roundtrip-test
   (testing "multi-indent preserves order/subtrees and is one undo step"
