@@ -1535,8 +1535,10 @@
        (format ".cp__right-sidebar .bullet-container[blockid='%s']" uuid))
       (assert/assert-is-visible
        (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
-      (util/refresh-until-graph-loaded)
-      (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
+      (w/refresh)
+      (assert/assert-is-hidden ".ui__loading, .loading-graph")
+      (assert/assert-is-visible
+       (format ".ls-page-blocks #ls-block-%s" uuid)))))
 
 (deftest selection-direction-and-hierarchical-select-all-test
   (testing "range and select-all remain inside the current visible container"
