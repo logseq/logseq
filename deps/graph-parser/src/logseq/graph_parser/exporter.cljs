@@ -229,13 +229,33 @@
         (swap! page-names-to-uuids assoc page-name new-uuid)
         new-uuid)))
 
+(def ^:private built-in-names-blocked-from-tag-class-conversion
+  "Keyword tag names that must not convert to classes. Colliding with a built-in
+  property/class reuses that entity's uuid and produces an invalid hybrid
+  (logseq/db-test#1009). :card is excluded because it intentionally converts."
+  (let [property-file-ids (->> (keys db-property/built-in-properties)
+                               (map (fn [db-ident]
+                                      ;; keep in sync with get-file-pid special cases
+                                      (or ({:logseq.property/order-list-type :logseq.order-list-type
+                                            :logseq.property/publishing-public? :public} db-ident)
+                                          (keyword (name db-ident)))))
+                               set)
+        class-titles (->> (vals db-class/built-in-classes)
+                          (map (comp keyword string/lower-case :title))
+                          set)]
+    (disj (set/union property-file-ids class-titles) :card)))
+
 (defn- convert-tag? [tag-name {:keys [convert-all-tags? tag-classes]}]
   (and (or convert-all-tags?
            (contains? tag-classes tag-name)
            ;; built-in tags that always convert
            (contains? #{"card"} tag-name))
        ;; Disallow tags as it breaks :block/tags
-       (not (contains? #{"tags"} tag-name))))
+       (not (contains? #{"tags"} tag-name))
+       ;; Avoid converting tags whose names match built-in properties/classes
+       ;; (e.g. #scheduled). That reuses the built-in entity uuid and corrupts it
+       ;; into an invalid hybrid property/class (logseq/db-test#1009).
+       (not (contains? built-in-names-blocked-from-tag-class-conversion (keyword tag-name)))))
 
 (defn- find-existing-class
   "Finds a class entity by unique name and parents and returns its :block/uuid if found.
