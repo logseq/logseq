@@ -281,69 +281,33 @@
 
 (defn- select-blocks-while-scrolling!
   [block-count]
-  (w/eval-js
-   (format
-    "(async () => {
-      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const blocks = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)')).slice(0, %d);
-
-      if (blocks.length !== %d) {
-        throw new Error(`Expected %d blocks, got ${blocks.length}`);
-      }
-
-      const firstContent = blocks[0].querySelector('.block-content');
-      firstContent.scrollIntoView({ block: 'center' });
-      await nextFrame();
-
-      const firstRect = firstContent.getBoundingClientRect();
-      const clientX = Math.floor(firstRect.left + 24);
-      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
-      const pointerInit = {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX,
-        clientY
-      };
-
-      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
-      await delay(100);
-
-      let previousTarget = firstContent;
-      for (const block of blocks.slice(1)) {
-        block.scrollIntoView({ block: 'center' });
-        await nextFrame();
-
-        const target = block.querySelector('.block-main-container');
-        previousTarget.dispatchEvent(new MouseEvent('mouseout', {
-          ...pointerInit,
-          relatedTarget: target
-        }));
-        target.dispatchEvent(new MouseEvent('mouseover', {
-          ...pointerInit,
-          relatedTarget: previousTarget
-        }));
-        previousTarget = target;
-        await delay(30);
-      }
-
-      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 0,
-        clientX,
-        clientY
-      }));
-
-      return Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block.selected'))
-        .map((block) => block.textContent.trim());
-    })();"
-    block-count
-    block-count
-    block-count)))
+  (let [block-selector ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"
+        blocks (vec (take block-count (w/query block-selector)))
+        mouse (.mouse (w/get-page))]
+    (when-not (= block-count (count blocks))
+      (throw (ex-info "Unexpected block count before drag selection"
+                      {:expected block-count
+                       :actual (count blocks)})))
+    (let [first-title (.locator (first blocks) ".block-title-wrap")
+          first-box (.boundingBox first-title)]
+      (.move mouse
+             (+ (.-x first-box) 1)
+             (+ (.-y first-box) (min 20 (/ (.-height first-box) 2))))
+      (.down mouse)
+      (try
+        (doseq [block (rest blocks)]
+          (.scrollIntoViewIfNeeded block)
+          (let [target (.locator block ".block-title-wrap")
+                box (.boundingBox target)]
+            (.move mouse
+                   (+ (.-x box) 1)
+                   (+ (.-y box) (min 20 (/ (.-height box) 2))))
+            (.move mouse
+                   (- (+ (.-x box) (.-width box)) 1)
+                   (+ (.-y box) (min 20 (/ (.-height box) 2))))
+            (util/wait-timeout 30)))
+        (finally
+          (.up mouse))))))
 
 (defn- enable-virtualized-rendering!
   []
@@ -833,8 +797,7 @@
     (let [blocks (mapv #(format "scroll-copy-block-%02d" %) (range 1 26))]
       (b/new-blocks blocks)
       (util/exit-edit)
-      (is (= (count blocks)
-             (count (select-blocks-while-scrolling! (count blocks)))))
+      (select-blocks-while-scrolling! (count blocks))
       (b/copy)
       (let [{:keys [missing-blocks] :as copy-result}
             (wait-for-copied-blocks! blocks)]
