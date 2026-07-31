@@ -195,7 +195,8 @@
   (testing "Graph view modes and settings rebuild the canvas"
     (doseq [title ["graph view alpha" "graph view beta" "graph view gamma"]]
       (page/new-page title)
-      (b/new-block (str "[[graph view alpha]] #" title))
+      (b/new-block "[[graph view alpha]]")
+      (util/set-tag title)
       (util/exit-edit))
     (util/search-and-click "Go to graph view")
     (assert/assert-is-visible "#global-graph.graph-root")

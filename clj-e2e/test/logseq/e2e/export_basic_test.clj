@@ -37,7 +37,8 @@
 
 (deftest graph-export-downloads-browser-artifacts-test
   (testing "browser graph export produces nonempty DB, zip, EDN, Markdown and transit files"
-    (b/new-blocks ["export root" "export child #export-tag"])
+    (b/new-blocks ["export root" "export child"])
+    (util/set-tag "export-tag")
     (b/indent)
     (open-export!)
     (doseq [label ["Export SQLite DB"
