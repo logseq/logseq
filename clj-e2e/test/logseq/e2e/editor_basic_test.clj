@@ -1347,9 +1347,8 @@
     (k/press "Home")
     (k/backspace)
     (is (= "merge previousmerge next" (util/get-edit-content)))
-    (let [merged-uuid (get (ls-api-call! :editor.getBlock
-                                         "merge previousmerge next")
-                           "uuid")]
+    (let [merged-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (util/exit-edit)
       (ls-api-call! :editor.insertBlock merged-uuid "merge preserved child"
                     {:sibling false})
       (assert/assert-is-visible
