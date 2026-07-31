@@ -1734,10 +1734,6 @@
        (loc/filter ".ls-page-blocks" :has-text "deep-level-100"))
       (assert/assert-have-count ".ui__loading, .loading-graph" 0))))
 
-(defn- block-uuid
-  [title]
-  (get (ls-api-call! :editor.getBlock title) "uuid"))
-
 (deftest journals-consecutive-input-test
   (testing "consecutive journal input creates one stable editor and distinct blocks"
     (util/goto-journals)
@@ -1772,22 +1768,24 @@
     (is (= ["alpha" "middle-omega"]
            (take-last 2 (util/get-page-blocks-contents))))))
 
-(deftest block-reference-autocomplete-and-refresh-test
-  (testing "block reference search inserts a UUID reference and rerenders target updates"
+(deftest node-reference-autocomplete-and-refresh-test
+  (testing "node reference search inserts a reference and rerenders target updates"
     (let [source-page (p/get-page-name)]
       (b/new-block "reference autocomplete unique target")
-      (let [target-uuid (block-uuid "reference autocomplete unique target")]
+      (let [target-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
         (b/new-block "")
-        (util/press-seq "((reference autocomplete unique")
-        (assert/assert-is-visible ".ac-block-search")
-        (w/click (.first (loc/filter ".ac-block-search a" :has-text
+        (util/press-seq "[[reference autocomplete unique")
+        (assert/assert-is-visible ".ui__popover-content")
+        (w/click (.first (loc/filter ".ui__popover-content a" :has-text
                                      "reference autocomplete unique target")))
         (util/exit-edit)
         (assert/assert-is-visible
-         (loc/filter ".ls-page-blocks" :has-text "reference autocomplete unique target"))
+         (loc/filter ".page-reference"
+                     :has-text "reference autocomplete unique target"))
         (ls-api-call! :editor.updateBlock target-uuid "reference autocomplete updated target")
         (assert/assert-is-visible
-         (loc/filter ".ls-page-blocks" :has-text "reference autocomplete updated target"))
+         (loc/filter ".page-reference"
+                     :has-text "reference autocomplete updated target"))
         (is (= source-page (p/get-page-name)))))))
 
 (deftest quick-add-moves-all-blocks-to-today-test
