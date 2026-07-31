@@ -1747,17 +1747,14 @@
     (assert/assert-have-count util/editor-q 1)
     (is (= "journal e2e third" (util/get-edit-content)))))
 
-(deftest worker-read-error-is-recoverable-test
-  (testing "a missing worker entity reports the error without poisoning a later read"
+(deftest worker-missing-read-is-recoverable-test
+  (testing "a missing worker entity returns nil without poisoning a later read"
     (let [missing-uuid (str (random-uuid))]
-      (b/new-block (str "((" missing-uuid "))"))
-      (util/exit-edit)
-      (w/click (format "a[data-ref='%s'], .block-ref" missing-uuid))
-      (assert/assert-is-visible
-       (loc/filter ".ui__toast" :has-text "does not exist")))
+      (is (nil? (ls-api-call! :editor.getBlock missing-uuid))))
     (assert/assert-is-hidden ".ui__loading, .loading-graph")
     (b/new-block "worker recovery target")
-    (let [uuid (block-uuid "worker recovery target")]
+    (let [uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (util/exit-edit)
       (is (string? uuid))
       (is (= "worker recovery target"
              (get (ls-api-call! :editor.getBlock uuid) "content"))))))
