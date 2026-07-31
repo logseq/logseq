@@ -1748,10 +1748,11 @@
   (testing "consecutive journal input creates one stable editor and distinct blocks"
     (util/goto-journals)
     (b/new-blocks ["journal e2e first" "journal e2e second" "journal e2e third"])
-    (is (= ["journal e2e first" "journal e2e second" "journal e2e third"]
-           (take-last 3 (util/get-page-blocks-contents))))
     (assert/assert-have-count util/editor-q 1)
-    (is (= "journal e2e third" (util/get-edit-content)))))
+    (is (= "journal e2e third" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["journal e2e first" "journal e2e second" "journal e2e third"]
+           (take-last 3 (util/get-page-blocks-contents))))))
 
 (deftest worker-missing-read-is-recoverable-test
   (testing "a missing worker entity returns nil without poisoning a later read"
