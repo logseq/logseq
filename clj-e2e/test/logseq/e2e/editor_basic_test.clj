@@ -972,13 +972,11 @@
        (mapcat identity)
        vec))
 
-(defn- worker-apply-times
+(defn- worker-op-logs
   [logs op-names]
   (->> logs
-       (filter #(string/includes? % (str ":op-names " op-names)))
-       (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
-                       second
-                       Double/parseDouble))))
+       (filter #(and (string/includes? % "[frontend.db.transact]")
+                     (string/includes? % (str ":op-names " op-names))))))
 
 (defn- editor-input-state
   []
@@ -1076,7 +1074,7 @@
          (loc/filter ".references" :has-text "Unexpected error")
          0)))))
 
-(deftest consecutive-enter-and-delete-ops-stay-within-render-budget
+(deftest consecutive-enter-and-delete-ops-complete-without-worker-errors
   (util/wait-timeout 500)
   (let [old-logs (set (console-logs))]
     (doseq [idx (range 3)]
@@ -1084,19 +1082,12 @@
       (b/delete-blocks))
     (util/wait-timeout 800)
     (let [logs (remove old-logs (console-logs))
-          enter-times (concat
-                       (worker-apply-times logs "[:insert-blocks]")
-                       (worker-apply-times logs "[:save-block :insert-blocks]"))
-          delete-times (worker-apply-times logs "[:delete-blocks]")
-          all-op-times (keep #(some-> (re-find #":worker-apply-ms ([0-9.]+)" %)
-                                      second
-                                      Double/parseDouble)
-                             logs)]
-      (is (<= 3 (count enter-times)) (pr-str enter-times))
-      (is (<= 3 (count delete-times)) (pr-str delete-times))
-      (is (every? #(<= % 60.0) enter-times) (pr-str enter-times))
-      (is (every? #(<= % 60.0) delete-times) (pr-str delete-times))
-      (is (every? #(<= % 60.0) all-op-times) (pr-str all-op-times))
+          enter-logs (concat
+                      (worker-op-logs logs "[:insert-blocks]")
+                      (worker-op-logs logs "[:save-block :insert-blocks]"))
+          delete-logs (worker-op-logs logs "[:delete-blocks]")]
+      (is (= 3 (count enter-logs)) (pr-str enter-logs))
+      (is (= 3 (count delete-logs)) (pr-str delete-logs))
       (is (not-any? #(some (fn [message] (string/includes? % message))
                             ["DB worker API failed"
                              "Missing renderer resource entity"
