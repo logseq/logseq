@@ -1362,6 +1362,7 @@
     (k/press "Home")
     (is (= "0:0" (selection-range)))
     (k/arrow-up)
+    (b/wait-editor-text "first cursor line")
     (is (= "first cursor line" (util/get-edit-content)))
     (util/move-cursor-to-end)
     (let [before (util/get-edit-content)]
