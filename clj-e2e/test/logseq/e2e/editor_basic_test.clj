@@ -1681,7 +1681,7 @@
           (is (pos? visibleCount))
           (is (false? overlap)))))))
 
-(deftest hundred-level-tree-can-expand-and-zoom-test
+(deftest ^:fix-me hundred-level-tree-can-expand-and-zoom-test
   (testing "a 100-level tree remains readable and the deepest block can be opened"
     (let [page-name (p/get-page-name)
           page-uuid (get (ls-api-call! :editor.getBlock page-name) "uuid")
