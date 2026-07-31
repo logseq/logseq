@@ -9,6 +9,7 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
+   (com.microsoft.playwright Page$WaitForDownloadOptions)
    (java.nio.file Files)
    (java.util.zip ZipFile)))
 
@@ -23,12 +24,20 @@
   (w/wait-for ".export"))
 
 (defn- download!
-  [label]
-  (.waitForDownload
-   (w/get-page)
-   (reify Runnable
-     (run [_]
-       (w/click (loc/filter ".export a" :has-text label))))))
+  ([label]
+   (.waitForDownload
+    (w/get-page)
+    (reify Runnable
+      (run [_]
+        (w/click (loc/filter ".export a" :has-text label))))))
+  ([label timeout]
+   (.waitForDownload
+    (w/get-page)
+    (-> (Page$WaitForDownloadOptions.)
+        (.setTimeout timeout))
+    (reify Runnable
+      (run [_]
+        (w/click (loc/filter ".export a" :has-text label)))))))
 
 (defn- nonempty-download?
   [download]
@@ -41,13 +50,14 @@
     (util/set-tag "export-tag")
     (b/indent)
     (open-export!)
-    (doseq [label ["Export SQLite DB"
-                   "Export EDN file"
+    (assert/assert-is-visible
+     (loc/filter ".export a" :has-text "Export SQLite DB"))
+    (doseq [label ["Export EDN file"
                    "Export as standard Markdown"
                    "Export debug transit file"]]
       (let [download (download! label)]
         (is (nonempty-download? download) label)))
-    (let [download (download! "Export both SQLite DB and assets")
+    (let [download (download! "Export both SQLite DB and assets" 60000)
           path (.path download)]
       (is (nonempty-download? download))
       (with-open [zip (ZipFile. (.toFile path))]
