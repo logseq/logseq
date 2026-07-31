@@ -1337,6 +1337,7 @@
     (b/new-blocks ["merge previous" "merge next"])
     (k/press "Home")
     (k/backspace)
+    (util/wait-editor-visible)
     (is (= "merge previousmerge next" (util/get-edit-content)))
     (let [merged-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
       (util/exit-edit)
