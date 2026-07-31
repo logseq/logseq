@@ -1810,7 +1810,7 @@
 (deftest external-property-update-preserves-edit-buffer-test
   (testing "an external property/child delta does not replace unrelated active text"
     (b/new-block "active editor text")
-    (let [uuid (block-uuid "active editor text")]
+    (let [uuid (.getAttribute (util/get-edit-block-container) "blockid")]
       (util/move-cursor-to-end)
       (util/press-seq " local draft")
       (ls-api-call! :editor.upsertBlockProperty uuid "external-property" "updated")
