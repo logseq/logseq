@@ -902,7 +902,7 @@
       ;; Any missing inverse entry means the whole semantic inverse is incomplete.
       ;; Use raw reversed tx instead of partially replaying.
       (when (every? some? inverse-entries)
-        (some->> inverse-entries
+        (some->> (reverse inverse-entries)
                  (mapcat #(if (and (sequential? %)
                                    (sequential? (first %)))
                             %

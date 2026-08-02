@@ -338,6 +338,294 @@
            (content-tree (get node "children"))])
         nodes))
 
+(defn- visible-outline-content-tree
+  []
+  (let [relations
+        (w/eval-js
+         "(() => {
+            const nodes = [...document.querySelectorAll('.ls-page-blocks .ls-block')]
+              .filter(node => !node.closest('.is-comments-area, .ls-comments-area, .ls-comment-row'));
+            return nodes
+              .map((node, index) => {
+                const own = selector => [...node.querySelectorAll(selector)]
+                  .find(child => child.closest('.ls-block') === node);
+                const editor = own('.editor-wrapper textarea');
+                const content = own('.block-content');
+                const title = (editor && editor.offsetParent !== null
+                               ? editor.value
+                               : content?.innerText || node.dataset.blockTitle || '').trim();
+                const parent = node.parentElement.closest('.ls-block');
+                return [index, title, parent ? nodes.indexOf(parent) : null];
+              })
+              .filter(([_index, title]) => title);
+          })()")
+        children-by-parent (group-by #(nth % 2) relations)
+        build-tree (fn build-tree [parent]
+                     (mapv (fn [[index title]]
+                             [title (build-tree index)])
+                           (get children-by-parent parent)))]
+    (build-tree nil)))
+
+(defn- wait-for-content-tree!
+  [_page-name expected]
+  (util/wait-timeout 300)
+  (loop [attempts 40]
+    (let [actual (visible-outline-content-tree)]
+      (if (= expected actual)
+        (do
+          (util/wait-timeout 250)
+          (is (= expected (visible-outline-content-tree))))
+        (if (zero? attempts)
+          (is (= expected actual))
+          (do
+            (util/wait-timeout 100)
+            (recur (dec attempts))))))))
+
+(defn- undo-and-wait-for-content-tree!
+  [page-name expected]
+  (b/undo)
+  (util/wait-timeout 1000)
+  (wait-for-content-tree! page-name expected))
+
+(defn- redo-and-wait-for-content-tree!
+  [page-name expected]
+  (b/redo)
+  (util/wait-timeout 1000)
+  (wait-for-content-tree! page-name expected))
+
+(defn- click-block-by-uuid!
+  [uuid]
+  (w/click (.first (w/-query (str "#block-content-" uuid ":visible")))))
+
+(defn- click-block-by-title!
+  [title]
+  (let [target-selector
+        (w/eval-js
+         (format
+          "(() => {
+             const root = document.querySelector(\".ls-block[data-block-title='%s']\");
+             const own = selector => [...root.querySelectorAll(selector)]
+               .find(node => node.closest('.ls-block') === root);
+             const editor = own('textarea');
+             const target = editor && editor.offsetParent !== null
+               ? editor
+               : own('.block-content');
+             return `#${CSS.escape(target.id)}`;
+           })()"
+          title))]
+    (w/click target-selector)
+    (w/eval-js
+     (format
+      "(() => new Promise((resolve, reject) => {
+         let attempts = 40;
+         const waitForTarget = () => {
+           const root = document.querySelector(\".ls-block[data-block-title='%s']\");
+           const target = [...root.querySelectorAll('textarea')]
+             .find(node => node.closest('.ls-block') === root && node.offsetParent !== null);
+           if (target) {
+             target.focus();
+             resolve(true);
+           } else if (attempts-- === 0) {
+             reject(new Error('Target block editor did not become active'));
+           } else {
+             setTimeout(waitForTarget, 50);
+           }
+         };
+         waitForTarget();
+       }))()"
+      title))))
+
+(defn- move-editor-cursor-to-start!
+  []
+  (w/eval-js
+   "(() => {
+      const editor = document.activeElement?.matches('.editor-wrapper textarea')
+        ? document.activeElement
+        : [...document.querySelectorAll('.editor-wrapper textarea')]
+          .find(node => node.offsetParent !== null);
+      editor.focus();
+      editor.setSelectionRange(0, 0);
+    })();"))
+
+(defn- move-editor-cursor-to!
+  [position]
+  (w/eval-js
+   (format
+    "(() => {
+       const editor = document.activeElement?.matches('.editor-wrapper textarea')
+         ? document.activeElement
+         : [...document.querySelectorAll('.editor-wrapper textarea')]
+           .find(node => node.offsetParent !== null);
+       editor.focus();
+       editor.setSelectionRange(%d, %d);
+     })();"
+    position
+    position)))
+
+(defn- move-editor-cursor-to-end!
+  []
+  (w/eval-js
+   "(() => {
+      const editor = document.activeElement?.matches('.editor-wrapper textarea')
+        ? document.activeElement
+        : [...document.querySelectorAll('.editor-wrapper textarea')]
+          .find(node => node.offsetParent !== null);
+      editor.focus();
+      editor.setSelectionRange(editor.value.length, editor.value.length);
+    })();"))
+
+(deftest boundary-delete-and-backspace-merge-contract-test
+  (testing "boundary edits preserve structure through per-step and full-history undo/redo"
+    (let [page-name "boundary edit history"
+          page-uuid (do
+                      (p/new-page page-name)
+                      (get (ls-api-call! :editor.getBlock page-name) "uuid"))
+          [_left right _child _source _source-child leaf]
+          (ls-api-call! :editor.insertBatchBlock
+                        page-uuid
+                        [{:content "b"}
+                         {:content "c"
+                          :children [{:content "d"}]}
+                         {:content "e"
+                          :children [{:content "f"}]}
+                         {:content "g"}])
+          initial [["b" []]
+                   ["c" [["d" []]]]
+                   ["e" [["f" []]]]
+                   ["g" []]]
+          after-backspace [["bc" [["d" []]]]
+                           ["e" [["f" []]]]
+                           ["g" []]]
+          after-enter [["b" [["c" []]
+                              ["d" []]]]
+                       ["e" [["f" []]]]
+                       ["g" []]]
+          after-delete [["b" [["c" []]
+                               ["d" []]]]
+                        ["e" [["fg" []]]]]
+          assert-tree! (partial wait-for-content-tree! page-name)]
+      (click-block-by-uuid! (get right "uuid"))
+      (util/wait-editor-visible)
+      (move-editor-cursor-to-start!)
+      (k/backspace)
+      (assert-tree! after-backspace)
+      (is (= "bc" (util/get-edit-content)))
+      (is (= 1
+             (w/eval-js
+              "document.querySelector('.editor-wrapper textarea').selectionStart")))
+      (undo-and-wait-for-content-tree! page-name initial)
+      (redo-and-wait-for-content-tree! page-name after-backspace)
+
+      (click-block-by-title! "bc")
+      (util/wait-editor-visible)
+      (move-editor-cursor-to! 1)
+      (is (= ["bc" 1]
+             (w/eval-js
+              "(() => {
+                 const editor = document.activeElement;
+                 return [editor.value, editor.selectionStart];
+               })()")))
+      (k/enter)
+      (util/wait-timeout 1000)
+      (assert-tree! after-enter)
+      (undo-and-wait-for-content-tree! page-name after-backspace)
+      (redo-and-wait-for-content-tree! page-name after-enter)
+
+      (click-block-by-title! "e")
+      (util/wait-editor-visible)
+      (move-editor-cursor-to-start!)
+      (k/backspace)
+      (assert-tree! after-enter)
+
+      (click-block-by-title! "d")
+      (util/wait-editor-visible)
+      (move-editor-cursor-to-end!)
+      (k/delete)
+      (assert-tree! after-enter)
+
+      (click-block-by-title! "f")
+      (util/wait-editor-visible)
+      (move-editor-cursor-to-end!)
+      (k/delete)
+      (assert-tree! after-delete)
+      (is (nil? (ls-api-call! :editor.getBlock (get leaf "uuid"))))
+      (undo-and-wait-for-content-tree! page-name after-enter)
+      (redo-and-wait-for-content-tree! page-name after-delete)
+
+      (undo-and-wait-for-content-tree! page-name after-enter)
+      (undo-and-wait-for-content-tree! page-name after-backspace)
+      (undo-and-wait-for-content-tree! page-name initial))))
+
+(deftest backspace-merge-skips-inline-comments-and-preserves-thread-test
+  (let [page-name "commented boundary merge"]
+    (p/new-page page-name)
+    (let [page-uuid (get (ls-api-call! :editor.getBlock page-name) "uuid")
+          [left right]
+          (ls-api-call! :editor.insertBatchBlock
+                        page-uuid
+                        [{:content "left"}
+                         {:content "right"}])
+          left-uuid (get left "uuid")
+          right-uuid (get right "uuid")
+          initial [["left" []]
+                   ["right" []]]
+          after-merge [["leftright" []]]
+          after-child [["leftright" [["child" []]]]]
+          after-split [["left" [["right" []]
+                                 ["child" []]]]]
+          direct-child-order
+          (fn []
+            (w/eval-js
+             (format
+              "(() => {
+                 const root = document.querySelector('#block-content-%s').closest('.ls-block');
+                 return [...root.querySelectorAll('.ls-block')]
+                   .filter(node => node.parentElement.closest('.ls-block') === root)
+                   .map(node => node.dataset.commentsArea === 'true'
+                     ? 'Comments'
+                     : node.dataset.blockTitle);
+               })()"
+              left-uuid)))]
+      (w/click (str "#block-content-" left-uuid))
+      (util/wait-editor-visible)
+      (util/search-and-click "Add comment")
+      (w/fill ".ls-comment-add textarea" "boundary comment")
+      (w/click ".ls-comment-submit")
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+      (w/click (str "#block-content-" right-uuid))
+      (util/wait-editor-visible)
+      (move-editor-cursor-to-start!)
+      (k/backspace)
+      (util/wait-timeout 300)
+      (is (= "leftright"
+             (get (ls-api-call! :editor.getBlock left-uuid) "content")))
+      (is (nil? (ls-api-call! :editor.getBlock right-uuid)))
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+      (undo-and-wait-for-content-tree! page-name initial)
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+      (redo-and-wait-for-content-tree! page-name after-merge)
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+
+      (ls-api-call! :editor.insertBlock left-uuid "child" {:sibling false})
+      (wait-for-content-tree! page-name after-child)
+
+      (click-block-by-title! "leftright")
+      (move-editor-cursor-to! 4)
+      (k/enter)
+      (util/wait-timeout 1000)
+      (wait-for-content-tree! page-name after-split)
+      (is (= ["Comments" "right" "child"] (direct-child-order)))
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+      (undo-and-wait-for-content-tree! page-name after-child)
+      (redo-and-wait-for-content-tree! page-name after-split)
+      (is (= ["Comments" "right" "child"] (direct-child-order)))
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')")
+
+      (undo-and-wait-for-content-tree! page-name after-child)
+      (undo-and-wait-for-content-tree! page-name after-merge)
+      (undo-and-wait-for-content-tree! page-name initial)
+      (assert/assert-is-visible ".ls-comment-row :text('boundary comment')"))))
+
 (defn- drag-block!
   [source-title target-title placement]
   (let [source-block (w/-query

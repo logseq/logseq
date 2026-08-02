@@ -568,16 +568,25 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
+(declare protected-comment-block?)
+
+(defn- get-child-order-bounds
+  [target-block]
+  (loop [child (ldb/get-down target-block)
+         start-order nil]
+    (if (and child (protected-comment-block? child))
+      (recur (ldb/get-right-sibling child) (:block/order child))
+      [start-order (:block/order child)])))
+
 (defn- get-block-orders
   [blocks target-block sibling? keep-block-order?]
   (if (and keep-block-order? (every? :block/order blocks))
     (map :block/order blocks)
-    (let [target-order (:block/order target-block)
-          start-order (when sibling? target-order)
-          end-order (if sibling?
-                      (:block/order (ldb/get-right-sibling target-block))
-                      (let [first-child (ldb/get-down target-block)]
-                        (:block/order first-child)))
+    (let [[start-order end-order]
+          (if sibling?
+            [(:block/order target-block)
+             (:block/order (ldb/get-right-sibling target-block))]
+            (get-child-order-bounds target-block))
           orders (db-order/gen-n-keys (count blocks) start-order end-order)]
       orders)))
 

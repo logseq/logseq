@@ -324,11 +324,6 @@
           snd-block-text (string/triml (subs value selection-end))]
       [fst-block-text snd-block-text])))
 
-(defn- block-map-has-children?
-  [block]
-  (boolean (or (:block.temp/has-children? block)
-               (seq (:block/children block)))))
-
 (defn- ref-db-id
   [x]
   (if (map? x) (:db/id x) x))
@@ -355,6 +350,34 @@
   [block]
   (boolean (or (seq (worker-children block))
                (:block.temp/has-children? block))))
+
+(defn- ordinary-outline-children
+  [block]
+  (remove comments-model/protected-comment-block? (worker-children block)))
+
+(defn- block-map-has-children?
+  [block]
+  (boolean (or (:block.temp/has-children? block)
+               (seq (ordinary-outline-children block)))))
+
+(defn- block-with-worker-children
+  [block result]
+  (if-let [loaded-block (some-> result worker-block-with-children)]
+    (let [block' (assoc block :children (vec (worker-children loaded-block)))]
+      (assoc block'
+             :block.temp/has-children?
+             (boolean (seq (ordinary-outline-children block')))))
+    block))
+
+(defn- boundary-merge-allowed?
+  [source-block target-block]
+  (boolean
+   (and source-block
+        target-block
+        (not (comments-model/protected-comment-block? source-block))
+        (not (comments-model/protected-comment-block? target-block))
+        (or (= (block-parent-id source-block) (block-parent-id target-block))
+            (empty? (ordinary-outline-children source-block))))))
 
 (declare save-block-aux! save-current-block! <left-sibling-or-parent)
 
@@ -528,26 +551,31 @@
    {:block/keys [uuid]
     :as block}
    value]
-  (let [block-self? (block-self-alone-when-insert? config uuid)
+  (let [repo (state/get-current-repo)
+        block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
         selection-start (util/get-selection-start input)
-        selection-end (util/get-selection-end input)
-        [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-        current-block (current-block-with-title block fst-block-text)
-        current-block (apply dissoc current-block retract-attributes)
-        new-m {:block/uuid (ldb/new-block-id)
-               :block/title snd-block-text}
-        next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                              new-m)
-                       (wrap-parse-block))
-        sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
-        container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                         (:container-id config))
-        config (assoc config :editor/edit-block-fn
-                      (inserted-block-edit-fn current-block next-block container-id))
-        result (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                                        :keep-uuid? true})]
-    [result sibling? next-block]))
+        selection-end (util/get-selection-end input)]
+    (p/let [worker-result (when-let [block-id (:db/id block)]
+                            (db-async/<get-block-with-children
+                             repo block-id {:children? true}))]
+      (let [block (block-with-worker-children block worker-result)
+            [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+            current-block (current-block-with-title block fst-block-text)
+            current-block (apply dissoc current-block retract-attributes)
+            new-m {:block/uuid (ldb/new-block-id)
+                   :block/title snd-block-text}
+            next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                  new-m)
+                           (wrap-parse-block))
+            sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
+            container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                             (:container-id config))
+            config (assoc config :editor/edit-block-fn
+                          (inserted-block-edit-fn current-block next-block container-id))
+            result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                            :keep-uuid? true})]
+        [result sibling? next-block]))))
 
 (defn clear-when-saved!
   []
@@ -858,6 +886,28 @@
      {:container (util/rec-get-blocks-container block-container)})
     (util/get-prev-block-non-collapsed-non-embed block-container)))
 
+(defn- comment-block-node?
+  [node]
+  (boolean
+   (when-let [closest-fn (some-> node (gobj/get "closest"))]
+     (.call closest-fn node
+            ".ls-inline-comments, .ls-comments-area, .is-comments-area"))))
+
+(defn- previous-outline-block-node
+  [block-container config]
+  (loop [node (previous-block-node block-container config)]
+    (if (comment-block-node? node)
+      (recur (previous-block-node node config))
+      node)))
+
+(defn- next-outline-block-node
+  [block-container]
+  (loop [node (util/get-next-block-non-collapsed block-container
+                                                  {:exclude-property? true})]
+    (if (comment-block-node? node)
+      (recur (util/get-next-block-non-collapsed node {:exclude-property? true}))
+      node)))
+
 (defn- mounted-block
   [node]
   (when node
@@ -929,9 +979,36 @@
                       (db-async/<get-block-sibling repo block-id :left))]
          (or left (:block/parent block))))))
 
+(defn- <comment-areas-for-block
+  [repo block]
+  (if-let [block-uuid (:block/uuid block)]
+    (state/<invoke-db-worker :thread-api/get-comment-threads-for-block repo block-uuid)
+    (p/resolved [])))
+
+(defn- retarget-comment-areas!
+  [comment-areas source-block target-block]
+  (when (and (seq comment-areas)
+             (:block/uuid source-block)
+             (:block/uuid target-block))
+    (let [source-ref [:block/uuid (:block/uuid source-block)]
+          target-ref [:block/uuid (:block/uuid target-block)]
+          tx-data (mapcat
+                   (fn [comments-area]
+                     (let [comments-ref [:block/uuid (:block/uuid comments-area)]]
+                       (cond-> [[:db/retract comments-ref
+                                  comments-model/comments-blocks-property
+                                  source-ref]
+                                [:db/add comments-ref
+                                 comments-model/comments-blocks-property
+                                 target-ref]]
+                         (= (block-parent-id comments-area) (:db/id source-block))
+                         (conj [:db/add comments-ref :block/parent target-ref]))))
+                   comment-areas)]
+      (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+
 (defn- delete-block-with-previous!
   [{:keys [block current-block next-block prev-block new-content edit-block-f
-           input-empty? delete-concat?]}]
+           input-empty? delete-concat? source-comment-areas target-comment-areas]}]
   (let [concat-prev-block? (boolean (and prev-block new-content))]
     (cond
       (and prev-block (:block/name prev-block)
@@ -942,6 +1019,7 @@
       (and concat-prev-block?
            input-empty?
            (not (editor-block-preserved-on-empty-title-merge? prev-block))
+           (empty? target-comment-areas)
            delete-concat?)
       (let [children (worker-children current-block)]
         (ui-outliner-tx/transact!
@@ -964,6 +1042,7 @@
            (string/blank? (:block/title prev-block))
            (not= (:db/id prev-block) (block-parent-id block))
            (not (editor-block-preserved-on-empty-title-merge? prev-block))
+           (empty? target-comment-areas)
            (not delete-concat?))
       (ui-outliner-tx/transact!
         (assoc (merge {:outliner-op :delete-blocks}
@@ -983,7 +1062,7 @@
                             (and preserve-prev-block? next-block
                                  (= (:db/id prev-block) (:db/id block))) next-block
                             :else block)
-            children (worker-children delete-target)]
+            children (ordinary-outline-children delete-target)]
         (p/do!
          (mobile-util/mobile-focus-hidden-input)
          (ui-outliner-tx/transact!
@@ -991,6 +1070,7 @@
                          (block-handler/outliner-tx-meta delete-target))
             edit-block-f
             (assoc :editor/edit-block-fn (fn [_rows] (edit-block-f))))
+          (retarget-comment-areas! source-comment-areas delete-target prev-block)
           (when (seq children)
             (outliner-op/move-blocks! children prev-block {:sibling? false}))
           (delete-block-aux! delete-target)
@@ -1012,44 +1092,40 @@
                          nil)]
       (p/let [loaded-previous-edit (loaded-block-edit loaded-block value (:container-id config))
               editor-block (or current-block block)
-              block-e (if delete-concat?
-                        editor-block
-                        (p/let [result (db-async/<get-block-with-children repo block-id {:children? true})
-                                persisted-block (worker-block-with-children result)]
-                          (if persisted-block
-                            (merge persisted-block
-                                   (dissoc editor-block
-                                           :children
-                                           :block/children
-                                           :block.temp/has-children?))
-                            editor-block)))]
-        (when (:block/parent block-e)
-          (let [has-children? (seq (worker-children block-e))
-                block block-e
-                current-block (or current-block block)
-                sibling-or-parent-node (previous-block-node block-container config)
-                previous-block (mounted-block sibling-or-parent-node)]
-            (when-not (and has-children? (not delete-concat?))
-              (p/let [left (<left-sibling-or-parent repo block previous-block)]
-                (let [left-has-children? (and left
-                                              (or (= (:db/id left) (block-parent-id block))
-                                                  (worker-has-children? left)))
-                      delete-empty-parent? (and delete-concat?
-                                                (= (:db/id current-block) (block-parent-id next-block))
-                                                (not (worker-has-children? next-block)))]
-                  (when-not (and has-children? left-has-children? (not delete-empty-parent?))
-                    (p/let [{:keys [prev-block new-content edit-block-f]}
-                            (or loaded-previous-edit
-                                (move-to-prev-block repo sibling-or-parent-node value))]
-                      (delete-block-with-previous!
-                       {:block block
-                        :current-block current-block
-                        :next-block next-block
-                        :prev-block prev-block
-                        :new-content new-content
-                        :edit-block-f edit-block-f
-                        :input-empty? input-empty?
-                        :delete-concat? delete-concat?}))))))))))))
+              persisted-source (when-not delete-concat?
+                                 (p/let [result (db-async/<get-block-with-children
+                                                          repo block-id {:children? true})]
+                                   (worker-block-with-children result)))
+              source-block (if delete-concat?
+                             next-block
+                             (if persisted-source
+                               (merge persisted-source
+                                      (dissoc editor-block
+                                              :children
+                                              :block/children
+                                              :block.temp/has-children?))
+                               editor-block))]
+        (when (:block/parent source-block)
+          (let [current-block (or current-block source-block)
+                sibling-or-parent-node (previous-outline-block-node block-container config)]
+            (p/let [{:keys [prev-block new-content edit-block-f]}
+                    (or loaded-previous-edit
+                        (move-to-prev-block repo sibling-or-parent-node value))]
+              (when (boundary-merge-allowed? source-block prev-block)
+                (p/let [[source-comment-areas target-comment-areas]
+                        (p/all [(<comment-areas-for-block repo source-block)
+                                (<comment-areas-for-block repo prev-block)])]
+                  (delete-block-with-previous!
+                   {:block source-block
+                    :current-block current-block
+                    :next-block next-block
+                    :prev-block prev-block
+                    :new-content new-content
+                    :edit-block-f edit-block-f
+                    :input-empty? input-empty?
+                    :delete-concat? delete-concat?
+                    :source-comment-areas source-comment-areas
+                    :target-comment-areas target-comment-areas}))))))))))
 
 (defn move-blocks!
   [blocks target opts]
@@ -3054,12 +3130,13 @@
                                 {:children? true})
           hydrated-current-block (worker-block-with-children current-block-result)
           collapsed? (util/collapsed? hydrated-current-block)
-          next-block (when-not collapsed?
-                       (when-let [next-node (util/get-next-block-non-collapsed
-                                             (util/rec-get-node (state/get-input) "ls-block")
-                                             {:exclude-property? true})]
-                         (when-let [next-block-id (some-> (dom/attr next-node "blockid") uuid)]
-                           (db-async/<get-block repo next-block-id {:children? false}))))]
+          next-node (when-not collapsed?
+                      (next-outline-block-node
+                       (util/rec-get-node (state/get-input) "ls-block")))
+          next-block (when-let [next-block-id (some-> (dom/attr next-node "blockid") uuid)]
+                       (p/let [result (db-async/<get-block-with-children
+                                              repo next-block-id {:children? true})]
+                         (worker-block-with-children result)))]
     (cond
       collapsed?
       nil
@@ -3072,9 +3149,7 @@
             editor-state (assoc (get-state)
                                 :block-id (:block/uuid next-block)
                                 :value (:block/title next-block)
-                                :block-container (util/get-next-block-non-collapsed
-                                                  (util/rec-get-node (state/get-input) "ls-block")
-                                                  {:exclude-property? true})
+                                :block-container next-node
                                 :current-block hydrated-current-block
                                 :next-block next-block
                                 :delete-concat? true)]
