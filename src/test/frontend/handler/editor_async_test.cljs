@@ -16,6 +16,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
+            [frontend.worker.handler.comments :as worker-comments]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.outliner.op :as outliner-op]
@@ -54,8 +55,15 @@
        (ldb/write-transit-str
         (mapv (fn [{:keys [id opts]}]
                 (let [block (block-by-worker-id test-db id)]
-                  (if (:children? opts)
-                    block
+                  (cond
+                    (nil? block) nil
+                    (:children? opts)
+                    {:block block
+                     :children (mapv #(d/pull test-db
+                                              test-worker-block-pull
+                                              (:db/id %))
+                                     (ldb/get-children test-db (:db/id block)))}
+                    :else
                     {:block block})))
               requests))))
 
@@ -70,6 +78,13 @@
       (p/resolved
        (when sibling
          (d/pull test-db test-worker-block-pull (:db/id sibling)))))
+
+    :thread-api/get-comment-threads-for-block
+    (let [[repo block-uuid] args]
+      (p/resolved
+       (worker-comments/get-comment-threads-for-block
+        (conn/get-db repo)
+        block-uuid)))
 
     (p/resolved nil)))
 
@@ -289,6 +304,11 @@
                         (fn [& _]
                           (swap! worker-fetches inc)
                           (p/resolved nil))
+                        state/<invoke-db-worker
+                        (fn [api & _]
+                          (if (= :thread-api/get-comment-threads-for-block api)
+                            (p/resolved [])
+                            (p/resolved nil)))
                         db-transact/apply-outliner-ops
                         (fn [_db ops _opts]
                           (reset! applied-ops ops)
@@ -399,39 +419,48 @@
                                   (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
                                       "Merging must keep the previous block renderable as an asset")))})))
 
-(deftest-async backspace-before-block-merges-into-previous-blank-comments-block
+(deftest-async backspace-merge-preserves-children-and-retargets-comments
   (load-test-files
-   [{:page {:block/title "page1"}
+   [{:page {:block/title "boundary-merge-page"}
      :blocks
-     [{:block/title "b1"}
-      {:block/title ""
-       :build/tags [:logseq.class/Comments]}
-      {:block/title "after"}]}])
+     [{:block/title "before"}
+      {:block/title "left"}
+      {:block/title "right"
+       :build/children [{:block/title "ordinary child"}
+                        {:block/title "Comments"
+                         :build/tags [:logseq.class/Comments]
+                         :build/children [{:block/title "Reply"}]}]}]}])
   (p/let [conn (conn/get-db test-helper/test-db false)
-          block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/title "after"]
-                            [?p :block/name "page1"]
-                            [?b :block/page ?p]]
-                          @conn)
-                     ffirst)]
-    (delete-block @conn block
-                  {:on-delete (fn []
-                                (let [visible-blocks (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
-                                                                 :where
-                                                                 [?p :block/name "page1"]
-                                                                 [?b :block/page ?p]
-                                                                 [?b :block/title]
-                                                                 [(missing? $ ?b :logseq.property/deleted-at)]]
-                                                               @conn)
-                                                          (map first))
-                                      visible-titles (map :block/title visible-blocks)
-                                      comments-blocks (filter comments-model/comments-area? visible-blocks)]
-                                  (is (= ["b1" "after"] visible-titles))
-                                  (is (= "after" (:block/title (first comments-blocks)))
-                                      "Backspace before the following block should merge its title into the Comments block")
-                                  (is (= #{:logseq.class/Comments}
-                                         (set (map :db/ident (:block/tags (first comments-blocks)))))
-                                      "Merging must keep the previous block tagged as a Comments block")))})))
+          left (test-helper/find-block-by-content "left")
+          right (test-helper/find-block-by-content "right")
+          ordinary-child (test-helper/find-block-by-content "ordinary child")
+          comments-area (test-helper/find-block-by-content "Comments")
+          reply (test-helper/find-block-by-content "Reply")
+          _ (conn/transact! test-helper/test-db
+                            [[:db/add (:db/id comments-area)
+                              comments-model/comments-blocks-property
+                              (:db/id right)]])]
+    (delete-block
+     @conn
+     right
+     {:on-delete
+      (fn []
+        (let [db @conn
+              left' (d/entity db [:block/uuid (:block/uuid left)])
+              ordinary-child' (d/entity db [:block/uuid (:block/uuid ordinary-child)])
+              comments-area' (d/entity db [:block/uuid (:block/uuid comments-area)])
+              reply' (d/entity db [:block/uuid (:block/uuid reply)])]
+          (is (= "leftright" (:block/title left')))
+          (is (= (:db/id left') (:db/id (:block/parent ordinary-child')))
+              "Same-level Backspace must move ordinary children under the surviving block")
+          (is (= (:db/id left') (:db/id (:block/parent comments-area')))
+              "A single-block Comments area must follow the surviving block")
+          (is (= #{(:db/id left')}
+                 (set (map :db/id
+                           (get comments-area' comments-model/comments-blocks-property))))
+              "The Comments area must target the surviving block")
+          (is (= (:db/id comments-area') (:db/id (:block/parent reply')))
+              "Comment replies must remain under their Comments area")))})))
 
 (deftest-async delete-at-empty-asset-end-merges-next-block-into-asset-block
   (load-test-files
@@ -488,63 +517,6 @@
                  "Delete at the end of an empty asset title should merge the next title into the asset block")
              (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
                  "Delete merge must keep the current block renderable as an asset"))))
-        (p/finally (fn [] nil)))))
-
-(deftest-async delete-at-empty-comments-end-merges-next-block-into-comments-block
-  (load-test-files
-   [{:page {:block/title "page1"}
-     :blocks
-     [{:block/title "b1"}
-      {:block/title ""
-       :build/tags [:logseq.class/Comments]}
-      {:block/title "after"}]}])
-  (p/let [conn (conn/get-db test-helper/test-db false)
-          comments-block (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
-                                      :where
-                                      [?p :block/name "page1"]
-                                      [?b :block/page ?p]
-                                      [?b :block/tags :logseq.class/Comments]]
-                                    @conn)
-                               ffirst)
-          next-block (->> (d/q '[:find (pull ?b [*])
-                                 :where [?b :block/title "after"]
-                                 [?p :block/name "page1"]
-                                 [?b :block/page ?p]]
-                               @conn)
-                          ffirst)
-          comments-dom #js {:getAttribute #({"blockid" (str (:block/uuid comments-block))
-                                             "containerid" nil} %)}]
-    (-> (p/with-redefs [state/<invoke-db-worker <test-db-worker
-                        db-transact/apply-outliner-ops apply-test-outliner-ops!
-                        state/get-edit-content (constantly "")
-                        util/get-prev-block-non-collapsed-non-embed (constantly comments-dom)
-                        editor/edit-block! (constantly nil)]
-          (p/do!
-           (editor/delete-block-inner!
-            test-helper/test-db
-            {:block-id (:block/uuid next-block)
-             :value (:block/title next-block)
-             :config {}
-             :block-container #js {}
-             :current-block comments-block
-             :next-block next-block
-             :delete-concat? true})
-           (let [visible-blocks (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
-                                            :where
-                                            [?p :block/name "page1"]
-                                            [?b :block/page ?p]
-                                            [?b :block/title]
-                                            [(missing? $ ?b :logseq.property/deleted-at)]]
-                                          @conn)
-                                     (map first))
-                 visible-titles (map :block/title visible-blocks)
-                 comments-blocks (filter comments-model/comments-area? visible-blocks)]
-             (is (= ["b1" "after"] visible-titles))
-             (is (= "after" (:block/title (first comments-blocks)))
-                 "Delete at the end of an empty Comments title should merge the next title into the Comments block")
-             (is (= #{:logseq.class/Comments}
-                    (set (map :db/ident (:block/tags (first comments-blocks)))))
-                 "Delete merge must keep the current block tagged as a Comments block"))))
         (p/finally (fn [] nil)))))
 
 (deftest-async top-level-blank-enter-does-not-query-right-sibling
