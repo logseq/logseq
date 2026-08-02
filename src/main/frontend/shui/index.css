@@ -263,7 +263,7 @@
         }
 
         .ui__toast-close {
-          @apply ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/50 transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-1px] focus-visible:outline-primary;
+          @apply ml-auto flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground/50 transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-1px] focus-visible:outline-primary;
         }
 
         .ui__toast-status-icon {
