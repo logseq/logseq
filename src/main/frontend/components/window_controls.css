@@ -8,6 +8,7 @@
     -webkit-app-region: no-drag;
     background: transparent;
     border-radius: 0;
+    cursor: pointer;
     width: 48px;
     height: 48px;
   }
