@@ -138,10 +138,12 @@
 (hsx/defc left-menu-button
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
-    [:button.#left-menu.cp__header-left-menu.button.icon
-     {:on-click on-click}
-     (ui/icon "menu-2" {:size ui/icon-size})]
-    (t :header/toggle-left-sidebar)))
+    (shui/button-ghost-icon
+     :menu-2 {:id "left-menu"
+              :class "cp__header-left-menu"
+              :on-click on-click})
+    (t :header/toggle-left-sidebar)
+    {:trigger-props {:id "left-menu"}}))
 
 (defn bug-report-url []
   (let [ua (.-userAgent js/navigator)
@@ -539,14 +541,15 @@
         ;; search button for non-mobile
         (when current-repo
           (ui/with-shortcut :go/search "right"
-            [:button.button.icon#search-button
-             {:data-keep-selection true
-              :on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
-             (ui/icon "search" {:size ui/icon-size})]
-            (t :nav/search))))]
+            (shui/button-ghost-icon
+             :search {:id "search-button"
+                      :data-keep-selection true
+                      :on-click #(do (when (or (mobile-util/native-android?)
+                                               (mobile-util/native-iphone?))
+                                       (state/set-left-sidebar-open! false))
+                                     (state/pub-event! [:go/search]))})
+            (t :nav/search)
+            {:trigger-props {:id "search-button"}})))]
 
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
