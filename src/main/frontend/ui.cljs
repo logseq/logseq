@@ -816,7 +816,7 @@
            (dissoc opts :style :class))]))
 
 (hsx/defc with-shortcut
-  [shortcut-key _position content & [title]]
+  [shortcut-key position content & [title tooltip-opts]]
   (let [shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
         config            (state/config-for-repo (rfx/use-sub [:config])
                                                  (state/get-current-repo))
@@ -833,7 +833,9 @@
                   (when first-binding
                     (shui/shortcut first-binding {:glow? false}))]
                  (keyboard-shortcut-from-config shortcut-key))
-               {:trigger-props {:as-child true}})
+               {:trigger-props (merge {:as-child true}
+                                      (:trigger-props tooltip-opts))
+                :content-props {:side position}})
       content)))
 
 (hsx/defc progress-bar
