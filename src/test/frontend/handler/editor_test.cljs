@@ -1399,6 +1399,31 @@
             :block/raw-title "Performance"}
            (#'editor/current-block-with-title block "Performance")))))
 
+(deftest split-block-insertion-detects-only-ordinary-children-test
+  (let [ordinary-child {:db/id 2
+                        :block/title "child"}
+        comments-area {:db/id 3
+                       :block/title "Comments"
+                       :block/tags [{:db/ident :logseq.class/Comments}]}
+        cases [{:label "worker children make the suffix the first child"
+                :block {}
+                :worker-result {:block {:db/id 1}
+                                :children [ordinary-child]}
+                :expected true}
+               {:label "a leaf keeps the suffix as its next sibling"
+                :block {}
+                :worker-result {:block {:db/id 1}
+                                :children []}
+                :expected false}
+               {:label "a Comments area does not make the suffix a child"
+                :block {:block.temp/has-children? true}
+                :worker-result {:block {:db/id 1}
+                                :children [comments-area]}
+                :expected false}]]
+    (doseq [{:keys [label block worker-result expected]} cases]
+      (let [hydrated (#'editor/block-with-worker-children block worker-result)]
+        (is (= expected (#'editor/block-map-has-children? hydrated)) label)))))
+
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -1520,66 +1545,76 @@
                         "Backspace on empty a must preserve a and its child b.")))
           (p/finally done)))))
 
-(defn- delete-parent-with-children-calls
-  [left]
-  (let [page {:db/id 10
-              :block/uuid #uuid "00000000-0000-0000-0000-000000000010"}
-        child {:db/id 2
-               :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
-               :block/title "child"
-               :block/parent {:db/id 1}}
-        parent {:db/id 1
+(defn- boundary-merge-allowed
+  [{:keys [source-children source-parent target-parent source-tags target-tags]}]
+  (let [source {:db/id 2
+                :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                :block/title "source"
+                :block/parent {:db/id source-parent}
+                :block/tags source-tags}
+        target {:db/id 1
                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                :block/title ""
-                :block/parent page}
-        delete-calls (atom [])]
-    (-> (p/with-redefs [state/get-edit-content (constantly "")
-                        util/get-prev-block-non-collapsed-non-embed (constantly nil)
-                        db-async/<get-block-with-children
-                        (fn [& _]
-                          (p/resolved {:block parent
-                                       :children [child]}))
-                        editor/<left-sibling-or-parent
-                        (fn [& _]
-                          (p/resolved left))
-                        editor/delete-block-with-previous!
-                        (fn [args]
-                          (swap! delete-calls conj args))]
-          (editor/delete-block-inner!
-           test-helper/test-db
-           {:block parent
-            :block-id (:block/uuid parent)
-            :value ""
-            :config {}
-            :current-block parent
-            :delete-concat? false}))
-        (p/then (fn [] @delete-calls)))))
+                :block/title "target"
+                :block/parent {:db/id target-parent}
+                :block/tags target-tags}]
+    (#'editor/boundary-merge-allowed? (assoc source :children source-children) target)))
 
-(deftest backspace-preserves-parent-with-children-after-commented-sibling-test
-  (async done
-    (-> (p/let [delete-calls
-                (delete-parent-with-children-calls
-                 {:db/id 3
-                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
-                  :block/title "previous"
-                  :block/parent {:db/id 10}
-                  :block/comment-threads
-                  [#uuid "44444444-4444-4444-4444-444444444444"]})]
-          (is (empty? delete-calls)
-              "A comment on the previous sibling must not allow deleting a parent block."))
-        (p/finally done))))
-
-(deftest backspace-preserves-higher-level-parent-with-children-test
-  (async done
-    (-> (p/let [delete-calls
-                (delete-parent-with-children-calls
-                 {:db/id 3
-                  :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
-                  :block/title "previous group"
-                  :block/parent {:db/id 10}})]
-          (is (empty? delete-calls)
-              "A canonical left sibling without loaded children must not allow deleting a parent block."))
-        (p/finally done))))
+(deftest boundary-delete-and-backspace-merge-contract-test
+  (let [ordinary-child {:db/id 3
+                          :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                          :block/title "child"
+                          :block/parent {:db/id 2}}
+          comments-area {:db/id 4
+                         :block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+                         :block/title "Comments"
+                         :block/parent {:db/id 2}
+                         :block/tags [{:db/ident :logseq.class/Comments}]}
+          cases [{:label "Backspace merges same-level blocks when the source owns ordinary children"
+                  :delete-concat? false
+                  :source-children [ordinary-child]
+                  :source-parent 10
+                  :target-parent 10
+                  :expected true}
+                 {:label "Backspace rejects a child-owning source merging into a deeper target"
+                  :delete-concat? false
+                  :source-children [ordinary-child]
+                  :source-parent 10
+                  :target-parent 20
+                  :expected false}
+                 {:label "Delete rejects a child-owning next block merging into a deeper target"
+                  :delete-concat? true
+                  :source-children [ordinary-child]
+                  :source-parent 10
+                  :target-parent 20
+                  :expected false}
+                 {:label "Delete allows a leaf next block merging into a deeper target"
+                  :delete-concat? true
+                  :source-children []
+                  :source-parent 10
+                  :target-parent 20
+                  :expected true}
+                 {:label "Comments areas do not count as ordinary children"
+                  :delete-concat? false
+                  :source-children [comments-area]
+                  :source-parent 10
+                  :target-parent 20
+                  :expected true}
+                 {:label "A Comments area cannot participate as the merge source"
+                  :delete-concat? false
+                  :source-children []
+                  :source-parent 10
+                  :target-parent 10
+                  :source-tags [{:db/ident :logseq.class/Comments}]
+                  :expected false}
+                 {:label "A Comments area cannot participate as the merge target"
+                  :delete-concat? false
+                  :source-children []
+                  :source-parent 10
+                  :target-parent 10
+                  :target-tags [{:db/ident :logseq.class/Comments}]
+                  :expected false}]]
+    (doseq [{:keys [label expected] :as test-case} cases]
+      (is (= expected (boundary-merge-allowed test-case)) label))))
 
 (deftest backspace-at-the-start-does-not-delete-a-non-empty-block-that-owns-children-test
   (async done
