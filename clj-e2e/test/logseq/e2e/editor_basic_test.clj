@@ -1042,7 +1042,9 @@
   (let [old-logs (set (console-logs))]
     (doseq [idx (range 3)]
       (b/new-block (str "render budget " idx))
-      (b/delete-blocks))
+      (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+        (b/delete-blocks)
+        (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
     (util/wait-timeout 800)
     (let [logs (remove old-logs (console-logs))
           enter-logs (concat
@@ -1515,13 +1517,19 @@
           parent (ls-api-call! :editor.appendBlockInPage page-name "collapse parent")
           uuid (get parent "uuid")]
       (ls-api-call! :editor.insertBlock uuid "collapse child" {:sibling false})
-      (w/click (format ".ls-page-blocks .bullet-container[blockid='%s']" uuid))
+      (w/click (format ".ls-page-blocks #control-%s" uuid))
       (assert/assert-is-hidden
        (loc/filter (format "#ls-block-%s" uuid) :has-text "collapse child"))
       (ls-api-call! :editor.openInRightSidebar uuid)
       (assert/assert-is-visible (format ".cp__right-sidebar #ls-block-%s" uuid))
+      (assert/assert-is-visible
+       (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
       (w/click
-       (format ".cp__right-sidebar .bullet-container[blockid='%s']" uuid))
+       (format ".cp__right-sidebar #control-%s" uuid))
+      (assert/assert-is-hidden
+       (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
+      (w/click
+       (format ".cp__right-sidebar #control-%s" uuid))
       (assert/assert-is-visible
        (loc/filter ".cp__right-sidebar" :has-text "collapse child"))
       (w/refresh)
