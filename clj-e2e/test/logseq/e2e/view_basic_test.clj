@@ -217,5 +217,4 @@
    (util/get-by-text "Copied view nodes" false))
   (let [content (w/eval-js "navigator.clipboard.readText()")]
     (is (string/includes? content "Alpha table object"))
-    (is (string/includes? content "Beta table object")))
-  (util/click-all! ".ui__toast.success button"))
+    (is (string/includes? content "Beta table object"))))

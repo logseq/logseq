@@ -118,13 +118,6 @@
   [q]
   (w/count* (w/-query q)))
 
-(defn click-all!
-  [q]
-  (loop []
-    (when (w/visible? q)
-      (w/click (.first (w/-query q)))
-      (recur))))
-
 (defn blocks-count
   "Blocks count including page title"
   []
