@@ -99,7 +99,8 @@
 @layer components {
   /* ui components */
   .ui__button {
-    &.as-classic {
+    &.as-classic,
+    &.as-depth-1 {
       /* depth = 1*/
       box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
       inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
