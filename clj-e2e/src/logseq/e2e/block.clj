@@ -33,6 +33,21 @@
   (w/fill util/editor-q text)
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
+(defn- focus-new-block!
+  [previous-editor-id]
+  (let [new-editor (loc/filter ".editor-wrapper"
+                               :has "textarea"
+                               :has-not (str "#" previous-editor-id))]
+    (try
+      (assert/assert-is-visible new-editor)
+      (catch Error _error
+        (open-last-block)
+        (when (= previous-editor-id
+                 (.getAttribute (w/-query ".editor-wrapper textarea") "id"))
+          (util/move-cursor-to-end)
+          (k/enter))
+        (assert/assert-is-visible new-editor)))))
+
 (defn new-block
   [title]
   (when-not (util/get-editor)
@@ -41,12 +56,9 @@
     (is (some? last-id))
     (util/move-cursor-to-end)
     (k/enter)
+    (focus-new-block! last-id)
     (when (seq title)
       (util/press-seq title))
-    (assert/assert-is-visible
-     (loc/filter ".editor-wrapper"
-                 :has "textarea"
-                 :has-not (str "#" last-id)))
     (assert/assert-editor-mode)
     (is (= title (util/get-edit-content)))))
 
@@ -89,12 +101,29 @@
 (def undo #(k/press "ControlOrMeta+z" {:delay 100}))
 (def redo #(k/press "ControlOrMeta+y" {:delay 100}))
 
+(defn- wait-for-editor-x-change
+  [x1 moved?]
+  (loop [attempts-left 40]
+    (if-let [editor (util/get-editor)]
+      (let [[x2 _] (util/bounding-xy editor)]
+        (if (or (moved? x1 x2) (zero? attempts-left))
+          x2
+          (do
+            (util/wait-timeout 50)
+            (recur (dec attempts-left)))))
+      (if (zero? attempts-left)
+        x1
+        (do
+          (util/wait-timeout 50)
+          (recur (dec attempts-left)))))))
+
 (defn- indent-outdent
   [indent?]
   (let [editor (util/get-editor)
         [x1 _] (util/bounding-xy editor)
+        moved? (if indent? < >)
         _ (if indent? (k/tab) (k/shift+tab))
-        [x2 _] (util/bounding-xy editor)]
+        x2 (wait-for-editor-x-change x1 moved?)]
     (if indent?
       (is (< x1 x2))
       (is (> x1 x2)))))

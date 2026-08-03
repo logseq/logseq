@@ -76,15 +76,22 @@
   (use-external-store subs/subscribe-block! subs/block-snapshot block-uuid))
 
 (defn use-block-prefetch
-  "Keep canonical block loads alive for a render-ahead window."
+  "Keep canonical block loads alive for a render-ahead window and report when
+  the whole window has settled."
   [block-uuids]
-  (let [block-uuids (use-stable-key (vec block-uuids))]
-    (react/useEffect
-     (fn []
-       (let [unsubscribes
-             (mapv #(subs/subscribe-block! % (fn [])) block-uuids)]
-         #(run! (fn [unsubscribe] (unsubscribe)) unsubscribes)))
-     #js [block-uuids])))
+  (let [block-uuids (use-stable-key (vec block-uuids))
+        subscribe (react/useCallback
+                   (fn [listener]
+                     (let [unsubscribes
+                           (mapv #(subs/subscribe-block! % listener) block-uuids)]
+                       #(run! (fn [unsubscribe] (unsubscribe)) unsubscribes)))
+                   #js [block-uuids])
+        get-snapshot (react/useCallback
+                      (fn []
+                        (every? #(not= :loading (:status (subs/block-snapshot %)))
+                                block-uuids))
+                      #js [block-uuids])]
+    (react/useSyncExternalStore subscribe get-snapshot get-snapshot)))
 
 (defn use-block-projection
   [block-uuid project]

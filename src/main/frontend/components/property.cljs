@@ -226,7 +226,7 @@
                          :dropdown? false
                          :close-modal? false
                          :new-case-sensitive? true
-                         :show-new-when-not-exact-match? true
+                         :show-new-when-not-exact-match? (some? properties)
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                          :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!

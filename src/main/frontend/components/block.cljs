@@ -1918,7 +1918,7 @@
         selected? (contains? selected block-id)
         block-uuid (:db/id block)]
     (when-not selected?
-      (util/clear-selection!)
+      (state/clear-selection!)
       (editor-handler/highlight-block! block-uuid))
     (editor-handler/block->data-transfer! block-uuid event false)
 
@@ -3728,10 +3728,11 @@
     (util/stop-propagation event)
     (haptics/haptics)
     (let [block-uuids (state/get-selection-block-ids)
+          dragging-block @*dragging-block
           repo (state/get-current-repo)
           move-to @*move-to']
       (p/let [selected (db-async/<get-blocks repo block-uuids {:children? false})
-              blocks (if (seq selected) (keep :block selected) [@*dragging-block])
+              blocks (if (seq selected) (keep :block selected) [dragging-block])
               blocks (remove-nils blocks)]
         (if (seq blocks)
           ;; dnd block moving in current Logseq instance
@@ -5053,9 +5054,27 @@
                                 :container-id container-id)
                          block-uuids)])))
 
+(defn- grouped-blocks-container
+  [config groups]
+  [:div.flex.flex-col.references-blocks-wrap
+   (for [[page page-blocks] groups
+         :let [page-blocks (vec (remove nil? page-blocks))]
+         :when (seq page-blocks)]
+     [:div.my-2.references-blocks-item
+      {:key (str "page-" (:db/id page))}
+      (ui/foldable
+       [:div.with-foldable-page
+        (page-cp config page)]
+       (fn []
+         (blocks-container config page-blocks))
+       {:debug-id page})])])
+
 (defn ->hiccup
   [blocks config option]
   [:div.content
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
-   (blocks-container config blocks)])
+   (if (and (:group-by-page? config)
+            (vector? (first blocks)))
+     (grouped-blocks-container config blocks)
+     (blocks-container config blocks))])

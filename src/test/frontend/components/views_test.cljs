@@ -297,18 +297,37 @@
       (is (= [row-uuid] @calls)
           "A mounted row supplies one UUID and owns no loader closure."))))
 
+(deftest filter-value-renders-referenced-uuid-content-test
+  (let [value-uuid (random-uuid)
+        table {:data-fns {:set-filters! (fn [_])}
+               :state {:filters {:filters [[:user.property/ref :is #{value-uuid}]]}}}
+        property {:db/ident :user.property/ref
+                  :block/title "Reference"}]
+    (with-redefs [db-hooks/use-block
+                  (fn [block-uuid]
+                    (when (= value-uuid block-uuid)
+                      {:block/uuid block-uuid
+                       :block/title "Referenced value"}))]
+      (is (string/includes?
+           (render-static
+            (views/filter-value-select {} table property #{value-uuid} :is 0 {}))
+           "Referenced value")))))
+
 (deftest view-prefetch-window-holds-row-subscriptions-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 100))
+        medium-rows (mapv (fn [_] (random-uuid)) (range 625))
         large-rows (mapv (fn [_] (random-uuid)) (range 2000))
         subscribed (atom [])
-        unsubscribed (atom [])
-        original-use-effect (gobj/get react "useEffect")]
-    (is (= rows
+        unsubscribed (atom [])]
+    (is (= (subvec rows 15 65)
            (#'views/view-prefetch-window rows 40 40)))
     (is (= (subvec rows 0 10)
            (#'views/view-prefetch-window (subvec rows 0 10) 90 99))
         "A filtered view can shrink before Virtuoso reports its new range.")
-    (is (= (subvec large-rows 500 1500)
+    (is (= (subvec medium-rows 0 50)
+           (#'views/view-prefetch-window medium-rows 0 30))
+        "A medium view only retains a bounded render-ahead window.")
+    (is (= (subvec large-rows 975 1025)
            (#'views/view-prefetch-window large-rows 1000 1000))
         "Large views retain one bounded window around the rendered rows.")
     (with-redefs [subs/subscribe-block!
@@ -317,19 +336,20 @@
                     #(swap! unsubscribed conj block-uuid))]
       (let [cleanup (atom nil)]
         (with-use-sync-external-store
-          (fn [_subscribe get-snapshot _get-server-snapshot]
+          (fn [subscribe get-snapshot _get-server-snapshot]
+            (reset! cleanup (subscribe (fn [])))
             (get-snapshot))
           (fn []
-            (gobj/set react "useEffect"
-                      (fn [effect _deps]
-                        (reset! cleanup (effect))))
-            (try
-              (db-hooks/use-block-prefetch rows)
-              (finally
-                (gobj/set react "useEffect" original-use-effect)))))
+            (is (false? (db-hooks/use-block-prefetch rows)))))
         (is (= rows @subscribed))
         (@cleanup)
         (is (= rows @unsubscribed))))))
+
+(deftest initial-view-prefetch-count-follows-the-viewport-test
+  (is (= 30 (#'views/initial-view-prefetch-count 990 33)))
+  (is (= 50 (#'views/initial-view-prefetch-count 10000 33))
+      "Initial table hydration remains bounded on tall viewports.")
+  (is (= 1 (#'views/initial-view-prefetch-count 0 33))))
 
 (deftest gallery-loading-row-keeps-the-card-size-test
   (with-redefs [db-hooks/use-block (constantly nil)]

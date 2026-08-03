@@ -607,7 +607,8 @@
                     (mapv #(hash-map :content %) blocks)
                     {:sibling false})))
   (ls-api-call! :editor.exitEditingMode false)
-  (ls-api-call! :app.pushState "all-journals" nil nil))
+  (util/goto-journals)
+  (w/wait-for "#journals"))
 
 (defn- seed-journals-with-linked-ref!
   []
@@ -626,7 +627,8 @@
                               (get target "name"))}]
                   {:sibling false})
     (ls-api-call! :editor.exitEditingMode false)
-    (ls-api-call! :app.pushState "all-journals" nil nil)))
+    (util/goto-journals)
+    (w/wait-for "#journals")))
 
 (defn- scroll-journals-to-text!
   [text]
@@ -1063,7 +1065,8 @@
 
 (deftest backspace-at-start-removes-pending-block-dom-test
   (b/new-blocks ["source"])
-  (b/new-block "pending block")
+  (b/new-block "")
+  (b/save-block "pending block")
   (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
     (util/move-cursor-to-start)
     (k/backspace)
@@ -1151,6 +1154,7 @@
       (choose-move-target! target-page)
       (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)" 0)
       (p/goto-page target-page)
+      (w/wait-for ".ls-page-blocks .ls-block:has-text('editing block')")
       (is (contains? (set (util/get-page-blocks-contents)) "editing block")))))
 
 (deftest shift-open-page-in-sidebar
