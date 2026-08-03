@@ -45,20 +45,21 @@ html:not(.is-mobile) .ls-tag-table {
     margin-left: var(--ls-tag-table-spine-offset, -20px);
 }
 
-/* ── Right bleed ────────────────────────────────────────────────────────────
-   A tag table's left edge stays in the block column's gutter, but its rows are
-   allowed to run right, out into the empty margin beside the column, so more
-   property columns are readable before you have to scroll.
+/* ── Table bleed ────────────────────────────────────────────────────────────
+   Applies to any table carrying `.ls-bleedable-table`: the tag / property
+   object tables, linked and unlinked references, and inline {{query}} results.
+   Their rows may run out into the empty margin on either side of the block
+   column, so more columns are readable before you have to scroll.
 
    Only `.ls-table-rows` grows. The toolbar, the filter chips and the section
-   rule all stay on the block column, so the page's right edge still reads as
-   one line — it is only the table body that breaks out.
+   rule all stay on the block column, so the page's edges still read as one
+   line — it is only the table body that breaks out.
 
-   `is-bleeding` and `--ls-table-bleed-right` are set by `table-scroll-proxy`
-   (views.cljs), which measures the free margin rather than deriving it from
-   100vw: with the right sidebar open, 100vw overstates it. The class is absent
-   whenever there is nothing to grow into — right sidebar, tag dialog, narrow
-   window, mobile — and then none of this applies. */
+   `is-bleeding` and the two `--ls-table-bleed-*` values are set by
+   `table-scroll-proxy` (views.cljs), which measures the free margin rather than
+   deriving it from 100vw: with the right sidebar open, 100vw overstates it. The
+   class is absent whenever there is nothing to grow into — right sidebar, tag
+   dialog, narrow window, mobile — and then none of this applies. */
 /* The widening happens on `.ls-foldable-content-inner`, not on `.ls-table-rows`
    itself. That wrapper carries `overflow: hidden` for the collapse animation
    (ui.css), so a wider scroller nested inside it would just be clipped back to
@@ -69,12 +70,51 @@ html:not(.is-mobile) .ls-tag-table {
    The reset keeps grouped tag tables honest: each group renders its own
    foldable inside the view body, and those must not take the bleed a second
    time. */
-html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-foldable-content-inner {
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-foldable-content-inner {
+    margin-left: calc(-1 * var(--ls-table-bleed-left, 0px));
     margin-right: calc(-1 * var(--ls-table-bleed-right, 0px));
 }
 
-html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-view-body .ls-foldable-content-inner {
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-view-body .ls-foldable-content-inner {
+    margin-left: 0;
     margin-right: 0;
+}
+
+/* The two sides are not symmetrical. On the right the table is free to run wide
+   immediately — the columns past the block column are simply readable. On the
+   left the first column must still start ON the block column when the table is
+   at rest, or the page loses its spine; it should only break out as you scroll.
+
+   Padding gives exactly that: the scroller's box reaches the window edge, but
+   its content starts a bleed's width in, and because leading padding inside a
+   scroll container scrolls away, swiping right walks the columns out into that
+   strip. The scroll travel is unchanged — the box and the scrollable content
+   both grew by the same amount. */
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-rows {
+    padding-left: var(--ls-table-bleed-left, 0px);
+}
+
+/* Sticky offsets resolve against the scroller's content box, so the frozen
+   row-selection column would come to rest on the block column while the rest of
+   the table slid out past it on the left — a 32px opaque seam in the middle of
+   the row. Pulling its threshold out by the bleed lets it travel with the table
+   instead, so the whole thing reads as one unit with nothing to its left. */
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-rows .sticky-columns {
+    left: calc(-1 * var(--ls-table-bleed-left, 0px));
+}
+
+/* Everything in the view body that is NOT the table has to give the left bleed
+   back, or it would hang off the block column along with the scroller. That is
+   the filter chips and the group headers ("Pages", the date groups) — the group
+   TABLES underneath keep the bleed, since they are tables like any other. */
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .filters-row,
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-view-body .ls-foldable-header {
+    padding-left: var(--ls-table-bleed-left, 0px);
+}
+
+/* A tag table's chips also carry the Name-column lead-in on top of that. */
+html:not(.is-mobile) .ls-tag-table.is-bleeding .filters-row {
+    padding-left: calc(var(--ls-tag-table-name-col-offset, 40px) + var(--ls-table-bleed-left, 0px));
 }
 
 /* The scrollbar belongs to whatever element has overflow-x, so a bled scroller
@@ -82,11 +122,11 @@ html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-view-body .ls-foldable-conten
    Hide it and let `.ls-table-scroll-proxy` — which stays at the block column's
    width — be the visible, draggable one. Swiping over the table body still
    scrolls the real element directly; the proxy just mirrors it. */
-html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-rows {
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-rows {
     scrollbar-width: none;
 }
 
-html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-rows::-webkit-scrollbar {
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-rows::-webkit-scrollbar {
     display: none;
 }
 
@@ -102,18 +142,85 @@ html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-rows::-webkit-scrollbar
     overflow-x: auto;
     overflow-y: hidden;
     contain: inline-size;
-    /* Its parent has been widened along with the table, so pull the bleed back
-       off to land on the block column, where the rest of the page ends. */
-    width: calc(100% - var(--ls-table-bleed-right, 0px));
+    /* Its parent has been widened along with the table, so pull both bleeds
+       back off to land on the block column, where the rest of the page sits. */
+    margin-left: var(--ls-table-bleed-left, 0px);
+    width: calc(100% - var(--ls-table-bleed-left, 0px) - var(--ls-table-bleed-right, 0px));
 }
 
-html:not(.is-mobile) .ls-tag-table.is-bleeding > * > * > .ls-view-body .ls-table-scroll-proxy,
-html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-scroll-proxy {
+/* When the header detaches it is positioned from the scroller's border box, so
+   it has to carry the same leading padding the scroller does — otherwise its
+   columns sit a bleed's width left of the rows they label. In the attached
+   state it is absolutely positioned inside `.relative`, which already lives
+   past that padding, so the rule is scoped to `.ls-fixed` only. */
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-header.ls-fixed {
+    padding-left: var(--ls-table-bleed-left, 0px);
+}
+
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding > * > * > .ls-view-body .ls-table-scroll-proxy,
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-scroll-proxy {
     display: block;
 }
 
 .ls-table-scroll-proxy-spacer {
     height: 1px;
+}
+
+/* A table that fits, or very nearly fits, still leaves a sliver of overflow
+   after the bleed is capped — enough for a bar whose thumb fills its own track.
+   That reads as a stray rule under the table, not as a control, so it is taken
+   out of the flow entirely and the row below moves up. `table-scroll-proxy`
+   sets this whenever fewer than `scroll-proxy-idle-threshold` pixels are
+   hidden. */
+html:not(.is-mobile) .ls-bleedable-table.is-bleeding .ls-table-scroll-proxy.is-idle {
+    display: none;
+}
+
+/* This bar is the table's only scroll affordance, so it has to be findable
+   rather than merely present. The app's `.force-visible-scrollbar` paints a
+   `rgba(0, 0, 0, .1)` thumb, which is fine over a white page and invisible over
+   a dark one; these use the gray scale instead, so both themes get the same
+   contrast step.
+
+   The track is drawn, not left blank: an empty rail is what tells you how much
+   table there is and how far along it you are, before you have touched it. The
+   thumb sits inside the rail via a transparent border with `background-clip:
+   content-box`, so the two read as separate surfaces, and it lightens on hover
+   and again while dragging. `min-width` keeps it grabbable on very wide tables
+   where a proportional thumb would shrink to a dot. */
+/* No `scrollbar-width` / `scrollbar-color` here on purpose: setting either one
+   opts Chrome into the standard scrollbar path and makes it ignore every
+   `::-webkit-scrollbar` rule below — including the `appearance: none` that
+   turns this from a macOS overlay bar (zero height, only visible mid-gesture)
+   into a classic one that always occupies its 10px. */
+.ls-table-scroll-proxy::-webkit-scrollbar {
+    -webkit-appearance: none;
+    height: 10px;
+}
+
+.ls-table-scroll-proxy::-webkit-scrollbar-track {
+    background-color: var(--lx-gray-03, var(--rx-gray-03));
+    border-radius: 999px;
+}
+
+.ls-table-scroll-proxy::-webkit-scrollbar-thumb {
+    min-width: 32px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    /* gray-09 is the first step that clears WCAG 1.4.11's 3:1 for a non-text UI
+       component against the page background: measured 3.62:1 in dark, where
+       gray-08 only reaches 2.24:1. Hover and drag step up from there. */
+    background-color: var(--lx-gray-09, var(--rx-gray-09));
+    transition: background-color 120ms ease-out;
+}
+
+.ls-table-scroll-proxy::-webkit-scrollbar-thumb:hover {
+    background-color: var(--lx-gray-10, var(--rx-gray-10));
+}
+
+.ls-table-scroll-proxy::-webkit-scrollbar-thumb:active {
+    background-color: var(--lx-gray-11, var(--rx-gray-11));
 }
 
 /* The toolbar row and the filter chips have no checkbox column in front of

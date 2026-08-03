@@ -2025,16 +2025,22 @@
                             (set-items-rendered! true)))}
        (:disable-virtualized? option)))))
 
+(def ^:private scroll-proxy-idle-threshold
+  "Hidden pixels below which the stand-in scrollbar is not worth showing."
+  8)
+
 (hsx/defc table-scroll-proxy
   "Stand-in horizontal scrollbar for a tag table that bleeds past the page's
    block column.
 
-   The real scroller (`.ls-table-rows`) is widened rightwards into the empty
-   margin next to the block column so more columns are readable, and its own
-   scrollbar is hidden. This element stays at the block column's width and
-   drives that scroller, so the bar still lines up with the rest of the page
-   while the table itself runs wider. Trackpad swipes go straight to the real
-   scroller; this only mirrors them.
+   The real scroller (`.ls-table-rows`) is widened into the empty margin on
+   both sides of the block column so more columns are readable, and its own
+   scrollbar is hidden. On the left the extra width is taken up by padding, so
+   the first column still starts on the block column at rest and only breaks
+   out as you scroll; on the right it is free immediately. This element stays
+   at the block column's width and drives that scroller, so the bar still lines
+   up with the rest of the page while the table runs wider. Trackpad swipes go
+   straight to the real scroller; this only mirrors them.
 
    Everything is opt-in via the `is-bleeding` class, which is only added when
    there is actually free margin to grow into. In the right sidebar, in the tag
@@ -2042,39 +2048,92 @@
    table keeps its native scrollbar and this element stays hidden."
   [*rows-ref]
   (let [*proxy-ref (hooks/use-ref nil)
-        [scroll-width set-scroll-width!] (hooks/use-state 0)]
+        [scroll-width set-scroll-width!] (hooks/use-state 0)
+        [scrollable? set-scrollable?!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
        (when-let [^js rows (hooks/deref *rows-ref)]
          (let [^js proxy (hooks/deref *proxy-ref)
-               ^js wrapper (.closest rows ".ls-tag-table")
+               ^js wrapper (.closest rows ".ls-bleedable-table")
                ^js main (.closest rows ".cp__sidebar-main-content")
                ^js spacing (.closest rows ".scrollbar-spacing")
                measure!
                (fn []
-                 ;; Free margin = from the main column's right edge out to the
-                 ;; scroll container's padding edge. Measured rather than
+                 ;; Free margin on each side = from the main column's edge out
+                 ;; to the scroll container's padding edge. Measured rather than
                  ;; derived from 100vw, which overstates it whenever the right
                  ;; sidebar is open.
-                 (let [free (if (and wrapper main spacing)
-                              (let [pad (or (js/parseFloat
-                                             (.-paddingRight (js/getComputedStyle spacing)))
-                                            0)]
-                                (js/Math.round
-                                 (max 0 (- (- (.-right (.getBoundingClientRect spacing)) pad)
-                                           (.-right (.getBoundingClientRect main))))))
-                              0)]
+                 (let [measurable? (and wrapper main spacing)
+                       edge (fn [side]
+                              ;; Measured to the scroll container's BORDER box,
+                              ;; not its padding box: that 32px/16px padding is
+                              ;; the page's reading margin, and the table is
+                              ;; meant to reach the sidebar edge and the window
+                              ;; edge, not stop one margin short of them.
+                              (if measurable?
+                                ;; Measured from the table's own wrapper, not
+                                ;; from the main column: the wrapper already
+                                ;; sits 20px into the block gutter, and using
+                                ;; the column instead would overshoot by that
+                                ;; much and slide the table under the sidebar.
+                                (let [sr (.getBoundingClientRect spacing)
+                                      mr (.getBoundingClientRect wrapper)]
+                                  (js/Math.round
+                                   (max 0 (if (= side :left)
+                                            (- (.-left mr) (.-left sr))
+                                            (- (.-right sr) (.-right mr))))))
+                                0))
+                       free-left (edge :left)
+                       free-right (edge :right)
+                       ;; How wide the columns actually are. Not derivable from
+                       ;; scrollWidth: the header carries `min-width: 100%`, so
+                       ;; once the content fits, scrollWidth just reports the
+                       ;; viewport back. Summing the header cells gives the real
+                       ;; figure, independent of how wide the scroller is.
+                       natural (->> (.querySelectorAll rows ".ls-table-header-cell")
+                                    (array-seq)
+                                    (map #(.-offsetWidth ^js %))
+                                    (reduce + 0))
+                       ;; What the scroller would measure with no bleed at all.
+                       current (fn [k] (or (some-> (.-style wrapper)
+                                                   (.getPropertyValue k)
+                                                   (js/parseFloat))
+                                           0))
+                       current (fn [k] (let [v (current k)] (if (js/isNaN v) 0 v)))
+                       column (- (.-clientWidth rows)
+                                 (current "--ls-table-bleed-left")
+                                 (current "--ls-table-bleed-right"))
+                       ;; Grow only as far as the columns need. Bleeding further
+                       ;; would stretch the header's `min-width: 100%` filler out
+                       ;; to the window edge, which reads as a cut-off column
+                       ;; rather than as a table that ends.
+                       overflow (max 0 (- natural column))
+                       right (if (pos? natural) (min free-right overflow) free-right)
+                       ;; The left side exists so columns can walk out under the
+                       ;; page margin as you scroll. With nothing left to scroll
+                       ;; it would only open an empty strip beside the table.
+                       left (if (and (pos? natural) (<= (- natural (+ column right)) 0))
+                              0
+                              free-left)]
                    (when wrapper
-                     (if (> free 1)
-                       (do (.setProperty (.-style wrapper) "--ls-table-bleed-right" (str free "px"))
+                     (if (> (+ left right) 1)
+                       (do (.setProperty (.-style wrapper) "--ls-table-bleed-left" (str left "px"))
+                           (.setProperty (.-style wrapper) "--ls-table-bleed-right" (str right "px"))
                            (.add (.-classList wrapper) "is-bleeding"))
-                       (do (.removeProperty (.-style wrapper) "--ls-table-bleed-right")
+                       (do (.removeProperty (.-style wrapper) "--ls-table-bleed-left")
+                           (.removeProperty (.-style wrapper) "--ls-table-bleed-right")
                            (.remove (.-classList wrapper) "is-bleeding"))))
-                   ;; The proxy is `free` px narrower than the real scroller, so
-                   ;; its spacer has to be `free` px shorter too — otherwise its
-                   ;; travel is longer than the scroller's and the last stretch
-                   ;; of the drag moves nothing.
-                   (set-scroll-width! (max 0 (- (.-scrollWidth rows) free)))))
+                   ;; The proxy is `left + right` px narrower than the real
+                   ;; scroller, so its spacer has to be that much shorter too —
+                   ;; otherwise its travel is longer than the scroller's and the
+                   ;; last stretch of the drag moves nothing.
+                   (set-scroll-width! (max 0 (- (.-scrollWidth rows) (+ left right))))
+                   ;; Below this there is nothing worth dragging to: the thumb
+                   ;; would fill its track and read as a stray rule under the
+                   ;; table rather than as a control. Take the bar away and give
+                   ;; its height back.
+                   (set-scrollable?! (> (- (.-scrollWidth rows) (.-clientWidth rows))
+                                        scroll-proxy-idle-threshold))))
                from-rows (fn [] (when proxy (set! (.-scrollLeft proxy) (.-scrollLeft rows))))
                from-proxy (fn [] (when proxy (set! (.-scrollLeft rows) (.-scrollLeft proxy))))
                ^js observer (js/ResizeObserver. measure!)]
@@ -2089,8 +2148,10 @@
              (when proxy (.removeEventListener proxy "scroll" from-proxy))
              (when wrapper (.remove (.-classList wrapper) "is-bleeding"))))))
      [])
-    [:div.ls-table-scroll-proxy.force-visible-scrollbar
-     {:ref *proxy-ref :aria-hidden true}
+    ;; Not `.force-visible-scrollbar`: that paints a `rgba(0,0,0,.1)` thumb,
+    ;; which is invisible on a dark background. This one is themed in views.css.
+    [:div.ls-table-scroll-proxy
+     {:ref *proxy-ref :aria-hidden true :class (when-not scrollable? "is-idle")}
      [:div.ls-table-scroll-proxy-spacer {:style {:width scroll-width}}]]))
 
 (hsx/defc table-view
@@ -2770,7 +2831,20 @@
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
-        pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
+        configured-pins (:logseq.property.table/pinned-columns view-entity)
+        ;; A tag table's rows run wider than the block column, so the name has
+        ;; to travel with the frozen group — otherwise scrolling right strands
+        ;; the row-selection checkbox alone in the middle of the row, masking a
+        ;; 32px strip of whatever column happens to be under it. Only applied
+        ;; while the view has no pins of its own, so unpinning still sticks.
+        pin-name? (and (contains? #{:class-objects :property-objects
+                                    :linked-references :unlinked-references
+                                    :query-result}
+                                  (:view-feature-type option*))
+                       (empty? configured-pins))
+        pinned-properties (set (cond->> (map :db/ident configured-pins)
+                                 pin-name?
+                                 (cons :block/title)
                                  id?
                                  (cons :id)
                                  select?

@@ -29,7 +29,7 @@
      (fn []
        (set-data! (init-result result* view-entity)))
      [result*])
-    [:div.query-result.w-full
+    [:div.query-result.ls-bleedable-table.w-full
      (views/view
       {:config (assoc {:custom-query? true} :sidebar? (:sidebar? config))
        :title-key :view.table/live-query-title

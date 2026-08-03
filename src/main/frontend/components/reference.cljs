@@ -75,7 +75,7 @@
       (ui/catch-error
        (ui/component-error
         "Linked References: Unexpected error.")
-       [:div.references
+       [:div.references.ls-bleedable-table
         (references-cp entity (assoc config :refs-total-count refs-total-count))]))))
 
 (hsx/defc unlinked-references
@@ -91,7 +91,7 @@
      [id])
     (when (and id has-references?)
       (let [config (assoc config :highlight-query (:block/title entity))]
-        [:div.unlinked-references
+        [:div.unlinked-references.ls-bleedable-table
          (views/view
           {:view-parent entity
            :view-feature-type :unlinked-references

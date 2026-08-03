@@ -131,7 +131,7 @@
     ;; .ls-tag-table carries the page-spine gutter (see page.css): the Name
     ;; column lands on the page's left spine and the row-selection checkbox
     ;; drops into the gutter beside it. Replaces the old flat `ml-1`.
-    [:div.ls-tag-table
+    [:div.ls-tag-table.ls-bleedable-table
      (class-objects-inner config class properties)]))
 
 (defn- add-new-property-object!
@@ -174,5 +174,5 @@
                      [property']
                      [property' (db/entity :block/tags)])]
     ;; Same spine gutter as class-objects above.
-    [:div.ls-tag-table
+    [:div.ls-tag-table.ls-bleedable-table
      (property-related-objects-inner config property' properties)]))

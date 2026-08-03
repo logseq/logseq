@@ -172,7 +172,16 @@
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
                                                           (.-scrollTop container)))))
                update-footer! (fn []
-                                (let [tw (.-scrollWidth table-el)]
+                                ;; The footer lives inside the scroller's content
+                                ;; box, so any leading padding on the scroller (a
+                                ;; table that bleeds left keeps its first column
+                                ;; on the page column that way) is already behind
+                                ;; it and must come off the width.
+                                (let [pad (or (some-> table-el (js/getComputedStyle)
+                                                      (.-paddingLeft) (js/parseFloat))
+                                              0)
+                                      pad (if (js/isNaN pad) 0 pad)
+                                      tw (- (.-scrollWidth table-el) pad)]
                                   (when (and table-footer (number? tw) (> tw 0))
                                     (set! (. (.-style table-footer) -width) (str tw "px")))))
                update-target! (fn []
