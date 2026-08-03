@@ -18,8 +18,7 @@
 (defn add-new-tags
   [title-prefix]
   (b/new-block (str title-prefix 1 " #" title-prefix "1"))
-  (k/esc)
-  (assert/assert-non-editor-mode)
+  (util/double-esc)
   (b/new-block (str title-prefix 2))
   (util/set-tag (str title-prefix 2)))
 
