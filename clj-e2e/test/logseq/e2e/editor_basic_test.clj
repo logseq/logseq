@@ -938,7 +938,7 @@
 (defn- worker-op-logs
   [logs op-names]
   (->> logs
-       (filter #(and (string/includes? % "[frontend.db.transact]")
+       (filter #(and (string/includes? % ":db-worker/outliner-op-perf")
                      (string/includes? % (str ":op-names " op-names))))))
 
 (defn- editor-input-state
@@ -1057,6 +1057,15 @@
                              "Unsupported view resource row"
                              "Invalid renderer resource UUID"])
                     logs)))))
+
+(deftest backspace-at-start-removes-pending-block-dom-test
+  (b/new-blocks ["source"])
+  (b/new-block "pending block")
+  (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+    (util/move-cursor-to-start)
+    (k/backspace)
+    (is (nil? (ls-api-call! :editor.getBlock block-uuid)))
+    (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
 
 (deftest today-queries-render-without-resource-errors
   (let [page (ls-api-call! :editor.createJournalPage
@@ -1242,6 +1251,12 @@
       return `${editor.selectionStart}:${editor.selectionEnd}`;
     })()"))
 
+(defn- assert-editor-value!
+  [value]
+  (-> (w/-query util/editor-q)
+      assert/assert-that
+      (.hasValue value)))
+
 (defn- clipboard-text!
   [text]
   (w/eval-js "text => navigator.clipboard.writeText(text)" text))
@@ -1311,37 +1326,37 @@
 
 (deftest cursor-boundaries-word-motion-and-kill-test
   (testing "cursor motion follows boundaries and range deletion is one undoable edit"
-    (b/new-blocks ["first cursor line" "second cursor line"])
-    (k/shift+enter)
-    (util/press-seq "continued")
-    (let [multiline "second cursor line\ncontinued"
-          second-line-start (inc (count "second cursor line"))]
-      (is (= multiline (util/get-edit-content)))
+    (let [word-modifier (if util/mac? "Alt" "Control")]
+      (b/new-blocks ["first cursor line" "second cursor line"])
+      (k/shift+enter)
+      (util/press-seq "continued")
+      (let [multiline "second cursor line\ncontinued"
+            second-line-start (inc (count "second cursor line"))]
+        (is (= multiline (util/get-edit-content)))
+        (k/press "Home")
+        (is (= (str second-line-start ":" second-line-start)
+               (selection-range)))
+        (k/arrow-up)
+        (is (= multiline (util/get-edit-content))))
       (k/press "Home")
-      (is (= (str second-line-start ":" second-line-start)
-             (selection-range)))
+      (is (= "0:0" (selection-range)))
       (k/arrow-up)
-      (is (= multiline (util/get-edit-content))))
-    (k/press "Home")
-    (is (= "0:0" (selection-range)))
-    (k/arrow-up)
-    (b/wait-editor-text "first cursor line")
-    (is (= "first cursor line" (util/get-edit-content)))
-    (util/move-cursor-to-end)
-    (let [before (util/get-edit-content)]
-      (k/press "ControlOrMeta+ArrowLeft")
-      (is (not= (str (count before) ":" (count before))
-                (selection-range))))
-    (k/press "ControlOrMeta+Backspace")
-    (let [after-kill (util/get-edit-content)]
-      (is (not= "first cursor line" after-kill))
+      (b/wait-editor-text "first cursor line")
+      (is (= "first cursor line" (util/get-edit-content)))
+      (util/move-cursor-to-end)
+      (let [before (util/get-edit-content)]
+        (k/press (str word-modifier "+ArrowLeft"))
+        (is (not= (str (count before) ":" (count before))
+                  (selection-range))))
+      (k/press (str word-modifier "+Backspace"))
+      (assert-editor-value! "first line")
       (b/undo)
-      (is (= "first cursor line" (util/get-edit-content))))
-    (k/press "ControlOrMeta+a")
-    (k/backspace)
-    (is (= "" (util/get-edit-content)))
-    (b/undo)
-    (is (= "first cursor line" (util/get-edit-content)))))
+      (assert-editor-value! "first cursor line")
+      (k/press "ControlOrMeta+a")
+      (k/backspace)
+      (assert-editor-value! "")
+      (b/undo)
+      (assert-editor-value! "first cursor line"))))
 
 (deftest text-format-shortcuts-and-source-roundtrip-test
   (testing "format shortcuts wrap only the selection and rendered text round-trips"
