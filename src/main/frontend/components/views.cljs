@@ -422,6 +422,22 @@
     :else
     entity))
 
+(hsx/defc referenced-filter-value-content
+  [block-uuid]
+  (some-> (db-hooks/use-block block-uuid)
+          get-property-value-content))
+
+(defn- filter-value-content
+  [value]
+  (let [reference-uuid (cond
+                         (uuid? value) value
+                         (and (map? value)
+                              (nil? (get-property-value-content value)))
+                         (:block/uuid value))]
+    (if (uuid? reference-uuid)
+      [referenced-filter-value-content reference-uuid]
+      (get-property-value-content value))))
+
 (hsx/defc block-container
   [config row]
   (let [container (state/get-component :block/container)
@@ -1843,7 +1859,7 @@
         [:div.ls-view-filter-value.flex.flex-row.items-center.gap-1.text-xs.min-w-0.max-w-full.overflow-hidden
          (cond
            (map? value)
-           [:div.ls-view-filter-value-item (get-property-value-content value)]
+           [:div.ls-view-filter-value-item (filter-value-content value)]
 
            (string? value)
            [:div.ls-view-filter-value-item value]
@@ -1855,7 +1871,7 @@
            [:div.ls-view-filter-value-item (t :view.filter/empty)]
 
            (seq value)
-           (->> (map (fn [v] [:span (get-property-value-content v)]) value)
+           (->> (map (fn [v] [:span (filter-value-content v)]) value)
                 (interpose [:span.flex-none ", "])
                 (into [:div.ls-view-filter-value-item]))
            :else
@@ -2018,7 +2034,13 @@
   [table-view?]
   (if table-view? 33 24))
 
-(def ^:private view-prefetch-limit 1000)
+(def ^:private view-prefetch-limit 50)
+
+(defn- initial-view-prefetch-count
+  [viewport-height item-height]
+  (-> (js/Math.ceil (/ viewport-height item-height))
+      (max 1)
+      (min view-prefetch-limit)))
 
 (defn- view-prefetch-window
   [rows start-index end-index]
@@ -2038,25 +2060,39 @@
   (.-index item))
 
 (defn- use-view-row-prefetch
-  [rows]
-  (let [last-initial-index (min (dec (count rows))
-                                (dec view-prefetch-limit))
-        [[start-index end-index] set-rendered-range!]
-        (hooks/use-state [0 (max 0 last-initial-index)])
-        prefetch-rows (if (seq rows)
-                        (view-prefetch-window rows start-index end-index)
-                        [])]
-    (db-hooks/use-block-prefetch prefetch-rows)
-    (fn [^js rendered-items]
-      (when (pos? (alength rendered-items))
-        (let [next-range [(rendered-item-index (aget rendered-items 0))
-                          (rendered-item-index
-                           (aget rendered-items (dec (alength rendered-items))))]]
-          (set-rendered-range!
-           (fn [current-range]
-             (if (= current-range next-range)
-               current-range
-               next-range))))))))
+  ([rows]
+   (use-view-row-prefetch rows view-prefetch-limit))
+  ([rows initial-prefetch-count]
+   (let [[rendered-range set-rendered-range!] (hooks/use-state nil)
+         prefetch-rows (cond
+                         (empty? rows)
+                         []
+
+                         rendered-range
+                         (view-prefetch-window rows
+                                               (first rendered-range)
+                                               (second rendered-range))
+
+                         :else
+                         (subvec (vec rows) 0 (min (count rows) initial-prefetch-count)))
+         prefetch-ready? (db-hooks/use-block-prefetch prefetch-rows)
+         [initial-prefetch-ready? set-initial-prefetch-ready!] (hooks/use-state prefetch-ready?)]
+     (hooks/use-effect!
+      (fn []
+        (when prefetch-ready?
+          (set-initial-prefetch-ready! true)))
+      [prefetch-ready?])
+     [(or initial-prefetch-ready? prefetch-ready?)
+      (fn [^js rendered-items]
+        (when (pos? (alength rendered-items))
+          (let [next-range [(rendered-item-index (aget rendered-items 0))
+                            (rendered-item-index
+                             (aget rendered-items (dec (alength rendered-items))))]]
+            (set-rendered-range!
+             (fn [current-range]
+               (if (= current-range next-range)
+                 current-range
+                 next-range))))))])))
 
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view?]} item-render]
@@ -2070,28 +2106,37 @@
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
-  (let [prefetch-rows! (use-view-row-prefetch (:data table))]
+  (let [scroll-parent (get-scroll-parent
+                       (-> (:config option)
+                           (assoc :viewel (js/document.getElementById (:viewid option)))))
+        initial-prefetch-count (initial-view-prefetch-count
+                                (.-clientHeight scroll-parent)
+                                (lazy-item-placeholder-height true))
+        [initial-rows-ready? prefetch-rows!]
+        (use-view-row-prefetch (:data table) initial-prefetch-count)]
     (when (seq rows)
-      (virtualized-list
-       {:ref #(reset! *scroller-ref %)
-        :increase-viewport-by {:top 300 :bottom 300}
-        :custom-scroll-parent (get-scroll-parent
-                               (-> (:config option)
-                                   (assoc :viewel (js/document.getElementById (:viewid option)))))
-        :compute-item-key (fn [idx]
-                            (str "table-row-" (util/nth-safe rows idx)))
-        :skipAnimationFrameInResizeObserver true
-        :total-count (count rows)
-        :item-content (fn [idx]
-                        (let [option (assoc option :table-view? true)]
-                          (lazy-item (:data table) idx option
-                                     (fn [row]
-                                       (table-row table row {} option)))))
-        :items-rendered (fn [props]
-                          (prefetch-rows! props)
-                          (when (seq props)
-                            (set-items-rendered! true)))}
-       (:disable-virtualized? option)))))
+      (if initial-rows-ready?
+        (virtualized-list
+         {:ref #(reset! *scroller-ref %)
+          :increase-viewport-by {:top 300 :bottom 300}
+          :custom-scroll-parent scroll-parent
+          :compute-item-key (fn [idx]
+                              (str "table-row-" (util/nth-safe rows idx)))
+          :skipAnimationFrameInResizeObserver true
+          :total-count (count rows)
+          :item-content (fn [idx]
+                          (let [option (assoc option :table-view? true)]
+                            (lazy-item (:data table) idx option
+                                       (fn [row]
+                                         (table-row table row {} option)))))
+          :items-rendered (fn [props]
+                            (prefetch-rows! props)
+                            (when (seq props)
+                              (set-items-rendered! true)))}
+         (:disable-virtualized? option))
+        [:div.flex.flex-col.gap-1.py-1
+         (for [idx (range 3)]
+           (shui/skeleton {:key idx :class "h-8 w-full"}))]))))
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
@@ -2305,7 +2350,7 @@
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
-        prefetch-rows! (use-view-row-prefetch blocks)
+        [_initial-rows-ready? prefetch-rows!] (use-view-row-prefetch blocks)
         render-card (fn [idx]
                       (lazy-item blocks idx
                                  (assoc (gallery-lazy-item-opts option)
