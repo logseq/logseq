@@ -458,12 +458,12 @@
                          #(assoc % :tab-indent? indent?))))
 
 (defn- backspace-pending-new-block!
-  []
+  [delete-block?]
   (when (pending-new-block?)
     (state/update-state!
      :editor/pending-new-block
      (fn [{:keys [typed-text] :as pending}]
-       (if (seq typed-text)
+       (if (and (seq typed-text) (not delete-block?))
          (assoc pending :typed-text (subs typed-text 0 (dec (count typed-text))))
          (assoc pending :delete? true))))))
 
@@ -3217,7 +3217,7 @@
       (pending-new-block?)
       (do
         (util/stop e)
-        (backspace-pending-new-block!))
+        (backspace-pending-new-block! (zero? (util/get-selection-start (.-target e)))))
 
       (= input element)
       (let [id (state/get-edit-input-id)
