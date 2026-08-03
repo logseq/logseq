@@ -10,6 +10,17 @@
   flex-shrink: 0;
 }
 
+/* Action-bar button labels can interpolate a page title ("Capture to <page>"),
+   so clamp them — an unbounded label pushes the primary action off the bar
+   before the collapse-to-"More" threshold gets a chance to fire. */
+.hint-button .hint-button-label {
+  display: block;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Tip text: never wraps, truncates only the trailing text (.hints-tip-tail).
    Every flex ancestor in the chain needs overflow:hidden + min-width:0
    so the width constraint propagates down to the ellipsis element. */

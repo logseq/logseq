@@ -417,6 +417,17 @@
     (subs title 0 (- (count title) (count tag-str) 1))
     title))
 
+(defn- plain-source-block
+  "Search-result maps keep the SQLite FTS highlight markers inside :block/title;
+   the worker stashes the unmarked text under :block.temp/original-title. Callers
+   read plain text off :source-block (hls-file? detection, capture labels), so put
+   the clean title back before handing the map on. Real entities have no
+   :block.temp/original-title and pass through untouched."
+  [block]
+  (if-let [original (:block.temp/original-title block)]
+    (assoc block :block/title original)
+    block))
+
 (defn page-item
   [repo page current-page-uuid input]
   (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
@@ -452,7 +463,7 @@
               :result-type :page
               :current-page? current-page?
               :alias (:alias page)
-              :source-block (or source-page page)
+              :source-block (or source-page (plain-source-block page))
               :text-tags tag-str)))
 
 (defn block-item
@@ -471,7 +482,7 @@
      :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id current-page-uuid))
-     :source-block block
+     :source-block (plain-source-block block)
      :text-tags tag-str}))
 
 (defn- previewable-item?
@@ -874,7 +885,7 @@
                                                         {:disabled? true :variant :search-result})
                               :result-type (if (:page? block) :page :block)
                               :current-page? true
-                              :source-block block})) blocks)]
+                              :source-block (plain-source-block block)})) blocks)]
         (swap! !results update :current-page merge {:status :success
                                                     :items items
                                                     :matched-count matched-count
@@ -1881,7 +1892,7 @@
                       :depth (when primary? 1)
                       :size :sm}
                      opts)
-        children (cond-> [[:span text]]
+        children (cond-> [[:span.hint-button-label text]]
                    (not-empty shortcut)
                    (conj (let [has-modifier? (and (coll? shortcut)
                                                   (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
@@ -1911,9 +1922,9 @@
                         (.preventDefault e)
                         (when-let [first-item (.. e -currentTarget (querySelector "[role=menuitem]"))]
                           (.focus first-item)))}
-    (for [{:keys [text icon icon-extension? shortcut on-click]} items]
+    (for [{:keys [id text icon icon-extension? shortcut on-click]} items]
       (shui/dropdown-menu-item
-       {:key text :on-click on-click}
+       {:key (or id text) :on-click on-click}
        [:div.flex.items-center.justify-between.w-full.gap-4
         [:span.flex.items-center.gap-2
          (when icon (icon-component/icon icon {:size 16 :extension? icon-extension?}))
@@ -1960,7 +1971,7 @@
           (into [:<>]
                 (map (fn [b]
                        (hint-button (:text b) (:shortcut b)
-                                    {:key (:text b) :on-click (:on-click b)}))
+                                    {:key (or (:id b) (:text b)) :on-click (:on-click b)}))
                      secondary))))
       (hint-button (:text primary) (:shortcut primary)
                    {:primary? true :on-click (:on-click primary)})]]))
@@ -2371,6 +2382,11 @@
   (let [[_highlighted] (hooks/use-atom (::highlighted-item state))
         item (state->highlighted-item state fallback-item)
         action (state->action state fallback-item)
+        ;; Search rows carry hiccup in :text (the FTS highlight spans), so the
+        ;; capture label has to come from the resolved entity — interpolating
+        ;; :text into the translation prints raw hiccup into the action bar.
+        capture-target (when (= :page (:result-type item)) (preview-page-entity item))
+        capture-label (:block/title capture-target)
         make-button (fn [text shortcut & {:as opts}]
                       {:text text :shortcut shortcut
                        :on-click #(handle-action action (assoc state :opts opts) %)})
@@ -2380,12 +2396,18 @@
           {:primary (make-button (t :cmdk.action/open) ["return"])
            :secondary (cond-> []
                         ;; Feature A discoverability: capture-into-this-page for page rows
-                        (= :page (:result-type item))
-                        (conj {:text (t :cmdk.action/capture-to (:text item))
+                        (not (string/blank? capture-label))
+                        (conj {;; :text is hiccup here, so key off :id instead
+                               :id "capture-to"
+                               ;; page name a level brighter than the verb, same split
+                               ;; as the "Tip:" prefix and the quick-add success toast
+                               :text (interpolate-rich-text-node
+                                      (t :cmdk.action/capture-to)
+                                      [[:span.text-gray-12 capture-label]])
                                :shortcut ["mod" "e"]
                                :on-click (fn [_]
                                            (state/pub-event!
-                                            [:go/capture {:initial-target (preview-page-entity item)}]))})
+                                            [:go/capture {:initial-target capture-target}]))})
                         true
                         (conj (make-button (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true}))
                         (:source-block (state->highlighted-item state fallback-item))
@@ -2404,7 +2426,9 @@
               (tip state)]
         :primary primary
         :secondary secondary
-        :cache-key action}))))
+        ;; label is part of the key: the cached expanded width is measured per
+        ;; action, but the capture button's width tracks the page title
+        :cache-key (str action "|" capture-label)}))))
 
 (hsx/defc search-only
   [state group-name]
