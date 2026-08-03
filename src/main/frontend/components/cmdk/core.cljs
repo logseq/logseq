@@ -1476,24 +1476,27 @@
                             "border-b border-gray-06 pb-1 last:border-b-0")}
      (when-not (= group :create)
        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
-        [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
-               :on-click (fn [_e]
-                          ;; change :less to :more or :more to :less
-                           (if (= show :more)
-                             (show-less)
-                             (show-more)))}
-         title]
-        (when (not= group :create)
-          (let [display-count (or matched-count (count items))]
-            [:div {:class "pl-1.5 text-gray-12 rounded-full"
-                   :style {:font-size "0.7rem"}}
-             (if (<= 99 display-count)
-               "99+"
-               display-count)]))
+        (let [display-count (or matched-count (count items))]
+          [:div {:class (str "flex items-center gap-1 pl-0.5 select-none"
+                             (when (or can-show-more? can-show-less?) " cursor-pointer"))
+                 :on-click (fn [_e]
+                          ;; toggle :more <-> :less
+                             (if (= show :more)
+                               (show-less)
+                               (show-more)))}
+           [:span {:class "font-bold"} title]
+           [:span "·"]
+           [:span {:style {:font-size "0.7rem"}}
+            (if (<= 99 display-count)
+              "99+"
+              display-count)]
+           (when (or can-show-more? can-show-less?)
+             (icon-component/icon (if (= show :more) "chevron-down" "chevron-right") {:size 14}))])
 
         [:div {:class "flex-1"}]
 
         (when (and (or can-show-more? can-show-less?)
+                   (= group (some-> highlighted-item :group))
                    (empty? filter')
                    (not sidebar?))
           [:a.text-link.select-node.opacity-50.hover:opacity-90
