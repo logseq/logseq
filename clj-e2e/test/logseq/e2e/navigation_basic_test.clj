@@ -171,11 +171,16 @@
     (doseq [title ["library sample parent" "library sample child"]]
       (page/new-page title)
       (b/new-block (str title " content"))
-      (util/exit-edit)
-      (k/press "ControlOrMeta+Shift+m")
-      (w/fill "input[placeholder='Move blocks to']" "Library")
-      (w/click (w/get-by-test-id "Library")))
+      (util/exit-edit))
     (page/goto-page "Library")
+    (w/click ".ls-add-pages button")
+    (assert/assert-is-visible ".cp__select-input")
+    (doseq [title ["library sample parent" "library sample child"]]
+      (w/fill ".cp__select-input" title)
+      (let [result (loc/filter ".cp__select-results a" :has-text title)]
+        (assert/assert-is-visible result)
+        (w/click result)))
+    (k/esc)
     (assert/assert-is-visible
      (loc/filter ".ls-page-blocks" :has-text "library sample parent"))
     (assert/assert-is-visible
