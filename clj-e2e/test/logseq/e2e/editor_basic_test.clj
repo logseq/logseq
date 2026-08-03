@@ -846,7 +846,8 @@
           blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
       (insert-current-page-blocks! blocks)
       (enable-virtualized-rendering!)
-      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (assert/assert-is-visible
+       (util/-query-last ".ls-page-blocks [data-virtuoso-scroller]"))
       (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
         (let [target-title (format "%s%05d" title-prefix target-index)]
           (is (= target-title
@@ -1218,9 +1219,13 @@
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
-    (.focus (w/-query ".cp__cmdk-search-input"))
-    (k/enter)
+    (w/click (w/get-by-test-id "Library"))
+    (assert/assert-have-count
+     (loc/filter ".ls-page-blocks .ls-block" :has-text "block1")
+     0)
     (p/goto-page "Library")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "block1"))
     (let [contents (set (util/get-page-blocks-contents))]
       (is (set/subset? (set ["block1" "block2" "block3"]) contents)))
     (p/goto-page "test page")
@@ -1231,9 +1236,13 @@
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
-    (.focus (w/-query ".cp__cmdk-search-input"))
-    (k/enter)
+    (w/click (w/get-by-test-id "Library"))
+    (assert/assert-have-count
+     (loc/filter ".ls-page-blocks .ls-block" :has-text "block4")
+     0)
     (p/goto-page "Library")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "block4"))
     (let [contents (set (util/get-page-blocks-contents))]
       (is (set/subset? (set ["block1" "block2" "block3" "block4" "block5"]) contents)))))
 
@@ -1570,9 +1579,9 @@
       (w/click (loc/filter ".block-title-wrap" :has-text "copy sibling"))
       (b/select-blocks 3)
       (k/press "ControlOrMeta+Shift+c")
-      (let [text (w/eval-js "navigator.clipboard.readText()")]
-        (is (string/includes? text "copy parent"))
-        (is (string/includes? text "copy child"))))))
+      (let [{:keys [missing-blocks] :as copy-result}
+            (wait-for-copied-blocks! ["copy parent" "copy child"])]
+        (is (empty? missing-blocks) (pr-str copy-result))))))
 
 (deftest plain-multiline-and-html-paste-test
   (testing "paste mode preserves cursor text, multiline structure and safe rich content"
@@ -1625,39 +1634,6 @@
        (loc/filter ".ls-page-blocks" :has-text "history c")
        0))))
 
-(deftest ten-thousand-block-page-remains-directly-navigable-test
-  (testing "a 10k top-level page can reach top, middle and bottom without walking every window"
-    (let [block-count 10000
-          title-prefix "ten-thousand-block-"
-          blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
-      (insert-current-page-blocks! blocks)
-      (enable-virtualized-rendering!)
-      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
-      (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
-        (let [target-title (format "%s%05d" title-prefix target-index)]
-          (is (= target-title
-                 (scroll-page-to-block!
-                  title-prefix block-count target-index)))
-          (assert/assert-is-visible
-           (format ".ls-page-blocks .ls-block[data-block-title='%s']"
-                   target-title))))
-      (util/wait-timeout 200)
-      (let [last-title (format "%s%05d" title-prefix (dec block-count))
-            last-block (w/-query
-                        (format
-                         ".ls-page-blocks .ls-block[data-block-title='%s']"
-                         last-title))
-            last-uuid (.getAttribute last-block "blockid")]
-        (is (string? last-uuid))
-        (w/click (.locator last-block ".block-content"))
-        (assert/assert-editor-mode)
-        (util/move-cursor-to-end)
-        (util/press-seq " edited")
-        (is (= (str last-title " edited") (util/get-edit-content)))
-        (util/exit-edit)
-        (is (= (str last-title " edited")
-               (get (ls-api-call! :editor.getBlock last-uuid) "title")))))))
-
 (deftest mixed-height-virtual-page-keeps-blocks-separated-test
   (testing "mixed text, code and headings do not overlap after fast scrolling"
     (let [long-text (apply str (repeat 40 "long mixed-height content "))
@@ -1671,13 +1647,14 @@
                    (range 60)))]
       (insert-current-page-blocks! blocks)
       (enable-virtualized-rendering!)
-      (w/wait-for ".ls-page-blocks [data-virtuoso-scroller]")
+      (assert/assert-is-visible
+       (util/-query-last ".ls-page-blocks [data-virtuoso-scroller]"))
       (doseq [position [1.0 0.0 0.5 0.9 0.1]]
         (w/eval-js
          "position => {
-            const scroller = document.querySelector(
+            const scroller = Array.from(document.querySelectorAll(
               '.ls-page-blocks [data-virtuoso-scroller]'
-            );
+            )).find((node) => node.getClientRects().length > 0);
             scroller.scrollTop =
               Math.max(0, (scroller.scrollHeight - scroller.clientHeight) * position);
             scroller.dispatchEvent(new Event('scroll'));
