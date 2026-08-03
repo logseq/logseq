@@ -5,20 +5,12 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
-            [logseq.db :as ldb]))
+            [frontend.util.ref :as ref]))
 
 (defn- top-move-target
   [target-block]
-  (let [parent (:block/parent target-block)
-        before-node (ldb/get-left-sibling target-block)]
-    (if (= (:block/uuid parent) (:block/uuid before-node))
-      (when parent
-        [parent {:sibling? false}])
-      (if before-node
-        [before-node {:sibling? true}]
-        (when parent
-          [parent {:sibling? false}])))))
+  (when-let [parent (:block/parent target-block)]
+    [parent {:top? true}]))
 
 (defn- move-target
   [target-block top? nested?]
