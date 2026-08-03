@@ -891,3 +891,111 @@ html.is-resizing-buf .property-row-resizer.is-active.at-limit::before {
   padding-left: 12px;
   margin-left: 10px;
 }
+
+/* ── Section tab strips ─────────────────────────────────────────────────────
+   Two strips use this: the tag's own configuration ("Tag properties" /
+   "Tag settings") and the bidirectional sections ("Books"). They are the same
+   gesture — switch between sibling sections — so they get the same anatomy
+   rather than one being a tab widget and the other a pair of labels.
+
+   Each label sits on the page spine with its icon in the gutter, at the same
+   16px as the property keys they live among. The active one is marked twice:
+   full text contrast against a muted sibling, and a rule under the label. The
+   rule is on the LABEL, not the trigger, so it does not run under the gutter
+   icon or under the count — a rule that starts left of the word it underlines
+   is what made the first attempt read as a stray line rather than as state. */
+.ls-section-tabs {
+  height: auto;
+  /* Radix ships the list with `p-1`; that 4px would push every label off the
+     spine, which is the whole point of the strip. */
+  padding: 0;
+  gap: 1.25rem;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.ls-section-tabs [role="tab"] {
+  height: auto;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+
+.ls-section-tabs [role="tab"]:hover {
+  color: var(--ls-primary-text-color);
+}
+
+/* shui's default tab variant paints the active trigger as a pill:
+   `data-[state=active]:bg-background` + `shadow-sm` + `rounded-sm`. Those
+   utilities tie with the base reset above on specificity and win on source
+   order, so the background has to be cleared here, where the extra
+   `[data-state]` beats them outright. */
+.ls-section-tabs [role="tab"][data-state="active"] {
+  color: var(--ls-primary-text-color);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.ls-section-tab {
+  @apply flex flex-row items-center;
+}
+
+/* A fixed slot rather than a gap, so the label lands on the spine whatever the
+   icon's own advance turns out to be — the 20px a property key's bullet takes.
+   The slot is held even when a section has no icon, so labels line up. */
+.ls-section-tab-icon {
+  @apply flex items-center shrink-0;
+  width: 20px;
+}
+
+/* The rule is drawn as a pseudo element rather than a real border. A border plus
+   its padding makes the label box ~5px taller than the text, and since the tab
+   is `items-center`, that taller box is what gets centred — which pushed the
+   gutter icon visibly below the label's centre line. Positioning it takes the
+   rule out of layout entirely: the icon centres against the text, and there is
+   no two-pixel shift when switching tabs either. */
+.ls-section-tab-label {
+  position: relative;
+}
+
+[role="tab"][data-state="active"] .ls-section-tab-label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  border-bottom: 2px solid currentColor;
+}
+
+.ls-section-tab-label .ls-auto-section-sep,
+.ls-section-tab-label .ls-auto-section-count {
+  margin-left: 0.3em;
+}
+
+/* Lines up with the labels above it, not with the gutter they hang in. The
+   bottom margin is the one real gap in this block: the description belongs to
+   the tab it sits under, and the rows below are a separate thing, so the space
+   goes between description and rows rather than being spread evenly. */
+.ls-class-config-desc {
+  margin-left: 20px;
+  margin-bottom: 0.6rem;
+}
+
+/* The settings rows step in under their description exactly as the tag's own
+   properties do under theirs — `.tag-properties-content` uses the same 22px. */
+.ls-class-settings {
+  margin-left: 22px;
+}
+
+/* A bidirectional section holds blocks, not property rows, so it takes the same
+   -22px outdent the page body uses: that cancels the block's fold-arrow gutter
+   and lands the block TEXT on the spine, with its bullet in the gutter beside
+   the property bullets above it. */
+html:not(.is-mobile) .ls-bidirectional-block-container {
+  margin-left: var(--ls-bidirectional-block-outdent, -22px);
+}

@@ -496,16 +496,14 @@
         {:defaultValue default-value
          :class "w-full"}
         (shui/tabs-list
-         {:variant :line
-          :class "h-8 gap-3"}
+         {:class "ls-section-tabs"}
          (for [{:keys [value class title]} normalized-items]
            (shui/tabs-trigger
             {:key (str "bidirectional-tab-" value)
-             :value value
-             :class "px-0 py-1 text-base text-foreground"}
-            [:span.inline-flex.items-center.gap-1.5
-             (bidirectional-tab-icon class)
-             [:span title]])))
+             :value value}
+            [:span.ls-section-tab
+             [:span.ls-section-tab-icon (bidirectional-tab-icon class)]
+             [:span.ls-section-tab-label title]])))
         (for [{:keys [value entities]} normalized-items]
           (shui/tabs-content
            {:key (str "bidirectional-tab-content-" value)
@@ -1259,12 +1257,179 @@
                                     #(reset! *bidirectional-properties %))
      (bidirectional-properties-section bidirectional-properties)]))
 
+(hsx/defc class-properties-section
+  "A tag's own schema: the properties inherited from its ancestors, then the ones
+   it declares itself, then the add-property affordance.
+
+   Lifted out of `properties-area` unchanged so that the tab strip above it has a
+   single thing to show and hide. The collapsed-ancestor state came with it —
+   nothing outside this section ever read it."
+  [block {:keys [opts resize-handle hidden-properties show-hidden-properties? id]}]
+  (let [*collapsed-parents (hooks/use-memo #(atom #{}) [])
+        [collapsed-parents] (hooks/use-atom *collapsed-parents)
+        properties (->> (:logseq.property.class/properties block)
+                        (map (fn [e] [(:db/ident e)])))
+        opts' (assoc opts :class-schema? true :resize-handle resize-handle)
+        inherited-groups (inherited-properties-by-class block)
+        has-meaningful-extends? (and (seq (:logseq.property.class/extends block))
+                                     (not-every? #(contains? #{:logseq.class/Root :logseq.class/Tag} (:db/ident %))
+                                                 (:logseq.property.class/extends block)))]
+    [:div.tag-properties-content.flex.flex-col.gap-1 {:style {:margin-left 22}}
+     ;; Inherited properties, grouped by source ancestor, per-group collapsible
+     (when (and has-meaningful-extends? (seq inherited-groups))
+       (into [:<>]
+             (for [{:keys [class properties]} inherited-groups]
+               (let [class-title (:block/title class)
+                     class-uuid (:block/uuid class)
+                     class-id (:db/id class)
+                     collapsed? (contains? collapsed-parents class-id)]
+                 ^{:key (str "inherited-" class-id)}
+                 [:div.inherited-group
+                  [:div.inherited-group-header
+                   [:a.inherited-collapse-toggle
+                    {:on-click (fn [e]
+                                 (util/stop-propagation e)
+                                 (swap! *collapsed-parents
+                                        (fn [set'] (if (contains? set' class-id)
+                                                     (disj set' class-id)
+                                                     (conj set' class-id)))))}
+                    [:span.control-show.cursor-pointer
+                     (ui/rotating-arrow collapsed?)]]
+                   [:span.text-xs.text-muted-foreground
+                    (t :class/inherited-from) " "
+                    [:a.cursor-pointer
+                     {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
+                      :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
+                     (str "#" class-title)]
+                    (when (pos? (count properties))
+                      [:<> [:span " \u00b7 "] [:span {:style {:font-size "0.7rem"}} (count properties)]])]]
+                  [:div.ls-foldable-content
+                   {:class (when collapsed? "is-collapsed")}
+                   [:div.ls-foldable-content-inner
+                    [:div.inherited-properties-scaffold
+                     [:div {:aria-readonly "true"}
+                      (properties-section block
+                                          (mapv (fn [pk] [pk (get block pk)]) properties)
+                                          (assoc opts' :inherited? true))]]]]]))))
+     (properties-section block properties opts')
+     (hidden-properties-cp block hidden-properties
+                           (assoc opts :show-hidden-properties? show-hidden-properties?))
+     ^{:key (str id "-class-add-property")}
+     [:div.mt-2 [new-property block opts']]]))
+
+(hsx/defc class-settings-section
+  "The Tag settings tab: the tag-level settings laid out as property rows.
+
+   Rendered from a fixed list, never from `:block/properties`. A normal property
+   row only exists while its property has a value, so deleting the default icon
+   retracts the property and takes the whole row with it — a regression this
+   codebase has already shipped twice. The rows here are a schema, not a value
+   map, so they survive their own delete button.
+
+   Labels and write paths come from `property-config/tag-settings`, the same
+   list the title-bar dropdown renders, so the two surfaces cannot drift."
+  [block]
+  (into [:div.ls-class-settings.flex.flex-col.gap-1]
+        (map (fn [{:keys [ident kind label value on-change empty-label page-title]}]
+               (let [property (db/entity ident)]
+                 ^{:key (str ident)}
+                 [:div.property-pair.property-panel-row
+                  {:data-property-title label
+                   :data-property-type (name (or (:logseq.property/type property) :default))}
+                  ;; The real property key, not a lookalike: it brings the bullet,
+                  ;; the grid column, the description tooltip and the go-to-property
+                  ;; gesture, and it takes its label from the same built-in title
+                  ;; the dropdown now uses.
+                  [:div.property-key-panel
+                   (property-key-cp block property {})]
+                  [:div.ls-block.property-value-container.property-value-panel
+                   [:div.property-value.property-value-panel-inner.flex.flex-1
+                    (case kind
+                      :icon
+                      (shui/button
+                       {:variant :ghost
+                        :size :sm
+                        :class "!px-1 h-6 text-sm font-normal justify-start"
+                        :on-click (fn [^js e]
+                                    (shui/popup-show!
+                                     (.-target e)
+                                     (fn [{:keys [id]}]
+                                       (icon-component/icon-search
+                                        {:on-chosen (fn [_e icon keep-popup?]
+                                                      (on-change icon)
+                                                      (when-not (true? keep-popup?)
+                                                        (shui/popup-hide! id)))
+                                         :icon-value value
+                                         :page-title page-title
+                                         :del-btn? (some? value)}))
+                                     {:align "start" :as-dropdown? true}))}
+                       (if value
+                         [:span.flex.items-center.gap-2
+                          (icon-component/icon value {:size 16 :color? true})]
+                         [:span.text-muted-foreground empty-label]))
+
+                      :checkbox
+                      (shui/checkbox
+                       {:checked value
+                        :on-checked-change (fn [checked?] (on-change (boolean checked?)))}))]]])))
+        (property-config/tag-settings block)))
+
+(hsx/defc class-config-tabs
+  "The strip over a tag's own configuration: its properties, and its settings.
+
+   Both are section labels, not property keys — see the plan's D1. The label of
+   each sits on the page spine with its icon in the gutter, matching every other
+   left-most label on the page.
+
+   The settings tab is hidden for built-in tags, matching the gate the title-bar
+   action already uses (`page.cljs`), so the two doors agree on where settings
+   exist at all."
+  [block section-opts]
+  (let [built-in? (:logseq.property/built-in? block)
+        tag-name [[:span.text-gray-11 (str "#" (:block/title block))]]
+        properties-count (count (:logseq.property.class/properties block))]
+    [:div.ls-class-config.flex.flex-col.mt-2
+     (shui/tabs
+      {:defaultValue "properties" :class "w-full"}
+      (shui/tabs-list
+       {:class "ls-section-tabs"}
+       (shui/tabs-trigger
+        {:value "properties"}
+        [:span.ls-section-tab
+         [:span.ls-section-tab-icon
+          (ui/icon "page-property" {:size 16 :extension? true :class "text-gray-10"})]
+         [:span.ls-section-tab-label
+          (db-property/built-in-display-title
+           (db/entity :logseq.property.class/properties) t)
+          [:span.ls-auto-section-sep "\u00b7"]
+          [:span.ls-auto-section-count properties-count]]])
+       (when-not built-in?
+         (shui/tabs-trigger
+          {:value "settings"}
+          [:span.ls-section-tab
+           [:span.ls-section-tab-icon
+            (ui/icon "settings" {:size 16 :class "opacity-50"})]
+           [:span.ls-section-tab-label (t :class/tag-settings)]])))
+
+      (shui/tabs-content
+       {:value "properties"}
+       [:<>
+        [:div.ls-class-config-desc.text-muted-foreground
+         (interpolate-rich-text-node (t :class/tag-properties-desc) tag-name)]
+        (class-properties-section block section-opts)])
+
+      (when-not built-in?
+        (shui/tabs-content
+         {:value "settings"}
+         [:<>
+          [:div.ls-class-config-desc.text-muted-foreground
+           (interpolate-rich-text-node (t :class/tag-settings-desc) tag-name)]
+          (class-settings-section block)])))]))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
         [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
-        *collapsed-parents (hooks/use-memo #(atom #{}) [])
-        [collapsed-parents] (hooks/use-atom *collapsed-parents)
         id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
         show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
@@ -1400,62 +1565,11 @@
                       append-renderers)
 
                 (when class?
-                  (let [properties (->> (:logseq.property.class/properties block)
-                                        (map (fn [e] [(:db/ident e)])))
-                        opts' (assoc opts :class-schema? true :resize-handle resize-handle)
-                        inherited-groups (inherited-properties-by-class block)
-                        has-meaningful-extends? (and (seq (:logseq.property.class/extends block))
-                                                     (not-every? #(contains? #{:logseq.class/Root :logseq.class/Tag} (:db/ident %))
-                                                                 (:logseq.property.class/extends block)))]
-                    [:div.flex.flex-col.gap-1.mt-2
-                     [:div {:style {:font-size 15}}
-                      [:div.property-key.text-sm
-                       (property-key-cp block (db/entity :logseq.property.class/properties) {})]
-                      [:div.text-muted-foreground.ml-5
-                       (interpolate-rich-text-node
-                        (t :class/tag-properties-desc)
-                        [[:span.text-gray-11 (str "#" (:block/title block))]])]]
-                     [:div.tag-properties-content.flex.flex-col.gap-1 {:style {:margin-left 22}}
-                      ;; Inherited properties, grouped by source ancestor, per-group collapsible
-                      (when (and has-meaningful-extends? (seq inherited-groups))
-                        (into [:<>]
-                              (for [{:keys [class properties]} inherited-groups]
-                                (let [class-title (:block/title class)
-                                      class-uuid (:block/uuid class)
-                                      class-id (:db/id class)
-                                      collapsed? (contains? collapsed-parents class-id)]
-                                  ^{:key (str "inherited-" class-id)}
-                                  [:div.inherited-group
-                                   [:div.inherited-group-header
-                                    [:a.inherited-collapse-toggle
-                                     {:on-click (fn [e]
-                                                  (util/stop-propagation e)
-                                                  (swap! *collapsed-parents
-                                                         (fn [set'] (if (contains? set' class-id)
-                                                                      (disj set' class-id)
-                                                                      (conj set' class-id)))))}
-                                     [:span.control-show.cursor-pointer
-                                      (ui/rotating-arrow collapsed?)]]
-                                    [:span.text-xs.text-muted-foreground
-                                     (t :class/inherited-from) " "
-                                     [:a.cursor-pointer
-                                      {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
-                                       :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
-                                      (str "#" class-title)]
-                                     (when (pos? (count properties))
-                                       [:<> [:span " \u00b7 "] [:span {:style {:font-size "0.7rem"}} (count properties)]])]]
-                                   [:div.ls-foldable-content
-                                    {:class (when collapsed? "is-collapsed")}
-                                    [:div.ls-foldable-content-inner
-                                     [:div.inherited-properties-scaffold
-                                      [:div {:aria-readonly "true"}
-                                       (properties-section block
-                                                           (mapv (fn [pk] [pk (get block pk)]) properties)
-                                                           (assoc opts' :inherited? true))]]]]]))))
-                      (properties-section block properties opts')
-                      (hidden-properties-cp block hidden-properties
-                                            (assoc opts :show-hidden-properties? show-hidden-properties?))
-                      ^{:key (str id "-class-add-property")}
-                      [:div.mt-2 [new-property block opts']]]]))]])
+                  (class-config-tabs block
+                                     {:opts opts
+                                      :resize-handle resize-handle
+                                      :hidden-properties hidden-properties
+                                      :show-hidden-properties? show-hidden-properties?
+                                      :id id}))]])
             (when-not skip-bidirectional-properties?
               (bidirectional-properties-section bidirectional-properties))])))]))

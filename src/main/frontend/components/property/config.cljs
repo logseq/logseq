@@ -1030,50 +1030,87 @@
             (property-dropdown-options property owner-block values opts)))))
 
 
+(defn tag-settings
+  "The tag-level settings, as data.
+
+   Both surfaces that edit them — the title-bar dropdown below and the Tag
+   settings tab in `property.cljs` — render from this one list, so a label, an
+   icon, or the way a value is written can only be changed in one place. Before
+   this existed there was a single surface and it had already drifted from
+   itself: the icon wrote through `property-handler` while the toggle wrote
+   through `db-property-handler`. Both go through `property-handler` now; for a
+   boolean it forwards unchanged, and for the icon it keeps the nil -> retract
+   behaviour the picker's delete button depends on.
+
+   `:kind` says what control edits the value, not what the value is."
+  [page]
+  (let [id (:db/id page)
+        current-icon (:logseq.property.class/default-icon page)]
+    [{:ident :logseq.property.class/default-icon
+      :kind :icon
+      :label (db-property/built-in-display-title (db/entity :logseq.property.class/default-icon) t)
+      :menu-icon :icons
+      :empty-label (t :class/default-icon-empty)
+      :page-title (:block/title page)
+      :value current-icon
+      :on-change (fn [icon]
+              (if icon
+                (property-handler/set-block-property!
+                 id :logseq.property.class/default-icon
+                 (cond
+                   (= :text (:type icon)) {:type :text :data (:data icon)}
+                   (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
+                   (= :image (:type icon)) {:type :image :data (:data icon)}
+                   :else (select-keys icon [:type :id :color])))
+                (property-handler/remove-block-property!
+                 id :logseq.property.class/default-icon)))}
+     {:ident :logseq.property.class/enable-bidirectional?
+      :kind :checkbox
+      :label (db-property/built-in-display-title (db/entity :logseq.property.class/enable-bidirectional?) t)
+      :menu-icon :arrows-exchange
+      :value (boolean (:logseq.property.class/enable-bidirectional? page))
+      :on-change (fn [checked?]
+              (property-handler/set-block-property!
+               id :logseq.property.class/enable-bidirectional? checked?))}]))
+
+(defn- tag-setting-menuitem
+  "One `tag-settings` entry rendered as a dropdown row."
+  [{:keys [kind label menu-icon empty-label page-title value on-change]}]
+  (case kind
+    :icon
+    (dropdown-editor-menuitem
+     {:icon menu-icon
+      :title label
+      :submenu-content
+      (fn [{:keys [set-sub-open! id]}]
+        (icon-component/icon-search
+         {:on-chosen (fn [_e icon keep-popup?]
+                       (on-change icon)
+                       (when-not (true? keep-popup?)
+                         (set-sub-open! false)
+                         (restore-root-highlight-item! id)))
+          :icon-value value
+          :page-title page-title
+          :del-btn? (some? value)}))
+      :desc (if value
+              (fn [] [:span.flex.items-center (icon-component/icon value {:size 16})])
+              empty-label)})
+
+    :checkbox
+    (dropdown-editor-menuitem
+     {:icon menu-icon
+      :title label
+      :toggle-checked? value
+      :on-toggle-checked-change (fn [] (on-change (not value)))})))
+
 (hsx/defc tag-settings-dropdown
-  "Tag-level settings popover for Default Icon and Bidirectional properties, opened from
-   the tag page's title actions."
+  "Tag-level settings popover, opened from the tag page's title actions. The
+   second surface for the same settings is the Tag settings tab; both render
+   from `tag-settings`."
   [page*]
-  (let [page (db/sub-block (:db/id page*))
-        bidirectional? (boolean (:logseq.property.class/enable-bidirectional? page))
-        current-icon (:logseq.property.class/default-icon page)
-        page-title (:block/title page)]
-    [:div.ls-property-dropdown.!p-0
-     (shui/dropdown-menu-label (t :class/tag-settings))
-     (shui/dropdown-menu-separator)
-     ;; Default Icon
-     (dropdown-editor-menuitem
-      {:icon :icons
-       :title (t :class/default-icon)
-       :submenu-content
-       (fn [{:keys [set-sub-open! id]}]
-         (icon-component/icon-search
-          {:on-chosen (fn [_e icon keep-popup?]
-                        (if icon
-                          (let [icon-data (cond
-                                            (= :text (:type icon)) {:type :text :data (:data icon)}
-                                            (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
-                                            (= :image (:type icon)) {:type :image :data (:data icon)}
-                                            :else (select-keys icon [:type :id :color]))]
-                            (property-handler/set-block-property!
-                             (:db/id page) :logseq.property.class/default-icon icon-data))
-                          (property-handler/remove-block-property!
-                           (:db/id page) :logseq.property.class/default-icon))
-                        (when-not (true? keep-popup?)
-                          (set-sub-open! false)
-                          (restore-root-highlight-item! id)))
-           :icon-value current-icon
-           :page-title page-title
-           :del-btn? (some? current-icon)}))
-       :desc (if current-icon
-               (fn [] [:span.flex.items-center (icon-component/icon current-icon {:size 16})])
-               (t :class/default-icon-empty))})
-     ;; Bidirectional properties
-     (dropdown-editor-menuitem
-      {:icon :arrows-exchange
-       :title (t :class/bidirectional-properties)
-       :toggle-checked? bidirectional?
-       :on-toggle-checked-change
-       (fn []
-         (db-property-handler/set-block-property!
-          (:db/id page) :logseq.property.class/enable-bidirectional? (not bidirectional?)))})]))
+  (let [page (db/sub-block (:db/id page*))]
+    (into [:div.ls-property-dropdown.!p-0
+           (shui/dropdown-menu-label (t :class/tag-settings))
+           (shui/dropdown-menu-separator)]
+          (map-indexed (partial with-react-key "tag-setting"))
+          (map tag-setting-menuitem (tag-settings page)))))

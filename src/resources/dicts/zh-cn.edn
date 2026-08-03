@@ -164,12 +164,11 @@
  :bug-report.issue/title "或..."
 
  :class/add-property "添加标签属性"
- :class/bidirectional-properties "双向属性"
- :class/default-icon "默认图标"
  :class/default-icon-empty "空"
  :class/inherited-from "继承自"
  :class/tag-properties-desc "这些属性会显示在所有带有 {1} 标签的节点上。"
  :class/tag-settings "标签设置"
+ :class/tag-settings-desc "这些设置会改变所有带有 {1} 标签的节点的外观和行为。"
  :class/tagged-nodes "已标记节点"
 
  :class.built-in/asset "附件"
@@ -1580,7 +1579,8 @@
  :property.built-in/choice-classes "选项标签"
  :property.built-in/choice-exclusions "排除的选项"
  :property.built-in/class-bidirectional-property-title "双向属性标题"
- :property.built-in/class-enable-bidirectional "启用双向属性"
+ :property.built-in/class-default-icon "默认图标"
+ :property.built-in/class-enable-bidirectional "双向属性"
  :property.built-in/class-extends "继承"
  :property.built-in/class-hide-from-node "从节点隐藏"
  :property.built-in/class-properties "标签属性"
