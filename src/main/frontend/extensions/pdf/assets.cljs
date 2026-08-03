@@ -218,16 +218,20 @@
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
         relative-path (subs path 14)
-        protocol (if (util/electron?) "assets://" "file://")]
-    (cond
-      (string/starts-with? path "zotero-link://")
-      (str protocol (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+        local-path (cond
+                     (string/starts-with? path "zotero-link://")
+                     (util/node-path.join zotero-linked-attachment-base-directory relative-path)
 
-      (string/starts-with? path "zotero-path://")
-      (str protocol (util/node-path.join zotero-data-directory "storage" relative-path))
+                     (string/starts-with? path "zotero-path://")
+                     (util/node-path.join zotero-data-directory "storage" relative-path)
 
-      :else ;; compatible with commit 33db791
-      (str protocol (util/node-path.join zotero-data-directory "storage" id path)))))
+                     :else ;; compatible with commit 33db791
+                     (util/node-path.join zotero-data-directory "storage" id path))]
+    ;; normalize-asset-resource-url converts to assets:// on Electron,
+    ;; protecting Windows drive letters (C: -> C/logseq__colon/)
+    (if (util/electron?)
+      (assets-handler/normalize-asset-resource-url local-path)
+      (str "file://" local-path))))
 
 (defn db-based-open-block-ref!
   [block]
