@@ -1229,7 +1229,6 @@
  :property/available-choices "Доступные варианты"
  :property/change-tooltip "Змінити {1}"
  :property/checkbox-state-mapping "Сопоставление состояний флажка"
- :property/children-count "дітей ({1})"
  :property/choices-count "{1} варіантів"
  :property/choose-tag "Вибрати тег"
  :property/choose-tags "Вибрати теги"

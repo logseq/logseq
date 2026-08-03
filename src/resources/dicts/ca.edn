@@ -1229,7 +1229,6 @@
  :property/available-choices "Opcions disponibles"
  :property/change-tooltip "Canviar {1}"
  :property/checkbox-state-mapping "Mapatge d'estat de casella"
- :property/children-count "Nens ({1})"
  :property/choices-count "{1} opcions"
  :property/choose-tag "Triar etiqueta"
  :property/choose-tags "Triar etiquetes"

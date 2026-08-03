@@ -1229,7 +1229,6 @@
  :property/available-choices "الخيارات المتاحة"
  :property/change-tooltip "تغيير {1}"
  :property/checkbox-state-mapping "ربط حالة مربع الاختيار"
- :property/children-count "الأطفال ({1})"
  :property/choices-count "{1} الاختيارات"
  :property/choose-tag "اختر وسماً"
  :property/choose-tags "اختر وسوماً"

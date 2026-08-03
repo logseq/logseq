@@ -1229,7 +1229,6 @@
  :property/available-choices "사용 가능한 선택지"
  :property/change-tooltip "{1} 변경"
  :property/checkbox-state-mapping "체크박스 상태 매핑"
- :property/children-count "어린이({1})"
  :property/choices-count "{1} 선택 사항"
  :property/choose-tag "태그 선택"
  :property/choose-tags "태그 선택"

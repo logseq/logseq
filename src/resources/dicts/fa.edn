@@ -1229,7 +1229,6 @@
  :property/available-choices "گزینه‌های موجود"
  :property/change-tooltip "تغییر {1}"
  :property/checkbox-state-mapping "نگاشت وضعیت چک‌باکس"
- :property/children-count "کودکان ({1})"
  :property/choices-count "{1} انتخاب"
  :property/choose-tag "انتخاب برچسب"
  :property/choose-tags "انتخاب برچسب‌ها"

@@ -1483,7 +1483,7 @@
  :property/available-choices "Available choices"
  :property/change-tooltip "Change {1}"
  :property/checkbox-state-mapping "Checkbox state mapping"
- :property/children-count "Children ({1})"
+ :property/children "Children"
  :property/choices-count "{1} choices"
  :property/choose-tag "Choose tag"
  :property/choose-tags "Choose tags"

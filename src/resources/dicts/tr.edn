@@ -1229,7 +1229,6 @@
  :property/available-choices "Mevcut seçenekler"
  :property/change-tooltip "{1} değiştir"
  :property/checkbox-state-mapping "Onay kutusu durum eşleme"
- :property/children-count "Çocuklar ({1})"
  :property/choices-count "{1} seçimler"
  :property/choose-tag "Etiket seç"
  :property/choose-tags "Etiketleri seç"

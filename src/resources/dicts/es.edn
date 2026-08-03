@@ -1229,7 +1229,6 @@
  :property/available-choices "Opciones disponibles"
  :property/change-tooltip "Cambiar {1}"
  :property/checkbox-state-mapping "Correspondencia de estado de casilla"
- :property/children-count "Niños ({1})"
  :property/choices-count "{1} opciones"
  :property/choose-tag "Elegir etiqueta"
  :property/choose-tags "Elegir etiquetas"

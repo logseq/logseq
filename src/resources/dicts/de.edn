@@ -1229,7 +1229,6 @@
  :property/available-choices "Verfügbare Auswahlen"
  :property/change-tooltip "{1} ändern"
  :property/checkbox-state-mapping "Checkbox-Status-Zuordnung"
- :property/children-count "Kinder ({1})"
  :property/choices-count "{1} Auswahlmöglichkeiten"
  :property/choose-tag "Tag auswählen"
  :property/choose-tags "Tags auswählen"

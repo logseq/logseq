@@ -1229,7 +1229,6 @@
  :property/available-choices "Tilgjengelige valg"
  :property/change-tooltip "Endre {1}"
  :property/checkbox-state-mapping "Avkrysningsbokstilordning"
- :property/children-count "barn ({1})"
  :property/choices-count "{1} valg"
  :property/choose-tag "Velg tagg"
  :property/choose-tags "Velg tagger"

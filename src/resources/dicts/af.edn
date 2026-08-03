@@ -1229,7 +1229,6 @@
  :property/available-choices "Beschikbare keuzes"
  :property/change-tooltip "Verander {1}"
  :property/checkbox-state-mapping "Selectievaketoewijzing"
- :property/children-count "Kinders ({1})"
  :property/choices-count "{1} keuses"
  :property/choose-tag "Kies etiket"
  :property/choose-tags "Kies etikette"

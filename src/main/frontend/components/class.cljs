@@ -30,8 +30,17 @@
           ;; Expand children if there are about a pageful of total blocks to display
           default-collapsed? (> (count children-pages) 30)]
       (ui/foldable
-       [:div.font-medium.opacity-50
-        (t :property/children-count (count children-pages))]
-       [:div.ml-1.mt-2 (class-children-aux class {:default-collapsed? default-collapsed?})]
+       ;; Auto-section signpost: same quiet treatment as "Linked references"
+       ;; and "All N" (see the auto-section header block in page.css) instead of
+       ;; the old one-off font-medium/opacity-50. "Title · N" mirrors the
+       ;; section-header idiom already used by CMD+K's result groups and the
+       ;; icon picker (cmdk/core.cljs, icon.cljs section-header).
+       [:div.ls-auto-section-title
+        [:span (t :property/children)]
+        [:span.ls-auto-section-sep "\u00b7"]
+        [:span.ls-auto-section-count (count children-pages)]]
+       [:div.ls-auto-section-list.mt-2 (class-children-aux class {:default-collapsed? default-collapsed?})]
        {:default-collapsed? false
-        :title-trigger? true}))))
+        :title-trigger? true
+        ;; Puts the label on the page spine and the chevron in the gutter.
+        :class "ls-auto-section"}))))

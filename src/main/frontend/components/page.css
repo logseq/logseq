@@ -211,6 +211,170 @@ html:not(.is-mobile) .unlinked-references {
   margin-left: var(--ls-page-refs-spine-offset, -18px);
 }
 
+/* ── Auto-section headers ───────────────────────────────────────────────────
+   "Linked references", "Unlinked references", "All N" and "Children (N)" are
+   written by the app, not by the reader. They are signposts, so they read one
+   step quieter than the content they introduce: smaller, muted, no card, no
+   background, no box. Quieter, not walled — a card would break the spine.
+
+   POSITION. Each section's label sits on the spine and its fold chevron hangs
+   in the gutter, the same way a block's text sits on the spine with its bullet
+   to the left. The lead-in goes on `.ls-foldable-header` (not on the label
+   itself) so the chevron travels with the label:
+
+       padding-left = (spine − the section's own left edge) + 1px
+
+   The `+ 1px` is the fold control's net offset inside the header: it carries
+   `margin-left: -27px` (ui.css), is 22px wide and is followed by a 4px flex
+   gap, so the label starts 1px left of the header's content box.
+
+   Distances, with X0 = `.page-inner`'s left edge and the spine at X0 + 20:
+     .references / .unlinked-references  box at X0 − 14  →  34 + 1 = 35px
+     .ls-tag-table (see views.css)       box at X0 − 20  →  40 + 1 = 41px
+     class-children foldable             box at X0 +  4  →  16 + 1 = 17px
+
+   Desktop only: mobile drops the spine offsets these are measured against. */
+html:not(.is-mobile) .references .ls-foldable-header,
+html:not(.is-mobile) .unlinked-references .ls-foldable-header {
+  padding-left: var(--ls-page-refs-header-indent, 35px);
+}
+
+/* ── The section rule ───────────────────────────────────────────────────────
+   One hairline per auto-section, drawn under its own header.
+
+   What it replaces: grouped views carry a `border-t` above their first group
+   (`.ls-view-groups` in views.cljs). That line only exists when a view happens
+   to be grouped — so "Linked references" had one and "Children" did not — and
+   it starts at the section box, 34px left of the label it appears to underline.
+   Both of those read as accidents. It is switched off inside the auto-sections
+   and kept for grouped {{query}} / all-pages views, where it separates a real
+   toolbar from the list.
+
+   In its place the rule is drawn on the section header itself, as a pseudo
+   element inset to the spine so it starts exactly under the first letter of the
+   label and never left of it. Every auto-section gets one, whatever its view
+   type, so a list-view section and a table-view section read alike.
+
+   Not applied to `.ls-tag-table`: its own column header draws a rule directly
+   below the toolbar already, and a second one 30px above it would just be
+   noise. Not applied to group headers ("Pages", the date groups) either —
+   they are a rank below and are already delimited by their content. */
+.references .ls-view-groups,
+.unlinked-references .ls-view-groups {
+  border-top: 0;
+}
+
+.references .ls-foldable-header,
+.unlinked-references .ls-foldable-header,
+.ls-auto-section .ls-foldable-header {
+  position: relative;
+  padding-bottom: var(--ls-auto-section-rule-gap, 8px);
+}
+
+.references .ls-foldable-header::after,
+.unlinked-references .ls-foldable-header::after,
+.ls-auto-section .ls-foldable-header::after {
+  content: "";
+  position: absolute;
+  left: var(--ls-auto-section-rule-inset, 0px);
+  right: 0;
+  bottom: 0;
+  border-top: 1px solid var(--lx-gray-04, var(--rx-gray-04));
+}
+
+/* The inset matches the header's own lead-in, so the rule and the label share a
+   left edge. Mobile has no lead-in, so it keeps the 0px default. */
+html:not(.is-mobile) .references,
+html:not(.is-mobile) .unlinked-references {
+  --ls-auto-section-rule-inset: var(--ls-page-refs-header-indent, 35px);
+}
+
+html:not(.is-mobile) .ls-auto-section {
+  --ls-auto-section-rule-inset: var(--ls-auto-section-header-indent, 17px);
+}
+
+/* Group headers are a rank below and get neither the rule nor its spacing. */
+.references .ls-view-body .ls-foldable-header,
+.unlinked-references .ls-view-body .ls-foldable-header {
+  padding-bottom: 0;
+}
+
+.references .ls-view-body .ls-foldable-header::after,
+.unlinked-references .ls-view-body .ls-foldable-header::after {
+  content: none;
+}
+
+/* Group foldables ("Pages", the date groups) live inside the view body and must
+   not take the lead-in a second time; they keep hanging in the gutter, one rank
+   below the section label. */
+html:not(.is-mobile) .references .ls-view-body .ls-foldable-header,
+html:not(.is-mobile) .unlinked-references .ls-view-body .ls-foldable-header {
+  padding-left: 0;
+}
+
+html:not(.is-mobile) .ls-auto-section > .ls-foldable-title .ls-foldable-header {
+  padding-left: var(--ls-auto-section-header-indent, 17px);
+}
+
+/* The children list mirrors the reference list below it: the page-reference
+   icon hangs in the gutter and its text sits on the spine, no bullet of its
+   own (the `#` / node icon already marks the row, and an `outside` list marker
+   would render past the page's left edge).
+
+   The section box sits at X0 + 4. A first-level row adds 8px (`li.ml-2`)
+   + 4px (icon inset) + 20px (icon box + gap) = 32px after the list, and the
+   list's own em-based margin is zeroed here, so -16px lands the row text on
+   the spine at X0 + 20. Nested levels keep their em margin and still step in. */
+html:not(.is-mobile) .ls-auto-section-list {
+  margin-left: var(--ls-auto-section-list-offset, -16px);
+}
+
+.ls-auto-section-list ul {
+  list-style: none;
+}
+
+html:not(.is-mobile) .ls-auto-section-list > ul {
+  margin-left: 0;
+}
+
+/* TYPOGRAPHY. The same "Title · N" signpost the app already uses for CMD+K's
+   result groups and the icon picker's section headers (`result-group` in
+   cmdk/core.cljs, `section-header` in icon.cljs): 12px bold label, gray-11, a
+   middot, then the count one step smaller.
+
+   What is deliberately NOT carried over from those two is their `bg-gray-02`
+   band, fixed `h-8` and `px-3`. Those exist because they are sticky headers
+   inside a scrolling dialog list; on a page the band would read as a wall and
+   break the spine rail.
+
+   Applies on mobile too — only the geometry above is desktop-only. Scoped to
+   the auto-sections: inline {{query}} views render their own title (the
+   `:query-result` branch of `view-head`) and must not be caught by this. */
+.references .ls-view-head .views button,
+.unlinked-references .ls-view-head .views button,
+.ls-tag-table .ls-view-head .views button,
+.ls-auto-section-title {
+  font-size: var(--ls-auto-section-title-size, 12px);
+  font-weight: 700;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* class-children builds its header by hand, so it needs the row layout the
+   shui button already gives the view tabs. */
+.ls-auto-section-title {
+  @apply flex flex-row items-center gap-1;
+}
+
+.ls-auto-section-sep,
+.ls-auto-section-count {
+  font-weight: 400;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+.ls-auto-section-count {
+  font-size: var(--ls-auto-section-count-size, 0.7rem);
+}
+
 .no-ring {
   @apply focus:ring-0 focus:ring-offset-0;
 }

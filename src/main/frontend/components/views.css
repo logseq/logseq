@@ -45,6 +45,77 @@ html:not(.is-mobile) .ls-tag-table {
     margin-left: var(--ls-tag-table-spine-offset, -20px);
 }
 
+/* ── Right bleed ────────────────────────────────────────────────────────────
+   A tag table's left edge stays in the block column's gutter, but its rows are
+   allowed to run right, out into the empty margin beside the column, so more
+   property columns are readable before you have to scroll.
+
+   Only `.ls-table-rows` grows. The toolbar, the filter chips and the section
+   rule all stay on the block column, so the page's right edge still reads as
+   one line — it is only the table body that breaks out.
+
+   `is-bleeding` and `--ls-table-bleed-right` are set by `table-scroll-proxy`
+   (views.cljs), which measures the free margin rather than deriving it from
+   100vw: with the right sidebar open, 100vw overstates it. The class is absent
+   whenever there is nothing to grow into — right sidebar, tag dialog, narrow
+   window, mobile — and then none of this applies. */
+/* The widening happens on `.ls-foldable-content-inner`, not on `.ls-table-rows`
+   itself. That wrapper carries `overflow: hidden` for the collapse animation
+   (ui.css), so a wider scroller nested inside it would just be clipped back to
+   the block column and nothing would appear to change. Widening the wrapper
+   instead lets the extra width flow down through `.ls-view-body` and
+   `.ls-table` to the scroller, which is `width: auto`.
+
+   The reset keeps grouped tag tables honest: each group renders its own
+   foldable inside the view body, and those must not take the bleed a second
+   time. */
+html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-foldable-content-inner {
+    margin-right: calc(-1 * var(--ls-table-bleed-right, 0px));
+}
+
+html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-view-body .ls-foldable-content-inner {
+    margin-right: 0;
+}
+
+/* The scrollbar belongs to whatever element has overflow-x, so a bled scroller
+   would put its bar out in the margin too, past every other edge on the page.
+   Hide it and let `.ls-table-scroll-proxy` — which stays at the block column's
+   width — be the visible, draggable one. Swiping over the table body still
+   scrolls the real element directly; the proxy just mirrors it. */
+html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-rows {
+    scrollbar-width: none;
+}
+
+html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-rows::-webkit-scrollbar {
+    display: none;
+}
+
+/* `contain: inline-size` is load-bearing. The spacer inside is as wide as the
+   table's full scroll width, and `overflow` only zeroes an element's *minimum*
+   size — its max-content contribution still counts, so without containment the
+   spacer widens this box, which widens the shared `.ls-table` parent, which
+   widens `.ls-table-rows`, whose new scrollWidth feeds the next measurement.
+   That loop ran away to ~486,000px. Containment makes this box's inline size
+   independent of its content, so it just fills the block column and scrolls. */
+.ls-table-scroll-proxy {
+    display: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    contain: inline-size;
+    /* Its parent has been widened along with the table, so pull the bleed back
+       off to land on the block column, where the rest of the page ends. */
+    width: calc(100% - var(--ls-table-bleed-right, 0px));
+}
+
+html:not(.is-mobile) .ls-tag-table.is-bleeding > * > * > .ls-view-body .ls-table-scroll-proxy,
+html:not(.is-mobile) .ls-tag-table.is-bleeding .ls-table-scroll-proxy {
+    display: block;
+}
+
+.ls-table-scroll-proxy-spacer {
+    height: 1px;
+}
+
 /* The toolbar row and the filter chips have no checkbox column in front of
    them, so they need the row lead-in added back to sit on the Name column
    rather than hanging in the gutter. Do NOT pad `.ls-view-body` or
@@ -53,10 +124,18 @@ html:not(.is-mobile) .ls-tag-table .filters-row {
     padding-left: var(--ls-tag-table-name-col-offset, 40px);
 }
 
-/* The toolbar row starts one pixel further left than the view body: it is the
-   flex sibling of the foldable's fold-arrow control, whose -27px margin, 22px
-   box and 4px gap net out to -1px. Add that pixel back so the view icon lands
-   exactly on the spine, level with the "Name" column header. */
-html:not(.is-mobile) .ls-tag-table .ls-view-head {
+/* The lead-in goes on the section's own foldable header rather than on
+   `.ls-view-head`, so the fold chevron travels with the label into the gutter
+   instead of being stranded ~66px out on its own. See the shared
+   `.ls-foldable-header` note in page.css for where the `+ 1px` comes from.
+
+   The `.ls-view-body` reset keeps grouped tables honest: every group renders
+   its own `ui/foldable`, and those nested headers must not pick the lead-in up
+   a second time. */
+html:not(.is-mobile) .ls-tag-table .ls-foldable-header {
     padding-left: calc(var(--ls-tag-table-name-col-offset, 40px) + 1px);
+}
+
+html:not(.is-mobile) .ls-tag-table .ls-view-body .ls-foldable-header {
+    padding-left: 0;
 }

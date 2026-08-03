@@ -1229,7 +1229,6 @@
  :property/available-choices "Choix disponibles"
  :property/change-tooltip "Modifier {1}"
  :property/checkbox-state-mapping "Correspondance d'état de case à cocher"
- :property/children-count "Enfants ({1})"
  :property/choices-count "{1} choix"
  :property/choose-tag "Choisir un tag"
  :property/choose-tags "Choisir des tags"

@@ -1242,7 +1242,6 @@
  :property/available-choices "利用可能な選択肢"
  :property/change-tooltip "{1}を変更"
  :property/checkbox-state-mapping "チェックボックスの状態マッピング"
- :property/children-count "の子供たち ({1})"
  :property/choices-count "{1} の選択肢"
  :property/choose-tag "タグを選択"
  :property/choose-tags "タグを選択"

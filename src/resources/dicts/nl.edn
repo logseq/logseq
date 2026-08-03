@@ -1229,7 +1229,6 @@
  :property/available-choices "Beschikbare keuzes"
  :property/change-tooltip "Wijzig {1}"
  :property/checkbox-state-mapping "Selectievaketoewijzing"
- :property/children-count "Kinderen ({1})"
  :property/choices-count "{1} keuzes"
  :property/choose-tag "Tag kiezen"
  :property/choose-tags "Tags kiezen"

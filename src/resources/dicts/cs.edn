@@ -1229,7 +1229,6 @@
  :property/available-choices "Dostupné volby"
  :property/change-tooltip "Změnit {1}"
  :property/checkbox-state-mapping "Mapování stavů zaškrtávacího pole"
- :property/children-count "Děti ({1})"
  :property/choices-count "{1} možností"
  :property/choose-tag "Vybrat štítek"
  :property/choose-tags "Vybrat štítky"

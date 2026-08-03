@@ -1242,7 +1242,6 @@
  :property/available-choices "可用選項"
  :property/change-tooltip "變更 {1}"
  :property/checkbox-state-mapping "核取方塊狀態對應"
- :property/children-count "子項 ({1})"
  :property/choices-count "{1} 個選項"
  :property/choose-tag "選擇標籤"
  :property/choose-tags "選擇標籤"

@@ -1229,7 +1229,6 @@
  :property/available-choices "Pilihan tersedia"
  :property/change-tooltip "Ubah {1}"
  :property/checkbox-state-mapping "Pemetaan status checkbox"
- :property/children-count "Anak-anak ({1})"
  :property/choices-count "{1} pilihan"
  :property/choose-tag "Pilih tag"
  :property/choose-tags "Pilih tag"

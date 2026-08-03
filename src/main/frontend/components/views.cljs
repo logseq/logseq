@@ -2025,20 +2025,92 @@
                             (set-items-rendered! true)))}
        (:disable-virtualized? option)))))
 
+(hsx/defc table-scroll-proxy
+  "Stand-in horizontal scrollbar for a tag table that bleeds past the page's
+   block column.
+
+   The real scroller (`.ls-table-rows`) is widened rightwards into the empty
+   margin next to the block column so more columns are readable, and its own
+   scrollbar is hidden. This element stays at the block column's width and
+   drives that scroller, so the bar still lines up with the rest of the page
+   while the table itself runs wider. Trackpad swipes go straight to the real
+   scroller; this only mirrors them.
+
+   Everything is opt-in via the `is-bleeding` class, which is only added when
+   there is actually free margin to grow into. In the right sidebar, in the tag
+   dialog, on mobile and at narrow window widths the class never appears, the
+   table keeps its native scrollbar and this element stays hidden."
+  [*rows-ref]
+  (let [*proxy-ref (hooks/use-ref nil)
+        [scroll-width set-scroll-width!] (hooks/use-state 0)]
+    (hooks/use-effect!
+     (fn []
+       (when-let [^js rows (hooks/deref *rows-ref)]
+         (let [^js proxy (hooks/deref *proxy-ref)
+               ^js wrapper (.closest rows ".ls-tag-table")
+               ^js main (.closest rows ".cp__sidebar-main-content")
+               ^js spacing (.closest rows ".scrollbar-spacing")
+               measure!
+               (fn []
+                 ;; Free margin = from the main column's right edge out to the
+                 ;; scroll container's padding edge. Measured rather than
+                 ;; derived from 100vw, which overstates it whenever the right
+                 ;; sidebar is open.
+                 (let [free (if (and wrapper main spacing)
+                              (let [pad (or (js/parseFloat
+                                             (.-paddingRight (js/getComputedStyle spacing)))
+                                            0)]
+                                (js/Math.round
+                                 (max 0 (- (- (.-right (.getBoundingClientRect spacing)) pad)
+                                           (.-right (.getBoundingClientRect main))))))
+                              0)]
+                   (when wrapper
+                     (if (> free 1)
+                       (do (.setProperty (.-style wrapper) "--ls-table-bleed-right" (str free "px"))
+                           (.add (.-classList wrapper) "is-bleeding"))
+                       (do (.removeProperty (.-style wrapper) "--ls-table-bleed-right")
+                           (.remove (.-classList wrapper) "is-bleeding"))))
+                   ;; The proxy is `free` px narrower than the real scroller, so
+                   ;; its spacer has to be `free` px shorter too — otherwise its
+                   ;; travel is longer than the scroller's and the last stretch
+                   ;; of the drag moves nothing.
+                   (set-scroll-width! (max 0 (- (.-scrollWidth rows) free)))))
+               from-rows (fn [] (when proxy (set! (.-scrollLeft proxy) (.-scrollLeft rows))))
+               from-proxy (fn [] (when proxy (set! (.-scrollLeft rows) (.-scrollLeft proxy))))
+               ^js observer (js/ResizeObserver. measure!)]
+           (measure!)
+           (.observe observer rows)
+           (when spacing (.observe observer spacing))
+           (.addEventListener rows "scroll" from-rows #js {:passive true})
+           (when proxy (.addEventListener proxy "scroll" from-proxy #js {:passive true}))
+           (fn []
+             (.disconnect observer)
+             (.removeEventListener rows "scroll" from-rows)
+             (when proxy (.removeEventListener proxy "scroll" from-proxy))
+             (when wrapper (.remove (.-classList wrapper) "is-bleeding"))))))
+     [])
+    [:div.ls-table-scroll-proxy.force-visible-scrollbar
+     {:ref *proxy-ref :aria-hidden true}
+     [:div.ls-table-scroll-proxy-spacer {:style {:width scroll-width}}]]))
+
 (hsx/defc table-view
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        [items-rendered? set-items-rendered!] (hooks/use-state false)]
+        [items-rendered? set-items-rendered!] (hooks/use-state false)
+        *rows-ref (hooks/use-ref nil)]
     (shui/table
      (let [rows (:rows table)]
-       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-        [:div.relative
-         (table-header table option selected-rows)
+       [:<>
+        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+         {:ref *rows-ref}
+         [:div.relative
+          (table-header table option selected-rows)
 
-         (table-body table option rows *scroller-ref set-items-rendered!)
+          (table-body table option rows *scroller-ref set-items-rendered!)
 
-         (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
-           (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
+          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
+            (shui/table-footer (add-new-row (:view-entity option) table)))]]
+        (table-scroll-proxy *rows-ref)]))))
 
 (hsx/defc list-view
   [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
@@ -2539,14 +2611,20 @@
            (icon-component/icon icon {:color? true
                                       :size 15}))))
      (display-view-title view)
+     ;; "Title \u00b7 N" — the section-header count idiom already used by CMD+K's
+     ;; result groups and the icon picker (cmdk/core.cljs, icon.cljs
+     ;; section-header). Styled in page.css alongside the other auto-section
+     ;; headers so "All \u00b7 48" and "Linked references \u00b7 3" read alike.
      (when (and current-view? show-items-count? (> items-count 0) (seq data))
-       [:span.text-muted-foreground.text-xs
-        items-count
-        (when (and refs-total-count
-                   (> refs-total-count items-count))
-          [:span
-           [:span "/"]
-           [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]))))
+       [:<>
+        [:span.ls-auto-section-sep "\u00b7"]
+        [:span.ls-auto-section-count
+         items-count
+         (when (and refs-total-count
+                    (> refs-total-count items-count))
+           [:span
+            [:span "/"]
+            [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]]))))
 
 (hsx/defc views-tab
   [view-parent current-view {:keys [views set-views! view-feature-type opacity] :as opts}]
@@ -2754,7 +2832,10 @@
                (if gallery?
                  (grouped-gallery-view table-map table option view-entity (:rows table) row-selection
                                        group-by-property group-by-property-ident *scroller-ref)
-                 [:div.flex.flex-col.border-t.pt-2.gap-2
+                 ;; .ls-view-groups so the hairline this carries can be scoped
+                 ;; off in the page's auto-sections (see page.css) without
+                 ;; touching grouped {{query}} / all-pages views.
+                 [:div.ls-view-groups.flex.flex-col.border-t.pt-2.gap-2
                   (virtualized-list
                    {:class (when list-view? "group-list-view")
                     :custom-scroll-parent (util/app-scroll-container-node (hooks/deref *view-ref))

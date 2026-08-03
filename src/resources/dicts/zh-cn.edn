@@ -1483,7 +1483,7 @@
  :property/available-choices "可用选项"
  :property/change-tooltip "修改“{1}”"
  :property/checkbox-state-mapping "复选框状态映射"
- :property/children-count "子项 ({1})"
+ :property/children "子项"
  :property/choices-count "{1} 个选项"
  :property/choose-tag "选择标签"
  :property/choose-tags "选择标签"
