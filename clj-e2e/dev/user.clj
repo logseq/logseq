@@ -18,9 +18,7 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.multi-tabs-basic-test]
-            [logseq.e2e.navigation-basic-test]
             [logseq.e2e.outliner-basic-test]
-            [logseq.e2e.pdf-annotation-basic-test]
             [logseq.e2e.plugins-basic-test]
             [logseq.e2e.plugins-marketplace-test]
             [logseq.e2e.property-basic-test]
@@ -31,7 +29,6 @@
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-part2-test]
             [logseq.e2e.rtc-extra-test]
-            [logseq.e2e.shell-search-basic-test]
             [logseq.e2e.tag-basic-test]
             [logseq.e2e.util :as util]
             [logseq.e2e.view-basic-test]
@@ -143,16 +140,13 @@
              'logseq.e2e.graph-navigation-basic-test
              'logseq.e2e.import-basic-test
              'logseq.e2e.multi-tabs-basic-test
-             'logseq.e2e.navigation-basic-test
              'logseq.e2e.outliner-basic-test
-             'logseq.e2e.pdf-annotation-basic-test
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.property-basic-test
              'logseq.e2e.property-config-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.right-sidebar-basic-test
              'logseq.e2e.rtc-basic-test
-             'logseq.e2e.shell-search-basic-test
              'logseq.e2e.tag-basic-test
              'logseq.e2e.view-basic-test)
   (System/exit 0))
