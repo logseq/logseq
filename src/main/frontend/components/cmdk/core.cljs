@@ -69,9 +69,27 @@
     :wikidata-entities 1
     5))
 
-(defonce ^:private *wikidata-cancel-token (atom nil))
-(defonce ^:private *wikidata-last-query (atom nil))
+;; The cancel token / last-query guard / debounce timer live in the per-mount
+;; state map (see cmdk-init-state), not in defonce globals: ::results is recreated
+;; on every dialog open, so a guard that outlives it can suppress a search the new
+;; mount still needs.
 (def ^:private wikidata-search-debounce-ms 400)
+
+(defn- cancel-wikidata-search!
+  "Abort the in-flight Wikidata request (and its image enrichment) and drop the
+   dedupe guard, so the same query searches again next time it is typed."
+  [state]
+  (when-let [cancel-fn @(::wikidata-cancel-token state)]
+    (cancel-fn))
+  (reset! (::wikidata-cancel-token state) nil)
+  (reset! (::wikidata-last-query state) nil)
+  (wikidata/cancel-image-fetches!))
+
+(defn- clear-wikidata-debounce!
+  [state]
+  (when-let [timer @(::wikidata-debounce-timer state)]
+    (js/clearTimeout timer))
+  (reset! (::wikidata-debounce-timer state) nil))
 
 (defn filters
   []
@@ -895,10 +913,16 @@
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (let [filter-group (:group @(::filter state))]
+    ;; Every refresh supersedes the pending debounce; otherwise each keystroke
+    ;; leaves its own timer running and none of them are ever cancelled.
+    (clear-wikidata-debounce! state)
     (if (and (not (some-> state ::input deref seq))
              (not filter-group))
       (do (load-results :initial state)
-          (load-results :filters state))
+          (load-results :filters state)
+          ;; :initial resets ::results wholesale, but the Wikidata request that is
+          ;; still in flight has to be cancelled explicitly or it writes right back.
+          (load-results :wikidata-entities state))
       (if filter-group
         (load-results filter-group state)
         (do
@@ -907,7 +931,8 @@
           (load-results :filters state)
           (load-results :files state)
           (load-results :recently-updated-pages state)
-          (js/setTimeout #(load-results :wikidata-entities state) wikidata-search-debounce-ms)
+          (reset! (::wikidata-debounce-timer state)
+                  (js/setTimeout #(load-results :wikidata-entities state) wikidata-search-debounce-ms))
           ;; (load-results :recents state)
           )))))
 
@@ -1211,20 +1236,24 @@
 (defmethod load-results :wikidata-entities [group state]
   (let [!input (::input state)
         !results (::results state)
-        input @!input]
+        input @!input
+        ;; A response is only allowed to write if the box still holds the query
+        ;; that asked for it. Without this, clearing the input leaves the last
+        ;; in-flight search free to repopulate "From web" over an empty query.
+        current? (fn [cancelled?] (and (not @cancelled?) (= input @!input)))]
     (if (and (not (string/blank? input)) (>= (count input) 2))
       (do
-        (when-let [cancel-fn @*wikidata-cancel-token]
+        (when-let [cancel-fn @(::wikidata-cancel-token state)]
           (cancel-fn))
         (wikidata/cancel-image-fetches!)
-        (when (not= input @*wikidata-last-query)
-          (reset! *wikidata-last-query input)
+        (when (not= input @(::wikidata-last-query state))
+          (reset! (::wikidata-last-query state) input)
           (swap! !results assoc-in [group :status] :loading)
           (let [cancelled? (atom false)]
-            (reset! *wikidata-cancel-token #(reset! cancelled? true))
+            (reset! (::wikidata-cancel-token state) #(reset! cancelled? true))
             (-> (wikidata/<search-and-enrich input)
                 (p/then (fn [results]
-                          (when-not @cancelled?
+                          (when (current? cancelled?)
                             (let [items (->> results
                                              (mapv (fn [{:keys [qid label description]}]
                                                      {:icon "globe"
@@ -1237,7 +1266,7 @@
                               (wikidata/<enrich-search-results-with-images
                                (mapv (fn [{:keys [qid]}] {:id qid}) results)
                                (fn [qid {:keys [image-url class-title icon-type]}]
-                                 (when-not @cancelled?
+                                 (when (current? cancelled?)
                                    (swap! !results update-in [group :items]
                                           (fn [items]
                                             (mapv (fn [item]
@@ -1248,8 +1277,13 @@
                                                       item))
                                                   items))))))))))
                 (p/catch (fn [_err]
-                           (swap! !results assoc-in [group :status] :success)))))))
-      (swap! !results update group merge {:status :success :items nil}))))
+                           (when (current? cancelled?)
+                             (swap! !results assoc-in [group :status] :success))))))))
+      (do
+        ;; Query too short or cleared: stop the network work as well as hiding the
+        ;; group, and drop the guard so retyping the same query searches again.
+        (cancel-wikidata-search! state)
+        (swap! !results update group merge {:status :success :items nil})))))
 
 (defmethod handle-action :create-from-wikidata [_ state _event]
   (when-let [item (state->highlighted-item state)]
@@ -2590,6 +2624,9 @@
      ::highlighted-item (atom nil)
      ::focus-source (atom :keyboard)
      ::results (atom default-results)
+     ::wikidata-cancel-token (atom nil)
+     ::wikidata-last-query (atom nil)
+     ::wikidata-debounce-timer (atom nil)
      ::preview-enabled? (atom (boolean (storage/get :cmdk-preview-pane?)))
      ::preview-debounced-item (atom nil)
      ::sidebar? (:sidebar? opts)}))
@@ -2598,6 +2635,8 @@
   "Clean up cmdk component: persist state, clear search mode."
   [state]
   (persist-cmdk-query-state! state)
+  (clear-wikidata-debounce! state)
+  (cancel-wikidata-search! state)
   (state/set-state! :search/mode nil)
   (state/set-state! :search/args nil)
   state)
