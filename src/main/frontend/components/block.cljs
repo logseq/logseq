@@ -4569,10 +4569,17 @@
        [:div.block-main-container.flex.flex-row.gap-1
         {:class (when (:page-title? config) "is-page-title-row")
          :style (when (:page-title? config)
+                  ;; Land the page-title TEXT on the first-level block text
+                  ;; column, icon or no icon, so title + blocks + property keys
+                  ;; share one left edge. The two values differ because the icon
+                  ;; branch renders a wider leading slot; both were measured
+                  ;; against the block column (see the -22 outdent in page.cljs).
+                  ;; Also fixes the pre-existing no-icon title sitting left of
+                  ;; that column. capacitor keeps 0.
                   {:margin-left (cond
                                   (util/capacitor?) 0
-                                  page-icon -36
-                                  :else -30)})
+                                  page-icon -62
+                                  :else -12)})
          :data-has-heading (block-heading-level block level)
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?

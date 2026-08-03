@@ -20,3 +20,43 @@
     @apply flex flex-row items-start text-sm;
     margin-right: 6px;
 }
+
+/* Tag ("All N") and property-object tables join the page's single left spine
+   (see the matching notes in page.css): the Name column's icon + text land on
+   the same column as the page title, the property keys and the block text,
+   while the row-selection checkbox drops into the gutter beside them. Flushing
+   the checkbox to the spine instead would leave a phantom ~40px indent in front
+   of every name, because the checkbox is opacity-0 until row hover.
+
+   -20px puts the wrapper on the same gutter line the page body already uses
+   (X0 - 20). Each row then adds back its own 40px lead-in — 32px checkbox
+   column + 8px cell padding — which lands the name exactly on the spine.
+
+   The gutter must stay out here on the wrapper, OUTSIDE `.ls-table-rows`: that
+   element is the `overflow-x-auto` viewport, and shifting it desyncs the
+   `left-0`-anchored sticky header/footer and the column resize handles. Keeping
+   it outside also means the sticky checkbox pins to the viewport's left edge,
+   i.e. stays in the gutter, while the table scrolls horizontally.
+
+   Desktop only — mobile drops the page's other offsets too, so it is already
+   aligned. Scoped to `.ls-tag-table` rather than `.ls-table` / `.views` /
+   `.ls-view-body`, which are shared with inline {{query}} views. */
+html:not(.is-mobile) .ls-tag-table {
+    margin-left: var(--ls-tag-table-spine-offset, -20px);
+}
+
+/* The toolbar row and the filter chips have no checkbox column in front of
+   them, so they need the row lead-in added back to sit on the Name column
+   rather than hanging in the gutter. Do NOT pad `.ls-view-body` or
+   `.ls-table-rows` — the rows reach the spine via the wrapper above. */
+html:not(.is-mobile) .ls-tag-table .filters-row {
+    padding-left: var(--ls-tag-table-name-col-offset, 40px);
+}
+
+/* The toolbar row starts one pixel further left than the view body: it is the
+   flex sibling of the foldable's fold-arrow control, whose -27px margin, 22px
+   box and 4px gap net out to -1px. Add that pixel back so the view icon lands
+   exactly on the spine, level with the "Name" column header. */
+html:not(.is-mobile) .ls-tag-table .ls-view-head {
+    padding-left: calc(var(--ls-tag-table-name-col-offset, 40px) + 1px);
+}

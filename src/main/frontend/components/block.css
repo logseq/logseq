@@ -1368,8 +1368,11 @@ html.is-mobile .ls-block-content-indent {
     @apply rounded-full opacity-80;
     display: block;
     flex: none;
-    width: 0.4em;
-    height: 0.4em;
+    /* Bumped 0.4em -> 0.45em so the round dot's visual mass matches the 6px
+       square property-key bullet (a circle reads ~20% lighter than a square at
+       the same box). Affects round dots only — icons replace .bullet entirely. */
+    width: 0.45em;
+    height: 0.45em;
 
     > * {
       @apply cursor-pointer;

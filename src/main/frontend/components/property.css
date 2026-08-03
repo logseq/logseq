@@ -544,6 +544,12 @@ a.control-link {
 
 .ls-page-title .ls-page-properties {
   @apply flex flex-col gap-0 mt-4;
+  /* Property keys sit on the first-level block text column by nature. The page
+     title text is now pulled onto that same column (block.cljs page-title row
+     margin), so properties need NO shift — they already align with title + block
+     text. (Was a +27px hack that chased the old icon-pushed title.) Nudge the var
+     to ~2px only if pixel-exact alignment is wanted. */
+  margin-left: var(--ls-page-title-property-indent, 0px);
 }
 
 .ls-page-title .ls-page-properties > .ls-new-property {

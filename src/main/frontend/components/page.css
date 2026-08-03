@@ -195,6 +195,22 @@ html.is-native-ios {
   @apply select-none;
 }
 
+/* Linked / unlinked references join the page's single left spine instead of
+   sitting indented off it: pull the whole section left so a first-level
+   reference block's TEXT lands on the same column as the page title, the
+   property keys and the body block text. The section's bullets, fold arrows and
+   the "Linked references" header then hang in the same gutter the body blocks
+   already use, so the page reads down one continuous rail.
+
+   -18px = the refs' own offsets (page.cljs `ml-1` +4, list-view group `-ml-2`
+   -8, so +34 from the section box to block text) reconciled against the body's
+   -22 outdent (+42 from `.ls-page-blocks` to block text). Desktop only: on
+   mobile none of those three offsets apply, so mobile is already aligned. */
+html:not(.is-mobile) .references,
+html:not(.is-mobile) .unlinked-references {
+  margin-left: var(--ls-page-refs-spine-offset, -18px);
+}
+
 .no-ring {
   @apply focus:ring-0 focus:ring-offset-0;
 }

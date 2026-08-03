@@ -515,7 +515,13 @@
               (if recycle-page?
                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
                 [:div.ls-page-blocks
-                 {:style {:margin-left (if (util/mobile?) 0 -20)}
+                 ;; -22 (not -20) cancels the block's in-flow fold-arrow gutter
+                 ;; exactly: the arrow column is 22px wide, so pulling the body
+                 ;; left by 22 puts first-level block TEXT on the same column as
+                 ;; the page title and the property keys, and the block bullet on
+                 ;; the same column as the property bullet. Mobile keeps 0 (the
+                 ;; ls-fold-button-on-right layout has no left gutter to cancel).
+                 {:style {:margin-left (if (util/mobile?) 0 -22)}
                   :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                      :on-page-blocks-rendered #(when-not (= linked-refs-blocks-ready-page-id page-id)

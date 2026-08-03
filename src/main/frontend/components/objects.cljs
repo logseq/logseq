@@ -128,7 +128,10 @@
         container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         properties (outliner-property/get-class-properties class)]
-    [:div.ml-1
+    ;; .ls-tag-table carries the page-spine gutter (see page.css): the Name
+    ;; column lands on the page's left spine and the row-selection checkbox
+    ;; drops into the gutter beside it. Replaces the old flat `ml-1`.
+    [:div.ls-tag-table
      (class-objects-inner config class properties)]))
 
 (defn- add-new-property-object!
@@ -170,5 +173,6 @@
         properties (if (= (:db/ident property) :block/tags)
                      [property']
                      [property' (db/entity :block/tags)])]
-    [:div.ml-1
+    ;; Same spine gutter as class-objects above.
+    [:div.ls-tag-table
      (property-related-objects-inner config property' properties)]))
