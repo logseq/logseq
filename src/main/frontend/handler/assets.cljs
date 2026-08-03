@@ -108,7 +108,8 @@
       protocol-link?
       (if (and (util/electron?)
                (string/starts-with? path "file://"))
-        (string/replace-first path "file://" "assets://")
+        ;; strip file:// then normalize (protects Windows drive: C: -> C/logseq__colon/)
+        (normalize-asset-resource-url (string/replace-first path "file://" ""))
         path)
 
       ;; BUG: avoid double encoding from PDF assets
@@ -169,7 +170,8 @@
          js-url?
          (if (and (util/electron?)
                   (string/starts-with? (.-protocol js-url) "file:"))
-           (string/replace-first path "file://" "assets://")
+           ;; strip file:// then normalize (protects Windows drive: C: -> C/logseq__colon/)
+           (normalize-asset-resource-url (string/replace-first path "file://" ""))
            path)                                               ;; just return the original
 
          (and (alias-enabled?)

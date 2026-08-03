@@ -47,7 +47,8 @@
               protocol-link?
               (if (and (util/electron?)
                        (string/starts-with? href "file://"))
-                (string/replace-first href "file://" "assets://")
+                ;; strip file:// then normalize (protects Windows drive: C: -> C/logseq__colon/)
+                (assets-handler/normalize-asset-resource-url (string/replace-first href "file://" ""))
                 href)
 
               :else
