@@ -134,6 +134,7 @@
     (k/esc)
     (util/search-and-click "(Dev) Validate current graph")
     (w/wait-for success-toast {:timeout 30000})
-    (when (w/visible? ".ui__toast.success button")
-      (w/click ".ui__toast.success button"))
+    (w/eval-js
+     "() => document.querySelectorAll('.ui__toast.success button')
+       .forEach((button) => button.click())")
     {:valid? true}))
