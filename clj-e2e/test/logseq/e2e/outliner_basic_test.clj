@@ -338,6 +338,16 @@
            (content-tree (get node "children"))])
         nodes))
 
+(defn- wait-for-block-content!
+  [block-id expected]
+  (loop [attempts-left 40]
+    (let [actual (get (ls-api-call! :editor.getBlock block-id) "content")]
+      (if (or (= expected actual) (zero? attempts-left))
+        (is (= expected actual))
+        (do
+          (util/wait-timeout 100)
+          (recur (dec attempts-left)))))))
+
 (defn- visible-outline-content-tree
   []
   (let [relations
@@ -629,48 +639,59 @@
 (defn- drag-block!
   [source-title target-title placement]
   (let [source-block (w/-query
-                      (format ".ls-block[data-block-title='%s']"
+                      (format ".ls-page-blocks .ls-block[data-block-title='%s']"
                               source-title))
         target-block (w/-query
-                      (format ".ls-block[data-block-title='%s']"
+                      (format ".ls-page-blocks .ls-block[data-block-title='%s']"
                               target-title))
         target-height (.-height (.boundingBox target-block))
+        target-x (if (= placement "inside") 80 30)
         target-y (case placement
                    "before" 2
                    "after" (- target-height 2)
-                   "inside" (/ target-height 2))
+                   "inside" (- target-height 2))
         options (doto (Locator$DragToOptions.)
-                  (.setTargetPosition 30 target-y)
+                  (.setTargetPosition target-x target-y)
                   (.setSteps 12))]
-    (.dragTo (.locator source-block ".bullet-container")
+    (.dragTo (.first (.locator source-block ".bullet-container"))
              target-block
              options)
     (util/wait-timeout 250)))
 
 (deftest drag-reorders-once-and-is-undoable-test
   (testing "same-level drag changes order once and undo restores the original order"
-    (let [page-name (p/get-page-name)]
+    (let [page-name (p/get-page-name)
+          initial [["drag first" []]
+                   ["drag second" []]
+                   ["drag third" []]]
+          reordered [["drag third" []]
+                     ["drag first" []]
+                     ["drag second" []]]]
       (b/new-blocks ["drag first" "drag second" "drag third"])
       (util/exit-edit)
+      (wait-for-content-tree! page-name initial)
       (drag-block! "drag third" "drag first" "before")
-      (is (= ["drag third" "drag first" "drag second"]
-             (mapv #(get % "content") (block-tree page-name))))
-      (b/undo)
-      (is (= ["drag first" "drag second" "drag third"]
-             (mapv #(get % "content") (block-tree page-name)))))))
+      (wait-for-content-tree! page-name reordered)
+      (undo-and-wait-for-content-tree! page-name initial))))
 
 (deftest drag-indents-and-outdents-test
   (testing "dragging into and out of a parent updates both sides of the tree"
-    (let [page-name (p/get-page-name)]
+    (let [page-name (p/get-page-name)
+          initial [["drag parent" []]
+                   ["drag child candidate" []]
+                   ["drag tail" []]]
+          indented [["drag parent" [["drag child candidate" []]]]
+                    ["drag tail" []]]
+          outdented [["drag parent" []]
+                     ["drag tail" []]
+                     ["drag child candidate" []]]]
       (b/new-blocks ["drag parent" "drag child candidate" "drag tail"])
       (util/exit-edit)
+      (wait-for-content-tree! page-name initial)
       (drag-block! "drag child candidate" "drag parent" "inside")
-      (is (= [["drag parent" [["drag child candidate" []]]]
-              ["drag tail" []]]
-             (content-tree (block-tree page-name))))
+      (wait-for-content-tree! page-name indented)
       (drag-block! "drag child candidate" "drag tail" "after")
-      (is (= ["drag parent" "drag tail" "drag child candidate"]
-             (mapv #(get % "content") (block-tree page-name)))))))
+      (wait-for-content-tree! page-name outdented))))
 
 (deftest drag-rejects-parent-into-descendant-test
   (testing "dragging a parent into its descendant leaves the tree unchanged"
@@ -689,11 +710,14 @@
       (graph/new-graph graph-a false)
       (p/new-page "undo graph a page")
       (b/new-block "graph a history")
-      (graph/new-graph graph-b false)
-      (p/new-page "undo graph b page")
-      (b/new-block "graph b history")
-      (b/undo)
-      (is (nil? (ls-api-call! :editor.getBlock "graph b history")))
-      (graph/switch-graph graph-a false false)
-      (is (= "graph a history"
-             (get (ls-api-call! :editor.getBlock "graph a history") "content"))))))
+      (let [graph-a-block-id (current-editing-block-id)]
+        (wait-for-block-content! graph-a-block-id "graph a history")
+        (graph/new-graph graph-b false)
+        (p/new-page "undo graph b page")
+        (b/new-block "graph b history")
+        (let [graph-b-block-id (current-editing-block-id)]
+          (wait-for-block-content! graph-b-block-id "graph b history")
+          (b/undo)
+          (wait-for-block-content! graph-b-block-id "")
+          (graph/switch-graph graph-a false false)
+          (wait-for-block-content! graph-a-block-id "graph a history"))))))
