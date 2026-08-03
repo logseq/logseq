@@ -11,7 +11,7 @@
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -898,9 +898,8 @@
     false))
 
 (def ^:private class-page-metadata-properties
-  [:logseq.property.class/extends
-   :logseq.property.class/enable-bidirectional?
-   :logseq.property.class/default-icon])
+  ;; enable-bidirectional? + default-icon moved into the title-actions tag settings menu
+  [:logseq.property.class/extends])
 
 (defn- properties-for-display
   [block]
@@ -1083,7 +1082,10 @@
         classes-properties-set (set (map :db/ident classes-properties))
         block-own-properties (->> properties
                                   (remove (fn [[id _]] (contains? recycled-only-property-ids id)))
-                                  (remove (fn [[id _]] (classes-properties-set id))))
+                                  (remove (fn [[id _]] (classes-properties-set id)))
+                                  ;; tag-level settings live in the title-actions gear, not as rows
+                                  (remove (fn [[id _]] (contains? #{:logseq.property.class/default-icon
+                                                                    :logseq.property.class/enable-bidirectional?} id))))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
@@ -1410,7 +1412,9 @@
                       [:div.property-key.text-sm
                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]
                       [:div.text-muted-foreground.ml-5
-                       (t :class/tag-properties-desc)]]
+                       (interpolate-rich-text-node
+                        (t :class/tag-properties-desc)
+                        [[:span.text-gray-11 (str "#" (:block/title block))]])]]
                      [:div.tag-properties-content.flex.flex-col.gap-1 {:style {:margin-left 22}}
                       ;; Inherited properties, grouped by source ancestor, per-group collapsible
                       (when (and has-meaningful-extends? (seq inherited-groups))

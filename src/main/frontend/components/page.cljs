@@ -265,7 +265,23 @@
         (ldb/property? page)
         (t :ui/configure)
         :else
-        (t :property/set-property)))]])
+        (t :property/set-property)))
+
+    (when (and (ldb/class? page) (not (:logseq.property/built-in? page)))
+      (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+         :title (t :class/tag-settings)
+         :on-click (fn [e]
+                     (shui/popup-show!
+                      (.-currentTarget e)
+                      (fn [] (property-config/tag-settings-dropdown page))
+                      {:content-props {:class "as-root"}
+                       :align :start :as-dropdown? true :dropdown-menu? true}))}
+        [:span.flex.items-center.gap-1
+         (shui/tabler-icon "settings" {:size 14})
+         (t :class/tag-settings)]))]])
 
 (hsx/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]

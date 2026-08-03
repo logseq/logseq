@@ -610,6 +610,20 @@
   @apply -m-1;
 }
 
+/* Same de-padding when the picker is a submenu (e.g. tag-settings "Default icon"):
+   the sub-content has its own baked-in p-1, so the picker fills it edge-to-edge. */
+.ui__dropdown-menu-sub-content:has(> .cp__emoji-icon-picker),
+.ui__dropdown-menu-sub-content:has(> .asset-picker),
+.ui__dropdown-menu-sub-content:has(> .text-picker) {
+  @apply flex;
+}
+
+.ui__dropdown-menu-sub-content > .cp__emoji-icon-picker,
+.ui__dropdown-menu-sub-content > .asset-picker,
+.ui__dropdown-menu-sub-content > .text-picker {
+  @apply -m-1;
+}
+
 .ls-icon {
   &-Backlog {
     @apply text-gray-05;

@@ -1276,7 +1276,10 @@
 
          :else
          (p/let [result (<load-initial-node-choices repo property non-root-classes)]
-           (set-result-and-initial-choices! result))))
+           (if (seq result)
+             (set-result-and-initial-choices! result)
+             ;; DI delta: empty node-property combobox falls back to recent pages to pick from
+             (set-result-and-initial-choices! (ldb/get-recent-updated-pages (db/get-db)))))))
      [])
 
     (select-node property opts' result)))

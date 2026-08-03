@@ -1028,3 +1028,52 @@
       (into [:<>]
             (map-indexed (partial with-react-key "property-dropdown"))
             (property-dropdown-options property owner-block values opts)))))
+
+
+(hsx/defc tag-settings-dropdown
+  "Tag-level settings popover for Default Icon and Bidirectional properties, opened from
+   the tag page's title actions."
+  [page*]
+  (let [page (db/sub-block (:db/id page*))
+        bidirectional? (boolean (:logseq.property.class/enable-bidirectional? page))
+        current-icon (:logseq.property.class/default-icon page)
+        page-title (:block/title page)]
+    [:div.ls-property-dropdown.!p-0
+     (shui/dropdown-menu-label (t :class/tag-settings))
+     (shui/dropdown-menu-separator)
+     ;; Default Icon
+     (dropdown-editor-menuitem
+      {:icon :icons
+       :title (t :class/default-icon)
+       :submenu-content
+       (fn [{:keys [set-sub-open! id]}]
+         (icon-component/icon-search
+          {:on-chosen (fn [_e icon keep-popup?]
+                        (if icon
+                          (let [icon-data (cond
+                                            (= :text (:type icon)) {:type :text :data (:data icon)}
+                                            (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
+                                            (= :image (:type icon)) {:type :image :data (:data icon)}
+                                            :else (select-keys icon [:type :id :color]))]
+                            (property-handler/set-block-property!
+                             (:db/id page) :logseq.property.class/default-icon icon-data))
+                          (property-handler/remove-block-property!
+                           (:db/id page) :logseq.property.class/default-icon))
+                        (when-not (true? keep-popup?)
+                          (set-sub-open! false)
+                          (restore-root-highlight-item! id)))
+           :icon-value current-icon
+           :page-title page-title
+           :del-btn? (some? current-icon)}))
+       :desc (if current-icon
+               (fn [] [:span.flex.items-center (icon-component/icon current-icon {:size 16})])
+               (t :class/default-icon-empty))})
+     ;; Bidirectional properties
+     (dropdown-editor-menuitem
+      {:icon :arrows-exchange
+       :title (t :class/bidirectional-properties)
+       :toggle-checked? bidirectional?
+       :on-toggle-checked-change
+       (fn []
+         (db-property-handler/set-block-property!
+          (:db/id page) :logseq.property.class/enable-bidirectional? (not bidirectional?)))})]))

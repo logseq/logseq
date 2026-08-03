@@ -164,8 +164,12 @@
  :bug-report.issue/title "或..."
 
  :class/add-property "添加标签属性"
+ :class/bidirectional-properties "双向属性"
+ :class/default-icon "默认图标"
+ :class/default-icon-empty "空"
  :class/inherited-from "继承自"
- :class/tag-properties-desc "标签属性会被所有使用该标签的节点继承。例如，每个 #Task 节点都会继承“Status”和“Priority”。"
+ :class/tag-properties-desc "这些属性会显示在所有带有 {1} 标签的节点上。"
+ :class/tag-settings "标签设置"
  :class/tagged-nodes "已标记节点"
 
  :class.built-in/asset "附件"
