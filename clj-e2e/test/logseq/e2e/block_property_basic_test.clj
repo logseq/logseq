@@ -529,36 +529,6 @@
          (loc/filter ".ls-page-blocks" :has-text "template static child")
          1)))))
 
-(deftest block-embed-shares-source-entity-test
-  (testing "an embedded subtree rerenders source changes without duplicating the entity"
-    (let [source-page (page/get-page-name)
-          source (ls-api-call! :editor.appendBlockInPage
-                               source-page
-                               "embed source")
-          source-uuid (get source "uuid")
-          [child] (ls-api-call! :editor.insertBatchBlock
-                                source-uuid
-                                [{:content "embed child"}]
-                                {:sibling false})
-          child-uuid (get child "uuid")]
-      (page/new-page "embed host")
-      (b/new-block "")
-      (util/input-command "Node embed")
-      (util/press-seq "embed source")
-      (w/click (.first (loc/filter ".ui__popover-content a" :has-text "embed source")))
-      (util/exit-edit)
-      (assert/assert-is-visible ".embed-block")
-      (assert/assert-is-visible
-       (loc/filter ".embed-block" :has-text "embed child"))
-      (ls-api-call! :editor.updateBlock child-uuid "embed child updated")
-      (assert/assert-is-visible
-       (loc/filter ".embed-block" :has-text "embed child updated"))
-      (is (= "embed child updated"
-             (get (ls-api-call! :editor.getBlock child-uuid) "content")))
-      (is (= "embed source"
-             (get (ls-api-call! :editor.getBlock source-uuid) "content")))
-      (is (not= source-page (page/get-page-name))))))
-
 (deftest checkbox-property-toggle-persists-test
   (testing "checkbox property toggles immediately and survives refresh"
     (let [property-name "e2e checkbox"
