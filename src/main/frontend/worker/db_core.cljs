@@ -9,6 +9,7 @@
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
+   [frontend.worker.db.metadata-cache :as metadata-cache]
    [frontend.worker.db.fix :as db-fix]
    [frontend.worker.db.migrate :as db-migrate]
    [frontend.worker.db.validate :as worker-db-validate]
@@ -375,6 +376,7 @@
   (swap! *vector-indexes dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (metadata-cache/clear! repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
   (search-handler/clear-search-index-builds! repo)
   (when db (.close db))
@@ -681,6 +683,7 @@
               (db-sync/handle-local-tx! repo initial-tx-report))
 
             (db-listener/listen-db-changes! repo conn)
+            (metadata-cache/initialize! repo @conn)
 
             nil))))))
 
