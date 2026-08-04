@@ -63,7 +63,8 @@
          (when-let [breadcrumb (state/get-component :block/breadcrumb)]
            [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
             (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
-                        {:disabled? true})]))
+                        {:disabled? true
+                         :block block'})]))
        [:div.flex.flex-row.items-start
         (when-not db-tag?
           [:div.flex.items-center.h-5.mr-1.opacity-50

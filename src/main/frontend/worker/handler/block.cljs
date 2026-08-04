@@ -4,6 +4,7 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.common.thread-api :refer [def-thread-api]]
+   [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
    [frontend.worker.handler.comments :as comments-handler]
    [frontend.worker.handler.property :as property-handler]
    [frontend.worker.handler.query :as query-handler]
@@ -78,48 +79,6 @@
   (and (not (contains? canonical-block-excluded-attrs attr))
        (not= "block.temp" (namespace attr))))
 
-(defn- shallow-ref-identity
-  [db ref-id]
-  (let [ref (d/entity db ref-id)
-        ref-uuid (:block/uuid ref)
-        ref-ident (:db/ident ref)
-        ref-title (:block/title ref)
-        ref-name (:block/name ref)
-        ref-tags (mapv (fn [tag]
-                         (select-keys tag [:db/id :block/uuid :db/ident]))
-                       (:block/tags ref))
-        choice-exclusions
-        (mapv (fn [choice]
-                (select-keys choice [:db/id :block/uuid :db/ident]))
-              (:logseq.property/choice-exclusions ref))
-        property-value (:logseq.property/value ref)
-        property-icon (:logseq.property/icon ref)
-        hide-from-node (:logseq.property.class/hide-from-node ref)
-        property-value-title (when (or (:block/closed-value-property ref)
-                                       (:logseq.property/created-from-property ref))
-                               (:block/title ref))]
-    (when-not ref
-      (fail-render-read! "Missing canonical block reference"
-                         {:ref-id ref-id}))
-    (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
-      (fail-render-read! "Invalid canonical block reference UUID"
-                         {:ref-id ref-id :block-uuid ref-uuid}))
-    (when (and (some? ref-ident) (not (keyword? ref-ident)))
-      (fail-render-read! "Invalid canonical block reference ident"
-                         {:ref-id ref-id :db-ident ref-ident}))
-    (cond-> {:db/id ref-id}
-      ref-uuid (assoc :block/uuid ref-uuid)
-      ref-ident (assoc :db/ident ref-ident)
-      (string? ref-title) (assoc :block/title ref-title)
-      (string? ref-name) (assoc :block/name ref-name)
-      (seq ref-tags) (assoc :block/tags ref-tags)
-      (seq choice-exclusions)
-      (assoc :logseq.property/choice-exclusions choice-exclusions)
-      (some? property-value) (assoc :logseq.property/value property-value)
-      (some? property-icon) (assoc :logseq.property/icon property-icon)
-      (some? hide-from-node) (assoc :logseq.property.class/hide-from-node hide-from-node)
-      (some? property-value-title) (assoc :block/title property-value-title))))
-
 (defn- canonical-positioned-properties-map
   [db block]
   (if (seq (property-handler/direct-block-property-ids db (:db/id block)))
@@ -152,7 +111,10 @@
                          {:db-id entity-id :block-uuid block-uuid}))
     (when-not (valid-revision? block-tx-id)
       (fail-render-read! "Invalid canonical block transaction ID"
-                         {:block-uuid block-uuid :block-tx-id block-tx-id}))
+                         {:db-id entity-id
+                          :block-uuid block-uuid
+                          :block-title display-title
+                          :block-tx-id block-tx-id}))
     (let [block
           (reduce
            (fn [result {:keys [a v]}]
@@ -160,7 +122,7 @@
                (let [{value-type :db/valueType
                       cardinality :db/cardinality} (render-attr-schema db a)
                      value (if (= :db.type/ref value-type)
-                             (shallow-ref-identity db v)
+                             (block-breadcrumb/shallow-ref-identity db v)
                              v)]
                  (if (= :db.cardinality/many cardinality)
                    (update result a (fnil conj []) value)
@@ -175,6 +137,8 @@
       (cond-> (assoc block
                      :block.temp/positioned-properties
                      (canonical-positioned-properties-map db entity)
+                     :block.temp/breadcrumb
+                     (block-breadcrumb/block-breadcrumb db entity)
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
         (string? raw-title)
@@ -195,7 +159,14 @@
                          {:block-uuid block-uuid})))
   (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
         referenced (mapcat :block/refs requested)
-        entities (distinct (concat requested referenced))]
+        positioned-properties
+        (mapcat (fn [block]
+                  (->> property-handler/render-property-positions
+                       (mapcat #(property-handler/block-positioned-properties
+                                 db (:db/id block) %))
+                       (keep #(d/entity db (:db/ident %)))))
+                requested)
+        entities (distinct (concat requested referenced positioned-properties))]
     {:basis-rev (render-basis-rev db)
      :blocks
      (into {}
@@ -464,6 +435,8 @@
         block-uuid (:block/uuid block)]
     (cond-> (assoc block
                    :block.temp/refs-count (block-refs-count db block-id)
+                   :block.temp/breadcrumb
+                   (block-breadcrumb/block-breadcrumb db block)
                    :block.temp/comment-thread-present?
                    (contains? commented-block-uuids (str block-uuid))
                    :block.temp/sync-conflicts

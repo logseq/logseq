@@ -2,7 +2,8 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.components.block :as block]))
 
 (defn- block-source
   []
@@ -54,6 +55,13 @@
   (doseq [marker local-derived-read-markers]
     (is (not (string/includes? source marker))
         (str "Unexpected local graph read: " marker))))
+
+(deftest grouped-block-rows-recognizes-worker-grouped-results-test
+  (let [page {:db/id 1}
+        block-row {:block/uuid (random-uuid)}]
+    (is (#'block/grouped-block-rows? {page [block-row]}))
+    (is (#'block/grouped-block-rows? [[page [block-row]]]))
+    (is (not (#'block/grouped-block-rows? [(:block/uuid block-row)])))))
 
 (deftest positioned-properties-render-from-the-canonical-block-revision-test
   (let [source (block-source)

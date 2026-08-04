@@ -1300,6 +1300,46 @@
                          (subs/block-snapshot inserted-uuid)))
                   (unsubscribe))))))))
 
+(deftest inserted-parent-delta-seeds-children-before-subtree-mount-test
+  (async done
+         (let [root-uuid (random-uuid)
+               parent-uuid (random-uuid)
+               child-uuid (random-uuid)
+               parent (block parent-uuid 2 "parent")
+               child (block child-uuid 2 "child")
+               calls (atom [])]
+           (with-redefs [subs/set-seeded-block-gc-timeout! (fn [_callback _delay-ms])]
+             (subs/apply-delta!
+              (delta 2
+                     {:blocks {parent-uuid parent
+                               child-uuid child}
+                      :children {root-uuid
+                                 {:base-rev 1
+                                  :rev 2
+                                  :remove []
+                                  :upsert [[parent-uuid "a"]]}
+                                 parent-uuid
+                                 {:base-rev 1
+                                  :rev 2
+                                  :remove []
+                                  :upsert [[child-uuid "a"]]}}})))
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [graph-id requested-uuid]
+                              (swap! calls conj [graph-id requested-uuid])
+                              (p/resolved {:basis-rev 2
+                                           :parent-tx-id 2
+                                           :items []}))]
+              (let [unsubscribe
+                    (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (empty? @calls)
+                      "The subtree consumes membership carried by its insert delta.")
+                  (is (= {:status :ready :value [child-uuid]}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe))))))))
+
 (deftest inserted-child-delta-batches-seeded-block-gc-test
   (let [parent-uuid (random-uuid)
         seeded-uuids (vec (repeatedly 1000 random-uuid))
@@ -1522,6 +1562,85 @@
                          unsubscribe-child
                          unsubscribe-journal
                          unsubscribe-resource]))))))))
+
+(deftest journal-window-seeds-all-visible-bundles-atomically-test
+  (async done
+         (let [first-uuid (random-uuid)
+               second-uuid (random-uuid)
+               resource-key [:journal-window [first-uuid second-uuid]]
+               first-block (block first-uuid 10 "First journal")
+               second-block (block second-uuid 10 "Second journal")
+               bundle (fn [root block-value]
+                        {:root-uuid root
+                         :blocks {root block-value}
+                         :children {root {:parent-tx-id 10 :items []}}})
+               value {:bundles {first-uuid (bundle first-uuid first-block)
+                                second-uuid (bundle second-uuid second-block)}}]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id _requested-key]
+                              (p/resolved {:basis-rev 1
+                                           :key resource-key
+                                           :watch-keys #{}
+                                           :value value}))
+                            subs/<load-block
+                            (fn [& _]
+                              (p/rejected (js/Error. "seeded block reloaded")))]
+              (let [unsubscribe-resource
+                    (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        unsubscribe-first
+                        (subs/subscribe-block! first-uuid (fn []))
+                        unsubscribe-second
+                        (subs/subscribe-block! second-uuid (fn []))]
+                  (is (= {:status :ready :value first-block}
+                         (subs/block-snapshot first-uuid)))
+                  (is (= {:status :ready :value second-block}
+                         (subs/block-snapshot second-uuid)))
+                  (unsubscribe-second)
+                  (unsubscribe-first)
+                  (unsubscribe-resource))))))))
+
+(deftest view-resource-seeds-initial-blocks-before-rendering-rows-test
+  (async done
+         (let [view-uuid (random-uuid)
+               row-uuid (random-uuid)
+               property-uuid (random-uuid)
+               resource-key [:view-data view-uuid {:feature-type :all-pages
+                                                   :initial-row-count 1}]
+               row (block row-uuid 10 "Row")
+               property (block property-uuid 10 "Positioned property")
+               value {:partition :flat
+                      :count 1
+                      :rows [row-uuid]
+                      :initial-blocks {row-uuid row
+                                       property-uuid property}}]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id _requested-key]
+                              (p/resolved {:basis-rev 1
+                                           :key resource-key
+                                           :watch-keys #{}
+                                           :value value}))
+                            subs/<load-block
+                            (fn [& _]
+                              (p/rejected (js/Error. "seeded block reloaded")))]
+              (let [unsubscribe-resource
+                    (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        unsubscribe-row
+                        (subs/subscribe-block! row-uuid (fn []))
+                        unsubscribe-property
+                        (subs/subscribe-block! property-uuid (fn []))]
+                  (is (= {:status :ready :value row}
+                         (subs/block-snapshot row-uuid)))
+                  (is (= {:status :ready :value property}
+                         (subs/block-snapshot property-uuid)))
+                  (unsubscribe-property)
+                  (unsubscribe-row)
+                  (unsubscribe-resource))))))))
 
 (deftest journal-bundle-unmount-collects-never-mounted-seeded-descendants-test
   (async done
