@@ -202,12 +202,14 @@
       (is (= 1 (:block.temp/order-list-index block))
           "Canonical blocks retain worker-derived ordered-list indexes.")
       (is (map? (:block.temp/positioned-properties block)))
+      (is (vector? (:block.temp/breadcrumb block)))
       (is (integer? (:block.temp/refs-count block)))
       (is (not (contains? block :block/children)))
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
                     (remove #{:block.temp/order-list-index
+                              :block.temp/breadcrumb
                               :block.temp/positioned-properties
                               :block.temp/refs-count}
                             (keys block)))))))

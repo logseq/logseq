@@ -72,7 +72,8 @@
     [[:.flex.items-center {:class (when ref? "ml-2")}
       (block/breadcrumb {:id     "block-parent"
                          :block? true
-                         :sidebar-key sidebar-key} repo block-id {:indent? false})]
+                         :sidebar-key sidebar-key} repo block-id {:indent? false
+                                                                 :block block})]
      (block-cp repo idx block)]))
 
 (hsx/defc search-title
@@ -171,7 +172,8 @@
 (defn- <build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
   (-> (p/let [entity (when (or (integer? db-id) (uuid? db-id))
-                       (db-async/<get-block repo db-id {:children? false}))
+                       (db-async/<get-block repo db-id {:children? false
+                                                       :block-metadata? true}))
               contents-page (when (= :contents (keyword block-type))
                               (db-async/<get-block repo "Contents" {:children? false}))]
        (build-sidebar-item repo idx db-id block-type *db-id init-key entity contents-page))

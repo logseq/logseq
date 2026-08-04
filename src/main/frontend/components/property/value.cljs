@@ -1017,7 +1017,8 @@
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
                                                                   (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
-                                                                              {:disabled? true})]))
+                                                                              {:disabled? true
+                                                                               :block node})]))
                                                       label [:div.flex.flex-row.items-center.gap-1
                                                              (when-not (or (:logseq.property/classes property)
                                                                            (contains? #{:class :property} property-type))
@@ -1179,7 +1180,8 @@
                                    (set-result! (current-initial-choices))
                                    ;; TODO rank initial choices higher
                                   (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
-                                                                                                   :built-in? false})]
+                                                                                                 :include-breadcrumb? true
+                                                                                                 :built-in? false})]
                                     (set-result!
                                      (cond-> result
                                        (and page-class

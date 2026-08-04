@@ -389,24 +389,36 @@
       (is (not (string/includes? preview-content-source
                                  "db-hooks/use-block"))))))
 
-(deftest breadcrumb-mounts-from-a-uuid-resource-with-row-subscriptions-test
+(deftest breadcrumb-primary-segments-render-synchronously-and-stay-reactive-test
   (let [source (source-for "src/main/frontend/components/block.cljs")
-        breadcrumb-source (form-source source "(hsx/defc breadcrumb\n")
+        breadcrumb-source (form-source source "(defn breadcrumb\n")
         row-source (form-source source "(hsx/defc breadcrumb-segment-row")]
     (is (some? breadcrumb-source))
     (is (some? row-source))
     (when breadcrumb-source
+      (is (string/includes? breadcrumb-source ":block.temp/breadcrumb"))
       (is (string/includes? breadcrumb-source
-                            "[:block-breadcrumb block-id load-depth]"))
-      (is (string/includes? breadcrumb-source "db-hooks/use-resource"))
-      (doseq [forbidden ["hooks/use-state"
+                            "(contains? block :block.temp/breadcrumb)"))
+      (doseq [forbidden ["[:block-breadcrumb block-id"
+                         "db-hooks/use-resource"
+                         "hooks/use-state"
                          "hooks/use-effect!"
                          "db-async/<get-block"
                          "db-async/<get-block-parents"
                          "<hydrate-breadcrumb-ref-titles!"]]
         (is (not (string/includes? breadcrumb-source forbidden)))))
     (when row-source
-      (is (string/includes? row-source "db-hooks/use-block")))))
+      (is (string/includes? row-source "db-hooks/use-block"))
+      (is (string/includes? row-source "(or loaded-block block)")))))
+
+(deftest breadcrumb-call-sites-request-ready-canonical-payloads-test
+  (doseq [file ["src/main/frontend/components/cmdk/state.cljs"
+                "src/main/frontend/handler/editor.cljs"
+                "src/main/frontend/components/property/value.cljs"]]
+    (is (string/includes? (source-for file) ":include-breadcrumb? true") file))
+  (let [sidebar (source-for "src/main/frontend/components/right_sidebar.cljs")]
+    (is (string/includes? sidebar ":block-metadata? true"))
+    (is (not (string/includes? sidebar "resolve-blocks!")))))
 
 (deftest breadcrumb-overflow-mounts-one-full-depth-resource-child-test
   (let [source (source-for "src/main/frontend/components/block.cljs")

@@ -499,6 +499,26 @@
   [resource-key]
   (= :journal-bundle (first resource-key)))
 
+(defn- resource-bundles
+  [resource-key value]
+  (case (first resource-key)
+    :journal-bundle
+    {(second resource-key) value}
+
+    :journals
+    (:bundles value)
+
+    :journal-window
+    (:bundles value)
+
+    {}))
+
+(defn- resource-blocks
+  [resource-key value]
+  (if (= :view-data (first resource-key))
+    (:initial-blocks value)
+    {}))
+
 (defn- require-block-bundle!
   [root-uuid value]
   (when-not (and (map? value)
@@ -651,14 +671,29 @@
   (when-not (set? watch-keys)
     (throw (ex-info "Invalid resource watch keys"
                     {:resource-key resource-key :watch-keys watch-keys})))
-  (let [journal-bundle? (journal-bundle-key? resource-key)
-        value (if journal-bundle?
-                (do
-                  (when-not (and (vector? resource-key)
-                                 (= 2 (count resource-key)))
-                    (throw (ex-info "Invalid journal bundle resource key"
-                                    {:resource-key resource-key})))
-                  (require-block-bundle! (second resource-key) value))
+  (let [bundles (into {}
+                      (map (fn [[root-uuid bundle]]
+                             [root-uuid
+                              (require-block-bundle! root-uuid bundle)]))
+                      (resource-bundles resource-key value))
+        initial-blocks (into {}
+                             (map (fn [[block-uuid block]]
+                                    [block-uuid
+                                     (require-block! block-uuid block)]))
+                             (resource-blocks resource-key value))
+        value (cond
+                (journal-bundle-key? resource-key)
+                (get bundles (second resource-key))
+
+                (contains? #{:journals :journal-window}
+                           (first resource-key))
+                (assoc value :bundles bundles)
+
+                (and (= :view-data (first resource-key))
+                     (contains? value :initial-blocks))
+                (assoc value :initial-blocks initial-blocks)
+
+                :else
                 value)
         next-slot (ready-resource-slot basis-rev watch-keys value)
         changed-resource? (volatile! false)
@@ -671,8 +706,11 @@
                (if (or (not= generation (:generation store))
                        (< basis-rev (:rev store))
                        (< basis-rev (slot-revision current))
-                       (and journal-bundle?
-                            (bundle-has-newer-slot? store basis-rev value)))
+                       (some #(bundle-has-newer-slot? store basis-rev %)
+                             (vals bundles))
+                       (some #(> (slot-revision (get-in store [:blocks %]))
+                                 basis-rev)
+                             (keys initial-blocks)))
                  (do
                    (when (= generation (:generation store))
                      (vreset! stale-response? true))
@@ -682,11 +720,16 @@
                                (do
                                  (vreset! changed-resource? true)
                                  (assoc-in store [:resources resource-key]
-                                           next-slot)))]
-                   (if journal-bundle?
-                     (seed-block-bundle store basis-rev value
-                                        changed-blocks changed-children)
-                     store))))))
+                                           next-slot)))
+                       store (reduce (fn [store bundle]
+                                       (seed-block-bundle
+                                        store basis-rev bundle
+                                        changed-blocks changed-children))
+                                     store
+                                     (vals bundles))]
+                   (seed-block-bundle store basis-rev
+                                      {:blocks initial-blocks :children {}}
+                                      changed-blocks changed-children))))))
     (when @stale-response?
       (schedule-resource-reload! resource-key))
     (notify-keys! :children @changed-children)
@@ -729,16 +772,21 @@
   (let [collect!
         (fn []
           (when-not (mounted? slot-type key)
-            (let [journal-bundle
-                  (when (and (= :resources slot-type)
-                             (journal-bundle-key? key))
-                    (get-in @*store [:resources key :snapshot :value]))]
+            (let [resource-value (when (= :resources slot-type)
+                                   (get-in @*store
+                                           [:resources key :snapshot :value]))
+                  bundles (when resource-value
+                            (resource-bundles key resource-value))
+                  initial-blocks (when resource-value
+                                   (resource-blocks key resource-value))]
               (collect-slot! slot-type key)
-              (when journal-bundle
-                (doseq [block-uuid (keys (:blocks journal-bundle))]
+              (doseq [bundle (vals bundles)]
+                (doseq [block-uuid (keys (:blocks bundle))]
                   (collect-slot! :blocks block-uuid))
-                (doseq [parent-uuid (keys (:children journal-bundle))]
-                  (collect-slot! :children parent-uuid))))))]
+                (doseq [parent-uuid (keys (:children bundle))]
+                  (collect-slot! :children parent-uuid)))
+              (doseq [block-uuid (keys initial-blocks)]
+                (collect-slot! :blocks block-uuid)))))]
     (if (= :children slot-type)
       (js/setTimeout collect! children-slot-cache-ms)
       (js/queueMicrotask collect!))))
@@ -856,24 +904,37 @@
                   (map first (:upsert patch))))
         children))
 
-(defn- schedule-seeded-blocks-gc!
-  [block-uuids basis-rev]
+(defn- schedule-seeded-slots-gc!
+  [block-uuids parent-uuids basis-rev]
   (set-seeded-block-gc-timeout!
    (fn []
      (swap! *store
-            update
-            :blocks
-            (fn [blocks]
-              (reduce
-               (fn [blocks block-uuid]
-                 (let [slot (get blocks block-uuid)]
-                   (if (and (not (mounted? :blocks block-uuid))
-                            (:seeded? slot)
-                            (= basis-rev (:basis-rev slot)))
-                     (dissoc blocks block-uuid)
-                     blocks)))
-               blocks
-               block-uuids))))
+            (fn [store]
+              (-> store
+                  (update :blocks
+                          (fn [blocks]
+                            (reduce
+                             (fn [blocks block-uuid]
+                               (let [slot (get blocks block-uuid)]
+                                 (if (and (not (mounted? :blocks block-uuid))
+                                          (:seeded? slot)
+                                          (= basis-rev (:basis-rev slot)))
+                                   (dissoc blocks block-uuid)
+                                   blocks)))
+                             blocks
+                             block-uuids)))
+                  (update :children
+                          (fn [children]
+                            (reduce
+                             (fn [children parent-uuid]
+                               (let [slot (get children parent-uuid)]
+                                 (if (and (not (mounted? :children parent-uuid))
+                                          (:seeded? slot)
+                                          (= basis-rev (:basis-rev slot)))
+                                   (dissoc children parent-uuid)
+                                   children)))
+                             children
+                             parent-uuids)))))))
    2000))
 
 (defn- apply-tombstone
@@ -912,7 +973,7 @@
 
 (defn- apply-child-patch
   [store parent-uuid {removed :remove patch-rev :rev :keys [base-rev upsert]}
-   changed-children stale-children]
+   seed? parent-tx-id changed-children seeded-children stale-children]
   (require-uuid! :block/uuid parent-uuid)
   (require-revision! :base-rev base-rev)
   (require-revision! :rev patch-rev)
@@ -924,11 +985,23 @@
   (let [current (get-in store [:children parent-uuid])]
     (cond
       (nil? current)
-      (if (mounted? :children parent-uuid)
+      (cond
+        seed?
+        (let [_ (require-revision! :block/tx-id parent-tx-id)
+              items (child-patch-items parent-uuid [] removed upsert)]
+          (vswap! changed-children conj parent-uuid)
+          (vswap! seeded-children conj parent-uuid)
+          (assoc-in store [:children parent-uuid]
+                    (assoc (ready-children-slot patch-rev parent-tx-id items)
+                           :seeded? true)))
+
+        (mounted? :children parent-uuid)
         (do
           (vswap! stale-children conj parent-uuid)
           (assoc-in store [:children parent-uuid :stale-rev]
                     (:rev store)))
+
+        :else
         store)
 
       (> (slot-revision current) (:rev store))
@@ -1010,6 +1083,7 @@
   (let [changed-blocks (volatile! #{})
         seeded-blocks (volatile! #{})
         changed-children (volatile! #{})
+        seeded-children (volatile! #{})
         stale-children (volatile! #{})
         stale-resources (volatile! #{})
         changed-resources (volatile! #{})
@@ -1040,7 +1114,10 @@
                      store (reduce-kv
                             (fn [store parent-uuid patch]
                               (apply-child-patch store parent-uuid patch
-                                                 changed-children stale-children))
+                                                 (contains? seed-block-uuids parent-uuid)
+                                                 (get-in blocks [parent-uuid :block/tx-id])
+                                                 changed-children seeded-children
+                                                 stale-children))
                             store
                             children)]
                  (vreset! applied? true)
@@ -1050,8 +1127,8 @@
       (notify-keys! :children @changed-children)
       (notify-keys! :blocks @changed-blocks)
       (notify-keys! :resources @changed-resources)
-      (when (seq @seeded-blocks)
-        (schedule-seeded-blocks-gc! @seeded-blocks rev))
+      (when (or (seq @seeded-blocks) (seq @seeded-children))
+        (schedule-seeded-slots-gc! @seeded-blocks @seeded-children rev))
       (doseq [parent-uuid @stale-children]
         (request-reload! [:children parent-uuid]
                          #(start-children-load! parent-uuid)))

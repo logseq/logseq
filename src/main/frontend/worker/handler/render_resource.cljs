@@ -106,14 +106,19 @@
 
 (defn- sidebar-page-summary
   [page]
-  (select-keys page
-               [:db/id
-                :block/uuid
-                :block/title
-                :block/raw-title
-                :block/name
-                :block/journal-day
-                :logseq.property/icon]))
+  (cond-> (select-keys page
+                       [:db/id
+                        :block/uuid
+                        :block/title
+                        :block/raw-title
+                        :block/name
+                        :block/journal-day
+                        :logseq.property/icon
+                        :logseq.property.asset/type])
+    (seq (:block/tags page))
+    (assoc :block/tags
+           (mapv #(select-keys % [:db/id :db/ident :logseq.property/icon])
+                 (:block/tags page)))))
 
 (defn- favorites-page
   [db]
@@ -240,11 +245,24 @@
         :ancestor-uuids ancestor-uuids
         :ref-titles ref-titles}])))
 
+(declare collect-flat-journal)
+
 (defn- journals
   [db resource-key]
-  (require-shape! resource-key :journals 1)
-  [#{[:journals]}
-   (mapv :block/uuid (ldb/get-latest-journals db))])
+  (require-shape! resource-key :journals 2)
+  (let [requested-count (second resource-key)]
+    (when-not (and (integer? requested-count) (pos? requested-count))
+      (fail! "Invalid initial journal count"
+             {:requested-count requested-count}))
+    (let [journal-uuids (mapv :block/uuid (ldb/get-latest-journals db))
+          initial-uuids (take (min 50 requested-count) journal-uuids)]
+      [#{[:journals]}
+       {:journal-uuids journal-uuids
+        :bundles (into {}
+                       (map (fn [journal-uuid]
+                              [journal-uuid
+                               (collect-flat-journal db journal-uuid)]))
+                       initial-uuids)}])))
 
 (defn- recycle-roots
   [db resource-key]
@@ -298,6 +316,21 @@
   (require-shape! resource-key :journal-bundle 2)
   (let [journal-uuid (require-uuid! :journal-uuid (second resource-key))]
     [#{} (collect-flat-journal db journal-uuid)]))
+
+(defn- journal-window
+  [db resource-key]
+  (require-shape! resource-key :journal-window 2)
+  (let [journal-uuids (second resource-key)]
+    (when-not (and (vector? journal-uuids)
+                   (<= (count journal-uuids) 50)
+                   (every? uuid? journal-uuids))
+      (fail! "Invalid journal window" {:journal-uuids journal-uuids}))
+    [#{}
+     {:bundles (into {}
+                     (map (fn [journal-uuid]
+                            [journal-uuid
+                             (collect-flat-journal db journal-uuid)]))
+                     journal-uuids)}]))
 
 (defn- block-reactions
   [db resource-key]
@@ -704,6 +737,7 @@
     :filters
     :input
     :group-by-property-ident
+    :initial-row-count
     :query-row-uuids})
 
 (defn- valid-sorting?
@@ -744,6 +778,11 @@
                      (string? (:input context)))
                  (or (not (contains? context :group-by-property-ident))
                      (keyword? (:group-by-property-ident context)))
+                 (or (not (contains? context :initial-row-count))
+                     (and (= :all-pages (:feature-type context))
+                          (integer? (:initial-row-count context))
+                          (pos? (:initial-row-count context))
+                          (<= (:initial-row-count context) 50)))
                  (or (not (contains? context :query-row-uuids))
                      (and (vector? (:query-row-uuids context))
                           (every? uuid? (:query-row-uuids context)))))
@@ -1009,7 +1048,8 @@
                                                             block-uuid)))
                                  (:query-row-uuids context))
           option (cond-> (-> context
-                             (dissoc :feature-type :query-row-uuids)
+                             (dissoc :feature-type :query-row-uuids
+                                     :initial-row-count)
                              (assoc :view-feature-type feature-type))
                    owner (assoc :view-for-id (:db/id owner))
                    (= :query-result feature-type)
@@ -1017,6 +1057,14 @@
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))
+          value (if-let [initial-row-count (:initial-row-count context)]
+                  (let [initial-row-uuids (->> (:rows value)
+                                               (take initial-row-count)
+                                               vec)]
+                    (assoc value :initial-blocks
+                           (:blocks (block-handler/canonical-blocks
+                                     db initial-row-uuids))))
+                  value)
           value-partition (:partition value)]
       [(view-watch-keys db view-uuid owner feature-type config value-partition)
        value])))
@@ -1250,6 +1298,7 @@
     :recycle-roots (recycle-roots db resource-key)
     :property-choices (property-choices db resource-key)
     :journal-bundle (journal-bundle db resource-key)
+    :journal-window (journal-window db resource-key)
     :block-reactions (block-reactions db resource-key)
     :block-display-properties (block-display-properties db resource-key)
     :block-positioned-properties (block-positioned-properties db resource-key)

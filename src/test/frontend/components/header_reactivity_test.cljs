@@ -54,3 +54,15 @@
     (is (string/includes? recent "db-hooks/use-resource"))
     (is (not (string/includes? recent "hooks/use-effect")))
     (is (not (string/includes? recent "get-recent-pages")))))
+
+(deftest zoomed-block-header-uses-the-ready-block-breadcrumb-test
+  (let [source (source-for "src/main/frontend/components/header.cljs")
+        breadcrumb (form-source source "(hsx/defc ready-block-breadcrumb")
+        boundary (form-source source "(hsx/defc block-breadcrumb")]
+    (is (some? breadcrumb))
+    (is (some? boundary))
+    (is (string/includes? breadcrumb "db-hooks/use-block"))
+    (is (string/includes? breadcrumb ":block page"))
+    (is (not (string/includes? breadcrumb "hooks/use-effect")))
+    (is (not (string/includes? breadcrumb "db-async/<get-block")))
+    (is (string/includes? boundary "(false? db-restoring?)"))))

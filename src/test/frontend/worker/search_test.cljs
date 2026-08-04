@@ -523,6 +523,28 @@
           (is (not (contains? result :logseq.property/icon)))
           (is (not (contains? result :alias))))))))
 
+(deftest search-result-includes-canonical-breadcrumb-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Teams"}
+                 :blocks [{:block/title "Parent"}
+                          {:block/title "Search target"}]}]})
+        parent (db-test/find-block-by-content @conn "Parent")
+        target (db-test/find-block-by-content @conn "Search target")
+        _ (d/transact! conn [[:db/add (:db/id target)
+                             :block/parent (:db/id parent)]])
+        result (#'search/search-result->block-result
+                conn
+                "target"
+                nil
+                {:enable-snippet? false
+                 :include-breadcrumb? true}
+                {:id (str (:block/uuid target))
+                 :page (str (:block/uuid (:block/page target)))
+                 :title "Search target"})]
+    (is (= ["Teams" "Parent"]
+           (mapv :block/title (:block.temp/breadcrumb result))))))
+
 (deftest search-result-keeps-tag-identities-for-ui-entity-predicates
   (let [page-id #uuid "00000000-0000-0000-0000-000000000124"
         page-tag {:db/id 2
