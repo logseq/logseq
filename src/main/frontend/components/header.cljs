@@ -464,27 +464,26 @@
     (when highlight?
       (recent-slider-inner))))
 
-(hsx/defc block-breadcrumb
-  [page-name]
-  (let [db-restoring? (rfx/use-sub [:db/restoring?])
-        [page set-page!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (when (and page-name (common-util/uuid-string? page-name))
-         (p/let [page (db-async/<get-block (state/get-current-repo) (uuid page-name) {:children? false})]
-           (set-page! page)))
-       nil)
-     [page-name])
+(hsx/defc ready-block-breadcrumb
+  [page-uuid]
+  (let [page (db-hooks/use-block page-uuid)]
     (when page
-      ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-      (when (and (if config/publishing? (not db-restoring?) true)
-                 (entity/page? page) (:block/parent page))
+      (when (and (entity/page? page) (:block/parent page))
         [:div.ls-block-breadcrumb
          [:div.text-sm
           (component-block/breadcrumb {}
                                       (state/get-current-repo)
                                       (:block/uuid page)
-                                      {:header? true})]]))))
+                                      {:header? true
+                                       :block page})]]))))
+
+(hsx/defc block-breadcrumb
+  [page-name]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when (and (false? db-restoring?)
+               page-name
+               (common-util/uuid-string? page-name))
+      (ready-block-breadcrumb (uuid page-name)))))
 
 (hsx/defc search-index-progress
   []
