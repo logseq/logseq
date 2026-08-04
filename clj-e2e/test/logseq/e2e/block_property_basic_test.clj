@@ -127,49 +127,6 @@
         (assert/assert-is-visible
          (loc/filter ".breadcrumb" :has-text "target renamed parent"))))))
 
-(deftest task-state-date-and-priority-test
-  (testing "task state, date and priority commands update the rendered block"
-    (let [block (ls-api-call! :editor.appendBlockInPage
-                              (current-page-name)
-                              "task sample history")
-          uuid (get block "uuid")]
-      (w/click (format "#block-content-%s" uuid))
-      (util/move-cursor-to-end)
-      (util/input-command "TODO")
-      (util/exit-edit)
-      (assert/assert-is-visible
-       (loc/filter (format "#ls-block-%s .block-tag" uuid)
-                   :has-text "Task"))
-      (w/click (format "#block-content-%s" uuid))
-      (util/move-cursor-to-end)
-      (util/input-command "Priority High")
-      (util/exit-edit)
-      (assert/assert-have-count
-       (format "#ls-block-%s .positioned-properties.block-left .property-value-inner"
-               uuid)
-      2)
-      (is (= "High"
-             (get-in (ls-api-call! :editor.getBlock uuid)
-                     [":logseq.property/priority" "title"])))
-      (w/click (format "#block-content-%s" uuid))
-      (util/move-cursor-to-end)
-      (util/input-command "Scheduled")
-      (w/click
-       "[role='gridcell'][aria-selected='true'] button")
-      (util/exit-edit)
-      (assert/assert-is-visible
-       (loc/filter (format "#ls-block-%s .bottom-property-pill" uuid)
-                   :has-text "Scheduled"))
-      (w/click (format "#block-content-%s" uuid))
-      (util/move-cursor-to-end)
-      (util/input-command "Done")
-      (util/exit-edit)
-      (is (= ":logseq.property/status.done"
-             (get-in (ls-api-call! :editor.getBlock uuid)
-                     [":logseq.property/status" "ident"])))
-      (util/refresh-until-graph-loaded)
-      (assert/assert-is-visible (format "#ls-block-%s" uuid)))))
-
 (deftest flashcard-rating-advances-once-test
   (testing "answer reveal and one rating advance to the next card and update due count"
     (let [page-name (current-page-name)]

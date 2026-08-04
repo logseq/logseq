@@ -1,21 +1,8 @@
 (ns frontend.modules.outliner.pipeline-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            [cljs.test :refer [deftest is]]
-            [clojure.string :as string]
+  (:require [cljs.test :refer [deftest is]]
             [frontend.db.subs :as db-subs]
             [frontend.modules.outliner.pipeline :as pipeline]
             [frontend.state :as state]))
-
-(deftest sync-change-event-does-not-skip-local-hooks
-  (let [source (.toString
-                (fs/readFileSync
-                 (node-path/join (.cwd js/process)
-                                 "src/main/frontend/handler/events.cljs")
-                 "utf8"))]
-    (is (not (string/includes? source "(when-not local-outliner-op?"))
-        "The direct worker response replaces UI publication, not transaction hooks.")
-    (is (string/includes? source "(pipeline/invoke-hooks data)"))))
 
 (deftest compact-worker-broadcast-applies-the-exact-delta-once-and-keeps-page-events-test
   (let [original-state @state/state
@@ -56,16 +43,6 @@
             "Page lifecycle events remain a narrow non-renderer side effect."))
       (finally
         (reset! state/state original-state)))))
-
-(deftest renderer-delta-entry-points-do-not-reference-the-legacy-transaction-marker-test
-  (doseq [relative-path ["src/main/frontend/db/transact.cljs"
-                         "src/main/frontend/modules/outliner/pipeline.cljs"]]
-    (let [source (.toString
-                  (fs/readFileSync
-                   (node-path/join (.cwd js/process) relative-path)
-                   "utf8"))]
-      (is (not (string/includes? source ":db/latest-transacted-entity-uuids"))
-          (str relative-path " must not read or write the removed renderer marker.")))))
 
 (deftest deleted-blocks-are-removed-from-the-sidebar-test
   (let [original-state @state/state

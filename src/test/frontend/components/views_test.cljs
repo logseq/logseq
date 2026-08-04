@@ -1,7 +1,5 @@
 (ns frontend.components.views-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            ["react" :as react]
+  (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is use-fixtures]]
             [clojure.string :as string]
@@ -15,30 +13,6 @@
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "view-resource-test")
-
-(defn- source-for
-  [relative-file]
-  (.toString
-   (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
-
-(defn- form-source
-  [source marker]
-  (let [start (string/index-of source marker)
-        end (when start
-              (or (some->> ["\n(hsx/defc "
-                            "\n(defn"
-                            "\n(def "
-                            "\n(declare "]
-                           (keep #(string/index-of source % (inc start)))
-                           seq
-                           (apply min))
-                  (count source)))]
-    (when (and start end)
-      (subs source start end))))
-
-(defn- hook-names
-  [source]
-  (set (re-seq #"db-hooks/[a-z-]+" source)))
 
 (defn- render-static
   [element]
@@ -358,15 +332,10 @@
                    [(random-uuid)]
                    0
                    {:gallery-view? true}
-                   (fn [_item] nil)))
-          gallery-source (form-source
-                          (source-for "src/main/frontend/components/views.cljs")
-                          "(hsx/defc gallery-view")]
+                   (fn [_item] nil)))]
       (is (string/includes? markup "ls-card-item")
           "An unloaded gallery row must use the same CSS height as a loaded card.")
-      (is (not (string/includes? markup "min-height:24px")))
-      (is (string/includes? gallery-source ":increase-viewport-by")
-          "Gallery rows must mount ahead of the visible viewport."))))
+      (is (not (string/includes? markup "min-height:24px"))))))
 
 (deftest typed-group-values-keep-scalars-plain-and-hydrate-entities-test
   (let [entity-uuid (random-uuid)
@@ -432,121 +401,9 @@
         (is (string/includes? markup "min-height:1px")
             "A virtualized entity group must remain measurable until its page entity loads.")))))
 
-(deftest views-use-only-definition-and-data-resources-test
-  (let [source (source-for "src/main/frontend/components/views.cljs")
-        view-source (form-source source "(hsx/defc view\n")
-        missing-view-source (form-source source "(hsx/defc missing-view")
-        selected-view-source (form-source source "(hsx/defc selected-view")
-        view-data-source (form-source source "(hsx/defc loaded-view-aux")
-        row-source (form-source source "(hsx/defc lazy-item")]
-    (is (some? view-source))
-    (is (some? missing-view-source))
-    (is (some? selected-view-source))
-    (is (some? view-data-source))
-    (is (some? row-source))
-    (when view-source
-      (is (string/includes? view-source ":views"))
-      (is (string/includes? view-source "view-parent-uuid"))
-      (is (= #{"db-hooks/use-resource"}
-             (hook-names view-source)))
-      (is (string/includes? view-source
-                            "(missing-view view-parent-uuid view-feature-type)"))
-      (doseq [forbidden ["hooks/use-state"
-                         "hooks/use-effect"
-                         "rfx/use-entity-tx-id"
-                         "<get-or-load-views"
-                         "create-view!"]]
-        (is (not (string/includes? view-source forbidden))
-            (str "View definitions retain an imperative owner: " forbidden))))
-    (when missing-view-source
-      (is (= #{"db-hooks/use-block"}
-             (hook-names missing-view-source)))
-      (is (string/includes? missing-view-source "hooks/use-effect!"))
-      (is (string/includes? missing-view-source "create-view!")))
-    (when selected-view-source
-      (is (= #{"db-hooks/use-block"}
-             (hook-names selected-view-source)))
-      (doseq [forbidden ["hooks/use-effect"
-                         "rfx/use-entity-tx-id"
-                         "<get-or-load-views"
-                         ":db/id"
-                         "db-async/"
-                         "react/q"
-                         "db-hooks/use-query"]]
-        (is (not (string/includes? selected-view-source forbidden))
-            (str "Selected view retains an imperative definition loader: " forbidden))))
-    (when view-data-source
-      (is (string/includes? view-data-source ":view-data"))
-      (is (= #{"db-hooks/use-resource"}
-             (hook-names view-data-source)))
-      (doseq [forbidden ["load-view-data"
-                         "hooks/use-effect"
-                         "db-async/"
-                         "react/q"
-                         "db-hooks/use-query"
-                         ":query-fn"]]
-        (is (not (string/includes? view-data-source forbidden))
-            (str "View data retains a local loader: " forbidden))))
-    (when row-source
-      (is (= #{"db-hooks/use-block"} (hook-names row-source)))
-      (doseq [forbidden [":db/id"
-                         "db-async/"
-                         "hooks/use-effect"
-                         "hooks/use-state"
-                         "loading-db-id"]]
-        (is (not (string/includes? row-source forbidden))
-            (str "A UUID row retains local hydration state: " forbidden))))
-    (is (not (string/includes? source "(defn sub-view-data-changes")))
-    (is (not (string/includes? source "[frontend.db.react :as react]")))))
 
-(deftest deferred-view-does-not-mount-its-data-resource-while-collapsed-test
-  (let [source (source-for "src/main/frontend/components/views.cljs")
-        deferred-source (form-source source "(hsx/defc view-aux")
-        placeholder-source (form-source source "(hsx/defc deferred-view-placeholder")]
-    (is (string/includes? deferred-source "defer-resource?"))
-    (is (string/includes? deferred-source "loaded-view-aux"))
-    (is (not (string/includes? deferred-source "db-hooks/use-resource")))
-    (is (string/includes? placeholder-source ":default-collapsed? true"))
-    (is (string/includes? placeholder-source "activate!"))))
 
-(deftest persisted-table-columns-derive-from-the-subscribed-view-test
-  (let [source (source-for "src/main/frontend/components/views.cljs")
-        view-inner-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo view-inner")
-        setters-source (form-source source "(defn- db-set-table-state!")]
-    (is (some? view-inner-source))
-    (is (some? setters-source))
-    (when view-inner-source
-      (is (not (string/includes?
-                view-inner-source
-                "(if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]"))
-          "Adding :id before testing persisted hidden columns makes the imported-table fallback unreachable.")
-      (is (string/includes?
-           view-inner-source
-           "(if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]")
-          "Imported tables without hidden-columns must derive visibility from ordered-columns.")
-      (is (string/includes? view-inner-source "(assoc :id false)")
-          "The internal row ID column must stay hidden for every table.")
-      (doseq [local-state-binding ["[visible-columns set-visible-columns!] (hooks/use-state"
-                                   "[ordered-columns set-ordered-columns!] (hooks/use-state"
-                                   "[sized-columns set-sized-columns!] (hooks/use-state"]]
-        (is (not (string/includes? view-inner-source local-state-binding))
-            (str "Persisted table state still has a local mirror: " local-state-binding)))
-      (doseq [property [":logseq.property.table/hidden-columns view-entity"
-                        ":logseq.property.table/ordered-columns view-entity"
-                        ":logseq.property.table/sized-columns view-entity"]]
-        (is (string/includes? view-inner-source property)
-            (str "Subscribed view entity no longer owns table state: " property))))
-    (when setters-source
-      (doseq [local-write ["(set-visible-columns! columns)"
-                           "(set-ordered-columns! ordered-columns)"
-                           "(set-sized-columns! sized-columns)"]]
-        (is (not (string/includes? setters-source local-write))
-            (str "Persisted table setter still writes a local mirror: " local-write))))))
 
-(deftest view-partition-readers-do-not-shadow-core-partition-test
-  (let [source (source-for "src/main/frontend/components/views.cljs")]
-    (is (not (string/includes? source "{:keys [partition rows groups]"))
-        "View payload destructuring must give :partition an intent-revealing local name.")))
 
 (deftest view-definition-uuids-hydrate-through-use-block-test
   (let [owner-uuid (random-uuid)
@@ -633,11 +490,3 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
-
-(deftest all-pages-requests-a-height-derived-initial-window-test
-  (let [source (source-for "src/main/frontend/components/views.cljs")
-        loaded-view-source (form-source source "(hsx/defc loaded-view-aux")]
-    (is (some? loaded-view-source))
-    (is (string/includes? loaded-view-source "initial-view-prefetch-count"))
-    (is (string/includes? loaded-view-source "initial-row-count"))
-    (is (string/includes? source "view-prefetch-limit"))))

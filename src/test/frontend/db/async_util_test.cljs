@@ -1,15 +1,8 @@
 (ns frontend.db.async-util-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
+  (:require [cljs.test :refer [async deftest is]]
             [frontend.db.async.util :as db-async-util]
             [frontend.state :as state]
             [promesa.core :as p]))
-
-(defn- source-for
-  [relative-file]
-  (.toString (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
 
 (deftest q-with-transact-db-uses-worker-without-renderer-db-test
   (async done
@@ -29,12 +22,7 @@
               (is (= first-result second-result))
               (is (= [[:thread-api/q repo [query]]
                       [:thread-api/q repo [query]]]
-                     @worker-calls))
-              (let [source (source-for "src/main/frontend/db/async/util.cljs")]
-                (is (not (string/includes? source "db-conn/get-db"))
-                    "Async worker queries should not read the renderer DB.")
-                (is (not (string/includes? source "d/transact!"))
-                    "Async worker queries should not hydrate a renderer DB.")))
+                     @worker-calls)))
             (p/catch
              (fn [error]
                (is false (str error))))

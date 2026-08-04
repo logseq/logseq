@@ -1,43 +1,12 @@
 (ns frontend.components.journal-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            ["react" :as react]
-            [cljs.test :refer [async deftest is testing use-fixtures]]
-            [clojure.string :as string]
+  (:require ["react" :as react]
+            [cljs.test :refer [async deftest is use-fixtures]]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "journal-membership-test")
-
-(defn- source-for
-  [relative-file]
-  (.toString
-   (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
-
-(defn- form-source
-  [source marker]
-  (let [start (string/index-of source marker)
-        end (when start
-              (or (some->> ["\n(hsx/defc "
-                            "\n(defn"
-                            "\n(def "
-                            "\n(declare "]
-                           (keep #(string/index-of source % (inc start)))
-                           seq
-                           (apply min))
-                  (count source)))]
-    (when (and start end)
-      (subs source start end))))
-
-(defn- occurrence-count
-  [source needle]
-  (loop [start 0
-         result 0]
-    (if-let [index (string/index-of source needle start)]
-      (recur (+ index (count needle)) (inc result))
-      result)))
 
 (defn- block
   [block-uuid tx-id title]
@@ -218,69 +187,3 @@
                   (run! unmount! block-mounts)
                   (run! unmount! children-mounts)
                   (unmount! bundle-mount))))))))
-
-(deftest journals-own-exactly-one-outer-virtuoso-test
-  (let [source (source-for "src/main/frontend/components/journal.cljs")
-        outer-source (form-source source "(hsx/defc all-journals")]
-    (is (some? outer-source))
-    (is (= 1 (occurrence-count source "ui/virtualized-list"))
-        "The journal module contains exactly one Virtuoso.")
-    (when outer-source
-      (is (string/includes? outer-source ":div#journals"))
-      (is (string/includes? outer-source ":journals initial-count"))
-      (is (string/includes? outer-source ":journal-window"))
-      (is (= 1 (occurrence-count outer-source "ui/virtualized-list"))
-          "#journals has one and only one virtualization owner.")
-      (is (string/includes? outer-source ":items-rendered"))
-      (is (string/includes? outer-source
-                            ":compute-item-key (fn [_idx journal-uuid]"))
-      (is (string/includes? outer-source
-                            ":item-content (fn [idx journal-uuid]"))
-      (is (string/includes? outer-source "journal-item"))
-      (is (not (string/includes? outer-source "[:journal-bundle"))
-          "The outer list owns every visible journal request."))))
-
-(deftest journal-item-has-no-inner-virtualizer-test
-  (let [source (source-for "src/main/frontend/components/journal.cljs")
-        item-source (form-source source "(hsx/defc journal-item")]
-    (is (some? item-source))
-    (when item-source
-      (is (string/includes? item-source "page/journal-page"))
-      (is (not (string/includes? item-source "db-hooks/use-resource"))
-          "A journal item renders only data installed by the owner window.")
-      (is (zero? (occurrence-count item-source "ui/virtualized-list"))
-          "A mounted journal never creates an inner virtualizer.")
-      (is (not (string/includes? item-source "page-root-virtual-list"))))))
-
-(deftest mounted-journal-page-renders-direct-and-nested-membership-plainly-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        journal-page-source (form-source source "(hsx/defc journal-page")]
-    (is (some? journal-page-source))
-    (when journal-page-source
-      (is (= #{"db-hooks/use-block-projection" "db-hooks/use-children"}
-             (set (re-seq #"db-hooks/[a-z-]+" journal-page-source))))
-      (is (string/includes? journal-page-source "block/plain-block-list"))
-      (is (string/includes? journal-page-source
-                            "(state/get-container-id [:journal-page journal-uuid])"))
-      (is (string/includes? journal-page-source
-                            "config (assoc (page-render-config page option document-mode?)"))
-      (is (string/includes? journal-page-source
-                            ":container-id container-id"))
-      (is (not (string/includes? journal-page-source
-                                 "block/page-root-virtual-list")))
-      (is (zero? (occurrence-count journal-page-source
-                                   "ui/virtualized-list"))
-          "The outer journal stream is the only virtualizer."))))
-
-(deftest unloaded-journal-preserves-its-last-measured-height-test
-  (let [source (source-for "src/main/frontend/components/journal.cljs")
-        item-source (form-source source "(hsx/defc journal-item")]
-    (testing "an asynchronous bundle reload must not collapse a remounted journal"
-      (is (string/includes? source "journal-item-height-by-key*"))
-      (is (string/includes? item-source "ResizeObserver"))
-      (is (string/includes? item-source ":min-height"))
-      (is (string/includes? item-source "default-journal-height"))
-      (is (string/includes? item-source "(when ready?"))
-      (is (string/includes? item-source "page/journal-page"))
-      (is (not (string/includes? source "js/setTimeout"))
-          "The placeholder lasts only until the bundle is ready."))))

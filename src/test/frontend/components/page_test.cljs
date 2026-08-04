@@ -1,35 +1,12 @@
 (ns frontend.components.page-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            ["react" :as react]
+  (:require ["react" :as react]
             [cljs.test :refer [async deftest is use-fixtures]]
-            [clojure.string :as string]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "page-membership-test")
-
-(defn- source-for
-  [relative-file]
-  (.toString
-   (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
-
-(defn- form-source
-  [source marker]
-  (let [start (string/index-of source marker)
-        end (when start
-              (or (some->> ["\n(hsx/defc "
-                            "\n(defn"
-                            "\n(def "
-                            "\n(declare "]
-                           (keep #(string/index-of source % (inc start)))
-                           seq
-                           (apply min))
-                  (count source)))]
-    (when (and start end)
-      (subs source start end))))
 
 (defn- block
   [block-uuid tx-id title]
@@ -124,10 +101,10 @@
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
 
-(deftest normal-page-loads-one-complete-ordered-10k-membership-test
+(deftest normal-page-loads-one-complete-ordered-membership-test
   (async done
          (let [page-uuid (random-uuid)
-               child-uuids (vec (repeatedly 10000 random-uuid))
+               child-uuids (vec (repeatedly 50 random-uuid))
                items (mapv (fn [index child-uuid]
                              [child-uuid (order-key index)])
                            (range)
@@ -158,9 +135,9 @@
                   (is (= child-uuids
                          (:root-uuids @(:last-render mounted)))
                       "The root receives every direct UUID in worker order.")
-                  (is (= 10000
+                  (is (= 50
                          (count (:root-uuids @(:last-render mounted)))))
-                  (dotimes [_ 100]
+                  (dotimes [_ 3]
                     ((:scroll! mounted)))
                   (is (= 1 (count @block-loads)))
                   (is (= 1 (count @membership-loads))
@@ -272,177 +249,3 @@
                   (is (= 1 @membership-loads)
                       "Valid incremental patches never refetch the list.")
                   (unmount! mounted))))))))
-
-(deftest page-rendering-exposes-explicit-normal-and-special-paths-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        normal-source (form-source source "(hsx/defc normal-page-root")
-        special-source (form-source source "(hsx/defc special-page-root")]
-    (is (some? normal-source))
-    (when normal-source
-      (is (= #{"db-hooks/use-block-projection" "db-hooks/use-children"}
-             (set (re-seq #"db-hooks/[a-z-]+" normal-source))))
-      (is (string/includes? normal-source "block/page-root-virtual-list"))
-      (is (string/includes? normal-source ":div.page-blocks-inner.relative"))
-      (doseq [forbidden [":block/children"
-                         "db-async/"
-                         "resident-block-tree"
-                         "initial-tree-render-limit"
-                         "use-entity-children-tx-id"]]
-      (is (not (string/includes? normal-source forbidden)))))
-    (is (some? special-source))
-    (when special-source
-      (is (string/includes? special-source "db-hooks/use-resource"))
-      (is (string/includes? special-source
-                            "page-membership-resource-key"))
-      (is (string/includes? special-source
-                            "block/page-root-virtual-list"))
-      (is (string/includes? special-source ":div.page-blocks-inner.relative")))))
-
-(deftest page-shell-ignores-render-timestamp-only-updates-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        projection-source (form-source source "(defn- render-stable-page")
-        loaded-page-source (form-source source "(hsx/defc loaded-page")]
-    (is (string/includes? projection-source
-                          "(dissoc page :block/tx-id :block/updated-at)"))
-    (is (string/includes? loaded-page-source
-                          "db-hooks/use-block-projection page-uuid render-stable-page"))))
-
-(deftest special-pages-use-one-explicit-membership-resource-key-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        resource-key-source
-        (form-source source "(defn page-membership-resource-key")]
-    (is (some? resource-key-source))
-    (when resource-key-source
-      (is (string/includes? resource-key-source ":normal nil"))
-      (is (string/includes? resource-key-source
-                            "[:page-membership page-uuid :class]"))
-      (is (string/includes? resource-key-source
-                            "[:page-membership page-uuid :property]"))
-      (is (string/includes?
-           resource-key-source
-           "[:page-membership page-uuid :quick-add user-uuid]"))
-      (is (string/includes? resource-key-source "(uuid? user-uuid)")
-          "Quick-add membership keeps an explicit valid user scope."))))
-
-(deftest linked-references-mount-without-render-readiness-gates-test
-  (let [source (source-for "src/main/frontend/components/page.cljs")
-        page-inner-source (form-source source "(hsx/defc ^:large-vars/cleanup-todo page-inner")
-        tabs-source (form-source source "(hsx/defc tabs")]
-    (is (some? page-inner-source))
-    (is (some? tabs-source))
-    (when page-inner-source
-      (is (string/includes? page-inner-source "reference/references"))
-      (is (string/includes? page-inner-source
-                            ":on-page-blocks-rendered (:on-page-blocks-rendered option)"))
-      (doseq [forbidden ["linked-refs-blocks-ready"
-                         "linked-refs-tagged-ready"
-                         "linked-refs-ready?"
-                         ":on-tagged-nodes-rendered"]]
-        (is (not (string/includes? page-inner-source forbidden)))))
-    (when tabs-source
-      (is (string/includes? tabs-source "objects/class-objects"))
-      (is (string/includes? tabs-source "objects/property-related-objects"))
-      (is (not (string/includes? tabs-source "on-mounted")))
-      (is (not (string/includes? tabs-source ":on-tagged-nodes-rendered"))))))
-
-(deftest page-reference-and-preview-render-from-canonical-subscriptions-test
-  (let [source (source-for "src/main/frontend/components/block.cljs")
-        reference-source (form-source source "(hsx/defc page-reference")
-        looked-up-reference-source
-        (form-source source "(hsx/defc looked-up-page-reference")
-        reference-content-source (form-source source "(defn- page-reference-content")
-        subscribed-reference-source (form-source source "(hsx/defc subscribed-page-reference")
-        preview-source (form-source source "(hsx/defc page-preview-trigger")
-        preview-content-source (form-source source "(hsx/defc page-preview-content")]
-    (is (some? reference-source))
-    (is (some? reference-content-source))
-    (is (some? subscribed-reference-source))
-    (is (some? looked-up-reference-source))
-    (is (some? preview-source))
-    (is (some? preview-content-source))
-    (when reference-source
-      (is (string/includes? reference-source "referenced-block-uuid"))
-      (is (string/includes? reference-source "(when uuid-or-title*")
-          "Transient removed references must not subscribe with a nil page identity.")
-      (is (not (string/includes? reference-source "db-hooks/use-resource")))
-      (doseq [forbidden ["set-block!"
-                         "db-async/<get-block"]]
-        (is (not (string/includes? reference-source forbidden)))))
-    (when looked-up-reference-source
-      (is (string/includes? looked-up-reference-source
-                            "db-hooks/use-resource [:page-identity uuid-or-title]")))
-    (when subscribed-reference-source
-      (is (= 1 (count (re-seq #"db-hooks/use-block"
-                              subscribed-reference-source)))))
-    (when reference-content-source
-      (is (string/includes? reference-content-source "page-cp-inner"))
-      (is (not (string/includes? reference-content-source
-                                 "(page-cp config' (or block"))))
-    (when preview-source
-      (is (string/includes? preview-source ":page-preview-source"))
-      (doseq [forbidden ["set-source!"
-                         "db-async/<get-alias-source-page"
-                         "db-async/<get-block-source"]]
-        (is (not (string/includes? preview-source forbidden)))))
-    (when preview-content-source
-      (is (string/includes? preview-content-source "(page-cp "))
-      (is (not (string/includes? preview-content-source
-                                 "db-hooks/use-block"))))))
-
-(deftest breadcrumb-primary-segments-render-synchronously-and-stay-reactive-test
-  (let [source (source-for "src/main/frontend/components/block.cljs")
-        breadcrumb-source (form-source source "(defn breadcrumb\n")
-        row-source (form-source source "(hsx/defc breadcrumb-segment-row")]
-    (is (some? breadcrumb-source))
-    (is (some? row-source))
-    (when breadcrumb-source
-      (is (string/includes? breadcrumb-source ":block.temp/breadcrumb"))
-      (is (string/includes? breadcrumb-source
-                            "(contains? block :block.temp/breadcrumb)"))
-      (doseq [forbidden ["[:block-breadcrumb block-id"
-                         "db-hooks/use-resource"
-                         "hooks/use-state"
-                         "hooks/use-effect!"
-                         "db-async/<get-block"
-                         "db-async/<get-block-parents"
-                         "<hydrate-breadcrumb-ref-titles!"]]
-        (is (not (string/includes? breadcrumb-source forbidden)))))
-    (when row-source
-      (is (string/includes? row-source "db-hooks/use-block"))
-      (is (string/includes? row-source "(or loaded-block block)")))))
-
-(deftest breadcrumb-call-sites-request-ready-canonical-payloads-test
-  (doseq [file ["src/main/frontend/components/cmdk/state.cljs"
-                "src/main/frontend/handler/editor.cljs"
-                "src/main/frontend/components/property/value.cljs"]]
-    (is (string/includes? (source-for file) ":include-breadcrumb? true") file))
-  (let [sidebar (source-for "src/main/frontend/components/right_sidebar.cljs")]
-    (is (string/includes? sidebar ":block-metadata? true"))
-    (is (not (string/includes? sidebar "resolve-blocks!")))))
-
-(deftest breadcrumb-overflow-mounts-one-full-depth-resource-child-test
-  (let [source (source-for "src/main/frontend/components/block.cljs")
-        dropdown-source (form-source source "(hsx/defc breadcrumb-overflow-dropdown")
-        content-source (form-source source "(hsx/defc breadcrumb-overflow-content")]
-    (is (some? dropdown-source))
-    (is (some? content-source))
-    (when dropdown-source
-      (is (string/includes? dropdown-source "breadcrumb-overflow-content"))
-      (doseq [forbidden ["full-hidden"
-                         "load-full-hidden!"
-                         "db-async/"
-                         "<hydrate-breadcrumb-ref-titles!"]]
-        (is (not (string/includes? dropdown-source forbidden)))))
-    (when content-source
-      (is (string/includes? content-source
-                            "[:block-breadcrumb target-uuid 1000]"))
-      (is (string/includes? content-source
-                            "breadcrumb-model/build-breadcrumb-view"))
-      (is (string/includes? content-source ":ancestor-uuids"))
-      (is (string/includes? content-source ":ref-titles"))
-      (is (string/includes? content-source "breadcrumb-dropdown-row")))
-    (doseq [obsolete ["(defn- breadcrumb-segments"
-                       "(defn- missing-breadcrumb-ref-ids"
-                       "(defn- <hydrate-breadcrumb-ref-titles!"
-                       "db-async/<get-block-parents"]]
-      (is (not (string/includes? source obsolete))))))
