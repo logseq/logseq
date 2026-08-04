@@ -2,6 +2,7 @@
   "Db listeners for worker-db."
   (:require [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.db.metadata-cache :as metadata-cache]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -157,6 +158,10 @@
 (defmethod listen-db-changes :db-sync
   [_ {:keys [repo]} tx-report]
   (db-sync/handle-local-tx! repo tx-report))
+
+(defmethod listen-db-changes :metadata-cache
+  [_ {:keys [repo]} {:keys [db-after] :as tx-report}]
+  (metadata-cache/refresh! repo db-after tx-report))
 
 (defmethod listen-db-changes :markdown-mirror
   [_ {:keys [repo]} tx-report]
