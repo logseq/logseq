@@ -2095,11 +2095,19 @@
                                     (map #(.-offsetWidth ^js %))
                                     (reduce + 0))
                        ;; What the scroller would measure with no bleed at all.
-                       current (fn [k] (or (some-> (.-style wrapper)
-                                                   (.getPropertyValue k)
-                                                   (js/parseFloat))
-                                           0))
-                       current (fn [k] (let [v (current k)] (if (js/isNaN v) 0 v)))
+                       ;; Threads from `wrapper`, not from `(.-style wrapper)`:
+                       ;; `some->` guards the steps after the first, so reading
+                       ;; `.style` off a nil wrapper threw and took the page down
+                       ;; with it. There is no wrapper on any table that is not
+                       ;; marked bleedable — /all-pages, for one — and this
+                       ;; component renders for every table, bleeding or not.
+                       current (fn [k]
+                                 (let [v (or (some-> wrapper
+                                                     (.-style)
+                                                     (.getPropertyValue k)
+                                                     (js/parseFloat))
+                                             0)]
+                                   (if (js/isNaN v) 0 v)))
                        column (- (.-clientWidth rows)
                                  (current "--ls-table-bleed-left")
                                  (current "--ls-table-bleed-right"))
