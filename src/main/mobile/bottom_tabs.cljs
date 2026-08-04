@@ -126,7 +126,7 @@
   (state/set-state! :rtc/loading-graphs? true)
   (-> (p/do!
        (when (= (state/get-current-repo) url)
-         (state/<invoke-db-worker :thread-api/rtc-stop))
+         (rtc-handler/<rtc-stop!))
        (rtc-handler/<rtc-delete-graph! graph-uuid graph-schema-version)
        (rtc-handler/<get-remote-graphs))
       (p/finally
@@ -138,7 +138,7 @@
   (state/set-state! :rtc/loading-graphs? true)
   (-> (p/do!
        (when (= (state/get-current-repo) url)
-         (state/<invoke-db-worker :thread-api/rtc-stop))
+         (rtc-handler/<rtc-stop!))
        (rtc-handler/<rtc-leave-graph! graph-uuid))
       (p/then
        (fn []

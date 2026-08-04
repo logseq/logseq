@@ -18,10 +18,6 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(def-thread-api :thread-api/input-idle?
-  [repo diff]
-  (state/input-idle? repo :diff diff))
-
 (defonce ^:private *search-index-progress-hide-timeout (atom nil))
 
 (defn- clear-search-index-progress-hide-timeout!

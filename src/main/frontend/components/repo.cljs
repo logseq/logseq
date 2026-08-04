@@ -261,7 +261,7 @@
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
                                     (when (= (state/get-current-repo) repo)
-                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                      (rtc-handler/<rtc-stop!))
                                     (p/do! (rtc-handler/<rtc-delete-graph! GraphUUID GraphSchemaVersion)
                                            (state/set-state! :rtc/loading-graphs? false)
                                            (rtc-handler/<get-remote-graphs)))))))}
@@ -280,7 +280,7 @@
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
                                     (when (= (state/get-current-repo) repo)
-                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                      (rtc-handler/<rtc-stop!))
                                     (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
                                         (p/then (fn []
                                                   (notification/show! (t :graph/left) :success)
