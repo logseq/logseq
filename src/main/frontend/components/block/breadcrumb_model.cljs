@@ -290,6 +290,19 @@
 ;; Visibility algorithm
 ;; ---------------------------------------------------------------------------
 
+(defn- distinct-entities
+  [segments]
+  (:segments
+   (reduce (fn [{:keys [seen] :as result} segment]
+             (let [identity (or (:block/uuid segment) (:db/id segment))]
+               (if (and identity (contains? seen identity))
+                 result
+                 (-> result
+                     (update :segments conj segment)
+                     (cond-> identity (update :seen conj identity))))))
+           {:seen #{} :segments []}
+           segments)))
+
 (defn build-breadcrumb-view
   "Applies the visibility budget to a sequence of segments.
 
@@ -308,7 +321,8 @@
       :overflow?       bool}       ; true when any segments are hidden"
   [segments {:keys [show-page? max-visible nearest-count]
              :or {show-page? true max-visible 4 nearest-count 2}}]
-  (let [segs (if show-page? (vec segments) (vec (rest segments)))
+  (let [segments (distinct-entities segments)
+        segs (if show-page? segments (vec (rest segments)))
         total (count segs)]
     (cond
       (zero? total)

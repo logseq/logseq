@@ -767,7 +767,6 @@
     (is (nil? (repo-error :thread-api/sync-app-state [{:auth/id-token "token"}] bound-repo)))
     (is (nil? (repo-error :thread-api/db-sync-list-remote-graphs [] bound-repo)))
     (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
-    (is (nil? (repo-error :thread-api/rtc-get-graphs ["token"] bound-repo)))
     (is (nil? (repo-error :thread-api/set-context [{:repo "not-a-repo-arg"}] bound-repo)))
     (is (nil? (repo-error :thread-api/resolve-ui-request ["req-id" {:password "pw"}] bound-repo)))
     (is (nil? (repo-error :thread-api/reject-ui-request ["req-id" {:code :cancelled}] bound-repo)))

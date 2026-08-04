@@ -1029,7 +1029,8 @@
         owner (require-view-owner! feature-type
                                    (:logseq.property/view-for view)
                                    view-uuid)]
-    (when-not (= stored-feature-type feature-type)
+    (when (and stored-feature-type
+               (not= stored-feature-type feature-type))
       (fail! "View resource feature does not match its definition"
              {:view-uuid view-uuid
               :feature-type feature-type

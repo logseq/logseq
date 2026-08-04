@@ -201,19 +201,6 @@
     :thread-api/sync-app-state
     :thread-api/update-thread-atom
     :thread-api/mobile-logs
-    :thread-api/rtc-start
-    :thread-api/rtc-stop
-    :thread-api/rtc-toggle-auto-push
-    :thread-api/rtc-toggle-remote-profile
-    :thread-api/rtc-grant-graph-access
-    :thread-api/rtc-get-graphs
-    :thread-api/rtc-delete-graph
-    :thread-api/rtc-get-users-info
-    :thread-api/rtc-get-block-content-versions
-    :thread-api/rtc-get-debug-state
-    :thread-api/rtc-request-download-graph
-    :thread-api/rtc-wait-download-graph-info-ready
-    :thread-api/rtc-download-graph-from-s3
     :thread-api/get-user-rsa-key-pair
     :thread-api/init-user-rsa-key-pair
     :thread-api/reset-user-rsa-key-pair
