@@ -23,6 +23,7 @@
    [logseq.db :as ldb]
    [logseq.db-sync.order :as sync-order]
    [logseq.db-sync.tx-sanitize :as tx-sanitize]
+   [logseq.db.common.entity-plus :as entity-plus]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.outliner.core :as outliner-core]
@@ -1025,7 +1026,8 @@
   (letfn [(collect [block]
             (mapcat (fn [child]
                       (cons child (collect child)))
-                    (sort-by :block/order (:block/_parent block))))]
+                    (sort-by :block/order
+                             (entity-plus/lookup-kv-then-entity block :block/_raw-parent))))]
     (collect entity)))
 
 (defn- retract-entity-op?
