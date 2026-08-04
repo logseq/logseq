@@ -406,6 +406,23 @@
       (is (false? (:overflow? result)))
       (is (= segs (:visible-prefix result)))))
 
+  (testing "the same root entity is rendered only once"
+    (let [[root parent] (make-segs 2)
+          result (model/build-breadcrumb-view [root root parent]
+                                              {:max-visible 4
+                                               :nearest-count 2
+                                               :show-page? true})]
+      (is (= [root parent] (:visible-prefix result)))))
+
+  (testing "different entities with the same title are preserved"
+    (let [[root parent] (make-segs 2)
+          parent (assoc parent :text (:text root))
+          result (model/build-breadcrumb-view [root parent]
+                                              {:max-visible 4
+                                               :nearest-count 2
+                                               :show-page? true})]
+      (is (= [root parent] (:visible-prefix result)))))
+
   (testing "5-segment path with max-visible 4: overflows"
     (let [segs (make-segs 5)
           result (model/build-breadcrumb-view segs {:max-visible 4 :nearest-count 2 :show-page? true})]

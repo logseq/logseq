@@ -2,9 +2,9 @@
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.user :as user]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.hooks :as hooks]
@@ -17,7 +17,7 @@
 (defn- stop
   []
   (p/do!
-   (state/<invoke-db-worker :thread-api/rtc-stop)
+   (rtc-handler/<rtc-stop!)
    (reset! debug-state nil)))
 
 (hsx/defc ^:large-vars/cleanup-todo rtc-debug-ui
@@ -26,8 +26,7 @@
         [rtc-logs set-rtc-logs!] (hooks/use-state nil)
         [keys-state set-keys-state!] (hooks/use-state nil)
         [current-page-blocks-count set-current-page-blocks-count!] (hooks/use-state nil)
-        rtc-state (:rtc-state debug-state*)
-        rtc-lock (:rtc-lock debug-state*)]
+        rtc-state (:rtc-state debug-state*)]
     (hooks/use-effect!
      (fn []
        (let [logs* (atom nil)
@@ -65,29 +64,10 @@
      [:div.flex.gap-2.flex-wrap.items-center.pb-3
       (shui/button
        {:size :sm
-        :on-click (fn [_]
-                    (p/let [new-state (state/<invoke-db-worker :thread-api/rtc-get-debug-state)]
-                      (swap! debug-state (fn [old] (merge old new-state)))))}
-       (shui/tabler-icon "refresh") "state")
-
-      (shui/button
-       {:size :sm
         :on-click
         (fn [_]
-          (let [token (state/get-auth-id-token)]
-            (p/let [graph-list (state/<invoke-db-worker :thread-api/rtc-get-graphs token)]
-              (swap! debug-state assoc
-                     :remote-graphs
-                     (map
-                      #(into {}
-                             (filter second
-                                     (select-keys % [:graph-uuid
-                                                     :graph-schema-version
-                                                     :graph-name
-                                                     :graph-status
-                                                     :graph<->user-user-type
-                                                     :graph<->user-grant-by-user])))
-                      graph-list)))))}
+          (p/let [graph-list (rtc-handler/<get-remote-graphs)]
+            (swap! debug-state assoc :remote-graphs graph-list)))}
        (shui/tabler-icon "download") "graph-list")
       (shui/button
        {:size :sm
@@ -114,35 +94,19 @@
            (fipp/pprint {:width 20})
            with-out-str)]]
 
-     (if (nil? rtc-lock)
-       (shui/button
+     [:div.my-2.flex.gap-2
+      (shui/button
         {:variant :outline
          :size :sm
          :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"
-         :on-click (fn [] (state/<invoke-db-worker :thread-api/rtc-start false))}
+         :on-click (fn [] (rtc-handler/<rtc-start! (state/get-current-repo)))}
         (shui/tabler-icon "player-play") "start")
-
-       [:div.my-2.flex
-        [:div.mr-2 (ui/button (str "Toggle auto push updates ("
-                                   (if (:auto-push? debug-state*)
-                                     "ON" "OFF")
-                                   ")")
-                              {:on-click
-                               (fn []
-                                 (state/<invoke-db-worker :thread-api/rtc-toggle-auto-push))})]
-        [:div.mr-2 (ui/button (str "Toggle remote profile ("
-                                   (if (:remote-profile? debug-state*)
-                                     "ON" "OFF")
-                                   ")")
-                              {:on-click
-                               (fn []
-                                 (state/<invoke-db-worker :thread-api/rtc-toggle-remote-profile))})]
-        [:div (shui/button
-               {:variant :outline
-                :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"
-                :size :sm
-                :on-click (fn [] (stop))}
-               (shui/tabler-icon "player-stop") "stop")]])
+      (shui/button
+       {:variant :outline
+        :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"
+        :size :sm
+        :on-click (fn [] (stop))}
+       (shui/tabler-icon "player-stop") "stop")]
 
      [:hr.my-2]
      [:div
