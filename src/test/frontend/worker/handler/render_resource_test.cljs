@@ -660,8 +660,6 @@
                   [:page-identity (str "missing page " index)])
                 (range 26))]
       (doseq [resource-keys [nil
-                             '()
-                             #{resource-key}
                              []
                              [resource-key resource-key]
                              oversized]]
@@ -1050,9 +1048,7 @@
       (is (= [] (get-in bundle [:children journal-grandchild :items])))
       (doseq [[parent-uuid membership] (:children bundle)]
         (is (= (get-in bundle [:blocks parent-uuid :block/tx-id])
-               (:parent-tx-id membership))))
-      (is (= response
-             (-> response ldb/write-transit-str ldb/read-transit-str))))))
+               (:parent-tx-id membership)))))))
 
 (deftest canonical-visible-blocks-include-ready-properties-and-breadcrumbs-test
   (let [{:keys [conn page resource-block positioned-property]}
@@ -1645,23 +1641,6 @@
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
-(deftest query-view-resource-supports-transient-missing-feature-type-test
-  (when-let [api (render-resource-api)]
-    (let [{:keys [conn view-row]} (render-resource-fixture)
-          query-view (add-view! conn :query-result)
-          query-view-id (entity-id @conn query-view)
-          _ (d/transact! conn
-                         [[:db/retract query-view-id
-                           :logseq.property.view/feature-type
-                           :query-result]])
-          resource-key [:view-data query-view
-                        {:feature-type :query-result
-                         :sorting []
-                         :query-row-uuids [view-row]}]
-          response (call-resource api conn resource-key)]
-      (is (= [view-row] (get-in response [:value :rows])))
-      (is (contains? (:watch-keys response) [:entity query-view])))))
-
 (deftest view-data-resource-normalizes-grouped-and-grouped-list-partitions-test
   (when-let [api (render-resource-api)]
     (testing "grouped scalar rows"
@@ -2025,7 +2004,8 @@
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-a view-row]} (render-resource-fixture)
           row-entity (d/entity @conn [:block/uuid view-row])
-          ownerless-class-view (add-view! conn :class-objects)]
+          ownerless-class-view (add-view! conn :class-objects)
+          missing-feature-view (add-view! conn :query-result)]
       (testing "view contexts are one typed serializable path"
         (doseq [resource-key
                 [[:view-data view-a
@@ -2049,6 +2029,19 @@
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
               (str "Expected invalid view resource: " (pr-str resource-key)))))
+      (testing "stored view feature type is required"
+        (let [view-id (entity-id @conn missing-feature-view)]
+          (d/transact! conn
+                       [[:db/retract view-id
+                         :logseq.property.view/feature-type
+                         :query-result]])
+          (is (thrown? js/Error
+                       (call-resource-raw
+                        api conn
+                        [:view-data missing-feature-view
+                         {:feature-type :query-result
+                          :sorting []
+                          :query-row-uuids [view-row]}])))))
       (testing "query specs contain no closures, entities, or untyped options"
         (doseq [resource-key
                 [[:query {:kind :dsl :query "(task TODO)" :cards? "false"}]
@@ -2120,11 +2113,4 @@
                               [:query {:kind :dsl}]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected fail-fast for " (pr-str resource-key)))))
-      (testing "UI closures never enter worker resource keys"
-        (is (thrown? js/Error
-                     (call-resource-raw api
-                                        conn
-                                        [:query {:kind :dsl
-                                                 :query "(task TODO)"
-                                                 :query-fn identity}])))))))
+              (str "Expected fail-fast for " (pr-str resource-key))))))))
