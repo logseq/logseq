@@ -142,6 +142,22 @@
     (cond-> {:items page}
       more? (assoc :next-cursor (encode-cursor (sort-key (last page)))))))
 
+(defn- paginate-bounded [items limit cursor]
+  (let [selected (reduce (fn [selected item]
+                           (if (or (nil? cursor)
+                                   (pos? (compare (sort-key item) cursor)))
+                             (->> (conj selected item)
+                                  (sort-by sort-key)
+                                  (take (inc limit))
+                                  vec)
+                             selected))
+                         []
+                         items)
+        more? (> (count selected) limit)
+        page (vec (take limit selected))]
+    (cond-> {:items page}
+      more? (assoc :next-cursor (encode-cursor (sort-key (last page)))))))
+
 (defn- pagination-options [url]
   (let [raw-cursor (.get (.-searchParams url) "cursor")]
     {:limit (parse-limit url)
@@ -173,6 +189,8 @@
   ([url response-key items]
    (paginated-response url response-key items identity))
   ([url response-key items response-fn]
+   (paginated-response url response-key items response-fn paginate))
+  ([url response-key items response-fn paginate-fn]
    (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
          time-filters (time-filter-options url)]
      (cond
@@ -180,7 +198,7 @@
        (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
        (:invalid? time-filters) (http/bad-request "invalid time filter")
        :else (let [items (filter #(after-time-filters? % time-filters) items)
-                   {:keys [items next-cursor]} (paginate items limit cursor)]
+                   {:keys [items next-cursor]} (paginate-fn items limit cursor)]
                (http/json-response nil (cond-> {response-key (mapv response-fn items)}
                                          next-cursor (assoc :next-cursor next-cursor))))))))
 
@@ -221,13 +239,51 @@
   (when-let [entity (find-entity db id)]
     (when-not (entity-util/hidden? entity) entity)))
 
-(defn- page-blocks [db page]
-  (let [blocks (ldb/get-page-blocks db (:db/id page)
-                                    :pull-keys [:db/id :block/uuid :block/title :block/order
-                                                {:block/parent [:db/id :block/uuid]}
-                                                {:block/page [:db/id :block/uuid]}])]
-    (mapv block-response (otree/non-consecutive-blocks->vec-tree
-                          (remove #(entity-util/hidden? (d/entity db (:db/id %))) blocks)))))
+(defn- page-root-blocks [db page]
+  (let [page-id (:db/id page)]
+    (->> (d/datoms db :avet :block/page page-id)
+         (filter #(seq (d/datoms db :eavt (:e %) :block/parent page-id)))
+         (map #(:e %))
+         (map #(d/pull db [:db/id :block/uuid :block/title :block/order
+                         :block/created-at :block/updated-at
+                         :logseq.property/hide? :logseq.property/deleted-at
+                         {:block/parent [:db/id :block/uuid]}
+                         {:block/page [:db/id :block/uuid]}]
+                    %))
+         (remove entity-util/hidden?))))
+
+(def ^:private page-block-pull-keys
+  [:db/id :block/uuid :block/title :block/order
+   :logseq.property/hide? :logseq.property/deleted-at
+   {:block/parent [:db/id :block/uuid]}
+   {:block/page [:db/id :block/uuid]}])
+
+(defn- page-block-tree [db root]
+  (let [blocks (->> (ldb/get-block-and-children db (:block/uuid root))
+                    (remove #(entity-util/hidden? (d/entity db (:db/id %)))))]
+    (some->> blocks
+             (map #(d/pull db page-block-pull-keys (:db/id %)))
+             (otree/non-consecutive-blocks->vec-tree)
+             first
+             block-response)))
+
+(defn- paginated-page-blocks-response [db page url]
+  (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
+        time-filters (time-filter-options url)]
+    (cond
+      (nil? limit) (http/bad-request "invalid limit")
+      (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
+      (:invalid? time-filters) (http/bad-request "invalid time filter")
+      :else
+      (let [{roots :items next-cursor :next-cursor}
+            (paginate (filter #(after-time-filters? % time-filters)
+                              (page-root-blocks db page))
+                      limit
+                      cursor)]
+        (http/json-response
+         nil
+         (cond-> {:blocks (mapv #(page-block-tree db %) roots)}
+           next-cursor (assoc :next-cursor next-cursor)))))))
 
 (defn- body-clj [request]
   (p/let [body (common/read-json request)]
@@ -449,8 +505,7 @@
                    (let [kind (block-kind entity)
                          type (case kind "tag" "tags" "property" "properties" "asset" "assets" "blocks")]
                      (and (contains? enabled type)
-                          (string/includes? (string/lower-case (or (:block/title entity) "")) needle)))))
-         vec)))
+                          (string/includes? (string/lower-case (or (:block/title entity) "")) needle))))))))
 
 (defn- handle-pages [{:keys [^js self request ^js url conn db handler path-params]}]
   (case handler
@@ -469,7 +524,7 @@
     (if-let [page (find-visible-entity db (:page-id path-params))]
       (if-not (page? page)
         (http/bad-request "block is not a page")
-        (paginated-response url :blocks (page-blocks db page)))
+        (paginated-page-blocks-response db page url))
       (http/not-found))
 
     :semantic/pages-references
@@ -896,7 +951,8 @@
         (http/bad-request "missing q")
         (paginated-response url :results
                             (search-results db query (.get (.-searchParams url) "types"))
-                            search-result-response)))))
+                            search-result-response
+                            paginate-bounded)))))
 
 (def ^:private page-handlers
   #{:semantic/pages-list :semantic/pages-create :semantic/pages-blocks :semantic/pages-references :semantic/pages-get

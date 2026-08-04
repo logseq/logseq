@@ -493,7 +493,9 @@
 (defn- class-tree?
   [db-before db-after datoms]
   (some (fn [datom]
-          (or (= :logseq.property.class/extends (:a datom))
+          (or (contains? #{:logseq.property.class/extends
+                           :logseq.property.class/properties}
+                         (:a datom))
               (and (contains? #{:block/tags :block/uuid :db/ident} (:a datom))
                    (entity-before-or-after? class-entity?
                                             db-before
