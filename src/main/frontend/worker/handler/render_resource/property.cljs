@@ -24,39 +24,31 @@
 
 (defn- normalize-entity-value
   [value]
-  (cond
-    (and (map? value) (uuid? (:block/uuid value)))
-    (:block/uuid value)
+  (letfn [(normalize-coll [values initial]
+            (reduce
+             (fn [[normalized uuids] item]
+               (let [[item uuids'] (normalize-entity-value item)]
+                 [(conj normalized item) (into uuids uuids')]))
+             [initial #{}]
+             values))]
+    (cond
+      (and (map? value) (uuid? (:block/uuid value)))
+      [(:block/uuid value) #{(:block/uuid value)}]
 
-    (set? value)
-    (into #{} (map normalize-entity-value) value)
+      (set? value)
+      (normalize-coll value #{})
 
-    (vector? value)
-    (mapv normalize-entity-value value)
+      (vector? value)
+      (normalize-coll value [])
 
-    (and (sequential? value) (not (string? value)))
-    (mapv normalize-entity-value value)
+      (and (sequential? value) (not (string? value)))
+      (normalize-coll value [])
 
-    (map? value)
-    (common/fail! "Renderer property value has no UUID" {:value value})
+      (map? value)
+      (common/fail! "Renderer property value has no UUID" {:value value})
 
-    :else
-    value))
-
-(defn- value-uuids
-  [value]
-  (cond
-    (uuid? value)
-    #{value}
-
-    (and (map? value) (uuid? (:block/uuid value)))
-    #{(:block/uuid value)}
-
-    (coll? value)
-    (into #{} (mapcat value-uuids) value)
-
-    :else
-    #{}))
+      :else
+      [value #{}])))
 
 (defn- normalize-display-property-row
   [{:keys [property value]}]
@@ -66,22 +58,26 @@
         (mapv (fn [closed-value]
                 (common/require-uuid! :closed-value-uuid
                                (:block/uuid closed-value)))
-              (:property/closed-values property))]
+              (:property/closed-values property))
+        [normalized-value value-uuids] (normalize-entity-value value)]
     (when-not (keyword? property-ident)
       (common/fail! "Renderer property has no ident" {:property-uuid property-uuid}))
-    {:property-uuid property-uuid
-     :property-ident property-ident
-     :value (normalize-entity-value value)
-     :closed-value-uuids closed-value-uuids}))
+    [{:property-uuid property-uuid
+      :property-ident property-ident
+      :value normalized-value
+      :closed-value-uuids closed-value-uuids}
+     (into #{[:entity property-uuid]}
+           (map (fn [block-uuid] [:entity block-uuid]))
+           (concat value-uuids closed-value-uuids))]))
 
-(defn- display-row-watch-keys
-  [{:keys [property value]}]
-  (let [property-uuid (common/require-uuid! :property-uuid (:block/uuid property))
-        closed-value-uuids (keep :block/uuid
-                                 (:property/closed-values property))]
-    (into #{[:entity property-uuid]}
-          (map (fn [block-uuid] [:entity block-uuid]))
-          (concat (value-uuids value) closed-value-uuids))))
+(defn- normalize-display-property-rows
+  [rows]
+  (reduce
+   (fn [[normalized watch-keys] row]
+     (let [[row row-watch-keys] (normalize-display-property-row row)]
+       [(conj normalized row) (into watch-keys row-watch-keys)]))
+   [[] #{}]
+   rows))
 
 (defn- optional-entity-uuid
   [label entity]
@@ -100,18 +96,17 @@
                 block
                 (dissoc context :show-empty-and-hidden-properties?)
                 show-empty-and-hidden-properties?)
-        rows (concat (:full-properties result)
-                     (:hidden-properties result))
-        watch-keys (reduce into
-                           #{[:display-properties block-uuid]
-                             [:class-tree]
-                             [:property-membership :block/closed-value-property]}
-                           (map display-row-watch-keys rows))]
+        [full-properties full-watch-keys]
+        (normalize-display-property-rows (:full-properties result))
+        [hidden-properties hidden-watch-keys]
+        (normalize-display-property-rows (:hidden-properties result))
+        watch-keys (into #{[:display-properties block-uuid]
+                           [:class-tree]
+                           [:property-membership :block/closed-value-property]}
+                         (concat full-watch-keys hidden-watch-keys))]
     [watch-keys
-     {:full-properties
-      (mapv normalize-display-property-row (:full-properties result))
-      :hidden-properties
-      (mapv normalize-display-property-row (:hidden-properties result))
+     {:full-properties full-properties
+      :hidden-properties hidden-properties
       :description-property-uuid
       (optional-entity-uuid :description-property-uuid
                             (:description-property result))
@@ -158,6 +153,6 @@
            groups)]))
 
 (def resource-renderers
-  {:block-display-properties block-display-properties
-   :block-positioned-properties block-positioned-properties
-   :block-bidirectional-properties block-bidirectional-properties})
+  {:block-display-properties (common/renderer 3 block-display-properties)
+   :block-positioned-properties (common/renderer 3 block-positioned-properties)
+   :block-bidirectional-properties (common/renderer 2 block-bidirectional-properties)})

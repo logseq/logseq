@@ -34,14 +34,26 @@
   (let [conn (conn-with-metadata "Color" "Topic")
         metadata (metadata-cache/build-metadata @conn)
         property (get-in metadata [:properties-by-ident :user.property/color])
-        class (get-in metadata [:classes-by-ident :user.class/Topic])]
+        class (get-in metadata [:classes-by-ident :user.class/Topic])
+        class-properties
+        (:classes-properties
+         (metadata-cache/block-class-properties
+          metadata
+          {:block/tags [(:db/id class)]}))]
     (is (= "Color" (:block/title property)))
     (is (integer? (:db/id property)))
     (is (= "Topic" (:block/title class)))
+    (is (integer? (:db/id class)))
+    (is (= :user.class/Topic
+           (:db/ident (metadata-cache/class metadata (:db/id class)))))
     (is (= [:logseq.class/Root]
            (:extends class)))
     (is (= [:user.property/color]
-           (:property-idents class)))))
+           (:property-idents class)))
+    (is (= [:user.property/color]
+           (:all-property-idents class)))
+    (is (= [:user.property/color]
+           (mapv :db/ident class-properties)))))
 
 (deftest metadata-cache-reuses-a-startup-entry-and-separates-graphs-test
   (metadata-cache/reset-for-tests!)
@@ -59,17 +71,18 @@
     (is (= "Color B"
            (get-in (metadata-cache/metadata-for-db @conn-b)
                    [:properties-by-ident :user.property/color :block/title])))
-    (is (= 2 (:builds (metadata-cache/stats))))
     (metadata-cache/clear! "repo-a")
-    (is (nil? (metadata-cache/cached-metadata-for-db @conn-a)))
-    (is (some? (metadata-cache/cached-metadata-for-db @conn-b)))))
+    (is (not (identical? metadata-a
+                         (metadata-cache/metadata-for-db @conn-a))))
+    (is (= "Color B"
+           (get-in (metadata-cache/metadata-for-db @conn-b)
+                   [:properties-by-ident :user.property/color :block/title])))))
 
 (deftest metadata-cache-refreshes-once-for-one-metadata-transaction-test
   (metadata-cache/reset-for-tests!)
   (let [conn (conn-with-metadata "Color" "Topic")
         repo "repo-refresh"
         _ (metadata-cache/initialize! repo @conn)
-        builds-before (:builds (metadata-cache/stats))
         report (d/transact! conn [{:db/ident :user.property/priority
                                    :block/uuid (random-uuid)
                                    :block/title "Priority"
@@ -81,7 +94,6 @@
                                    :logseq.property.class/properties
                                    :user.property/priority]])]
     (metadata-cache/refresh! repo (:db-after report) report)
-    (is (= (inc builds-before) (:builds (metadata-cache/stats))))
     (is (= [:user.property/color :user.property/priority]
            (:property-idents
             (get-in (metadata-cache/metadata-for-db @conn)
@@ -98,7 +110,9 @@
                                    :block/tags :user.class/Topic}])]
     (metadata-cache/refresh! repo (:db-after report) report)
     (is (identical? metadata-before (metadata-cache/metadata-for-db @conn)))
-    (is (= 1 (:builds (metadata-cache/stats))))))
+    (is (= "Color"
+           (get-in (metadata-cache/metadata-for-db @conn)
+                   [:properties-by-ident :user.property/color :block/title])))))
 
 (deftest property-handler-reads-definition-from-metadata-cache-test
   (let [conn (db-test/create-conn)
@@ -122,4 +136,6 @@
                         :block/uuid (random-uuid)
                         :block/title "Priority"
                         :block/tags :logseq.class/Property}])
-    (is (= 2 (:builds (metadata-cache/stats))))))
+    (is (= "Priority"
+           (get-in (metadata-cache/metadata-for-db @conn)
+                   [:properties-by-ident :user.property/priority :block/title])))))

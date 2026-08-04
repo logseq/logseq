@@ -320,11 +320,11 @@
           (and (entity-util/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident property)))
           (and class-schema? (db-property/public-built-in-property? property) (:logseq.property/view-context property))))))
 
-(declare display-property-map)
+(declare display-property-map*)
 
 (defn- property-definition
-  [db property-id]
-  (or (metadata-cache/property (metadata-cache/metadata-for-db db) property-id)
+  [db metadata property-id]
+  (or (metadata-cache/property metadata property-id)
       (d/entity db property-id)))
 
 (defn- get-all-properties
@@ -333,13 +333,14 @@
        :or {remove-built-in-property? true
             remove-non-queryable-built-in-property? false
             remove-ui-non-suitable-properties? false}}]
-  (let [result (sort-by (juxt (fn [property]
+  (let [metadata (metadata-cache/metadata-for-db db)
+        result (sort-by (juxt (fn [property]
                                 (some-> (:db/ident property)
                                         (db-property/plugin-property?)))
                               entity-util/built-in?
                               :block/title)
                         (remove entity-util/recycled?
-                                (vals (:properties-by-id (metadata-cache/metadata-for-db db)))))]
+                                (vals (:properties-by-id metadata))))]
     (cond->> result
       remove-built-in-property?
       (remove (fn [property]
@@ -357,7 +358,7 @@
                 (ui-non-suitable-property? block property {:class-schema? class-schema?})))
       true
       (map (fn [property]
-             (merge property (display-property-map db (:db/id property))))))))
+             (merge property (display-property-map* db metadata (:db/id property))))))))
 
 (def-thread-api :thread-api/get-all-properties
   [repo opts]
@@ -458,9 +459,9 @@
        (sort-by :block/order)
        (mapv #(entity-direct-map db % display-property-value-keys))))
 
-(defn display-property-map
-  [db property-id]
-  (when-let [entity (property-definition db property-id)]
+(defn- display-property-map*
+  [db metadata property-id]
+  (when-let [entity (property-definition db metadata property-id)]
     (let [description (display-property-description db entity)
           closed-values (display-property-closed-values db entity)]
       (cond-> (entity-direct-map db entity display-property-keys)
@@ -469,6 +470,10 @@
 
         (seq closed-values)
         (assoc :property/closed-values closed-values)))))
+
+(defn display-property-map
+  [db property-id]
+  (display-property-map* db (metadata-cache/metadata-for-db db) property-id))
 
 (defn- display-property-value
   [db property-id value]
@@ -582,7 +587,8 @@
 (defn display-properties
   [db block {:keys [gallery-view? page-title? sidebar-properties? tag-dialog?
                     publishing? state-hide-empty-properties?]} show-empty-and-hidden-properties?]
-  (let [block-entity (or (some->> (:db/id block) (d/entity db)) block)
+  (let [metadata (metadata-cache/metadata-for-db db)
+        block-entity (or (some->> (:db/id block) (d/entity db)) block)
         page-properties-area? (and (or page-title?
                                        sidebar-properties?
                                        tag-dialog?)
@@ -612,14 +618,14 @@
                   property-pairs))
         {:keys [all-classes classes-properties]}
         (metadata-cache/block-class-properties
-         (metadata-cache/metadata-for-db db)
+         metadata
          block-entity)
         classes-properties-set (set (map :db/ident classes-properties))
         block-own-properties (->> properties
                                   (remove (fn [[id _]] (contains? recycled-only-property-ids id)))
                                   (remove (fn [[id _]] (classes-properties-set id))))
         hide-with-property-id (fn [property-id]
-                                (let [property (property-definition db property-id)]
+                                (let [property (property-definition db metadata property-id)]
                                   (boolean
                                    (cond
                                      show-empty-and-hidden-properties?
@@ -638,7 +644,7 @@
                                 (hide-with-property-id property-id)))
                           state-hide-empty-properties?
                           (fn [[property-id property-value]]
-                            (if (:logseq.property/hide? (property-definition db property-id))
+                            (if (:logseq.property/hide? (property-definition db metadata property-id))
                               (hide-with-property-id property-id)
                               (nil? property-value)))
                           :else
@@ -673,8 +679,10 @@
                                    true))]
     {:full-properties (vec (sort-display-property-pairs db full-properties))
      :hidden-properties (vec (sort-display-property-pairs db hidden-properties))
-     :description-property (display-property-map db :logseq.property/description)
-     :class-properties-property (display-property-map db :logseq.property.class/properties)}))
+     :description-property
+     (display-property-map* db metadata :logseq.property/description)
+     :class-properties-property
+     (display-property-map* db metadata :logseq.property.class/properties)}))
 
 (def-thread-api :thread-api/get-display-properties
   [repo {:keys [block opts show-empty-and-hidden-properties?]}]
@@ -739,8 +747,8 @@
   (entity-direct-value db block-id property-id))
 
 (defn- render-positioned-property?
-  [db block-id property-id position {:keys [allow-empty-block-below?]}]
-  (when-let [property (property-definition db property-id)]
+  [db metadata block-id property-id position {:keys [allow-empty-block-below?]}]
+  (when-let [property (property-definition db metadata property-id)]
     (let [property-position (render-property-position db property)
           property-value (block-direct-property-value db block-id property-id)]
       (and
@@ -757,15 +765,16 @@
 
 (defn- block-positioned-property-ids
   [db block-id position]
-  (let [block (d/entity db block-id)
+  (let [metadata (metadata-cache/metadata-for-db db)
+        block (d/entity db block-id)
+        class-page? (render-tag-class-page? db block)
         own-property-ids (direct-block-property-ids db block-id)
-        classes-properties (when-not (render-tag-class-page? db block)
+        classes-properties (when-not class-page?
                              (:classes-properties
                               (metadata-cache/block-class-properties
-                               (metadata-cache/metadata-for-db db)
-                               block)))
+                               metadata block)))
         classes-property-ids-set (set (map :db/ident classes-properties))
-        property-ids (if (render-tag-class-page? db block)
+        property-ids (if class-page?
                        own-property-ids
                        (->> classes-properties
                             (map :db/ident)
@@ -773,10 +782,10 @@
                             distinct))]
     (->> property-ids
          (filter (fn [property-id]
-                   (render-positioned-property? db block-id property-id position
+                   (render-positioned-property? db metadata block-id property-id position
                                                 {:allow-empty-block-below?
                                                  (contains? classes-property-ids-set property-id)})))
-         (keep #(property-definition db %))
+         (keep #(property-definition db metadata %))
          db-property/sort-properties
          (map :db/ident))))
 
