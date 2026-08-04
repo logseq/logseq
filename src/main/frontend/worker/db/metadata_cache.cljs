@@ -45,7 +45,6 @@
 (defonce ^:private *cache
   (atom (cache/lru-cache-factory {} :threshold cache-threshold)))
 (defonce ^:private *entries (atom {}))
-(defonce ^:private *stats (atom {:builds 0 :hits 0 :misses 0 :refreshes 0}))
 
 (defn- values
   [db eid attr]
@@ -120,29 +119,32 @@
                                           (when-let [property-ident (:db/ident property)]
                                             [property-ident property])))
                                   properties-by-id)
-        classes-by-id (into {}
-                            (keep (fn [eid]
-                                    (when-let [class (class-map db properties-by-ident eid)]
-                                      [eid class])))
-                            (all-class-eids db))
         classes-by-ident (into {}
-                              (keep (fn [[_ class]]
-                                      (when-let [class-ident (:db/ident class)]
-                                        [class-ident class])))
-                              classes-by-id)
-        classes-by-id (reduce-kv
-                       (fn [result class-id class]
-                         (assoc result class-id
-                                (assoc class :ancestors
-                                       (class-ancestors classes-by-ident (:db/ident class)))))
-                       {}
-                       classes-by-id)
+                               (keep (fn [eid]
+                                       (when-let [class (class-map db properties-by-ident eid)]
+                                         (when-let [class-ident (:db/ident class)]
+                                           [class-ident class]))))
+                               (all-class-eids db))
         classes-by-ident (into {}
                                (map (fn [[class-ident class]]
                                       [class-ident
                                        (assoc class :ancestors
                                               (class-ancestors classes-by-ident class-ident))]))
-                               classes-by-ident)]
+                               classes-by-ident)
+        classes-by-ident (into {}
+                               (map (fn [[class-ident class]]
+                                      [class-ident
+                                       (assoc class :all-property-idents
+                                              (->> (cons class-ident (:ancestors class))
+                                                   (mapcat #(get-in classes-by-ident
+                                                                    [% :property-idents]))
+                                                   distinct
+                                                   vec))]))
+                               classes-by-ident)
+        classes-by-id (into {}
+                            (map (fn [[class-ident class]]
+                                   [(:db/id class) (assoc class :db/ident class-ident)]))
+                            classes-by-ident)]
     {:properties-by-id properties-by-id
      :properties-by-ident properties-by-ident
      :classes-by-id classes-by-id
@@ -172,7 +174,9 @@
   "Return cached class metadata relevant to a block's direct class tags."
   [metadata block]
   (let [direct-class-idents (->> (:block/tags block)
-                                 (keep #(some-> (class-id metadata %) (class metadata) :db/ident))
+                                 (keep (fn [tag]
+                                         (when-let [id (class-id metadata tag)]
+                                           (:db/ident (class metadata id)))))
                                  (sort-by #(get-in metadata [:classes-by-ident % :block/name])))
         all-class-idents (->> (concat direct-class-idents
                                       (mapcat #(get-in metadata [:classes-by-ident % :ancestors])
@@ -181,27 +185,23 @@
         all-classes (->> all-class-idents
                          (keep #(class metadata %))
                          (filter (comp seq :property-idents)))
-        property-idents (->> all-classes
-                             (mapcat :property-idents)
+        property-idents (->> direct-class-idents
+                             (mapcat #(get-in metadata
+                                              [:classes-by-ident % :all-property-idents]))
                              distinct)]
     {:all-classes (vec all-classes)
      :classes-properties (mapv #(property metadata %) property-idents)}))
 
-(defn- cache-key
-  [repo generation]
-  [repo generation])
-
 (defn- active-entry-for-db
   [db]
   (some (fn [[_ entry]]
-          (when (or (identical? db (:db entry))
-                    (= db (:db entry)))
+          (when (identical? db (:db entry))
             entry))
         @*entries))
 
 (defn- store-entry!
   [repo generation db metadata]
-  (let [key (cache-key repo generation)]
+  (let [key [repo generation]]
     (swap! *cache cache/miss key metadata)
     (swap! *entries assoc repo {:db db
                                 :repo repo
@@ -212,7 +212,6 @@
 
 (defn- build-entry!
   [repo generation db]
-  (swap! *stats update :builds inc)
   (store-entry! repo generation db (build-metadata db)))
 
 (defn initialize!
@@ -225,12 +224,6 @@
     (build-entry! repo generation db)
     generation))
 
-(defn cached-metadata-for-db
-  [db]
-  (when-let [{:keys [key metadata]} (active-entry-for-db db)]
-    (when (cache/has? @*cache key)
-      metadata)))
-
 (defn metadata-for-db
   "Return cached metadata for `db`, building a non-published fallback when needed."
   [db]
@@ -238,15 +231,9 @@
     (if (cache/has? @*cache (:key entry))
       (do
         (swap! *cache cache/hit (:key entry))
-        (swap! *stats update :hits inc)
         (:metadata entry))
-      (do
-        (swap! *stats update :misses inc)
-        (build-entry! (:repo entry) (:generation entry) db)))
-    (do
-      (swap! *stats update :misses inc)
-      (swap! *stats update :builds inc)
-      (build-metadata db))))
+      (build-entry! (:repo entry) (:generation entry) db))
+    (build-metadata db)))
 
 (defn metadata-attribute?
   [attribute]
@@ -276,7 +263,6 @@
   "Refresh the active graph entry once when a transaction changes metadata."
   [repo db-after tx-report]
   (when-let [{:keys [generation]} (get @*entries repo)]
-    (swap! *stats update :refreshes inc)
     (if (some #(metadata-datom? tx-report %) (:tx-data tx-report))
       (build-entry! repo generation db-after)
       (swap! *entries assoc-in [repo :db] db-after))))
@@ -288,13 +274,8 @@
   (swap! *entries dissoc repo)
   nil)
 
-(defn stats
-  []
-  @*stats)
-
 (defn reset-for-tests!
   []
   (reset! *cache (cache/lru-cache-factory {} :threshold cache-threshold))
   (reset! *entries {})
-  (reset! *stats {:builds 0 :hits 0 :misses 0 :refreshes 0})
   nil)

@@ -11,46 +11,33 @@
                      slot-revision
                      tombstone-slot]]))
 
-(def ^:dynamic *store nil)
-(def ^:dynamic *listeners nil)
-(def ^:dynamic *request-reload! nil)
-(def ^:dynamic *start-children-load! nil)
-(def ^:dynamic *schedule-resource-reload! nil)
-(def ^:dynamic *set-seeded-block-gc-timeout! nil)
-
 (defn- mounted?
-  [slot-type key]
-  (seq (get-in @*listeners [slot-type key])))
+  [context slot-type key]
+  (seq (get-in @(:listeners context) [slot-type key])))
 
 (defn- listeners-for
-  [slot-type key]
-  (vals (get-in @*listeners [slot-type key])))
+  [context slot-type key]
+  (vals (get-in @(:listeners context) [slot-type key])))
 
 (defn- notify-key!
-  [slot-type key]
-  (doseq [listener (listeners-for slot-type key)]
+  [context slot-type key]
+  (doseq [listener (listeners-for context slot-type key)]
     (listener)))
 
 (defn- notify-keys!
-  [slot-type keys]
+  [context slot-type keys]
   (doseq [key keys]
-    (notify-key! slot-type key)))
+    (notify-key! context slot-type key)))
 
-(defn- request-reload!
-  [request-key start-load!]
-  (*request-reload! request-key start-load!))
-
-(defn- start-children-load!
-  [parent-uuid]
-  (*start-children-load! parent-uuid))
-
-(defn- schedule-resource-reload!
-  [resource-key]
-  (*schedule-resource-reload! resource-key))
-
-(defn- set-seeded-block-gc-timeout!
-  [callback delay-ms]
-  (*set-seeded-block-gc-timeout! callback delay-ms))
+(defn- commit-transition!
+  [context transition]
+  (let [result (volatile! nil)]
+    (swap! (:store context)
+           (fn [store]
+             (let [next (transition store)]
+               (vreset! result next)
+               (first next))))
+    @result))
 
 (defn- loaded-block-slot
   [block-uuid basis-rev current block]
@@ -67,46 +54,46 @@
       :else
       (ready-block-slot basis-rev block))))
 
+(defn- current-load?
+  [store generation basis-rev slot-type key]
+  (and (= generation (:generation store))
+       (>= basis-rev (slot-revision (get-in store [slot-type key])))))
+
 (defn- apply-block-load*
-  [generation block-uuid {:keys [basis-rev blocks]}]
+  [context generation block-uuid {:keys [basis-rev blocks]}]
   (require-revision! :basis-rev basis-rev)
-  (let [changed-blocks (volatile! #{})]
-    (swap! *store
-           (fn [store]
-             (let [current (get-in store [:blocks block-uuid])]
-               (if (or (not= generation (:generation store))
-                       (< basis-rev (slot-revision current)))
-                 store
-                 (let [store
-                       (reduce-kv
-                        (fn [store loaded-uuid block]
-                          (let [current (get-in store [:blocks loaded-uuid])
-                                next-slot (loaded-block-slot loaded-uuid
-                                                             basis-rev
-                                                             current
-                                                             block)]
-                            (if (identical? current next-slot)
-                              store
-                              (do
-                                (vswap! changed-blocks conj loaded-uuid)
-                                (assoc-in store [:blocks loaded-uuid]
-                                          next-slot)))))
-                        store
-                        blocks)]
+  (let [[_ {:keys [changed-blocks]}]
+        (commit-transition!
+         context
+         (fn [store]
+           (if-not (current-load? store generation basis-rev :blocks block-uuid)
+             [store {:changed-blocks #{}}]
+             (let [[store changed-blocks]
+                   (reduce-kv
+                    (fn [[store changed-blocks] loaded-uuid block]
+                      (let [current (get-in store [:blocks loaded-uuid])
+                            next-slot (loaded-block-slot loaded-uuid basis-rev
+                                                         current block)]
+                        (if (identical? current next-slot)
+                          [store changed-blocks]
+                          [(assoc-in store [:blocks loaded-uuid] next-slot)
+                           (conj changed-blocks loaded-uuid)])))
+                    [store #{}]
+                    blocks)
+                   [store changed-blocks]
                    (if (contains? blocks block-uuid)
-                     store
+                     [store changed-blocks]
                      (let [current (get-in store [:blocks block-uuid])
                            next-slot (if (and (= :tombstone (:kind current))
                                               (>= (:rev current) basis-rev))
                                        current
                                        (tombstone-slot basis-rev))]
                        (if (identical? current next-slot)
-                         store
-                         (do
-                           (vswap! changed-blocks conj block-uuid)
-                           (assoc-in store [:blocks block-uuid]
-                                     next-slot))))))))))
-    (notify-keys! :blocks @changed-blocks)))
+                         [store changed-blocks]
+                         [(assoc-in store [:blocks block-uuid] next-slot)
+                          (conj changed-blocks block-uuid)])))]
+               [store {:changed-blocks changed-blocks}]))))]
+    (notify-keys! context :blocks changed-blocks)))
 
 (defn- require-child-items!
   [parent-uuid items]
@@ -125,28 +112,21 @@
        (sort-by second)
        vec))
 
-(defn- journal-bundle-key?
-  [resource-key]
-  (= :journal-bundle (first resource-key)))
-
-(defn resource-bundles
+(defn resource-dependencies
   [resource-key value]
   (case (first resource-key)
     :journal-bundle
-    {(second resource-key) value}
+    {:bundles {(second resource-key) value}}
 
     :journals
-    (:bundles value)
+    {:bundles (:bundles value)}
 
     :journal-window
-    (:bundles value)
+    {:bundles (:bundles value)}
 
-    {}))
+    :view-data
+    {:initial-blocks (:initial-blocks value)}
 
-(defn resource-blocks
-  [resource-key value]
-  (if (= :view-data (first resource-key))
-    (:initial-blocks value)
     {}))
 
 (defn- require-block-bundle!
@@ -210,27 +190,26 @@
 (declare apply-block-tree-load!)
 
 (defn- apply-children-load*
-  [generation parent-uuid {:keys [blocks children] :as response}]
+  [context generation parent-uuid {:keys [blocks children] :as response}]
   (if (and blocks children)
-    (apply-block-tree-load! generation parent-uuid response)
+    (apply-block-tree-load! context generation parent-uuid response)
     (let [{:keys [basis-rev parent-tx-id items]} response]
       (require-revision! :basis-rev basis-rev)
       (require-revision! :block/tx-id parent-tx-id)
       (let [items (require-child-items! parent-uuid items)
             next-slot (ready-children-slot basis-rev parent-tx-id items)
-            changed? (volatile! false)]
-        (swap! *store
-               (fn [store]
+            [_ {:keys [changed?]}]
+            (commit-transition!
+             context
+             (fn [store]
+               (if-not (current-load? store generation basis-rev
+                                       :children parent-uuid)
+                 [store {:changed? false}]
                  (let [current (get-in store [:children parent-uuid])]
-                   (if (or (not= generation (:generation store))
-                           (< basis-rev (slot-revision current)))
-                     store
-                     (do
-                       (when-not (= current next-slot)
-                         (vreset! changed? true))
-                       (assoc-in store [:children parent-uuid] next-slot))))))
-        (when @changed?
-          (notify-key! :children parent-uuid))))))
+                   [(assoc-in store [:children parent-uuid] next-slot)
+                    {:changed? (not= current next-slot)}]))))]
+        (when changed?
+          (notify-key! context :children parent-uuid))))))
 
 (defn- bundle-has-newer-slot?
   [store basis-rev {:keys [blocks children]}]
@@ -239,35 +218,42 @@
       (some #(> (slot-revision (get-in store [:children %])) basis-rev)
             (keys children))))
 
+(def ^:private empty-delta-effects
+  {:changed-blocks #{}
+   :seeded-blocks #{}
+   :changed-children #{}
+   :seeded-children #{}
+   :stale-children #{}
+   :stale-resources #{}
+   :changed-resources #{}
+   :applied? false})
+
 (defn- seed-block-bundle
-  [store basis-rev {:keys [blocks children]}
-   changed-blocks changed-children]
-  (let [store
+  [store basis-rev {:keys [blocks children]} effects]
+  (let [[store effects]
         (reduce-kv
-         (fn [store block-uuid block]
+         (fn [[store effects] block-uuid block]
            (let [current (get-in store [:blocks block-uuid])
                  next-slot (loaded-block-slot block-uuid basis-rev current block)]
              (if (identical? current next-slot)
-               store
-               (do
-                 (vswap! changed-blocks conj block-uuid)
-                 (assoc-in store [:blocks block-uuid] next-slot)))))
-         store
+               [store effects]
+               [(assoc-in store [:blocks block-uuid] next-slot)
+                (update effects :changed-blocks conj block-uuid)])))
+         [store effects]
          blocks)]
     (reduce-kv
-     (fn [store parent-uuid {:keys [parent-tx-id items]}]
+     (fn [[store effects] parent-uuid {:keys [parent-tx-id items]}]
        (let [current (get-in store [:children parent-uuid])
              next-slot (ready-children-slot basis-rev parent-tx-id items)]
          (if (= current next-slot)
-           store
-           (do
-             (vswap! changed-children conj parent-uuid)
-             (assoc-in store [:children parent-uuid] next-slot)))))
-     store
+           [store effects]
+           [(assoc-in store [:children parent-uuid] next-slot)
+            (update effects :changed-children conj parent-uuid)])))
+     [store effects]
      children)))
 
 (defn- apply-block-tree-load!
-  [generation parent-uuid {:keys [basis-rev parent-tx-id items blocks children]}]
+  [context generation parent-uuid {:keys [basis-rev parent-tx-id items blocks children]}]
   (require-revision! :basis-rev basis-rev)
   (let [bundle (require-block-bundle!
                 parent-uuid
@@ -280,20 +266,51 @@
                  root-membership)
       (throw (ex-info "Block tree root membership does not match"
                       {:parent-uuid parent-uuid})))
-    (let [changed-blocks (volatile! #{})
-          changed-children (volatile! #{})]
-      (swap! *store
-             (fn [store]
-               (if (or (not= generation (:generation store))
-                       (bundle-has-newer-slot? store basis-rev bundle))
-                 store
-                 (seed-block-bundle store basis-rev bundle
-                                    changed-blocks changed-children))))
-      (notify-keys! :blocks @changed-blocks)
-      (notify-keys! :children @changed-children))))
+    (let [[_ {:keys [changed-blocks changed-children]}]
+          (commit-transition!
+           context
+           (fn [store]
+             (if (or (not= generation (:generation store))
+                     (bundle-has-newer-slot? store basis-rev bundle))
+               [store empty-delta-effects]
+               (seed-block-bundle store basis-rev bundle
+                                  empty-delta-effects))))]
+      (notify-keys! context :blocks changed-blocks)
+      (notify-keys! context :children changed-children))))
+
+(defn- normalize-resource-value
+  [resource-key value]
+  (let [kind (first resource-key)
+        {:keys [bundles initial-blocks]}
+        (resource-dependencies resource-key value)
+        bundles (into {}
+                      (map (fn [[root-uuid bundle]]
+                             [root-uuid
+                              (require-block-bundle! root-uuid bundle)]))
+                      bundles)
+        initial-blocks (into {}
+                             (map (fn [[block-uuid block]]
+                                    [block-uuid
+                                     (require-block! block-uuid block)]))
+                             initial-blocks)]
+    {:bundles bundles
+     :initial-blocks initial-blocks
+     :value (cond
+              (= :journal-bundle kind)
+              (get bundles (second resource-key))
+
+              (contains? #{:journals :journal-window} kind)
+              (assoc value :bundles bundles)
+
+              (and (= :view-data kind)
+                   (contains? value :initial-blocks))
+              (assoc value :initial-blocks initial-blocks)
+
+              :else
+              value)}))
 
 (defn- apply-resource-load*
-  [generation resource-key {:keys [basis-rev key watch-keys value]}]
+  [context generation resource-key {:keys [basis-rev key watch-keys value]}]
   (require-revision! :basis-rev basis-rev)
   (when-not (= resource-key key)
     (throw (ex-info "Resource key does not match its subscription key"
@@ -301,77 +318,52 @@
   (when-not (set? watch-keys)
     (throw (ex-info "Invalid resource watch keys"
                     {:resource-key resource-key :watch-keys watch-keys})))
-  (let [bundles (into {}
-                      (map (fn [[root-uuid bundle]]
-                             [root-uuid
-                              (require-block-bundle! root-uuid bundle)]))
-                      (resource-bundles resource-key value))
-        initial-blocks (into {}
-                             (map (fn [[block-uuid block]]
-                                    [block-uuid
-                                     (require-block! block-uuid block)]))
-                             (resource-blocks resource-key value))
-        value (cond
-                (journal-bundle-key? resource-key)
-                (get bundles (second resource-key))
-
-                (contains? #{:journals :journal-window}
-                           (first resource-key))
-                (assoc value :bundles bundles)
-
-                (and (= :view-data (first resource-key))
-                     (contains? value :initial-blocks))
-                (assoc value :initial-blocks initial-blocks)
-
-                :else
-                value)
+  (let [{:keys [bundles initial-blocks value]}
+        (normalize-resource-value resource-key value)
         next-slot (ready-resource-slot basis-rev watch-keys value)
-        changed-resource? (volatile! false)
-        changed-blocks (volatile! #{})
-        changed-children (volatile! #{})
-        stale-response? (volatile! false)]
-    (swap! *store
-           (fn [store]
-             (let [current (get-in store [:resources resource-key])]
-               (if (or (not= generation (:generation store))
-                       (< basis-rev (:rev store))
-                       (< basis-rev (slot-revision current))
-                       (some #(bundle-has-newer-slot? store basis-rev %)
-                             (vals bundles))
-                       (some #(> (slot-revision (get-in store [:blocks %]))
-                                 basis-rev)
-                             (keys initial-blocks)))
-                 (do
-                   (when (= generation (:generation store))
-                     (vreset! stale-response? true))
-                   store)
-                 (let [store (if (= current next-slot)
-                               store
-                               (do
-                                 (vreset! changed-resource? true)
-                                 (assoc-in store [:resources resource-key]
-                                           next-slot)))
-                       store (reduce (fn [store bundle]
-                                       (seed-block-bundle
-                                        store basis-rev bundle
-                                        changed-blocks changed-children))
-                                     store
-                                     (vals bundles))]
+        [_ {:keys [reload? changed-resource? changed-blocks changed-children]}]
+        (commit-transition!
+         context
+         (fn [store]
+             (let [current (get-in store [:resources resource-key])
+                   stale? (or (not= generation (:generation store))
+                              (< basis-rev (:rev store))
+                              (< basis-rev (slot-revision current))
+                              (some #(bundle-has-newer-slot? store basis-rev %)
+                                    (vals bundles))
+                              (some #(> (slot-revision (get-in store [:blocks %]))
+                                        basis-rev)
+                                    (keys initial-blocks)))]
+               (if stale?
+                 [store (assoc empty-delta-effects
+                               :reload? (= generation (:generation store)))]
+                 (let [effects (cond-> empty-delta-effects
+                                 (not= current next-slot)
+                                 (assoc :changed-resource? true))
+                       [store effects]
+                       (reduce (fn [[store effects] bundle]
+                                 (seed-block-bundle store basis-rev bundle effects))
+                               [(if (= current next-slot)
+                                  store
+                                  (assoc-in store [:resources resource-key]
+                                            next-slot))
+                                effects]
+                               (vals bundles))]
                    (seed-block-bundle store basis-rev
                                       {:blocks initial-blocks :children {}}
-                                      changed-blocks changed-children))))))
-    (when @stale-response?
-      (schedule-resource-reload! resource-key))
-    (notify-keys! :children @changed-children)
-    (notify-keys! :blocks @changed-blocks)
-    (when @changed-resource?
-      (notify-key! :resources resource-key))))
+                                      effects))))))]
+    (when reload?
+      ((:schedule-resource-reload! context) resource-key))
+    (notify-keys! context :children changed-children)
+    (notify-keys! context :blocks changed-blocks)
+    (when changed-resource?
+      (notify-key! context :resources resource-key))))
 
 (defn- apply-block-replacement
-  [store block-uuid block seed-block-uuids changed-blocks seeded-blocks]
+  [context store block-uuid block seed-block-uuids effects]
   (let [block (require-block! block-uuid block)
         current (get-in store [:blocks block-uuid])
-        mounted-block? (mounted? :blocks block-uuid)
+        mounted-block? (mounted? context :blocks block-uuid)
         seed? (contains? seed-block-uuids block-uuid)]
     (if (or (and (nil? current)
                  (not mounted-block?)
@@ -379,15 +371,14 @@
             (> (slot-revision current) (:rev store))
             (and (= :ready (:kind current))
                  (not (block-changed? (get-in current [:snapshot :value]) block))))
-      store
-      (do
-        (vswap! changed-blocks conj block-uuid)
-        (when (and seed? (not mounted-block?))
-          (vswap! seeded-blocks conj block-uuid))
-        (assoc-in store [:blocks block-uuid]
-                  (cond-> (ready-block-slot (:rev store) block)
-                    (and seed? (not mounted-block?))
-                    (assoc :seeded? true)))))))
+      [store effects]
+      [(assoc-in store [:blocks block-uuid]
+                 (cond-> (ready-block-slot (:rev store) block)
+                   (and seed? (not mounted-block?))
+                   (assoc :seeded? true)))
+       (cond-> (update effects :changed-blocks conj block-uuid)
+         (and seed? (not mounted-block?))
+         (update :seeded-blocks conj block-uuid))])))
 
 (defn- inserted-child-uuids
   [children]
@@ -396,45 +387,33 @@
                   (map first (:upsert patch))))
         children))
 
+(defn- remove-seeded-slots
+  [slots context slot-type keys basis-rev]
+  (reduce
+   (fn [slots key]
+     (let [slot (get slots key)]
+       (if (and (not (mounted? context slot-type key))
+                (:seeded? slot)
+                (= basis-rev (:basis-rev slot)))
+         (dissoc slots key)
+         slots)))
+   slots
+   keys))
+
 (defn- schedule-seeded-slots-gc!
-  [block-uuids parent-uuids basis-rev]
-  (let [store *store
-        listeners *listeners]
-    (set-seeded-block-gc-timeout!
-     (fn []
-       (binding [*store store
-                 *listeners listeners]
-         (swap! *store
-                (fn [store]
-                  (-> store
-                      (update :blocks
-                              (fn [blocks]
-                                (reduce
-                                 (fn [blocks block-uuid]
-                                   (let [slot (get blocks block-uuid)]
-                                     (if (and (not (mounted? :blocks block-uuid))
-                                              (:seeded? slot)
-                                              (= basis-rev (:basis-rev slot)))
-                                       (dissoc blocks block-uuid)
-                                       blocks)))
-                                 blocks
-                                 block-uuids)))
-                      (update :children
-                              (fn [children]
-                                (reduce
-                                 (fn [children parent-uuid]
-                                   (let [slot (get children parent-uuid)]
-                                     (if (and (not (mounted? :children parent-uuid))
-                                              (:seeded? slot)
-                                              (= basis-rev (:basis-rev slot)))
-                                       (dissoc children parent-uuid)
-                                       children)))
-                                 children
-                                 parent-uuids))))))))
-     2000)))
+  [context block-uuids parent-uuids basis-rev]
+  ((:set-seeded-block-gc-timeout! context)
+   #(swap! (:store context)
+           (fn [store]
+             (-> store
+                 (update :blocks remove-seeded-slots context :blocks
+                         block-uuids basis-rev)
+                 (update :children remove-seeded-slots context :children
+                         parent-uuids basis-rev))))
+   2000))
 
 (defn- apply-tombstone
-  [store delta-rev block-uuid tombstone changed-blocks]
+  [context store delta-rev block-uuid tombstone effects]
   (require-uuid! :block/uuid block-uuid)
   (let [tombstone-rev (require-revision! :rev (:rev tombstone))
         current (get-in store [:blocks block-uuid])]
@@ -444,15 +423,14 @@
                        :block-uuid block-uuid
                        :tombstone-rev tombstone-rev})))
     (if (or (and (nil? current)
-                 (not (mounted? :blocks block-uuid)))
+                 (not (mounted? context :blocks block-uuid)))
             (> (slot-revision current) delta-rev)
             (and (= :tombstone (:kind current))
                  (>= (:rev current) tombstone-rev)))
-      store
-      (do
-        (vswap! changed-blocks conj block-uuid)
-        (assoc-in store [:blocks block-uuid]
-                  (tombstone-slot tombstone-rev))))))
+      [store effects]
+      [(assoc-in store [:blocks block-uuid]
+                 (tombstone-slot tombstone-rev))
+       (update effects :changed-blocks conj block-uuid)])))
 
 (defn- child-patch-items
   [parent-uuid items remove-items upsert-items]
@@ -468,8 +446,8 @@
          vec)))
 
 (defn- apply-child-patch
-  [store parent-uuid {removed :remove patch-rev :rev :keys [base-rev upsert]}
-   seed? parent-tx-id changed-children seeded-children stale-children]
+  [context store parent-uuid {removed :remove patch-rev :rev :keys [base-rev upsert]}
+   seed? parent-tx-id effects]
   (require-uuid! :block/uuid parent-uuid)
   (require-revision! :base-rev base-rev)
   (require-revision! :rev patch-rev)
@@ -482,42 +460,40 @@
     (cond
       (nil? current)
       (cond
-        seed?
-        (let [_ (require-revision! :block/tx-id parent-tx-id)
-              items (child-patch-items parent-uuid [] removed upsert)]
-          (vswap! changed-children conj parent-uuid)
-          (vswap! seeded-children conj parent-uuid)
-          (assoc-in store [:children parent-uuid]
-                    (assoc (ready-children-slot patch-rev parent-tx-id items)
-                           :seeded? true)))
+      seed?
+      (let [_ (require-revision! :block/tx-id parent-tx-id)
+            items (child-patch-items parent-uuid [] removed upsert)]
+          [(assoc-in store [:children parent-uuid]
+                         (assoc (ready-children-slot patch-rev parent-tx-id items)
+                                :seeded? true))
+           (-> effects
+               (update :changed-children conj parent-uuid)
+               (update :seeded-children conj parent-uuid))])
 
-        (mounted? :children parent-uuid)
-        (do
-          (vswap! stale-children conj parent-uuid)
-          (assoc-in store [:children parent-uuid :stale-rev]
-                    (:rev store)))
+      (mounted? context :children parent-uuid)
+      [(assoc-in store [:children parent-uuid :stale-rev] (:rev store))
+       (update effects :stale-children conj parent-uuid)]
 
-        :else
-        store)
+      :else
+      [store effects])
 
       (> (slot-revision current) (:rev store))
-      store
+      [store effects]
 
       (= patch-rev (:basis-rev current))
-      store
+      [store effects]
 
       (= base-rev (:basis-rev current))
       (let [items (child-patch-items parent-uuid (:items current) removed upsert)]
-        (vswap! changed-children conj parent-uuid)
-        (assoc-in store [:children parent-uuid]
-                  (ready-children-slot patch-rev (:tx-id current) items)))
+        [(assoc-in store [:children parent-uuid]
+                   (ready-children-slot patch-rev (:tx-id current) items))
+         (update effects :changed-children conj parent-uuid)])
 
       :else
-      (do
-        (when (mounted? :children parent-uuid)
-          (vswap! stale-children conj parent-uuid))
-        (assoc-in store [:children parent-uuid :stale-rev]
-                  (:rev store))))))
+      [(assoc-in store [:children parent-uuid :stale-rev] (:rev store))
+       (cond-> effects
+         (mounted? context :children parent-uuid)
+         (update :stale-children conj parent-uuid))])))
 
 (defn- advance-unpatched-children
   [store previous-rev blocks child-patches]
@@ -535,32 +511,63 @@
    (:children store)))
 
 (defn- invalidate-resources
-  [store affected-keys deleted stale-resources changed-resources]
+  [context store affected-keys deleted effects]
   (reduce-kv
-   (fn [store resource-key slot]
+   (fn [[store effects] resource-key slot]
      (let [owner-uuid (second resource-key)]
        (cond
          (and (uuid? owner-uuid) (contains? deleted owner-uuid))
-         (do
-           (vswap! changed-resources conj resource-key)
-           (assoc-in store [:resources resource-key]
-                     (tombstone-slot (:rev store))))
+         [(assoc-in store [:resources resource-key]
+                    (tombstone-slot (:rev store)))
+          (update effects :changed-resources conj resource-key)]
 
-         (and (mounted? :resources resource-key)
+         (and (mounted? context :resources resource-key)
               (<= (slot-revision slot) (:rev store))
               (seq (set/intersection affected-keys (:watch-keys slot))))
-         (do
-           (vswap! stale-resources conj resource-key)
-           (assoc-in store [:resources resource-key :stale-rev]
-                     (:rev store)))
+         [(assoc-in store [:resources resource-key :stale-rev] (:rev store))
+          (update effects :stale-resources conj resource-key)]
 
          :else
-         store)))
-   store
+         [store effects])))
+   [store effects]
    (:resources store)))
 
+(defn- apply-delta-to-store
+  [context store {:keys [graph-id rev blocks deleted children affected-keys]}]
+  (if (or (not= graph-id (:graph-id store))
+          (<= rev (:rev store)))
+    [store empty-delta-effects]
+    (let [seed-block-uuids (inserted-child-uuids children)
+          effects (assoc empty-delta-effects :applied? true)
+          previous-rev (:rev store)
+          store (assoc store :rev rev)
+          store (advance-unpatched-children store previous-rev blocks children)
+          [store effects]
+          (reduce-kv
+           (fn [[store effects] block-uuid block]
+             (apply-block-replacement context store block-uuid block
+                                      seed-block-uuids effects))
+           [store effects]
+           blocks)
+          [store effects]
+          (reduce-kv
+           (fn [[store effects] block-uuid tombstone]
+             (apply-tombstone context store rev block-uuid tombstone effects))
+           [store effects]
+           deleted)
+          [store effects]
+          (reduce-kv
+           (fn [[store effects] parent-uuid patch]
+             (apply-child-patch context store parent-uuid patch
+                                (contains? seed-block-uuids parent-uuid)
+                                (get-in blocks [parent-uuid :block/tx-id])
+                                effects))
+           [store effects]
+           children)]
+      (invalidate-resources context store affected-keys deleted effects))))
+
 (defn- apply-delta*
-  [{:keys [graph-id rev blocks deleted children affected-keys] :as delta}]
+  [context {:keys [graph-id rev blocks deleted children affected-keys] :as delta}]
   (require-revision! :rev rev)
   (when-not (map? delta)
     (throw (ex-info "Invalid renderer delta" {:delta delta})))
@@ -576,88 +583,43 @@
   (when (seq (set/intersection (set (keys blocks)) (set (keys deleted))))
     (throw (ex-info "A block cannot be replaced and deleted in one delta"
                     {:rev rev})))
-  (let [changed-blocks (volatile! #{})
-        seeded-blocks (volatile! #{})
-        changed-children (volatile! #{})
-        seeded-children (volatile! #{})
-        stale-children (volatile! #{})
-        stale-resources (volatile! #{})
-        changed-resources (volatile! #{})
-        applied? (volatile! false)]
-    (swap! *store
-           (fn [store]
-             (if (or (not= graph-id (:graph-id store))
-                     (<= rev (:rev store)))
-               store
-               (let [previous-rev (:rev store)
-                     seed-block-uuids (inserted-child-uuids children)
-                     store (assoc store :rev rev)
-                     store (advance-unpatched-children store previous-rev blocks children)
-                     store (reduce-kv
-                            (fn [store block-uuid block]
-                              (apply-block-replacement store block-uuid block
-                                                       seed-block-uuids
-                                                       changed-blocks
-                                                       seeded-blocks))
-                            store
-                            blocks)
-                     store (reduce-kv
-                            (fn [store block-uuid tombstone]
-                              (apply-tombstone store rev block-uuid tombstone
-                                               changed-blocks))
-                            store
-                            deleted)
-                     store (reduce-kv
-                            (fn [store parent-uuid patch]
-                              (apply-child-patch store parent-uuid patch
-                                                 (contains? seed-block-uuids parent-uuid)
-                                                 (get-in blocks [parent-uuid :block/tx-id])
-                                                 changed-children seeded-children
-                                                 stale-children))
-                            store
-                            children)]
-                 (vreset! applied? true)
-                 (invalidate-resources store affected-keys deleted
-                                       stale-resources changed-resources)))))
-    (when @applied?
-      (notify-keys! :children @changed-children)
-      (notify-keys! :blocks @changed-blocks)
-      (notify-keys! :resources @changed-resources)
-      (when (or (seq @seeded-blocks) (seq @seeded-children))
-        (schedule-seeded-slots-gc! @seeded-blocks @seeded-children rev))
-      (doseq [parent-uuid @stale-children]
-        (request-reload! [:children parent-uuid]
-                         #(start-children-load! parent-uuid)))
-      (doseq [resource-key @stale-resources]
-        (schedule-resource-reload! resource-key)))
-    @applied?))
-
-(defn- bind-context
-  [context f]
-  (binding [*store (:store context)
-            *listeners (:listeners context)
-            *request-reload! (:request-reload! context)
-            *start-children-load! (:start-children-load! context)
-            *schedule-resource-reload! (:schedule-resource-reload! context)
-            *set-seeded-block-gc-timeout! (:set-seeded-block-gc-timeout! context)]
-    (f)))
+  (let [[_ {:keys [applied? changed-blocks seeded-blocks
+                   changed-children seeded-children stale-children
+                   stale-resources changed-resources]}]
+        (commit-transition!
+         context
+         #(apply-delta-to-store context %
+                                {:graph-id graph-id
+                                 :rev rev
+                                 :blocks blocks
+                                 :deleted deleted
+                                 :children children
+                                 :affected-keys affected-keys}))]
+    (when applied?
+      (notify-keys! context :children changed-children)
+      (notify-keys! context :blocks changed-blocks)
+      (notify-keys! context :resources changed-resources)
+      (when (or (seq seeded-blocks) (seq seeded-children))
+        (schedule-seeded-slots-gc! context seeded-blocks seeded-children rev))
+      (doseq [parent-uuid stale-children]
+        ((:request-reload! context) [:children parent-uuid]
+                                     #((:start-children-load! context) parent-uuid)))
+      (doseq [resource-key stale-resources]
+        ((:schedule-resource-reload! context) resource-key)))
+    applied?))
 
 (defn apply-block-load!
   [context generation block-uuid response]
-  (bind-context context
-                #(apply-block-load* generation block-uuid response)))
+  (apply-block-load* context generation block-uuid response))
 
 (defn apply-children-load!
   [context generation parent-uuid response]
-  (bind-context context
-                #(apply-children-load* generation parent-uuid response)))
+  (apply-children-load* context generation parent-uuid response))
 
 (defn apply-resource-load!
   [context generation resource-key response]
-  (bind-context context
-                #(apply-resource-load* generation resource-key response)))
+  (apply-resource-load* context generation resource-key response))
 
 (defn apply-delta!
   [context delta]
-  (bind-context context
-                #(apply-delta* delta)))
+  (apply-delta* context delta))

@@ -143,22 +143,23 @@
         (start-load! key))))
   nil)
 
+(defn- snapshot
+  [slot-type key]
+  (or (get-in @*store [slot-type key :snapshot]) loading-snapshot))
+
 (defn block-snapshot
   [block-uuid]
   (require-uuid! :block/uuid block-uuid)
-  (or (get-in @*store [:blocks block-uuid :snapshot])
-      loading-snapshot))
+  (snapshot :blocks block-uuid))
 
 (defn children-snapshot
   [parent-uuid]
   (require-uuid! :block/uuid parent-uuid)
-  (or (get-in @*store [:children parent-uuid :snapshot])
-      loading-snapshot))
+  (snapshot :children parent-uuid))
 
 (defn resource-snapshot
   [resource-key]
-  (or (get-in @*store [:resources resource-key :snapshot])
-      loading-snapshot))
+  (snapshot :resources resource-key))
 
 (defn- error-slot
   [error]
@@ -284,6 +285,18 @@
     (swap! *store update slot-type dissoc key)
     (swap! *in-flight dissoc [slot-type key])))
 
+(defn- dependent-slots
+  [resource-key resource-value]
+  (let [{:keys [bundles initial-blocks]}
+        (blocks/resource-dependencies resource-key resource-value)]
+    (concat
+     (mapcat (fn [{:keys [blocks children]}]
+               (concat (map #(vector :blocks %) (keys blocks))
+                       (map #(vector :children %) (keys children))))
+             (vals bundles))
+     (map #(vector :blocks %)
+          (keys initial-blocks)))))
+
 (defn- schedule-slot-gc!
   [slot-type key]
   (let [collect!
@@ -292,18 +305,11 @@
             (let [resource-value (when (= :resources slot-type)
                                    (get-in @*store
                                            [:resources key :snapshot :value]))
-                  bundles (when resource-value
-                            (blocks/resource-bundles key resource-value))
-                  initial-blocks (when resource-value
-                                   (blocks/resource-blocks key resource-value))]
+                  slots-to-collect (when resource-value
+                                     (dependent-slots key resource-value))]
               (collect-slot! slot-type key)
-              (doseq [bundle (vals bundles)]
-                (doseq [block-uuid (keys (:blocks bundle))]
-                  (collect-slot! :blocks block-uuid))
-                (doseq [parent-uuid (keys (:children bundle))]
-                  (collect-slot! :children parent-uuid)))
-              (doseq [block-uuid (keys initial-blocks)]
-                (collect-slot! :blocks block-uuid)))))]
+              (doseq [[slot-type key] slots-to-collect]
+                (collect-slot! slot-type key)))))]
     (if (= :children slot-type)
       (js/setTimeout collect! children-slot-cache-ms)
       (js/queueMicrotask collect!))))
@@ -341,36 +347,36 @@
   (add-listener! :resources resource-key listener start-resource-load!))
 
 (defn- block-resolution-error
-  [block-uuid snapshot]
-  (case (:status snapshot)
+  [block-uuid current-snapshot]
+  (case (:status current-snapshot)
     :missing
     (ex-info "Canonical block is missing"
              {:status :missing
               :block-uuid block-uuid})
 
     :error
-    (:error snapshot)
+    (:error current-snapshot)
 
     (ex-info "Invalid canonical block snapshot"
              {:block-uuid block-uuid
-              :snapshot snapshot})))
+              :snapshot current-snapshot})))
 
 (defn- wait-for-block!
   [block-uuid cleanups]
   (letfn [(settle! [result]
-            (let [snapshot (block-snapshot block-uuid)]
-              (case (:status snapshot)
+            (let [current-snapshot (block-snapshot block-uuid)]
+              (case (:status current-snapshot)
                 :loading nil
-                :ready (p/resolve! result (:value snapshot))
+                :ready (p/resolve! result (:value current-snapshot))
                 (p/reject! result
-                           (block-resolution-error block-uuid snapshot)))))]
-    (let [snapshot (block-snapshot block-uuid)]
-      (case (:status snapshot)
+                           (block-resolution-error block-uuid current-snapshot)))))]
+    (let [current-snapshot (block-snapshot block-uuid)]
+      (case (:status current-snapshot)
         :ready
-        (p/resolved (:value snapshot))
+        (p/resolved (:value current-snapshot))
 
         (:missing :error)
-        (p/rejected (block-resolution-error block-uuid snapshot))
+        (p/rejected (block-resolution-error block-uuid current-snapshot))
 
         :loading
         (let [result (p/deferred)
@@ -379,7 +385,7 @@
           (settle! result)
           result)
 
-        (p/rejected (block-resolution-error block-uuid snapshot))))))
+        (p/rejected (block-resolution-error block-uuid current-snapshot))))))
 
 (defn resolve-blocks!
   "Resolve canonical blocks in input order through the exact block store."

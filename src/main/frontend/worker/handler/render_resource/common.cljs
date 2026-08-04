@@ -7,40 +7,21 @@
   [message data]
   (throw (ex-info message data)))
 
-(defn function-bearing?
+(defn renderer
+  "Describe a renderer and its fixed resource-key arity."
+  [shape render]
+  {:shape shape
+   :render render})
+
+(defn invalid-resource-key-value
   [value]
   (cond
-    (fn? value)
-    true
-
-    (de/entity? value)
-    false
-
-    (map? value)
-    (or (some function-bearing? (keys value))
-        (some function-bearing? (vals value)))
-
-    (coll? value)
-    (some function-bearing? value)
-
-    :else
-    false))
-
-(defn entity-bearing?
-  [value]
-  (cond
-    (de/entity? value)
-    true
-
-    (map? value)
-    (or (some entity-bearing? (keys value))
-        (some entity-bearing? (vals value)))
-
-    (coll? value)
-    (some entity-bearing? value)
-
-    :else
-    false))
+    (fn? value) :function
+    (de/entity? value) :entity
+    (map? value) (or (some invalid-resource-key-value (keys value))
+                     (some invalid-resource-key-value (vals value)))
+    (coll? value) (some invalid-resource-key-value value)
+    :else false))
 
 (defn require-shape!
   [resource-key tag size]

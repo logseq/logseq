@@ -15,62 +15,46 @@
          view/resource-renderers
          query/resource-renderers
          {:block-sync-conflicts
-          (fn [_db resource-key _runtime]
-            (common/fail! "Renderer resource belongs to a non-DB provider"
-                           {:provider :sync-state
-                           :resource-key resource-key}))}))
-
-(def ^:private resource-shapes
-  {:favorites 1
-   :favorite-status 2
-   :recent-pages 2
-   :page-identity 2
-   :page-preview-source 2
-   :block-breadcrumb 3
-   :journals 2
-   :recycle-roots 1
-   :property-choices 2
-   :journal-bundle 2
-   :journal-window 2
-   :block-reactions 3
-   :block-display-properties 3
-   :block-positioned-properties 3
-   :block-bidirectional-properties 2
-   :block-ref-count 2
-   :block-unlinked-ref-exists 2
-   :block-comment-threads 2
-   :block-comment-summary 2
-   :block-task-time 2
-   :route-block 3
-   :views 3
-   :view-data 3
-   :query 2})
+          (common/renderer nil
+                           (fn [_db resource-key _runtime]
+                             (common/fail!
+                              "Renderer resource belongs to a non-DB provider"
+                              {:provider :sync-state
+                               :resource-key resource-key})))}))
 
 (defn- resource-value
   [db resource-key runtime]
   (when-not (and (vector? resource-key) (seq resource-key))
     (common/fail! "Invalid renderer resource key"
                   {:resource-key resource-key}))
-  (when (common/function-bearing? resource-key)
+  (case (common/invalid-resource-key-value resource-key)
+    :function
     (common/fail! "Renderer resource keys cannot contain functions"
-                  {:resource-key resource-key}))
-  (when (common/entity-bearing? resource-key)
+                  {:resource-key resource-key})
+
+    :entity
     (common/fail! "Renderer resource keys cannot contain graph entities"
-                  {:resource-key resource-key}))
-  (let [resource-kind (first resource-key)]
-    (if-let [render (get resource-renderers resource-kind)]
-      (do
-        (when-let [shape (get resource-shapes resource-kind)]
-          (common/require-shape! resource-key resource-kind shape))
-        (render db resource-key runtime))
-      (common/fail! "Unknown renderer resource key"
-                    {:resource-key resource-key}))))
+                  {:resource-key resource-key})
+
+    (let [resource-kind (first resource-key)]
+      (if-let [{:keys [shape render]} (get resource-renderers resource-kind)]
+        (do
+          (when shape
+            (common/require-shape! resource-key resource-kind shape))
+          (render db resource-key runtime))
+        (common/fail! "Unknown renderer resource key"
+                      {:resource-key resource-key})))))
+
+(defn- resource-entry
+  [db resource-key runtime]
+  (let [[watch-keys value] (resource-value db resource-key runtime)]
+    {:watch-keys watch-keys :value value}))
 
 (defn render-resource
   ([db resource-key]
    (render-resource db resource-key {}))
   ([db resource-key runtime]
-   (let [[watch-keys value] (resource-value db resource-key runtime)]
+   (let [{:keys [watch-keys value]} (resource-entry db resource-key runtime)]
      (common/envelope db resource-key watch-keys value))))
 
 (def ^:private render-resource-batch-limit 25)
@@ -96,15 +80,14 @@
     (into {}
           (map (fn [resource-key]
                  (let [started-at (.now js/performance)
-                       [watch-keys value] (resource-value db resource-key runtime)
+                       entry (resource-entry db resource-key runtime)
                        completed-at (.now js/performance)]
                    (when (and goog.DEBUG (> (- completed-at started-at) 10))
                      (log/info :db-worker/render-resource-perf
                                {:resource-key resource-key
                                 :elapsed-ms (- completed-at started-at)}))
                    [resource-key
-                    {:watch-keys watch-keys
-                     :value value}])))
+                    entry])))
           resource-keys)}))
 
 (def-thread-api :thread-api/get-render-resources

@@ -44,20 +44,16 @@
     response
 
     :children
-    (do
-      (when-not (contains? children key)
-        (throw (ex-info "Missing direct-children batch result"
-                        {:parent-uuid key})))
-      (assoc (get children key) :basis-rev basis-rev))
+    (if-let [value (get children key)]
+      (assoc value :basis-rev basis-rev)
+      (throw (ex-info "Missing direct-children batch result"
+                      {:parent-uuid key})))
 
     :resources
-    (do
-      (when-not (contains? resources key)
-        (throw (ex-info "Missing renderer resource batch result"
-                        {:resource-key key})))
-      (assoc (get resources key)
-             :basis-rev basis-rev
-             :key key))))
+    (if-let [value (get resources key)]
+      (assoc value :basis-rev basis-rev :key key)
+      (throw (ex-info "Missing renderer resource batch result"
+                      {:resource-key key})))))
 
 (defn- flush-kind!
   [kind]
