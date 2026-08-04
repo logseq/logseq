@@ -449,6 +449,7 @@
                      (:hidden-properties result))
         watch-keys (reduce into
                            #{[:display-properties block-uuid]
+                             [:class-tree]
                              [:property-membership :block/closed-value-property]}
                            (map display-row-watch-keys rows))]
     [watch-keys
@@ -1272,7 +1273,15 @@
                        (if (or opaque? (empty? keys))
                          #{[:graph]}
                          keys))
-                     #{[:graph]})]
+                     (let [{:keys [attrs opaque?]}
+                           (query-dsl/query-watch-dependencies
+                            (:query query-spec)
+                            db
+                            query-spec)
+                           keys (into #{} (map (fn [attr] [:attr attr])) attrs)]
+                       (if (or opaque? (empty? keys))
+                         #{[:graph]}
+                         keys)))]
     [watch-keys
      {:rows (query-result-rows (execute-query-spec db query-spec runtime)
                                query-spec)}]))
