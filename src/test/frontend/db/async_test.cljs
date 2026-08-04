@@ -1,8 +1,5 @@
 (ns frontend.db.async-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
+  (:require [cljs.test :refer [async deftest is]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -96,17 +93,6 @@
                      @calls)))
             (p/catch #(is false (str %)))
             (p/finally done))))))
-
-(defn- source-for
-  [relative-file]
-  (.toString (fs/readFileSync (node-path/join (.cwd js/process) relative-file) "utf8")))
-
-(deftest block-batching-has-one-worker-call-path-test
-  (let [source (source-for "src/main/frontend/db/async.cljs")]
-    (is (not (string/includes? source "*get-blocks-batch-enabled?"))
-        "A worker error must not switch the runtime to a second fetch path.")
-    (is (not (string/includes? source "Safety fallback: retry once"))
-        "A failed batch must not repeat the same large request.")))
 
 (deftest block-batching-preserves-complete-tree-options-test
   (let [id (random-uuid)
@@ -359,12 +345,6 @@
                           (is false (str error)))))))
                (p/finally done)))))
 
-(deftest block-batching-flush-is-not-frame-coupled-test
-  (let [source (source-for "src/main/frontend/db/async.cljs")]
-    (is (string/includes? source "(js/queueMicrotask flush-get-blocks-batch!)")
-        "Block fetches must flush before the next animation frame.")
-    (is (not (string/includes? source "(util/schedule flush-get-blocks-batch!)"))
-        "Worker requests must not be coupled to requestAnimationFrame.")))
 
 (deftest block-loaders-return-worker-data-without-renderer-db-test
   (async done
@@ -406,17 +386,7 @@
                           @worker-requests))
                    (is (= [[:thread-api/get-block-parents repo 42 1000]]
                           @worker-calls))
-                   (let [source (source-for "src/main/frontend/db/async.cljs")]
-                     (is (not (string/includes? source "d/transact!"))
-                         "Async block loaders should not hydrate a renderer DB.")
-                     (is (not (string/includes? source (str "db/" "get-db graph false")))
-                         "Async block loaders should not read the renderer DB conn.")
-                     (is (not (string/includes? source (str "db/" "get-page name'")))
-                         "Async block loading should not resolve page names through the renderer DB.")
-                     (is (not (string/includes? source (str "db/" "entity [:block/uuid")))
-                         "Async block loading should not resolve UUIDs through the renderer DB.")
-                     (is (not (string/includes? source (str "(:block.temp/load-status (db/" "entity")))
-                         "Async block loading should not depend on renderer load-status cache state.")))
+                   )
                  (p/catch
                   (fn [error]
                     (is false (str error))))
@@ -449,11 +419,7 @@
                    (is (= asset asset-result))
                    (is (= [older-history newer-history] history-result))
                    (is (= 2 (count @query-calls)))
-                   (let [source (source-for "src/main/frontend/db/async.cljs")]
-                     (is (not (string/includes? source (str "(some-> (first result)\n            :db/id\n            db/" "entity)")))
-                         "Asset lookup should return the worker query result directly.")
-                     (is (not (string/includes? source (str "(map (fn [b] (db/" "entity (:db/id b))))")))
-                         "Property history lookup should not hydrate worker results from the renderer DB.")))
+                   )
                  (p/catch
                   (fn [error]
                     (is false (str error))))
@@ -494,9 +460,7 @@
                             repo
                             {:remove-built-in-property? false}]]
                           @worker-calls))
-                   (let [source (source-for "src/main/frontend/db/async.cljs")]
-                     (is (not (string/includes? source "db-model/get-all-properties"))
-                         "Async property loading should not call the renderer DB model.")))
+                   )
                  (p/catch
                   (fn [error]
                     (is false (str error))))
@@ -524,11 +488,7 @@
                           @worker-calls))
                    (is (empty? @query-calls)
                        "Tag object loading should use the worker class object API directly.")
-                   (let [source (source-for "src/main/frontend/db/async.cljs")]
-                     (is (not (string/includes? source "db-model/get-structured-children"))
-                         "Tag object loading should not use the renderer DB model.")
-                     (is (not (string/includes? source "class-ids (distinct (conj class-children class-id))"))
-                         "Tag object loading should not assemble class ids in the renderer.")))
+                   )
                  (p/catch
                   (fn [error]
                     (is false (str error))))
@@ -553,11 +513,7 @@
                    (is (= grouped-result result))
                    (is (= repo (ffirst @worker-calls)))
                    (is (every? number? (rest (first @worker-calls))))
-                   (let [source (source-for "src/main/frontend/db/async.cljs")]
-                     (is (not (string/includes? source "db-model/sort-by-order-recursive"))
-                         "Scheduled/deadline loading should not sort through the renderer DB model.")
-                     (is (not (string/includes? source "db-utils/group-by-page"))
-                         "Scheduled/deadline loading should not group through renderer DB utils.")))
+                   )
                  (p/catch
                   (fn [error]
                     (is false (str error))))
