@@ -360,6 +360,20 @@
            (affected-keys db [[:db/retract 12 :block/tags 10]
                               [:db/add 12 :block/tags 11]])))))
 
+(deftest class-property-definition-invalidation-uses-class-tree-test
+  (let [class-uuid (random-uuid)
+        property-uuid (random-uuid)
+        db (db-with [{:db/id 10
+                      :block/uuid class-uuid}
+                     {:db/id 11
+                      :block/uuid property-uuid}])]
+    (is (contains? (affected-keys
+                    db
+                    [[:db/add 10
+                      :logseq.property.class/properties
+                      11]])
+                   [:class-tree]))))
+
 (deftest class-hierarchy-and-aliases-invalidate-reference-scope-test
   (let [class-uuid (random-uuid)
         parent-before-uuid (random-uuid)

@@ -568,6 +568,21 @@
      :block/parent (when-let [parent (:block/parent entity)]
                      {:db/id (:db/id parent)})}))
 
+(deftest simple-dsl-query-resource-uses-attribute-watch-keys-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row]} (render-resource-fixture)
+          query-spec {:kind :dsl
+                      :query "(page Page)"}
+          resource-key [:query query-spec]]
+      (with-redefs [query-dsl/execute-query
+                    (fn [& _args]
+                      [[(query-block-row @conn view-row)]])]
+        (let [response (call-resource api conn resource-key)
+              watch-keys (:watch-keys response)]
+          (is (not (contains? watch-keys [:graph])))
+          (is (contains? watch-keys [:attr :block/name]))
+          (is (contains? watch-keys [:attr :block/title])))))))
+
 (deftest property-choices-resource-tracks-choice-entity-updates-test
   (when-let [api (render-resource-api)]
     (let [conn (db-test/create-conn)
@@ -1112,6 +1127,7 @@
        @conn
        resource-key
        #{[:display-properties resource-block]
+         [:class-tree]
          [:entity display-property]
          [:entity hidden-property]
          [:entity property-value]
