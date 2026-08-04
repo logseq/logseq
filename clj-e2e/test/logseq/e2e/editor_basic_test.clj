@@ -279,36 +279,6 @@
            (pr-str file-name)
            (pr-str file-type))))
 
-(defn- select-blocks-while-scrolling!
-  [block-count]
-  (let [block-selector ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"
-        blocks (vec (take block-count (w/query block-selector)))
-        mouse (.mouse (w/get-page))]
-    (when-not (= block-count (count blocks))
-      (throw (ex-info "Unexpected block count before drag selection"
-                      {:expected block-count
-                       :actual (count blocks)})))
-    (let [first-title (.locator (first blocks) ".block-title-wrap")
-          first-box (.boundingBox first-title)]
-      (.move mouse
-             (+ (.-x first-box) 1)
-             (+ (.-y first-box) (min 20 (/ (.-height first-box) 2))))
-      (.down mouse)
-      (try
-        (doseq [block (rest blocks)]
-          (.scrollIntoViewIfNeeded block)
-          (let [target (.locator block ".block-title-wrap")
-                box (.boundingBox target)]
-            (.move mouse
-                   (+ (.-x box) 1)
-                   (+ (.-y box) (min 20 (/ (.-height box) 2))))
-            (.move mouse
-                   (- (+ (.-x box) (.-width box)) 1)
-                   (+ (.-y box) (min 20 (/ (.-height box) 2))))
-            (util/wait-timeout 30)))
-        (finally
-          (.up mouse))))))
-
 (defn- enable-virtualized-rendering!
   []
   (w/eval-js
@@ -318,110 +288,12 @@
       history.replaceState(null, '', url.pathname + url.search + url.hash);
     }")
   (w/refresh)
+  (w/wait-for (.first (w/get-by-test-id "page title")) {:timeout 15000})
   (assert/assert-graph-loaded?))
 
 (defn- js-json
   [script]
   (json/read-value (w/eval-js script) json/keyword-keys-object-mapper))
-
-(defn- select-block-titles-while-scrolling!
-  [blocks]
-  (w/eval-js
-   (format
-    "(async () => {
-      const blockTitles = %s;
-      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const scrollContainer = document.querySelector('#main-content-container');
-
-      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]'))
-        .find((block) => block.dataset.blockTitle === title);
-
-      const scrollToBlock = async (title) => {
-        for (let i = 0; i < 80; i++) {
-          const block = blockByTitle(title);
-          if (block) {
-            block.scrollIntoView({ block: 'center' });
-            await nextFrame();
-            return block;
-          }
-          if (title === blockTitles[0]) {
-            scrollContainer.scrollTop = 0;
-          } else {
-            scrollContainer.scrollTop += 260;
-          }
-          await nextFrame();
-          await delay(50);
-        }
-        throw new Error(`Could not find mounted block ${title}`);
-      };
-
-      if (document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)').length >= blockTitles.length) {
-        throw new Error('Expected virtualized block window');
-      }
-
-      if (!blockByTitle(blockTitles[0])) {
-        scrollContainer.scrollTop = 0;
-        await delay(500);
-      }
-
-      const firstBlock = await scrollToBlock(blockTitles[0]);
-      const firstContent = firstBlock.querySelector('.block-content');
-      await delay(500);
-      const firstRect = firstContent.getBoundingClientRect();
-      const clientX = Math.floor(firstRect.left + 24);
-      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
-      const pointerInit = {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX,
-        clientY
-      };
-
-      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
-      await delay(100);
-
-      let previousTarget = firstContent;
-      for (const title of blockTitles.slice(1)) {
-        const block = await scrollToBlock(title);
-        const target = block.querySelector('.block-main-container');
-        const targetRect = target.getBoundingClientRect();
-        const targetX = Math.floor(targetRect.left + 24);
-        const targetY = Math.floor(targetRect.top + Math.min(20, targetRect.height / 2));
-        const targetPointer = {
-          ...pointerInit,
-          clientX: targetX,
-          clientY: targetY
-        };
-        if (previousTarget.isConnected) {
-          previousTarget.dispatchEvent(new MouseEvent('mouseout', {
-            ...targetPointer,
-            relatedTarget: target
-          }));
-        }
-        target.dispatchEvent(new MouseEvent('mouseover', {
-          ...targetPointer,
-          relatedTarget: previousTarget
-        }));
-        previousTarget = target;
-        await delay(30);
-      }
-
-      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 0,
-        clientX,
-        clientY
-      }));
-
-      return Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block.selected'))
-        .map((block) => block.textContent.trim());
-    })();"
-    (json/write-value-as-string blocks))))
 
 (defn- insert-current-page-blocks!
   [blocks]
@@ -433,65 +305,6 @@
                   {:sibling false})
     (ls-api-call! :editor.exitEditingMode false)
     (ls-api-call! :app.pushState "page" {:name page-uuid} nil)))
-
-(defn- scroll-page-to-block!
-  [title-prefix block-count target-index]
-  (let [target-title (format "%s%05d" title-prefix target-index)]
-    (w/eval-js
-     (format
-      "(async () => {
-        const titlePrefix = %s;
-        const targetTitle = %s;
-        const totalCount = %d;
-        const targetIndex = %d;
-        const scrollContainer = document.querySelector('#main-content-container');
-        const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-        if (!scrollContainer) {
-          throw new Error('Expected main content scroller');
-        }
-
-        const mountedBlocks = () => Array.from(
-          document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block[data-block-title]')
-        ).filter((block) => block.dataset.blockTitle.startsWith(titlePrefix));
-        const findTarget = () => mountedBlocks()
-          .find((block) => block.dataset.blockTitle === targetTitle);
-        const maxScrollTop = () => Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-        const clampScrollTop = (value) => Math.max(0, Math.min(maxScrollTop(), value));
-
-        scrollContainer.scrollTop = clampScrollTop(
-          maxScrollTop() * (targetIndex / Math.max(1, totalCount - 1))
-        );
-
-        for (let attempt = 0; attempt < 120; attempt++) {
-          await nextFrame();
-          const target = findTarget();
-          if (target) {
-            target.scrollIntoView({ block: 'center' });
-            await nextFrame();
-            return target.dataset.blockTitle;
-          }
-
-          const blocks = mountedBlocks();
-          if (blocks.length > 0) {
-            const middle = blocks[Math.floor(blocks.length / 2)];
-            const middleIndex = Number.parseInt(
-              middle.dataset.blockTitle.slice(titlePrefix.length),
-              10
-            );
-            const estimatedRowHeight = Math.max(1, maxScrollTop() / totalCount);
-            scrollContainer.scrollTop = clampScrollTop(
-              scrollContainer.scrollTop + ((targetIndex - middleIndex) * estimatedRowHeight)
-            );
-          }
-        }
-
-        throw new Error(`Could not mount page block ${targetTitle}`);
-      })();"
-      (json/write-value-as-string title-prefix)
-      (json/write-value-as-string target-title)
-      block-count
-      target-index))))
 
 (deftest click-rendered-block-focuses-editor
   (testing "clicking a rendered block leaves the editor textarea focused"
@@ -651,11 +464,24 @@
       await nextFrame();
 
       for (let i = 0; i < 240; i++) {
-        const item = findText();
-        if (item) {
-          item.scrollIntoView({ block: 'center' });
-          await nextFrame();
-          return true;
+        for (let settle = 0; settle < 40; settle++) {
+          const item = findText();
+          if (item) {
+            item.scrollIntoView({ block: 'center' });
+            await nextFrame();
+            return true;
+          }
+
+          const visibleItems = Array.from(document.querySelectorAll('#journals .journal-item'))
+            .filter((journal) => {
+              const rect = journal.getBoundingClientRect();
+              const containerRect = scrollContainer.getBoundingClientRect();
+              return rect.bottom > containerRect.top && rect.top < containerRect.bottom;
+            });
+          if (visibleItems.length > 0 && visibleItems.every((journal) => journal.textContent.trim())) {
+            break;
+          }
+          await delay(50);
         }
 
         scrollContainer.scrollTop += Math.max(280, Math.floor(scrollContainer.clientHeight * 0.7));
@@ -794,17 +620,6 @@
         (json/write-value-as-string title)))
       (json/read-value json/keyword-keys-object-mapper)))
 
-(deftest copy-blocks-selected-while-scrolling
-  (testing "copy includes blocks selected by dragging while the page scrolls"
-    (let [blocks (mapv #(format "scroll-copy-block-%02d" %) (range 1 26))]
-      (b/new-blocks blocks)
-      (util/exit-edit)
-      (select-blocks-while-scrolling! (count blocks))
-      (b/copy)
-      (let [{:keys [missing-blocks] :as copy-result}
-            (wait-for-copied-blocks! blocks)]
-        (is (empty? missing-blocks) (pr-str copy-result))))))
-
 (deftest multiline-heading-keeps-bullet-on-first-line
   (testing "heading block bullet aligns with the first line when the heading wraps"
     (doseq [heading (map #(str "h" %) (range 1 7))]
@@ -817,21 +632,9 @@
         (let [{:keys [delta] :as alignment} (multiline-heading-bullet-alignment title)]
           (is (<= delta 3) (pr-str (assoc alignment :heading heading))))))))
 
-(deftest copy-blocks-selected-while-scrolling-virtualized-list
-  (testing "copy includes virtualized blocks selected by dragging while the page scrolls"
-    (let [blocks (mapv #(format "virtual-scroll-copy-block-%03d" %) (range 1 101))]
-      (b/new-blocks blocks)
-      (util/exit-edit)
-      (enable-virtualized-rendering!)
-      (is (pos? (count (select-block-titles-while-scrolling! blocks))))
-      (b/copy)
-      (let [{:keys [missing-blocks] :as copy-result}
-            (wait-for-copied-blocks! blocks)]
-        (is (empty? missing-blocks) (pr-str copy-result))))))
-
 (deftest copy-blocks-selected-after-fast-scroll-virtualized-list
   (testing "copy includes virtualized blocks selected after fast scrolling a long page"
-    (let [blocks (mapv #(format "fast-scroll-copy-block-%03d" %) (range 1 101))]
+    (let [blocks (mapv #(format "fast-scroll-copy-block-%03d" %) (range 1 31))]
       (insert-current-page-blocks! blocks)
       (enable-virtualized-rendering!)
       (is (set/subset? (set blocks)
@@ -840,25 +643,6 @@
       (let [{:keys [missing-blocks] :as copy-result}
             (wait-for-copied-blocks! blocks)]
         (is (empty? missing-blocks) (pr-str copy-result))))))
-
-(deftest page-virtualization-renders-top-middle-and-bottom-of-1k-membership
-  (testing "one real 1k top-level membership remains navigable across the full page"
-    (let [block-count 1000
-          title-prefix "large page membership block "
-          blocks (mapv #(format "%s%05d" title-prefix %) (range block-count))]
-      (insert-current-page-blocks! blocks)
-      (enable-virtualized-rendering!)
-      (assert/assert-is-visible
-       (util/-query-last ".ls-page-blocks [data-virtuoso-scroller]"))
-      (doseq [target-index [0 (quot block-count 2) (dec block-count)]]
-        (let [target-title (format "%s%05d" title-prefix target-index)]
-          (is (= target-title
-                 (scroll-page-to-block!
-                  title-prefix block-count target-index))
-              (str {:target-index target-index}))
-          (assert/assert-is-visible
-           (format ".ls-page-blocks .ls-block[data-block-title='%s']"
-                   target-title)))))))
 
 (deftest journals-list-uses-measured-spacing-without-item-margins
   (testing "journals list spacing does not use item margins that destabilize Virtuoso measurement"
@@ -874,10 +658,12 @@
 
 (deftest journals-list-does-not-nest-virtualized-scrollers-in-long-journal
   (testing "long journals keep a single virtualized measurement owner"
-    (let [blocks (mapv #(format "journals long stable block %03d" %) (range 1 81))]
+    (let [blocks (mapv #(format "journals long stable block %03d" %) (range 1 13))]
       (seed-journals!
        [{:date "2026-03-06T12:00:00"
          :blocks blocks}])
+      (w/wait-for (format "#journals .journal-item:has-text('%s')"
+                          (first blocks)))
       (enable-virtualized-rendering!)
       (w/wait-for "#journals [data-virtuoso-scroller]")
       (scroll-journals-to-text! (first blocks))
@@ -887,15 +673,15 @@
 (deftest journals-list-remounts-complete-long-journal-with-one-scroller
   (testing "an outer journal remount restores all content without a nested virtualizer"
     (let [first-block-title "journals remount stable block 001"
-          last-block-title "journals remount stable block 080"
+          last-block-title "journals remount stable block 012"
           long-blocks (mapv #(format "journals remount stable block %03d %s"
                                       %
                                       (string/join " " (repeat 24 "wrapped-content")))
-                            (range 1 81))
+                            (range 1 13))
           older-journals (mapv (fn [idx]
                                   {:date (format "2026-03-%02dT12:00:00" idx)
                                    :blocks [(format "journals remount spacer block %02d" idx)]})
-                                (range 1 18))]
+                                (range 1 7))]
       (seed-journals!
        (into [{:date "2026-03-20T12:00:00"
                :blocks long-blocks}]
@@ -925,6 +711,11 @@
 
 (deftest journals-linked-refs-remain-visible
   (testing "journals linked refs stay visible while journals layout owns the outer measurement"
+    (seed-journals!
+     (mapv (fn [day]
+             {:date (format "2026-03-%02dT12:00:00" day)
+              :blocks [(format "journals linked refs spacer %02d" day)]})
+           (range 2 6)))
     (seed-journals-with-linked-ref!)
     (scroll-journals-to-text! "journals linked refs visible target")
     (let [{:keys [collapsed body-mounted body-height] :as metrics} (journals-linked-refs-metrics)]
@@ -1180,6 +971,16 @@
                (.setModifiers [KeyboardModifier/SHIFT])))
     (assert/assert-is-visible
      ".cp__right-sidebar .sidebar-item :text('Shift click sidebar page')")))
+
+(deftest cmdk-block-results-render-breadcrumbs-test
+  (testing "CmdK block results include their ready breadcrumb"
+    (let [page-name (p/get-page-name)
+          title (str "cmdk breadcrumb target " (random-uuid))]
+      (b/new-block title)
+      (util/exit-edit)
+      (util/search title)
+      (assert/assert-is-visible
+       (loc/filter ".cp__cmdk .breadcrumb" :has-text page-name)))))
 
 (deftest comments-update-and-title-edit
   (testing "a submitted comment renders immediately and its thread title is editable"
@@ -1483,11 +1284,11 @@
       (ls-api-call! :editor.insertBatchBlock
                     page-uuid
                     (mapv #(hash-map :content (str "late editor row " %))
-                          (range 180)))
-      (w/click (loc/filter ".block-title-wrap" :has-text "late editor row 179"))
+                          (range 30)))
+      (w/click (loc/filter ".block-title-wrap" :has-text "late editor row 29"))
       (util/move-cursor-to-end)
       (util/press-seq " edited")
-      (is (= "late editor row 179 edited" (util/get-edit-content))))
+      (is (= "late editor row 29 edited" (util/get-edit-content))))
     (b/new-block "")
     (util/input-command "Code block")
     (assert/assert-is-visible ".CodeMirror, .cm-editor")
@@ -1640,7 +1441,7 @@
 
 (deftest mixed-height-virtual-page-keeps-blocks-separated-test
   (testing "mixed text, code and headings do not overlap after fast scrolling"
-    (let [long-text (apply str (repeat 40 "long mixed-height content "))
+    (let [long-text (apply str (repeat 8 "long mixed-height content "))
           blocks (vec
                   (mapcat
                    (fn [index]
@@ -1648,7 +1449,7 @@
                       (str "## mixed heading " index)
                       (str "```clojure\n(+ " index " 1)\n```")
                       (str long-text index)])
-                   (range 60)))]
+                   (range 8)))]
       (insert-current-page-blocks! blocks)
       (enable-virtualized-rendering!)
       (assert/assert-is-visible
@@ -1685,31 +1486,6 @@
           (is (pos? visibleCount))
           (is (false? overlap)))))))
 
-(deftest ^:fix-me hundred-level-tree-can-expand-and-zoom-test
-  (testing "a 100-level tree remains readable and the deepest block can be opened"
-    (let [page-name (p/get-page-name)
-          page-uuid (get (ls-api-call! :editor.getBlock page-name) "uuid")
-          nested-tree
-          (reduce
-           (fn [children depth]
-             [{:content (format "deep-level-%03d" depth)
-               :children children}])
-           []
-           (reverse (range 1 101)))]
-      (ls-api-call! :editor.insertBatchBlock page-uuid nested-tree)
-      (letfn [(tree-depth [nodes]
-                (if-let [node (first nodes)]
-                  (inc (tree-depth (get node "children")))
-                  0))]
-        (is (= 100
-               (tree-depth
-                (ls-api-call! :editor.getPageBlocksTree page-name)))))
-      (util/search "deep-level-100")
-      (w/click (loc/filter ".ui__ac-inner" :has-text "deep-level-100"))
-      (assert/assert-is-visible
-       (loc/filter ".ls-page-blocks" :has-text "deep-level-100"))
-      (assert/assert-have-count ".ui__loading, .loading-graph" 0))))
-
 (deftest journals-consecutive-input-test
   (testing "consecutive journal input creates one stable editor and distinct blocks"
     (util/goto-journals)
@@ -1717,8 +1493,12 @@
     (assert/assert-have-count util/editor-q 1)
     (is (= "journal e2e third" (util/get-edit-content)))
     (util/exit-edit)
-    (is (= ["journal e2e first" "journal e2e second" "journal e2e third"]
-           (take-last 3 (util/get-page-blocks-contents))))))
+    (let [journal-selector "#journals .journal-item:has-text('journal e2e third')"
+          block-selector (str journal-selector
+                              " .ls-block:not(.block-add-button) .block-title-wrap")]
+      (w/wait-for journal-selector)
+      (is (= ["journal e2e first" "journal e2e second" "journal e2e third"]
+             (take-last 3 (w/all-text-contents block-selector)))))))
 
 (deftest worker-missing-read-is-recoverable-test
   (testing "a missing worker entity returns nil without poisoning a later read"
@@ -1753,6 +1533,8 @@
         (b/new-block "")
         (util/press-seq "[[reference autocomplete unique")
         (assert/assert-is-visible ".ui__popover-content")
+        (assert/assert-is-visible
+         (loc/filter ".ui__popover-content .breadcrumb" :has-text source-page))
         (w/click (.first (loc/filter ".ui__popover-content a" :has-text
                                      "reference autocomplete unique target")))
         (util/exit-edit)

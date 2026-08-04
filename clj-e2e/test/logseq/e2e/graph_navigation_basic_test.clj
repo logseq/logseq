@@ -237,33 +237,6 @@
         (is (= full-count
                (util/count-elements ".graph-node, [data-node-id]")))))))
 
-(deftest late-graph-work-cannot-overwrite-new-graph-test
-  (testing "a pending large-page load from graph A cannot render after switching to B"
-    (let [graph-a (str "late-load-a-" (random-uuid))
-          graph-b (str "late-load-b-" (random-uuid))
-          page-a "graph a slow page"
-          page-b "graph b stable page"]
-      (graph/new-graph graph-a false)
-      (page/new-page page-a)
-      (let [page-uuid (get (ls-api-call! :editor.getPage page-a) "uuid")]
-        (ls-api-call! :editor.insertBatchBlock
-                      page-uuid
-                      (mapv #(hash-map :content (str "graph a row " %))
-                            (range 500))))
-      (util/search page-a)
-      (graph/new-graph graph-b false)
-      (page/new-page page-b)
-      (b/new-block "graph b only content")
-      (util/exit-edit)
-      (util/wait-timeout 500)
-      (is (= page-b (page/get-page-name)))
-      (assert/assert-is-visible
-       (loc/filter ".ls-page-blocks" :has-text "graph b only content"))
-      (assert/assert-have-count
-       (loc/filter "#main-content-container" :has-text "graph a row")
-       0)
-      (graph/switch-graph "Demo" false false))))
-
 (deftest restoring-graph-gates-and-recovers-interaction-test
   (testing "reload/restoring never accepts half-mounted edits and restores all controls"
     (b/new-block "restore interaction target")

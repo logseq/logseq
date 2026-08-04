@@ -300,7 +300,13 @@
                [:reactions target-before-uuid]}
              (affected-keys
               db
-              [[:db/add 12 :logseq.property.reaction/emoji-id "new"]]))))))
+              [[:db/add 12 :logseq.property.reaction/emoji-id "new"]]))))
+    (testing "deleting a target does not reload its retiring reactions resource"
+      (is (= #{}
+             (keys-with-tag
+              :reactions
+              (affected-keys db [[:db/retractEntity 12]
+                                 [:db/retractEntity 10]])))))))
 
 (deftest view-definition-invalidation-uses-before-and-after-owner-feature-pairs-test
   (let [owner-before-uuid (random-uuid)

@@ -633,3 +633,11 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
+
+(deftest all-pages-requests-a-height-derived-initial-window-test
+  (let [source (source-for "src/main/frontend/components/views.cljs")
+        loaded-view-source (form-source source "(hsx/defc loaded-view-aux")]
+    (is (some? loaded-view-source))
+    (is (string/includes? loaded-view-source "initial-view-prefetch-count"))
+    (is (string/includes? loaded-view-source "initial-row-count"))
+    (is (string/includes? source "view-prefetch-limit"))))

@@ -223,7 +223,7 @@
   [pages]
   (map (fn [block]
          (let [text (block-handler/block-unique-title block :truncate? false)
-               icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+               icon (icon-component/get-node-icon-cp block {})]
            {:icon icon
             :icon-theme :gray
             :text text
@@ -349,7 +349,9 @@
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
-                                          {:disabled? true :variant :search-result}))
+                                          {:disabled? true
+                                           :variant :search-result
+                                           :block page}))
               :result-type :page
               :current-page? current-page?
               :alias (:alias page)
@@ -365,7 +367,9 @@
      :text (highlight-content-query text input)
      :header (block/breadcrumb {:disable-preview? true
                                 :search? true} repo id
-                               {:disabled? true :variant :search-result})
+                               {:disabled? true
+                                :variant :search-result
+                                :block block})
      :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id current-page-uuid))
@@ -507,7 +511,9 @@
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
                               :header (block/breadcrumb {:search? true} repo id
-                                                        {:disabled? true :variant :search-result})
+                                                        {:disabled? true
+                                                         :variant :search-result
+                                                         :block block})
                               :result-type (if (:page? block) :page :block)
                               :current-page? true
                               :source-block block})) blocks)]

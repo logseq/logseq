@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
@@ -859,6 +860,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                    :block.temp/original-title (:block/title block)
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
+            (:include-breadcrumb? option)
+            (assoc :block.temp/breadcrumb
+                   (block-breadcrumb/block-breadcrumb @conn block))
+
             block-page
             (assoc :block/page block-page)
 

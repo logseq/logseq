@@ -110,7 +110,7 @@
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
 
-(deftest offscreen-journal-does-not-subscribe-its-bundle-test
+(deftest journals-request-one-complete-visible-window-test
   (async done
          (let [journal-a (random-uuid)
                journal-b (random-uuid)
@@ -118,6 +118,7 @@
                (bundle journal-a
                        {journal-a (block journal-a 1 "Journal A")}
                        {journal-a {:parent-tx-id 1 :items []}})
+               pending-block-load (p/deferred)
                resource-loads (atom [])]
            (finish-async!
             done
@@ -127,37 +128,33 @@
                               (case (first resource-key)
                                 :journals
                                 (p/resolved {:basis-rev 1
-                                             :key [:journals]
+                                             :key resource-key
                                              :watch-keys #{[:journals]}
-                                             :value [journal-a journal-b]})
+                                             :value {:journal-uuids [journal-a journal-b]
+                                                     :bundles {journal-a journal-a-bundle}}})
 
-                                :journal-bundle
-                                (if (= journal-a (second resource-key))
-                                  (p/resolved
-                                   {:basis-rev 1
-                                    :key [:journal-bundle journal-a]
-                                    :watch-keys #{}
-                                    :value journal-a-bundle})
-                                  (p/rejected
-                                   (js/Error. "offscreen journal loaded")))
+                                :journal-window
+                                (p/resolved {:basis-rev 1
+                                             :key resource-key
+                                             :watch-keys #{}
+                                             :value {:bundles {}}})
 
                                 (p/rejected
-                                 (js/Error. "unexpected journal resource"))))]
-              (let [outer (mount-hook! db-hooks/use-resource [:journals])]
+                                 (js/Error. "unexpected journal resource"))))
+                            subs/<load-block
+                            (fn [_graph-id _block-uuid]
+                              pending-block-load)]
+              (let [outer (mount-hook! db-hooks/use-resource [:journals 1])]
                 (p/let [_ (p/delay 0)
-                        _ (is (= [journal-a journal-b] @(:value outer)))
-                        _ (is (= [[:journals]] @resource-loads)
-                              "Loading the outer UUID stream mounts no journal bundle.")
-                        visible
-                        (mount-hook! db-hooks/use-resource
-                                     [:journal-bundle journal-a])
+                        _ (is (= [journal-a journal-b]
+                                 (:journal-uuids @(:value outer))))
+                        _ (is (= [[:journals 1]] @resource-loads))
+                        mounted-page (mount-hook! db-hooks/use-block journal-a)
                         _ (p/delay 0)]
-                  (is (= [[:journals] [:journal-bundle journal-a]]
-                         @resource-loads))
-                  (is (not-any? #{[:journal-bundle journal-b]}
-                                @resource-loads)
-                      "Only the Virtuoso-mounted journal item subscribes.")
-                  (unmount! visible)
+                  (is (= "Journal A" (:block/title @(:value mounted-page))))
+                  (is (= [[:journals 1]] @resource-loads)
+                      "The initial visible journal needs no per-item bundle request.")
+                  (unmount! mounted-page)
                   (unmount! outer))))))))
 
 (deftest mounted-journal-bundle-seeds-its-entire-plain-tree-atomically-test
@@ -230,27 +227,27 @@
         "The journal module contains exactly one Virtuoso.")
     (when outer-source
       (is (string/includes? outer-source ":div#journals"))
-      (is (string/includes? outer-source
-                            "(db-hooks/use-resource [:journals])"))
+      (is (string/includes? outer-source ":journals initial-count"))
+      (is (string/includes? outer-source ":journal-window"))
       (is (= 1 (occurrence-count outer-source "ui/virtualized-list"))
           "#journals has one and only one virtualization owner.")
-      (is (string/includes? outer-source ":data (to-array journal-uuids)"))
+      (is (string/includes? outer-source ":items-rendered"))
       (is (string/includes? outer-source
                             ":compute-item-key (fn [_idx journal-uuid]"))
       (is (string/includes? outer-source
                             ":item-content (fn [idx journal-uuid]"))
       (is (string/includes? outer-source "journal-item"))
       (is (not (string/includes? outer-source "[:journal-bundle"))
-          "The outer list subscribes only to journal membership."))))
+          "The outer list owns every visible journal request."))))
 
 (deftest journal-item-has-no-inner-virtualizer-test
   (let [source (source-for "src/main/frontend/components/journal.cljs")
         item-source (form-source source "(hsx/defc journal-item")]
     (is (some? item-source))
     (when item-source
-      (is (string/includes? item-source
-                            "(db-hooks/use-resource [:journal-bundle journal-uuid])"))
       (is (string/includes? item-source "page/journal-page"))
+      (is (not (string/includes? item-source "db-hooks/use-resource"))
+          "A journal item renders only data installed by the owner window.")
       (is (zero? (occurrence-count item-source "ui/virtualized-list"))
           "A mounted journal never creates an inner virtualizer.")
       (is (not (string/includes? item-source "page-root-virtual-list"))))))
@@ -282,6 +279,8 @@
       (is (string/includes? source "journal-item-height-by-key*"))
       (is (string/includes? item-source "ResizeObserver"))
       (is (string/includes? item-source ":min-height"))
-      (is (string/includes? item-source "(when bundle"))
+      (is (string/includes? item-source "default-journal-height"))
+      (is (string/includes? item-source "(when ready?"))
+      (is (string/includes? item-source "page/journal-page"))
       (is (not (string/includes? source "js/setTimeout"))
           "The placeholder lasts only until the bundle is ready."))))

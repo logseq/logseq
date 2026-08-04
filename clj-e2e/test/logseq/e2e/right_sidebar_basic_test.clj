@@ -5,6 +5,8 @@
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.locator :as loc]
+   [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
    [wally.main :as w]))
 
@@ -60,7 +62,8 @@
 
 (deftest same-block-updates-in-main-and-right-sidebar
   (testing "one mounted UUID rerenders content and properties in both containers"
-    (let [initial-title "sidebar live block before"
+    (let [page-name (p/get-page-name)
+          initial-title "sidebar live block before"
           updated-title "sidebar live block after"
           property-name "sidebar-live-property"
           initial-property-value "sidebar property before"
@@ -74,6 +77,9 @@
       (w/wait-for (format "%s .block-title-wrap:text('%s')" main-block initial-title))
       (ls-api-call! :editor.openInRightSidebar block-uuid)
       (w/wait-for sidebar-block)
+      (assert/assert-is-visible
+       (loc/filter ".cp__right-sidebar .sidebar-item-header .breadcrumb"
+                   :has-text page-name))
       (assert/assert-have-count (format "#ls-block-%s" block-uuid) 2)
 
       (ls-api-call! :editor.updateBlock block-uuid updated-title)

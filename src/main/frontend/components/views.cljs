@@ -3071,7 +3071,7 @@
 
 (defn- view-resource-context
   [view-feature-type sorting filters input group-by-property-ident
-   query-row-uuids]
+   query-row-uuids initial-row-count]
   (cond-> {:feature-type view-feature-type
            :sorting sorting
            :input input}
@@ -3080,6 +3080,9 @@
 
     group-by-property-ident
     (assoc :group-by-property-ident group-by-property-ident)
+
+    initial-row-count
+    (assoc :initial-row-count initial-row-count)
 
     (= :query-result view-feature-type)
     (assoc :query-row-uuids query-row-uuids)))
@@ -3097,10 +3100,19 @@
         sorting (effective-view-sorting view-entity)
         filters (:logseq.property.table/filters view-entity)
         debounced-input (hooks/use-debounced-value input 300)
+        initial-row-count
+        (when (= :all-pages view-feature-type)
+          (let [scroll-parent (get-scroll-parent config)
+                viewport-height (or (some-> scroll-parent .-clientHeight)
+                                    (.-innerHeight js/window))]
+            (initial-view-prefetch-count
+             viewport-height
+             (lazy-item-placeholder-height true))))
         resource-context (view-resource-context view-feature-type sorting filters
                                                 debounced-input
                                                 group-by-property-ident
-                                                query-row-uuids)
+                                                query-row-uuids
+                                                initial-row-count)
         view-data (db-hooks/use-resource
                    [:view-data (:block/uuid view-entity) resource-context])
         query? (= view-feature-type :query-result)

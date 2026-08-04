@@ -237,7 +237,7 @@
               {:class (when (:mobile? opts) "ls-mobile-card")}
               [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
                [:div.mb-4.ml-2.opacity-70.text-sm
-                (component-block/breadcrumb {} repo (:block/uuid block) {})]
+                (component-block/breadcrumb {} repo (:block/uuid block) {:block block})]
                (let [option (case phase
                               :init
                               {:hide-children? true}

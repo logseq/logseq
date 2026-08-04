@@ -1399,30 +1399,16 @@
             :block/raw-title "Performance"}
            (#'editor/current-block-with-title block "Performance")))))
 
-(deftest split-block-insertion-detects-only-ordinary-children-test
-  (let [ordinary-child {:db/id 2
-                        :block/title "child"}
-        comments-area {:db/id 3
-                       :block/title "Comments"
-                       :block/tags [{:db/ident :logseq.class/Comments}]}
-        cases [{:label "worker children make the suffix the first child"
-                :block {}
-                :worker-result {:block {:db/id 1}
-                                :children [ordinary-child]}
-                :expected true}
-               {:label "a leaf keeps the suffix as its next sibling"
-                :block {}
-                :worker-result {:block {:db/id 1}
-                                :children []}
-                :expected false}
-               {:label "a Comments area does not make the suffix a child"
-                :block {:block.temp/has-children? true}
-                :worker-result {:block {:db/id 1}
-                                :children [comments-area]}
-                :expected false}]]
-    (doseq [{:keys [label block worker-result expected]} cases]
-      (let [hydrated (#'editor/block-with-worker-children block worker-result)]
-        (is (= expected (#'editor/block-map-has-children? hydrated)) label)))))
+(deftest split-block-hydrates-current-children-before-choosing-placement-test
+  (let [child {:db/id 2 :block/title "child"}
+        parent (#'editor/block-with-worker-children
+                {:db/id 1}
+                {:block {:db/id 1} :children [child]})
+        leaf (#'editor/block-with-worker-children
+              {:db/id 3}
+              {:block {:db/id 3} :children []})]
+    (is (#'editor/block-map-has-children? parent))
+    (is (not (#'editor/block-map-has-children? leaf)))))
 
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
@@ -1577,15 +1563,15 @@
                   :expected true}
                  {:label "Backspace rejects a child-owning source merging into a deeper target"
                   :delete-concat? false
-                  :source-children [ordinary-child]
-                  :source-parent 10
-                  :target-parent 20
+                 :source-children [ordinary-child]
+                 :source-parent 10
+                 :target-parent 20
                   :expected false}
                  {:label "Delete rejects a child-owning next block merging into a deeper target"
                   :delete-concat? true
-                  :source-children [ordinary-child]
-                  :source-parent 10
-                  :target-parent 20
+                 :source-children [ordinary-child]
+                 :source-parent 10
+                 :target-parent 20
                   :expected false}
                  {:label "Delete allows a leaf next block merging into a deeper target"
                   :delete-concat? true
@@ -1593,12 +1579,12 @@
                   :source-parent 10
                   :target-parent 20
                   :expected true}
-                 {:label "Comments areas do not count as ordinary children"
+                 {:label "A source with a Comments child cannot merge across levels"
                   :delete-concat? false
                   :source-children [comments-area]
                   :source-parent 10
                   :target-parent 20
-                  :expected true}
+                  :expected false}
                  {:label "A Comments area cannot participate as the merge source"
                   :delete-concat? false
                   :source-children []
@@ -1612,9 +1598,51 @@
                   :source-parent 10
                   :target-parent 10
                   :target-tags [{:db/ident :logseq.class/Comments}]
+                  :expected false}
+                 {:label "A direct Comment block cannot participate as the merge source"
+                  :delete-concat? false
+                  :source-children []
+                  :source-parent 10
+                  :target-parent 10
+                  :source-tags [{:db/ident :logseq.class/Comment}]
+                  :expected false}
+                 {:label "A direct Comment block cannot participate as the merge target"
+                  :delete-concat? true
+                  :source-children []
+                  :source-parent 10
+                  :target-parent 10
+                  :target-tags [{:db/ident :logseq.class/Comment}]
                   :expected false}]]
     (doseq [{:keys [label expected] :as test-case} cases]
       (is (= expected (boundary-merge-allowed test-case)) label))))
+
+(deftest protected-comment-boundary-does-not-start-delete-work-test
+  (let [comments-area {:db/id 1
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "Comments"
+                       :block/parent {:db/id 10}
+                       :block/tags [{:db/ident :logseq.class/Comments}]}
+        worker-calls (atom 0)
+        sibling-calls (atom 0)]
+    (with-redefs [state/get-edit-content (constantly "Comments")
+                  db-async/<get-block-with-children
+                  (fn [& _]
+                    (swap! worker-calls inc)
+                    (p/resolved comments-area))
+                  editor/<left-sibling-or-parent
+                  (fn [& _]
+                    (swap! sibling-calls inc)
+                    (p/resolved nil))]
+      (is (nil? (editor/delete-block-inner!
+                 test-helper/test-db
+                 {:block comments-area
+                  :block-id (:block/uuid comments-area)
+                  :value "Comments"
+                  :config {}
+                  :current-block comments-area
+                  :delete-concat? false})))
+      (is (zero? @worker-calls))
+      (is (zero? @sibling-calls)))))
 
 (deftest backspace-at-the-start-does-not-delete-a-non-empty-block-that-owns-children-test
   (async done

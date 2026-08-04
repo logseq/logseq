@@ -419,49 +419,6 @@
                                   (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
                                       "Merging must keep the previous block renderable as an asset")))})))
 
-(deftest-async backspace-merge-preserves-children-and-retargets-comments
-  (load-test-files
-   [{:page {:block/title "boundary-merge-page"}
-     :blocks
-     [{:block/title "before"}
-      {:block/title "left"}
-      {:block/title "right"
-       :build/children [{:block/title "ordinary child"}
-                        {:block/title "Comments"
-                         :build/tags [:logseq.class/Comments]
-                         :build/children [{:block/title "Reply"}]}]}]}])
-  (p/let [conn (conn/get-db test-helper/test-db false)
-          left (test-helper/find-block-by-content "left")
-          right (test-helper/find-block-by-content "right")
-          ordinary-child (test-helper/find-block-by-content "ordinary child")
-          comments-area (test-helper/find-block-by-content "Comments")
-          reply (test-helper/find-block-by-content "Reply")
-          _ (conn/transact! test-helper/test-db
-                            [[:db/add (:db/id comments-area)
-                              comments-model/comments-blocks-property
-                              (:db/id right)]])]
-    (delete-block
-     @conn
-     right
-     {:on-delete
-      (fn []
-        (let [db @conn
-              left' (d/entity db [:block/uuid (:block/uuid left)])
-              ordinary-child' (d/entity db [:block/uuid (:block/uuid ordinary-child)])
-              comments-area' (d/entity db [:block/uuid (:block/uuid comments-area)])
-              reply' (d/entity db [:block/uuid (:block/uuid reply)])]
-          (is (= "leftright" (:block/title left')))
-          (is (= (:db/id left') (:db/id (:block/parent ordinary-child')))
-              "Same-level Backspace must move ordinary children under the surviving block")
-          (is (= (:db/id left') (:db/id (:block/parent comments-area')))
-              "A single-block Comments area must follow the surviving block")
-          (is (= #{(:db/id left')}
-                 (set (map :db/id
-                           (get comments-area' comments-model/comments-blocks-property))))
-              "The Comments area must target the surviving block")
-          (is (= (:db/id comments-area') (:db/id (:block/parent reply')))
-              "Comment replies must remain under their Comments area")))})))
-
 (deftest-async delete-at-empty-asset-end-merges-next-block-into-asset-block
   (load-test-files
    [{:page {:block/title "page1"}

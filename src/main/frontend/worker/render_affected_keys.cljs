@@ -247,7 +247,8 @@
                             :logseq.property.reaction/target
                             :block/uuid)]))
          (keep (fn [target-uuid]
-                 (when (uuid? target-uuid)
+                 (when (and (uuid? target-uuid)
+                            (d/entity db-after [:block/uuid target-uuid]))
                    [:reactions target-uuid]))))
         entity-ids))
 

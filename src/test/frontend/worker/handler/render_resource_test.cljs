@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource :as render-resource]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -511,6 +512,7 @@
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
   (is (every? #{:block.temp/positioned-properties
+                :block.temp/breadcrumb
                 :block.temp/refs-count
                 :block.temp/order-list-index}
               (filter #(= "block.temp" (namespace %)) (keys block))))
@@ -618,18 +620,21 @@
     (let [{:keys [conn page journal-a journal-b resource-block]}
           (render-resource-fixture)
           page-key [:page-identity "page identity"]
-          journals-key [:journals]
+          journals-key [:journals 1]
           ref-count-key [:block-ref-count resource-block]
           resource-keys [page-key journals-key ref-count-key]
           response (api @conn resource-keys)]
       (assert-resources-envelope @conn resource-keys response)
-      (is (= {page-key {:watch-keys #{[:page-lookup "page identity"]}
-                         :value page}
-              journals-key {:watch-keys #{[:journals]}
-                            :value [journal-b journal-a]}
-              ref-count-key {:watch-keys #{[:refs resource-block]}
-                             :value 1}}
-             (:resources response)))
+      (is (= page
+             (get-in response [:resources page-key :value])))
+      (is (= #{[:journals]}
+             (get-in response [:resources journals-key :watch-keys])))
+      (is (= [journal-b journal-a]
+             (get-in response [:resources journals-key :value :journal-uuids])))
+      (is (= #{journal-b}
+             (set (keys (get-in response [:resources journals-key :value :bundles])))))
+      (is (= 1
+             (get-in response [:resources ref-count-key :value])))
       (is (not-any? #(contains? % :basis-rev)
                     (vals (:resources response)))
           "The shared revision appears exactly once at the batch boundary."))))
@@ -698,7 +703,7 @@
     (with-redefs [worker-state/get-datascript-conn (constantly nil)]
       (is (thrown-with-msg? js/Error
                             #"Missing renderer resource database"
-                            (api test-repo [[:journals]]))))))
+                            (api test-repo [[:journals 1]]))))))
 
 (deftest page-identity-resource-resolves-only-the-page-uuid-test
   (when-let [api (render-resource-api)]
@@ -749,6 +754,8 @@
                            :block/order "a0"}])
           first-page-id (entity-id @conn first-page-uuid)
           second-page-id (entity-id @conn second-page-uuid)
+          page-tag (select-keys (d/entity @conn :logseq.class/Page)
+                                [:db/id :db/ident :logseq.property/icon])
           favorites-response (call-resource api conn [:favorites])
           status-response (call-resource api conn
                                          [:favorite-status first-page-uuid])
@@ -764,7 +771,8 @@
          :block/uuid first-page-uuid
          :block/title "First"
          :block/raw-title "First"
-         :block/name "first"}]
+         :block/name "first"
+         :block/tags [page-tag]}]
        favorites-response)
       (assert-resource-envelope
        @conn
@@ -781,12 +789,14 @@
          :block/uuid second-page-uuid
          :block/title "Second"
          :block/raw-title "Second"
-         :block/name "second"}
+         :block/name "second"
+         :block/tags [page-tag]}
         {:db/id first-page-id
          :block/uuid first-page-uuid
          :block/title "First"
          :block/raw-title "First"
-         :block/name "first"}]
+         :block/name "first"
+         :block/tags [page-tag]}]
        recent-response))))
 
 (deftest missing-page-identity-keeps-a-creation-watch-key-test
@@ -969,13 +979,48 @@
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-a journal-b]}
           (render-resource-fixture)
-          resource-key [:journals]
-          response (call-resource api conn resource-key)]
-      (assert-resource-envelope @conn
-                                resource-key
-                                #{[:journals]}
-                                [journal-b journal-a]
-                                response))))
+          resource-key [:journals 1]
+          response (call-resource api conn resource-key)
+          value (:value response)]
+      (is (= [journal-b journal-a] (:journal-uuids value)))
+      (is (= #{journal-b} (set (keys (:bundles value))))
+          "The initial height-derived window is bundled with membership.")
+      (is (= journal-b (get-in value [:bundles journal-b :root-uuid])))
+      (is (= #{[:journals]} (:watch-keys response)))
+      (is (= response
+             (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest journal-window-resource-loads-one-bounded-range-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn journal-a journal-b]}
+          (render-resource-fixture)
+          resource-key [:journal-window [journal-b journal-a]]
+          response (call-resource api conn resource-key)
+          bundles (get-in response [:value :bundles])]
+      (is (= #{journal-a journal-b} (set (keys bundles))))
+      (is (= journal-a (get-in bundles [journal-a :root-uuid])))
+      (is (= journal-b (get-in bundles [journal-b :root-uuid])))
+      (is (= #{} (:watch-keys response)))
+      (is (= response
+             (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest journals-resource-caps-the-initial-window-at-fifty-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          journals (mapv (fn [index]
+                           {:block/uuid (random-uuid)
+                            :block/tx-id 1
+                            :block/title (str "Journal " index)
+                            :block/name (str "journal " index)
+                            :block/journal-day (+ 20200101
+                                                  (* 100 (quot index 28))
+                                                  (mod index 28))
+                            :block/tags :logseq.class/Journal})
+                         (range 60))
+          _ (d/transact! conn journals)
+          response (call-resource api conn [:journals 60])]
+      (is (= 60 (count (get-in response [:value :journal-uuids]))))
+      (is (= 50 (count (get-in response [:value :bundles])))))))
 
 (deftest journal-bundle-resource-is-flat-and-transit-safe-test
   (when-let [api (render-resource-api)]
@@ -1008,6 +1053,22 @@
                (:parent-tx-id membership))))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest canonical-visible-blocks-include-ready-properties-and-breadcrumbs-test
+  (let [{:keys [conn page resource-block positioned-property]}
+        (render-resource-fixture)
+        positioned-property-id (:db/id (d/entity @conn
+                                                  [:block/uuid positioned-property]))
+        _ (d/transact! conn [[:db/add positioned-property-id :block/tx-id 20]])
+        response (block-handler/canonical-blocks @conn [resource-block])
+        target (get-in response [:blocks resource-block])]
+    (is (contains? (:blocks response) positioned-property)
+        "A positioned property row is ready in the same visible block load.")
+    (is (= [page]
+           (mapv :block/uuid (:block.temp/breadcrumb target)))
+        "The primary breadcrumb is ready with its owning block.")
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str)))))
 
 (deftest block-reactions-resource-returns-final-render-summary-test
   (when-let [api (render-resource-api)]
@@ -1565,6 +1626,24 @@
           (is (uuid? row))
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
+
+(deftest all-pages-view-data-includes-the-height-derived-initial-block-window-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          view-uuid (add-view! conn :all-pages)
+          resource-key [:view-data view-uuid
+                        {:feature-type :all-pages
+                         :sorting [{:id :block/title :asc? true}]
+                         :initial-row-count 2}]
+          response (call-resource api conn resource-key)
+          value (:value response)
+          initial-blocks (:initial-blocks value)]
+      (is (every? #(contains? initial-blocks %)
+                  (take 2 (:rows value))))
+      (is (every? #(contains? % :block.temp/positioned-properties)
+                  (vals initial-blocks)))
+      (is (= response
+             (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
 (deftest query-view-resource-supports-transient-missing-feature-type-test
   (when-let [api (render-resource-api)]

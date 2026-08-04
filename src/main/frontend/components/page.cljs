@@ -474,7 +474,7 @@
                  (property-component/bidirectional-properties-area page config))])
 
             (when (and block? (not sidebar?))
-              (block/breadcrumb {} repo (:block/uuid page) {}))
+              (block/breadcrumb {} repo (:block/uuid page) {:block page}))
 
             (when (ldb/library? page)
               (library/add-pages page))

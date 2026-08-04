@@ -3536,15 +3536,16 @@
         inner))))
 
 (hsx/defc breadcrumb-segment-row
-  [config block-uuid ref-titles opts effective-variant]
-  (let [entity (some-> (db-hooks/use-block block-uuid)
-                       (breadcrumb-model/with-breadcrumb-ref-titles ref-titles))
-        segment (breadcrumb-model/block->breadcrumb-segment entity)]
+  [config block opts effective-variant]
+  (let [block-id (or (:block/uuid block) (:db/id block))
+        loaded-block (db-hooks/use-block block-id)
+        block' (or loaded-block block)
+        segment (breadcrumb-model/block->breadcrumb-segment block')]
     (when segment
-      (let [label (breadcrumb-segment-label segment entity)]
+      (let [label (breadcrumb-segment-label segment block')]
         (if (or (:disabled? opts) (= effective-variant :search-result))
           label
-          (breadcrumb-fragment config entity label opts))))))
+          (breadcrumb-fragment config block' label opts))))))
 
 (hsx/defc breadcrumb-dropdown-row
   [config block-uuid ref-titles opts]
@@ -3608,7 +3609,7 @@
   [config target-uuid {:keys [show-page? indent? end-separator? _navigating-block variant header?]
                        :or {show-page? true}
                        :as opts}
-   ancestor-uuids ref-titles]
+   breadcrumb-ancestors]
   (let [;; Derive effective variant from explicit :variant opt or legacy config flags
         effective-variant (or variant
                               (cond
@@ -3617,7 +3618,7 @@
                                 (:list-view? config) :inline
                                 :else :block-page))
         vopts (breadcrumb-model/variant-options effective-variant)
-        view (breadcrumb-model/build-breadcrumb-view ancestor-uuids
+        view (breadcrumb-model/build-breadcrumb-view breadcrumb-ancestors
                                                      (assoc vopts :show-page? show-page?))
         {visible-prefix-raw :visible-prefix
          visible-suffix-raw :visible-suffix
@@ -3625,24 +3626,24 @@
         config (assoc config
                       :breadcrumb? true
                       :disable-preview? true)
-        render-seg (fn [group block-uuid]
-                     ^{:key (str group "-seg-" block-uuid)}
+        render-seg (fn [group block]
+                     ^{:key (str group "-seg-" (:block/uuid block))}
                      [:<> (breadcrumb-segment-row
-                           config block-uuid ref-titles opts effective-variant)])
-        render-segs (fn [group block-uuids]
-                      (mapcat (fn [idx block-uuid]
+                           config block opts effective-variant)])
+        render-segs (fn [group blocks]
+                      (mapcat (fn [idx block]
                                 (if (zero? idx)
-                                  [(render-seg group block-uuid)]
+                                  [(render-seg group block)]
                                   [(breadcrumb-separator (str group "-sep-" idx))
-                                   (render-seg group block-uuid)]))
+                                   (render-seg group block)]))
                               (cljs.core/range)
-                              block-uuids))]
+                              blocks))]
     (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
                     (when-not (or (:search? config) (:list-view? config)) " my-2")
                     (when indent? " ml-4"))}
-       (when (and (false? (:top-level? config)) (seq ancestor-uuids))
+       (when (and (false? (:top-level? config)) (seq breadcrumb-ancestors))
          (breadcrumb-separator "leading-sep"))
        ;; visible prefix (page + early ancestors)
        (render-segs "prefix" visible-prefix-raw)
@@ -3662,22 +3663,19 @@
           (render-segs "suffix" visible-suffix-raw)))
        (when end-separator? (breadcrumb-separator "end-sep"))])))
 
-(hsx/defc breadcrumb
-  [config _repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]
-                          :as opts}]
-  (let [effective-variant (or variant
-                              (cond
-                                header? :app-header
-                                (:search? config) :search-result
-                                (:list-view? config) :inline
-                                :else :block-page))
-        load-depth (:load-depth (breadcrumb-model/variant-options effective-variant))
-        breadcrumb-data (db-hooks/use-resource
-                         [:block-breadcrumb block-id load-depth])]
-    (when breadcrumb-data
-      (breadcrumb-aux config block-id opts
-                      (:ancestor-uuids breadcrumb-data)
-                      (:ref-titles breadcrumb-data)))))
+(hsx/defc subscribed-breadcrumb
+  [config block-id opts]
+  (let [block (db-hooks/use-block block-id)
+        breadcrumb-ancestors (:block.temp/breadcrumb block)]
+    (when (seq breadcrumb-ancestors)
+      (breadcrumb-aux config block-id opts breadcrumb-ancestors))))
+
+(defn breadcrumb
+  [config _repo block-id {:keys [block] :as opts}]
+  (if (contains? block :block.temp/breadcrumb)
+    (when-let [breadcrumb-ancestors (seq (:block.temp/breadcrumb block))]
+      (breadcrumb-aux config block-id opts breadcrumb-ancestors))
+    (subscribed-breadcrumb config block-id opts)))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to']
@@ -4243,7 +4241,8 @@
      (when (and ref? breadcrumb-show? (not (or table? property?)))
        (breadcrumb config repo uuid {:show-page? false
                                      :indent? true
-                                     :navigating-block *navigating-block}))
+                                     :navigating-block *navigating-block
+                                     :block block}))
 
      ;; only render this for the first block in each container
      (when (and top? (not (or table? property?)))
@@ -5069,12 +5068,21 @@
          (blocks-container config page-blocks))
        {:debug-id page})])])
 
+(defn- grouped-block-rows?
+  [blocks]
+  (or (map? blocks)
+      (let [row (first blocks)]
+        (and (sequential? row)
+             (= 2 (count row))
+             (map? (first row))
+             (sequential? (second row))))))
+
 (defn ->hiccup
   [blocks config option]
   [:div.content
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (if (and (:group-by-page? config)
-            (vector? (first blocks)))
+            (grouped-block-rows? blocks))
      (grouped-blocks-container config blocks)
      (blocks-container config blocks))])
