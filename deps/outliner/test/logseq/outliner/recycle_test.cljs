@@ -68,6 +68,69 @@
     (is (true? (recycle/permanently-delete! conn (:block/uuid page1))))
     (is (nil? (d/entity @conn [:block/uuid block-uuid])))))
 
+(deftest permanently-delete-recycled-converted-page-removes-property-value-blocks
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "outer"}
+                :blocks [{:block/title "target"
+                          :build/properties {:default "value"}}]}])
+        target (db-test/find-block-by-content @conn "target")
+        target-id (:db/id target)
+        target-uuid (:block/uuid target)
+        value-id (d/q '[:find ?value .
+                        :in $ ?target
+                        :where
+                        [?value :block/parent ?target]
+                        [?value :logseq.property/created-from-property]]
+                      @conn target-id)]
+    (d/transact! conn [[:db/retract target-id :block/page]
+                       [:db/add target-id :block/name "target"]
+                       [:db/add target-id :block/tags :logseq.class/Page]])
+    (let [page (d/entity @conn target-id)]
+      (ldb/transact! conn (recycle/recycle-page-tx-data @conn page {}) {:outliner-op :delete-page}))
+    (is (true? (recycle/permanently-delete! conn target-uuid)))
+    (is (nil? (d/entity @conn target-id)))
+    (is (nil? (d/entity @conn value-id)))))
+
+(deftest gc-recycled-converted-page-removes-property-value-blocks
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "outer"}
+                :blocks [{:block/title "target"
+                          :build/properties {:default "value"}}
+                         {:block/title "unrelated"}]}])
+        outer (ldb/get-page @conn "outer")
+        target (db-test/find-block-by-content @conn "target")
+        unrelated (db-test/find-block-by-content @conn "unrelated")
+        target-id (:db/id target)
+        value-id (d/q '[:find ?value .
+                        :in $ ?target
+                        :where
+                        [?value :block/parent ?target]
+                        [?value :logseq.property/created-from-property]]
+                      @conn target-id)]
+    (d/transact! conn [[:db/retract target-id :block/page]
+                       [:db/add target-id :block/name "target"]
+                       [:db/add target-id :block/tags :logseq.class/Page]])
+    (let [page (d/entity @conn target-id)]
+      (ldb/transact! conn
+                     (recycle/recycle-page-tx-data @conn page {:now-ms 0})
+                     {:outliner-op :delete-page}))
+    (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+    (is (nil? (d/entity @conn target-id)))
+    (is (nil? (d/entity @conn value-id)))
+    (is (some? (d/entity @conn (:db/id outer))))
+    (is (some? (d/entity @conn (:db/id unrelated))))))
+
+(deftest gc-keeps-unexpired-recycled-page
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}])
+        page (ldb/get-page @conn "page1")
+        page-id (:db/id page)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn page {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (is (nil? (recycle/gc! conn {:now-ms (* 29 24 3600 1000)})))
+    (is (some? (d/entity @conn page-id)))))
+
 (deftest apply-ops-permanently-delete-recycled-page-removes-page-and-descendants
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
