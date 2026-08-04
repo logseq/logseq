@@ -436,22 +436,22 @@
               :resource-key resource-key}))))
 
 (def resource-renderers
-  {:favorites favorites
-   :favorite-status favorite-status
-   :recent-pages recent-pages
-   :page-identity page-identity
-   :page-preview-source page-preview-source
-   :block-breadcrumb block-breadcrumb
-   :journals journals
-   :recycle-roots recycle-roots
-   :property-choices property-choices
-   :journal-bundle journal-bundle
-   :journal-window journal-window
-   :block-reactions block-reactions
-   :block-ref-count block-ref-count
-   :block-unlinked-ref-exists block-unlinked-ref-exists
-   :block-comment-threads block-comment-threads
-   :block-comment-summary block-comment-summary
-   :block-task-time block-task-time
-   :route-block route-block
-   :page-membership page-membership})
+  {:favorites (common/renderer 1 favorites)
+   :favorite-status (common/renderer 2 favorite-status)
+   :recent-pages (common/renderer 2 recent-pages)
+   :page-identity (common/renderer 2 page-identity)
+   :page-preview-source (common/renderer 2 page-preview-source)
+   :block-breadcrumb (common/renderer 3 block-breadcrumb)
+   :journals (common/renderer 2 journals)
+   :recycle-roots (common/renderer 1 recycle-roots)
+   :property-choices (common/renderer 2 property-choices)
+   :journal-bundle (common/renderer 2 journal-bundle)
+   :journal-window (common/renderer 2 journal-window)
+   :block-reactions (common/renderer 3 block-reactions)
+   :block-ref-count (common/renderer 2 block-ref-count)
+   :block-unlinked-ref-exists (common/renderer 2 block-unlinked-ref-exists)
+   :block-comment-threads (common/renderer 2 block-comment-threads)
+   :block-comment-summary (common/renderer 2 block-comment-summary)
+   :block-task-time (common/renderer 2 block-task-time)
+   :route-block (common/renderer 3 route-block)
+   :page-membership (common/renderer nil page-membership)})

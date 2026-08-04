@@ -200,31 +200,30 @@
         rows (apply-result-transform rows (:result-transform-edn query-spec))]
     (mapv normalize-query-row rows)))
 
+(defn- dependency-watch-keys
+  [{:keys [attrs task-attrs tasks? opaque?]}]
+  (let [watch-keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
+               (seq task-attrs)
+               (into (map (fn [attr] [:task-attr attr])) task-attrs)
+               tasks?
+               (conj [:tasks]))]
+    (if (or opaque? (empty? watch-keys))
+      #{[:graph]}
+      watch-keys)))
+
+(defn- query-watch-keys
+  [db query-spec]
+  (dependency-watch-keys
+   (if (= :datalog (:kind query-spec))
+     (query-handler/custom-query-watch-dependencies query-spec)
+     (query-dsl/query-watch-dependencies (:query query-spec) db query-spec))))
+
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))
-        watch-keys (if (= :datalog (:kind query-spec))
-                     (let [{:keys [attrs task-attrs tasks? opaque?]}
-                           (query-handler/custom-query-watch-dependencies query-spec)
-                           keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
-                                  (seq task-attrs)
-                                  (into (map (fn [attr] [:task-attr attr])) task-attrs)
-                                  tasks? (conj [:tasks]))]
-                       (if (or opaque? (empty? keys))
-                         #{[:graph]}
-                         keys))
-                     (let [{:keys [attrs opaque?]}
-                           (query-dsl/query-watch-dependencies
-                            (:query query-spec)
-                            db
-                            query-spec)
-                           keys (into #{} (map (fn [attr] [:attr attr])) attrs)]
-                       (if (or opaque? (empty? keys))
-                         #{[:graph]}
-                         keys)))]
-    [watch-keys
+  (let [query-spec (require-query-spec! (second resource-key))]
+    [(query-watch-keys db query-spec)
      {:rows (query-result-rows (execute-query-spec db query-spec runtime)
                                query-spec)}]))
 
 (def resource-renderers
-  {:query query})
+  {:query (common/renderer 2 query)})

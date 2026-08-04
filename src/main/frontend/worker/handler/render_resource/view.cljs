@@ -273,11 +273,15 @@
                              (every? grouped-list-partition? partitions)))))
                data)))
 
+(defn- normalize-view-rows
+  [db rows]
+  (mapv #(normalize-view-row db %) rows))
+
 (defn- normalize-flat-view-data
   [db result]
   {:partition :flat
    :count (:count result)
-   :rows (mapv #(normalize-view-row db %) (:data result))})
+   :rows (normalize-view-rows db (:data result))})
 
 (defn- normalize-grouped-view-data
   [db result]
@@ -286,7 +290,7 @@
    :groups
    (mapv (fn [[value rows]]
            {:value (normalize-group-value value)
-            :rows (mapv #(normalize-view-row db %) rows)})
+            :rows (normalize-view-rows db rows)})
          (:data result))})
 
 (defn- normalize-grouped-list-view-data
@@ -299,7 +303,7 @@
             :partitions
             (mapv (fn [[breadcrumb-uuid rows]]
                     {:breadcrumb-uuid breadcrumb-uuid
-                     :rows (mapv #(normalize-view-row db %) rows)})
+                     :rows (normalize-view-rows db rows)})
                   partitions)})
          (:data result))})
 
@@ -379,5 +383,5 @@
        value])))
 
 (def resource-renderers
-  {:views views
-   :view-data view-data})
+  {:views (common/renderer 3 views)
+   :view-data (common/renderer 3 view-data)})
