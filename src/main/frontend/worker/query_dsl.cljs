@@ -734,12 +734,13 @@ Some bindings in this fn:
                         (add-bindings! (if (= key :and) (rest result) result))))
             extract-rules (fn [rules]
                             (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
-            rules' (let [rules' (if (contains? (set rules) :page-ref)
-                                  (conj (set rules) :self-ref)
-                                  rules)]
-                     (extract-rules rules'))]
+            rule-names (if (contains? (set rules) :page-ref)
+                         (conj (set rules) :self-ref)
+                         (set rules))
+            rules' (extract-rules rule-names)]
         {:query result'
          :rules rules'
+         :rule-names rule-names
          :sort-by @sort-by
          :blocks? (boolean @blocks?)
          :sample sample}))))
@@ -766,6 +767,35 @@ Some bindings in this fn:
   ([q db options]
    (let [q' (resolve-dynamic-template q options)]
      (parse q' db options))))
+
+(def ^:private query-result-watch-attrs
+  #{:block/uuid :block/title :block/name :block/parent})
+
+(def ^:private attr-watch-safe-rules
+  #{:between :block-content :page})
+
+(defn query-watch-dependencies
+  "Return attribute-level dependencies for a DSL query when its rules are safe to inspect.
+
+  Queries that rely on dynamic class or property semantics remain opaque and keep the
+  graph-level dependency until those semantics have their own invalidation keys."
+  [query-string db options]
+  (if (or (not (string? query-string))
+          (string/blank? query-string)
+          (common-util/wrapped-by-quotes? query-string))
+    {:attrs #{} :opaque? true}
+    (let [{query* :query :keys [rule-names rules]} (parse-query query-string db options)
+          safe? (every? attr-watch-safe-rules rule-names)
+          forms (tree-seq coll? seq [query* rules])
+          attrs (into query-result-watch-attrs
+                      (keep (fn [form]
+                              (when (and (vector? form)
+                                         (<= 2 (count form))
+                                         (qualified-keyword? (second form)))
+                                (second form)))
+                      forms))]
+      {:attrs attrs
+       :opaque? (or (not safe?) (empty? query*))})))
 
 (def db-block-attrs
   "Block attributes for db graph queries"
