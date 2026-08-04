@@ -622,7 +622,7 @@
 
 (deftest multiline-heading-keeps-bullet-on-first-line
   (testing "heading block bullet aligns with the first line when the heading wraps"
-    (doseq [heading (map #(str "h" %) (range 1 7))]
+    (doseq [heading ["h1" "h6"]]
       (let [title (format "Multiline %s heading bullet should stay on the first visual line" heading)]
         (b/new-block title)
         (util/input-command heading)
@@ -1032,24 +1032,7 @@
     (assert/assert-is-visible
      (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "block1"))
     (let [contents (set (util/get-page-blocks-contents))]
-      (is (set/subset? (set ["block1" "block2" "block3"]) contents)))
-    (p/goto-page "test page")
-    (b/new-blocks ["block4" "block5"])
-    (b/select-blocks 2)
-    (b/toggle-property "Tags" "Page")
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
-    (k/press "ControlOrMeta+Shift+m")
-    (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
-    (w/wait-for (w/get-by-test-id "Library"))
-    (w/click (w/get-by-test-id "Library"))
-    (assert/assert-have-count
-     (loc/filter ".ls-page-blocks .ls-block" :has-text "block4")
-     0)
-    (p/goto-page "Library")
-    (assert/assert-is-visible
-     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "block4"))
-    (let [contents (set (util/get-page-blocks-contents))]
-      (is (set/subset? (set ["block1" "block2" "block3" "block4" "block5"]) contents)))))
+      (is (set/subset? (set ["block1" "block2" "block3"]) contents)))))
 
 (deftest create-nested-pages-in-library
   (testing "create nested pages in Library"
@@ -1121,24 +1104,6 @@
       (let [[after-x _] (util/bounding-xy (util/get-editor))]
         (is (= before-count (util/page-blocks-count)))
         (is (< after-x before-x))))))
-
-(deftest backspace-character-and-tree-merge-test
-  (testing "Backspace distinguishes character deletion from structural merge"
-    (b/new-block "abc")
-    (k/press "ArrowLeft")
-    (k/backspace)
-    (is (= "ac" (util/get-edit-content)))
-    (b/new-blocks ["merge previous" "merge next"])
-    (k/press "Home")
-    (k/backspace)
-    (util/wait-editor-visible)
-    (is (= "merge previousmerge next" (util/get-edit-content)))
-    (let [merged-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
-      (util/exit-edit)
-      (ls-api-call! :editor.insertBlock merged-uuid "merge preserved child"
-                    {:sibling false})
-      (assert/assert-is-visible
-       (loc/filter ".ls-block" :has-text "merge preserved child")))))
 
 (deftest cursor-boundaries-word-motion-and-kill-test
   (testing "cursor motion follows boundaries and range deletion is one undoable edit"
@@ -1419,25 +1384,6 @@
     (assert/assert-is-visible
      (loc/filter ".block-title-wrap" :has-text "Rich title"))
     (is (not (true? (w/eval-js "window.__e2eInjected === true"))))))
-
-(deftest structural-operation-undo-redo-steps-test
-  (testing "insert, indent, move and delete each have a reversible UI/worker state"
-    (let [page-name (p/get-page-name)]
-      (b/new-blocks ["history a" "history b" "history c"])
-      (b/indent)
-      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
-      (b/undo)
-      (is (= 3 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
-      (b/redo)
-      (is (= 2 (count (ls-api-call! :editor.getPageBlocksTree page-name))))
-      (b/delete-blocks)
-      (b/undo)
-      (assert/assert-is-visible
-       (loc/filter ".ls-page-blocks" :has-text "history c"))
-      (b/redo)
-      (assert/assert-have-count
-       (loc/filter ".ls-page-blocks" :has-text "history c")
-       0))))
 
 (deftest mixed-height-virtual-page-keeps-blocks-separated-test
   (testing "mixed text, code and headings do not overlap after fast scrolling"

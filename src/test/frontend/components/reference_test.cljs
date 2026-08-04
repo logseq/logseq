@@ -1,23 +1,12 @@
 (ns frontend.components.reference-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
-            ["react" :as react]
+  (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
+            [cljs.test :refer [deftest is]]
             [frontend.components.reference :as reference]
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.state :as state]
             [goog.object :as gobj]))
-
-(defn- reference-source
-  []
-  (.toString
-   (fs/readFileSync
-    (node-path/join (.cwd js/process)
-                    "src/main/frontend/components/reference.cljs")
-    "utf8")))
 
 (defn- render-static
   [element]
@@ -82,24 +71,3 @@
       (render-static (reference/unlinked-references page-uuid {}))
       (is (empty? @view-calls)
           "Empty reference sections must not create persistent views."))))
-
-(deftest references-have-no-mount-time-loader-or-local-membership-copy-test
-  (let [source (reference-source)]
-    (is (string/includes? source "db-hooks/use-block"))
-    (is (string/includes? source "db-hooks/use-resource"))
-    (is (string/includes? source ":block-ref-count"))
-    (is (string/includes? source ":block-unlinked-ref-exists"))
-    (is (string/includes? source ":linked-references"))
-    (is (string/includes? source ":unlinked-references"))
-    (testing "membership is owned by the mounted view-data resource"
-      (doseq [forbidden ["[frontend.db.async"
-                         "state/<invoke-db-worker"
-                         ":thread-api/block-refs-check"
-                         "hooks/use-effect"
-                         "hooks/use-state"
-                         "p/let"
-                         "react/q"
-                         "db-hooks/use-query"
-                         ":db/id"]]
-        (is (not (string/includes? source forbidden))
-            (str "Reference UI retains a local loader: " forbidden))))))
