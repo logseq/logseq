@@ -1,13 +1,13 @@
 (ns frontend.worker.handler.render-resource.engine
   "Renderer resource registry, batching, and thread API."
   (:require [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.basic :as basic]
             [frontend.worker.handler.render-resource.common :as common]
             [frontend.worker.handler.render-resource.property :as property]
             [frontend.worker.handler.render-resource.query :as query]
             [frontend.worker.handler.render-resource.view :as view]
-            [frontend.worker.state :as worker-state]
-            [lambdaisland.glogi :as log]))
+            [frontend.worker.state :as worker-state]))
 
 (def resource-renderers
   (merge basic/resource-renderers
@@ -47,51 +47,113 @@
 
 (defn- resource-entry
   [db resource-key runtime]
-  (let [[watch-keys value] (resource-value db resource-key runtime)]
-    {:watch-keys watch-keys :value value}))
+  (let [[watch value slots] (resource-value db resource-key runtime)
+        watch-all? (= common/watch-all watch)
+        watch-keys (if watch-all? #{} watch)]
+    (when-not (set? watch-keys)
+      (common/fail! "Invalid renderer resource watch keys"
+                    {:resource-key resource-key :watch watch}))
+    {:watch-keys watch-keys
+     :watch-all? watch-all?
+     :value value
+     :slots (or slots {})}))
 
-(defn render-resource
-  ([db resource-key]
-   (render-resource db resource-key {}))
-  ([db resource-key runtime]
-   (let [{:keys [watch-keys value]} (resource-entry db resource-key runtime)]
-     (common/envelope db resource-key watch-keys value))))
+(def ^:private snapshot-request-limits
+  {:blocks 1000 :children 25 :resources 25})
 
-(def ^:private render-resource-batch-limit 25)
+(defn- require-snapshot-request!
+  [request]
+  (when-not (and (map? request)
+                 (= #{:blocks :children :resources} (set (keys request)))
+                 (some seq (vals request))
+                 (every? (fn [[kind values]]
+                           (and (vector? values)
+                                (<= (count values)
+                                    (get snapshot-request-limits kind))
+                                (= values (vec (distinct values)))))
+                         request))
+    (common/fail! "Invalid renderer snapshot request"
+                  {:request request :limits snapshot-request-limits}))
+  request)
 
-(defn- require-resource-keys!
-  [resource-keys]
-  (when-not (and (vector? resource-keys)
-                 (seq resource-keys)
-                 (<= (count resource-keys) render-resource-batch-limit)
-                 (= (count resource-keys) (count (distinct resource-keys))))
-    (common/fail! "Invalid renderer resource batch"
-                  {:resource-keys resource-keys
-                   :max-size render-resource-batch-limit}))
-  resource-keys)
+(defn- merge-slots
+  [left right]
+  (reduce-kv
+   (fn [slots key value]
+     (when-let [existing (get slots key)]
+       (when-not (= existing value)
+         (common/fail! "Conflicting renderer snapshot slots"
+                       {:slot-key key})))
+     (assoc slots key value))
+   left
+   right))
 
-(defn render-resources
-  ([db resource-keys]
-   (render-resources db resource-keys {}))
-  ([db resource-keys runtime]
-   (require-resource-keys! resource-keys)
-   {:basis-rev (common/basis-rev db)
-    :resources
-    (into {}
-          (map (fn [resource-key]
-                 (let [started-at (.now js/performance)
-                       entry (resource-entry db resource-key runtime)
-                       completed-at (.now js/performance)]
-                   (when (and goog.DEBUG (> (- completed-at started-at) 10))
-                     (log/info :db-worker/render-resource-perf
-                               {:resource-key resource-key
-                                :elapsed-ms (- completed-at started-at)}))
-                   [resource-key
-                    entry])))
-          resource-keys)}))
+(defn- block-snapshot-slots
+  [db block-uuids]
+  (let [blocks (:blocks (block-handler/canonical-blocks db block-uuids))]
+    (reduce (fn [slots block-uuid]
+              (if (contains? blocks block-uuid)
+                slots
+                (assoc slots [:block block-uuid] {:missing? true})))
+            (common/block-slots blocks)
+            block-uuids)))
 
-(def-thread-api :thread-api/get-render-resources
-  [repo resource-keys]
+(defn- children-snapshot-groups
+  [db parent-uuids]
+  (into {}
+        (map (fn [parent-uuid]
+               (let [tree (block-handler/open-block-tree db parent-uuid)]
+                 [[:children parent-uuid]
+                  (common/block-bundle-slots tree)])))
+        parent-uuids))
+
+(defn render-snapshots
+  [db {:keys [blocks children resources] :as request} runtime]
+  (require-snapshot-request! request)
+  (let [resource-entries (into {}
+                               (map (fn [resource-key]
+                                      [resource-key
+                                       (resource-entry db resource-key runtime)]))
+                               resources)
+        block-slots (block-snapshot-slots db blocks)
+        children-groups (children-snapshot-groups db children)
+        base-slots (reduce merge-slots block-slots (vals children-groups))
+        slots (reduce-kv
+               (fn [slots resource-key entry]
+                 (-> slots
+                     (merge-slots (:slots entry))
+                     (merge-slots
+                      {[:resource resource-key]
+                       {:watch {:keys (:watch-keys entry)
+                                :all? (:watch-all? entry)}
+                        :value (:value entry)}})))
+               base-slots
+               resource-entries)
+        groups (into {}
+                     (concat
+                      (map-indexed
+                       (fn [index block-uuid]
+                         [[:block block-uuid]
+                          (if (zero? index)
+                            (set (keys block-slots))
+                            #{[:block block-uuid]})])
+                       blocks)
+                      (map (fn [parent-uuid]
+                             [[:children parent-uuid]
+                              (set (keys (get children-groups
+                                              [:children parent-uuid])))])
+                           children)
+                      (map (fn [[resource-key entry]]
+                             [[:resource resource-key]
+                              (conj (set (keys (:slots entry)))
+                                    [:resource resource-key])])
+                           resource-entries)))]
+    {:basis-rev (common/basis-rev db)
+     :slots slots
+     :groups groups}))
+
+(def-thread-api :thread-api/get-render-snapshots
+  [repo request]
   (if-let [conn (worker-state/get-datascript-conn repo)]
-    (render-resources @conn resource-keys {:repo repo})
-    (common/fail! "Missing renderer resource database" {:repo repo})))
+    (render-snapshots @conn request {:repo repo})
+    (common/fail! "Missing renderer snapshot database" {:repo repo})))

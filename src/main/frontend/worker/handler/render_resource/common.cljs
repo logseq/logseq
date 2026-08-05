@@ -3,6 +3,8 @@
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]))
 
+(def watch-all ::watch-all)
+
 (defn fail!
   [message data]
   (throw (ex-info message data)))
@@ -59,9 +61,19 @@
       (fail! "Invalid renderer resource revision" {:basis-rev rev}))
     rev))
 
-(defn envelope
-  [db resource-key watch-keys value]
-  {:basis-rev (basis-rev db)
-   :key resource-key
-   :watch-keys watch-keys
-   :value value})
+(defn block-slots
+  [blocks]
+  (into {}
+        (map (fn [[block-uuid block]]
+               [[:block block-uuid]
+                {:value block}]))
+        blocks))
+
+(defn block-bundle-slots
+  [{:keys [blocks children]}]
+  (into (block-slots blocks)
+        (map (fn [[parent-uuid membership]]
+               [[:children parent-uuid]
+                {:tx-id (:parent-tx-id membership)
+                 :items (:items membership)}]))
+        children))

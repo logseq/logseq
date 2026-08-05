@@ -200,7 +200,7 @@
         rows (apply-result-transform rows (:result-transform-edn query-spec))]
     (mapv normalize-query-row rows)))
 
-(defn- dependency-watch-keys
+(defn- dependency-watch
   [{:keys [attrs task-attrs tasks? opaque?]}]
   (let [watch-keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
                (seq task-attrs)
@@ -208,12 +208,12 @@
                tasks?
                (conj [:tasks]))]
     (if (or opaque? (empty? watch-keys))
-      #{[:graph]}
+      common/watch-all
       watch-keys)))
 
 (defn- query-watch-keys
   [db query-spec]
-  (dependency-watch-keys
+  (dependency-watch
    (if (= :datalog (:kind query-spec))
      (query-handler/custom-query-watch-dependencies query-spec)
      (query-dsl/query-watch-dependencies (:query query-spec) db query-spec))))

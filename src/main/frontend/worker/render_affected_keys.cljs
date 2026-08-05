@@ -1,7 +1,8 @@
 (ns frontend.worker.render-affected-keys
   "Derive explicit renderer resource invalidations from one transaction report."
   (:require [clojure.string :as string]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.worker.db.metadata-cache :as metadata-cache]))
 
 (def ^:private page-identity-attrs
   #{:block/name :block/uuid})
@@ -378,6 +379,14 @@
                     [:display-properties block-uuid]))))
         datoms))
 
+(defn- property-config-changed?
+  [db-before db-after datoms]
+  (some (fn [{:keys [e a]}]
+          (and (metadata-cache/metadata-attribute? a)
+               (entity-before-or-after? property-entity?
+                                        db-before db-after e)))
+        datoms))
+
 (defn- enabled-bidirectional-class-ids
   [source]
   (into #{}
@@ -533,7 +542,7 @@
         class-tree-changed? (class-tree? db-before db-after datoms)
         ref-scope-changed? (or class-tree-changed?
                                (some #(= :block/alias (:a %)) datoms))]
-    (into #{[:graph]}
+    (into #{}
           (concat
            (entity-keys db-before db-after changed-entity-ids)
            (attribute-keys datoms)
@@ -549,6 +558,8 @@
            (when (task-query-changed? db-before db-after datoms) [[:tasks]])
            (task-attribute-keys db-before db-after datoms)
            (display-property-keys db-before db-after datoms)
+           (when (property-config-changed? db-before db-after datoms)
+             [[:property-config]])
            (bidirectional-keys db-before db-after datoms touched-entity-ids)
            (view-keys db-before db-after touched-entity-ids)
            (class-membership-keys db-before db-after datoms)

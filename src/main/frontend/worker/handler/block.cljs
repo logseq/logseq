@@ -492,28 +492,6 @@
                       worker-plain/with-explicit-ref-fields-recursive))
            ldb/write-transit-str))))
 
-(defn- render-db
-  [repo]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    @conn
-    (fail-render-read! "Missing renderer database" {:repo repo})))
-
-(def-thread-api :thread-api/get-canonical-blocks
-  [repo block-uuids]
-  (canonical-blocks (render-db repo) block-uuids))
-
-(def-thread-api :thread-api/get-direct-children
-  [repo parent-uuids]
-  (let [db (render-db repo)
-        basis-rev (render-basis-rev db)]
-    {:basis-rev basis-rev
-     :children
-     (into {}
-           (map (fn [parent-uuid]
-                  [parent-uuid
-                   (open-block-tree db parent-uuid)]))
-           parent-uuids)}))
-
 (def-thread-api :thread-api/get-blocks
   [repo requests]
   (let [requests (ldb/read-transit-str requests)]

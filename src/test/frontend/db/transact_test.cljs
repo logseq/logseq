@@ -75,11 +75,7 @@
       (-> (p/with-redefs [db-subs/apply-delta!
                           (fn [value]
                             (swap! calls conj [:delta value])
-                            false)
-                          db-subs/resolve-blocks!
-                          (fn [_requested-uuids]
-                            (p/rejected
-                             (js/Error. "Editor rows must not be fetched again.")))]
+                            false)]
             (p/let [_ (#'db-transact/publish-worker-response!
                        {:editor/edit-block-fn
                         (fn [rows]
@@ -127,10 +123,6 @@
                           (fn [value]
                             (swap! calls conj [:delta value])
                             true)
-                          db-subs/resolve-blocks!
-                          (fn [_row-uuids]
-                            (p/rejected
-                             (js/Error. "Editor rows must not be fetched again.")))
                           state/get-current-repo (constantly repo)
                           state/get-route-match (constantly nil)
                           state/get-editor-info (constantly nil)

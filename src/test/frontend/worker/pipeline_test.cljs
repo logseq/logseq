@@ -310,8 +310,7 @@
                                         "after"]])
                          :tx-meta {})
         result (worker-pipeline/invoke-hooks conn tx-report {})]
-    (is (= #{[:graph]
-             [:entity block-uuid]
+    (is (= #{[:entity block-uuid]
              [:attr :block/title]
              [:display-properties block-uuid]
              [:property-membership :block/title]}
