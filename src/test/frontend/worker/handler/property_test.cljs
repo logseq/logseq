@@ -42,3 +42,24 @@
         (fn [error]
           (is false (str error))))
        (p/finally done)))))
+
+(deftest display-property-map-reflects-default-value-entity-updates
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/ident :user.property/color
+                        :block/uuid (random-uuid)
+                        :block/title "Color"
+                        :block/tags :logseq.class/Property
+                        :logseq.property/type :default}
+                       {:db/ident :user.property/color.red
+                        :block/uuid (random-uuid)
+                        :block/title "Red"
+                        :block/closed-value-property :user.property/color}
+                       [:db/add :user.property/color
+                        :logseq.property/default-value
+                        :user.property/color.red]])
+    (let [before (worker-property/display-property-map @conn :user.property/color)]
+      (d/transact! conn [[:db/add :user.property/color.red :block/title "Crimson"]])
+      (let [after (worker-property/display-property-map @conn :user.property/color)]
+        (is (= "Red" (get-in before [:logseq.property/default-value :block/title])))
+        (is (= "Crimson" (get-in after [:logseq.property/default-value :block/title])))))))

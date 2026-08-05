@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
-            [frontend.worker.db.metadata-cache :as metadata-cache]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
@@ -1153,14 +1152,8 @@
                      :block/tags :logseq.class/Tag
                      :logseq.property.class/properties -100}
                     [:db/add [:block/uuid resource-block] :block/tags -101]])
-      (let [block (d/entity @conn [:block/uuid resource-block])
-            metadata (metadata-cache/build-metadata @conn)
-            rows (get-in (call-resource api conn resource-key)
+      (let [rows (get-in (call-resource api conn resource-key)
                          [:value :full-properties])]
-        (is (= [property-uuid]
-               (mapv :block/uuid
-                     (:classes-properties
-                      (metadata-cache/block-class-properties metadata block)))))
         (is (some #(= property-uuid (:property-uuid %)) rows)
             "A class-configured property is rendered even when the block has no own value.")))))
 
