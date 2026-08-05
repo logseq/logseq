@@ -1,8 +1,22 @@
 (ns frontend.worker.render-affected-keys
   "Derive explicit renderer resource invalidations from one transaction report."
   (:require [clojure.string :as string]
-            [datascript.core :as d]
-            [frontend.worker.db.metadata-cache :as metadata-cache]))
+            [datascript.core :as d]))
+
+(def ^:private property-metadata-attrs
+  #{:db/cardinality
+    :logseq.property/type
+    :logseq.property/public?
+    :logseq.property/built-in?
+    :logseq.property/hide?
+    :logseq.property/hide-empty-value
+    :logseq.property/ui-position
+    :logseq.property/view-context
+    :logseq.property/scalar-default-value
+    :logseq.property/default-value
+    :logseq.property/classes
+    :logseq.property.class/extends
+    :logseq.property.class/properties})
 
 (def ^:private page-identity-attrs
   #{:block/name :block/uuid})
@@ -382,7 +396,7 @@
 (defn- property-config-changed?
   [db-before db-after datoms]
   (some (fn [{:keys [e a]}]
-          (and (metadata-cache/metadata-attribute? a)
+          (and (contains? property-metadata-attrs a)
                (entity-before-or-after? property-entity?
                                         db-before db-after e)))
         datoms))

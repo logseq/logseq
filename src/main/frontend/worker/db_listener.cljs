@@ -2,7 +2,6 @@
   "Db listeners for worker-db."
   (:require [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
-            [frontend.worker.db.metadata-cache :as metadata-cache]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -159,10 +158,6 @@
   [_ {:keys [repo]} tx-report]
   (db-sync/handle-local-tx! repo tx-report))
 
-(defmethod listen-db-changes :metadata-cache
-  [_ {:keys [repo]} {:keys [db-after] :as tx-report}]
-  (metadata-cache/refresh! repo db-after tx-report))
-
 (defmethod listen-db-changes :markdown-mirror
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
@@ -231,7 +226,7 @@
        handler-timings k handler-fn opt tx-report))))
 
 (defn- process-committed-tx!
-  [repo conn persist-local-tx-handler metadata-cache-handler deferred-handlers
+  [repo conn persist-local-tx-handler deferred-handlers
    sync-db-to-main-thread? {:keys [tx-data tx-meta] :as tx-report}]
   (let [started-at (perf-time-ms)]
     (run-post-commit!
@@ -248,16 +243,7 @@
                                    persist-local-tx-handler
                                    opt
                                    tx-report)))
-      (let [persist-at (perf-time-ms)]
-        (when metadata-cache-handler
-          (run-post-commit!
-           repo tx-meta :metadata-cache
-           #(invoke-listener-handler! handler-timings
-                                      :metadata-cache
-                                      metadata-cache-handler
-                                      opt
-                                      tx-report)))
-        (let [metadata-at (perf-time-ms)
+      (let [persist-at (perf-time-ms)
             sync-result (when sync-db-to-main-thread?
                           (main-thread-sync-result repo conn tx-report))
             processed-tx-report (or (:tx-report sync-result) tx-report)
@@ -273,10 +259,9 @@
           :tx-count (count tx-data)
           :checksum-ms (- checksum-at started-at)
           :persist-ms (- persist-at checksum-at)
-          :metadata-cache-ms (- metadata-at persist-at)
-          :sync-main-ms (- sync-main-at metadata-at)
+          :sync-main-ms (- sync-main-at persist-at)
           :handlers-ms @handler-timings
-          :total-ms (- (perf-time-ms) started-at)}))))))
+          :total-ms (- (perf-time-ms) started-at)})))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
@@ -284,8 +269,7 @@
                    (select-keys (methods listen-db-changes) handler-keys)
                    (methods listen-db-changes))
         persist-local-tx-handler (get handlers :db-sync)
-        metadata-cache-handler (get handlers :metadata-cache)
-        deferred-handlers (dissoc handlers :db-sync :metadata-cache)
+        deferred-handlers (dissoc handlers :db-sync)
         sync-db-to-main-thread?
         (or (nil? handler-keys)
             (contains? (set handler-keys) :sync-db-to-main-thread))]
@@ -297,5 +281,5 @@
                             (or (:batch-final-tx-report? tx-meta)
                                 (not (:batch-tx-report? tx-meta))))
                    (process-committed-tx!
-                    repo conn persist-local-tx-handler metadata-cache-handler deferred-handlers
+                    repo conn persist-local-tx-handler deferred-handlers
                     sync-db-to-main-thread? tx-report))))))
