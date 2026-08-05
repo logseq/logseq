@@ -69,8 +69,9 @@
 
 (defn exit-edit
   []
-  (when (get-editor)
-    (k/esc))
+  (dotimes [_ 2]
+    (when (get-editor)
+      (k/esc)))
   (assert/assert-non-editor-mode))
 
 (defn double-esc
