@@ -47,6 +47,17 @@
   [tag keys]
   (into #{} (filter #(= tag (first %))) keys))
 
+(deftest affected-keys-do-not-add-a-global-invalidation-test
+  (let [block-uuid (random-uuid)
+        db (db-with [{:db/id 10
+                      :block/uuid block-uuid
+                      :block/title "Before"}])
+        title-change (affected-keys db [[:db/add 10 :block/title "After"]])]
+    (is (not (contains? title-change [:graph]))
+        "Exact transactions must not invalidate every renderer resource.")
+    (is (= #{} (affected-keys db []))
+        "An empty transaction has no renderer dependencies.")))
+
 (deftest direct-children-invalidation-follows-membership-and-order-test
   (let [parent-before-uuid (random-uuid)
         parent-after-uuid (random-uuid)
@@ -143,14 +154,14 @@
         (is (contains? keys [:entity reference-before-uuid])
             "Referenced entities invalidate through their exact entity key.")))))
 
-(deftest graph-invalidation-is-always-present-and-transaction-stamps-are-ignored-test
+(deftest transaction-stamps-have-no-renderer-dependencies-test
   (let [block-uuid (random-uuid)
         db (db-with [{:db/id 10
                       :block/uuid block-uuid
                       :block/tx-id 10}])]
-    (is (= #{[:graph]}
+    (is (= #{}
            (affected-keys db [])))
-    (is (= #{[:graph]}
+    (is (= #{}
            (affected-keys db [[:db/add 10 :block/tx-id 11]]))
         "Pipeline transaction stamps are transport metadata, not resource dependencies.")))
 
@@ -182,7 +193,7 @@
         db (db-with [{:db/id 10
                       :block/uuid block-uuid
                       property-ident "low"}])]
-    (is (= #{[:graph]
+    (is (= #{
              [:entity block-uuid]
              [:attr property-ident]
              [:property-membership property-ident]}
@@ -194,7 +205,7 @@
         db (db-with [{:db/id 10
                       :block/uuid old-uuid
                       :block/name "old page"}])]
-    (is (= #{[:graph]
+    (is (= #{
              [:entity old-uuid]
              [:entity new-uuid]
              [:attr :block/uuid]
@@ -216,7 +227,7 @@
                       :block/uuid page-uuid
                       :block/name "page"
                       :block/title "Page"}])]
-    (is (= #{[:graph]
+    (is (= #{
              [:entity page-uuid]
              [:attr :logseq.property/deleted-at]
              [:property-membership :logseq.property/deleted-at]
@@ -256,14 +267,14 @@
                       :block/journal-day 20260720
                       :block/tags 1}])]
     (testing "journal day changes"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity journal-uuid]
                [:attr :block/journal-day]
                [:property-membership :block/journal-day]
                [:journals]}
              (affected-keys db [[:db/add 10 :block/journal-day 20260721]]))))
     (testing "recycling a journal"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity journal-uuid]
                [:attr :logseq.property/deleted-at]
                [:property-membership :logseq.property/deleted-at]
@@ -283,7 +294,7 @@
                       :logseq.property.reaction/target 10
                       :logseq.property.reaction/emoji-id "old"}])]
     (testing "moving a reaction invalidates the old and new target"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity reaction-uuid]
                [:attr :logseq.property.reaction/target]
                [:property-membership :logseq.property.reaction/target]
@@ -293,7 +304,7 @@
               db
               [[:db/add 12 :logseq.property.reaction/target 11]]))))
     (testing "editing a reaction still invalidates its unchanged target"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity reaction-uuid]
                [:attr :logseq.property.reaction/emoji-id]
                [:property-membership :logseq.property.reaction/emoji-id]
@@ -320,7 +331,7 @@
                       :logseq.property/view-for 10
                       :logseq.property.view/feature-type :class-objects}])]
     (testing "owner and feature changes produce two real pairs, not a Cartesian product"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity view-uuid]
                [:attr :logseq.property/view-for]
                [:attr :logseq.property.view/feature-type]
@@ -334,7 +345,7 @@
                 :logseq.property/view-for 11
                 :logseq.property.view/feature-type :linked-references}]))))
     (testing "ordering a view invalidates its current definition list"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity view-uuid]
                [:attr :block/order]
                [:property-membership :block/order]
@@ -350,7 +361,7 @@
                      {:db/id 12
                       :block/uuid object-uuid
                       :block/tags 10}])]
-    (is (= #{[:graph]
+    (is (= #{
              [:entity object-uuid]
              [:attr :block/tags]
              [:property-membership :block/tags]
@@ -374,6 +385,20 @@
                       11]])
                    [:class-tree]))))
 
+(deftest property-presentation-configuration-invalidates-property-resources-test
+  (let [property-uuid (random-uuid)
+        db (db-with [{:db/id 1
+                      :db/ident :logseq.class/Property}
+                     {:db/id 2
+                      :db/ident :user.property/configured
+                      :block/uuid property-uuid
+                      :block/tags 1
+                      :logseq.property/ui-position :block-right}])]
+    (is (contains? (affected-keys
+                    db
+                    [[:db/add 2 :logseq.property/ui-position :properties]])
+                   [:property-config]))))
+
 (deftest class-hierarchy-and-aliases-invalidate-reference-scope-test
   (let [class-uuid (random-uuid)
         parent-before-uuid (random-uuid)
@@ -394,7 +419,7 @@
                      {:db/id 16
                       :db/ident :logseq.class/Property}])]
     (testing "class hierarchy"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity class-uuid]
                [:attr :logseq.property.class/extends]
                [:property-membership :logseq.property.class/extends]
@@ -403,7 +428,7 @@
              (affected-keys db [[:db/retract 10 :logseq.property.class/extends 11]
                                 [:db/add 10 :logseq.property.class/extends 12]]))))
     (testing "aliases"
-      (is (= #{[:graph]
+      (is (= #{
                [:entity class-uuid]
                [:attr :block/alias]
                [:property-membership :block/alias]
@@ -422,7 +447,7 @@
                       :block/uuid ref-block-uuid
                       :block/title "Reference"
                       :block/refs 10}])]
-    (is (= #{[:graph]
+    (is (= #{
              [:entity ref-block-uuid]
              [:attr :block/refs]
              [:property-membership :block/refs]
@@ -444,7 +469,7 @@
                       :block/title "Before"
                       :block/parent 11
                       :block/refs 10}])
-        common #{[:graph]
+        common #{
                  [:entity ref-block-uuid]
                  [:refs target-uuid]}]
     (testing "content"
@@ -453,7 +478,7 @@
                      [:property-membership :block/title]})
              (affected-keys db [[:db/add 13 :block/title "After"]]))))
     (testing "sorting attributes"
-      (is (= #{[:graph]
+      (is (= #{
                [:attr :block/updated-at]
                [:property-membership :block/updated-at]
                [:refs target-uuid]}

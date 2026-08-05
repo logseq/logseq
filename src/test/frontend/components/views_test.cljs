@@ -465,9 +465,10 @@
                                       [reaction-watch []])]
                                 (p/resolved
                                  {:basis-rev (dec load-number)
-                                  :key resource-key
-                                  :watch-keys #{watch-key}
-                                  :value value})))]
+                                  :slots
+                                  {[:resource resource-key]
+                                   {:watch {:keys #{watch-key} :all? false}
+                                    :value value}}})))]
               (let [mounted-view (mount-resource! view-key)
                     mounted-reactions (mount-resource! reaction-key)]
                 (p/let [_ (p/delay 0)

@@ -23,7 +23,7 @@
    [frontend.worker.handler.page]
    [frontend.worker.handler.property]
    [frontend.worker.handler.query]
-   [frontend.worker.handler.render-resource]
+   [frontend.worker.handler.render-resource.engine]
    [frontend.worker.handler.search :as search-handler]
    [frontend.worker.handler.sync]
    [frontend.worker.handler.transaction :as transaction-handler]

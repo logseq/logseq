@@ -75,12 +75,12 @@
                    journal-window-limit
                    initial-count))])
         visible-uuids (journal-window journal-uuids visible-range)
-        initial-uuids (set (keys (:bundles journal-data)))
+        initial-uuids (set (:loaded-uuids journal-data))
         window-key (when (some #(not (contains? initial-uuids %)) visible-uuids)
                      [:journal-window visible-uuids])
         window-state (db-hooks/use-resource-snapshot window-key)
         ready-uuids (into initial-uuids
-                          (keys (get-in window-state [:value :bundles])))
+                          (get-in window-state [:value :loaded-uuids]))
         items-rendered! (fn [^js items]
                           (when (pos? (alength items))
                             (let [next-range [(.-index (aget items 0))

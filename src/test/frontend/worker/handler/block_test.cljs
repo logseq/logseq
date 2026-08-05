@@ -1,10 +1,8 @@
 (ns frontend.worker.handler.block-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.common.thread-api :as thread-api]
             [frontend.util.entity :as entity]
             [frontend.worker.handler.block]
-            [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -548,45 +546,17 @@
       (is (thrown? js/Error
                    (direct-children-membership @conn page-uuid))))))
 
-(deftest canonical-block-thread-apis-return-transit-safe-pure-results-test
+(deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
         direct-children-membership (direct-children-membership-api)
-        open-block-tree (open-block-tree-api)
-        get-canonical-blocks (get @thread-api/*thread-apis
-                                  :thread-api/get-canonical-blocks)
-        get-direct-children (get @thread-api/*thread-apis
-                                 :thread-api/get-direct-children)]
-    (is (fn? get-canonical-blocks)
-        "Missing thread API: get-canonical-blocks")
-    (is (fn? get-direct-children)
-        "Missing thread API: get-direct-children")
-    (when (and canonical-blocks
-               direct-children-membership
-               open-block-tree
-               get-canonical-blocks
-               get-direct-children)
+        open-block-tree (open-block-tree-api)]
+    (when (and canonical-blocks direct-children-membership open-block-tree)
       (let [{:keys [conn target-uuid parent-uuid]}
             (canonical-block-fixture)
-            repo "canonical-block-thread-api-test"
             block-uuids [target-uuid]
-            expected-blocks (canonical-blocks @conn block-uuids)
-            tree (open-block-tree @conn parent-uuid)
-            expected-children
-            {:basis-rev (:max-tx @conn)
-             :children {parent-uuid tree}}]
-        (with-redefs [worker-state/get-datascript-conn
-                      (fn [requested-repo]
-                        (is (= repo requested-repo))
-                        conn)]
-          (let [actual-blocks (get-canonical-blocks repo block-uuids)
-                actual-children (get-direct-children repo [parent-uuid])]
-            (is (= expected-blocks actual-blocks))
-            (is (= expected-children actual-children))
-            (is (= actual-blocks
-                   (-> actual-blocks
-                       ldb/write-transit-str
-                       ldb/read-transit-str)))
-            (is (= actual-children
-                   (-> actual-children
-                       ldb/write-transit-str
-                       ldb/read-transit-str)))))))))
+            blocks (canonical-blocks @conn block-uuids)
+            membership (direct-children-membership @conn parent-uuid)
+            tree (open-block-tree @conn parent-uuid)]
+        (doseq [value [blocks membership tree]]
+          (is (= value
+                 (-> value ldb/write-transit-str ldb/read-transit-str))))))))
