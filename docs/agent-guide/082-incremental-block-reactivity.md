@@ -123,8 +123,8 @@ Nested membership is loaded by the nested parent subscription and is never inclu
  :op-id operation-id
  :blocks {block-uuid complete-block}
  :deleted {deleted-uuid {:rev 121}}
- :children {parent-uuid {:base-tx-id 117
-                         :tx-id 121
+ :children {parent-uuid {:base-rev 117
+                         :rev 121
                          :remove [[old-child "a0"]]
                          :upsert [[new-child "b0"]]}}
  :affected-keys #{[:journals] [:entity owner-uuid]}}
@@ -136,26 +136,38 @@ The renderer applies it once by `[graph-id rev]` and notifies only exact mounted
 
 Loader `:basis-rev` values protect individual slots but never advance the renderer delta cursor.
 
-### Explicit resources
+### Normalized renderer snapshots
 
-Every non-block result has one declared key and one response envelope.
+Blocks, child memberships, and feature resources share one flat snapshot API
+and response protocol. The UI batches each slot kind independently so a
+resource failure cannot poison block or child loads.
 
 ```clojure
+;; Request
+{:blocks [block-uuid]
+ :children [parent-uuid]
+ :resources [resource-key]}
+
+;; Response
 {:basis-rev 120
- :key resource-key
- :watch-keys #{watch-key}
- :value plain-value}
+ :slots {[:block block-uuid] {:value complete-block}
+         [:children parent-uuid] {:tx-id 118 :items [[child-uuid "a0"]]}
+         [:resource resource-key] {:watch {:keys #{watch-key} :all? false}
+                                    :value plain-value}}
+ :groups {[:block block-uuid] #{[:block block-uuid]}
+          [:children parent-uuid] #{[:children parent-uuid]}
+          [:resource resource-key] #{[:resource resource-key]}}}
 ```
 
 | Resource key | Returned value | Invalidation owner |
 |---|---|---|
 | `[:page-identity lookup]` | Page UUID or nil. | Normalized page lookup. |
-| `[:journals]` | Ordered journal UUIDs. | Journal membership. |
-| `[:journal-bundle journal-uuid]` | Flat canonical blocks and direct memberships. | Subsequent exact block and child deltas. |
+| `[:journals]` | Ordered and initially loaded journal UUIDs. Its snapshot patch also seeds canonical block and membership slots. | Journal membership. |
+| `[:journal-window journal-uuids]` | Loaded journal UUIDs. Its snapshot patch seeds the requested journal slots. | Explicit viewport request. |
 | `[:block-reactions block-uuid user-uuid]` | Final summarized reaction rows. | Reaction target and creator entities. |
 | `[:views owner-uuid feature-type]` | Ordered view-definition UUIDs. | View owner and feature membership. |
 | `[:view-data view-uuid context]` | UUID-only rows, groups, partitions, and plain scalar metadata. | Explicit entity, membership, ref, class-tree, and attribute keys. |
-| `[:query query-spec]` | Worker-computed UUID rows or plain scalar tuples. | `[:graph]` for opaque query specifications. |
+| `[:query query-spec]` | Worker-computed UUID rows or plain scalar tuples. | Exact semantic keys when derivable; otherwise the explicit `:all?` watch flag. |
 
 Unknown shapes, closures, missing required values, and invalid UUIDs fail immediately.
 
@@ -201,8 +213,8 @@ not just the caller context:
 - Linked-reference views watch the ref scope plus exact reference targets,
   aliases, class descendants, and explicit include or exclude targets.
 - Unlinked-reference views watch its text/reference index boundary.
-- Query-result views intentionally watch `[:graph]`; opaque queries do not get a
-  speculative dependency analyzer.
+- Opaque query-result views use the explicit watch-all flag; they do not add a
+  synthetic `[:graph]` key or use a speculative dependency analyzer.
 
 ## Recommended execution order
 
@@ -283,7 +295,7 @@ Steps:
 6. Reset and restart mounted subscriptions when a restored worker graph becomes active.
 7. Apply direct and broadcast deltas through the same `apply-delta!` entry.
 8. Make hooks unwrap store status so components receive a value, nil while unavailable, or a thrown load error.
-9. Resolve editor callback rows only from ready post-delta block slots and fail if a required row is absent.
+9. Consume canonical editor callback rows directly from the worker transaction response.
 10. Run all focused renderer-store namespaces and require zero failures and zero warnings.
 
 ## Task 4: Add explicit resources and affected keys
@@ -304,9 +316,9 @@ Steps:
 2. Reject malformed keys and recursively reject function values before database work.
 3. Execute page, journal, reaction, view, and query reads entirely in the worker.
 4. Normalize entity rows to UUIDs while retaining feature-owned scalar and grouped values as plain data.
-5. Seed journal bundle blocks and direct memberships into the same exact store atomically.
+5. Seed journal-window blocks and direct memberships into the same flat slot patch atomically.
 6. Derive explicit affected keys from `db-before`, `db-after`, and transaction datoms.
-7. Always include `[:graph]` for mounted opaque queries without inventing dependency analysis.
+7. Use the explicit watch-all descriptor for opaque queries without inventing dependency analysis.
 8. Add tests for reaction edits and deletion, page rename, journal membership, class membership, refs, view membership, and sorted attributes.
 9. Run resource, pipeline, and subscription tests and require zero failures and zero warnings.
 
@@ -366,7 +378,7 @@ Steps:
 1. Add a failing test proving the journal route owns one Virtuoso over ordered journal UUIDs.
 2. Add a failing test proving a mounted journal page renders a plain direct list and plain recursive descendants.
 3. Subscribe the route to `[:journals]`.
-4. Subscribe each mounted row to `[:journal-bundle journal-uuid]` so one response seeds exact block and membership slots.
+4. Load each viewport window through `[:journal-window journal-uuids]`; keep its feature value UUID-only and seed exact block and membership slots in the top-level snapshot patch.
 5. Apply later changes only through ordinary block and child deltas.
 6. Remove per-journal intersection observers, timers, resident caches, height ownership, nested virtualizers, and mobile descendant truncation.
 7. Preserve focus and scroll restoration at the outer journal virtualizer only.
@@ -448,7 +460,9 @@ Steps:
 1. Run `rtk bb dev:lint-and-test` and require zero failures and zero warnings.
 2. Run `rtk bb -f clj-e2e/bb.edn test` and require the selected application flows to pass.
 3. Measure a 10,000-top-level-block page and require one direct-membership request with no descendant transport.
-4. Prove that 100 same-tick UUID subscriptions use no more than four worker calls of 25.
+4. Prove that 100 same-tick block UUID subscriptions use one worker call, 100
+   resource subscriptions use four calls of 25, and different slot kinds have
+   independent failure domains.
 5. Prove that one exact block delta notifies only that key among 10,000 mounted subscribers.
 6. Prove that structural delta bytes remain bounded when sibling count grows from 10 to 10,000.
 7. Verify local, cross-window, RTC, undo, redo, property retraction, move, indent, outdent, page, journal, view, reference, and query behavior manually where automation is unavailable.
@@ -458,7 +472,7 @@ Steps:
 ## Edge cases
 
 - A block replacement and tombstone for the same UUID in one delta is invalid.
-- A child patch whose base parent tx-id does not match starts one exact parent reload and coalesces further invalidations.
+- A child patch whose base revision does not match starts one exact parent reload and coalesces further invalidations.
 - A loader response can have a later basis than the renderer delta cursor without swallowing intermediate deltas.
 - A stale load error cannot replace a newer ready slot.
 - A graph switch rejects old-generation completions and restarts only still-mounted keys.
@@ -467,8 +481,9 @@ Steps:
 - Deleting a direct parent emits child removal where possible and tombstones without retaining deleted entity maps.
 - Reaction deletion and emoji edits resolve their target from both `db-before` and `db-after`.
 - Page renames invalidate both old and new normalized lookup keys.
-- Journal bundles contain flat canonical blocks plus one direct-membership slot for every included parent and leaf.
-- Opaque query invalidation is intentionally graph-wide only while the resource is mounted.
+- Journal-window hydration contains flat canonical blocks plus one
+  direct-membership slot for every included parent and leaf.
+- Opaque queries use explicit watch-all invalidation only while mounted.
 - Public plugin APIs that explicitly request a full tree are not conflated with renderer virtualization data.
 
 ## Testing Details
@@ -490,8 +505,8 @@ E2E tests verify that editor focus and visible data remain correct across local 
 - Build and serialize one compact delta per committed renderer-visible transaction.
 - Keep global delta revision separate from per-load basis revision.
 - Store only complete block replacements and direct-child memberships.
-- Batch exact block and child loads in groups of 25.
-- Represent feature results as seven explicit resource types.
+- Batch every slot type through one bounded renderer-snapshot API.
+- Represent feature results as explicit keyed resources with declared dependencies.
 - Virtualize normal page roots and outer journals only.
 - Keep auxiliary plugin, search, asset, and mirror effects outside renderer delta.
 - Delete old paths immediately after their last caller migrates.

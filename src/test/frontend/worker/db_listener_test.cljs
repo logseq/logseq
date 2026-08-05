@@ -1,6 +1,7 @@
 (ns frontend.worker.db-listener-test
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
+            [frontend.worker.db.metadata-cache :as metadata-cache]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -96,6 +97,24 @@
       (d/transact! conn [{:db/id -1 :block/title "b1"}] {:local-tx? true}))
     (is (= [:persist-local-tx :build-ui-refresh :broadcast-ui-refresh] @calls)
         "UI refresh work must wait until the local tx has been persisted.")))
+
+(deftest db-listener-advances-metadata-cache-before-building-render-delta-test
+  (let [conn (db-test/create-conn)
+        calls (atom [])]
+    (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  metadata-cache/refresh! (fn [& _]
+                                            (swap! calls conj :metadata-cache))
+                  worker-pipeline/invoke-hooks (fn [_conn tx-report _context]
+                                                 (swap! calls conj :render-delta)
+                                                 {:tx-report tx-report})
+                  render-delta/build (constantly {:rev 1})
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+      (db-listener/listen-db-changes!
+       "repo" conn
+       :handler-keys [:sync-db-to-main-thread :metadata-cache])
+      (d/transact! conn [{:db/id -1 :block/title "b1"}]))
+    (is (= [:metadata-cache :render-delta] @calls)
+        "Canonical rendering must see the cache entry for db-after.")))
 
 (deftest db-listener-builds-one-render-delta-for-origin-and-broadcast-test
   (let [repo "repo"
