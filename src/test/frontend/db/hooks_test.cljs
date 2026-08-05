@@ -157,7 +157,7 @@
 
 (deftest use-resource-is-an-exact-external-store-adapter-test
   (let [journal-uuid (random-uuid)
-        resource-key [:journal-bundle journal-uuid]
+        resource-key [:journal-window [journal-uuid]]
         snapshot {:status :ready
                   :value {:journal-uuid journal-uuid}}
         captured (atom nil)
@@ -191,7 +191,7 @@
 
 (deftest equal-resource-keys-keep-stable-external-store-callbacks-test
   (let [journal-uuid (random-uuid)
-        equal-key-a [:journal-bundle journal-uuid]
+        equal-key-a [:journal-window [journal-uuid]]
         equal-key-b (mapv identity equal-key-a)
         changed-key [:page-identity journal-uuid]
         subscription-calls (atom [])

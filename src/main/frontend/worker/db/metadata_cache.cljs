@@ -59,7 +59,8 @@
   (->> property-idents
        (sort-by (fn [property-ident]
                   (let [property (get properties-by-ident property-ident)]
-                    [(or (:block/order property) "")
+                    [(if (nil? (:block/order property)) 1 0)
+                     (:block/order property)
                      (str (:block/uuid property))])))
        vec))
 
@@ -165,10 +166,9 @@
 (defn- class-id
   [metadata tag]
   (cond
-    (map? tag) (:db/id tag)
     (integer? tag) tag
     (keyword? tag) (some-> (class metadata tag) :db/id)
-    :else nil))
+    :else (:db/id tag)))
 
 (defn block-class-properties
   "Return cached class metadata relevant to a block's direct class tags."
@@ -206,8 +206,7 @@
     (swap! *entries assoc repo {:db db
                                 :repo repo
                                 :generation generation
-                                :key key
-                                :metadata metadata})
+                                :key key})
     metadata))
 
 (defn- build-entry!
@@ -228,10 +227,10 @@
   "Return cached metadata for `db`, building a non-published fallback when needed."
   [db]
   (if-let [entry (active-entry-for-db db)]
-    (if (cache/has? @*cache (:key entry))
+    (if-let [metadata (cache/lookup @*cache (:key entry))]
       (do
         (swap! *cache cache/hit (:key entry))
-        (:metadata entry))
+        metadata)
       (build-entry! (:repo entry) (:generation entry) db))
     (build-metadata db)))
 

@@ -25,6 +25,19 @@
           :affected-keys #{}}
          overrides))
 
+(defn- block-patch
+  [basis-rev blocks]
+  {:basis-rev basis-rev
+   :slots (into {}
+                (map (fn [[block-uuid block-value]]
+                       [[:block block-uuid] {:value block-value}]))
+                blocks)})
+
+(defn- children-patch
+  [basis-rev parent-uuid tx-id items]
+  {:basis-rev basis-rev
+   :slots {[:children parent-uuid] {:tx-id tx-id :items items}}})
+
 (defn- finish-async!
   [done promise]
   (-> promise
@@ -117,16 +130,14 @@
                             (fn [graph-id requested-uuid]
                               (swap! block-loads conj [graph-id requested-uuid])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
-                                {page-uuid (block page-uuid 1 "Large page")}}))
+                               (block-patch
+                                1 {page-uuid (block page-uuid 1 "Large page")})))
                             subs/<load-children
                             (fn [graph-id requested-uuid]
                               (swap! membership-loads conj
                                      [graph-id requested-uuid])
-                              (p/resolved {:basis-rev 1
-                                           :parent-tx-id 1
-                                           :items items}))]
+                              (p/resolved
+                               (children-patch 1 requested-uuid 1 items)))]
               (let [mounted (mount-normal-page! page-uuid)]
                 (p/let [_ (p/delay 0)]
                   (is (= [[test-graph-id page-uuid]] @block-loads))
@@ -155,20 +166,17 @@
             (p/with-redefs [subs/<load-block
                             (fn [_graph-id _requested-uuid]
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
-                                {page-uuid (block page-uuid 1 "Page")}}))
+                               (block-patch
+                                1 {page-uuid (block page-uuid 1 "Page")})))
                             subs/<load-children
                             (fn [_graph-id parent-uuid]
                               (swap! membership-loads conj parent-uuid)
                               (p/resolved
-                               (if (= page-uuid parent-uuid)
-                                 {:basis-rev 1
-                                  :parent-tx-id 1
-                                  :items [[top-level-uuid "a"]]}
-                                 {:basis-rev 1
-                                  :parent-tx-id 1
-                                  :items [[nested-uuid "a"]]})))]
+                               (children-patch
+                                1 parent-uuid 1
+                                (if (= page-uuid parent-uuid)
+                                  [[top-level-uuid "a"]]
+                                  [[nested-uuid "a"]]))))]
               (let [mounted (mount-normal-page! page-uuid)]
                 (p/let [_ (p/delay 0)
                         unsubscribe-nested
@@ -198,18 +206,17 @@
             (p/with-redefs [subs/<load-block
                             (fn [_graph-id _requested-uuid]
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks {page-uuid
-                                         (block page-uuid 1 "Page")}}))
+                               (block-patch
+                                1 {page-uuid (block page-uuid 1 "Page")})))
                             subs/<load-children
-                            (fn [_graph-id _requested-uuid]
+                            (fn [_graph-id requested-uuid]
                               (swap! membership-loads inc)
                               (p/resolved
-                               {:basis-rev 1
-                                :parent-tx-id 1
-                                :items [[child-a "a"]
-                                        [child-b "b"]
-                                        [child-c "c"]]}))]
+                               (children-patch
+                                1 requested-uuid 1
+                                [[child-a "a"]
+                                 [child-b "b"]
+                                 [child-c "c"]])))]
               (let [mounted (mount-normal-page! page-uuid)
                     patch! (fn [rev remove-items upsert-items]
                              (subs/apply-delta!

@@ -102,6 +102,7 @@
         (normalize-display-property-rows (:hidden-properties result))
         watch-keys (into #{[:display-properties block-uuid]
                            [:class-tree]
+                           [:property-config]
                            [:property-membership :block/closed-value-property]}
                          (concat full-watch-keys hidden-watch-keys))]
     [watch-keys
@@ -134,7 +135,8 @@
           watch-uuids (into (set property-uuids)
                             (map property-uuid!)
                             candidate-properties)]
-      [(into #{[:entity block-uuid]}
+      [(into #{[:entity block-uuid]
+               [:property-config]}
              (map (fn [property-uuid] [:entity property-uuid]))
              watch-uuids)
        property-uuids])))

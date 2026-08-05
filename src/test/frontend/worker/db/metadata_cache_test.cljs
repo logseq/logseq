@@ -55,6 +55,22 @@
     (is (= [:user.property/color]
            (mapv :db/ident class-properties)))))
 
+(deftest metadata-cache-keeps-unordered-class-properties-after-ordered-properties-test
+  (let [conn (conn-with-metadata "Color" "Topic")]
+    (d/transact! conn
+                 [{:db/ident :user.property/unordered
+                   :block/uuid (random-uuid)
+                   :block/title "Unordered"
+                   :block/tags :logseq.class/Property
+                   :logseq.property/type :default
+                   :db/cardinality :db.cardinality/one}
+                  [:db/add :user.class/Topic
+                   :logseq.property.class/properties
+                   :user.property/unordered]])
+    (is (= [:user.property/color :user.property/unordered]
+           (get-in (metadata-cache/build-metadata @conn)
+                   [:classes-by-ident :user.class/Topic :property-idents])))))
+
 (deftest metadata-cache-reuses-a-startup-entry-and-separates-graphs-test
   (metadata-cache/reset-for-tests!)
   (let [conn-a (conn-with-metadata "Color A" "Topic A")
@@ -77,6 +93,24 @@
     (is (= "Color B"
            (get-in (metadata-cache/metadata-for-db @conn-b)
                    [:properties-by-ident :user.property/color :block/title])))))
+
+(deftest metadata-cache-rebuilds-an-evicted-active-graph-once-test
+  (metadata-cache/reset-for-tests!)
+  (let [conns (mapv (fn [index]
+                      (conn-with-metadata (str "Color " index)
+                                          (str "Topic " index)))
+                    (range 9))
+        first-db @(first conns)
+        _ (metadata-cache/initialize! "repo-0" first-db)
+        first-metadata (metadata-cache/metadata-for-db first-db)]
+    (doseq [index (range 1 9)]
+      (metadata-cache/initialize! (str "repo-" index) @(get conns index)))
+    (let [rebuilt (metadata-cache/metadata-for-db first-db)]
+      (is (not (identical? first-metadata rebuilt)))
+      (is (= "Color 0"
+             (get-in rebuilt
+                     [:properties-by-ident :user.property/color :block/title])))
+      (is (identical? rebuilt (metadata-cache/metadata-for-db first-db))))))
 
 (deftest metadata-cache-refreshes-once-for-one-metadata-transaction-test
   (metadata-cache/reset-for-tests!)

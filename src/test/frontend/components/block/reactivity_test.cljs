@@ -36,6 +36,14 @@
           :affected-keys #{}}
          overrides))
 
+(defn- block-patch
+  [basis-rev blocks]
+  {:basis-rev basis-rev
+   :slots (into {}
+                (map (fn [[block-uuid block-value]]
+                       [[:block block-uuid] {:value block-value}]))
+                blocks)})
+
 (defn- finish-async!
   [done promise]
   (-> promise
@@ -127,10 +135,9 @@
                         _ (is (= [[test-graph-id block-uuid]] @load-calls)
                               "All mounted surfaces share the canonical UUID request.")
                         _ (p/resolve! request
-                                      {:basis-rev 1
-                                       :blocks
-                                       {block-uuid
-                                        (block block-uuid 1 "before")}})
+                                      (block-patch
+                                       1 {block-uuid
+                                          (block block-uuid 1 "before")}))
                         _ (p/delay 0)
                         _ (is (= 2 @(:render-count main-row)))
                         _ (is (= 2 @(:render-count sidebar-row)))
@@ -163,10 +170,9 @@
             (p/with-redefs [subs/<load-block
                             (fn [_graph-id requested-uuid]
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
-                                {requested-uuid
-                                 (block requested-uuid 1 "mounted")}}))]
+                               (block-patch
+                                1 {requested-uuid
+                                   (block requested-uuid 1 "mounted")})))]
               (let [row (mount-block-row! block-uuid :main render-events)]
                 (p/let [_ (p/delay 0)
                         renders-before @(:render-count row)
@@ -195,8 +201,7 @@
             (p/with-redefs [subs/<load-block
                             (fn [_graph-id _requested-uuid]
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks {block-uuid original}}))]
+                               (block-patch 1 {block-uuid original})))]
               (let [row (mount-block-row! block-uuid :sidebar render-events)]
                 (p/let [_ (p/delay 0)
                         original-snapshot (subs/block-snapshot block-uuid)
@@ -240,10 +245,9 @@
                         _ (unmount-row! first-row)
                         _ (p/delay 0)
                         _ (p/resolve! first-request
-                                      {:basis-rev 10
-                                       :blocks
-                                       {block-uuid
-                                        (block block-uuid 10 "late")}})
+                                      (block-patch
+                                       10 {block-uuid
+                                           (block block-uuid 10 "late")}))
                         _ (p/delay 0)
                         _ (is (= first-render-count
                                  @(:render-count first-row))
@@ -257,10 +261,9 @@
                         _ (is (= 2 @load-calls)
                               "A later mount starts a fresh canonical request.")
                         _ (p/resolve! second-request
-                                      {:basis-rev 11
-                                       :blocks
-                                       {block-uuid
-                                        (block block-uuid 11 "current")}})
+                                      (block-patch
+                                       11 {block-uuid
+                                           (block block-uuid 11 "current")}))
                         _ (p/delay 0)]
                   (is (= "current"
                          (-> (subs/block-snapshot block-uuid)

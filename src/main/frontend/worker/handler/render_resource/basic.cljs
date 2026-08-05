@@ -157,14 +157,16 @@
       (common/fail! "Invalid initial journal count"
              {:requested-count requested-count}))
     (let [journal-uuids (mapv :block/uuid (ldb/get-latest-journals db))
-          initial-uuids (take (min 50 requested-count) journal-uuids)]
+          initial-uuids (vec (take (min 50 requested-count) journal-uuids))
+          slots (into {}
+                      (mapcat (fn [journal-uuid]
+                                (common/block-bundle-slots
+                                 (collect-flat-journal db journal-uuid))))
+                      initial-uuids)]
       [#{[:journals]}
        {:journal-uuids journal-uuids
-        :bundles (into {}
-                       (map (fn [journal-uuid]
-                              [journal-uuid
-                               (collect-flat-journal db journal-uuid)]))
-                       initial-uuids)}])))
+        :loaded-uuids initial-uuids}
+       slots])))
 
 (defn- recycle-roots
   [db _resource-key _runtime]
@@ -211,11 +213,6 @@
        :blocks (:blocks (block-handler/canonical-blocks db (vec seen)))
        :children children})))
 
-(defn- journal-bundle
-  [db resource-key _runtime]
-  (let [journal-uuid (common/require-uuid! :journal-uuid (second resource-key))]
-    [#{} (collect-flat-journal db journal-uuid)]))
-
 (defn- journal-window
   [db resource-key _runtime]
   (let [journal-uuids (second resource-key)]
@@ -224,11 +221,12 @@
                    (every? uuid? journal-uuids))
       (common/fail! "Invalid journal window" {:journal-uuids journal-uuids}))
     [#{}
-     {:bundles (into {}
-                     (map (fn [journal-uuid]
-                            [journal-uuid
-                             (collect-flat-journal db journal-uuid)]))
-                     journal-uuids)}]))
+     {:loaded-uuids journal-uuids}
+     (into {}
+           (mapcat (fn [journal-uuid]
+                     (common/block-bundle-slots
+                      (collect-flat-journal db journal-uuid))))
+           journal-uuids)]))
 
 (defn- block-reactions
   [db resource-key _runtime]
@@ -421,7 +419,9 @@
         (let [current-user
               (common/entity-by-uuid! db :current-user-uuid current-user-uuid)
               current-user-id (:db/id current-user)]
-          [#{[:entity page-uuid] [:graph]}
+          [#{[:entity page-uuid]
+             [:children page-uuid]
+             [:attr :logseq.property/created-by-ref]}
            (->> children
                 (filter (fn [child]
                           (let [creator-id
@@ -445,7 +445,6 @@
    :journals (common/renderer 2 journals)
    :recycle-roots (common/renderer 1 recycle-roots)
    :property-choices (common/renderer 2 property-choices)
-   :journal-bundle (common/renderer 2 journal-bundle)
    :journal-window (common/renderer 2 journal-window)
    :block-reactions (common/renderer 3 block-reactions)
    :block-ref-count (common/renderer 2 block-ref-count)

@@ -26,6 +26,57 @@
           :affected-keys #{}}
          overrides))
 
+(defn- block-patch
+  [basis-rev blocks]
+  {:basis-rev basis-rev
+   :slots (into {}
+                (map (fn [[block-uuid block-value]]
+                       [[:block block-uuid] {:value block-value}]))
+                blocks)})
+
+(defn- missing-block-patch
+  [basis-rev block-uuid]
+  {:basis-rev basis-rev
+   :slots {[:block block-uuid] {:missing? true}}})
+
+(defn- children-patch
+  [basis-rev parent-uuid tx-id items]
+  {:basis-rev basis-rev
+   :slots {[:children parent-uuid] {:tx-id tx-id :items items}}})
+
+(defn- subtree-patch
+  [basis-rev blocks children]
+  {:basis-rev basis-rev
+   :slots (merge
+           (:slots (block-patch basis-rev blocks))
+           (into {}
+                 (map (fn [[parent-uuid {:keys [parent-tx-id items]}]]
+                        [[:children parent-uuid]
+                         {:tx-id parent-tx-id :items items}]))
+                 children))})
+
+(defn- resource-patch
+  [basis-rev resource-key watch value]
+  {:basis-rev basis-rev
+   :slots {[:resource resource-key] {:watch watch :value value}}})
+
+(defn- exact-resource-patch
+  [basis-rev resource-key watch-keys value]
+  (resource-patch basis-rev resource-key
+                  {:keys watch-keys :all? false}
+                  value))
+
+(defn- all-resource-patch
+  [basis-rev resource-key value]
+  (resource-patch basis-rev resource-key
+                  {:keys #{} :all? true}
+                  value))
+
+(defn- grouped-patch
+  [patch slot-keys]
+  (assoc patch :groups
+         (into {} (map (fn [slot-key] [slot-key #{slot-key}])) slot-keys)))
+
 (defn- finish-async!
   [done promise]
   (-> promise
@@ -117,9 +168,9 @@
                         _ (is (= {:status :missing}
                                  (subs/block-snapshot block-uuid)))
                         _ (p/resolve! request
-                                      {:basis-rev 1
-                                       :blocks {block-uuid
-                                                (block block-uuid 1 "late")}})
+                                      (block-patch
+                                       1 {block-uuid
+                                          (block block-uuid 1 "late")}))
                         _ (p/delay 0)]
                   (is (= {:status :missing}
                          (subs/block-snapshot block-uuid)))
@@ -145,9 +196,9 @@
                         _ (subs/apply-delta! (delta 5 {:blocks {block-uuid current}}))
                         current-snapshot (subs/block-snapshot block-uuid)
                         _ (p/resolve! request
-                                      {:basis-rev 4
-                                       :blocks {block-uuid
-                                                (block block-uuid 99 "stale basis")}})
+                                      (block-patch
+                                       4 {block-uuid
+                                          (block block-uuid 99 "stale basis")}))
                         _ (p/delay 0)]
                   (is (identical? current-snapshot
                                   (subs/block-snapshot block-uuid)))
@@ -171,9 +222,9 @@
               (let [unsubscribe (subs/subscribe-block! loaded-uuid (fn []))]
                 (p/let [_ (p/delay 0)
                         _ (p/resolve! request
-                                      {:basis-rev 10
-                                       :blocks {loaded-uuid
-                                                (block loaded-uuid 10 "loaded")}})
+                                      (block-patch
+                                       10 {loaded-uuid
+                                           (block loaded-uuid 10 "loaded")}))
                         _ (p/delay 0)
                         unsubscribe-changed
                         (subs/subscribe-block! changed-uuid (fn []))]
@@ -227,18 +278,18 @@
                         _ (p/delay 0)
                         notification-count-after-reset @notifications
                         _ (p/resolve! old-request
-                                      {:basis-rev 100
-                                       :blocks {block-uuid
-                                                (block block-uuid 100 "old generation")}})
+                                      (block-patch
+                                       100 {block-uuid
+                                            (block block-uuid 100 "old generation")}))
                         _ (p/delay 0)]
                   (is (= {:status :loading}
                          (subs/block-snapshot block-uuid)))
                   (is (= notification-count-after-reset @notifications)
                       "An old generation completion must not notify cleared listeners.")
                   (p/resolve! new-request
-                              {:basis-rev 101
-                               :blocks {block-uuid
-                                        (block block-uuid 101 "new generation")}})
+                              (block-patch
+                               101 {block-uuid
+                                    (block block-uuid 101 "new generation")}))
                   (p/let [_ (p/delay 0)]
                     (is (= {:status :ready
                             :value (block block-uuid 101 "new generation")}
@@ -283,6 +334,20 @@
                           "Untouched exact-key snapshots must retain identity.")))
                   (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
 
+(deftest mounted-resource-index-excludes-block-slots-test
+  (let [block-uuids (vec (repeatedly 1000 random-uuid))
+        resource-key [:page-identity "indexed resource"]
+        pending (p/deferred)]
+    (with-redefs [subs/<load-block (fn [& _] pending)
+                  subs/<load-resource (fn [& _] pending)]
+      (let [unsubscribes (conj (mapv #(subs/subscribe-block! % (fn []))
+                                     block-uuids)
+                               (subs/subscribe-resource! resource-key (fn [])))]
+        (is (= #{[:resource resource-key]}
+               (:resource-slot-keys @@#'subs/*store)))
+        (run! (fn [unsubscribe] (unsubscribe)) unsubscribes)
+        (is (empty? (:resource-slot-keys @@#'subs/*store)))))))
+
 (deftest direct-response-and-broadcast-apply-one-graph-revision-once-test
   (let [block-uuid (random-uuid)
         before (block block-uuid 1 "before")
@@ -323,10 +388,10 @@
                             subs/<load-children
                             (fn [graph-id requested-parent]
                               (swap! loader-calls conj [graph-id requested-parent])
-                              (p/resolved {:basis-rev 1
-                                           :parent-tx-id 10
-                                           :items [[child-a "a"]
-                                                   [child-b "c"]]}))]
+                              (p/resolved
+                               (children-patch 1 requested-parent 10
+                                               [[child-a "a"]
+                                                [child-b "c"]])))]
               (let [children-notifications (atom 0)
                     observations (atom [])
                     unsubscribe-children
@@ -394,9 +459,9 @@
                                 (if (= 1 (count (filter #(= parent-uuid (second %))
                                                         @loader-calls)))
                                   parent-initial-request
-                                  (p/resolved {:basis-rev 2
-                                               :parent-tx-id 11
-                                               :items [[new-child-uuid "b"]]}))
+                                  (p/resolved
+                                   (children-patch 2 requested-parent 11
+                                                   [[new-child-uuid "b"]])))
 
                                 (= unrelated-parent-uuid requested-parent)
                                 unrelated-request
@@ -429,13 +494,11 @@
                                  (subs/children-snapshot unrelated-parent-uuid))
                               "The delta must not invalidate an unrelated pending parent.")
                         _ (p/resolve! parent-initial-request
-                                      {:basis-rev 1
-                                       :parent-tx-id 10
-                                       :items [[old-child-uuid "a"]]})
+                                      (children-patch 1 parent-uuid 10
+                                                      [[old-child-uuid "a"]]))
                         _ (p/resolve! unrelated-request
-                                      {:basis-rev 1
-                                       :parent-tx-id 20
-                                       :items [[unrelated-child-uuid "a"]]})
+                                      (children-patch 1 unrelated-parent-uuid 20
+                                                      [[unrelated-child-uuid "a"]]))
                         _ (p/delay 0)
                         _ (p/delay 0)]
                   (is (= {parent-uuid 2
@@ -464,9 +527,9 @@
                             (fn [graph-id requested-parent]
                               (swap! loader-calls conj [graph-id requested-parent])
                               (if (= 1 (count @loader-calls))
-                                (p/resolved {:basis-rev 1
-                                             :parent-tx-id 10
-                                             :items [[child-a "a"]]})
+                                (p/resolved
+                                 (children-patch 1 requested-parent 10
+                                                 [[child-a "a"]]))
                                 reload-request))]
               (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
                 (p/let [_ (p/delay 0)
@@ -498,9 +561,8 @@
                         _ (is (= 2 (count @loader-calls))
                               "Repeated invalidation shares the in-flight typed reload.")
                         _ (p/resolve! reload-request
-                                      {:basis-rev 3
-                                       :parent-tx-id 11
-                                       :items [[child-b "b"]]})
+                                      (children-patch 3 parent-uuid 11
+                                                      [[child-b "b"]]))
                         _ (p/delay 0)]
                   (is (= {:status :ready :value [child-b]}
                          (subs/children-snapshot parent-uuid)))
@@ -516,9 +578,9 @@
             (p/with-redefs [subs/<load-children
                             (fn [graph-id requested-parent]
                               (swap! loader-calls conj [graph-id requested-parent])
-                              (p/resolved {:basis-rev 1
-                                           :parent-tx-id 10
-                                           :items [[child-before "a"]]}))]
+                              (p/resolved
+                               (children-patch 1 requested-parent 10
+                                               [[child-before "a"]])))]
               (let [unsubscribe-first
                     (subs/subscribe-children! parent-uuid (fn []))
                     unsubscribe-second
@@ -585,18 +647,16 @@
                         _ (is (= {:status :loading}
                                  (subs/resource-snapshot resource-key)))
                         _ (p/resolve! block-request
-                                      {:basis-rev 1
-                                       :blocks {block-uuid
-                                                (block block-uuid 1 "loaded")}})
+                                      (block-patch
+                                       1 {block-uuid
+                                          (block block-uuid 1 "loaded")}))
                         _ (p/resolve! children-request
-                                      {:basis-rev 1
-                                       :parent-tx-id 1
-                                       :items [[child-uuid "a"]]})
+                                      (children-patch 1 parent-uuid 1
+                                                      [[child-uuid "a"]]))
                         _ (p/resolve! resource-request
-                                      {:basis-rev 1
-                                       :key resource-key
-                                       :watch-keys #{[:journal journal-uuid]}
-                                       :value {:journal-uuid journal-uuid}})
+                                      (exact-resource-patch
+                                       1 resource-key #{[:journal journal-uuid]}
+                                       {:journal-uuid journal-uuid}))
                         _ (p/delay 0)]
                   (is (= {:status :ready
                           :value (block block-uuid 1 "loaded")}
@@ -623,19 +683,17 @@
             (p/with-redefs [subs/<load-children
                             (fn [_graph-id _parent-uuid]
                               (p/resolved
-                               {:basis-rev 12
-                                :parent-tx-id 10
-                                :items [[child-uuid "a"]]
-                                :blocks {parent-uuid parent
-                                         child-uuid child
-                                         grandchild-uuid grandchild}
-                                :children
+                               (subtree-patch
+                                12
+                                {parent-uuid parent
+                                 child-uuid child
+                                 grandchild-uuid grandchild}
                                 {parent-uuid {:parent-tx-id 10
                                               :items [[child-uuid "a"]]}
                                  child-uuid {:parent-tx-id 11
                                              :items [[grandchild-uuid "a"]]}
                                  grandchild-uuid {:parent-tx-id 12
-                                                  :items []}}}))]
+                                                  :items []}})))]
               (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
                 (p/let [_ (p/delay 0)]
                   (is (= {:status :ready :value child}
@@ -661,24 +719,20 @@
                             (fn [graph-id requested-uuid]
                               (swap! calls conj [:block graph-id requested-uuid])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks {requested-uuid
-                                         (block requested-uuid 1 "loaded")}}))
+                               (block-patch
+                                1 {requested-uuid
+                                   (block requested-uuid 1 "loaded")})))
                             subs/<load-children
                             (fn [graph-id requested-parent]
                               (swap! calls conj [:children graph-id requested-parent])
                               (p/resolved
-                               {:basis-rev 1
-                                :parent-tx-id 1
-                                :items [[child-uuid "a"]]}))
+                               (children-patch 1 requested-parent 1
+                                               [[child-uuid "a"]])))
                             subs/<load-resource
                             (fn [graph-id requested-key]
                               (swap! calls conj [:resource graph-id requested-key])
                               (p/resolved
-                               {:basis-rev 1
-                                :key requested-key
-                                :watch-keys #{[:graph]}
-                                :value :loaded}))]
+                               (all-resource-patch 1 requested-key :loaded)))]
               (let [unsubscribes
                     [(subs/subscribe-block! block-uuid (fn []))
                      (subs/subscribe-children! parent-uuid (fn []))
@@ -721,10 +775,9 @@
                                 (if (and (= key-a resource-key)
                                          (> (count (filter #{key-a} @calls)) 1))
                                   reload-a
-                                  (p/resolved {:basis-rev 1
-                                               :key resource-key
-                                               :watch-keys #{watch-key}
-                                               :value value}))))]
+                                  (p/resolved
+                                   (exact-resource-patch
+                                    1 resource-key #{watch-key} value)))))]
               (let [unsubscribe-a (subs/subscribe-resource! key-a (fn []))
                     unsubscribe-b (subs/subscribe-resource! key-b (fn []))
                     unsubscribe-c (subs/subscribe-resource! key-c (fn []))]
@@ -746,10 +799,8 @@
                         _ (is (= 2 (count (filter #{key-a} @calls)))
                               "A mounted stale resource shares its in-flight reload.")
                         _ (p/resolve! reload-a
-                                      {:basis-rev 3
-                                       :key key-a
-                                       :watch-keys #{watch-a}
-                                       :value :a-reloaded})
+                                      (exact-resource-patch
+                                       3 key-a #{watch-a} :a-reloaded))
                         _ (p/delay 0)]
                   (is (= {:status :ready :value :a-reloaded}
                          (subs/resource-snapshot key-a)))
@@ -763,6 +814,34 @@
                     (is (= calls-before @calls)
                         "Invalidated unmounted resources never start requests.")))))))))
 
+(deftest equal-resource-reload-retains-snapshot-identity-test
+  (async done
+         (let [resource-key [:page-identity "same page"]
+               watch-key [:page-lookup "same page"]
+               calls (atom 0)
+               notifications (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id requested-key]
+                              (p/resolved
+                               (exact-resource-patch
+                                (swap! calls inc) requested-key #{watch-key}
+                                :same-value)))]
+              (let [unsubscribe
+                    (subs/subscribe-resource! resource-key
+                                              #(swap! notifications inc))]
+                (p/let [_ (p/delay 0)
+                        snapshot (subs/resource-snapshot resource-key)
+                        _ (subs/apply-delta!
+                           (delta 2 {:affected-keys #{watch-key}}))
+                        _ (p/delay 0)]
+                  (is (= 2 @calls))
+                  (is (= 1 @notifications))
+                  (is (identical? snapshot
+                                  (subs/resource-snapshot resource-key)))
+                  (unsubscribe))))))))
+
 (deftest custom-query-reload-waits-for-two-seconds-of-idle-test
   (async done
          (let [resource-key [:query {:kind :datalog :query [:find '?b]}]
@@ -775,10 +854,10 @@
             (p/with-redefs [subs/<load-resource
                             (fn [_graph-id requested-key]
                               (swap! calls conj requested-key)
-                              (p/resolved {:basis-rev (if (= 1 (count @calls)) 1 3)
-                                           :key requested-key
-                                           :watch-keys #{watch-key}
-                                           :value :result}))
+                              (p/resolved
+                               (exact-resource-patch
+                                (if (= 1 (count @calls)) 1 3)
+                                requested-key #{watch-key} :result)))
                             subs/set-query-reload-timeout!
                             (fn [callback delay-ms]
                               (let [timer-id (count @timers)]
@@ -817,10 +896,9 @@
             (p/with-redefs [subs/<load-resource
                             (fn [_graph-id requested-key]
                               (swap! calls inc)
-                              (p/resolved {:basis-rev 1
-                                           :key requested-key
-                                           :watch-keys #{watch-key}
-                                           :value []}))]
+                              (p/resolved
+                               (exact-resource-patch
+                                1 requested-key #{watch-key} [])))]
               (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
                 (p/let [_ (p/delay 0)
                         _ (subs/apply-delta!
@@ -844,11 +922,11 @@
                             (fn [_graph-id requested-uuid]
                               (swap! calls conj requested-uuid)
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
+                               (block-patch
+                                1
                                 {source-uuid (block source-uuid 1 "Source")
                                  reference-uuid
-                                 (block reference-uuid 1 "Reference")}}))]
+                                 (block reference-uuid 1 "Reference")})))]
               (let [unsubscribe-source
                     (subs/subscribe-block! source-uuid (fn []))]
                 (p/let [_ (p/delay 0)
@@ -876,10 +954,9 @@
                             (fn [_graph-id requested-key]
                               (is (= resource-key requested-key))
                               (case (swap! calls inc)
-                                1 (p/resolved {:basis-rev 1
-                                               :key resource-key
-                                               :watch-keys #{watch-key}
-                                               :value :initial})
+                                1 (p/resolved
+                                   (exact-resource-patch
+                                    1 resource-key #{watch-key} :initial))
                                 2 first-reload
                                 3 follow-up
                                 (p/rejected
@@ -896,18 +973,14 @@
                         _ (is (= 2 @calls)
                               "Repeated invalidations share the current request.")
                         _ (p/resolve! first-reload
-                                      {:basis-rev 2
-                                       :key resource-key
-                                       :watch-keys #{watch-key}
-                                       :value :stale-reload})
+                                      (exact-resource-patch
+                                       2 resource-key #{watch-key} :stale-reload))
                         _ (p/delay 0)
                         _ (is (= 3 @calls)
                               "Invalidation during the request schedules one follow-up.")
                         _ (p/resolve! follow-up
-                                      {:basis-rev 4
-                                       :key resource-key
-                                       :watch-keys #{watch-key}
-                                       :value :fresh})
+                                      (exact-resource-patch
+                                       4 resource-key #{watch-key} :fresh))
                         _ (p/delay 0)]
                   (is (= 3 @calls))
                   (is (= {:status :ready :value :fresh}
@@ -924,21 +997,22 @@
                             (fn [api graph-id payload]
                               (swap! worker-calls conj [api graph-id payload])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
-                                (into {}
-                                      (map (fn [block-uuid]
-                                             [block-uuid
-                                              (block block-uuid 1 "loaded")]))
-                                      payload)}))]
+                               (grouped-patch
+                                (block-patch
+                                 1 (into {}
+                                         (map (fn [block-uuid]
+                                                [block-uuid
+                                                 (block block-uuid 1 "loaded")]))
+                                         (:blocks payload)))
+                                (mapv #(vector :block %) (:blocks payload)))))]
               (let [unsubscribes
                     (mapv #(subs/subscribe-block! % (fn [])) block-uuids)]
                 (p/let [_ (p/delay 0)
                         calls @worker-calls
-                        payloads (mapv #(nth % 2) calls)]
+                        payloads (mapv #(get-in % [2 :blocks]) calls)]
                   (is (= 1 (count calls))
                       "One view prefetch tick produces one canonical block response.")
-                  (is (every? #(= :thread-api/get-canonical-blocks (first %)) calls))
+                  (is (every? #(= :thread-api/get-render-snapshots (first %)) calls))
                   (is (every? #(= test-graph-id (second %)) calls))
                   (is (every? vector? payloads)
                       "The typed worker API receives plain UUID vectors.")
@@ -947,6 +1021,43 @@
                   (is (every? #(= :ready (:status (subs/block-snapshot %)))
                               block-uuids))
                   (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
+
+(deftest batched-block-load-cannot-overwrite-a-newer-sibling-slot-test
+  (async done
+         (let [block-a (random-uuid)
+               block-b (random-uuid)
+               request (p/deferred)
+               worker-calls (atom [])
+               stale-a (block block-a 1 "A from load")
+               stale-b (block block-b 1 "B from load")
+               current-b (block block-b 2 "B from delta")]
+           (finish-async!
+            done
+            (p/with-redefs [state/<invoke-db-worker
+                            (fn [api graph-id payload]
+                              (swap! worker-calls conj [api graph-id payload])
+                              request)]
+              (let [unsubscribe-a (subs/subscribe-block! block-a (fn []))
+                    unsubscribe-b (subs/subscribe-block! block-b (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= 1 (count @worker-calls)))
+                        _ (subs/apply-delta!
+                           (delta 2 {:blocks {block-b current-b}}))
+                        current-b-snapshot (subs/block-snapshot block-b)
+                        _ (p/resolve! request
+                                      (grouped-patch
+                                       (block-patch 1 {block-a stale-a
+                                                       block-b stale-b})
+                                       [[:block block-a] [:block block-b]]))
+                        _ (p/delay 0)]
+                  (is (= {:status :ready :value stale-a}
+                         (subs/block-snapshot block-a)))
+                  (is (identical? current-b-snapshot
+                                  (subs/block-snapshot block-b))
+                      "Applying A's batch result must not replay stale B data.")
+                  (is (= current-b (:value (subs/block-snapshot block-b))))
+                  (unsubscribe-b)
+                  (unsubscribe-a))))))))
 
 (deftest block-subscriptions-coalesce-loads-across-microtasks-test
   (async done
@@ -963,13 +1074,14 @@
                             (fn [api graph-id payload]
                               (swap! worker-calls conj [api graph-id payload])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks
-                                (into {}
-                                      (map (fn [block-uuid]
-                                             [block-uuid
-                                              (block block-uuid 1 "loaded")]))
-                                      payload)}))]
+                               (grouped-patch
+                                (block-patch
+                                 1 (into {}
+                                         (map (fn [block-uuid]
+                                                [block-uuid
+                                                 (block block-uuid 1 "loaded")]))
+                                         (:blocks payload)))
+                                (mapv #(vector :block %) (:blocks payload)))))]
               (p/let [unsubscribe-a (subs/subscribe-block! block-a (fn []))
                       _ (p/resolved nil)
                       unsubscribe-b (subs/subscribe-block! block-b (fn []))
@@ -977,9 +1089,11 @@
                             "Promise microtasks must not split a renderer batch.")
                       _ ((first @scheduled))
                       _ (p/delay 0)]
-                (is (= [[:thread-api/get-canonical-blocks
+                (is (= [[:thread-api/get-render-snapshots
                          test-graph-id
-                         [block-a block-b]]]
+                         {:blocks [block-a block-b]
+                          :children []
+                          :resources []}]]
                        @worker-calls))
                 (unsubscribe-a)
                 (unsubscribe-b)))))))
@@ -994,17 +1108,20 @@
                             (fn [api graph-id payload]
                               (swap! worker-calls conj [api graph-id payload])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks {block-uuid
-                                         (block block-uuid 1 "loaded")}}))]
+                               (grouped-patch
+                                (block-patch
+                                 1 {block-uuid (block block-uuid 1 "loaded")})
+                                [[:block block-uuid]])))]
               (let [unsubscribes
                     (mapv (fn [_]
                             (subs/subscribe-block! block-uuid (fn [])))
                           (range 100))]
                 (p/let [_ (p/delay 0)]
-                  (is (= [[:thread-api/get-canonical-blocks
+                  (is (= [[:thread-api/get-render-snapshots
                            test-graph-id
-                           [block-uuid]]]
+                           {:blocks [block-uuid]
+                            :children []
+                            :resources []}]]
                          @worker-calls))
                   (is (= {:status :ready
                           :value (block block-uuid 1 "loaded")}
@@ -1024,29 +1141,27 @@
             (p/with-redefs [state/<invoke-db-worker
                             (fn [api graph-id payload]
                               (swap! worker-calls conj [api graph-id payload])
-                              (if (vector? payload)
+                              (let [parents (:children payload)]
                                 (p/resolved
-                                 {:basis-rev 1
-                                  :children
-                                  (into {}
-                                        (map (fn [parent-uuid]
-                                               [parent-uuid
-                                                {:parent-tx-id 1
-                                                 :items [[(get child-by-parent parent-uuid)
-                                                          "a"]]}]))
-                                        payload)})
-                                (p/resolved
-                                 {:basis-rev 1
-                                  :parent-tx-id 1
-                                  :items [[(get child-by-parent payload) "a"]]})))]
+                                 (grouped-patch
+                                  (subtree-patch
+                                   1 {}
+                                   (into {}
+                                         (map (fn [parent-uuid]
+                                                [parent-uuid
+                                                 {:parent-tx-id 1
+                                                  :items [[(get child-by-parent parent-uuid)
+                                                           "a"]]}]))
+                                         parents))
+                                  (mapv #(vector :children %) parents)))))]
               (let [unsubscribes
                     (mapv #(subs/subscribe-children! % (fn [])) parent-uuids)]
                 (p/let [_ (p/delay 0)
                         calls @worker-calls
-                        payloads (mapv #(nth % 2) calls)]
+                        payloads (mapv #(get-in % [2 :children]) calls)]
                   (is (<= (count calls) 4)
                       "Direct-child loads use the same bounded one-tick batching policy.")
-                  (is (every? #(= :thread-api/get-direct-children (first %)) calls))
+                  (is (every? #(= :thread-api/get-render-snapshots (first %)) calls))
                   (is (every? #(= test-graph-id (second %)) calls))
                   (is (every? vector? payloads)
                       "Batching stays internal; the worker receives parent UUID vectors.")
@@ -1068,25 +1183,26 @@
            (finish-async!
             done
             (p/with-redefs [state/<invoke-db-worker
-                            (fn [api graph-id requested-keys]
+                            (fn [api graph-id request]
                               (swap! worker-calls conj
-                                     [api graph-id requested-keys])
-                              (p/resolved
-                               {:basis-rev 1
-                                :resources
-                                (into {}
-                                      (map (fn [resource-key]
-                                             [resource-key
-                                              {:watch-keys #{[:graph]}
-                                               :value resource-key}]))
-                                      requested-keys)}))]
+                                     [api graph-id request])
+                              (let [resource-keys (:resources request)
+                                    slots (into {}
+                                                (map (fn [resource-key]
+                                                       [[:resource resource-key]
+                                                        {:watch {:keys #{} :all? true}
+                                                         :value resource-key}]))
+                                                resource-keys)]
+                                (p/resolved
+                                 (grouped-patch {:basis-rev 1 :slots slots}
+                                                (keys slots)))))]
               (let [unsubscribes
                     (mapv #(subs/subscribe-resource! % (fn [])) resource-keys)]
                 (p/let [_ (p/delay 0)
                         calls @worker-calls
-                        payloads (mapv #(nth % 2) calls)]
+                        payloads (mapv #(get-in % [2 :resources]) calls)]
                   (is (= 4 (count calls)))
-                  (is (every? #(= :thread-api/get-render-resources (first %))
+                  (is (every? #(= :thread-api/get-render-snapshots (first %))
                               calls))
                   (is (every? #(= test-graph-id (second %)) calls))
                   (is (every? vector? payloads))
@@ -1110,18 +1226,19 @@
                               (swap! worker-calls conj
                                      [api graph-id requested-keys])
                               (p/resolved
-                               {:basis-rev 1
-                                :resources
-                                {resource-key {:watch-keys #{[:graph]}
-                                               :value :shared}}}))]
+                               (grouped-patch
+                                (all-resource-patch 1 resource-key :shared)
+                                [[:resource resource-key]])))]
               (let [unsubscribes
                     (mapv (fn [_]
                             (subs/subscribe-resource! resource-key (fn [])))
                           (range 100))]
                 (p/let [_ (p/delay 0)]
-                  (is (= [[:thread-api/get-render-resources
+                  (is (= [[:thread-api/get-render-snapshots
                            test-graph-id
-                           [resource-key]]]
+                           {:blocks []
+                            :children []
+                            :resources [resource-key]}]]
                          @worker-calls))
                   (is (= {:status :ready :value :shared}
                          (subs/resource-snapshot resource-key)))
@@ -1137,9 +1254,13 @@
                             (fn [_api _graph-id _requested-keys]
                               (p/resolved
                                {:basis-rev 1
-                                :resources
-                                {present-key {:watch-keys #{[:graph]}
-                                              :value :present}}}))]
+                                :slots
+                                {[:resource present-key]
+                                 {:watch {:keys #{} :all? true}
+                                  :value :present}}
+                                :groups
+                                {[:resource present-key]
+                                 #{[:resource present-key]}}}))]
               (let [unsubscribe-present
                     (subs/subscribe-resource! present-key (fn []))
                     unsubscribe-missing
@@ -1151,9 +1272,10 @@
                   (is (= :error (:status missing-snapshot)))
                   (doseq [error [(:error present-snapshot)
                                  (:error missing-snapshot)]]
-                    (is (re-find #"Missing renderer resource batch result"
+                    (is (re-find #"Missing renderer snapshot group"
                                  (ex-message error)))
-                    (is (= missing-key (:resource-key (ex-data error)))))
+                    (is (= [:resource missing-key]
+                           (:slot-key (ex-data error)))))
                   (unsubscribe-missing)
                   (unsubscribe-present))))))))
 
@@ -1193,22 +1315,22 @@
                             (fn [graph-id requested-uuid]
                               (swap! calls conj [:block graph-id requested-uuid])
                               (p/resolved
-                               {:basis-rev 1
-                                :blocks {requested-uuid
-                                         (block requested-uuid 1 "loaded")}}))
+                               (block-patch
+                                1 {requested-uuid
+                                   (block requested-uuid 1 "loaded")})))
                             subs/<load-children
                             (fn [graph-id requested-parent]
                               (swap! calls conj [:children graph-id requested-parent])
-                              (p/resolved {:basis-rev 1
-                                           :parent-tx-id 1
-                                           :items [[child-uuid "a"]]}))
+                              (p/resolved
+                               (children-patch 1 requested-parent 1
+                                               [[child-uuid "a"]])))
                             subs/<load-resource
                             (fn [graph-id requested-key]
                               (swap! calls conj [:resource graph-id requested-key])
-                              (p/resolved {:basis-rev 1
-                                           :key requested-key
-                                           :watch-keys #{[:page-lookup "paused page"]}
-                                           :value block-uuid}))]
+                              (p/resolved
+                               (exact-resource-patch
+                                1 requested-key #{[:page-lookup "paused page"]}
+                                block-uuid)))]
               (subs/reset-graph! nil)
               (let [unsubscribes
                     [(subs/subscribe-block! block-uuid (fn []))
@@ -1247,12 +1369,11 @@
                             (fn [graph-id requested-uuid]
                               (swap! calls conj [graph-id requested-uuid])
                               (p/resolved
-                               {:basis-rev 2
-                                :blocks
-                                (if (= changed-uuid requested-uuid)
-                                  {changed-uuid
-                                   (block changed-uuid 2 "canonical load")}
-                                  {})}))]
+                               (if (= changed-uuid requested-uuid)
+                                 (block-patch
+                                  2 {changed-uuid
+                                     (block changed-uuid 2 "canonical load")})
+                                 (missing-block-patch 2 requested-uuid))))]
               (let [unsubscribe-changed
                     (subs/subscribe-block! changed-uuid (fn []))
                     unsubscribe-deleted
@@ -1286,11 +1407,11 @@
                                 :upsert [[inserted-uuid "a"]]}}}))
            (finish-async!
             done
-            (p/with-redefs [subs/set-seeded-block-gc-timeout! (fn [_callback _delay-ms])
-                            subs/<load-block
+            (p/with-redefs [subs/<load-block
                             (fn [graph-id requested-uuid]
                               (swap! calls conj [graph-id requested-uuid])
-                              (p/resolved {:basis-rev 2 :blocks {}}))]
+                              (p/resolved
+                               (missing-block-patch 2 requested-uuid)))]
               (let [unsubscribe
                     (subs/subscribe-block! inserted-uuid (fn []))]
                 (p/let [_ (p/delay 0)]
@@ -1308,29 +1429,27 @@
                parent (block parent-uuid 2 "parent")
                child (block child-uuid 2 "child")
                calls (atom [])]
-           (with-redefs [subs/set-seeded-block-gc-timeout! (fn [_callback _delay-ms])]
-             (subs/apply-delta!
-              (delta 2
-                     {:blocks {parent-uuid parent
-                               child-uuid child}
-                      :children {root-uuid
-                                 {:base-rev 1
-                                  :rev 2
-                                  :remove []
-                                  :upsert [[parent-uuid "a"]]}
-                                 parent-uuid
-                                 {:base-rev 1
-                                  :rev 2
-                                  :remove []
-                                  :upsert [[child-uuid "a"]]}}})))
+           (subs/apply-delta!
+            (delta 2
+                   {:blocks {parent-uuid parent
+                             child-uuid child}
+                    :children {root-uuid
+                               {:base-rev 1
+                                :rev 2
+                                :remove []
+                                :upsert [[parent-uuid "a"]]}
+                               parent-uuid
+                               {:base-rev 1
+                                :rev 2
+                                :remove []
+                                :upsert [[child-uuid "a"]]}}}))
            (finish-async!
             done
             (p/with-redefs [subs/<load-children
                             (fn [graph-id requested-uuid]
                               (swap! calls conj [graph-id requested-uuid])
-                              (p/resolved {:basis-rev 2
-                                           :parent-tx-id 2
-                                           :items []}))]
+                              (p/resolved
+                               (children-patch 2 requested-uuid 2 [])))]
               (let [unsubscribe
                     (subs/subscribe-children! parent-uuid (fn []))]
                 (p/let [_ (p/delay 0)]
@@ -1340,51 +1459,7 @@
                          (subs/children-snapshot parent-uuid)))
                   (unsubscribe))))))))
 
-(deftest inserted-child-delta-batches-seeded-block-gc-test
-  (let [parent-uuid (random-uuid)
-        seeded-uuids (vec (repeatedly 1000 random-uuid))
-        [collected-uuid mounted-uuid replaced-uuid] seeded-uuids
-        callbacks (atom [])
-        blocks (into {}
-                     (map-indexed
-                      (fn [index block-uuid]
-                        [block-uuid
-                         (block block-uuid 1 (str "block " index))]))
-                     seeded-uuids)
-        upserts (mapv (fn [index block-uuid]
-                        [block-uuid (str "a" index)])
-                      (range)
-                      seeded-uuids)]
-    (with-redefs [subs/set-seeded-block-gc-timeout!
-                  (fn [callback _delay-ms]
-                    (swap! callbacks conj callback))]
-      (subs/apply-delta!
-       (delta 1
-              {:blocks blocks
-               :children {parent-uuid
-                          {:base-rev 0
-                           :rev 1
-                           :remove []
-                           :upsert upserts}}}))
-      (let [unsubscribe-mounted
-            (subs/subscribe-block! mounted-uuid (fn []))]
-        (subs/apply-delta!
-         (delta 2
-                {:blocks {replaced-uuid
-                          (block replaced-uuid 2 "replacement")}}))
-        (is (= 1 (count @callbacks))
-            "One delta must schedule one seeded-block cleanup.")
-        ((first @callbacks))
-        (is (= {:status :loading}
-               (subs/block-snapshot collected-uuid)))
-        (is (= :ready
-               (:status (subs/block-snapshot mounted-uuid))))
-        (is (= {:status :ready
-                :value (block replaced-uuid 2 "replacement")}
-               (subs/block-snapshot replaced-uuid)))
-        (unsubscribe-mounted)))))
-
-(deftest last-unsubscribe-gc-is-deferred-for-a-same-tick-remount-test
+(deftest recently-unmounted-block-remains-warm-for-navigation-test
   (async done
          (let [block-uuid (random-uuid)
                calls (atom 0)]
@@ -1394,10 +1469,10 @@
                             (fn [_graph-id requested-uuid]
                               (let [call (swap! calls inc)]
                                 (p/resolved
-                                 {:basis-rev call
-                                  :blocks {requested-uuid
-                                           (block requested-uuid call
-                                                  (str "load " call))}})))]
+                                 (block-patch
+                                  call {requested-uuid
+                                        (block requested-uuid call
+                                               (str "load " call))}))))]
               (let [unsubscribe-first
                     (subs/subscribe-block! block-uuid (fn []))]
                 (p/let [_ (p/delay 0)
@@ -1413,17 +1488,17 @@
                       "A same-tick remount cancels last-subscriber collection.")
                   (unsubscribe-same-tick)
                   (p/let [_ (p/delay 0)
-                          _ (is (= {:status :loading}
-                                   (subs/block-snapshot block-uuid))
-                                "The unmounted slot is collected on the next microtask.")
-                          unsubscribe-after-gc
+                          _ (is (identical? first-snapshot
+                                           (subs/block-snapshot block-uuid))
+                                "A recently unmounted block remains in the warm cache.")
+                          unsubscribe-after-unmount
                           (subs/subscribe-block! block-uuid (fn []))
                           _ (p/delay 0)]
-                    (is (= 2 @calls))
+                    (is (= 1 @calls))
                     (is (= {:status :ready
-                            :value (block block-uuid 2 "load 2")}
+                            :value (block block-uuid 1 "load 1")}
                            (subs/block-snapshot block-uuid)))
-                    (unsubscribe-after-gc)))))))))
+                    (unsubscribe-after-unmount)))))))))
 
 (deftest unmounted-children-remain-warm-for-page-navigation-test
   (async done
@@ -1433,10 +1508,10 @@
            (finish-async!
             done
             (p/with-redefs [subs/<load-children
-                            (fn [_graph-id _parent-uuid]
-                              (p/resolved {:basis-rev 1
-                                           :parent-tx-id 1
-                                           :items [[first-child-uuid "a"]]}))]
+                            (fn [_graph-id requested-parent]
+                              (p/resolved
+                               (children-patch 1 requested-parent 1
+                                               [[first-child-uuid "a"]])))]
               (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
                 (p/let [_ (p/delay 0)
                         _ (unsubscribe)
@@ -1455,6 +1530,46 @@
                           :value [first-child-uuid second-child-uuid]}
                          (subs/children-snapshot parent-uuid))
                       "An unmounted warm page still receives direct-child patches."))))))))
+
+(deftest stale-unmounted-children-reload-on-next-navigation-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               first-child-uuid (random-uuid)
+               current-child-uuid (random-uuid)
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (case (swap! calls inc)
+                                1 (p/resolved
+                                   (children-patch 1 requested-parent 1
+                                                   [[first-child-uuid "a"]]))
+                                2 (p/resolved
+                                   (children-patch 3 requested-parent 3
+                                                   [[current-child-uuid "b"]]))
+                                (p/rejected
+                                 (js/Error. "unexpected extra children request"))))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (unsubscribe)
+                        _ (p/delay 0)
+                        _ (subs/apply-delta! (delta 2 {}))
+                        _ (subs/apply-delta!
+                           (delta 3
+                                  {:children
+                                   {parent-uuid {:base-rev 2
+                                                 :rev 3
+                                                 :remove [first-child-uuid]
+                                                 :upsert [[current-child-uuid "b"]]}}}))
+                        unsubscribe-current
+                        (subs/subscribe-children! parent-uuid (fn []))
+                        _ (p/delay 0)]
+                  (is (= 2 @calls)
+                      "A warm children slot that missed a revision reloads when remounted.")
+                  (is (= {:status :ready :value [current-child-uuid]}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe-current))))))))
 
 (deftest collected-request-token-cannot-complete-a-remounted-slot-test
   (async done
@@ -1481,58 +1596,54 @@
                         _ (p/delay 0)
                         _ (is (= 2 @calls))
                         _ (p/resolve! first-request
-                                      {:basis-rev 10
-                                       :blocks {block-uuid
-                                                (block block-uuid 10 "old token")}})
+                                      (block-patch
+                                       10 {block-uuid
+                                           (block block-uuid 10 "old token")}))
                         _ (p/delay 0)
                         _ (is (= {:status :loading}
                                  (subs/block-snapshot block-uuid))
                               "A collected request cannot write into the remounted slot.")
                         _ (p/resolve! second-request
-                                      {:basis-rev 11
-                                       :blocks {block-uuid
-                                                (block block-uuid 11 "current token")}})
+                                      (block-patch
+                                       11 {block-uuid
+                                           (block block-uuid 11 "current token")}))
                         _ (p/delay 0)]
                   (is (= {:status :ready
                           :value (block block-uuid 11 "current token")}
                          (subs/block-snapshot block-uuid)))
                   (unsubscribe-second))))))))
 
-(deftest journal-bundle-seeds-blocks-and-memberships-atomically-test
+(deftest normalized-resource-patch-seeds-slots-atomically-test
   (async done
          (let [journal-uuid (random-uuid)
                child-uuid (random-uuid)
-               resource-key [:journal-bundle journal-uuid]
+               resource-key [:journal-window [journal-uuid]]
                journal (block journal-uuid 10 "Journal")
                child (block child-uuid 10 "Child")
-               bundle {:root-uuid journal-uuid
-                       :blocks {journal-uuid journal
-                                child-uuid child}
-                       :children
-                       {journal-uuid {:parent-tx-id 10
-                                      :items [[child-uuid "a"]]}
-                        child-uuid {:parent-tx-id 10
-                                    :items []}}}
                calls (atom [])]
            (finish-async!
             done
             (p/with-redefs [subs/<load-resource
                             (fn [graph-id requested-key]
                               (swap! calls conj [:resource graph-id requested-key])
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value bundle}))
+                              (p/resolved
+                               {:basis-rev 1
+                                :slots
+                                {[:resource resource-key]
+                                 {:watch {:keys #{} :all? false}
+                                  :value {:loaded-uuids [journal-uuid]}}
+                                 [:block journal-uuid] {:value journal}
+                                 [:block child-uuid] {:value child}
+                                 [:children journal-uuid]
+                                 {:tx-id 10 :items [[child-uuid "a"]]}
+                                 [:children child-uuid]
+                                 {:tx-id 10 :items []}}}))
                             subs/<load-block
-                            (fn [graph-id requested-uuid]
-                              (swap! calls conj [:block graph-id requested-uuid])
-                              (p/rejected
-                               (js/Error. "seeded block must not reload")))
+                            (fn [& _]
+                              (p/rejected (js/Error. "seeded block reloaded")))
                             subs/<load-children
-                            (fn [graph-id requested-uuid]
-                              (swap! calls conj [:children graph-id requested-uuid])
-                              (p/rejected
-                               (js/Error. "seeded membership must not reload")))]
+                            (fn [& _]
+                              (p/rejected (js/Error. "seeded membership reloaded")))]
               (let [unsubscribe-resource
                     (subs/subscribe-resource! resource-key (fn []))]
                 (p/let [_ (p/delay 0)
@@ -1540,13 +1651,11 @@
                         (subs/subscribe-block! journal-uuid (fn []))
                         unsubscribe-child
                         (subs/subscribe-block! child-uuid (fn []))
-                        unsubscribe-journal-children
-                        (subs/subscribe-children! journal-uuid (fn []))
-                        unsubscribe-child-children
-                        (subs/subscribe-children! child-uuid (fn []))
-                        _ (p/delay 0)]
+                        unsubscribe-children
+                        (subs/subscribe-children! journal-uuid (fn []))]
                   (is (= [[:resource test-graph-id resource-key]] @calls))
-                  (is (= {:status :ready :value bundle}
+                  (is (= {:status :ready
+                          :value {:loaded-uuids [journal-uuid]}}
                          (subs/resource-snapshot resource-key)))
                   (is (= {:status :ready :value journal}
                          (subs/block-snapshot journal-uuid)))
@@ -1554,402 +1663,162 @@
                          (subs/block-snapshot child-uuid)))
                   (is (= {:status :ready :value [child-uuid]}
                          (subs/children-snapshot journal-uuid)))
-                  (is (= {:status :ready :value []}
-                         (subs/children-snapshot child-uuid)))
                   (run! (fn [unsubscribe] (unsubscribe))
-                        [unsubscribe-child-children
-                         unsubscribe-journal-children
-                         unsubscribe-child
-                         unsubscribe-journal
-                         unsubscribe-resource]))))))))
+                        [unsubscribe-children unsubscribe-child
+                         unsubscribe-journal unsubscribe-resource]))))))))
 
-(deftest journal-window-seeds-all-visible-bundles-atomically-test
+(deftest stale-resource-hydration-cannot-seed-slots-after-a-newer-delta-test
   (async done
-         (let [first-uuid (random-uuid)
-               second-uuid (random-uuid)
-               resource-key [:journal-window [first-uuid second-uuid]]
-               first-block (block first-uuid 10 "First journal")
-               second-block (block second-uuid 10 "Second journal")
-               bundle (fn [root block-value]
-                        {:root-uuid root
-                         :blocks {root block-value}
-                         :children {root {:parent-tx-id 10 :items []}}})
-               value {:bundles {first-uuid (bundle first-uuid first-block)
-                                second-uuid (bundle second-uuid second-block)}}]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [_graph-id _requested-key]
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value value}))
-                            subs/<load-block
-                            (fn [& _]
-                              (p/rejected (js/Error. "seeded block reloaded")))]
-              (let [unsubscribe-resource
-                    (subs/subscribe-resource! resource-key (fn []))]
-                (p/let [_ (p/delay 0)
-                        unsubscribe-first
-                        (subs/subscribe-block! first-uuid (fn []))
-                        unsubscribe-second
-                        (subs/subscribe-block! second-uuid (fn []))]
-                  (is (= {:status :ready :value first-block}
-                         (subs/block-snapshot first-uuid)))
-                  (is (= {:status :ready :value second-block}
-                         (subs/block-snapshot second-uuid)))
-                  (unsubscribe-second)
-                  (unsubscribe-first)
-                  (unsubscribe-resource))))))))
-
-(deftest view-resource-seeds-initial-blocks-before-rendering-rows-test
-  (async done
-         (let [view-uuid (random-uuid)
-               row-uuid (random-uuid)
-               property-uuid (random-uuid)
-               resource-key [:view-data view-uuid {:feature-type :all-pages
-                                                   :initial-row-count 1}]
-               row (block row-uuid 10 "Row")
-               property (block property-uuid 10 "Positioned property")
-               value {:partition :flat
-                      :count 1
-                      :rows [row-uuid]
-                      :initial-blocks {row-uuid row
-                                       property-uuid property}}]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [_graph-id _requested-key]
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value value}))
-                            subs/<load-block
-                            (fn [& _]
-                              (p/rejected (js/Error. "seeded block reloaded")))]
-              (let [unsubscribe-resource
-                    (subs/subscribe-resource! resource-key (fn []))]
-                (p/let [_ (p/delay 0)
-                        unsubscribe-row
-                        (subs/subscribe-block! row-uuid (fn []))
-                        unsubscribe-property
-                        (subs/subscribe-block! property-uuid (fn []))]
-                  (is (= {:status :ready :value row}
-                         (subs/block-snapshot row-uuid)))
-                  (is (= {:status :ready :value property}
-                         (subs/block-snapshot property-uuid)))
-                  (unsubscribe-property)
-                  (unsubscribe-row)
-                  (unsubscribe-resource))))))))
-
-(deftest journal-bundle-unmount-collects-never-mounted-seeded-descendants-test
-  (async done
-         (let [journal-uuid (random-uuid)
-               collapsed-child-uuid (random-uuid)
-               resource-key [:journal-bundle journal-uuid]
-               journal (block journal-uuid 10 "Journal")
-               collapsed-child (block collapsed-child-uuid 10 "Collapsed child")
-               bundle
-               {:root-uuid journal-uuid
-                :blocks {journal-uuid journal
-                         collapsed-child-uuid collapsed-child}
-                :children
-                {journal-uuid {:parent-tx-id 10
-                               :items [[collapsed-child-uuid "a"]]}
-                 collapsed-child-uuid {:parent-tx-id 10
-                                       :items []}}}]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [_graph-id _requested-key]
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value bundle}))
-                            subs/<load-block
-                            (fn [& _]
-                              (p/rejected
-                               (js/Error. "seeded block must not reload")))
-                            subs/<load-children
-                            (fn [& _]
-                              (p/rejected
-                               (js/Error. "seeded membership must not reload")))]
-              (let [unsubscribe-resource
-                    (subs/subscribe-resource! resource-key (fn []))]
-                (p/let [_ (p/delay 0)
-                        unsubscribe-mounted-block
-                        (subs/subscribe-block! journal-uuid (fn []))
-                        unsubscribe-mounted-children
-                        (subs/subscribe-children! journal-uuid (fn []))
-                        _ (is (= {:status :ready :value collapsed-child}
-                                 (subs/block-snapshot collapsed-child-uuid)))
-                        _ (is (= {:status :ready :value []}
-                                 (subs/children-snapshot collapsed-child-uuid)))
-                        _ (unsubscribe-resource)
-                        _ (p/delay 0)]
-                  (is (= {:status :ready :value journal}
-                         (subs/block-snapshot journal-uuid))
-                      "A mounted exact descendant survives bundle collection.")
-                  (is (= {:status :ready :value [collapsed-child-uuid]}
-                         (subs/children-snapshot journal-uuid)))
-                  (is (= {:status :loading}
-                         (subs/block-snapshot collapsed-child-uuid))
-                      "A never-mounted seeded block is collected with its bundle.")
-                  (is (= {:status :loading}
-                         (subs/children-snapshot collapsed-child-uuid))
-                      "A never-mounted seeded membership is collected with its bundle.")
-                  (unsubscribe-mounted-children)
-                  (unsubscribe-mounted-block))))))))
-
-(deftest malformed-journal-bundle-is-rejected-without-partial-seeding-test
-  (async done
-         (let [journal-uuid (random-uuid)
-               child-uuid (random-uuid)
-               resource-key [:journal-bundle journal-uuid]
-               journal (block journal-uuid 10 "Journal")
-               child (block child-uuid 10 "Child")
-               malformed-bundle
-               {:root-uuid journal-uuid
-                :blocks {journal-uuid journal}
-                :children
-                {journal-uuid {:parent-tx-id 10
-                               :items [[child-uuid "a"]]}}}
-               calls (atom [])]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [graph-id requested-key]
-                              (swap! calls conj [:resource graph-id requested-key])
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value malformed-bundle}))
-                            subs/<load-block
-                            (fn [graph-id requested-uuid]
-                              (swap! calls conj [:block graph-id requested-uuid])
-                              (p/resolved
-                               {:basis-rev 1
-                                :blocks {requested-uuid
-                                         (if (= journal-uuid requested-uuid)
-                                           journal
-                                           child)}}))
-                            subs/<load-children
-                            (fn [graph-id requested-uuid]
-                              (swap! calls conj [:children graph-id requested-uuid])
-                              (p/resolved
-                               {:basis-rev 1
-                                :parent-tx-id 10
-                                :items (if (= journal-uuid requested-uuid)
-                                         [[child-uuid "a"]]
-                                         [])}))]
-              (let [unsubscribe-resource
-                    (subs/subscribe-resource! resource-key (fn []))]
-                (p/let [_ (p/delay 0)
-                        _ (is (= :error
-                                 (:status (subs/resource-snapshot resource-key))))
-                        unsubscribe-journal
-                        (subs/subscribe-block! journal-uuid (fn []))
-                        unsubscribe-child
-                        (subs/subscribe-block! child-uuid (fn []))
-                        unsubscribe-journal-children
-                        (subs/subscribe-children! journal-uuid (fn []))
-                        unsubscribe-child-children
-                        (subs/subscribe-children! child-uuid (fn []))
-                        _ (p/delay 0)]
-                  (is (= #{[:resource test-graph-id resource-key]
-                           [:block test-graph-id journal-uuid]
-                           [:block test-graph-id child-uuid]
-                           [:children test-graph-id journal-uuid]
-                           [:children test-graph-id child-uuid]}
-                         (set @calls))
-                      "No exact slot from an invalid bundle is retained.")
-                  (run! (fn [unsubscribe] (unsubscribe))
-                        [unsubscribe-child-children
-                         unsubscribe-journal-children
-                         unsubscribe-child
-                         unsubscribe-journal
-                         unsubscribe-resource]))))))))
-
-(deftest stale-seeded-membership-reloads-on-later-mount-test
-  (async done
-         (let [journal-uuid (random-uuid)
-               old-child-uuid (random-uuid)
-               new-child-uuid (random-uuid)
-               resource-key [:journal-bundle journal-uuid]
-               reload-request (p/deferred)
-               children-calls (atom [])
-               bundle
-               {:root-uuid journal-uuid
-                :blocks {journal-uuid (block journal-uuid 10 "Journal")
-                         old-child-uuid (block old-child-uuid 10 "Old child")}
-                :children
-                {journal-uuid {:parent-tx-id 10
-                               :items [[old-child-uuid "a"]]}
-                 old-child-uuid {:parent-tx-id 10
-                                 :items []}}}]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [_graph-id _requested-key]
-                              (p/resolved {:basis-rev 1
-                                           :key resource-key
-                                           :watch-keys #{}
-                                           :value bundle}))
-                            subs/<load-children
-                            (fn [graph-id requested-parent]
-                              (swap! children-calls conj [graph-id requested-parent])
-                              reload-request)]
-              (let [unsubscribe-resource
-                    (subs/subscribe-resource! resource-key (fn []))]
-                (p/let [_ (p/delay 0)
-                        _ (is (= {:status :ready :value [old-child-uuid]}
-                                 (subs/children-snapshot journal-uuid)))
-                        _ (subs/apply-delta!
-                           (delta 2
-                                  {:children
-                                   {journal-uuid
-                                    {:base-rev 0
-                                     :rev 2
-                                     :remove [[old-child-uuid "a"]]
-                                     :upsert [[new-child-uuid "b"]]}}}))
-                        _ (is (empty? @children-calls)
-                              "An unmounted stale membership does not reload eagerly.")
-                        unsubscribe-children
-                        (subs/subscribe-children! journal-uuid (fn []))
-                        _ (p/delay 0)
-                        _ (is (= [[test-graph-id journal-uuid]]
-                                 @children-calls))
-                        _ (p/resolve! reload-request
-                                      {:basis-rev 2
-                                       :parent-tx-id 11
-                                       :items [[new-child-uuid "b"]]})
-                        _ (p/delay 0)]
-                  (is (= {:status :ready :value [new-child-uuid]}
-                         (subs/children-snapshot journal-uuid)))
-                  (unsubscribe-children)
-                  (unsubscribe-resource))))))))
-
-(deftest initial-resource-behind-global-revision-starts-one-follow-up-test
-  (async done
-         (let [resource-key [:page-identity "late page"]
-               watch-key [:page-lookup "late page"]
+         (let [resource-key [:journal-window [(random-uuid)]]
+               block-uuid (random-uuid)
                first-request (p/deferred)
-               follow-up-request (p/deferred)
-               calls (atom 0)]
+               second-request (p/deferred)
+               stale-block (block block-uuid 1 "stale")
+               current-block (block block-uuid 2 "current")
+               calls (atom 0)
+               response (fn [basis-rev block-value]
+                          {:basis-rev basis-rev
+                           :slots
+                           {[:resource resource-key]
+                            {:watch {:keys #{} :all? false}
+                             :value {:loaded-uuids []}}
+                            [:block block-uuid] {:value block-value}}})]
            (finish-async!
             done
             (p/with-redefs [subs/<load-resource
                             (fn [_graph-id _requested-key]
                               (case (swap! calls inc)
                                 1 first-request
-                                2 follow-up-request
+                                2 second-request
                                 (p/rejected
                                  (js/Error. "unexpected extra resource request"))))]
+              (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (subs/apply-delta!
+                           (delta 2 {:blocks {block-uuid current-block}}))
+                        _ (p/resolve! first-request (response 1 stale-block))
+                        _ (p/delay 0)
+                        _ (is (= 2 @calls)
+                              "A resource response that missed a hydrated slot change reloads once.")
+                        _ (is (= {:status :loading}
+                                 (subs/resource-snapshot resource-key))
+                              "The stale resource value is never published.")
+                        _ (is (= {:status :loading}
+                                 (subs/block-snapshot block-uuid))
+                              "The stale hydrated block is never published.")
+                        _ (p/resolve! second-request (response 2 current-block))
+                        _ (p/delay 0)]
+                  (is (= {:status :ready :value current-block}
+                         (subs/block-snapshot block-uuid)))
+                  (unsubscribe))))))))
+
+(deftest stale-resource-hydration-cannot-seed-children-after-a-newer-patch-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               old-child-uuid (random-uuid)
+               current-child-uuid (random-uuid)
+               resource-key [:journal-window [parent-uuid]]
+               first-request (p/deferred)
+               second-request (p/deferred)
+               calls (atom 0)
+               response (fn [basis-rev tx-id items]
+                          {:basis-rev basis-rev
+                           :slots
+                           {[:resource resource-key]
+                            {:watch {:keys #{} :all? false}
+                             :value {:loaded-uuids [parent-uuid]}}
+                            [:children parent-uuid]
+                            {:tx-id tx-id :items items}}})]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id _requested-key]
+                              (case (swap! calls inc)
+                                1 first-request
+                                2 second-request
+                                (p/rejected
+                                 (js/Error. "unexpected extra resource request"))))]
+              (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (subs/apply-delta!
+                           (delta 2
+                                  {:children
+                                   {parent-uuid
+                                    {:base-rev 1
+                                     :rev 2
+                                     :remove [[old-child-uuid "a"]]
+                                     :upsert [[current-child-uuid "b"]]}}}))
+                        _ (p/resolve! first-request
+                                      (response 1 1 [[old-child-uuid "a"]]))
+                        _ (p/delay 0)
+                        _ (is (= 2 @calls))
+                        _ (is (= {:status :loading}
+                                 (subs/children-snapshot parent-uuid))
+                              "The stale hydrated membership is never published.")
+                        _ (p/resolve! second-request
+                                      (response 2 2 [[current-child-uuid "b"]]))
+                        _ (p/delay 0)]
+                  (is (= {:status :ready :value [current-child-uuid]}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe))))))))
+
+(deftest mixed-slot-kinds-have-independent-worker-failure-domains-test
+  (async done
+         (let [block-uuid (random-uuid)
+               resource-key [:page-identity "failing resource"]
+               calls (atom [])]
+           (finish-async!
+            done
+            (p/with-redefs [state/<invoke-db-worker
+                            (fn [_api _graph-id payload]
+                              (swap! calls conj payload)
+                              (if (seq (:resources payload))
+                                (p/rejected (js/Error. "resource failed"))
+                                (p/resolved
+                                 (grouped-patch
+                                  (block-patch
+                                   1 {block-uuid
+                                      (block block-uuid 1 "loaded")})
+                                  [[:block block-uuid]]))))]
+              (let [unsubscribe-block
+                    (subs/subscribe-block! block-uuid (fn []))
+                    unsubscribe-resource
+                    (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (= 2 (count @calls)))
+                  (is (= {:status :ready
+                          :value (block block-uuid 1 "loaded")}
+                         (subs/block-snapshot block-uuid)))
+                  (is (= :error (:status (subs/resource-snapshot resource-key))))
+                  (unsubscribe-resource)
+                  (unsubscribe-block))))))))
+
+
+(deftest unrelated-delta-does-not-reload-an-in-flight-resource-test
+  (async done
+         (let [resource-key [:page-identity "late page"]
+               watch-key [:page-lookup "late page"]
+               first-request (p/deferred)
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id _requested-key]
+                              (swap! calls inc)
+                              first-request)]
               (let [unsubscribe
                     (subs/subscribe-resource! resource-key (fn []))]
                 (p/let [_ (p/delay 0)
                         _ (subs/apply-delta!
                            (delta 5 {:affected-keys #{[:unrelated]}}))
                         _ (p/resolve! first-request
-                                      {:basis-rev 4
-                                       :key resource-key
-                                       :watch-keys #{watch-key}
-                                       :value :stale})
+                                      (exact-resource-patch
+                                       4 resource-key #{watch-key} :current))
                         _ (p/delay 0)
-                        _ (is (= 2 @calls)
-                              "A stale initial response schedules exactly one fresh request.")
-                        _ (is (= {:status :loading}
+                        _ (is (= 1 @calls)
+                              "Only intersecting dependencies invalidate an in-flight request.")
+                        _ (is (= {:status :ready :value :current}
                                  (subs/resource-snapshot resource-key))
-                              "The stale initial value is never published.")
-                        _ (p/resolve! follow-up-request
-                                      {:basis-rev 5
-                                       :key resource-key
-                                       :watch-keys #{watch-key}
-                                       :value :fresh})
-                        _ (p/delay 0)]
-                  (is (= 2 @calls))
-                  (is (= {:status :ready :value :fresh}
-                         (subs/resource-snapshot resource-key)))
+                              "An unrelated newer graph revision does not stale the result.")]
+                  (is (= 1 @calls))
                   (unsubscribe))))))))
-
-(deftest resolve-blocks-loads-shared-canonical-rows-in-input-order-test
-  (async done
-         (let [block-a-uuid (random-uuid)
-               block-b-uuid (random-uuid)
-               block-a (block block-a-uuid 1 "A")
-               block-b (block block-b-uuid 1 "B")
-               requests (atom {})
-               calls (atom [])]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-block
-                            (fn [graph-id requested-uuid]
-                              (swap! calls conj [graph-id requested-uuid])
-                              (let [request (p/deferred)]
-                                (swap! requests assoc requested-uuid request)
-                                request))]
-              (let [result (subs/resolve-blocks!
-                            [block-b-uuid block-a-uuid block-b-uuid])]
-                (p/let [_ (p/delay 0)
-                        _ (is (= [[test-graph-id block-b-uuid]
-                                  [test-graph-id block-a-uuid]]
-                                 @calls)
-                              "Duplicate UUIDs share the same exact in-flight request.")
-                        _ (p/resolve! (get @requests block-a-uuid)
-                                      {:basis-rev 1
-                                       :blocks {block-a-uuid block-a}})
-                        _ (p/resolve! (get @requests block-b-uuid)
-                                      {:basis-rev 1
-                                       :blocks {block-b-uuid block-b}})
-                        rows result]
-                  (is (= [block-b block-a block-b] rows)))))))))
-
-(deftest resolve-blocks-reuses-a-ready-canonical-row-test
-  (async done
-         (let [block-uuid (random-uuid)
-               canonical-block (block block-uuid 1 "Ready")
-               calls (atom 0)]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-block
-                            (fn [_graph-id requested-uuid]
-                              (swap! calls inc)
-                              (p/resolved {:basis-rev 1
-                                           :blocks {requested-uuid
-                                                    canonical-block}}))]
-              (let [unsubscribe
-                    (subs/subscribe-block! block-uuid (fn []))]
-                (p/let [_ (p/delay 0)
-                        rows (subs/resolve-blocks! [block-uuid block-uuid])]
-                  (is (= [canonical-block canonical-block] rows))
-                  (is (= 1 @calls)
-                      "Resolving ready rows does not invoke the worker again.")
-                  (unsubscribe))))))))
-
-(deftest resolve-blocks-rejects-tombstones-and-loader-errors-test
-  (async done
-         (let [missing-uuid (random-uuid)
-               error-uuid (random-uuid)]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-block
-                            (fn [_graph-id requested-uuid]
-                              (if (= missing-uuid requested-uuid)
-                                (p/resolved {:basis-rev 1 :blocks {}})
-                                (p/rejected
-                                 (ex-info "canonical load failed"
-                                          {:code :canonical-load-failed}))))]
-              (p/all
-               [(-> (subs/resolve-blocks! [missing-uuid])
-                    (p/then (fn [_rows]
-                              (is false "A tombstone must reject resolution.")))
-                    (p/catch (fn [error]
-                               (is (= :missing (:status (ex-data error))))
-                               (is (= missing-uuid
-                                      (:block-uuid (ex-data error)))))))
-                (-> (subs/resolve-blocks! [error-uuid])
-                    (p/then (fn [_rows]
-                              (is false "A load error must reject resolution.")))
-                    (p/catch (fn [error]
-                               (is (= :canonical-load-failed
-                                      (:code (ex-data error)))))))]))))))

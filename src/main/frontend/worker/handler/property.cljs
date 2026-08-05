@@ -655,8 +655,7 @@
                                 existing-properties (set (map first block-own-properties'))
                                 result []]
                            (if-let [class (first classes)]
-                             (let [cur-properties (->> (db-property/get-class-ordered-properties class)
-                                                       (map :db/ident)
+                             (let [cur-properties (->> (:property-idents class)
                                                        (remove existing-properties))]
                                (recur (rest classes)
                                       (into existing-properties cur-properties)

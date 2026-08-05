@@ -14,12 +14,6 @@
    :block/tx-id tx-id
    :block/title title})
 
-(defn- bundle
-  [root-uuid blocks children]
-  {:root-uuid root-uuid
-   :blocks blocks
-   :children children})
-
 (defn- finish-async!
   [done promise]
   (-> promise
@@ -83,10 +77,7 @@
   (async done
          (let [journal-a (random-uuid)
                journal-b (random-uuid)
-               journal-a-bundle
-               (bundle journal-a
-                       {journal-a (block journal-a 1 "Journal A")}
-                       {journal-a {:parent-tx-id 1 :items []}})
+               journal-a-block (block journal-a 1 "Journal A")
                pending-block-load (p/deferred)
                resource-loads (atom [])]
            (finish-async!
@@ -97,16 +88,23 @@
                               (case (first resource-key)
                                 :journals
                                 (p/resolved {:basis-rev 1
-                                             :key resource-key
-                                             :watch-keys #{[:journals]}
-                                             :value {:journal-uuids [journal-a journal-b]
-                                                     :bundles {journal-a journal-a-bundle}}})
+                                             :slots
+                                             {[:resource resource-key]
+                                              {:watch {:keys #{[:journals]}
+                                                       :all? false}
+                                               :value {:journal-uuids [journal-a journal-b]
+                                                       :loaded-uuids [journal-a]}}
+                                              [:block journal-a]
+                                              {:value journal-a-block}
+                                              [:children journal-a]
+                                              {:tx-id 1 :items []}}})
 
                                 :journal-window
                                 (p/resolved {:basis-rev 1
-                                             :key resource-key
-                                             :watch-keys #{}
-                                             :value {:bundles {}}})
+                                             :slots
+                                             {[:resource resource-key]
+                                              {:watch {:keys #{} :all? false}
+                                               :value {:loaded-uuids []}}}})
 
                                 (p/rejected
                                  (js/Error. "unexpected journal resource"))))
@@ -126,12 +124,12 @@
                   (unmount! mounted-page)
                   (unmount! outer))))))))
 
-(deftest mounted-journal-bundle-seeds-its-entire-plain-tree-atomically-test
+(deftest mounted-journal-window-seeds-its-entire-plain-tree-atomically-test
   (async done
          (let [journal-uuid (random-uuid)
                child-uuid (random-uuid)
                nested-uuid (random-uuid)
-               resource-key [:journal-bundle journal-uuid]
+               resource-key [:journal-window [journal-uuid]]
                blocks {journal-uuid (block journal-uuid 10 "Journal")
                        child-uuid (block child-uuid 10 "Child")
                        nested-uuid (block nested-uuid 10 "Nested")}
@@ -142,17 +140,32 @@
                             :items [[nested-uuid "a"]]}
                 nested-uuid {:parent-tx-id 10
                              :items []}}
-               expected-bundle (bundle journal-uuid blocks children)
+               value {:loaded-uuids [journal-uuid]}
                block-loads (atom [])
                children-loads (atom [])]
            (finish-async!
             done
             (p/with-redefs [subs/<load-resource
                             (fn [_graph-id requested-key]
-                              (p/resolved {:basis-rev 1
-                                           :key requested-key
-                                           :watch-keys #{}
-                                           :value expected-bundle}))
+                              (is (= resource-key requested-key))
+                              (p/resolved
+                               {:basis-rev 1
+                                :slots
+                                (merge
+                                 {[:resource resource-key]
+                                  {:watch {:keys #{} :all? false}
+                                   :value value}}
+                                 (into {}
+                                       (map (fn [[block-uuid block-value]]
+                                              [[:block block-uuid]
+                                               {:value block-value}]))
+                                       blocks)
+                                 (into {}
+                                       (map (fn [[parent-uuid membership]]
+                                              [[:children parent-uuid]
+                                               {:tx-id (:parent-tx-id membership)
+                                                :items (:items membership)}]))
+                                       children))}))
                             subs/<load-block
                             (fn [_graph-id block-uuid]
                               (swap! block-loads conj block-uuid)
@@ -163,10 +176,10 @@
                               (swap! children-loads conj parent-uuid)
                               (p/rejected
                                (js/Error. "seeded membership reloaded")))]
-              (let [bundle-mount
+              (let [window-mount
                     (mount-hook! db-hooks/use-resource resource-key)]
                 (p/let [_ (p/delay 0)
-                        _ (is (= expected-bundle @(:value bundle-mount)))
+                        _ (is (= value @(:value window-mount)))
                         _ (doseq [[block-uuid expected-block] blocks]
                             (is (= {:status :ready :value expected-block}
                                    (subs/block-snapshot block-uuid))))
@@ -186,4 +199,4 @@
                       "Every direct membership, including leaves, is seeded atomically.")
                   (run! unmount! block-mounts)
                   (run! unmount! children-mounts)
-                  (unmount! bundle-mount))))))))
+                  (unmount! window-mount))))))))

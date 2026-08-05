@@ -370,17 +370,16 @@
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))
-          value (if-let [initial-row-count (:initial-row-count context)]
-                  (let [initial-row-uuids (->> (:rows value)
-                                               (take initial-row-count)
-                                               vec)]
-                    (assoc value :initial-blocks
-                           (:blocks (block-handler/canonical-blocks
-                                     db initial-row-uuids))))
-                  value)
+          initial-blocks (when-let [initial-row-count (:initial-row-count context)]
+                           (let [initial-row-uuids (->> (:rows value)
+                                                        (take initial-row-count)
+                                                        vec)]
+                             (:blocks (block-handler/canonical-blocks
+                                       db initial-row-uuids))))
           value-partition (:partition value)]
       [(view-watch-keys db view-uuid owner feature-type config value-partition)
-       value])))
+       value
+       (common/block-slots initial-blocks)])))
 
 (def resource-renderers
   {:views (common/renderer 3 views)

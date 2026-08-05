@@ -2,8 +2,9 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.db.metadata-cache :as metadata-cache]
             [frontend.worker.handler.block :as block-handler]
-            [frontend.worker.handler.render-resource :as render-resource]
+            [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.query-dsl :as query-dsl]
@@ -442,13 +443,27 @@
                          (special-page-membership-tx uuids)))
     (assoc uuids :conn conn)))
 
+(defn- render-one-resource
+  ([db resource-key]
+   (render-one-resource db resource-key {}))
+  ([db resource-key runtime]
+   (let [response (render-engine/render-snapshots
+                   db {:blocks [] :children [] :resources [resource-key]}
+                   runtime)
+         slot-key [:resource resource-key]
+         {:keys [watch value]} (get-in response [:slots slot-key])]
+     {:basis-rev (:basis-rev response)
+      :key resource-key
+      :watch-keys (:keys watch)
+      :watch-all? (:all? watch)
+      :value value
+      :slots (dissoc (select-keys (:slots response)
+                                 (get-in response [:groups slot-key]))
+                     slot-key)})))
+
 (defn- render-resource-api
   []
-  render-resource/render-resource)
-
-(defn- render-resources-api
-  []
-  render-resource/render-resources)
+  render-one-resource)
 
 (defn- call-resource-raw
   ([api conn resource-key]
@@ -482,27 +497,19 @@
 
 (defn- assert-resource-envelope
   [db resource-key watch-keys value response]
-  (is (= #{:basis-rev :key :watch-keys :value}
-         (set (keys response))))
-  (is (= (:max-tx db) (:basis-rev response)))
-  (is (= resource-key (:key response)))
-  (is (= watch-keys (:watch-keys response)))
-  (is (= value (:value response)))
-  (is (= response
-         (-> response ldb/write-transit-str ldb/read-transit-str))
-      "Every renderer resource response must be transit-safe."))
-
-(defn- assert-resources-envelope
-  [db resource-keys response]
-  (is (= #{:basis-rev :resources} (set (keys response))))
-  (is (= (:max-tx db) (:basis-rev response)))
-  (is (= (set resource-keys) (set (keys (:resources response)))))
-  (doseq [resource (vals (:resources response))]
-    (is (= #{:watch-keys :value} (set (keys resource))))
-    (is (set? (:watch-keys resource))))
-  (is (= response
-         (-> response ldb/write-transit-str ldb/read-transit-str))
-      "The complete renderer resource batch must be transit-safe."))
+  (let [watch-all? (contains? watch-keys [:graph])
+        watch-keys (disj watch-keys [:graph])]
+    (is (= #{:basis-rev :key :watch-keys :watch-all? :value :slots}
+           (set (keys response))))
+    (is (= (:max-tx db) (:basis-rev response)))
+    (is (= resource-key (:key response)))
+    (is (= watch-keys (:watch-keys response)))
+    (is (= watch-all? (:watch-all? response)))
+    (is (= value (:value response)))
+    (is (map? (:slots response)))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Every renderer resource response must be transit-safe.")))
 
 (defn- assert-canonical-block
   [block]
@@ -630,93 +637,87 @@
                (mapv :block/uuid (:value response))))
         (run! assert-canonical-block (:value response))))))
 
-(deftest render-resources-returns-one-compact-snapshot-envelope-test
-  (when-let [api (render-resources-api)]
-    (let [{:keys [conn page journal-a journal-b resource-block]}
-          (render-resource-fixture)
-          page-key [:page-identity "page identity"]
-          journals-key [:journals 1]
-          ref-count-key [:block-ref-count resource-block]
-          resource-keys [page-key journals-key ref-count-key]
-          response (api @conn resource-keys)]
-      (assert-resources-envelope @conn resource-keys response)
-      (is (= page
-             (get-in response [:resources page-key :value])))
-      (is (= #{[:journals]}
-             (get-in response [:resources journals-key :watch-keys])))
-      (is (= [journal-b journal-a]
-             (get-in response [:resources journals-key :value :journal-uuids])))
-      (is (= #{journal-b}
-             (set (keys (get-in response [:resources journals-key :value :bundles])))))
-      (is (= 1
-             (get-in response [:resources ref-count-key :value])))
-      (is (not-any? #(contains? % :basis-rev)
-                    (vals (:resources response)))
-          "The shared revision appears exactly once at the batch boundary."))))
+(deftest render-snapshots-validates-bounded-unique-requests-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        resource-key [:page-identity "page identity"]
+        resources (mapv (fn [index]
+                          [:page-identity (str "missing page " index)])
+                        (range 25))
+        request #(hash-map :blocks [] :children [] :resources %)]
+    (is (= 25 (count (:groups (render-engine/render-snapshots
+                               @conn (request resources) {})))))
+    (doseq [invalid-request [(request nil)
+                             (request [])
+                             (request [resource-key resource-key])
+                             (request (conj resources resource-key))]]
+      (is (thrown? js/Error
+                   (render-engine/render-snapshots @conn invalid-request {}))
+          (str "Expected invalid renderer snapshot request: "
+               (pr-str invalid-request))))))
 
-(deftest render-resources-accepts-exactly-25-unique-resource-keys-test
-  (when-let [api (render-resources-api)]
-    (let [{:keys [conn]} (render-resource-fixture)
-          resource-keys
-          (mapv (fn [index]
-                  [:page-identity (str "missing page " index)])
-                (range 25))
-          response (api @conn resource-keys)]
-      (assert-resources-envelope @conn resource-keys response)
-      (is (= 25 (count (:resources response))))
-      (is (every? nil? (map :value (vals (:resources response))))))))
+(deftest legacy-render-read-thread-apis-are-removed-test
+  (doseq [api-key [:thread-api/get-render-resource
+                   :thread-api/get-render-resources
+                   :thread-api/get-canonical-blocks
+                   :thread-api/get-direct-children]]
+    (is (nil? (get @thread-api/*thread-apis api-key))
+        (str "Legacy renderer API remains registered: " api-key))))
 
-(deftest render-resources-rejects-non-vector-empty-duplicate-and-oversize-batches-test
-  (when-let [api (render-resources-api)]
-    (let [{:keys [conn]} (render-resource-fixture)
-          resource-key [:page-identity "page identity"]
-          oversized
-          (mapv (fn [index]
-                  [:page-identity (str "missing page " index)])
-                (range 26))]
-      (doseq [resource-keys [nil
-                             []
-                             [resource-key resource-key]
-                             oversized]]
-        (is (thrown? js/Error (api @conn resource-keys))
-            (str "Expected invalid renderer resource batch: "
-                 (pr-str resource-keys)))))))
 
-(deftest worker-exposes-only-the-batched-render-resources-thread-api-test
+(deftest worker-exposes-one-normalized-render-snapshots-api-test
   (let [api (get @thread-api/*thread-apis
-                 :thread-api/get-render-resources)
-        removed-api (get @thread-api/*thread-apis
-                         :thread-api/get-render-resource)]
-    (is (fn? api) "Missing thread API: get-render-resources")
-    (is (nil? removed-api) "The single-resource transport API is deleted.")
-    (when api
-      (let [{:keys [conn resource-block]} (render-resource-fixture)
+                 :thread-api/get-render-snapshots)]
+    (if-not api
+      (is false "Missing thread API: get-render-snapshots")
+      (let [{:keys [conn journal-a resource-block reference-block]}
+            (render-resource-fixture)
             db @conn
-            deref-count (atom 0)
-            counting-conn
-            (reify
-              IDeref
-              (-deref [_]
-                (swap! deref-count inc)
-                db))
-            resource-keys [[:page-identity "page identity"]
-                           [:block-ref-count resource-block]]]
-        (with-redefs [worker-state/get-datascript-conn
-                      (fn [repo]
-                        (is (= test-repo repo))
-                        counting-conn)]
-          (let [response (api test-repo resource-keys)]
-            (assert-resources-envelope db resource-keys response)
-            (is (= 1 @deref-count)
-                "Every key is evaluated from one immutable DB snapshot.")))))))
+            page-key [:page-identity "page identity"]
+            journals-key [:journals 1]
+            request {:blocks [reference-block]
+                     :children [journal-a]
+                     :resources [page-key journals-key]}]
+        (with-redefs [worker-state/get-datascript-conn (constantly conn)]
+          (let [response (api test-repo request)
+                slots (:slots response)]
+            (is (= (:max-tx db) (:basis-rev response)))
+            (is (= #{[:block reference-block]
+                     [:children journal-a]
+                     [:resource page-key]
+                     [:resource journals-key]}
+                   (set (keys (:groups response)))))
+            (is (= reference-block
+                   (get-in slots [[:block reference-block]
+                                  :value :block/uuid])))
+            (is (= #{:value}
+                   (set (keys (get slots [:block reference-block]))))
+                "A block wire slot has one canonical transaction ID in its value.")
+            (is (= resource-block
+                   (get-in slots [[:block resource-block]
+                                  :value :block/uuid])))
+            (is (contains? (get (:groups response) [:block reference-block])
+                           [:block resource-block]))
+            (is (vector? (get-in slots [[:children journal-a] :items])))
+            (is (= {:keys #{[:page-lookup "page identity"]}
+                    :all? false}
+                   (get-in slots [[:resource page-key] :watch])))
+            (is (contains? (get (:groups response) [:resource journals-key])
+                           [:block (get-in response
+                                           [:slots [:resource journals-key]
+                                            :value :loaded-uuids 0])]))
+            (is (= response
+                   (-> response ldb/write-transit-str ldb/read-transit-str)))))))))
 
-(deftest batched-render-resources-thread-api-fails-fast-without-a-database-test
+(deftest render-snapshots-thread-api-fails-fast-without-a-database-test
   (when-let [api (get @thread-api/*thread-apis
-                      :thread-api/get-render-resources)]
+                      :thread-api/get-render-snapshots)]
     (with-redefs [worker-state/get-datascript-conn (constantly nil)]
       (is (thrown-with-msg? js/Error
-                            #"Missing renderer resource database"
-                            (api test-repo [[:journals 1]]))))))
+                            #"Missing renderer snapshot database"
+                            (api test-repo
+                                 {:blocks []
+                                  :children []
+                                  :resources [[:journals 1]]}))))))
 
 (deftest page-identity-resource-resolves-only-the-page-uuid-test
   (when-let [api (render-resource-api)]
@@ -996,9 +997,11 @@
           response (call-resource api conn resource-key)
           value (:value response)]
       (is (= [journal-b journal-a] (:journal-uuids value)))
-      (is (= #{journal-b} (set (keys (:bundles value))))
-          "The initial height-derived window is bundled with membership.")
-      (is (= journal-b (get-in value [:bundles journal-b :root-uuid])))
+      (is (= [journal-b] (:loaded-uuids value)))
+      (is (not (contains? value :bundles))
+          "Resource values contain only feature data, never block trees.")
+      (is (contains? (:slots response) [:block journal-b]))
+      (is (contains? (:slots response) [:children journal-b]))
       (is (= #{[:journals]} (:watch-keys response)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
@@ -1009,10 +1012,11 @@
           (render-resource-fixture)
           resource-key [:journal-window [journal-b journal-a]]
           response (call-resource api conn resource-key)
-          bundles (get-in response [:value :bundles])]
-      (is (= #{journal-a journal-b} (set (keys bundles))))
-      (is (= journal-a (get-in bundles [journal-a :root-uuid])))
-      (is (= journal-b (get-in bundles [journal-b :root-uuid])))
+          value (:value response)]
+      (is (= [journal-b journal-a] (:loaded-uuids value)))
+      (is (not (contains? value :bundles)))
+      (is (every? #(contains? (:slots response) [:block %])
+                  [journal-a journal-b]))
       (is (= #{} (:watch-keys response)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
@@ -1033,37 +1037,19 @@
           _ (d/transact! conn journals)
           response (call-resource api conn [:journals 60])]
       (is (= 60 (count (get-in response [:value :journal-uuids]))))
-      (is (= 50 (count (get-in response [:value :bundles])))))))
+      (is (= 50 (count (get-in response [:value :loaded-uuids]))))
+      (is (= 50
+             (count (filter #(= :block (first %))
+                            (keys (:slots response)))))))))
 
-(deftest journal-bundle-resource-is-flat-and-transit-safe-test
+(deftest journal-bundle-resource-is-removed-test
   (when-let [api (render-resource-api)]
-    (let [{:keys [conn journal-a journal-child-a journal-child-b
-                  journal-grandchild]}
+    (let [{:keys [conn journal-a]}
           (render-resource-fixture)
-          resource-key [:journal-bundle journal-a]
-          response (call-resource api conn resource-key)
-          bundle (:value response)
-          block-uuids #{journal-a journal-child-a journal-child-b
-                        journal-grandchild}]
-      (assert-resource-envelope @conn resource-key #{} bundle response)
-      (is (= #{} (:watch-keys response))
-          "A mounted bundle is updated by canonical block and child deltas, not full reloads.")
-      (is (= journal-a (:root-uuid bundle)))
-      (is (= block-uuids (set (keys (:blocks bundle)))))
-      (is (= block-uuids (set (keys (:children bundle))))
-          "The bootstrap includes direct membership slots for leaves too.")
-      (doseq [block (vals (:blocks bundle))]
-        (assert-canonical-block block))
-      (is (= [[journal-child-a "a0"]
-              [journal-child-b "b0"]]
-             (get-in bundle [:children journal-a :items])))
-      (is (= [[journal-grandchild "a1"]]
-             (get-in bundle [:children journal-child-a :items])))
-      (is (= [] (get-in bundle [:children journal-child-b :items])))
-      (is (= [] (get-in bundle [:children journal-grandchild :items])))
-      (doseq [[parent-uuid membership] (:children bundle)]
-        (is (= (get-in bundle [:blocks parent-uuid :block/tx-id])
-               (:parent-tx-id membership)))))))
+          resource-key [:journal-bundle journal-a]]
+      (is (thrown-with-msg? js/Error
+                            #"Unknown renderer resource key"
+                            (call-resource-raw api conn resource-key))))))
 
 (deftest canonical-visible-blocks-include-ready-properties-and-breadcrumbs-test
   (let [{:keys [conn page resource-block positioned-property]}
@@ -1128,6 +1114,7 @@
        resource-key
        #{[:display-properties resource-block]
          [:class-tree]
+         [:property-config]
          [:entity display-property]
          [:entity hidden-property]
          [:entity property-value]
@@ -1140,6 +1127,43 @@
                             (map :value (get-in response [:value :hidden-properties]))))
           "Graph property values cross the resource boundary only as UUIDs."))))
 
+(deftest block-display-properties-resource-includes-configured-class-properties-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn resource-block]} (render-resource-fixture)
+          class-uuid (random-uuid)
+          property-uuid (random-uuid)
+          resource-key [:block-display-properties resource-block default-display-context]]
+      (d/transact! conn
+                   [{:db/id -100
+                     :db/ident :user.property/configured
+                     :block/uuid property-uuid
+                     :block/tx-id 21
+                     :block/title "Configured property"
+                     :block/tags :logseq.class/Property
+                     :db/valueType :db.type/string
+                     :db/cardinality :db.cardinality/one
+                     :logseq.property/type :default
+                     :logseq.property/ui-position :properties
+                     :logseq.property/public? true}
+                    {:db/id -101
+                     :db/ident :user.class/configured
+                     :block/uuid class-uuid
+                     :block/tx-id 21
+                     :block/title "Configured class"
+                     :block/tags :logseq.class/Tag
+                     :logseq.property.class/properties -100}
+                    [:db/add [:block/uuid resource-block] :block/tags -101]])
+      (let [block (d/entity @conn [:block/uuid resource-block])
+            metadata (metadata-cache/build-metadata @conn)
+            rows (get-in (call-resource api conn resource-key)
+                         [:value :full-properties])]
+        (is (= [property-uuid]
+               (mapv :block/uuid
+                     (:classes-properties
+                      (metadata-cache/block-class-properties metadata block)))))
+        (is (some #(= property-uuid (:property-uuid %)) rows)
+            "A class-configured property is rendered even when the block has no own value.")))))
+
 (deftest block-positioned-properties-resource-watches-every-candidate-definition-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block display-property positioned-property hidden-property]}
@@ -1150,6 +1174,7 @@
        @conn
        resource-key
        #{[:entity resource-block]
+         [:property-config]
          [:entity display-property]
          [:entity positioned-property]
          [:entity hidden-property]}
@@ -1558,7 +1583,8 @@
       (assert-resource-envelope @conn
                                 resource-key
                                 #{[:entity quick-add-page]
-                                  [:graph]}
+                                  [:children quick-add-page]
+                                  [:attr :logseq.property/created-by-ref]}
                                 [quick-add-unowned quick-add-current-user]
                                 response))))
 
@@ -1649,13 +1675,27 @@
                          :initial-row-count 2}]
           response (call-resource api conn resource-key)
           value (:value response)
-          initial-blocks (:initial-blocks value)]
-      (is (every? #(contains? initial-blocks %)
+          initial-rows (take 2 (:rows value))]
+      (is (not (contains? value :initial-blocks)))
+      (is (every? #(contains? (:slots response) [:block %])
                   (take 2 (:rows value))))
       (is (every? #(contains? % :block.temp/positioned-properties)
-                  (vals initial-blocks)))
+                  (map #(get-in response [:slots [:block %] :value])
+                       initial-rows)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest opaque-query-resource-declares-watch-all-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row]} (render-resource-fixture)
+          resource-key [:query {:kind :dsl :query "(task TODO)"}]]
+      (with-redefs [query-dsl/execute-query
+                    (fn [& _args]
+                      [[(query-block-row @conn view-row)]])]
+        (let [response (call-resource api conn resource-key)]
+          (is (= #{} (:watch-keys response)))
+          (is (true? (:watch-all? response)))
+          (is (not (contains? (:watch-keys response) [:graph]))))))))
 
 (deftest query-view-resource-supports-transient-missing-feature-type-test
   (when-let [api (render-resource-api)]

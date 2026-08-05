@@ -1,96 +1,77 @@
 (ns frontend.db.subs-loader
-  "One batched worker loader for blocks, children, and renderer resources."
+  "Batch renderer snapshot requests across every slot type."
   (:require [frontend.state :as state]
             [promesa.core :as p]))
 
-(def ^:private batch-limits
-  {:blocks 1000
-   :children 25
-   :resources 25})
+(def ^:private limits {:blocks 1000 :children 25 :resources 25})
+(def ^:private slot-kind {:block :blocks :children :children :resource :resources})
 
-(def ^:private worker-apis
-  {:blocks :thread-api/get-canonical-blocks
-   :children :thread-api/get-direct-children
-   :resources :thread-api/get-render-resources})
+(defonce ^:private *batch (atom {}))
 
-(defonce ^:private *batch
-  (atom {:scheduled #{}
-         :entries {}}))
-
-(defn- reject-entries!
+(defn- reject!
   [entries error]
   (doseq [{:keys [result]} entries]
     (p/reject! result error)))
 
-(defn- take-kind-entries!
-  [kind]
-  (let [loaded (->> (:entries @*batch)
-                    (filter (fn [[[entry-kind _ _] _]]
-                              (= kind entry-kind)))
-                    (mapv second))]
-    (swap! *batch
-           (fn [{:keys [scheduled entries]}]
-             {:scheduled (disj scheduled kind)
-              :entries (apply dissoc entries
-                              (map (fn [{:keys [graph-id key]}]
-                                     [kind graph-id key])
-                                   loaded))}))
-    loaded))
+(defn- take-batch!
+  []
+  (let [entries (vals @*batch)]
+    (reset! *batch {})
+    entries))
 
-(defn- response-value
-  [kind {:keys [key]} {:keys [basis-rev children resources] :as response}]
-  (case kind
-    :blocks
-    response
+(defn- request-groups
+  [entries]
+  (let [entries-by-kind (group-by (comp slot-kind first :slot-key) entries)]
+    (mapcat (fn [[kind limit]]
+              (map vec (partition-all limit (get entries-by-kind kind))))
+            limits)))
 
-    :children
-    (if-let [value (get children key)]
-      (assoc value :basis-rev basis-rev)
-      (throw (ex-info "Missing direct-children batch result"
-                      {:parent-uuid key})))
+(defn- worker-request
+  [entries]
+  (reduce (fn [request {:keys [slot-key]}]
+            (update request (slot-kind (first slot-key)) conj (second slot-key)))
+          {:blocks [] :children [] :resources []}
+          entries))
 
-    :resources
-    (if-let [value (get resources key)]
-      (assoc value :basis-rev basis-rev :key key)
-      (throw (ex-info "Missing renderer resource batch result"
-                      {:resource-key key})))))
+(defn- entry-response
+  [response {:keys [slot-key]}]
+  (if-let [group (get-in response [:groups slot-key])]
+    {:basis-rev (:basis-rev response)
+     :slots (select-keys (:slots response) group)}
+    (throw (ex-info "Missing renderer snapshot group"
+                    {:slot-key slot-key}))))
 
-(defn- flush-kind!
-  [kind]
-  (doseq [[graph-id entries]
-          (group-by :graph-id (take-kind-entries! kind))
-          batch (partition-all (get batch-limits kind) entries)]
-    (let [keys (mapv :key batch)]
-      (-> (state/<invoke-db-worker (get worker-apis kind) graph-id keys)
-          (p/then (fn [response]
-                    (let [values (mapv #(response-value kind % response) batch)]
-                      (doseq [[{:keys [result]} value]
-                              (map vector batch values)]
-                        (p/resolve! result value)))))
-          (p/catch (fn [error]
-                     (reject-entries! batch error)))))))
+(defn- flush!
+  []
+  (doseq [[graph-id graph-entries] (group-by :graph-id (take-batch!))
+          entries (request-groups graph-entries)]
+    (-> (state/<invoke-db-worker :thread-api/get-render-snapshots
+                                 graph-id
+                                 (worker-request entries))
+        (p/then (fn [response]
+                  (try
+                    (let [values (mapv #(entry-response response %) entries)]
+                      (doseq [[entry value] (map vector entries values)]
+                        (p/resolve! (:result entry) value)))
+                    (catch :default error
+                      (reject! entries error)))))
+        (p/catch #(reject! entries %)))))
 
 (defn load!
-  [kind graph-id key schedule!]
-  (let [entry-key [kind graph-id key]]
-    (if-let [result (get-in @*batch [:entries entry-key :result])]
+  [graph-id slot-key schedule!]
+  (let [entry-key [graph-id slot-key]]
+    (if-let [result (get-in @*batch [entry-key :result])]
       result
       (let [result (p/deferred)
-            schedule? (not (contains? (:scheduled @*batch) kind))]
-        (swap! *batch
-               (fn [{:keys [scheduled entries]}]
-                 {:scheduled (conj scheduled kind)
-                  :entries (assoc entries entry-key
-                                  {:kind kind
-                                   :graph-id graph-id
-                                   :key key
-                                   :result result})}))
+            schedule? (empty? @*batch)]
+        (swap! *batch assoc entry-key
+               {:graph-id graph-id :slot-key slot-key :result result})
         (when schedule?
-          (schedule! #(flush-kind! kind)))
+          (schedule! flush!))
         result))))
 
 (defn reject-pending!
   [error]
-  (let [entries (vals (:entries @*batch))]
-    (reset! *batch {:scheduled #{} :entries {}})
-    (reject-entries! entries error)))
+  (let [entries (vals @*batch)]
+    (reset! *batch {})
+    (reject! entries error)))

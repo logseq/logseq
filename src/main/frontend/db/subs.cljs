@@ -1,403 +1,508 @@
 (ns frontend.db.subs
-  "Exact renderer subscriptions for worker-owned graph data."
-  (:require [frontend.state :as state]
+  "Immutable renderer snapshots loaded from the worker-owned graph database."
+  (:require [cljs.cache :as cache]
+            [clojure.set :as set]
             [frontend.db.subs-loader :as loader]
-            [frontend.db.subs-slots :as slots]
-            [frontend.db.subs-blocks :as blocks]
+            [frontend.state :as state]
             [promesa.core :as p]))
 
 (def ^:private loading-snapshot {:status :loading})
+(def ^:private warm-cache-size 5000)
+
+(defn require-uuid!
+  [label value]
+  (when-not (uuid? value)
+    (throw (ex-info (str "Invalid " label) {label value})))
+  value)
+
+(defn- require-revision!
+  [label value]
+  (when-not (and (integer? value) (not (neg? value)))
+    (throw (ex-info (str "Invalid " label) {label value})))
+  value)
+
+(defn block-changed?
+  [old-block new-block]
+  (not= (require-revision! :block/tx-id (:block/tx-id old-block))
+        (require-revision! :block/tx-id (:block/tx-id new-block))))
 
 (defn- empty-store
   [graph-id generation]
   {:graph-id graph-id
    :generation generation
    :rev -1
-   :blocks {}
-   :children {}
-   :resources {}})
+   :slots {}
+   :resource-slot-keys #{}
+   :warm (cache/lru-cache-factory {} :threshold warm-cache-size)})
 
-(defonce ^:private *store
-  (atom (empty-store (state/get-current-repo) 0)))
-(defonce ^:private *listeners
-  (atom {:blocks {}
-         :children {}
-         :resources {}}))
+(defonce ^:private *store (atom (empty-store (state/get-current-repo) 0)))
+(defonce ^:private *listeners (atom {}))
 (defonce ^:private *in-flight (atom {}))
+(defonce ^:private *query-reloads (atom {:timer-id nil :slot-keys #{}}))
 
-(def require-uuid! slots/require-uuid!)
-(def block-changed? slots/block-changed?)
-
-(def ^:private children-slot-cache-ms 30000)
-
-(defonce ^:private *query-resource-reloads
-  (atom {:timer-id nil :resource-keys #{}}))
-
-(defn ^:no-doc set-query-reload-timeout!
-  [callback delay-ms]
+(defn ^:no-doc set-query-reload-timeout! [callback delay-ms]
   (js/setTimeout callback delay-ms))
-
-(defn ^:no-doc clear-query-reload-timeout!
-  [timer-id]
+(defn ^:no-doc clear-query-reload-timeout! [timer-id]
   (js/clearTimeout timer-id))
-
-(defn ^:no-doc set-seeded-block-gc-timeout!
-  [callback delay-ms]
-  (js/setTimeout callback delay-ms))
-
-(defn ^:no-doc schedule-load-batch!
-  [callback]
+(defn ^:no-doc schedule-load-batch! [callback]
   (js/setTimeout callback 0))
-
-(defn <load-block
-  [graph-id block-uuid]
-  (loader/load! :blocks graph-id block-uuid schedule-load-batch!))
-
-(defn <load-children
-  [graph-id parent-uuid]
-  (loader/load! :children graph-id parent-uuid schedule-load-batch!))
-
-(defn <load-resource
-  [graph-id resource-key]
-  (loader/load! :resources graph-id resource-key schedule-load-batch!))
-
-
-(defn- listeners-for
-  [slot-type key]
-  (vals (get-in @*listeners [slot-type key])))
+(defn <load-block [graph-id block-uuid]
+  (loader/load! graph-id [:block block-uuid] schedule-load-batch!))
+(defn <load-children [graph-id parent-uuid]
+  (loader/load! graph-id [:children parent-uuid] schedule-load-batch!))
+(defn <load-resource [graph-id resource-key]
+  (loader/load! graph-id [:resource resource-key] schedule-load-batch!))
 
 (defn- mounted?
-  [slot-type key]
-  (seq (get-in @*listeners [slot-type key])))
+  [slot-key]
+  (seq (get @*listeners slot-key)))
 
-(defn- notify-key!
-  [slot-type key]
-  (doseq [listener (listeners-for slot-type key)]
+(defn- notify!
+  [slot-key]
+  (doseq [listener (vals (get @*listeners slot-key))]
     (listener)))
 
-(defn- all-listeners
-  []
-  (mapcat (fn [listeners-by-key]
-            (mapcat vals (vals listeners-by-key)))
-          (vals @*listeners)))
+(defn- store-slot
+  [store slot-key]
+  (or (get-in store [:slots slot-key])
+      (cache/lookup (:warm store) slot-key)))
 
-(declare request-reload!
-         start-block-load! start-children-load! start-resource-load!
-         schedule-resource-reload!)
+(defn- slot-snapshot
+  [slot-key]
+  (or (:snapshot (store-slot @*store slot-key)) loading-snapshot))
 
-(defn- clear-query-resource-reloads!
+(defn block-snapshot [block-uuid]
+  (require-uuid! :block/uuid block-uuid)
+  (slot-snapshot [:block block-uuid]))
+(defn children-snapshot [parent-uuid]
+  (require-uuid! :block/uuid parent-uuid)
+  (slot-snapshot [:children parent-uuid]))
+(defn resource-snapshot [resource-key]
+  (slot-snapshot [:resource resource-key]))
+
+(defn- slot-revision
+  [slot]
+  (max -1 (or (:basis-rev slot) -1) (or (:rev slot) -1)))
+
+(defn- ready-slot
+  [basis-rev value attributes]
+  (merge {:basis-rev basis-rev
+          :snapshot {:status :ready :value value}}
+         attributes))
+
+(defn- require-block!
+  [block-uuid block]
+  (require-uuid! :block/uuid block-uuid)
+  (when-not (= block-uuid (:block/uuid block))
+    (throw (ex-info "Block UUID does not match its snapshot key"
+                    {:block-uuid block-uuid})))
+  (require-revision! :block/tx-id (:block/tx-id block))
+  block)
+
+(defn- child-items!
+  [parent-uuid items]
+  (->> items
+       (map (fn [[child-uuid order :as item]]
+              (when-not (and (= 2 (count item)) (string? order))
+                (throw (ex-info "Invalid direct-child item"
+                                {:parent-uuid parent-uuid :item item})))
+              [(require-uuid! :block/uuid child-uuid) order]))
+       (sort-by second)
+       vec))
+
+(defn- wire-slot
+  [basis-rev [kind key :as slot-key] wire]
+  (case kind
+    :block
+    (if (:missing? wire)
+      {:rev basis-rev :snapshot {:status :missing}}
+      (let [block (require-block! key (:value wire))]
+        (ready-slot basis-rev block {:tx-id (:block/tx-id block)})))
+
+    :children
+    (let [tx-id (require-revision! :block/tx-id (:tx-id wire))
+          items (child-items! key (:items wire))]
+      (ready-slot basis-rev (mapv first items) {:tx-id tx-id :items items}))
+
+    :resource
+    (let [{:keys [keys all?] :as watch} (:watch wire)]
+      (when-not (and (= #{:keys :all?} (set (clojure.core/keys watch)))
+                     (set? keys) (boolean? all?))
+        (throw (ex-info "Invalid resource watch descriptor"
+                        {:resource-key key :watch watch})))
+      (ready-slot basis-rev (:value wire) {:watch watch}))
+
+    (throw (ex-info "Invalid renderer snapshot slot" {:slot-key slot-key}))))
+
+(defn- resource-response-stale?
+  [slot-key patch]
+  (let [dirty-keys (get-in @*in-flight [slot-key :dirty-keys])
+        dirty-slots (get-in @*in-flight [slot-key :dirty-slots])
+        hydrated-slots (disj (set (keys (:slots patch))) slot-key)
+        {:keys [keys all?]} (get-in patch [:slots slot-key :watch])]
+    (or (and all? (contains? dirty-keys ::changed))
+        (seq (set/intersection dirty-keys keys))
+        (seq (set/intersection dirty-slots hydrated-slots)))))
+
+(defn- loaded-slot
+  [slot-key current next-slot]
+  (let [selected (cond
+                   (> (slot-revision current) (slot-revision next-slot)) current
+                   (and (= :block (first slot-key))
+                        (:tx-id current)
+                        (= (:tx-id current) (:tx-id next-slot))) current
+                   (= current next-slot) current
+                   :else next-slot)]
+    (if (= (:snapshot current) (:snapshot selected))
+      (assoc selected :snapshot (:snapshot current))
+      selected)))
+
+(defn- apply-patch!
+  [generation requested-slot-key response]
+  (let [{:keys [basis-rev slots] :as patch} response
+        _ (require-revision! :basis-rev basis-rev)
+        stale-resource? (and (= :resource (first requested-slot-key))
+                             (resource-response-stale? requested-slot-key patch))
+        changed (volatile! #{})]
+    (when-not (map? slots)
+      (throw (ex-info "Invalid renderer snapshot slots" {:slots slots})))
+    (when-not (or stale-resource? (contains? slots requested-slot-key))
+      (throw (ex-info "Missing requested renderer snapshot slot"
+                      {:slot-key requested-slot-key})))
+    (when-not stale-resource?
+      (swap! *store
+             (fn [store]
+               (if (not= generation (:generation store))
+                 store
+                 (reduce-kv
+                  (fn [store slot-key wire]
+                    (let [current (store-slot store slot-key)
+                          next-slot (loaded-slot slot-key current
+                                                 (wire-slot basis-rev slot-key wire))]
+                      (if (identical? current next-slot)
+                        store
+                        (do
+                          (when-not (identical? (:snapshot current)
+                                                (:snapshot next-slot))
+                            (vswap! changed conj slot-key))
+                          (if (mounted? slot-key)
+                            (-> store
+                                (assoc-in [:slots slot-key] next-slot)
+                                (update :warm cache/evict slot-key))
+                            (update store :warm cache/miss slot-key next-slot))))))
+                  store
+                  slots))))
+      (doseq [slot-key @changed]
+        (notify! slot-key)))
+    stale-resource?))
+
+(declare start-load! schedule-resource-reload!)
+
+(defn- current-request?
+  [slot-key token graph-id generation]
+  (let [store @*store]
+    (and (= graph-id (:graph-id store))
+         (= generation (:generation store))
+         (identical? token (get-in @*in-flight [slot-key :token])))))
+
+(defn- finish-request!
+  [slot-key token]
+  (let [reload? (volatile! false)]
+    (swap! *in-flight
+           (fn [requests]
+             (if (identical? token (get-in requests [slot-key :token]))
+               (do (vreset! reload? (get-in requests [slot-key :reload?]))
+                   (dissoc requests slot-key))
+               requests)))
+    (when (and @reload? (mounted? slot-key))
+      (start-load! slot-key))))
+
+(defn- load-error!
+  [slot-key error]
+  (let [changed? (volatile! false)]
+    (swap! *store
+           (fn [store]
+             (let [current (store-slot store slot-key)]
+               (if (or (nil? current) (:stale? current)
+                       (= :error (get-in current [:snapshot :status])))
+                 (do (vreset! changed? true)
+                     (assoc-in store [:slots slot-key]
+                               {:snapshot {:status :error :error error}}))
+                 store))))
+    (when @changed? (notify! slot-key))))
+
+(defn- load-slot
+  [graph-id [kind key]]
+  (case kind
+    :block (<load-block graph-id key)
+    :children (<load-children graph-id key)
+    :resource (<load-resource graph-id key)))
+
+(defn- start-load!
+  [slot-key]
+  (when (and (:graph-id @*store) (not (contains? @*in-flight slot-key)))
+    (let [{:keys [graph-id generation]} @*store
+          token (js-obj)
+          request (try (load-slot graph-id slot-key)
+                       (catch :default error (p/rejected error)))]
+      (swap! *in-flight assoc slot-key
+             {:token token :dirty-keys #{} :dirty-slots #{} :reload? false})
+      (-> request
+          (p/then (fn [response]
+                    (when (current-request? slot-key token graph-id generation)
+                      (when (apply-patch! generation slot-key response)
+                        (swap! *in-flight assoc-in [slot-key :reload?] true)))))
+          (p/catch (fn [error]
+                     (when (current-request? slot-key token graph-id generation)
+                       (load-error! slot-key error))))
+          (p/finally #(finish-request! slot-key token))))))
+
+(defn- request-reload!
+  [slot-key]
+  (if (contains? @*in-flight slot-key)
+    (swap! *in-flight assoc-in [slot-key :reload?] true)
+    (start-load! slot-key)))
+
+(defn- clear-query-reloads!
   []
-  (when-let [timer-id (:timer-id @*query-resource-reloads)]
+  (when-let [timer-id (:timer-id @*query-reloads)]
     (clear-query-reload-timeout! timer-id))
-  (reset! *query-resource-reloads {:timer-id nil :resource-keys #{}}))
+  (reset! *query-reloads {:timer-id nil :slot-keys #{}}))
 
-(defn- flush-query-resource-reloads!
+(defn- flush-query-reloads!
   []
-  (let [resource-keys (:resource-keys @*query-resource-reloads)]
-    (reset! *query-resource-reloads {:timer-id nil :resource-keys #{}})
-    (doseq [resource-key resource-keys]
-      (when (mounted? :resources resource-key)
-        (request-reload! [:resources resource-key]
-                         #(start-resource-load! resource-key))))))
-
-(defn- schedule-query-resource-reload!
-  [resource-key]
-  (when-let [timer-id (:timer-id @*query-resource-reloads)]
-    (clear-query-reload-timeout! timer-id))
-  (let [timer-id (set-query-reload-timeout! flush-query-resource-reloads! 2000)]
-    (swap! *query-resource-reloads
-           (fn [state]
-             (-> state
-                 (update :resource-keys conj resource-key)
-                 (assoc :timer-id timer-id))))))
+  (let [slot-keys (:slot-keys @*query-reloads)]
+    (reset! *query-reloads {:timer-id nil :slot-keys #{}})
+    (doseq [slot-key slot-keys]
+      (when (mounted? slot-key) (request-reload! slot-key)))))
 
 (defn- schedule-resource-reload!
-  [resource-key]
+  [[_ resource-key :as slot-key]]
   (if (= :query (first resource-key))
-    (schedule-query-resource-reload! resource-key)
-    (request-reload! [:resources resource-key]
-                     #(start-resource-load! resource-key))))
+    (do
+      (when-let [timer-id (:timer-id @*query-reloads)]
+        (clear-query-reload-timeout! timer-id))
+      (swap! *query-reloads
+             (fn [state]
+               {:timer-id (set-query-reload-timeout! flush-query-reloads! 2000)
+                :slot-keys (conj (:slot-keys state) slot-key)})))
+    (request-reload! slot-key)))
 
 (defn reset-graph!
   [graph-id]
   (let [generation (inc (:generation @*store))
-        {:keys [blocks children resources]} @*listeners
-        block-uuids (vec (keys blocks))
-        parent-uuids (vec (keys children))
-        resource-keys (vec (keys resources))
-        listeners (vec (all-listeners))
-        reset-error (ex-info "Graph changed during renderer load"
-                             {:graph-id graph-id})]
-    (clear-query-resource-reloads!)
-    (reset! *store (empty-store graph-id generation))
+        slot-keys (vec (keys @*listeners))
+        resource-slot-keys (into #{} (filter #(= :resource (first %))) slot-keys)
+        listeners (mapcat vals (vals @*listeners))
+        error (ex-info "Graph changed during renderer load" {:graph-id graph-id})]
+    (clear-query-reloads!)
+    (reset! *store (assoc (empty-store graph-id generation)
+                          :resource-slot-keys resource-slot-keys))
     (reset! *in-flight {})
-    (loader/reject-pending! reset-error)
-    (doseq [listener listeners]
-      (listener))
-    (when graph-id
-      (doseq [[slot-keys start-load!]
-              [[block-uuids start-block-load!]
-               [parent-uuids start-children-load!]
-               [resource-keys start-resource-load!]]
-              key slot-keys]
-        (start-load! key))))
+    (loader/reject-pending! error)
+    (run! (fn [listener] (listener)) listeners)
+    (when graph-id (run! start-load! slot-keys)))
   nil)
 
-(defn- snapshot
-  [slot-type key]
-  (or (get-in @*store [slot-type key :snapshot]) loading-snapshot))
-
-(defn block-snapshot
-  [block-uuid]
-  (require-uuid! :block/uuid block-uuid)
-  (snapshot :blocks block-uuid))
-
-(defn children-snapshot
-  [parent-uuid]
-  (require-uuid! :block/uuid parent-uuid)
-  (snapshot :children parent-uuid))
-
-(defn resource-snapshot
-  [resource-key]
-  (snapshot :resources resource-key))
-
-(defn- error-slot
-  [error]
-  {:kind :error
-   :snapshot {:status :error :error error}})
-
-(defn- clear-in-flight!
-  [request-key token]
-  (let [reload? (volatile! false)]
-    (swap! *in-flight
-           (fn [requests]
-             (let [request (get requests request-key)]
-               (if (identical? token (:token request))
-                 (do
-                   (vreset! reload? (:reload? request))
-                   (dissoc requests request-key))
-                 requests))))
-    @reload?))
-
-(defn- request-reload!
-  [request-key start-load!]
-  (let [in-flight? (volatile! false)]
-    (swap! *in-flight
-           (fn [requests]
-             (if (contains? requests request-key)
-               (do
-                 (vreset! in-flight? true)
-                 (assoc-in requests [request-key :reload?] true))
-               requests)))
-    (when-not @in-flight?
-      (start-load!))))
-
-(defn- current-generation?
-  [graph-id generation]
-  (let [store @*store]
-    (and (= graph-id (:graph-id store))
-         (= generation (:generation store)))))
-
-(defn- current-request?
-  [request-key token graph-id generation]
-  (and (current-generation? graph-id generation)
-       (identical? token (get-in @*in-flight [request-key :token]))))
-
-(defn- apply-load-error!
-  [slot-type key graph-id generation error]
-  (when (current-generation? graph-id generation)
-    (let [changed? (volatile! false)]
-      (swap! *store
-             (fn [store]
-               (let [current (get-in store [slot-type key])]
-                 (if (or (contains? #{nil :error} (:kind current))
-                         (contains? current :stale-rev))
-                   (do
-                     (vreset! changed? true)
-                     (assoc-in store [slot-type key] (error-slot error)))
-                   store))))
-      (when @changed?
-        (notify-key! slot-type key)))))
-
-(defn- start-request!
-  [request-key loader on-success on-error]
-  (when (and (:graph-id @*store)
-             (not (get @*in-flight request-key)))
-    (let [{:keys [graph-id generation]} @*store
-          token (js-obj)
-          request (try
-                    (loader graph-id (second request-key))
-                    (catch :default error
-                      (p/rejected error)))]
-      (swap! *in-flight assoc request-key {:token token})
-      (-> request
-          (p/then (fn [response]
-                    (when (current-request? request-key token
-                                            graph-id generation)
-                      (on-success generation response))))
-          (p/catch (fn [error]
-                     (when (current-request? request-key token
-                                             graph-id generation)
-                       (on-error graph-id generation error))))
-          (p/finally (fn []
-                       (when (and (clear-in-flight! request-key token)
-                                  (mounted? (first request-key)
-                                            (second request-key)))
-                         (start-request! request-key loader
-                                         on-success on-error))))))))
-
-(defn- blocks-context
-  []
-  {:store *store
-   :listeners *listeners
-   :request-reload! request-reload!
-   :start-children-load! start-children-load!
-   :schedule-resource-reload! schedule-resource-reload!
-   :set-seeded-block-gc-timeout! set-seeded-block-gc-timeout!})
-
-(defn- start-block-load!
-  [block-uuid]
-  (start-request!
-   [:blocks block-uuid]
-   <load-block
-   #(blocks/apply-block-load! (blocks-context) %1 block-uuid %2)
-   #(apply-load-error! :blocks block-uuid %1 %2 %3)))
-
-(defn- start-children-load!
-  [parent-uuid]
-  (start-request!
-   [:children parent-uuid]
-   <load-children
-   #(blocks/apply-children-load! (blocks-context) %1 parent-uuid %2)
-   #(apply-load-error! :children parent-uuid %1 %2 %3)))
-
-(defn- start-resource-load!
-  [resource-key]
-  (start-request!
-   [:resources resource-key]
-   <load-resource
-   #(blocks/apply-resource-load! (blocks-context) %1 resource-key %2)
-   #(apply-load-error! :resources resource-key %1 %2 %3)))
-
-(defn- collect-slot!
-  [slot-type key]
-  (when-not (mounted? slot-type key)
-    (swap! *store update slot-type dissoc key)
-    (swap! *in-flight dissoc [slot-type key])))
-
-(defn- dependent-slots
-  [resource-key resource-value]
-  (let [{:keys [bundles initial-blocks]}
-        (blocks/resource-dependencies resource-key resource-value)]
-    (concat
-     (mapcat (fn [{:keys [blocks children]}]
-               (concat (map #(vector :blocks %) (keys blocks))
-                       (map #(vector :children %) (keys children))))
-             (vals bundles))
-     (map #(vector :blocks %)
-          (keys initial-blocks)))))
-
-(defn- schedule-slot-gc!
-  [slot-type key]
-  (let [collect!
-        (fn []
-          (when-not (mounted? slot-type key)
-            (let [resource-value (when (= :resources slot-type)
-                                   (get-in @*store
-                                           [:resources key :snapshot :value]))
-                  slots-to-collect (when resource-value
-                                     (dependent-slots key resource-value))]
-              (collect-slot! slot-type key)
-              (doseq [[slot-type key] slots-to-collect]
-                (collect-slot! slot-type key)))))]
-    (if (= :children slot-type)
-      (js/setTimeout collect! children-slot-cache-ms)
-      (js/queueMicrotask collect!))))
-
-(defn- add-listener!
-  [slot-type key listener start-load!]
+(defn- subscribe!
+  [slot-key listener]
   (let [listener-id (random-uuid)]
-    (swap! *listeners assoc-in [slot-type key listener-id] listener)
-    (let [slot (get-in @*store [slot-type key])]
-      (when (or (contains? #{nil :error} (:kind slot))
-                (contains? slot :stale-rev))
-        (start-load! key)))
+    (swap! *listeners assoc-in [slot-key listener-id] listener)
+    (swap! *store
+           (fn [store]
+             (let [store (cond-> store
+                           (= :resource (first slot-key))
+                           (update :resource-slot-keys conj slot-key))]
+               (if-let [slot (cache/lookup (:warm store) slot-key)]
+                 (-> store
+                     (assoc-in [:slots slot-key] slot)
+                     (update :warm cache/evict slot-key))
+                 store))))
+    (let [slot (store-slot @*store slot-key)]
+      (when (or (nil? slot) (:stale? slot)
+                (= :error (get-in slot [:snapshot :status])))
+        (start-load! slot-key)))
     (fn []
-      (swap! *listeners
-             (fn [listeners]
-               (let [listeners' (update-in listeners [slot-type key]
-                                           dissoc listener-id)]
-                 (if (seq (get-in listeners' [slot-type key]))
-                   listeners'
-                   (update listeners' slot-type dissoc key)))))
-      (schedule-slot-gc! slot-type key))))
+      (swap! *listeners update slot-key dissoc listener-id)
+      (when-not (mounted? slot-key)
+        (swap! *listeners dissoc slot-key)
+        (swap! *in-flight dissoc slot-key)
+        (swap! *store
+               (fn [store]
+                 (let [resource? (= :resource (first slot-key))
+                       store (if resource?
+                               (update store :resource-slot-keys disj slot-key)
+                               store)]
+                   (if-let [slot (get-in store [:slots slot-key])]
+                     (if resource?
+                       (update store :slots dissoc slot-key)
+                       (-> store
+                           (update :slots dissoc slot-key)
+                           (update :warm cache/miss slot-key slot)))
+                     store))))))))
 
-(defn subscribe-block!
-  [block-uuid listener]
+(defn subscribe-block! [block-uuid listener]
   (require-uuid! :block/uuid block-uuid)
-  (add-listener! :blocks block-uuid listener start-block-load!))
-
-(defn subscribe-children!
-  [parent-uuid listener]
+  (subscribe! [:block block-uuid] listener))
+(defn subscribe-children! [parent-uuid listener]
   (require-uuid! :block/uuid parent-uuid)
-  (add-listener! :children parent-uuid listener start-children-load!))
+  (subscribe! [:children parent-uuid] listener))
+(defn subscribe-resource! [resource-key listener]
+  (subscribe! [:resource resource-key] listener))
 
-(defn subscribe-resource!
-  [resource-key listener]
-  (add-listener! :resources resource-key listener start-resource-load!))
+(defn- put-delta-slot
+  [store slot-key next-slot]
+  (let [current (store-slot store slot-key)]
+    (if (or (> (slot-revision current) (:rev store))
+            (and (= :block (first slot-key))
+                 (:tx-id current)
+                 (= (:tx-id current) (:tx-id next-slot))))
+      [store false]
+      [(if (mounted? slot-key)
+         (assoc-in store [:slots slot-key] next-slot)
+         (update store :warm cache/miss slot-key next-slot))
+       (not= current next-slot)])))
 
-(defn- block-resolution-error
-  [block-uuid current-snapshot]
-  (case (:status current-snapshot)
-    :missing
-    (ex-info "Canonical block is missing"
-             {:status :missing
-              :block-uuid block-uuid})
+(defn- record-delta-slot
+  [store changed slot-key next-slot]
+  (let [[store changed?] (put-delta-slot store slot-key next-slot)]
+    (when changed? (vswap! changed conj slot-key))
+    store))
 
-    :error
-    (:error current-snapshot)
+(defn- children-slot
+  [rev tx-id items]
+  (ready-slot rev (mapv first items) {:tx-id tx-id :items items}))
 
-    (ex-info "Invalid canonical block snapshot"
-             {:block-uuid block-uuid
-              :snapshot current-snapshot})))
+(defn- patch-items
+  [parent-uuid items removed upsert]
+  (let [removed (set (child-items! parent-uuid removed))
+        upsert (child-items! parent-uuid upsert)
+        upsert-uuids (set (map first upsert))]
+    (->> items
+         (remove #(or (contains? removed %)
+                      (contains? upsert-uuids (first %))))
+         (concat upsert)
+         (sort-by second)
+         vec)))
 
-(defn- wait-for-block!
-  [block-uuid cleanups]
-  (letfn [(settle! [result]
-            (let [current-snapshot (block-snapshot block-uuid)]
-              (case (:status current-snapshot)
-                :loading nil
-                :ready (p/resolve! result (:value current-snapshot))
-                (p/reject! result
-                           (block-resolution-error block-uuid current-snapshot)))))]
-    (let [current-snapshot (block-snapshot block-uuid)]
-      (case (:status current-snapshot)
-        :ready
-        (p/resolved (:value current-snapshot))
+(defn- apply-delta-store
+  [store {:keys [rev blocks deleted children affected-keys]}]
+  (let [inserted (into #{} (mapcat #(map first (:upsert (second %)))) children)
+        changed (volatile! #{})
+        reload (volatile! #{})
+        store (assoc store :rev rev)
+        store (reduce-kv
+               (fn [store block-uuid block]
+                 (let [slot-key [:block block-uuid]
+                       current (store-slot store slot-key)]
+                   (if (or current (mounted? slot-key) (contains? inserted block-uuid))
+                     (let [block (require-block! block-uuid block)]
+                       (record-delta-slot
+                        store changed slot-key
+                        (ready-slot rev block {:tx-id (:block/tx-id block)})))
+                     store)))
+               store blocks)
+        store (reduce-kv
+               (fn [store block-uuid tombstone]
+                 (let [slot-key [:block block-uuid]
+                       tombstone-rev (require-revision! :rev (:rev tombstone))]
+                   (when-not (= rev tombstone-rev)
+                     (throw (ex-info "Tombstone revision does not match delta"
+                                     {:block-uuid block-uuid})))
+                   (if (or (store-slot store slot-key) (mounted? slot-key))
+                     (record-delta-slot store changed slot-key
+                                        {:rev rev :snapshot {:status :missing}})
+                     store)))
+               store deleted)
+        store (reduce-kv
+               (fn [store parent-uuid {:keys [base-rev upsert]
+                                       removed :remove patch-rev :rev}]
+                 (require-revision! :base-rev base-rev)
+                 (when-not (= rev (require-revision! :rev patch-rev))
+                   (throw (ex-info "Child patch revision does not match delta"
+                                   {:parent-uuid parent-uuid})))
+                 (let [slot-key [:children parent-uuid]
+                       current (store-slot store slot-key)
+                       parent-tx-id (get-in blocks [parent-uuid :block/tx-id])]
+                   (cond
+                     (and current (= base-rev (:basis-rev current)))
+                     (let [items (patch-items parent-uuid (:items current) removed upsert)]
+                       (record-delta-slot store changed slot-key
+                                          (children-slot rev (:tx-id current) items)))
 
-        (:missing :error)
-        (p/rejected (block-resolution-error block-uuid current-snapshot))
+                     (and (nil? current) parent-tx-id
+                          (contains? inserted parent-uuid))
+                     (let [items (patch-items parent-uuid [] removed upsert)]
+                       (record-delta-slot store changed slot-key
+                                          (children-slot rev parent-tx-id items)))
 
-        :loading
-        (let [result (p/deferred)
-              unsubscribe (subscribe-block! block-uuid #(settle! result))]
-          (swap! cleanups conj unsubscribe)
-          (settle! result)
-          result)
+                     (mounted? slot-key)
+                     (do (vswap! reload conj slot-key)
+                         (assoc-in store [:slots slot-key]
+                                   {:rev rev :stale? true}))
 
-        (p/rejected (block-resolution-error block-uuid current-snapshot))))))
+                     current
+                     (update store :warm cache/evict slot-key)
 
-(defn resolve-blocks!
-  "Resolve canonical blocks in input order through the exact block store."
-  [block-uuids]
-  (when-not (vector? block-uuids)
-    (throw (ex-info "Canonical block UUIDs must be a vector"
-                    {:block-uuids block-uuids})))
-  (let [cleanups (atom [])]
-    (-> (p/all (mapv #(wait-for-block! % cleanups) block-uuids))
-        (p/then vec)
-        (p/finally #(run! (fn [unsubscribe] (unsubscribe)) @cleanups)))))
+                     :else store)))
+               store children)
+        store (reduce
+               (fn [store slot-key]
+                 (let [slot (get-in store [:slots slot-key])
+                       owner (second (second slot-key))
+                       watch (:watch slot)]
+                   (cond
+                     (and (uuid? owner) (contains? deleted owner))
+                     (do (vswap! changed conj slot-key)
+                         (assoc-in store [:slots slot-key]
+                                   {:rev rev :snapshot {:status :missing}}))
+
+                     (or (:all? watch)
+                         (seq (set/intersection affected-keys (:keys watch))))
+                     (do (vswap! reload conj slot-key)
+                         (assoc-in store [:slots slot-key :stale?] true))
+
+                     :else store)))
+               store (:resource-slot-keys store))]
+    [store {:changed @changed :reload @reload}]))
 
 (defn apply-delta!
-  [delta]
-  (blocks/apply-delta! (blocks-context) delta))
+  [{:keys [graph-id rev blocks deleted children affected-keys] :as delta}]
+  (when-not (and (map? delta) (map? blocks) (map? deleted)
+                 (map? children) (set? affected-keys))
+    (throw (ex-info "Invalid renderer delta" {:delta delta})))
+  (require-revision! :rev rev)
+  (let [effects (volatile! nil)]
+    (swap! *store
+           (fn [store]
+             (if (or (not= graph-id (:graph-id store)) (<= rev (:rev store)))
+               store
+               (let [[store result] (apply-delta-store store delta)]
+                 (vreset! effects result)
+                 store))))
+    (when-let [{:keys [changed reload]} @effects]
+      (let [dirty-slots
+            (into #{}
+                  (concat (map #(vector :block %)
+                               (concat (keys blocks) (keys deleted)))
+                          (map #(vector :children %) (keys children))))]
+        (swap! *in-flight
+               (fn [requests]
+                 (reduce-kv
+                  (fn [requests slot-key request]
+                    (if (= :resource (first slot-key))
+                      (assoc requests slot-key
+                             (-> request
+                                 (update :dirty-keys into
+                                         (conj affected-keys ::changed))
+                                 (update :dirty-slots into dirty-slots)))
+                      requests))
+                  requests requests))))
+      (run! notify! changed)
+      (run! (fn [slot-key]
+              (when (= :resource (first slot-key))
+                (schedule-resource-reload! slot-key))
+              (when (= :children (first slot-key))
+                (request-reload! slot-key)))
+            reload)
+      true)))
