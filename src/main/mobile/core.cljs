@@ -16,6 +16,7 @@
             [mobile.events]
             [mobile.init :as init]
             [mobile.navigation :as mobile-nav]
+            [mobile.render :as mobile-render]
             [mobile.routes :refer [routes] :as mobile-routes]
             [mobile.state :as mobile-state]
             [reitit.frontend :as rf]
@@ -59,7 +60,7 @@
 
 (defn ^:export render!
   []
-  (.render root (app/main)))
+  (.render root (mobile-render/app-root (app/main))))
 
 (defn set-router!
   []
