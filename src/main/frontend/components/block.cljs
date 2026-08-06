@@ -72,6 +72,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.bidi :as bidi-util]
             [frontend.util.clock :as clock]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
@@ -1255,7 +1256,7 @@
                            (:logseq.property/status block)
                            (:logseq.property/priority block))
                    [:div.inline-block
-                    {:style {:margin-right 1
+                    {:style {:margin-inline-end 1
                              :margin-top -2
                              :vertical-align "middle"}
                      :on-pointer-down (fn [e]
@@ -2396,7 +2397,7 @@
 (defn list-checkbox
   [config checked?]
   (ui/checkbox
-   {:style {:margin-right 6}
+   {:style {:margin-inline-end 6}
     :value checked?
     :checked checked?
     :on-change (fn [event]
@@ -4250,17 +4251,32 @@
                  (on-error error)))}
    view))
 
+(defn- get-cached-bidi-dir!
+  [*bidi-dir-state block-id text]
+  (let [{cached-block-id :block-id
+         cached-text :text
+         cached-dir :dir} @*bidi-dir-state]
+    (if (and (= cached-block-id block-id)
+             (= cached-text text))
+      cached-dir
+      (let [dir (bidi-util/infer-text-dir text)]
+        (reset! *bidi-dir-state {:block-id block-id
+                                 :text text
+                                 :dir dir})
+        dir))))
+
 (hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux
   [container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
            embed-self? (and (:embed? config*)
                             (= (:block/uuid block) (:block/uuid (:block config*))))
-           default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
-                             (= (str (:id config*)) (str (:block/uuid block))))
-           *ref (hooks/use-memo #(atom nil) [])
-           *hide-block-refs? (hooks/use-memo #(atom default-hide?) [])
-           *show-query? (hooks/use-memo #(atom false) [])
-           *plugin-renderer-error? (hooks/use-memo #(atom false) [])
+	           default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+	                             (= (str (:id config*)) (str (:block/uuid block))))
+	           *ref (hooks/use-memo #(atom nil) [])
+           *bidi-dir-state (hooks/use-memo #(atom {:block-id nil :text nil :dir "auto"}) [])
+	           *hide-block-refs? (hooks/use-memo #(atom default-hide?) [])
+	           *show-query? (hooks/use-memo #(atom false) [])
+	           *plugin-renderer-error? (hooks/use-memo #(atom false) [])
            *use-plugin-renderer? (hooks/use-memo #(atom true) [])
            *hydrated-comment-thread (hooks/use-memo #(atom nil) [])
            *comment-thread-present? (hooks/use-memo #(atom nil) [])
@@ -4285,11 +4301,11 @@
               (fn []
                 ;; Mobile swipe handling calls preventDefault, so avoid registering
                 ;; the active touchmove listener on desktop blocks.
-                (when (or (util/mobile?) (mobile-util/native-platform?))
-                  (when-let [node @*ref]
-                    (.addEventListener node "touchmove" block-handler/on-touch-move)
-                    #(.removeEventListener node "touchmove" block-handler/on-touch-move))))
-              [])
+	                (when (or (util/mobile?) (mobile-util/native-platform?))
+	                  (when-let [node @*ref]
+	                    (.addEventListener node "touchmove" block-handler/on-touch-move)
+	                    #(.removeEventListener node "touchmove" block-handler/on-touch-move))))
+	              [])
         switch-to-plugin-renderer! (fn []
                                      (reset! *plugin-renderer-error? false)
                                      (reset! *use-plugin-renderer? true))
@@ -4310,6 +4326,15 @@
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
+        edit-content (when editing? (state/sub-edit-content uuid))
+        bidi-text (bidi-util/row-dir-source-text
+                   {:editing? editing?
+                    :edit-content edit-content
+                    :title title
+                    :original-name (:block/original-name block)
+                    :name (:block/name block)
+                    :raw-title (:block/raw-title block)})
+        bidi-dir (get-cached-bidi-dir! *bidi-dir-state uuid bidi-text)
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -4510,10 +4535,11 @@
      (when (and top? (not (or table? property?)))
        (dnd-separator-wrapper block block-id true))
 
-     (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row.gap-1
-        {:class (when (:page-title? config) "is-page-title-row")
-         :style (when (:page-title? config)
+    (when-not (:hide-title? config)
+      [:div.block-main-container.flex.gap-1
+       {:class (when (:page-title? config) "is-page-title-row")
+        :data-row-dir bidi-dir
+        :style (when (:page-title? config)
                   {:margin-left (cond
                                   (util/capacitor?) 0
                                   page-icon -36
@@ -4527,18 +4553,19 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not property?) (not (:table-block-title? config)) (not (:hide-block-control? config)))
-          (let [edit? (or editing?
-                        (= uuid (:block/uuid (state/get-edit-block))))]
+	        (when (and (not property?) (not (:table-block-title? config)) (not (:hide-block-control? config)))
+	          (let [edit? (or editing?
+	                        (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
               block
               (merge opts
                 {:uuid uuid
-                 :block-id block-id
-                 :collapsed? collapsed?
-                 :*control-show? *control-show?
-                 :edit? edit?}))))
+	                 :block-id block-id
+	                 :collapsed? collapsed?
+	                 :*control-show? *control-show?
+	                 :edit? edit?}))))
 
+	       [:div.block-main-content-wrap.flex.flex-col.w-full
         (if (= :plugin renderer-display-mode)
           ;; --- Plugin renderer: full-block replacement ---
           [:div.block-renderer-container.flex.flex-col.w-full
@@ -4564,7 +4591,7 @@
                (js/React.createElement renderer block-renderer-props-js))]]]
 
           ;; --- Original outline ---
-          outline-view-cp)
+          outline-view-cp)]
 
         (when (and has-comment-thread? (not table?) (not property?))
           (shui/button

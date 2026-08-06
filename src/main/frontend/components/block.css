@@ -600,7 +600,8 @@ html.is-mobile .ls-block-content-indent {
     @apply py-[1px] m-0;
 
     .ui__checkbox {
-      @apply mr-1.5 overflow-hidden relative top-0.5;
+      @apply overflow-hidden relative top-0.5;
+      margin-inline-end: 0.375rem;
     }
   }
 }
@@ -663,10 +664,12 @@ html.is-mobile .ls-block-content-indent {
   @apply relative;
 
   &.is-order-list {
-    @apply mr-0 pr-0;
+    margin-inline-end: 0;
+    padding-inline-end: 0;
 
     .bullet-link-wrap {
-      @apply relative left-[-3px];
+      @apply relative;
+      inset-inline-start: -3px;
     }
   }
 
@@ -690,13 +693,13 @@ html.is-mobile .ls-block-content-indent {
   }
 
   &.bullet-hidden {
-    padding-right: 2px;
+    padding-inline-end: 2px;
   }
 }
 
 .block-editing-avatar-wrap {
   @apply absolute top-1/2 -translate-y-1/2 pointer-events-none;
-  left: 6px;
+  inset-inline-start: 6px;
   z-index: 2;
   opacity: 0;
   animation: block-editing-avatar-fade-in 160ms ease-out forwards;
@@ -960,6 +963,19 @@ html.is-mobile .ls-block-content-indent {
 
 .block-main-container {
   @apply min-h-[24px];
+  --ls-heading-control-icon-size: 14px;
+  direction: ltr;
+  flex-direction: row;
+  unicode-bidi: isolate;
+
+  > .block-control-wrap {
+    order: 1;
+  }
+
+  > .block-main-content-wrap {
+    order: 2;
+    min-width: 0;
+  }
 
   > .block-control-wrap.is-with-icon {
     .icon-cp-container,
@@ -975,6 +991,38 @@ html.is-mobile .ls-block-content-indent {
     .ui__icon em-emoji {
       display: block;
       line-height: 1;
+    }
+  }
+
+  &[data-row-dir="rtl"] {
+    /* In RTL rows, keep controls at logical end and content at logical start. */
+    > .block-control-wrap {
+      order: 2;
+      padding-inline: 0;
+      flex-direction: row-reverse;
+    }
+
+    > .block-main-content-wrap {
+      order: 1;
+    }
+
+    > .block-main-content-wrap .block-content-wrapper {
+      justify-content: flex-end;
+    }
+
+    > .block-main-content-wrap .block-content,
+    > .block-main-content-wrap .block-content-inner,
+    > .block-main-content-wrap .block-head-wrap {
+      direction: rtl;
+    }
+
+    > .block-main-content-wrap .block-head-wrap {
+      justify-content: flex-end;
+    }
+
+    /* Keep "block-left" positioned properties at logical start in RTL rows. */
+    > .block-main-content-wrap .block-content-or-editor-wrap {
+      flex-direction: row-reverse;
     }
   }
 
@@ -1004,10 +1052,14 @@ html.is-mobile .ls-block-content-indent {
 
 }
 
+.block-main-content-wrap {
+  direction: ltr;
+}
+
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
     @apply absolute -top-5 opacity-0;
-    left: -2px;
+    inset-inline-start: -2px;
   }
 
   &:hover {
@@ -1890,6 +1942,10 @@ html.is-mac {
 .ls-page-title .positioned-properties.block-right svg {
   width: 24px;
   height: 24px;
+}
+
+.ls-page-title .positioned-properties.block-below {
+  margin-inline-start: 7px;
 }
 
 .ls-page-title .ls-properties-area .positioned-properties.block-left svg,

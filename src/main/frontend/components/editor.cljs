@@ -571,7 +571,8 @@
               nil)))
      (state/set-state! :editor/on-paste? false)))
   [:div#mock-text
-   {:style {:width "100%"
+   {:dir "auto"
+    :style {:width "100%"
             :height "100%"
             :position "absolute"
             :visibility "hidden"

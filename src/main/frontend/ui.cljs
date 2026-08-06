@@ -177,6 +177,7 @@
         props (assoc props
                      :ref *el
                      "data-testid" "block editor"
+                     :dir "auto"
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
