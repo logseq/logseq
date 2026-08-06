@@ -363,7 +363,7 @@
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
      (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)
+     (shui-dialog/install-dialogs)
      [:div.download
       [:a#download.hidden]
       [:a#download-as-transit-debug.hidden]
