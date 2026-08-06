@@ -745,6 +745,7 @@
                :minRows           (if (state/enable-grammarly?) 2 1)
                :on-click          (editor-handler/editor-on-click! id)
                :on-change         (editor-handler/editor-on-change! block id search-timeout)
+               :on-composition-commit (editor-handler/editor-on-composition-commit! id format)
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-key-down       (fn [e]
                                     (if-let [on-key-down (:on-key-down config)]

@@ -2988,7 +2988,7 @@
         (contains? #{"ArrowLeft" "ArrowRight"} key)
         (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
+        (and (util/keyboard-event-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3247,6 +3247,54 @@
           (edit-box-on-change! e block id)
           (when-not editor-action
             (util/scroll-editor-cursor input)))))))
+
+(def ^:private dead-key-autopair-chars
+  "Autopair chars that are dead keys on international keyboard layouts: they
+   reach the editor through an IME composition commit instead of a plain
+   keydown, so the keydown autopair path never sees them.
+   `^` is also a dead key but is excluded since it only autopairs with a
+   selection (see `autopair-when-selected`); its `^^` pair is handled
+   separately below."
+  #{"`" "~"})
+
+(defn editor-on-composition-commit!
+  "Markdown shortcuts for chars committed by a dead-key composition, mirroring
+   the keydown behavior: autopair/skip-close for ` and ~, and the ^^ highlight
+   pair. On international keyboard layouts these chars are dead keys, so they
+   never produce the plain keydowns the shortcut branches listen for."
+  [id format]
+  (fn [e]
+    (let [data (some-> ^js (util/native-event e) (gobj/get "data"))
+          input (gdom/getElement id)]
+      (when (and input (nil? (state/get-editor-action)))
+        (let [value (gobj/get input "value")
+              pos (cursor/pos input)]
+          ;; The committed char is already in the textarea when this runs;
+          ;; if it isn't (unexpected event ordering), leave the input as-is.
+          (when (= data (util/nth-safe value (dec pos)))
+            (cond
+              (contains? dead-key-autopair-chars data)
+              (do
+                ;; Remove the committed char so the caret state matches what
+                ;; the keydown autopair path expects, then re-run its decision.
+                (state/set-edit-content! id
+                                         (str (subs value 0 (dec pos)) (subs value pos))
+                                         true
+                                         (dec pos))
+                (let [curr (get-current-input-char input)
+                      prev (util/nth-safe (gobj/get input "value") (- pos 2))]
+                  (if (and (= curr data)
+                           (or (not= data "`") (not= prev "`")))
+                    (cursor/move-cursor-forward input)
+                    (autopair id data format nil))))
+
+              ;; ^^ highlight: mirrors the `double-chars-typed?` keydown branch.
+              ;; That branch relies on the typed char inserting itself afterwards;
+              ;; here the committed char is already in place, so just add the pair.
+              (and (= data "^")
+                   (= "^" (util/nth-safe value (- pos 2)))
+                   (not= "^" (util/nth-safe value pos)))
+              (commands/simple-insert! id "^^" {:backward-pos 2}))))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]

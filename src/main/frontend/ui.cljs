@@ -163,22 +163,35 @@
                                                        active-ring)}} "-"]]]])))
 
 (hsx/defc ls-textarea
-  [{:keys [on-change] :as props}]
+  [{:keys [on-change on-composition-commit] :as props}]
   (let [*el (hooks/use-ref nil)
         skip-composition? (state/use-sub :editor/action)
+        ;; The in-composition check doubles as a reentrancy guard: WebKit can
+        ;; deliver both a non-composing input and a compositionend for the
+        ;; same commit, and the commit hook triggers synthetic change events.
+        end-composition! (fn [e]
+                           (when (state/editor-in-composition?)
+                             (state/set-editor-in-composition! false)
+                             (when on-composition-commit (on-composition-commit e))
+                             (on-change e)))
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
                            (case e.type
-                             "compositionend" (do
-                                                (state/set-editor-in-composition! false)
-                                                (on-change e))
+                             "compositionend" (end-composition! e)
                              (state/set-editor-in-composition! true))))
-        props (assoc props
+        props (assoc (dissoc props :on-composition-commit)
                      :ref *el
                      "data-testid" "block editor"
-                     :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                          (on-change e)))
+                     :on-change (fn [e]
+                                  (if (state/editor-in-composition?)
+                                    ;; A composition canceled by a programmatic
+                                    ;; value write or a macOS dead-key commit
+                                    ;; never fires compositionend; the first
+                                    ;; non-composing input marks its real end.
+                                    (when-not (util/native-event-is-composing? e)
+                                      (end-composition! e))
+                                    (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition
                      :on-composition-end on-composition)]
