@@ -142,7 +142,7 @@
 (defn- table-row-id
   [row]
   (if (map? row)
-    (:db/id row)
+    (or (:block/uuid row) (:db/id row))
     row))
 
 (defn- table-row-selected?
@@ -255,7 +255,7 @@
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
                      (util/stop e)
-                     (let [idx (.indexOf data (:db/id row))]
+                     (let [idx (.indexOf data (table-row-id row))]
                        (when (not= last-selected-idx idx)
                          (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
                            (when (seq new-ids)
@@ -263,10 +263,11 @@
                                (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
        :on-checked-change (fn [v]
                             (if v
-                              (let [idx (.indexOf data (:db/id row))]
+                              (let [idx (.indexOf data (table-row-id row))]
                                 (set-table-last-selected-idx! table idx))
-                              (when (= (:db/id row) (get-table-last-selected-idx table))
-                                (set-table-last-selected-idx! table nil)))
+                              (let [idx (.indexOf data (table-row-id row))]
+                                (when (= idx (get-table-last-selected-idx table))
+                                  (set-table-last-selected-idx! table nil))))
                             (table-toggle-row-selected! table row v))
        :aria-label (t :view.table/select-row)
        :class (str "jtrigger flex transition-opacity "
@@ -286,7 +287,7 @@
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
                      (util/stop e)
-                     (let [idx (.indexOf data (:db/id row))]
+                     (let [idx (.indexOf data (table-row-id row))]
                        (when (not= last-selected-idx idx)
                          (let [new-ids (keep (fn [idx] (util/nth-safe data idx))
                                              (range (min last-selected-idx idx)
@@ -295,7 +296,7 @@
                              (doseq [row-id (map table-row-id new-ids)]
                                (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
        :on-checked-change (fn [v]
-                            (let [idx (.indexOf data (:db/id row))]
+                            (let [idx (.indexOf data (table-row-id row))]
                               (if v
                                 (set-table-last-selected-idx! table idx)
                                 (when (= idx (get-table-last-selected-idx table))
