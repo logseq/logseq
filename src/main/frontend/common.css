@@ -338,6 +338,11 @@ h1.title, h1.title input, .ls-page-title-container {
   font-size: var(--ls-page-title-size, 32px);
 }
 
+.ls-page-title-container textarea {
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .block-highlight,
 .ls-block.selected,
 .ls-table-cell.selected
