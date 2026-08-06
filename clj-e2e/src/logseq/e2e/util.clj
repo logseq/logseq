@@ -48,8 +48,12 @@
       ;; ensure cursor exists
       ;; Sometimes when the editor exists, there isn't a blinking cursor,
       ;; causing subsequent operations (like pressing Enter) to fail.
-      (.focus editor)
-      editor)))
+      (try
+        (.focus editor)
+        editor
+        (catch TimeoutError error
+          (when (w/visible? editor-q)
+            (throw error)))))))
 
 (defn get-edit-block-container
   []
