@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -50,6 +51,10 @@
                  (fn []
                    (when-let [graph (state/get-current-repo)]
                      (ipc/ipc :setCurrentGraph graph))))
+
+  (safe-api-call "createTodayJournal"
+                 (fn [_data]
+                   (page-handler/create-today-journal!)))
 
   (safe-api-call "redirect"
                  (fn [data]

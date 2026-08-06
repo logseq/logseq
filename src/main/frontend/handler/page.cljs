@@ -39,6 +39,36 @@
 (def <delete! page-common-handler/<delete!)
 (def edit-page-when-present! page-common-handler/edit-page-when-present!)
 
+(declare create-today-journal!)
+
+(defonce ^:private *pending-today-journal? (atom false))
+(defonce ^:private graph-loading-ref (state/path-ref :graph/loading?))
+(defonce ^:private graph-importing-ref (state/path-ref :graph/importing))
+
+(defn- today-journal-deferred?
+  []
+  (or (:graph/loading? @state/state)
+      (:graph/importing @state/state)))
+
+(defn- remove-pending-today-journal-watch! []
+  (remove-watch graph-loading-ref ::create-today-journal)
+  (remove-watch graph-importing-ref ::create-today-journal))
+
+(defn- watch-pending-today-journal! []
+  (let [retry! (fn [_ _ _ _]
+                 (when (and @*pending-today-journal?
+                            (not (today-journal-deferred?)))
+                   (reset! *pending-today-journal? false)
+                   (remove-pending-today-journal-watch!)
+                   (create-today-journal!)))]
+    (remove-pending-today-journal-watch!)
+    (add-watch graph-loading-ref ::create-today-journal retry!)
+    (add-watch graph-importing-ref ::create-today-journal retry!)))
+
+(defn- defer-today-journal-check! []
+  (reset! *pending-today-journal? true)
+  (watch-pending-today-journal!))
+
 (defn get-recycle-page
   []
   (db/get-page common-config/recycle-page-name))
@@ -279,12 +309,14 @@
 
 (defn create-today-journal!
   []
-  (when (and
-         ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
-         ;; We should implement an app-wide check rather than list them all here
-         (not (:graph/loading? @state/state))
-         (not (:graph/importing @state/state))
-         (not config/publishing?))
+  (cond
+    config/publishing?
+    nil
+
+    (today-journal-deferred?)
+    (defer-today-journal-check!)
+
+    :else
     (when-let [title (date/today)]
       (state/set-today! title)
       (p/let [today-page-lc-title (util/page-name-sanity-lc title)

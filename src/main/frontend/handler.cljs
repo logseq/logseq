@@ -12,6 +12,7 @@
             [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
+            [frontend.date :as date]
             [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
@@ -50,12 +51,38 @@
           (when-not (error/ignored? message)
             (log/error :exception error)))))
 
-(defn- watch-for-date!
-  []
-  (let [f (fn []
-            (page-handler/create-today-journal!))]
-    (f)
-    (js/setInterval f 3000)))
+(def ^:private today-journal-max-check-interval-ms 60000)
+
+(defonce ^:private *today-journal-schedule (atom nil))
+
+(defn- today-journal-check-delay-ms
+  [target-ms]
+  (min today-journal-max-check-interval-ms
+       (max 1000 (- target-ms (.now js/Date)))))
+
+(defn- stop-today-journal-timeout! []
+  (when-let [timeout-id (:timeout-id @*today-journal-schedule)]
+    (js/clearTimeout timeout-id)
+    (reset! *today-journal-schedule nil)))
+
+(defn- schedule-today-journal-timeout! [target-ms]
+  (stop-today-journal-timeout!)
+  (let [timeout-id (js/setTimeout
+                    (fn []
+                      (if (>= (.now js/Date) target-ms)
+                        (do
+                          (page-handler/create-today-journal!)
+                          (schedule-today-journal-timeout! (date/next-local-day-ms)))
+                        (schedule-today-journal-timeout! target-ms)))
+                    (today-journal-check-delay-ms target-ms))]
+    (reset! *today-journal-schedule {:target-ms target-ms
+                                     :timeout-id timeout-id})))
+
+(defn- setup-today-journal-check! []
+  (page-handler/create-today-journal!)
+  (if (util/electron?)
+    (stop-today-journal-timeout!)
+    (schedule-today-journal-timeout! (date/next-local-day-ms))))
 
 (defn restore-and-setup!
   [repo]
@@ -87,7 +114,7 @@
 
            (page-handler/init-commands!)
 
-           (watch-for-date!)))
+           (setup-today-journal-check!)))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
