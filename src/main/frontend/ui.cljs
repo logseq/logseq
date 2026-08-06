@@ -598,6 +598,79 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
+(defn segmented-control
+  "Render a pilled segmented control with radiogroup ARIA semantics.
+   Visually distinct from `tab-items` to communicate value selection vs.
+   content navigation: same content under both segments, only the
+   resulting *value/shape* differs.
+
+   opts:
+     :options       — [[id label] ...]
+     :active        — id of currently-selected segment
+     :on-change     — (fn [id event])
+     :aria-label    — string label for the radiogroup
+     :button-attrs  — optional map merged into every segment button"
+  [{:keys [options active on-change aria-label button-attrs]}]
+  [:div.segmented-control
+   {:role "radiogroup"
+    :aria-label aria-label}
+   (for [[id label] options
+         :let [active? (= active id)]]
+     [:button.segment
+      (merge button-attrs
+             {:key (name id)
+              :type "button"
+              :role "radio"
+              :aria-checked (str active?)
+              :tab-index (if active? "0" "-1")
+              :data-segment-id (name id)
+              :data-active (when active? "true")
+              ;; mousedown prevents the focus shift to the segment (we want
+              ;; the search input to keep focus during a real click). The
+              ;; actual on-change runs from on-click — this also makes
+              ;; programmatic .click() from keyboard nav work. preventDefault
+              ;; on mousedown does NOT suppress the subsequent click.
+              :on-mouse-down (fn [^js e] (util/stop e))
+              :on-click (fn [^js e]
+                          (util/stop e)
+                          (when on-change (on-change id e)))})
+      label])])
+
+(defn tab-items
+  "Render underline-style tab buttons. Caller wraps them in `.tabs-section`
+   and supplies any siblings (observers, `.tab-actions`, etc.).
+   opts: :tabs [[id label] ...], :active id, :on-change (fn [id event]),
+         :button-attrs (optional map merged into every button's attrs;
+                        does not override keys this fn sets)
+         :tab-id-prefix (optional; if set, emit id=\"<prefix>-tab-<id>\"
+                         per button for WAI-ARIA tab/tabpanel linkage)
+         :panel-id (optional; if set, emit aria-controls=<panel-id> per
+                    button — pair with the corresponding role=\"tabpanel\")"
+  [{:keys [tabs active on-change button-attrs tab-id-prefix panel-id]}]
+  (for [[id label] tabs
+        :let [active? (= active id)]]
+    [:button.tab-item
+     (merge button-attrs
+            {:key (name id)
+             :type "button"
+             :role "tab"
+             :aria-selected (str active?)
+             :tab-index (if active? "0" "-1")
+             :data-text label
+             :data-tab-id (name id)
+             :data-active (when active? "true")
+             ;; mousedown keeps focus where it was (e.g. on the search
+             ;; input) by preventing the default focus shift; click is
+             ;; what fires on-change so programmatic .click() from the
+             ;; keyboard-nav controller also works.
+             :on-mouse-down (fn [^js e] (util/stop e))
+             :on-click      (fn [^js e]
+                              (util/stop e)
+                              (when on-change (on-change id e)))}
+            (when tab-id-prefix {:id (str tab-id-prefix "-tab-" (name id))})
+            (when panel-id     {:aria-controls panel-id}))
+     label]))
+
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [binding (shortcut-dh/shortcut-binding shortcut-name)]
     (cond

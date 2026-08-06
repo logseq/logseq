@@ -110,10 +110,60 @@
   }
 
   .page-icon {
-    @apply flex items-center text-center align-baseline leading-none;
+    @apply flex items-center leading-none mr-2;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+
+    /* Avatar font size in sidebar */
+    .avatar-fallback {
+      font-size: 10px !important;
+      font-weight: 500 !important;
+    }
+
+    /* Standalone tabler-icon page icons (legacy `:type :tabler-icon`)
+       need this centering harness so the SVG sits in the middle of
+       the 20×20 tile instead of sticking to the left edge.
+       `:not(.ui__avatar *)` is load-bearing: `.ui__icon` also appears
+       deep inside avatar tiles (`.page-icon → .ls-icon-color-wrap
+       → .ui__avatar → .avatar-fallback → .ui__icon`), and applying
+       `w-full + max-width: 20px` to that nested span clamps the icon-
+       glyph wrapper to 20px while the SVG stays at its inline 11×11,
+       producing a tiny off-center glyph. The avatar-fallback already
+       centers its own children via flex; we don't need to layer
+       another centering frame on top. */
+    .ui__icon:not(.ui__avatar *) {
+      @apply inline-flex w-full justify-center items-center;
+      max-width: 20px;
+      overflow: hidden;
+    }
+
+    /* Emoji clamp — see block.css's `.page-ref ... em-emoji` rule for
+       the rationale (emoji-mart inline-styles win over `!important` on
+       the ancestor, so target both em-emoji and its descendant span).
+       At font-size 14 the glyph lands ~18-19px, fitting inside the
+       20×20 tile without bleeding into adjacent rows. */
+    em-emoji, em-emoji span {
+      font-size: 16px !important;
+      line-height: 1 !important;
+    }
   }
 
-  .ui__icon {
+  .icon-cp-container {
+    width: 20px;
+  }
+
+  /* Sidebar navigation icons (Journals, Pages, Graph view, etc.) get
+     the 16px / 8px-right-margin / 70%-opacity treatment so they pair
+     with their text label. `:not(.page-icon *)` excludes `.ui__icon`
+     descendants of `.page-icon` (page entry icons in Recent /
+     Favorites), which have their own sizing rules above and don't
+     want this nav-icon styling cascading into them. Without the
+     `:not()`, the rule cascades 4 levels deep into the avatar tree
+     and the `mr-2` shifts the SVG glyph left of center inside its
+     20×20 tile (the avatar-fallback's flex-centering accounts for the
+     item's outer margin, so 8px right-margin = 8px visual left-shift). */
+  .ui__icon:not(.page-icon *) {
     @apply relative flex justify-center w-[16px] text-base mr-2 opacity-70;
   }
 
@@ -233,6 +283,18 @@
 
         > .ui__icon {
           @apply mr-0;
+        }
+
+        /* Image icons in sidebar - fit without cropping, match container width */
+        .image-icon {
+          width: 20px !important;
+          height: 20px !important;
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
         }
       }
     }

@@ -38,16 +38,23 @@
         [restored-sidebar? set-restored-sidebar?] (hooks/use-state false)]
 
     (hooks/use-effect!
-     #(let [^js doc js/document.documentElement
-            ^js cls (.-classList doc)
-            ^js cls-body (.-classList js/document.body)]
-        (.setAttribute doc "data-theme" theme)
-        (if (= theme "dark") ;; for tailwind dark mode
-          ; The white-theme is for backward compatibility. See: https://github.com/logseq/logseq/pull/4652.
-          (do (.add cls "dark") (doto cls-body (.remove "white-theme" "light-theme") (.add "dark-theme")))
-          (do (.remove cls "dark") (doto cls-body (.remove "dark-theme") (.add "white-theme" "light-theme"))))
-        (ui/apply-custom-theme-effect! theme)
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
+     (fn []
+       ;; DOM stamp is owned by state/apply-theme-to-dom! — the same
+       ;; helper set-theme-mode! calls synchronously before set-state!.
+       ;; Calling it here covers the initial mount (where set-theme-mode!
+       ;; hasn't run) and is idempotent on every subsequent toggle.
+       (state/apply-theme-to-dom! theme)
+       (ui/apply-custom-theme-effect! theme)
+       (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme})
+       ;; Force a full reactive re-render after the data-theme attribute
+       ;; is on <html>. Components that DON'T subscribe to :ui/theme but
+       ;; DO render avatar/contrast colors (computed from CSS vars at
+       ;; render time) would otherwise keep their stale inline styles
+       ;; until something unrelated triggered them to re-render. Theme
+       ;; toggle is a rare user action; the one-frame reconciliation
+       ;; cost is imperceptible. Same pattern as language change
+       ;; (settings.cljs:298).
+       (ui-handler/re-render-root!))
      [theme])
 
     ;; theme color

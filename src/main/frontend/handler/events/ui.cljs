@@ -305,11 +305,8 @@
        target'
        (fn [{:keys [id]}]
          (icon-component/icon-search
-          {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
-           :tabs [[:emoji (t :icon/tab-emojis)]]
-           :default-tab :emoji
-           :show-used? true
-           :icon-value nil}))
+          (merge icon-component/reaction-picker-opts
+                 {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))})))
        {:align :start
         :content-props {:class "ls-icon-picker"}}))))
 
