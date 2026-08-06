@@ -225,6 +225,7 @@
                icon (icon-component/get-node-icon-cp block {})]
            {:icon icon
             :icon-theme :gray
+            :hide-inline-icon? true
             :text text
             :result-type :page
             :source-block block}))
