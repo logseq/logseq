@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
@@ -116,7 +117,11 @@
       (if skip-load?
         (edit-loaded-block! repo block pos opts)
         (p/let [loaded-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
-          (edit-loaded-block! repo (or loaded-block block) pos opts))))))
+          (let [{:keys [status value]} (db-subs/block-snapshot (:block/uuid block))]
+            (edit-loaded-block! repo (or (when (= :ready status) value)
+                                         loaded-block
+                                         block)
+                                pos opts)))))))
 
 (defn- get-original-block-by-dom
   [node]

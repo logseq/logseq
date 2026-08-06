@@ -295,6 +295,38 @@
   [script]
   (json/read-value (w/eval-js script) json/keyword-keys-object-mapper))
 
+(defn- start-edit-exit-frame-capture!
+  []
+  (w/eval-js
+   "(() => {
+      const editor = document.querySelector('.editor-wrapper textarea');
+      const block = editor?.closest('.ls-block');
+      if (!block) throw new Error('Expected an editing block');
+
+      window.__e2eEditExitFrames = [];
+      const startedAt = performance.now();
+      const sample = () => {
+        const currentEditor = block.querySelector('.editor-wrapper textarea');
+        const title = block.querySelector('.block-title-wrap');
+        const pageRef = block.querySelector('.page-reference .page-ref');
+        window.__e2eEditExitFrames.push({
+          editing: Boolean(currentEditor),
+          text: title?.textContent || '',
+          pageRefText: pageRef?.textContent || ''
+        });
+        if (performance.now() - startedAt < 400) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      return true;
+    })()"))
+
+(defn- edit-exit-read-frames
+  []
+  (util/wait-timeout 450)
+  (->> (js-json "JSON.stringify(window.__e2eEditExitFrames)")
+       (remove :editing)
+       vec))
+
 (defn- insert-current-page-blocks!
   [blocks]
   (let [page (ls-api-call! :editor.getCurrentPage)
@@ -1159,6 +1191,46 @@
     (util/exit-edit)
     (assert/assert-is-visible
      (loc/filter ".block-title-wrap" :has-text "longwordwithoutbreak"))))
+
+(deftest escape-save-never-paints-stale-block-content-test
+  (testing "the first rendered frame after Escape contains the saved text"
+    (let [title (str "escape-save-frame-" (random-uuid))]
+      (b/new-block "")
+      (w/fill util/editor-q title)
+      (start-edit-exit-frame-capture!)
+      (k/esc)
+      (assert/assert-non-editor-mode)
+      (let [frames (edit-exit-read-frames)]
+        (is (seq frames))
+        (is (every? #(= title (:text %)) frames)
+            frames)))))
+
+(deftest new-page-reference-renders-on-the-first-frame-after-save-test
+  (testing "a newly created page reference is never blank after Escape"
+    (let [page-title (str "reference-first-frame-" (random-uuid))]
+      (b/new-block "")
+      (w/fill util/editor-q (str "[[" page-title "]]"))
+      (start-edit-exit-frame-capture!)
+      (k/esc)
+      (assert/assert-non-editor-mode)
+      (let [frames (edit-exit-read-frames)]
+        (is (seq frames))
+        (is (every? #(= page-title (:pageRefText %)) frames)
+            frames)))))
+
+(deftest saved-page-reference-reopens-with-page-title-test
+  (testing "keyboard editing uses the page title instead of its UUID"
+    (let [page-title (str "reference-reedit-" (random-uuid))
+          source (format "[[%s]]" page-title)]
+      (b/new-block "")
+      (w/fill util/editor-q source)
+      (k/esc)
+      (assert/assert-non-editor-mode)
+      (assert/assert-is-visible
+       (loc/filter ".page-reference .page-ref" :has-text page-title))
+      (k/enter)
+      (assert/assert-editor-mode)
+      (is (= source (util/get-edit-content))))))
 
 (deftest page-and-tag-autocomplete-test
   (testing "page and tag autocomplete update, insert and open existing/new targets"

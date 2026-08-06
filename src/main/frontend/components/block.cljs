@@ -1241,12 +1241,11 @@
              [:span.text-gray-500.bracket page-ref/right-brackets])])))))
 
 (hsx/defc subscribed-page-reference
-  [config uuid-or-title label page-uuid]
+  [config uuid-or-title label page-uuid fallback-block]
   (let [block (db-hooks/use-block page-uuid)]
-    (when block
-      (page-reference-content config uuid-or-title label block))))
+    (page-reference-content config uuid-or-title label (or block fallback-block))))
 
-(defn referenced-block-uuid
+(defn referenced-block
   [block uuid-or-title]
   (let [lookup-name (when (string? uuid-or-title)
                       (string/lower-case (string/trim uuid-or-title)))]
@@ -1257,14 +1256,14 @@
                                (= lookup-name
                                   (some-> (:block/title reference)
                                           string/lower-case)))))
-              (:block/uuid reference)))
+              reference))
           (:block/refs block))))
 
 (hsx/defc looked-up-page-reference
   [config uuid-or-title label]
   (let [page-uuid (db-hooks/use-resource [:page-identity uuid-or-title])]
     (if page-uuid
-      (subscribed-page-reference config uuid-or-title label page-uuid)
+      (subscribed-page-reference config uuid-or-title label page-uuid nil)
       (page-reference-content config uuid-or-title label nil))))
 
 (hsx/defc page-reference
@@ -1277,13 +1276,14 @@
                               (parse-uuid str-id)
                               str-id))
                           uuid-or-title*)
+          reference (referenced-block (:block config) uuid-or-title)
           page-uuid (or (when (uuid? uuid-or-title) uuid-or-title)
-                        (referenced-block-uuid (:block config) uuid-or-title))
+                        (:block/uuid reference))
           self-reference? (when (set? (:ref-set config))
                             (contains? (:ref-set config) uuid-or-title))]
       (when-not self-reference?
         (if page-uuid
-          (subscribed-page-reference config uuid-or-title label page-uuid)
+          (subscribed-page-reference config uuid-or-title label page-uuid reference)
           (looked-up-page-reference config uuid-or-title label))))))
 
 (defn- latex-environment-content
