@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
    [com.climate.claypoole :as cp]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.const :refer [*page1 *page2]]
@@ -50,8 +51,9 @@
         (w/with-page @*page2
           (rtc/wait-tx-update-to @*last-remote-tx)
           (doseq [page-name page-names]
-            (util/search page-name)
-            (assert/assert-is-hidden (w/get-by-test-id page-name))))))
+            (let [deleted-page (ls-api-call! :editor.getPage page-name)]
+              (is (number? (get deleted-page ":logseq.property/deleted-at")))
+              (is (= "Recycle" (get-in deleted-page ["parent" "title"]))))))))
     (testing "Page reference created"
       (let [page-name "test-page-reference"
             {:keys [_local-tx remote-tx]}
