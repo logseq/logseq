@@ -72,6 +72,15 @@
       (k/arrow-down))
     (k/arrow-right)))
 
+(deftest table-row-selection-shows-action-bar-test
+  (seed-table-view! "table-row-selection-actions")
+  (doseq [title ["Alpha table object" "Beta table object"]]
+    (let [row (loc/filter ".ls-view-body .ls-table-row" :has-text title)]
+      (w/click (.locator row "[data-table-row-select]"))))
+  (assert/assert-is-visible ".ls-table-actions")
+  (assert/assert-is-visible
+   (loc/filter ".ls-table-actions .selection-count" :has-text "2")))
+
 (deftest view-lifecycle-and-display-type-persistence-test
   (let [tag-name "view-lifecycle"
         container-page (page/get-page-name)
