@@ -28,7 +28,6 @@
             [frontend.util.page :as page-util]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
-            [goog.functions :as gfun]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
             [logseq.shui.hooks :as hooks]
@@ -1023,6 +1022,10 @@
   (persist-cmdk-query-state! state)
   (load-results :default state))
 
+(defn make-search-debouncer
+  [refresh-fn]
+  (util/cancelable-debounce refresh-fn 150))
+
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value) true))
   ([state e input] (handle-input-change state e input true))
@@ -1172,12 +1175,8 @@
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
         input-ref (::input-ref state)
-        debounced-refresh-results (hooks/use-callback
-                                   (gfun/debounce
-                                    (fn []
-                                      (refresh-results! state))
-                                    150)
-                                   [])]
+        [debounced-refresh-results cancel-refresh-results]
+        (hooks/use-memo #(make-search-debouncer (fn [] (refresh-results! state))) [])]
     (hooks/use-effect! (fn []
                          (reset! (::all-items-cache state) (vec all-items))
                          (when highlighted-item
@@ -1202,6 +1201,7 @@
            (when timeout-id
              (js/clearTimeout timeout-id)))))
      [])
+    (hooks/use-effect! (fn [] cancel-refresh-results) [])
     [:div.cp__cmdk-input-row {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent !border-none w-full !outline-none !shadow-none px-3 py-3 focus:!border-none focus:!outline-none focus:!shadow-none focus-visible:!outline-none focus-visible:!shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -1214,7 +1214,6 @@
                     (let [new-value (.-value (.-target e))
                           composing? (util/native-event-is-composing? e)]
                       (handle-input-change state e new-value false)
-                      (reset! (::results state) default-results)
                       (when-not composing?
                         (debounced-refresh-results))
                       (when-let [on-change (:on-input-change opts)]
