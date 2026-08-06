@@ -176,6 +176,11 @@
               graph))
           (state/get-repos))))
 
+(defn <load-rtc-graph-uuid
+  [current-repo db-worker-ready?]
+  (when (and current-repo db-worker-ready?)
+    (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid current-repo)))
+
 (defn- register-native-top-bar-events! [*configure-top-bar-f]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar
@@ -321,6 +326,7 @@
         page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
         [rtc-graph-uuid set-rtc-graph-uuid!] (hooks/use-state nil)
+        db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)
         detail-info (rtc-indicator/use-detail-info)
         _ (rfx/use-sub [:auth/current-login-user])
         online? (rfx/use-sub [:network/online?])
@@ -343,9 +349,9 @@
                      "#CA8A04")]
     (hooks/use-effect!
      (fn []
-       (if current-repo
+       (if-let [rtc-graph-uuid-request (<load-rtc-graph-uuid current-repo db-worker-ready?)]
          (let [cancelled? (atom false)]
-           (-> (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid current-repo)
+           (-> rtc-graph-uuid-request
                (p/then (fn [uuid]
                          (when-not @cancelled?
                            (set-rtc-graph-uuid! uuid))))
@@ -354,7 +360,7 @@
          (do
            (set-rtc-graph-uuid! nil)
            nil)))
-     [current-repo])
+     [current-repo db-worker-ready?])
 
     (hooks/use-effect!
      (fn []
