@@ -2,7 +2,10 @@
   (:require [cljs-time.core :as t]
             [cljs.test :refer [deftest is use-fixtures]]
             [frontend.db.query-custom :as query-custom]
+            [frontend.db.query-react :as query-react]
+            [frontend.db.react :as react]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.inputs :as db-inputs]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -141,3 +144,45 @@ adds rules that users often use"
             (blocks-with-tag-on-specified-current-page :current-page "b" :tag "shared-tag")
             [])
       "Querying for blocks with tag on current page from page returns not-empty but differing results"))
+
+(deftest cache-input-for-right-now-ms
+  (react/clear-query-state!)
+  (let [timestamp (atom 1000)
+        query {:inputs [:right-now-ms]
+               :query '[:find ?now
+                        :in $ ?now]}]
+    (with-redefs [common-util/time-ms #(swap! timestamp inc)]
+      (let [[k1 result1] (query-react/react-query test-helper/test-db query {})
+            [k2 result2] (query-react/react-query test-helper/test-db query {})]
+        (is (= k1 k2)
+            ":right-now-ms produces a stable cache key as time advances")
+        (is (identical? result1 result2)
+            ":right-now-ms reuses the cached result atom")
+        (is (= #{[1001]} @result1)
+            ":right-now-ms is resolved before query execution")))))
+
+(deftest cache-input-for-right-now-ms-with-context-input
+  (react/clear-query-state!)
+  (let [timestamp (atom 1000)
+        query {:inputs [:current-page :right-now-ms]
+               :query '[:find ?page ?now
+                        :in $ ?page ?now]}]
+    (with-redefs [common-util/time-ms #(swap! timestamp inc)]
+      (let [[a-k1 a-result1] (query-react/react-query test-helper/test-db query
+                                                      {:current-page-fn (constantly "a")})
+            [a-k2 a-result2] (query-react/react-query test-helper/test-db query
+                                                      {:current-page-fn (constantly "a")})
+            [b-k b-result] (query-react/react-query test-helper/test-db query
+                                                    {:current-page-fn (constantly "b")})]
+        (is (= a-k1 a-k2)
+            ":right-now-ms stays stable within the same query context")
+        (is (not= a-k1 b-k)
+            "Resolved context inputs still distinguish cache entries")
+        (is (identical? a-result1 a-result2)
+            "The same query context reuses the cached result atom")
+        (is (= #{["a" 1001]} @a-result1)
+            "The first context uses its resolved inputs")
+        (is (= "b" (ffirst @b-result))
+            "A different context executes with its resolved page input")
+        (is (< (second (first @a-result1)) (second (first @b-result)))
+            "A different context resolves its own current timestamp")))))
