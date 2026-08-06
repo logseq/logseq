@@ -60,6 +60,28 @@
            return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
          })()")))
 
+(deftest cmdk-keeps-results-visible-while-searching
+  (testing "typing and deleting do not clear the visible results before the debounced search finishes"
+    (let [prefix (str "cmdkflicker" (random-uuid))
+          result-selector (format "[data-testid^='%s']" prefix)]
+      (setup-search prefix 2 "a")
+      (let [result-count (util/count-elements result-selector)]
+        (is (pos? result-count) "initial search results are visible")
+
+        (util/press-seq "a")
+        (is (= result-count (util/count-elements result-selector))
+            "typing keeps the previous results visible")
+        (util/wait-timeout 400)
+        (is (= result-count (util/count-elements result-selector))
+            "matching results remain visible after search settles")
+
+        (k/press "Backspace")
+        (is (= result-count (util/count-elements result-selector))
+            "deleting keeps the previous results visible")
+        (util/wait-timeout 400)
+        (is (= result-count (util/count-elements result-selector))
+            "matching results remain visible after deletion search settles")))))
+
 ;; ---------------------------------------------------------------------------
 ;; Highlight mode switching
 ;;
