@@ -45,7 +45,11 @@
               (assets-handler/normalize-asset-resource-url (fs/asset-path-normalize href))
 
               protocol-link?
-              href
+              (if (and (util/electron?)
+                       (string/starts-with? href "file://"))
+                ;; strip file:// then normalize (protects Windows drive: C: -> C/logseq__colon/)
+                (assets-handler/normalize-asset-resource-url (string/replace-first href "file://" ""))
+                href)
 
               :else
               (assets-handler/normalize-asset-resource-url original-path))
@@ -214,16 +218,21 @@
   (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
-        relative-path (subs path 14)]
-    (cond
-      (string/starts-with? path "zotero-link://")
-      (str "file://" (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+        relative-path (subs path 14)
+        local-path (cond
+                     (string/starts-with? path "zotero-link://")
+                     (util/node-path.join zotero-linked-attachment-base-directory relative-path)
 
-      (string/starts-with? path "zotero-path://")
-      (str "file://" (util/node-path.join zotero-data-directory "storage" relative-path))
+                     (string/starts-with? path "zotero-path://")
+                     (util/node-path.join zotero-data-directory "storage" relative-path)
 
-      :else ;; compatible with commit 33db791
-      (str "file://" (util/node-path.join zotero-data-directory "storage" id path)))))
+                     :else ;; compatible with commit 33db791
+                     (util/node-path.join zotero-data-directory "storage" id path))]
+    ;; normalize-asset-resource-url converts to assets:// on Electron,
+    ;; protecting Windows drive letters (C: -> C/logseq__colon/)
+    (if (util/electron?)
+      (assets-handler/normalize-asset-resource-url local-path)
+      (str "file://" local-path))))
 
 (defn db-based-open-block-ref!
   [block]

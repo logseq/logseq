@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.handler.assets :as assets-handler]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -66,12 +67,14 @@
 
 (defn zotero-full-path
   [config item-key filename]
-  (str "file://"
-       (util/node-path.join
-        (setting config :zotero-data-directory)
-        "storage"
-        item-key
-        filename)))
+  (let [local-path (util/node-path.join
+                    (setting config :zotero-data-directory)
+                    "storage"
+                    item-key
+                    filename)]
+    (if (util/electron?)
+      (assets-handler/normalize-asset-resource-url local-path)
+      (str "file://" local-path))))
 
 (hsx/defc zotero-imported-file
   [item-key filename]
@@ -90,9 +93,10 @@
     (if (string/blank? attachment-directory)
       [:p.warning (t :zotero/linked-file-warning)]
       (let [path (read-string path)
-            full-path
-            (str "file://"
-                 (util/node-path.join
-                  attachment-directory
-                  (string/replace-first path "attachments:" "")))]
+            local-path (util/node-path.join
+                        attachment-directory
+                        (string/replace-first path "attachments:" ""))
+            full-path (if (util/electron?)
+                        (assets-handler/normalize-asset-resource-url local-path)
+                        (str "file://" local-path))]
         (open-button full-path)))))
