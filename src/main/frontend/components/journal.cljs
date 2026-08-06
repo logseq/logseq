@@ -10,6 +10,7 @@
 (defonce ^:private journal-item-height-by-key* (atom {}))
 
 (def ^:private journal-window-limit 50)
+(def ^:private journal-window-load-delay-ms 120)
 (def ^:private default-journal-height 640)
 
 (defn- estimated-journal-height
@@ -74,7 +75,10 @@
          [0 (dec (if (util/rtc-test-without-virtualization?)
                    journal-window-limit
                    initial-count))])
-        visible-uuids (journal-window journal-uuids visible-range)
+        settled-visible-range (hooks/use-debounced-value
+                               visible-range
+                               journal-window-load-delay-ms)
+        visible-uuids (journal-window journal-uuids settled-visible-range)
         initial-uuids (set (:loaded-uuids journal-data))
         window-key (when (some #(not (contains? initial-uuids %)) visible-uuids)
                      [:journal-window visible-uuids])
