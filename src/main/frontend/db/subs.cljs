@@ -425,7 +425,11 @@
                        current (store-slot store slot-key)
                        parent-tx-id (get-in blocks [parent-uuid :block/tx-id])]
                    (cond
-                     (and current (= base-rev (:basis-rev current)))
+                     (and current
+                          (= :ready (get-in current [:snapshot :status]))
+                          (or (= base-rev (:basis-rev current))
+                              (and (mounted? slot-key)
+                                   (< (:basis-rev current) base-rev))))
                      (let [items (patch-items parent-uuid (:items current) removed upsert)]
                        (record-delta-slot store changed slot-key
                                           (children-slot rev (:tx-id current) items)))
