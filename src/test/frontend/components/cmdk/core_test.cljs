@@ -35,3 +35,17 @@
            (fn [error]
              (is false (str error))))
           (p/finally done)))))
+
+(deftest cmdk-search-debouncer-coalesces-continuous-typing-test
+  (async done
+    (let [calls (atom 0)
+          [schedule! cancel!] (cmdk/make-search-debouncer #(swap! calls inc))]
+      (doseq [delay [0 100 200 300 400]]
+        (js/setTimeout schedule! delay))
+      (js/setTimeout
+       (fn []
+         (cancel!)
+         (is (= 1 @calls)
+             "five keystrokes 100 ms apart should trigger one search")
+         (done))
+       700))))
