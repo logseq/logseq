@@ -199,6 +199,35 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest ensure-started-waits-for-stop-all-before-starting-new-runtime
+  (async done
+    (let [start-calls (atom [])
+          stop-calls (atom [])
+          stop-deferred (p/deferred)
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (swap! start-calls conj repo)
+                                     (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    stop-deferred)})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (let [stop-all-promise (db-worker/stop-all! manager)
+                          ensure-new-promise (db-worker/ensure-started! manager "graph-b" :window-2)]
+                      (p/let [_ (p/delay 0)
+                              _ (do
+                                  (is (= ["graph-a"] @stop-calls))
+                                  (is (= ["graph-a"] @start-calls)))
+                              _ (p/resolve! stop-deferred true)]
+                        (p/all [stop-all-promise ensure-new-promise])))
+                  manager-state @(:state manager)]
+            (is (= ["graph-a" "graph-b"] @start-calls))
+            (is (= "graph-b" (get-in manager-state [:window->repo :window-2])))
+            (is (= #{:window-2} (get-in manager-state [:repos "graph-b" :windows]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest stop-all-skips-external-runtimes
   (async done
     (let [stop-calls (atom [])

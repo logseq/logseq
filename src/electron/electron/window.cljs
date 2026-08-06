@@ -141,9 +141,90 @@
           (when (= res 1)
             (default-open url)))))))
 
+(defn- window-open-handler
+  [^js win open-external!]
+  (fn [^js details]
+    (let [url         (.-url details)
+          fullscreen? (.isFullScreen win)
+          features    (string/split (.-features details) ",")
+          features    (when (seq features)
+                        (reduce (fn [a b]
+                                  (let [[k v] (string/split b "=")]
+                                    (if (string? v)
+                                      (assoc a (keyword k) (parse-long (string/trim v)))
+                                      a))) {} features))]
+      (-> (if (= url "about:blank")
+            (merge {:action "allow"
+                    :overrideBrowserWindowOptions
+                    {:frame true
+                     :titleBarStyle "default"
+                     :trafficLightPosition {:x 16 :y 16}
+                     :autoHideMenuBar (not mac?)
+                     :fullscreenable (not fullscreen?)
+                     :webPreferences
+                     {:plugins true
+                      :nodeIntegration false
+                      :webSecurity (not dev?)
+                      :preload (node-path/join js/__dirname "js/preload.js")
+                      :nativeWindowOpen true}}}
+                   features)
+            (do (open-external! url) {:action "deny"}))
+          (bean/->js)))))
+
+(defn- setup-web-contents-listeners!
+  [^js web-contents]
+  (let [will-navigate-handler
+        (fn [e url]
+          (.preventDefault e)
+          (open-default-app! url open))
+
+        persist-zoom-level-handler
+        (fn []
+          (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
+
+        restore-zoom-level-handler
+        (fn []
+          (.send web-contents "restore-zoom-level"))]
+    (doto web-contents
+      (.on "will-navigate" will-navigate-handler)
+      (.on "did-start-navigation" persist-zoom-level-handler)
+      (.on "page-title-updated" restore-zoom-level-handler))
+    #(doto web-contents
+       (.off "will-navigate" will-navigate-handler)
+       (.off "did-start-navigation" persist-zoom-level-handler)
+       (.off "page-title-updated" restore-zoom-level-handler))))
+
+(defn- setup-browser-window-listeners!
+  [^js win ^js web-contents]
+  (let [enter-full-screen-handler
+        (fn []
+          (.send web-contents "full-screen" "enter"))
+
+        leave-full-screen-handler
+        (fn []
+          (.send web-contents "full-screen" "leave"))
+
+        maximize-handler
+        (fn []
+          (.send web-contents "maximize" true))
+
+        unmaximize-handler
+        (fn []
+          (.send web-contents "maximize" false))]
+    (doto win
+      (.on "enter-full-screen" enter-full-screen-handler)
+      (.on "leave-full-screen" leave-full-screen-handler)
+      (.on "maximize" maximize-handler)
+      (.on "unmaximize" unmaximize-handler))
+    #(doto win
+       (.off "enter-full-screen" enter-full-screen-handler)
+       (.off "leave-full-screen" leave-full-screen-handler)
+       (.off "maximize" maximize-handler)
+       (.off "unmaximize" unmaximize-handler))))
+
 (defn setup-window-listeners!
   [^js win]
-  (when win
+  (if win
     (let [web-contents (. win -webContents)
           open-external!
           (fn [url]
@@ -156,62 +237,16 @@
                    (.join node-path (. app getAppPath) "index.html"))
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
-
-          will-navigate-handler
-          (fn [e url]
-            (.preventDefault e)
-            (open-default-app! url open))
-
           context-menu-handler
           (context-menu/setup-context-menu! win)
+          clear-web-contents! (setup-web-contents-listeners! web-contents)
+          clear-window! (setup-browser-window-listeners! win web-contents)]
 
-          window-open-handler
-          (fn [^js details]
-            (let [url         (.-url details)
-                  fullscreen? (.isFullScreen win)
-                  features    (string/split (.-features details) ",")
-                  features    (when (seq features)
-                                (reduce (fn [a b]
-                                          (let [[k v] (string/split b "=")]
-                                            (if (string? v)
-                                              (assoc a (keyword k) (parse-long (string/trim v)))
-                                              a))) {} features))]
-              (-> (if (= url "about:blank")
-                    (merge {:action "allow"
-                            :overrideBrowserWindowOptions
-                            {:frame true
-                             :titleBarStyle "default"
-                             :trafficLightPosition {:x 16 :y 16}
-                             :autoHideMenuBar (not mac?)
-                             :fullscreenable (not fullscreen?)
-                             :webPreferences
-                             {:plugins true
-                              :nodeIntegration false
-                              :webSecurity (not dev?)
-                              :preload (node-path/join js/__dirname "js/preload.js")
-                              :nativeWindowOpen true}}}
-                           features)
-                    (do (open-external! url) {:action "deny"}))
-                  (bean/->js))))]
-
-      (doto web-contents
-        (.on "will-navigate" will-navigate-handler)
-        (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "page-title-updated" #(.send web-contents "restore-zoom-level"))
-        (.setWindowOpenHandler window-open-handler))
-
-      (doto win
-        (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
-        (.on "maximize" #(.send web-contents "maximize" true))
-        (.on "unmaximize" #(.send web-contents "maximize" false)))
+      (.setWindowOpenHandler web-contents (window-open-handler win open-external!))
 
       ;; clear
       (fn []
-        (doto web-contents
-          (.off "context-menu" context-menu-handler)
-          (.off "will-navigate" will-navigate-handler))
-
-        (.off win "enter-full-screen")
-        (.off win "leave-full-screen")))
+        (.off web-contents "context-menu" context-menu-handler)
+        (clear-web-contents!)
+        (clear-window!)))
     #()))
