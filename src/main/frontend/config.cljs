@@ -99,6 +99,33 @@
     (custom-url->http-base custom)
     default-db-sync-http-base))
 
+(defn get-custom-sync-server-token
+  "Read the user-configured access token for the custom sync server from
+   localStorage. Returns nil when not set or empty."
+  []
+  (when-not util/node-test?
+    (let [v (.getItem js/localStorage "sync-server-token")]
+      (when (and (string? v) (not (string/blank? v)))
+        v))))
+
+(defn set-custom-sync-server-token!
+  "Persist the custom sync server access token to localStorage. Pass nil or
+   empty string to clear."
+  [token]
+  (when-not util/node-test?
+    (if (or (nil? token) (string/blank? token))
+      (.removeItem js/localStorage "sync-server-token")
+      (.setItem js/localStorage "sync-server-token" (string/trim token)))))
+
+(defn local-sync-token
+  "Return the access token for a self-hosted sync server, or nil. Non-nil only
+   when a custom sync server URL is configured as well, so the token is never
+   sent to the default Logseq sync service. When set, db-sync runs without a
+   Logseq account."
+  []
+  (when (get-custom-sync-server-url)
+    (get-custom-sync-server-token)))
+
 (defn get-custom-publish-server-url
   "Read the user-configured custom publish server URL from localStorage.
    Returns nil when not set or empty."

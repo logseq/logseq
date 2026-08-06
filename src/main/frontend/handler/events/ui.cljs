@@ -2,6 +2,7 @@
   "UI events"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
+            [clojure.string :as string]
             [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.icon :as icon-component]
@@ -101,6 +102,32 @@
   (shui/dialog-open!
    (settings/sync-server-url-settings-container)
    {:id :sync-server-panel :center? true :class "lg:max-w-2xl"}))
+
+(defmethod events/handle :sync-server/pair-request [[_ {:keys [url token]}]]
+  (let [url (some-> url string/trim)
+        token (some-> token string/trim not-empty)]
+    (if-not (and (config/valid-sync-server-url? url) token)
+      (notification/show! (t :settings.sync-server/pair-invalid) :error)
+      (-> (shui/dialog-confirm!
+           [:div.flex.flex-col.gap-2.-my-2
+            [:p.font-medium (t :settings.sync-server/pair-confirm)]
+            [:p [:code url]]
+            [:p.text-sm.opacity-70 (t :settings.sync-server/pair-confirm-desc)]]
+           {:cancel-label (t :ui/cancel)
+            :ok-label (t :ui/confirm)})
+          (p/then
+           (fn []
+             (config/set-custom-sync-server-url! url)
+             (config/set-custom-sync-server-token! token)
+             (state/pub-event! [:rtc/sync-app-state])
+             (-> (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                          {:enabled? true
+                                           :ws-url (config/db-sync-ws-url)
+                                           :http-base (config/db-sync-http-base)})
+                 (p/then (fn [] (rtc-handler/<get-remote-graphs)))
+                 (p/then (fn [] (notification/show! (t :settings.sync-server/pair-success) :success)))
+                 (p/catch (fn [e]
+                            (notification/show! (str "Sync server pairing failed: " e) :error))))))))))
 
 (defmethod events/handle :go/publish-server-settings [[_]]
   (shui/dialog-open!

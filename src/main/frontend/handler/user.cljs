@@ -351,8 +351,16 @@
 
 (def-thread-api :thread-api/ensure-id&access-token
   []
-  (p/let [_ (js/Promise. task--ensure-id&access-token)]
-    {:id-token (state/get-auth-id-token)}))
+  (if-let [token (config/local-sync-token)]
+    {:id-token token}
+    (p/let [_ (js/Promise. task--ensure-id&access-token)]
+      {:id-token (state/get-auth-id-token)})))
+
+(defn local-sync-mode?
+  "True when a self-hosted sync server and its local access token are
+   configured, so db-sync works without a Logseq account."
+  []
+  (some? (config/local-sync-token)))
 
 ;;; user groups
 

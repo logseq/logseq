@@ -16,6 +16,8 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.e2ee]
             [frontend.handler.events :as events]
             [frontend.handler.events.export]
@@ -202,6 +204,16 @@
                      _ (when target-repo
                          (apply-url-target-route! url-target))]
                (set-network-watcher!)
+               ;; With a self-hosted sync server and local access token there
+               ;; is no login event to fetch remote graphs, so do it at startup.
+               (when (and (config/local-sync-token)
+                          (not (user-handler/logged-in?)))
+                 (-> (p/let [_ (rtc-handler/<get-remote-graphs)]
+                       (when-let [repo' (state/get-current-repo)]
+                         (when (some #(= repo' (:url %)) (state/get-rtc-graphs))
+                           (rtc-flows/trigger-rtc-start repo'))))
+                     (p/catch (fn [e]
+                                (log/error :local-sync/fetch-remote-graphs-failed e)))))
                (when (mobile-util/native-platform?)
                  (state/restore-mobile-theme!)))))
           (p/catch (fn [e]

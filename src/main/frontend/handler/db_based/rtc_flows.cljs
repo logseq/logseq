@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
   (:require [frontend.common.missionary :as c.m]
+            [frontend.config :as config]
             [frontend.flows :as flows]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.state :as state]
@@ -64,7 +65,8 @@ conditions:
         (keep (fn [m]
                 (let [{:keys [rtc-lock last-stop-exception-ex-data graph-uuid login-user online?]} m]
                   (when (and online?
-                             (some? (:email login-user))
+                             (or (some? (:email login-user))
+                                 (some? (config/local-sync-token)))
                              (some? graph-uuid)
                              (not rtc-lock) ; no rtc loop now
                              (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data)))
@@ -151,5 +153,7 @@ conditions:
      mobile-app-active&rtc-not-running-flow)]
    (apply c.m/mix)
    (m/latest vector flows/current-login-user-flow)
-   (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))
+   (m/eduction (keep (fn [[current-user trigger-event]]
+                       (when (or current-user (config/local-sync-token))
+                         trigger-event))))
    (c.m/debounce 50)))
