@@ -601,6 +601,75 @@
                   (unsubscribe-second)
                   (unsubscribe-first))))))))
 
+(deftest mounted-children-apply-patches-after-unrelated-revision-gap-test
+  (async done
+         (let [page-uuid (random-uuid)
+               parent-uuid (random-uuid)
+               moved-uuid (random-uuid)
+               sibling-uuid (random-uuid)
+               loader-calls (atom [])
+               pending-reload (p/deferred)]
+           (subs/apply-delta! (delta 1 {}))
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [graph-id requested-parent]
+                              (swap! loader-calls conj [graph-id requested-parent])
+                              (cond
+                                (and (= page-uuid requested-parent)
+                                     (= 1 (count (filter #(= page-uuid (second %))
+                                                         @loader-calls))))
+                                (p/resolved
+                                 (children-patch 1 page-uuid 10
+                                                 [[parent-uuid "a"]
+                                                  [sibling-uuid "c"]]))
+
+                                (and (= parent-uuid requested-parent)
+                                     (= 1 (count (filter #(= parent-uuid (second %))
+                                                         @loader-calls))))
+                                (p/resolved
+                                 (children-patch 1 parent-uuid 11
+                                                 [[moved-uuid "a"]]))
+
+                                :else
+                                pending-reload))]
+              (let [unsubscribe-page
+                    (subs/subscribe-children! page-uuid (fn []))
+                    unsubscribe-parent
+                    (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= {:status :ready
+                                  :value [parent-uuid sibling-uuid]}
+                                 (subs/children-snapshot page-uuid)))
+                        _ (is (= {:status :ready :value [moved-uuid]}
+                                 (subs/children-snapshot parent-uuid)))
+                        _ (subs/apply-delta! (delta 2 {}))
+                        _ (subs/apply-delta!
+                           (delta 3
+                                  {:blocks
+                                   {moved-uuid
+                                    (block moved-uuid 3 "moved")}
+                                   :children
+                                   {parent-uuid
+                                    {:base-rev 2
+                                     :rev 3
+                                     :remove [[moved-uuid "a"]]
+                                     :upsert []}
+                                    page-uuid
+                                    {:base-rev 2
+                                     :rev 3
+                                     :remove []
+                                     :upsert [[moved-uuid "b"]]}}}))]
+                  (is (= {:status :ready :value []}
+                         (subs/children-snapshot parent-uuid)))
+                  (is (= {:status :ready
+                          :value [parent-uuid moved-uuid sibling-uuid]}
+                         (subs/children-snapshot page-uuid)))
+                  (is (= 2 (count @loader-calls))
+                      "Both mounted memberships apply the move without reloading.")
+                  (unsubscribe-parent)
+                  (unsubscribe-page))))))))
+
 (deftest first-subscription-starts-one-typed-load-and-shares-it-test
   (async done
          (let [block-uuid (random-uuid)
