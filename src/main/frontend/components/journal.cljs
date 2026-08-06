@@ -97,7 +97,7 @@
                                    next-range))))))]
     (when (seq journal-uuids)
       (if (util/rtc-test-without-virtualization?)
-        [:div#journals
+        [:div#journals.h-full
          (map-indexed
           (fn [idx journal-uuid]
             ^{:key (str "journal-" journal-uuid)}
@@ -105,7 +105,7 @@
              (= (inc idx) (count journal-uuids))
              (contains? ready-uuids journal-uuid)])
           journal-uuids)]
-        [:div#journals
+        [:div#journals.h-full
          (ui/virtualized-list
           {:custom-scroll-parent (util/app-scroll-container-node)
            :data (to-array journal-uuids)

@@ -43,19 +43,30 @@
 
 (defn- flush!
   []
-  (doseq [[graph-id graph-entries] (group-by :graph-id (take-batch!))
-          entries (request-groups graph-entries)]
-    (-> (state/<invoke-db-worker :thread-api/get-render-snapshots
-                                 graph-id
-                                 (worker-request entries))
-        (p/then (fn [response]
-                  (try
-                    (let [values (mapv #(entry-response response %) entries)]
-                      (doseq [[entry value] (map vector entries values)]
-                        (p/resolve! (:result entry) value)))
-                    (catch :default error
-                      (reject! entries error)))))
-        (p/catch #(reject! entries %)))))
+  (when @state/db-worker-ready?
+    (let [batch (take-batch!)]
+      (doseq [[graph-id graph-entries] (group-by :graph-id batch)
+              entries (request-groups graph-entries)]
+        (-> (state/<invoke-db-worker :thread-api/get-render-snapshots
+                                     graph-id
+                                     (worker-request entries))
+            (p/then (fn [response]
+                      (try
+                        (let [values (mapv #(entry-response response %) entries)]
+                          (doseq [[entry value] (map vector entries values)]
+                            (p/resolve! (:result entry) value)))
+                        (catch :default error
+                          (reject! entries error)))))
+            (p/catch #(reject! entries %)))))))
+
+(defn- flush-when-db-worker-ready!
+  [_key _ref _old-value ready?]
+  (when ready?
+    (flush!)))
+
+(add-watch state/db-worker-ready?
+           ::flush-pending-loads
+           flush-when-db-worker-ready!)
 
 (defn load!
   [graph-id slot-key schedule!]
