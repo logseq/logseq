@@ -84,9 +84,66 @@
                  (is false (str error))))
       (p/finally done)))
 
+(def ^:private previous-worker (atom nil))
+
 (use-fixtures :each
-  {:before #(subs/reset-graph! test-graph-id)
-   :after #(subs/reset-graph! test-graph-id)})
+  {:before #(do
+              (reset! previous-worker @state/*db-worker)
+              (reset! state/*db-worker (fn [& _args] nil))
+              (subs/reset-graph! test-graph-id))
+   :after #(do
+             (subs/reset-graph! test-graph-id)
+             (reset! state/*db-worker @previous-worker))})
+
+(deftest subscriptions-mounted-before-db-worker-start-load-when-it-is-ready-test
+  (async done
+         (let [resource-key [:journals 1]
+               previous-db-worker @state/*db-worker
+               worker-calls (atom [])
+               scheduled-load (atom nil)
+               unsubscribe (atom nil)]
+           (reset! state/*db-worker nil)
+           (finish-async!
+            done
+            (p/with-redefs [subs/schedule-load-batch!
+                            #(reset! scheduled-load %)]
+              (->
+               (p/let [_ (reset! unsubscribe
+                                 (subs/subscribe-resource! resource-key (fn [])))
+                       flush-error (try
+                                     (@scheduled-load)
+                                     nil
+                                     (catch :default error error))
+                       _ (is (nil? flush-error)
+                             "A scheduled load must remain pending until the DB worker is ready.")
+                       _ (reset! state/*db-worker
+                                 (fn [api graph-id request]
+                                   (swap! worker-calls conj [api graph-id request])
+                                   (p/resolved
+                                    {:basis-rev 1
+                                     :slots
+                                     {[:resource resource-key]
+                                      {:watch {:keys #{[:journals]} :all? false}
+                                       :value {:journal-uuids [] :loaded-uuids []}}}
+                                     :groups
+                                     {[:resource resource-key]
+                                      #{[:resource resource-key]}}})))
+                       _ (p/delay 0)]
+                 (is (= [[test-graph-id
+                          {:blocks [] :children [] :resources [resource-key]}]]
+                        (->> @worker-calls
+                             (keep (fn [[api graph-id request]]
+                                     (when (= :thread-api/get-render-snapshots api)
+                                       [graph-id request])))
+                             vec)))
+                 (is (= {:status :ready
+                         :value {:journal-uuids [] :loaded-uuids []}}
+                        (subs/resource-snapshot resource-key))))
+               (p/finally
+                 (fn []
+                   (when-let [unsubscribe! @unsubscribe]
+                     (unsubscribe!))
+                   (reset! state/*db-worker previous-db-worker)))))))))
 
 (deftest block-changed-uses-only-tx-id-test
   (let [block-uuid (random-uuid)

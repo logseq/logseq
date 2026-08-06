@@ -1,9 +1,14 @@
 (ns frontend.components.journal-test
   (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.components.journal :as journal]
+            [frontend.components.page :as page]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "journal-membership-test")
@@ -20,6 +25,17 @@
       (p/catch (fn [error]
                  (is false (str error))))
       (p/finally done)))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (defn- with-use-sync-external-store
   [replacement f]
@@ -72,6 +88,24 @@
 (use-fixtures :each
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
+
+(deftest journals-root-fills-its-scroll-container-test
+  (let [journal-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-resource
+                  (constantly {:journal-uuids [journal-uuid]
+                               :loaded-uuids [journal-uuid]})
+                  db-hooks/use-resource-snapshot (constantly nil)
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-state (fn [value] [value (fn [& _args])])
+                  hooks/use-debounced-value (fn [value _delay] value)
+                  hooks/use-effect! (fn [& _args])
+                  util/app-scroll-container-node
+                  (constantly #js {:clientHeight 800})
+                  util/rtc-test-without-virtualization? (constantly true)
+                  page/journal-page (fn [& _args] [:div "Journal"])]
+      (let [markup (render-static (journal/all-journals))]
+        (is (re-find #"id=\"journals\"[^>]*class=\"[^\"]*h-full" markup)
+            "The virtualized journal root must fill the mobile scroll container.")))))
 
 (deftest journals-request-one-complete-visible-window-test
   (async done
