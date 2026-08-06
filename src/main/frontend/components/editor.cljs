@@ -751,7 +751,8 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (.stopPropagation e)
+                                        (when-not (editor-handler/editor-commands-popup-exists?)
+                                          (.stopPropagation e))
                                         (editor-on-hide component-state :esc e false))))
                :auto-focus true
                :auto-capitalize (if (util/mobile?) "sentences" "off")
