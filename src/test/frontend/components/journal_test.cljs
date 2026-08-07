@@ -6,6 +6,7 @@
             [frontend.components.page :as page]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
@@ -91,14 +92,12 @@
 
 (deftest journals-root-fills-its-scroll-container-test
   (let [journal-uuid (random-uuid)]
-    (with-redefs [db-hooks/use-resource
-                  (constantly {:journal-uuids [journal-uuid]
-                               :loaded-uuids [journal-uuid]})
-                  db-hooks/use-resource-snapshot (constantly nil)
-                  hooks/use-memo (fn [f _deps] (f))
-                  hooks/use-state (fn [value] [value (fn [& _args])])
-                  hooks/use-debounced-value (fn [value _delay] value)
+    (with-redefs [db-hooks/use-resource (constantly [journal-uuid])
+                  db-hooks/use-block (constantly {})
+                  subs/block-snapshot
+                  (constantly {:status :ready})
                   hooks/use-effect! (fn [& _args])
+                  hooks/use-ref (fn [value] #js {:current value})
                   util/app-scroll-container-node
                   (constantly #js {:clientHeight 800})
                   util/rtc-test-without-virtualization? (constantly true)
@@ -107,130 +106,112 @@
         (is (re-find #"id=\"journals\"[^>]*class=\"[^\"]*h-full" markup)
             "The virtualized journal root must fill the mobile scroll container.")))))
 
-(deftest journals-request-one-complete-visible-window-test
+(deftest journals-use-one-resource-and-need-no-scroll-loader-test
+  (let [journal-uuids (vec (repeatedly 12 random-uuid))
+        resource-keys (atom [])
+        virtual-opts (atom nil)]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-keys conj resource-key)
+                    journal-uuids)
+                  subs/block-snapshot (constantly {:status :ready})
+                  hooks/use-effect! (fn [& _args])
+                  hooks/use-ref (fn [value] #js {:current value})
+                  util/app-scroll-container-node
+                  (constantly #js {:clientHeight 800})
+                  util/rtc-test-without-virtualization? (constantly false)
+                  ui/virtualized-list
+                  (fn [opts]
+                    (reset! virtual-opts opts)
+                    [:div])]
+      (render-static (journal/all-journals))
+      (is (= [[:journals]] @resource-keys))
+      (is (nil? (:items-rendered @virtual-opts))
+          "Scrolling does not schedule a second resource path.")
+      (is (fn? (:is-scrolling @virtual-opts))
+          "The list suppresses missing journal loads while scrolling."))))
+
+(deftest fast-scrolling-does-not-render-an-unseeded-journal-test
+  (let [journal-uuid (random-uuid)
+        scrolling? (atom true)
+        block-value (atom nil)
+        virtual-opts (atom nil)
+        page-calls (atom [])]
+    (with-redefs [db-hooks/use-resource (constantly [journal-uuid])
+                  subs/block-snapshot (constantly {:status :loading})
+                  hooks/use-state
+                  (fn [initial]
+                    (is (false? initial))
+                    [@scrolling? #(reset! scrolling? %)])
+                  hooks/use-effect! (fn [& _args])
+                  util/app-scroll-container-node
+                  (constantly #js {:clientHeight 800})
+                  util/rtc-test-without-virtualization? (constantly false)
+                  page/journal-page
+                  (fn [requested-uuid _opts]
+                    (swap! page-calls conj requested-uuid)
+                    (when @block-value [:div "Journal"]))
+                  ui/virtualized-list
+                  (fn [opts]
+                    (reset! virtual-opts opts)
+                    [:div])]
+      (render-static (journal/all-journals))
+      (let [markup (render-static
+                    ((:item-content @virtual-opts) 0 journal-uuid))]
+        (is (re-find #"journal-item-placeholder" markup)
+            "Intermediate virtual items show a stable placeholder."))
+      (is (empty? @page-calls)
+          "Intermediate virtual items do not start block requests.")
+      ((:is-scrolling @virtual-opts) false)
+      (render-static (journal/all-journals))
+      (let [markup (render-static
+                    ((:item-content @virtual-opts) 0 journal-uuid))]
+        (is (re-find #"journal-item-placeholder" markup))
+        (is (= [journal-uuid] @page-calls)
+            "The final visible journal starts its normal page subscriptions."))
+      (reset! block-value {})
+      (let [markup (render-static
+                    ((:item-content @virtual-opts) 0 journal-uuid))]
+        (is (re-find #"Journal" markup)
+            "The loaded journal replaces its placeholder.")))))
+
+(deftest visible-journal-loads-through-the-normal-block-path-test
   (async done
          (let [journal-a (random-uuid)
                journal-b (random-uuid)
                journal-a-block (block journal-a 1 "Journal A")
-               pending-block-load (p/deferred)
-               resource-loads (atom [])]
+               resource-loads (atom [])
+               block-loads (atom [])]
            (finish-async!
             done
             (p/with-redefs [subs/<load-resource
                             (fn [_graph-id resource-key]
                               (swap! resource-loads conj resource-key)
-                              (case (first resource-key)
-                                :journals
+                              (if (= [:journals] resource-key)
                                 (p/resolved {:basis-rev 1
                                              :slots
                                              {[:resource resource-key]
                                               {:watch {:keys #{[:journals]}
                                                        :all? false}
-                                               :value {:journal-uuids [journal-a journal-b]
-                                                       :loaded-uuids [journal-a]}}
-                                              [:block journal-a]
-                                              {:value journal-a-block}
-                                              [:children journal-a]
-                                              {:tx-id 1 :items []}}})
-
-                                :journal-window
-                                (p/resolved {:basis-rev 1
-                                             :slots
-                                             {[:resource resource-key]
-                                              {:watch {:keys #{} :all? false}
-                                               :value {:loaded-uuids []}}}})
-
+                                               :value [journal-a journal-b]}}})
                                 (p/rejected
                                  (js/Error. "unexpected journal resource"))))
                             subs/<load-block
-                            (fn [_graph-id _block-uuid]
-                              pending-block-load)]
-              (let [outer (mount-hook! db-hooks/use-resource [:journals 1])]
+                            (fn [_graph-id block-uuid]
+                              (swap! block-loads conj block-uuid)
+                              (p/resolved
+                               {:basis-rev 1
+                                :slots {[:block block-uuid]
+                                        {:value journal-a-block}}}))]
+              (let [outer (mount-hook! db-hooks/use-resource [:journals])]
                 (p/let [_ (p/delay 0)
                         _ (is (= [journal-a journal-b]
-                                 (:journal-uuids @(:value outer))))
-                        _ (is (= [[:journals 1]] @resource-loads))
+                                 @(:value outer)))
+                        _ (is (= [[:journals]] @resource-loads))
                         mounted-page (mount-hook! db-hooks/use-block journal-a)
                         _ (p/delay 0)]
                   (is (= "Journal A" (:block/title @(:value mounted-page))))
-                  (is (= [[:journals 1]] @resource-loads)
-                      "The initial visible journal needs no per-item bundle request.")
+                  (is (= [journal-a] @block-loads)
+                      "Only the mounted journal root loads on demand.")
                   (unmount! mounted-page)
                   (unmount! outer))))))))
-
-(deftest mounted-journal-window-seeds-its-entire-plain-tree-atomically-test
-  (async done
-         (let [journal-uuid (random-uuid)
-               child-uuid (random-uuid)
-               nested-uuid (random-uuid)
-               resource-key [:journal-window [journal-uuid]]
-               blocks {journal-uuid (block journal-uuid 10 "Journal")
-                       child-uuid (block child-uuid 10 "Child")
-                       nested-uuid (block nested-uuid 10 "Nested")}
-               children
-               {journal-uuid {:parent-tx-id 10
-                              :items [[child-uuid "a"]]}
-                child-uuid {:parent-tx-id 10
-                            :items [[nested-uuid "a"]]}
-                nested-uuid {:parent-tx-id 10
-                             :items []}}
-               value {:loaded-uuids [journal-uuid]}
-               block-loads (atom [])
-               children-loads (atom [])]
-           (finish-async!
-            done
-            (p/with-redefs [subs/<load-resource
-                            (fn [_graph-id requested-key]
-                              (is (= resource-key requested-key))
-                              (p/resolved
-                               {:basis-rev 1
-                                :slots
-                                (merge
-                                 {[:resource resource-key]
-                                  {:watch {:keys #{} :all? false}
-                                   :value value}}
-                                 (into {}
-                                       (map (fn [[block-uuid block-value]]
-                                              [[:block block-uuid]
-                                               {:value block-value}]))
-                                       blocks)
-                                 (into {}
-                                       (map (fn [[parent-uuid membership]]
-                                              [[:children parent-uuid]
-                                               {:tx-id (:parent-tx-id membership)
-                                                :items (:items membership)}]))
-                                       children))}))
-                            subs/<load-block
-                            (fn [_graph-id block-uuid]
-                              (swap! block-loads conj block-uuid)
-                              (p/rejected
-                               (js/Error. "seeded block reloaded")))
-                            subs/<load-children
-                            (fn [_graph-id parent-uuid]
-                              (swap! children-loads conj parent-uuid)
-                              (p/rejected
-                               (js/Error. "seeded membership reloaded")))]
-              (let [window-mount
-                    (mount-hook! db-hooks/use-resource resource-key)]
-                (p/let [_ (p/delay 0)
-                        _ (is (= value @(:value window-mount)))
-                        _ (doseq [[block-uuid expected-block] blocks]
-                            (is (= {:status :ready :value expected-block}
-                                   (subs/block-snapshot block-uuid))))
-                        _ (doseq [[parent-uuid membership] children]
-                            (is (= {:status :ready
-                                    :value (mapv first (:items membership))}
-                                   (subs/children-snapshot parent-uuid))))
-                        block-mounts
-                        (mapv #(mount-hook! db-hooks/use-block %) (keys blocks))
-                        children-mounts
-                        (mapv #(mount-hook! db-hooks/use-children %)
-                              (keys children))
-                        _ (p/delay 0)]
-                  (is (empty? @block-loads)
-                      "Canonical bundle blocks are ready before rows mount.")
-                  (is (empty? @children-loads)
-                      "Every direct membership, including leaves, is seeded atomically.")
-                  (run! unmount! block-mounts)
-                  (run! unmount! children-mounts)
-                  (unmount! window-mount))))))))
