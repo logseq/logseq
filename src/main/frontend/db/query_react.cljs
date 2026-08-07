@@ -88,11 +88,17 @@
         rules-input (cond
                       (some? rules) rules
                       (query-expects-rules? query) [])
-        inputs (cond-> resolved-inputs
-                 (some? rules-input)
-                 (conj rules-input))
+        query-inputs (cond-> resolved-inputs
+                       (some? rules-input)
+                       (conj rules-input))
+        cache-inputs (cond-> (mapv (fn [input resolved-input]
+                                     (if (= :right-now-ms input) input resolved-input))
+                                   inputs
+                                   resolved-inputs)
+                       (some? rules-input)
+                       (conj rules-input))
         k [:custom
            (or (:query-string query') (dissoc query' :title))
            (:today-query? query-opts)
-           inputs]]
-    [k (apply react/q repo k query-opts query inputs)]))
+           cache-inputs]]
+    [k (apply react/q repo k query-opts query query-inputs)]))
