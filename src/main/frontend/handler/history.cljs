@@ -40,7 +40,7 @@
 (defn- restore-app-state!
   [state]
   (let [route-data (:route-data state)
-        current-route (:route-match @state/state)
+        current-route (:route-match (state/get-state))
         current-route-data (db-browser/get-route-data current-route)]
     (when (and (not= route-data current-route-data) route-data
                (contains? #{:home :page :page-block :all-journals} (:to route-data)))
@@ -64,7 +64,7 @@
 (let [*last-request (atom nil)]
   (defn- undo-aux!
     [e]
-    (when-not (:editor/code-block-context @state/state)
+    (when-not (:editor/code-block-context (state/get-state))
       (state/set-state! :editor/op :undo)
       (p/do!
        @*last-request
@@ -82,7 +82,7 @@
 (let [*last-request (atom nil)]
   (defn- redo-aux!
     [e]
-    (when-not (:editor/code-block-context @state/state)
+    (when-not (:editor/code-block-context (state/get-state))
       (state/set-state! :editor/op :redo)
       (p/do!
        @*last-request

@@ -5,7 +5,7 @@
 (defn add-page-to-recent!
   [db-id _click-from-recent?]
   (assert db-id (number? db-id))
-  (when-not (:db/restoring? @state/state)
+  (when-not (:db/restoring? (state/get-state))
     (let [pages (state/get-recent-pages)]
       (when-not ((set pages) db-id)
         (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]

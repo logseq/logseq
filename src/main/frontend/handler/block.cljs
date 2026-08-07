@@ -322,7 +322,7 @@
                 (state/conj-selection-block! block-container nil)))
             (if (seq (state/get-selection-blocks))
               (state/set-state! :mobile/show-action-bar? true)
-              (when (:mobile/show-action-bar? @state/state)
+              (when (:mobile/show-action-bar? (state/get-state))
                 (state/set-state! :mobile/show-action-bar? false)))
             (haptics/haptics)))
         (catch :default e

@@ -12,12 +12,12 @@
 
 (deftest convert-tag-to-page-uses-atomic-worker-command-test
   (async done
-    (let [previous-state @state/state
+    (let [previous-state (state/get-state)
           original-invoke-db-worker state/<invoke-db-worker
           class-id 42
           class-uuid #uuid "33333333-3333-3333-3333-333333333333"
           calls (atom [])]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
             (fn [& args]
               (swap! calls conj (vec args))
@@ -51,18 +51,18 @@
             (p/finally
              (fn []
                (set! state/<invoke-db-worker original-invoke-db-worker)
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))
 
 (deftest add-tag-validates-through-worker-test
   (async done
-    (let [previous-state @state/state
+    (let [previous-state (state/get-state)
           original-invoke-db-worker state/<invoke-db-worker
           original-save-current-block! editor-handler/save-current-block!
           block-id #uuid "11111111-1111-1111-1111-111111111111"
           tag-id 42
           calls (atom [])]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
             (fn [& args]
               (swap! calls conj (vec args))
@@ -94,7 +94,7 @@
            (fn []
              (set! editor-handler/save-current-block! original-save-current-block!)
              (set! state/<invoke-db-worker original-invoke-db-worker)
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (done)))))))
 
 (deftest tag-on-chosen-treats-worker-map-as-existing-page-test
@@ -131,12 +131,12 @@
 
 (deftest add-tag-shows-worker-validation-notification-test
   (async done
-    (let [previous-state @state/state
+    (let [previous-state (state/get-state)
           original-invoke-db-worker state/<invoke-db-worker
           block-id #uuid "22222222-2222-2222-2222-222222222222"
           tag-id 43
           calls (atom [])]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
             (fn [& args]
               (swap! calls conj (vec args))
@@ -169,17 +169,17 @@
             (p/finally
              (fn []
                (set! state/<invoke-db-worker original-invoke-db-worker)
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))
 
 (deftest convert-page-to-tag-uses-atomic-worker-command-test
   (async done
-    (let [previous-state @state/state
+    (let [previous-state (state/get-state)
           original-invoke-db-worker state/<invoke-db-worker
           page-id 43
           page-uuid #uuid "55555555-5555-5555-5555-555555555555"
           calls (atom [])]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (set! state/<invoke-db-worker
             (fn [& args]
               (case (first args)
@@ -211,5 +211,5 @@
             (p/finally
              (fn []
                (set! state/<invoke-db-worker original-invoke-db-worker)
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))

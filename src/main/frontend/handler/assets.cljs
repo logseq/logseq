@@ -19,7 +19,7 @@
 (defn alias-enabled?
   []
   (and (util/electron?)
-       (:assets/alias-enabled? @state/state)))
+       (:assets/alias-enabled? (state/get-state))))
 
 (defn clean-path-prefix
   [path]
@@ -35,7 +35,7 @@
 
 (defn get-alias-dirs
   []
-  (:assets/alias-dirs @state/state))
+  (:assets/alias-dirs (state/get-state)))
 
 (defn get-alias-by-dir
   [dir]

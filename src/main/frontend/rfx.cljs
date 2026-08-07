@@ -9,89 +9,11 @@
 (defonce !context
   (atom nil))
 
-(defonce ^:private !app-db
-  (atom {}))
-
 (defonce ^:private !state-listeners
   (atom {}))
 
-(defonce ^:private !state-sub-ids
-  (atom #{}))
-
-(defonce ^:private !state-path-listeners
-  (atom {}))
-
-(defonce ^:private !state-path-listener-paths
-  (atom {}))
-
-(def ^:private fast-state-sub-ids
-  #{:db/async-queries
-    :sync/block-conflicts
-    :ui/container-id
-    :ui/cached-key->container-id
-    :command-palette/commands})
-
-(defn- state-path-prefixes
-  [path]
-  (when (seq path)
-    (mapv #(subvec path 0 %) (range 1 (inc (count path))))))
-
-(defn- affected-state-path-listeners
-  [listeners-by-path listener-paths changed-path]
-  (if (seq changed-path)
-    (let [affected-paths (into (set (state-path-prefixes changed-path))
-                               (get listener-paths changed-path))]
-      (vec (mapcat #(vals (get listeners-by-path %)) affected-paths)))
-    (vec (mapcat vals (vals listeners-by-path)))))
-
-(defn- affected-state-path-listeners-for-paths
-  [listeners-by-path listener-paths changed-paths]
-  (if (seq changed-paths)
-    (vec (distinct
-          (mapcat #(affected-state-path-listeners listeners-by-path listener-paths %)
-                  changed-paths)))
-    (vec (mapcat vals (vals listeners-by-path)))))
-
-(defn- top-level-changed-paths
-  [prev-db next-db]
-  (->> (concat (keys prev-db) (keys next-db))
-       (set)
-       (keep (fn [k]
-               (when (not= (get prev-db k)
-                           (get next-db k))
-                 [k])))
-       (vec)))
-
-(defn- add-state-path-listener
-  [path id listener]
-  (swap! !state-path-listeners assoc-in [path id] {:path path
-                                                   :listener listener})
-  (swap! !state-path-listener-paths
-         (fn [listener-paths]
-           (reduce #(update %1 %2 (fnil conj #{}) path)
-                   listener-paths
-                   (state-path-prefixes path)))))
-
-(defn- remove-state-path-listener
-  [path id]
-  (let [path-empty? (volatile! false)]
-    (swap! !state-path-listeners
-           (fn [listeners-by-path]
-             (let [listeners' (dissoc (get listeners-by-path path) id)]
-               (vreset! path-empty? (empty? listeners'))
-               (if (seq listeners')
-                 (assoc listeners-by-path path listeners')
-                 (dissoc listeners-by-path path)))))
-    (when @path-empty?
-      (swap! !state-path-listener-paths
-             (fn [listener-paths]
-               (reduce (fn [result prefix]
-                         (let [paths' (disj (get result prefix) path)]
-                           (if (seq paths')
-                             (assoc result prefix paths')
-                             (dissoc result prefix))))
-                       listener-paths
-                       (state-path-prefixes path)))))))
+(defonce ^:private !init-once-called?
+  (atom false))
 
 (defn- pub-event-deferred
   [event]
@@ -137,11 +59,13 @@
                                 :initial-value (or initial-value {})
                                 :registry (or registry (atom {}))))]
     (reset! !context ctx)
-    (reset! !app-db (or initial-value {}))
-    (reset! !state-sub-ids #{})
-    (reset! !state-path-listeners {})
-    (reset! !state-path-listener-paths {})
     ctx))
+
+(defn init-once!
+  [opts]
+  (if (compare-and-set! !init-once-called? false true)
+    (init! opts)
+    (context)))
 
 (defn current-registry
   []
@@ -149,36 +73,19 @@
 
 (defn snapshot
   []
-  @!app-db)
+  (store/snapshot (:store (context))))
 
-(defn- sync-wrapper-state-paths!
-  [prev-db next-db changed-paths]
-  (reset! !app-db next-db)
-  (let [path-listeners
-        (affected-state-path-listeners-for-paths @!state-path-listeners
-                                                 @!state-path-listener-paths
-                                                 changed-paths)]
-    (doseq [listener (vals @!state-listeners)]
-      (listener next-db))
-    (doseq [{:keys [path listener]} path-listeners
-            :when (not= (get-in prev-db path)
-                        (get-in next-db path))]
-      (listener))
-    next-db))
-
-(defn- fast-state-path?
-  [path]
-  (contains? fast-state-sub-ids (first path)))
+(defn- notify-state-listeners!
+  [prev-db next-db]
+  (doseq [listener (vals @!state-listeners)]
+    (listener prev-db next-db)))
 
 (defn replace-state-paths!
-  [db changed-paths]
+  [db _changed-paths]
   (let [prev-db (snapshot)
-        fast-state? (and (seq changed-paths)
-                         (every? fast-state-path? changed-paths))
-        next-db (if fast-state?
-                  db
-                  (store/next-state! (:store (context)) db))]
-    (sync-wrapper-state-paths! prev-db next-db changed-paths)))
+        next-db (store/next-state! (:store (context)) db)]
+    (notify-state-listeners! prev-db next-db)
+    next-db))
 
 (defn replace-state!
   ([db]
@@ -191,64 +98,27 @@
   (swap! !state-listeners assoc listener-id f)
   #(swap! !state-listeners dissoc listener-id))
 
+(defn unlisten!
+  [listener-id]
+  (swap! !state-listeners dissoc listener-id)
+  nil)
+
 (defn snapshot-sub
   [sub]
-  (if (contains? @!state-sub-ids (first sub))
-    (get-in (snapshot) sub)
-    (rfx/snapshot-sub (context) sub)))
+  (rfx/snapshot-sub (context) sub))
 
 (defn dispatch-sync!
   [event]
-  (let [ctx (context)
-        prev-db (snapshot)
-        result (rfx/dispatch-sync ctx event)
-        next-db (reduce (fn [db k]
-                          (if (contains? prev-db k)
-                            (assoc db k (get prev-db k))
-                            db))
-                        (store/snapshot (:store ctx))
-                        fast-state-sub-ids)]
+  (let [prev-db (snapshot)
+        result (rfx/dispatch-sync (context) event)
+        next-db (snapshot)]
     (when-not (= prev-db next-db)
-      (sync-wrapper-state-paths! prev-db
-                                 next-db
-                                 (top-level-changed-paths prev-db next-db)))
+      (notify-state-listeners! prev-db next-db))
     result))
 
 (defn use-sub
   [sub]
-  (cond
-    (contains? @!state-sub-ids (first sub))
-    (let [path (vec sub)
-          ;; React's useSyncExternalStore compares snapshots with Object.is.
-          ;; (get-in (snapshot) path) may return a non-Object.is-stable value
-          ;; for the same logical data (e.g. cljs-bean lazy Bean / ArrayVector
-          ;; wrappers reconstructed on every property access), which would
-          ;; cause an infinite re-render loop. Cache the last value and reuse
-          ;; the previous reference whenever the new value is cljs `=` to it.
-          *last-snapshot (react/useRef js/undefined)]
-      (letfn [(get-state-path-snapshot []
-                (let [v (get-in (snapshot) path)
-                      prev (.-current *last-snapshot)]
-                  (if (and (not (identical? prev js/undefined))
-                           (= prev v))
-                    prev
-                    (do (set! (.-current *last-snapshot) v) v))))]
-        (react/useSyncExternalStore
-         (fn subscribe-to-state-path! [listener]
-           (let [id (str (gensym "state-path-listener"))]
-             (add-state-path-listener path id listener)
-             (fn []
-               (remove-state-path-listener path id))))
-         get-state-path-snapshot
-         get-state-path-snapshot)))
-
-    :else
-    (rfx/use-sub sub)))
-
-(defn register-state-sub-id!
-  [sub-id]
-  (swap! !state-sub-ids conj sub-id)
-  nil)
+  (rfx/use-sub sub))
 
 (defn provider
   [child]

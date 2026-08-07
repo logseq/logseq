@@ -44,13 +44,13 @@
 (defn open-find-in-page!
   []
   (when (util/electron?)
-    (let [{:keys [active?]} (:ui/find-in-page @state/state)]
+    (let [{:keys [active?]} (:ui/find-in-page (state/get-state))]
       (when-not active? (state/set-state! [:ui/find-in-page :active?] true)))))
 
 (defn electron-find-in-page!
   []
   (when (util/electron?)
-    (let [{:keys [active? backward? match-case? q]} (:ui/find-in-page @state/state)
+    (let [{:keys [active? backward? match-case? q]} (:ui/find-in-page (state/get-state))
           option (cond->
                   {}
 
@@ -80,7 +80,7 @@
 
 (defn loop-find-in-page!
   [backward?]
-  (if (and (get-in @state/state [:ui/find-in-page :active?])
+  (if (and (get-in (state/get-state) [:ui/find-in-page :active?])
            (not (state/editing?)))
     (do (state/set-state! [:ui/find-in-page :backward?] backward?)
         (debounced-search))

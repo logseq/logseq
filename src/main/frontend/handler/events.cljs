@@ -184,7 +184,7 @@
                  :node-test? util/node-test?
                  :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
-                 :importing? (:graph/importing @state/state)
+                 :importing? (:graph/importing (state/get-state))
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]

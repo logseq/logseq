@@ -15,8 +15,7 @@
         app-state* (atom {:date-picker/date selected-date})
         calendar-opts* (atom nil)
         inserted* (atom [])]
-    (with-redefs [state/state app-state*
-                  rfx/use-sub (fn [sub] (get-in @app-state* sub))
+    (with-redefs [rfx/use-sub (fn [sub] (get-in @app-state* sub))
                   state/set-state! (fn [k v & _] (swap! app-state* assoc k v) nil)
                   state/clear-editor-action! (fn [] nil)
                   date/js-date->journal-title (constantly "May 20th, 2026")

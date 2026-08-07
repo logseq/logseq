@@ -4,7 +4,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [io.factorhouse.rfx.store :as store]))
 
 (defn- caret-pos-when-editor-content-changes
   [initial-content updated-content new-pos]
@@ -22,8 +23,8 @@
           (fn [start end]
             (set! (.-selectionStart input) start)
             (set! (.-selectionEnd input) end)))
-    (add-watch state/state watch-key
-               (fn [_ _ _ db]
+    (rfx/listen! watch-key
+               (fn [_ db]
                  (when (= updated-content (get-in db [:editor/content block-id]))
                    (reset! observed-pos (cursor/pos input)))))
     (try
@@ -42,7 +43,7 @@
       {:observed-pos @observed-pos
        :final-pos (cursor/pos input)}
       (finally
-        (remove-watch state/state watch-key)
+        (rfx/unlisten! watch-key)
         (state/set-state! :editor/content editor-content)
         (state/set-state! :editor/last-saved-cursor last-saved-cursor)))))
 
@@ -79,26 +80,26 @@
       "Map values get merged across configs"))
 
 (deftest get-state-reads-plain-state
-  (let [original-state @state/state]
+  (let [original-state (state/get-state)]
     (try
-      (reset! state/state (assoc original-state
+      (state/replace-state! (assoc original-state
                                  :plain-value 1
                                  :nested-value {:a {:b 2}}
                                  :nested-path-value {:a {:b 4}}))
-      (rfx/init! {:initial-value @state/state
+      (rfx/init! {:initial-value (state/get-state)
                   :registry (atom {})})
       (is (= 1 (state/get-state :plain-value)))
       (is (= 2 (state/get-state [:nested-value :a :b])))
       (is (= 4 (state/get-state :nested-path-value :nested-path [:a :b])))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
 (deftest plain-state-accessors-use-rfx-app-db
-  (let [original-state @state/state]
+  (let [original-state (state/get-state)]
     (try
-      (reset! state/state {:legacy-value 1
+      (state/replace-state! {:legacy-value 1
                            :nested {:value 2}})
       (rfx/init! {:initial-value {:legacy-value 10
                                   :nested {:value 20}}
@@ -115,18 +116,18 @@
       (is (= 21 (state/get-state [:nested :value])))
       (is (= 21 (get-in (rfx/snapshot) [:nested :value])))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
 (deftest container-id-is-stable-for-an-equal-render-context
-  (let [original-state @state/state
+  (let [original-state (state/get-state)
         context {:db/id 42 :journals? true}]
     (try
       (let [initial-state (assoc original-state
                                  :ui/container-id 0
                                  :ui/cached-key->container-id {})]
-        (reset! state/state initial-state)
+        (state/replace-state! initial-state)
         (rfx/init! {:initial-value initial-state
                     :registry (atom {})})
         (is (= 1 (state/get-container-id context)))
@@ -135,12 +136,28 @@
         (is (= {context 1}
                (state/get-state :ui/cached-key->container-id))))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
+(deftest cached-container-id-is-created-with-one-rfx-write
+  (let [initial-state {:ui/container-id 0
+                       :ui/cached-key->container-id {}}
+        written-state (atom nil)
+        store-writes (atom 0)]
+    (rfx/init! {:initial-value initial-state
+                :registry (atom {})})
+    (with-redefs [store/next-state! (fn [_ db]
+                                      (swap! store-writes inc)
+                                      (reset! written-state db)
+                                      db)]
+      (is (= 1 (state/get-container-id [:page]))))
+    (is (= 1 @store-writes))
+    (is (= 1 (:ui/container-id @written-state)))
+    (is (= {[:page] 1} (:ui/cached-key->container-id @written-state)))))
+
 (deftest rfx-state-subscriptions-read-top-level-and-nested-paths
-  (let [original-state @state/state]
+  (let [original-state (state/get-state)]
     (try
       (rfx/init! {:initial-value {:route-match {:data {:name :home}}
                                   :ui/theme "light"}
@@ -154,13 +171,13 @@
       (is (= "light"
              (rfx/snapshot-sub [:ui/theme])))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})
         (state/register-rfx-state-subs!)))))
 
 (deftest rfx-state-subscriptions-read-plain-values
-  (let [original-state @state/state]
+  (let [original-state (state/get-state)]
     (try
       (rfx/init! {:initial-value {:editor/action :search
                                   :editor/content {:block-1 "hello"}}
@@ -172,13 +189,13 @@
       (is (= "hello"
              (rfx/snapshot-sub [:editor/content :block-1])))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})
         (state/register-rfx-state-subs!)))))
 
 (deftest sync-block-conflicts-bulk-state-replaces-one-repo-test
-  (let [original-state @state/state
+  (let [original-state (state/get-state)
         repo-a "graph-a"
         repo-b "graph-b"
         block-a (str (random-uuid))
@@ -190,7 +207,7 @@
                              {repo-a {block-a old-conflicts}
                               repo-b {block-b old-conflicts}})]
     (try
-      (reset! state/state initial-state)
+      (state/replace-state! initial-state)
       (rfx/init! {:initial-value initial-state
                   :registry (atom {})})
       (let [result (try
@@ -214,12 +231,12 @@
                        (apply state/set-sync-block-conflicts! [repo-a nil]))
               "Missing worker data must fail instead of silently clearing state.")))
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
 (deftest delete-repo-clears-only-that-repos-sync-conflicts-test
-  (let [original-state @state/state
+  (let [original-state (state/get-state)
         repo-a {:url "graph-a"}
         repo-b {:url "graph-b"}
         block-id (str (random-uuid))
@@ -230,7 +247,7 @@
                              {(:url repo-a) {block-id conflicts}
                               (:url repo-b) {block-id conflicts}})]
     (try
-      (reset! state/state initial-state)
+      (state/replace-state! initial-state)
       (rfx/init! {:initial-value initial-state
                   :registry (atom {})})
       (state/delete-repo! repo-a)
@@ -240,7 +257,7 @@
              (state/get-state :sync/block-conflicts))
           "Removing a graph must remove its hydrated conflicts without touching another graph.")
       (finally
-        (reset! state/state original-state)
+        (state/replace-state! original-state)
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 

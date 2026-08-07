@@ -14,8 +14,8 @@
             listener-id (random-uuid)]
         (rfx/listen!
          listener-id
-         (fn [_db]
-           (let [value (get-in (rfx/snapshot) sub)]
+         (fn [_prev-db db]
+           (let [value (get-in db sub)]
              (when-not (= @state* value)
                (reset! state* value)))))
         (swap! *sub-atoms assoc sub state*)

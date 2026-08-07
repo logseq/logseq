@@ -377,7 +377,7 @@
 
 (defn get-user-type
   [repo]
-  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs @state/state))
+  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs (state/get-state)))
       :graph<->user-user-type))
 
 (defn manager?

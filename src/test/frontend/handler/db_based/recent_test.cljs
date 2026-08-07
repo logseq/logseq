@@ -119,8 +119,7 @@
 
 (defn- with-test-env
   [env f]
-  (p/with-redefs [state/state (atom {})
-                  state/get-current-repo (constantly (:repo env))
+  (p/with-redefs [state/get-current-repo (constantly (:repo env))
                   state/<invoke-db-worker (partial test-worker-read env)]
     (f)))
 
@@ -162,8 +161,7 @@
 (deftest add-page-to-recent-updates-state-without-renderer-entity-test
   (let [recent-pages (atom [2 3])
         updates (atom [])]
-    (with-redefs [state/state (atom {})
-                  state/get-recent-pages (fn [] @recent-pages)
+    (with-redefs [state/get-recent-pages (fn [] @recent-pages)
                   state/set-recent-pages!
                   (fn [pages]
                     (reset! recent-pages pages)
@@ -173,7 +171,7 @@
       (db-recent-handler/add-page-to-recent! 2 true)
       (is (= [1 2 3] @recent-pages)
           "Existing recent page ids keep their current position")
-      (with-redefs [state/state (atom {:db/restoring? true})]
+      (with-redefs [state/get-state (fn [] {:db/restoring? true})]
         (db-recent-handler/add-page-to-recent! 4 false))
       (is (= [[1 2 3]]
              @updates)

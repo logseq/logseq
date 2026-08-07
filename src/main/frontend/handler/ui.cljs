@@ -37,14 +37,14 @@
 
 (defn toggle-right-sidebar!
   []
-  (when-not (:ui/sidebar-open? @state/state) (restore-right-sidebar-width!))
+  (when-not (:ui/sidebar-open? (state/get-state)) (restore-right-sidebar-width!))
   (state/toggle-sidebar-open?!))
 
 (defn persist-right-sidebar-state!
   []
-  (let [sidebar-open? (:ui/sidebar-open? @state/state)
-        data (if sidebar-open? {:blocks (:sidebar/blocks @state/state)
-                                :collapsed (:ui/sidebar-collapsed-blocks @state/state)
+  (let [sidebar-open? (:ui/sidebar-open? (state/get-state))
+        data (if sidebar-open? {:blocks (:sidebar/blocks (state/get-state))
+                                :collapsed (:ui/sidebar-collapsed-blocks (state/get-state))
                                 :open? true} {:open? false})]
     (storage/set "ls-right-sidebar-state" data)))
 
@@ -72,7 +72,7 @@
 
 (defn toggle-settings-modal!
   []
-  (when-not (:srs/mode? @state/state)
+  (when-not (:srs/mode? (state/get-state))
     (state/toggle-settings!)))
 
 (defn re-render-root!

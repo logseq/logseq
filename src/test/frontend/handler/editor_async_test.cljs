@@ -99,7 +99,7 @@
 
 (use-fixtures :each
   {:before (fn []
-             (reset! *previous-state @state/state)
+             (reset! *previous-state (state/get-state))
              (async done
                     (test-helper/start-test-db!)
                     (done)))

@@ -11,6 +11,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
@@ -33,24 +34,24 @@
           (js/setTimeout
            (fn []
              (let [{current-repo :repo current-build-id :build-id}
-                   (get @state/state :search/index-build)]
+                   (get (state/get-state) :search/index-build)]
                (when (and (= repo current-repo)
                           (= build-id current-build-id))
                  (state/set-state! :search/index-build
-                                   (assoc (get @state/state :search/index-build)
+                                   (assoc (get (state/get-state) :search/index-build)
                                           :visible? false)))))
            1500)))
 
 (defn- maybe-notify-search-index-rebuilt!
   [repo]
-  (when (true? (get-in @state/state [:search/index-build-notify-repos repo]))
+  (when (true? (get-in (state/get-state) [:search/index-build-notify-repos repo]))
     (state/set-state! [:search/index-build-notify-repos repo] false)
     (notification/show! (t :search/indices-rebuilt-success) :success)))
 
 (def-thread-api :thread-api/search-index-build-progress
   [repo {:keys [build-id status progress processed total]
          input-stage :stage}]
-  (let [prev-state (get @state/state :search/index-build)
+  (let [prev-state (get (state/get-state) :search/index-build)
         current-repo (state/get-current-repo)
         stage :search-index
         visible-repo? (or (= repo current-repo)
@@ -121,19 +122,20 @@
 
 (defn- sync-ui-state!
   []
-  (add-watch state/state
-             :sync-ui-state
-             (fn [_ _ prev current]
-               (when-not (state/get-state :history/paused?)
-                 (let [f (fn [state]
-                           (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
-                               (assoc :route-data (get-route-data (:route-match state)))))
-                       old-state (f prev)
-                       new-state (f current)]
-                   (when (not= new-state old-state)
-                     (let [repo (state/get-current-repo)
-                           ui-state-str (ldb/write-transit-str {:old-state old-state :new-state new-state})]
-                       (undo-redo/record-ui-state! repo ui-state-str))))))))
+  (rfx/listen!
+   :sync-ui-state
+   (fn [prev current]
+     (when-not (state/get-state :history/paused?)
+       (let [f (fn [db]
+                 (-> (select-keys db [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
+                     (assoc :route-data (get-route-data (:route-match db)))))
+             old-state (f prev)
+             new-state (f current)]
+         (when (not= new-state old-state)
+           (let [repo (state/get-current-repo)
+                 ui-state-str (ldb/write-transit-str {:old-state old-state :new-state new-state})]
+             (undo-redo/record-ui-state! repo ui-state-str)))))))
+  nil)
 
 (defn transact!
   [repo tx-data tx-meta]
@@ -142,7 +144,7 @@
                  :node-test? util/node-test?
                  :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
-                 :importing? (:graph/importing @state/state)
+                 :importing? (:graph/importing (state/get-state))
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]
@@ -235,7 +237,7 @@
                 (db-transact/transact transact!
                                       (if (string? repo) repo (state/get-current-repo))
                                       tx-data
-                                      (assoc tx-meta :client-id (:client-id @state/state))))))
+                                      (assoc tx-meta :client-id (:client-id (state/get-state)))))))
            (p/catch (fn [error]
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 

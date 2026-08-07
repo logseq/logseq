@@ -22,10 +22,10 @@
 (defn- publishing-export-options
   [repo]
   {:repo repo
-   :app-state (select-keys @state/state
+   :app-state (select-keys (state/get-state)
                            [:ui/theme
                             :ui/sidebar-collapsed-blocks])
-   :repo-config (get-in @state/state [:config repo])})
+   :repo-config (get-in (state/get-state) [:config repo])})
 
 (defn download-repo-as-html!
   "download public pages as html"

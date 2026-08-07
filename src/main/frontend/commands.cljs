@@ -379,7 +379,7 @@
   [get-page-ref-text]
   (let [commands    (commands-map get-page-ref-text)
         en-commands (commands-map get-page-ref-text t-en)
-        lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+        lang        (or (some-> (:preferred-language (state/get-state)) keyword) :en)
         zh-cn?      (= lang :zh-CN)
         commands-with-meta
         (mapv (fn [cmd en-cmd]
@@ -557,7 +557,7 @@
   ([text]
    (get-matched-commands text @*initial-commands))
   ([text commands]
-   (let [lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+   (let [lang        (or (some-> (:preferred-language (state/get-state)) keyword) :en)
          en?         (= lang :en)
          zh-cn?      (= lang :zh-CN)
          extract-fns (cond
