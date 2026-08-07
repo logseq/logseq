@@ -146,11 +146,15 @@
        (remove nil?)
        vec))
 
-(defn open-dir-dialog []
-  (p/let [result (.showOpenDialog dialog (bean/->js
-                                          {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
-          result (get (js->clj result) "filePaths")]
-    (p/resolved (first result))))
+(defn open-dir-dialog
+  ([] (open-dir-dialog nil))
+  ([default-path]
+   (p/let [opts (cond-> {:properties ["openDirectory" "createDirectory" "promptToCreate"]}
+                  (and (string? default-path) (not (string/blank? default-path)))
+                  (assoc :defaultPath (node-path/dirname default-path)))
+           result (.showOpenDialog dialog (bean/->js opts))
+           result (get (js->clj result) "filePaths")]
+     (p/resolved (first result)))))
 
 (defn- pretty-print-js-error
   "Converts file related JS Error messages to a human readable format.
@@ -271,8 +275,8 @@
 
 ;; DB related IPCs End
 
-(defmethod handle :openDialog [^js _window _messages]
-  (open-dir-dialog))
+(defmethod handle :openDialog [^js _window [_ default-path]]
+  (open-dir-dialog default-path))
 
 (defmethod handle :showOpenDialog [_window [_ ^js options]]
   (p/let [^js result (.showOpenDialog dialog options)]
