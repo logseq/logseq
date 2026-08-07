@@ -58,7 +58,7 @@
      (state/sync-system-theme!)
      (ui/setup-system-theme-effect!)
      (let [handler (fn [^js e]
-                     (when (:ui/system-theme? @state/state)
+                     (when (:ui/system-theme? (state/get-state))
                        (let [is-dark? (boolean (some-> e .-detail .-isDark))]
                          (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
        (.addEventListener js/window "logseq:native-system-theme-changed" handler)
@@ -200,13 +200,13 @@
 
 (defn- use-native-graphs-effects!
   []
-  (let [[id-token] (hooks/use-atom-in state/state :auth/id-token)
-        [repos] (hooks/use-atom-in state/state [:me :repos])
-        [remotes] (hooks/use-atom-in state/state :rtc/graphs)
-        [downloading-graph-id] (hooks/use-atom-in state/state :rtc/downloading-graph-uuid)
-        [loading-graphs?] (hooks/use-atom-in state/state :rtc/loading-graphs?)
-        [route-match] (hooks/use-atom-in state/state :route-match)
-        [_preferred-language] (hooks/use-atom-in state/state :preferred-language)
+  (let [id-token (rfx/use-sub [:auth/id-token])
+        repos (rfx/use-sub [:me :repos])
+        remotes (rfx/use-sub [:rtc/graphs])
+        downloading-graph-id (rfx/use-sub [:rtc/downloading-graph-uuid])
+        loading-graphs? (rfx/use-sub [:rtc/loading-graphs?])
+        route-match (rfx/use-sub [:route-match])
+        _preferred-language (rfx/use-sub [:preferred-language])
         [tab] (hooks/use-atom mobile-state/*tab)
         login? (boolean id-token)
         route-name (get-in route-match [:data :name])
@@ -308,7 +308,7 @@
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
         preferred-language (rfx/use-sub [:preferred-language])
-        [theme] (hooks/use-atom-in state/state :ui/theme)]
+        theme (rfx/use-sub [:ui/theme])]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!

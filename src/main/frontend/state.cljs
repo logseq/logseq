@@ -87,8 +87,8 @@
     (contains? legacy-export-block-text-indent-styles v) (get legacy-export-block-text-indent-styles v)
     :else (throw (ex-info "Invalid export block text indent style" {:value v}))))
 
-;; Stores main application state
-(defonce ^:large-vars/data-var state
+;; Initial main application state
+(defonce ^:large-vars/data-var initial-state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [url-graph (:graph (util/parse-params))
                              graph (or url-graph
@@ -96,8 +96,7 @@
                                        (storage/get :git/current-repo))]
                          (when graph (ipc/ipc "setCurrentGraph" graph))
                          graph)]
-    (atom
-     {:client-id                             (str (random-uuid))
+    {:client-id                             (str (random-uuid))
       :route-match                           nil
       :today                                 nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
@@ -353,10 +352,10 @@
                                                  3)
       :favorites/updated?                    0
       :db/async-queries                      {}
-      :sync-graph/init?                      nil})))
+      :sync-graph/init?                      nil}))
 
-(rfx/init! {:initial-value @state
-            :registry (atom {})})
+(rfx/init-once! {:initial-value initial-state
+                 :registry (atom {})})
 
 (defn register-rfx-state-subs!
   []
@@ -364,14 +363,12 @@
     (fn [db [_ k]]
       (get db k)))
   (doseq [k (keys (rfx/snapshot))]
-    (rfx/register-state-sub-id! k)
     (rfx/reg-sub! k
       [[::state-key k]]
       (fn [value [_ & path]]
         (if (seq path)
           (get-in value path)
           value))))
-  (rfx/register-state-sub-id! :view/table-selection)
   (rfx/reg-sub! :selection/block-selected?
     [[:selection/blocks]]
     (fn [selection-blocks [_ block-id]]
@@ -471,15 +468,15 @@
 
 (defn get-global-config
   []
-  (get-in @state [:config ::global-config]))
+  (get-in (rfx/snapshot) [:config ::global-config]))
 
 (defn get-global-config-str-content
   []
-  (get-in @state [:config ::global-config-str-content]))
+  (get-in (rfx/snapshot) [:config ::global-config-str-content]))
 
 (defn get-graph-config
   ([] (get-graph-config (get-current-repo)))
-  ([repo-url] (get-in @state [:config repo-url])))
+  ([repo-url] (get-in (rfx/snapshot) [:config repo-url])))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -584,7 +581,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-start-of-week
   []
   (or (:start-of-week (get-config))
-      (get-in @state [:me :settings :start-of-week])
+      (get-in (rfx/snapshot) [:me :settings :start-of-week])
       6))
 
 (defn get-ref-open-blocks-level
@@ -613,7 +610,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn enable-semantic-search?
   []
-  (true? (get-in @state [:electron/user-cfgs :feature/enable-semantic-search?])))
+  (true? (get-in (rfx/snapshot) [:electron/user-cfgs :feature/enable-semantic-search?])))
 
 ;; State subscription helpers
 ;; ==========================
@@ -640,8 +637,9 @@ should be done through this fn in order to get global config and config defaults
 
   Use this outside component rendering or when the caller does not need reactive
   rendering. Components that render from state should use `frontend.rfx/use-sub`."
-  [ks & {:keys [nested-path]}]
-  (read-state-value (rfx/snapshot) ks nested-path))
+  ([] (rfx/snapshot))
+  ([ks & {:keys [nested-path]}]
+   (read-state-value (rfx/snapshot) ks nested-path)))
 
 (defn set-editing-block-id!
   [container-block]
@@ -802,22 +800,19 @@ should be done through this fn in order to get global config and config defaults
       (let [db' (assoc-state-db (rfx/snapshot) path value nested-path)]
         (if (seq changed-paths)
           (rfx/replace-state-paths! db' changed-paths)
-          (rfx/replace-state! db' (full-state-path path nested-path)))
-        (reset! state db'))))
+          (rfx/replace-state! db' (full-state-path path nested-path))))))
   nil)
 
 (defn update-state!
   [path f & {:keys [nested-path]}]
   (vswap! *profile-state update path inc)
   (let [db' (update-state-db (rfx/snapshot) path f nested-path)]
-    (rfx/replace-state! db' (full-state-path path nested-path))
-    (reset! state db'))
+    (rfx/replace-state! db' (full-state-path path nested-path)))
   nil)
 
 (defn replace-state!
   [db]
   (rfx/replace-state! db)
-  (reset! state db)
   nil)
 
 (defn swap-state!
@@ -831,7 +826,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-route-match
   []
-  (:route-match @state))
+  (:route-match (rfx/snapshot)))
 
 (defn get-current-route
   []
@@ -854,11 +849,11 @@ should be done through this fn in order to get global config and config defaults
 (defn get-current-repo
   "Returns the current repo URL, or else open demo graph"
   []
-  (:git/current-repo @state))
+  (:git/current-repo (rfx/snapshot)))
 
 (defn get-rtc-graphs
   []
-  (:rtc/graphs @state))
+  (:rtc/graphs (rfx/snapshot)))
 
 ;; TODO: rtc version
 (comment
@@ -875,7 +870,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-repos
   []
-  (get-in @state [:me :repos]))
+  (get-in (rfx/snapshot) [:me :repos]))
 
 (defn set-repos!
   [repos]
@@ -899,7 +894,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-preferred-language!
   [language]
-  (let [old-language (:preferred-language @state)
+  (let [old-language (:preferred-language (rfx/snapshot))
         new-language (canonical-preferred-language language)]
     (when (not= new-language old-language)
       (set-state! :preferred-language new-language)
@@ -1202,7 +1197,7 @@ should be done through this fn in order to get global config and config defaults
 (declare sidebar-add-block!)
 (defn- sidebar-add-content-when-open!
   []
-  (when (empty? (:sidebar/blocks @state))
+  (when (empty? (:sidebar/blocks (rfx/snapshot)))
     (sidebar-add-block! (get-current-repo) "contents" :contents)))
 
 (defn open-right-sidebar!
@@ -1216,7 +1211,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn toggle-sidebar-open?!
   []
-  (if (:ui/sidebar-open? @state)
+  (if (:ui/sidebar-open? (rfx/snapshot))
     (hide-right-sidebar!)
     (open-right-sidebar!)))
 
@@ -1237,7 +1232,7 @@ should be done through this fn in order to get global config and config defaults
                                    (if (string? idx)
                                      (remove #(= (second %) idx) blocks)
                                      (util/drop-nth idx blocks))))
-  (when (empty? (:sidebar/blocks @state))
+  (when (empty? (:sidebar/blocks (rfx/snapshot)))
     (hide-right-sidebar!)))
 
 (defn sidebar-remove-deleted-block!
@@ -1246,7 +1241,7 @@ should be done through this fn in order to get global config and config defaults
     (update-state! :sidebar/blocks (fn [items]
                                      (remove (fn [[repo id _]]
                                                (and (= repo (get-current-repo)) (contains? ids-set id))) items)))
-    (when (empty? (:sidebar/blocks @state))
+    (when (empty? (:sidebar/blocks (rfx/snapshot)))
       (hide-right-sidebar!))))
 
 (defn sidebar-remove-rest!
@@ -1264,7 +1259,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn sidebar-block-exists?
   [idx]
-  (some #(= (second %) idx) (:sidebar/blocks @state)))
+  (some #(= (second %) idx) (:sidebar/blocks (rfx/snapshot))))
 
 (defn clear-sidebar-blocks!
   []
@@ -1277,12 +1272,12 @@ should be done through this fn in order to get global config and config defaults
 
 (defn sidebar-block-collapse-rest!
   [db-id]
-  (let [items (disj (set (map second (:sidebar/blocks @state))) db-id)]
+  (let [items (disj (set (map second (:sidebar/blocks (rfx/snapshot)))) db-id)]
     (doseq [item items] (set-state! [:ui/sidebar-collapsed-blocks item] true))))
 
 (defn sidebar-block-set-collapsed-all!
   [collapsed?]
-  (let [items (map second (:sidebar/blocks @state))]
+  (let [items (map second (:sidebar/blocks (rfx/snapshot)))]
     (doseq [item items]
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
@@ -1328,7 +1323,7 @@ should be done through this fn in order to get global config and config defaults
     (set-editor-last-pos! new-pos)))
 
 (defn set-theme-mode!
-  ([mode] (set-theme-mode! mode (:ui/system-theme? @state)))
+  ([mode] (set-theme-mode! mode (:ui/system-theme? (rfx/snapshot))))
   ([mode system-theme?]
    (when (mobile-util/native-platform?)
      (if (= mode "light")
@@ -1341,7 +1336,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn sync-system-theme!
   []
-  (when (:ui/system-theme? @state)
+  (when (:ui/system-theme? (rfx/snapshot))
     (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
       (set-theme-mode! (if system-dark? "dark" "light") true)
       (set-state! :ui/system-theme? true)
@@ -1365,14 +1360,14 @@ should be done through this fn in order to get global config and config defaults
 
 (defn toggle-theme!
   []
-  (use-theme-mode! (toggle-theme (:ui/theme @state))))
+  (use-theme-mode! (toggle-theme (:ui/theme (rfx/snapshot)))))
 
 (defn set-custom-theme!
   ([custom-theme]
    (set-custom-theme! nil custom-theme))
   ([mode theme]
    (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
-   (storage/set :ui/custom-theme (:ui/custom-theme @state))))
+   (storage/set :ui/custom-theme (:ui/custom-theme (rfx/snapshot)))))
 
 (defn restore-mobile-theme!
   "Restore mobile theme setting from local storage"
@@ -1391,9 +1386,9 @@ should be done through this fn in order to get global config and config defaults
   ([] (load-app-user-cfgs false))
   ([refresh?]
    (when (util/electron?)
-     (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
+     (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs (rfx/snapshot))))
                     (ipc/ipc :userAppCfgs)
-                    (:electron/user-cfgs @state))
+                    (:electron/user-cfgs (rfx/snapshot)))
              cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
        (set-state! :electron/user-cfgs cfgs)))))
 
@@ -1442,7 +1437,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-me
   []
-  (:me @state))
+  (:me (rfx/snapshot)))
 
 (defn set-db-restoring!
   [value]
@@ -1457,7 +1452,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-left-sidebar-open?
   []
-  (get-in @state [:ui/left-sidebar-open?]))
+  (get-in (rfx/snapshot) [:ui/left-sidebar-open?]))
 
 (defn set-left-sidebar-open!
   [value]
@@ -1476,7 +1471,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn developer-mode?
   []
-  (:ui/developer-mode? @state))
+  (:ui/developer-mode? (rfx/snapshot)))
 
 (defn document-mode?
   []
@@ -1516,7 +1511,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-wide-mode?
   []
-  (:ui/wide-mode? @state))
+  (:ui/wide-mode? (rfx/snapshot)))
 
 (defn toggle-wide-mode!
   []
@@ -1528,22 +1523,22 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-plugins-slash-commands
   []
-  (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
+  (mapcat seq (flatten (vals (:plugin/installed-slash-commands (rfx/snapshot))))))
 
 (defn get-plugins-commands-with-type
   [type]
-  (->> (apply concat (vals (:plugin/simple-commands @state)))
+  (->> (apply concat (vals (:plugin/simple-commands (rfx/snapshot))))
        (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugins-ui-items-with-type
   [type]
-  (->> (apply concat (vals (:plugin/installed-ui-items @state)))
+  (->> (apply concat (vals (:plugin/installed-ui-items (rfx/snapshot))))
        (filterv #(= (keyword (first %)) (keyword type)))))
 
 (defn get-plugin-resources-with-type
   [pid type]
   (when-let [pid (and type (keyword pid))]
-    (get-in @state [:plugin/installed-resources pid (keyword type)])))
+    (get-in (rfx/snapshot) [:plugin/installed-resources pid (keyword type)])))
 
 (defn get-plugin-resource
   [pid type key]
@@ -1560,7 +1555,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-plugin-services
   [pid type]
-  (when-let [installed (and pid (:plugin/installed-services @state))]
+  (when-let [installed (and pid (:plugin/installed-services (rfx/snapshot)))]
     (some->> (seq (get installed (keyword pid)))
              (filterv #(= type (:type %))))))
 
@@ -1580,7 +1575,7 @@ should be done through this fn in order to get global config and config defaults
 (defn uninstall-plugin-service
   [pid type-or-all]
   (when-let [pid (keyword pid)]
-    (when-let [installed (get (:plugin/installed-services @state) pid)]
+    (when-let [installed (get (:plugin/installed-services (rfx/snapshot)) pid)]
       (let [remove-all? (or (true? type-or-all) (nil? type-or-all))
             remains     (if remove-all? nil (filterv #(not= type-or-all (:type %)) installed))
             removed     (if remove-all? installed (filterv #(= type-or-all (:type %)) installed))]
@@ -1592,12 +1587,12 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-all-plugin-services-with-type
   [type]
-  (when-let [installed (vals (:plugin/installed-services @state))]
+  (when-let [installed (vals (:plugin/installed-services (rfx/snapshot)))]
     (mapcat (fn [s] (filter #(= (keyword type) (:type %)) s)) installed)))
 
 (defn get-all-plugin-search-engines
   []
-  (:search/engines @state))
+  (:search/engines (rfx/snapshot)))
 
 (defn update-plugin-search-engine
   [pid name f]
@@ -1620,7 +1615,7 @@ should be done through this fn in order to get global config and config defaults
      (set-state!
       [:plugin/installed-hooks hook]
       (assoc
-       ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
+       ((fnil identity {}) (get-in (rfx/snapshot) [:plugin/installed-hooks hook]))
        pid opts)) true)))
 
 (defn uninstall-plugin-hook
@@ -1628,7 +1623,7 @@ should be done through this fn in order to get global config and config defaults
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
       (swap-state! update :plugin/installed-hooks #(update-vals % (fn [ids] (dissoc ids pid))))
-      (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
+      (when-let [coll (get-in (rfx/snapshot) [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (dissoc coll pid))))
     true))
 
@@ -1644,7 +1639,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn editor-in-composition?
   []
-  (:editor/in-composition? @state))
+  (:editor/in-composition? (rfx/snapshot)))
 
 (defn set-editor-last-input-time!
   [repo time]
@@ -1674,7 +1669,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-search-mode
   []
-  (:search/mode @state))
+  (:search/mode (rfx/snapshot)))
 
 (defn toggle!
   [path]
@@ -1724,7 +1719,7 @@ should be done through this fn in order to get global config and config defaults
             (util/scroll-to elem 0)))))))
 
 (defn get-export-block-text-indent-style []
-  (normalize-export-block-text-indent-style (:copy/export-block-text-indent-style @state)))
+  (normalize-export-block-text-indent-style (:copy/export-block-text-indent-style (rfx/snapshot))))
 
 (defn set-export-block-text-indent-style!
   [v]
@@ -1734,15 +1729,15 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-recent-pages
   []
-  (get-in @state [:ui/recent-pages (get-current-repo)]))
+  (get-in (rfx/snapshot) [:ui/recent-pages (get-current-repo)]))
 
 (defn set-recent-pages!
   [v]
   (set-state! [:ui/recent-pages (get-current-repo)] v)
-  (storage/set :ui/recent-pages (:ui/recent-pages @state)))
+  (storage/set :ui/recent-pages (:ui/recent-pages (rfx/snapshot))))
 
 (defn get-export-block-text-remove-options []
-  (:copy/export-block-text-remove-options @state))
+  (:copy/export-block-text-remove-options (rfx/snapshot)))
 
 (defn update-export-block-text-remove-options!
   [e k]
@@ -1753,7 +1748,7 @@ should be done through this fn in order to get global config and config defaults
                  (get-export-block-text-remove-options))))
 
 (defn get-export-block-text-other-options []
-  (:copy/export-block-text-other-options @state))
+  (:copy/export-block-text-other-options (rfx/snapshot)))
 
 (defn update-export-block-text-other-options!
   [k v]
@@ -1765,7 +1760,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn block-component-editing?
   []
-  (:block/component-editing-mode? @state))
+  (:block/component-editing-mode? (rfx/snapshot)))
 
 (defn set-block-component-editing-mode!
   [value]
@@ -1787,7 +1782,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-page-blocks-cp
   []
-  (get-in @state [:view/components :page-blocks]))
+  (get-in (rfx/snapshot) [:view/components :page-blocks]))
 
 ;; To avoid circular dependencies
 (defn set-component!
@@ -1796,7 +1791,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-component
   [k]
-  (get-in @state [:view/components k]))
+  (get-in (rfx/snapshot) [:view/components k]))
 
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
@@ -1878,7 +1873,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-block-op-type
   []
-  (:editor/block-op-type @state))
+  (:editor/block-op-type (rfx/snapshot)))
 
 (defn feature-http-server-enabled?
   []
@@ -1887,7 +1882,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-plugin-by-id
   [id]
   (when-let [id (and id (keyword id))]
-    (get-in @state [:plugin/installed-plugins id])))
+    (get-in (rfx/snapshot) [:plugin/installed-plugins id])))
 
 (defn get-enabled?-installed-plugins
   ([theme?] (get-enabled?-installed-plugins theme? true false false))
@@ -1896,11 +1891,11 @@ should be done through this fn in order to get global config and config defaults
     #(and (if include-unpacked? true (or (:webMode %) (:iir %)))
           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
-    (vals (:plugin/installed-plugins @state)))))
+    (vals (:plugin/installed-plugins (rfx/snapshot))))))
 
 (defn lsp-enabled?-or-theme
   []
-  (:plugin/enabled @state))
+  (:plugin/enabled (rfx/snapshot)))
 
 (def lsp-enabled?
   (lsp-enabled?-or-theme))
@@ -1908,7 +1903,7 @@ should be done through this fn in order to get global config and config defaults
 (defn consume-updates-from-coming-plugin!
   [payload updated?]
   (when-let [id (keyword (:id payload))]
-    (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
+    (let [prev-pending? (boolean (seq (:plugin/updates-pending (rfx/snapshot))))]
       (println "Updates: consumed pending - " id)
       (swap-state! update :plugin/updates-pending dissoc id)
       (if updated?
@@ -1924,18 +1919,18 @@ should be done through this fn in order to get global config and config defaults
 
 (defn plugin-update-available?
   [id]
-  (when-let [pkg (and id (get (:plugin/updates-coming @state) (keyword id)))]
+  (when-let [pkg (and id (get (:plugin/updates-coming (rfx/snapshot)) (keyword id)))]
     (coming-update-new-version? pkg)))
 
 (defn all-available-coming-updates
-  ([] (all-available-coming-updates (:plugin/updates-coming @state)))
+  ([] (all-available-coming-updates (:plugin/updates-coming (rfx/snapshot))))
   ([updates] (when-let [updates (vals updates)]
                (filterv #(coming-update-new-version? %) updates))))
 
 (defn get-next-selected-coming-update
   []
   (when-let [updates (all-available-coming-updates)]
-    (let [unchecked (:plugin/updates-unchecked @state)]
+    (let [unchecked (:plugin/updates-unchecked (rfx/snapshot))]
       (first (filter #(and (not (and (seq unchecked) (contains? unchecked (:id %))))
                            (not (:error-code %))) updates)))))
 
@@ -1987,7 +1982,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-block-collapsed
   ([block-id] (get-block-collapsed block-id nil))
   ([block-id container-id]
-   (get-in @state [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
+   (get-in (rfx/snapshot) [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-dialog-id
   []
@@ -2009,7 +2004,7 @@ should be done through this fn in order to get global config and config defaults
   (get-state :auth/id-token))
 
 (defn get-auth-refresh-token []
-  (:auth/refresh-token @state))
+  (:auth/refresh-token (rfx/snapshot)))
 
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port]} (get-state [:electron/user-cfgs :settings/agent])]
@@ -2021,7 +2016,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-current-pdf
   []
-  (:pdf/current @state))
+  (:pdf/current (rfx/snapshot)))
 
 (defn set-current-pdf!
   [inflated-file]
@@ -2049,18 +2044,18 @@ should be done through this fn in order to get global config and config defaults
   (storage/set :ui/radix-color color))
 
 (defn set-editor-font! [config]
-  (let [config' (:ui/editor-font @state)
+  (let [config' (:ui/editor-font (rfx/snapshot))
         config (if (map? config') (merge config' config) {})]
     (swap-state! assoc :ui/editor-font config)
     (storage/set :ui/editor-font config)))
 
 (defn handbook-open?
   []
-  (:ui/handbooks-open? @state))
+  (:ui/handbooks-open? (rfx/snapshot)))
 
 (defn get-handbook-route-chan
   []
-  (:handbook/route-chan @state))
+  (:handbook/route-chan (rfx/snapshot)))
 
 (defn open-handbook-pane!
   [k]
@@ -2083,10 +2078,17 @@ should be done through this fn in order to get global config and config defaults
   "Either cached container-id or a new id"
   [key]
   (if (seq key)
-    (or (get (get-state :ui/cached-key->container-id) key)
-        (let [id (get-next-container-id)]
-          (update-state! :ui/cached-key->container-id #(assoc % key id))
-          id))
+    (let [db (rfx/snapshot)]
+      (or (get (:ui/cached-key->container-id db) key)
+          (let [id (inc (or (:ui/container-id db) 0))
+                db' (-> db
+                        (assoc :ui/container-id id)
+                        (assoc-in [:ui/cached-key->container-id key] id))]
+            (vswap! *profile-state update :ui/container-id inc)
+            (vswap! *profile-state update :ui/cached-key->container-id inc)
+            (rfx/replace-state-paths! db' [[:ui/container-id]
+                                           [:ui/cached-key->container-id key]])
+            id)))
     (get-next-container-id)))
 
 (defn use-container-id

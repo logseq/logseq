@@ -53,7 +53,7 @@
   []
   ;; Client sets repo name (and graph type) based on what was written in app state
   (when-let [data js/window.logseq_db]
-    (let [repo (-> @state/state :config keys first)]
+    (let [repo (-> (state/get-state) :config keys first)]
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
               _ (let [db-transit-str (unescape-html data)]

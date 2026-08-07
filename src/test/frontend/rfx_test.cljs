@@ -1,9 +1,26 @@
 (ns frontend.rfx-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [io.factorhouse.rfx.store :as store]
             [promesa.core :as p]))
+
+(defn- source-files
+  [dir]
+  (mapcat (fn [entry]
+            (let [path (node-path/join dir (.-name entry))]
+              (cond
+                (.isDirectory entry) (source-files path)
+                (re-find #"\.clj[cs]?$" path) [path]
+                :else [])))
+          (array-seq (fs/readdirSync dir #js {:withFileTypes true}))))
+
+(defn- source
+  [path]
+  (fs/readFileSync path "utf8"))
 
 (defn- timeout
   [value ms]
@@ -27,10 +44,20 @@
     (is (= 3 (rfx/snapshot-sub [::counter])))
     (is (= {:counter 3} (rfx/snapshot)))))
 
-(deftest dispatch-sync-preserves-fast-state
+(deftest init-once-preserves-the-active-context
+  (rfx/init! {:initial-value {:value 1}
+              :registry (atom {})})
+  (rfx/init-once! {:initial-value {:value 2}
+                   :registry (atom {})})
+  (is (= {:value 1} (rfx/snapshot))))
+
+(deftest dispatch-sync-preserves-state-written-through-the-rfx-store
   (rfx/init! {:initial-value {:counter 0
                               :db/async-queries {"query" :stale}}
               :registry (atom {})})
+  (rfx/reg-sub! ::async-queries
+    (fn [db _]
+      (:db/async-queries db)))
   (rfx/reg-event-db! ::increment
     (fn [db _]
       (update db :counter inc)))
@@ -42,9 +69,11 @@
 
   (is (= 1 (:counter (rfx/snapshot))))
   (is (= {"query" :fresh}
-         (:db/async-queries (rfx/snapshot)))))
+         (:db/async-queries (rfx/snapshot))))
+  (is (= {"query" :fresh}
+         (rfx/snapshot-sub [::async-queries]))))
 
-(deftest fast-state-replacement-bypasses-the-general-rfx-store
+(deftest state-replacement-updates-the-rfx-store
   (rfx/init! {:initial-value {:sync/block-conflicts {}}
               :registry (atom {})})
   (let [store-writes (atom 0)
@@ -55,11 +84,10 @@
       (rfx/replace-state! (assoc (rfx/snapshot)
                                  :sync/block-conflicts refresh)
                           [:sync/block-conflicts]))
-    (is (zero? @store-writes)
-        "Fast state should notify only precise state-path listeners.")
-    (is (= refresh (:sync/block-conflicts (rfx/snapshot))))))
+    (is (= 1 @store-writes)
+        "Every frontend state write must update the single RFX store.")))
 
-(deftest replace-state-paths-updates-fast-state-once
+(deftest replace-state-paths-updates-the-rfx-store-once
   (rfx/init! {:initial-value {:sync/block-conflicts {}}
               :registry (atom {})})
   (let [block-a (random-uuid)
@@ -75,8 +103,40 @@
       (rfx/replace-state-paths! (assoc (rfx/snapshot)
                                        :sync/block-conflicts refresh)
                                 paths))
-    (is (zero? @store-writes))
-    (is (= refresh (:sync/block-conflicts (rfx/snapshot))))))
+    (is (= 1 @store-writes))))
+
+(deftest frontend-state-has-one-rfx-db-source
+  (let [state-source (source "src/main/frontend/state.cljs")
+        rfx-source (source "src/main/frontend/rfx.cljs")
+        direct-state-references
+        (->> (source-files "src/main")
+             (keep (fn [path]
+                     (when (re-find #"(?:frontend\.state|state)/state(?![-?!A-Za-z0-9])"
+                                    (source path))
+                       path))))]
+    (is (not (re-find #"\(defonce[^\n]*\sstate\s" state-source))
+        "frontend.state must not own a second application-state atom.")
+    (is (string/includes? state-source "(rfx/init-once!")
+        "RFX initialization must survive namespace hot reloads.")
+    (is (not (string/includes? rfx-source "!app-db"))
+        "frontend.rfx must read and write the RFX store directly.")
+    (is (not (string/includes? rfx-source "fast-state"))
+        "Every frontend state key must use the same RFX store path.")
+    (is (empty? direct-state-references)
+        (str "Production code must use RFX snapshots/subscriptions, not state/state: "
+             (pr-str direct-state-references)))))
+
+(deftest state-listeners-receive-the-state-transition-and-can-unlisten
+  (rfx/init! {:initial-value {:value 1}
+              :registry (atom {})})
+  (let [transitions (atom [])]
+    (rfx/listen! ::transition
+                 (fn [prev-db next-db]
+                   (swap! transitions conj [prev-db next-db])))
+    (rfx/replace-state! {:value 2})
+    (rfx/unlisten! ::transition)
+    (rfx/replace-state! {:value 3})
+    (is (= [[{:value 1} {:value 2}]] @transitions))))
 
 (deftest pub-event-resolves-handler-result
   (async done
@@ -160,4 +220,4 @@
 
 (deftest state-does-not-own-system-event-channel
   (testing "frontend state no longer owns the event dispatch channel"
-    (is (not (contains? @state/state :system/events)))))
+    (is (not (contains? (rfx/snapshot) :system/events)))))

@@ -159,11 +159,11 @@
           document #js {:title ""
                         :body #js {:dataset #js {:page ""}}}
           previous-document (.-document js/global)
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-worker @state/*db-worker
           calls (atom [])]
       (set! (.-document js/global) document)
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (reset! state/*db-worker
               (fn [& args]
                 (swap! calls conj (vec args))
@@ -190,7 +190,7 @@
              (is false (str error))))
           (p/finally
            (fn []
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (reset! state/*db-worker previous-worker)
              (set! (.-document js/global) previous-document)
              (done)))))))

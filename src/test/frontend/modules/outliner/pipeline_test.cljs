@@ -5,7 +5,7 @@
             [frontend.state :as state]))
 
 (deftest compact-worker-broadcast-applies-the-exact-delta-once-and-keeps-page-events-test
-  (let [original-state @state/state
+  (let [original-state (state/get-state)
         state-calls (atom [])
         applied-deltas (atom [])
         published-events (atom [])
@@ -21,7 +21,7 @@
                  :outliner-op :rename-page
                  :data rename-data}]
     (try
-      (reset! state/state {:client-id "client"})
+      (state/replace-state! {:client-id "client"})
       (with-redefs [db-subs/apply-delta! (fn [value]
                                            (swap! applied-deltas conj value)
                                            true)
@@ -42,10 +42,10 @@
         (is (= [[:page/renamed repo rename-data]] @published-events)
             "Page lifecycle events remain a narrow non-renderer side effect."))
       (finally
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest deleted-blocks-are-removed-from-the-sidebar-test
-  (let [original-state @state/state
+  (let [original-state (state/get-state)
         removed-ids (atom nil)
         repo "sidebar-tombstone-test"
         deleted-uuid (random-uuid)
@@ -57,7 +57,7 @@
                :affected-keys #{}}
         tx-meta {:client-id "client"}]
     (try
-      (reset! state/state {:client-id "client"})
+      (state/replace-state! {:client-id "client"})
       (with-redefs [db-subs/apply-delta! (constantly true)
                     state/get-current-repo (constantly repo)
                     state/get-current-page (constantly nil)
@@ -69,4 +69,4 @@
         (is (= [42] @removed-ids)
             "Deleted block tombstones drop the matching sidebar entries."))
       (finally
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))

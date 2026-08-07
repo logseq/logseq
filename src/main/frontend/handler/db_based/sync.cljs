@@ -120,7 +120,7 @@
 
 (defn- should-start-rtc?
   [repo]
-  (and (not (true? (:rtc/uploading? @state/state)))
+  (and (not (true? (:rtc/uploading? (state/get-state))))
        (let [graph (remote-graph repo)]
          (and (some? graph)
               (not= false (:graph-ready-for-use? graph))))))
@@ -132,7 +132,7 @@
     (true? graph-e2ee?)))
 
 (defn- active-graph-operation []
-  (let [{:rtc/keys [downloading-graph-uuid uploading?]} @state/state]
+  (let [{:rtc/keys [downloading-graph-uuid uploading?]} (state/get-state)]
     (cond
       downloading-graph-uuid
       {:active-operation :download
@@ -203,7 +203,7 @@
 (defn- sync-app-state-payload
   []
   (cond-> (common-util/remove-nils-non-nested
-           (select-keys @state/state [:git/current-repo :config
+           (select-keys (state/get-state) [:git/current-repo :config
                                       :auth/id-token :auth/access-token :auth/refresh-token
                                       :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
                                       :user/info]))
@@ -229,7 +229,7 @@
           (state/<invoke-db-worker :thread-api/db-sync-start repo)))
       (do
         (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
-                                       :remote-graphs-loading? (:rtc/loading-graphs? @state/state)})
+                                       :remote-graphs-loading? (:rtc/loading-graphs? (state/get-state))})
         (<rtc-stop!)))))
 
 (defonce ^:private debounced-update-presence

@@ -333,8 +333,8 @@
   (when (and
          ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
          ;; We should implement an app-wide check rather than list them all here
-         (not (:graph/loading? @state/state))
-         (not (:graph/importing @state/state))
+         (not (:graph/loading? (state/get-state)))
+         (not (:graph/importing (state/get-state)))
          (not config/publishing?))
     (when-let [title (date/today)]
       (state/set-today! title)

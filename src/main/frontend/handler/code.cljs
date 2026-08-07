@@ -42,7 +42,7 @@
 
 (defn save-code-editor!
   []
-  (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
+  (let [{:keys [config state editor]} (get (state/get-state) :editor/code-block-context)]
     (when editor
       (state/set-block-component-editing-mode! false)
       (.save editor)

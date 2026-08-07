@@ -13,7 +13,7 @@
     (let [repo "logseq_db_restore_without_ui_conn"
           block-id (str (random-uuid))
           conflicts-by-block {block-id [{:value "remote"}]}
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-conns @db-conn/conns
           calls (atom [])
           events (atom [])
@@ -34,7 +34,7 @@
                       (fn [repo']
                         (swap! current-repos conj repo')
                         (swap! calls conj [:current-repo repo'])
-                        (swap! state/state assoc :git/current-repo repo')
+                        (state/swap-state! assoc :git/current-repo repo')
                         nil)
                       state/<invoke-db-worker
                       (fn [api repo']
@@ -71,6 +71,6 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (reset! db-conn/conns previous-conns)
                (done))))))))

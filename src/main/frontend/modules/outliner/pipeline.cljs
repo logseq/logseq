@@ -67,13 +67,13 @@
           (when (current-page-recycled? current-page blocks)
             (route-handler/redirect! {:to :home :push false}))
 
-          (when (or (not= (:client-id tx-meta) (:client-id @state/state))
+          (when (or (not= (:client-id tx-meta) (:client-id (state/get-state)))
                     (= :apply-template (:outliner-op tx-meta)))
             (update-editing-block-title-if-changed! blocks))
 
           (state/set-state! :editor/start-pos nil)
 
-          (when-not (:graph/importing @state/state)
+          (when-not (:graph/importing (state/get-state))
             (publish-plugin-hook! tx-meta delta)))))
 
     (when (= (:outliner-op tx-meta) :delete-page)

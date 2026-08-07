@@ -196,7 +196,7 @@
 
 (defn load-marketplace-plugins
   [refresh?]
-  (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
+  (if (or refresh? (nil? (:plugin/marketplace-pkgs (state/get-state))))
     (p/create
       (fn [resolve reject]
         (let [on-ok (fn [res]
@@ -212,11 +212,11 @@
               (p/then on-ok)
               (p/catch reject))
             (util/fetch plugins-url on-ok reject)))))
-    (p/resolved (:plugin/marketplace-pkgs @state/state))))
+    (p/resolved (:plugin/marketplace-pkgs (state/get-state)))))
 
 (defn load-marketplace-stats
   [refresh?]
-  (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
+  (if (or refresh? (nil? (:plugin/marketplace-stats (state/get-state))))
     (p/create
       (fn [resolve reject]
         (let [on-ok (fn [^js res]
@@ -240,7 +240,7 @@
 
 (defn check-or-update-marketplace-plugin!
   [{:keys [id] :as pkg} error-handler]
-  (when-not (and (:plugin/installing @state/state)
+  (when-not (and (:plugin/installing (state/get-state))
               (not (plugin-common-handler/installed? id)))
     (state/set-state! :plugin/installing pkg)
 
@@ -274,7 +274,7 @@
 
 (defn call-plugin-user-command!
   [pid key args]
-  (when-let [commands (and key (seq (get (:plugin/simple-commands @state/state) (keyword pid))))]
+  (when-let [commands (and key (seq (get (:plugin/simple-commands (state/get-state)) (keyword pid))))]
     (when-let [matched (medley/find-first #(= (:key (second %)) key) commands)]
       (let [[_ cmd action pid] matched]
         (state/pub-event!
@@ -282,9 +282,9 @@
 
 (defn open-updates-downloading
   []
-  (when (and (not (:plugin/updates-downloading? @state/state))
+  (when (and (not (:plugin/updates-downloading? (state/get-state)))
           (seq (state/all-available-coming-updates)))
-    (->> (:plugin/updates-coming @state/state)
+    (->> (:plugin/updates-coming (state/get-state))
       (map #(if (state/coming-update-new-version? (second %1))
               (update % 1 dissoc :error-code) %1))
       (into {})
@@ -293,7 +293,7 @@
 
 (defn close-updates-downloading
   []
-  (when (:plugin/updates-downloading? @state/state)
+  (when (:plugin/updates-downloading? (state/get-state))
     (state/set-state! :plugin/updates-downloading? false)))
 
 (defn has-setting-schema?
@@ -356,7 +356,7 @@
 
                                             [error-code :error])
                                rate-limit-error? (some-> msg str (string/includes? "API rate limit"))
-                               pending? (seq (:plugin/updates-pending @state/state))]
+                               pending? (seq (:plugin/updates-pending (state/get-state)))]
 
                            (if (and only-check pending?)
                              (state/consume-updates-from-coming-plugin! payload false)
@@ -407,7 +407,7 @@
 (defn register-plugin-slash-command
   [pid [cmd actions]]
   (when-let [pid (keyword pid)]
-    (when (contains? (:plugin/installed-plugins @state/state) pid)
+    (when (contains? (:plugin/installed-plugins (state/get-state)) pid)
       (state/swap-state! update-in [:plugin/installed-slash-commands pid]
         (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
       (state/pub-event! [:rebuild-slash-commands-list])
@@ -459,7 +459,7 @@
   ;; action => [:action-key :event-key]
   [pid {:keys [type] :as cmd} action]
   (when-let [pid (keyword pid)]
-    (when (contains? (:plugin/installed-plugins @state/state) pid)
+    (when (contains? (:plugin/installed-plugins (state/get-state)) pid)
       (state/swap-state! update-in [:plugin/simple-commands pid]
         (fnil conj []) [type cmd action pid])
       true)))
@@ -477,8 +477,8 @@
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
   (when-let [pid (keyword pid)]
-    (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (let [items (or (get-in @state/state [:plugin/installed-ui-items pid]) [])
+    (when (contains? (:plugin/installed-plugins (state/get-state)) pid)
+      (let [items (or (get-in (state/get-state) [:plugin/installed-ui-items pid]) [])
             items (filter #(not= key (:key (second %))) items)]
         (state/swap-state! assoc-in [:plugin/installed-ui-items pid]
           (conj items [type opts pid])))
@@ -496,7 +496,7 @@
     (when-let [type (and key (keyword type))]
       (let [path [:plugin/installed-resources pid type]]
         ;; TODO: conditions
-        ;; (when (contains? #{:error nil} (get-in @state/state (conj path key))))
+        ;; (when (contains? #{:error nil} (get-in (state/get-state) (conj path key))))
         (state/swap-state! update-in path
           (fnil assoc {}) key (merge opts {:pid pid}))
         true))))
@@ -542,7 +542,7 @@
 
 (defn get-installed-hooks
   []
-  (:plugin/installed-hooks @state/state))
+  (:plugin/installed-hooks (state/get-state)))
 
 (defn plugin-hook-installed?
   [pid hook]
@@ -848,7 +848,7 @@
 
 (defn select-a-plugin-theme
   [pid]
-  (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
+  (when-let [themes (get (group-by :pid (:plugin/installed-themes (state/get-state))) pid)]
     (when-let [theme (assets-theme-to-file (first themes))]
       (js/LSPluginCore.selectTheme (bean/->js theme)))))
 
@@ -930,7 +930,7 @@
   []
   (when (util/electron?)
     (p/let [path (ipc/ipc "openDialog")]
-      (when-not (:plugin/selected-unpacked-pkg @state/state)
+      (when-not (:plugin/selected-unpacked-pkg (state/get-state))
         (state/set-state! :plugin/selected-unpacked-pkg path)))))
 
 (defn reset-unpacked-state
@@ -1058,15 +1058,15 @@
 
 (defn get-auto-checking?
   []
-  (:plugin/updates-auto-checking? @state/state))
+  (:plugin/updates-auto-checking? (state/get-state)))
 
 (defn get-user-checking?
   []
-  (boolean (seq (:plugin/updates-pending @state/state))))
+  (boolean (seq (:plugin/updates-pending (state/get-state)))))
 
 (defn get-updates-downloading?
   []
-  (boolean (:plugin/updates-downloading? @state/state)))
+  (boolean (:plugin/updates-downloading? (state/get-state))))
 
 (defn cancel-user-checking!
   []
@@ -1122,7 +1122,7 @@
 
 (defn op-pinned-toolbar-item!
   [key op]
-  (let [pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
+  (let [pinned (get-in (state/get-state) [:plugin/preferences :pinnedToolbarItems])
         pinned (into #{} pinned)]
     (when-let [op-fn (case op
                        :add conj
@@ -1132,7 +1132,7 @@
 (defn- remove-pinned-toolbar-items-of-plugin!
   [pid]
   (let [prefix (str (name pid) ":")
-        pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
+        pinned (get-in (state/get-state) [:plugin/preferences :pinnedToolbarItems])
         pinned (if (sequential? pinned) (vec pinned) [])
         updated-pinned (->> pinned
                             (remove #(and (string? %) (string/starts-with? % prefix)))
@@ -1274,7 +1274,7 @@
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
                                                 url (:url theme)
-                                                mode (or (:mode theme) (:ui/theme @state/state))]
+                                                mode (or (:mode theme) (:ui/theme (state/get-state)))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))
@@ -1292,7 +1292,7 @@
                   (.on "settings-changed" (fn [id ^js settings]
                                             (let [id (keyword id)]
                                               (when (and settings
-                                                      (contains? (:plugin/installed-plugins @state/state) id))
+                                                      (contains? (:plugin/installed-plugins (state/get-state)) id))
                                                 (update-plugin-settings-state id (bean/->clj settings))))))
 
                   (.on "ready" (fn [^js perf-table]
@@ -1346,8 +1346,8 @@
     (init-plugins!)))
 
 (comment
-  {:pending (count (:plugin/updates-pending @state/state))
-   :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
-   :coming (count (:plugin/updates-coming @state/state))
-   :installing (:plugin/installing @state/state)
-   :downloading? (boolean (:plugin/updates-downloading? @state/state))})
+  {:pending (count (:plugin/updates-pending (state/get-state)))
+   :auto-checking? (boolean (:plugin/updates-auto-checking? (state/get-state)))
+   :coming (count (:plugin/updates-coming (state/get-state)))
+   :installing (:plugin/installing (state/get-state))
+   :downloading? (boolean (:plugin/updates-downloading? (state/get-state)))})

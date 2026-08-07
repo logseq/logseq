@@ -224,7 +224,7 @@
   [anchor-text]
   (when anchor-text
     (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)
-    (when-let [f (:editor/virtualized-scroll-fn @state/state)]
+    (when-let [f (:editor/virtualized-scroll-fn (state/get-state))]
       (f))))
 
 (defn set-route-match!

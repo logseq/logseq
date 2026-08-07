@@ -7,7 +7,7 @@
 (deftest restore-repo-config-reads-config-through-worker-test
   (async done
     (let [repo "logseq_db_repo_config_worker"
-          previous-state @state/state
+          previous-state (state/get-state)
           worker-calls (atom [])]
       (p/with-redefs [repo-config-handler/<get-file-content
                       (fn [repo' path]
@@ -24,5 +24,5 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))
