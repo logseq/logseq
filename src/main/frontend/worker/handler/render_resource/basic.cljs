@@ -148,25 +148,10 @@
         :ancestor-uuids ancestor-uuids
         :ref-titles ref-titles}])))
 
-(declare collect-flat-journal)
-
 (defn- journals
-  [db resource-key _runtime]
-  (let [requested-count (second resource-key)]
-    (when-not (and (integer? requested-count) (pos? requested-count))
-      (common/fail! "Invalid initial journal count"
-             {:requested-count requested-count}))
-    (let [journal-uuids (mapv :block/uuid (ldb/get-latest-journals db))
-          initial-uuids (vec (take (min 50 requested-count) journal-uuids))
-          slots (into {}
-                      (mapcat (fn [journal-uuid]
-                                (common/block-bundle-slots
-                                 (collect-flat-journal db journal-uuid))))
-                      initial-uuids)]
-      [#{[:journals]}
-       {:journal-uuids journal-uuids
-        :loaded-uuids initial-uuids}
-       slots])))
+  [db _resource-key _runtime]
+  [#{[:journals]}
+   (mapv :block/uuid (ldb/get-latest-journals db))])
 
 (defn- recycle-roots
   [db _resource-key _runtime]
@@ -193,40 +178,6 @@
                                 [:entity (:block/uuid choice)]))
                          choices)]
     [watch-keys (vec choices)]))
-
-(defn- collect-flat-journal
-  [db root-uuid]
-  (loop [pending [root-uuid]
-         seen #{}
-         children {}]
-    (if-let [parent-uuid (peek pending)]
-      (let [pending (pop pending)]
-        (if (contains? seen parent-uuid)
-          (recur pending seen children)
-          (let [membership (block-handler/direct-children-membership db parent-uuid)
-                child-uuids (mapv first (:items membership))]
-            (recur (into pending child-uuids)
-                   (conj seen parent-uuid)
-                   (assoc children parent-uuid
-                          (dissoc membership :basis-rev))))))
-      {:root-uuid root-uuid
-       :blocks (:blocks (block-handler/canonical-blocks db (vec seen)))
-       :children children})))
-
-(defn- journal-window
-  [db resource-key _runtime]
-  (let [journal-uuids (second resource-key)]
-    (when-not (and (vector? journal-uuids)
-                   (<= (count journal-uuids) 50)
-                   (every? uuid? journal-uuids))
-      (common/fail! "Invalid journal window" {:journal-uuids journal-uuids}))
-    [#{}
-     {:loaded-uuids journal-uuids}
-     (into {}
-           (mapcat (fn [journal-uuid]
-                     (common/block-bundle-slots
-                      (collect-flat-journal db journal-uuid))))
-           journal-uuids)]))
 
 (defn- block-reactions
   [db resource-key _runtime]
@@ -442,10 +393,9 @@
    :page-identity (common/renderer 2 page-identity)
    :page-preview-source (common/renderer 2 page-preview-source)
    :block-breadcrumb (common/renderer 3 block-breadcrumb)
-   :journals (common/renderer 2 journals)
+   :journals (common/renderer 1 journals)
    :recycle-roots (common/renderer 1 recycle-roots)
    :property-choices (common/renderer 2 property-choices)
-   :journal-window (common/renderer 2 journal-window)
    :block-reactions (common/renderer 3 block-reactions)
    :block-ref-count (common/renderer 2 block-ref-count)
    :block-unlinked-ref-exists (common/renderer 2 block-unlinked-ref-exists)
