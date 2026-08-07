@@ -11,8 +11,8 @@
     (let [repo "logseq_db_config_worker"
           worker-calls (atom [])
           saved-files (atom [])
-          previous-state @state/state]
-      (swap! state/state assoc :git/current-repo repo)
+          previous-state (state/get-state)]
+      (state/swap-state! assoc :git/current-repo repo)
       (p/with-redefs [config-handler/<get-file-content
                       (fn [repo' path]
                         (swap! worker-calls conj [:thread-api/get-file-content repo' path])
@@ -35,5 +35,5 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))

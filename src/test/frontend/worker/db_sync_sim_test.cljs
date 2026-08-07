@@ -156,7 +156,7 @@
           (d/listen! conn key
                      (fn [tx-report]
                        (let [tx-report' (-> tx-report
-                                            (assoc-in [:tx-meta :client-id] (:client-id @state/state))
+                                            (assoc-in [:tx-meta :client-id] (:client-id (state/get-state)))
                                             (update-in [:tx-meta :local-tx?]
                                                        (fn [local-tx?]
                                                          (if (nil? local-tx?)

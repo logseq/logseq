@@ -17,8 +17,8 @@
                         :value "new content"}
           editor #js {:save (fn [])
                       :getTextArea (fn [] textarea)}
-          previous-state @state/state]
-      (swap! state/state assoc
+          previous-state (state/get-state)]
+      (state/swap-state! assoc
              :git/current-repo repo
              :editor/code-block-context {:config {:file-path "logseq/config.edn"}
                                          :state nil
@@ -44,7 +44,7 @@
              (is false (str error))))
           (p/finally
            (fn []
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (done)))))))
 
 (deftest save-code-editor-saves-code-snippet-after-worker-block-lookup-test
@@ -61,8 +61,8 @@
                         :value "NEW"}
           editor #js {:save (fn [])
                       :getTextArea (fn [] textarea)}
-          previous-state @state/state]
-      (swap! state/state assoc
+          previous-state (state/get-state)]
+      (state/swap-state! assoc
              :git/current-repo repo
              :editor/code-block-context {:config {:block/uuid block-uuid}
                                          :state {:code-options (atom {:pos_meta {:start_pos 4
@@ -93,5 +93,5 @@
              (is false (str error))))
           (p/finally
            (fn []
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (done)))))))

@@ -28,7 +28,7 @@
 (defn installed?
   "For the given plugin id, returns boolean indicating if it is installed"
   [id]
-  (contains? (:plugin/installed-plugins @state/state) (keyword id)))
+  (contains? (:plugin/installed-plugins (state/get-state)) (keyword id)))
 
 (defn emit-lsp-updates!
   [payload]
@@ -66,7 +66,7 @@
 (defn install-marketplace-plugin!
   "Installs plugin given plugin map with id"
   [{:keys [id] :as manifest}]
-  (when-not (and (:plugin/installing @state/state)
+  (when-not (and (:plugin/installing (state/get-state))
                  (installed? id))
     (state/set-state! :plugin/installing manifest)
     (if (util/electron?)

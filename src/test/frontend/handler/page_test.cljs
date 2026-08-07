@@ -101,10 +101,10 @@
                   (aset "preventDefault" (fn []))
                   (aset "stopPropagation" (fn [])))
           calls (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-worker @state/*db-worker
           restore! (install-page-on-chosen-stubs! loaded-page calls)]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (reset! state/*db-worker
               (fn [& args]
                 (swap! calls conj (vec args))
@@ -143,7 +143,7 @@
             (p/finally
              (fn []
                (restore!)
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (reset! state/*db-worker previous-worker)
                (done))))))))
 
@@ -331,10 +331,10 @@
     (let [page-a #uuid "11111111-1111-1111-1111-111111111111"
           page-b #uuid "22222222-2222-2222-2222-222222222222"
           calls (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-worker @state/*db-worker
           original-update-favorites-updated! state/update-favorites-updated!]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (reset! state/*db-worker
               (fn [api repo & args]
                 (swap! calls conj (into [api repo] args))
@@ -358,7 +358,7 @@
            (fn []
              (set! state/update-favorites-updated! original-update-favorites-updated!)
              (reset! state/*db-worker previous-worker)
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (done)))))))
 
 (deftest today-journal-actions-load-page-through-worker-test
@@ -366,9 +366,9 @@
     (let [calls (atom [])
           journal-page-results (atom [nil {:db/id 42}])
           created-page {:block/title "Jul 7th, 2026"}
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-worker @state/*db-worker]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (reset! state/*db-worker
               (fn [& args]
                 (if (= :thread-api/get-journal-page-by-day (first args))
@@ -411,6 +411,6 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (reset! state/*db-worker previous-worker)
                (done))))))))

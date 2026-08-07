@@ -28,7 +28,7 @@
              (map #(if (string/starts-with? % "@")
                      (subs % 1)
                      (keyword %)))
-             (get-in @state/state)
+             (get-in (state/get-state))
              (#(if (util/atom? %) @% %))
              (sdk-utils/normalize-keyword-for-json)
              (bean/->js))))
@@ -55,8 +55,8 @@
   (fn []
     (bean/->js
      (sdk-utils/normalize-keyword-for-json
-      {:preferred-language      (:preferred-language @state/state)
-       :preferred-theme-mode    (:ui/theme @state/state)
+      {:preferred-language      (:preferred-language (state/get-state))
+       :preferred-theme-mode    (:ui/theme (state/get-state))
        :preferred-format        (state/get-preferred-format)
        :preferred-date-format   (state/get-date-formatter)
        :preferred-start-of-week (state/get-start-of-week)
