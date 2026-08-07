@@ -162,8 +162,7 @@ resource failure cannot poison block or child loads.
 | Resource key | Returned value | Invalidation owner |
 |---|---|---|
 | `[:page-identity lookup]` | Page UUID or nil. | Normalized page lookup. |
-| `[:journals]` | Ordered and initially loaded journal UUIDs. Its snapshot patch also seeds canonical block and membership slots. | Journal membership. |
-| `[:journal-window journal-uuids]` | Loaded journal UUIDs. Its snapshot patch seeds the requested journal slots. | Explicit viewport request. |
+| `[:journals]` | Ordered journal UUID vector. Journal roots and children use ordinary on-demand loading. | Journal membership. |
 | `[:block-reactions block-uuid user-uuid]` | Final summarized reaction rows. | Reaction target and creator entities. |
 | `[:views owner-uuid feature-type]` | Ordered view-definition UUIDs. | View owner and feature membership. |
 | `[:view-data view-uuid context]` | UUID-only rows, groups, partitions, and plain scalar metadata. | Explicit entity, membership, ref, class-tree, and attribute keys. |
@@ -316,7 +315,7 @@ Steps:
 2. Reject malformed keys and recursively reject function values before database work.
 3. Execute page, journal, reaction, view, and query reads entirely in the worker.
 4. Normalize entity rows to UUIDs while retaining feature-owned scalar and grouped values as plain data.
-5. Seed journal-window blocks and direct memberships into the same flat slot patch atomically.
+5. Load visible journal roots and children through the ordinary canonical slots.
 6. Derive explicit affected keys from `db-before`, `db-after`, and transaction datoms.
 7. Use the explicit watch-all descriptor for opaque queries without inventing dependency analysis.
 8. Add tests for reaction edits and deletion, page rename, journal membership, class membership, refs, view membership, and sorted attributes.
@@ -378,7 +377,7 @@ Steps:
 1. Add a failing test proving the journal route owns one Virtuoso over ordered journal UUIDs.
 2. Add a failing test proving a mounted journal page renders a plain direct list and plain recursive descendants.
 3. Subscribe the route to `[:journals]`.
-4. Load each viewport window through `[:journal-window journal-uuids]`; keep its feature value UUID-only and seed exact block and membership slots in the top-level snapshot patch.
+4. Load visible journal roots and child membership through the ordinary on-demand paths.
 5. Apply later changes only through ordinary block and child deltas.
 6. Remove per-journal intersection observers, timers, resident caches, height ownership, nested virtualizers, and mobile descendant truncation.
 7. Preserve focus and scroll restoration at the outer journal virtualizer only.

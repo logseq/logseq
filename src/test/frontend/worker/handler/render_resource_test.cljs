@@ -672,7 +672,7 @@
             (render-resource-fixture)
             db @conn
             page-key [:page-identity "page identity"]
-            journals-key [:journals 1]
+            journals-key [:journals]
             request {:blocks [reference-block]
                      :children [journal-a]
                      :resources [page-key journals-key]}]
@@ -700,10 +700,8 @@
             (is (= {:keys #{[:page-lookup "page identity"]}
                     :all? false}
                    (get-in slots [[:resource page-key] :watch])))
-            (is (contains? (get (:groups response) [:resource journals-key])
-                           [:block (get-in response
-                                           [:slots [:resource journals-key]
-                                            :value :loaded-uuids 0])]))
+            (is (= #{[:resource journals-key]}
+                   (get (:groups response) [:resource journals-key])))
             (is (= response
                    (-> response ldb/write-transit-str ldb/read-transit-str)))))))))
 
@@ -716,7 +714,7 @@
                             (api test-repo
                                  {:blocks []
                                   :children []
-                                  :resources [[:journals 1]]}))))))
+                                  :resources [[:journals]]}))))))
 
 (deftest page-identity-resource-resolves-only-the-page-uuid-test
   (when-let [api (render-resource-api)]
@@ -988,39 +986,28 @@
                (get-in (call-resource api conn resource-key)
                        [:value :ref-titles])))))))
 
-(deftest journals-resource-returns-ordered-uuids-test
+(deftest journals-resource-returns-only-ordered-uuids-test
   (when-let [api (render-resource-api)]
-    (let [{:keys [conn journal-a journal-b]}
+    (let [{:keys [conn journal-a journal-b journal-child-a journal-grandchild]}
           (render-resource-fixture)
-          resource-key [:journals 1]
+          resource-key [:journals]
           response (call-resource api conn resource-key)
           value (:value response)]
-      (is (= [journal-b journal-a] (:journal-uuids value)))
-      (is (= [journal-b] (:loaded-uuids value)))
+      (is (= [journal-b journal-a] value))
       (is (not (contains? value :bundles))
           "Resource values contain only feature data, never block trees.")
-      (is (contains? (:slots response) [:block journal-b]))
-      (is (contains? (:slots response) [:children journal-b]))
+      (is (not (contains? (:slots response) [:block journal-b])))
+      (is (not (contains? (:slots response) [:block journal-a])))
+      (is (not (contains? (:slots response) [:children journal-b])))
+      (is (not (contains? (:slots response) [:children journal-a])))
+      (is (not (contains? (:slots response) [:block journal-child-a])))
+      (is (not (contains? (:slots response) [:block journal-grandchild]))
+          "Journal blocks load only when their virtual items become visible.")
       (is (= #{[:journals]} (:watch-keys response)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
-(deftest journal-window-resource-loads-one-bounded-range-test
-  (when-let [api (render-resource-api)]
-    (let [{:keys [conn journal-a journal-b]}
-          (render-resource-fixture)
-          resource-key [:journal-window [journal-b journal-a]]
-          response (call-resource api conn resource-key)
-          value (:value response)]
-      (is (= [journal-b journal-a] (:loaded-uuids value)))
-      (is (not (contains? value :bundles)))
-      (is (every? #(contains? (:slots response) [:block %])
-                  [journal-a journal-b]))
-      (is (= #{} (:watch-keys response)))
-      (is (= response
-             (-> response ldb/write-transit-str ldb/read-transit-str))))))
-
-(deftest journals-resource-caps-the-initial-window-at-fifty-test
+(deftest journals-resource-does-not-prewarm-roots-test
   (when-let [api (render-resource-api)]
     (let [conn (db-test/create-conn)
           journals (mapv (fn [index]
@@ -1034,12 +1021,12 @@
                             :block/tags :logseq.class/Journal})
                          (range 60))
           _ (d/transact! conn journals)
-          response (call-resource api conn [:journals 60])]
-      (is (= 60 (count (get-in response [:value :journal-uuids]))))
-      (is (= 50 (count (get-in response [:value :loaded-uuids]))))
-      (is (= 50
+          response (call-resource api conn [:journals])]
+      (is (= 60 (count (:value response))))
+      (is (zero?
              (count (filter #(= :block (first %))
-                            (keys (:slots response)))))))))
+                            (keys (:slots response)))))
+          "Journal count does not affect initial block hydration."))))
 
 (deftest journal-bundle-resource-is-removed-test
   (when-let [api (render-resource-api)]
@@ -2146,6 +2133,7 @@
                               []
                               [:unknown]
                               [:journals :extra]
+                              [:journal-window [(random-uuid)]]
                               [:journal-bundle "not-a-uuid"]
                               [:block-display-properties resource-block
                                (dissoc default-display-context :publishing?)]

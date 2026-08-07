@@ -97,7 +97,7 @@
 
 (deftest subscriptions-mounted-before-db-worker-start-load-when-it-is-ready-test
   (async done
-         (let [resource-key [:journals 1]
+         (let [resource-key [:journals]
                previous-db-worker @state/*db-worker
                worker-calls (atom [])
                scheduled-load (atom nil)
@@ -124,7 +124,7 @@
                                      :slots
                                      {[:resource resource-key]
                                       {:watch {:keys #{[:journals]} :all? false}
-                                       :value {:journal-uuids [] :loaded-uuids []}}}
+                                       :value []}}
                                      :groups
                                      {[:resource resource-key]
                                       #{[:resource resource-key]}}})))
@@ -137,7 +137,7 @@
                                        [graph-id request])))
                              vec)))
                  (is (= {:status :ready
-                         :value {:journal-uuids [] :loaded-uuids []}}
+                         :value []}
                         (subs/resource-snapshot resource-key))))
                (p/finally
                  (fn []
@@ -1743,7 +1743,7 @@
   (async done
          (let [journal-uuid (random-uuid)
                child-uuid (random-uuid)
-               resource-key [:journal-window [journal-uuid]]
+               resource-key [:test-resource journal-uuid]
                journal (block journal-uuid 10 "Journal")
                child (block child-uuid 10 "Child")
                calls (atom [])]
@@ -1757,7 +1757,7 @@
                                 :slots
                                 {[:resource resource-key]
                                  {:watch {:keys #{} :all? false}
-                                  :value {:loaded-uuids [journal-uuid]}}
+                                  :value [journal-uuid]}
                                  [:block journal-uuid] {:value journal}
                                  [:block child-uuid] {:value child}
                                  [:children journal-uuid]
@@ -1781,7 +1781,7 @@
                         (subs/subscribe-children! journal-uuid (fn []))]
                   (is (= [[:resource test-graph-id resource-key]] @calls))
                   (is (= {:status :ready
-                          :value {:loaded-uuids [journal-uuid]}}
+                          :value [journal-uuid]}
                          (subs/resource-snapshot resource-key)))
                   (is (= {:status :ready :value journal}
                          (subs/block-snapshot journal-uuid)))
@@ -1795,7 +1795,7 @@
 
 (deftest stale-resource-hydration-cannot-seed-slots-after-a-newer-delta-test
   (async done
-         (let [resource-key [:journal-window [(random-uuid)]]
+         (let [resource-key [:test-resource (random-uuid)]
                block-uuid (random-uuid)
                first-request (p/deferred)
                second-request (p/deferred)
@@ -1807,7 +1807,7 @@
                            :slots
                            {[:resource resource-key]
                             {:watch {:keys #{} :all? false}
-                             :value {:loaded-uuids []}}
+                             :value []}
                             [:block block-uuid] {:value block-value}}})]
            (finish-async!
             done
@@ -1843,7 +1843,7 @@
          (let [parent-uuid (random-uuid)
                old-child-uuid (random-uuid)
                current-child-uuid (random-uuid)
-               resource-key [:journal-window [parent-uuid]]
+               resource-key [:test-resource parent-uuid]
                first-request (p/deferred)
                second-request (p/deferred)
                calls (atom 0)
@@ -1852,7 +1852,7 @@
                            :slots
                            {[:resource resource-key]
                             {:watch {:keys #{} :all? false}
-                             :value {:loaded-uuids [parent-uuid]}}
+                             :value [parent-uuid]}
                             [:children parent-uuid]
                             {:tx-id tx-id :items items}}})]
            (finish-async!
