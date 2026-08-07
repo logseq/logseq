@@ -97,12 +97,10 @@
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
-        matched (or (filter-commands page? matched') no-matched-commands)
-        filtered? (not= matched @commands/*initial-commands)]
+        matched (or (filter-commands page? matched') no-matched-commands)]
     (ui/auto-complete
      matched
-     (cond->
-      {:item-render
+     {:item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
@@ -144,12 +142,14 @@
                                              format
                                              {:restore? restore-slash?
                                               :command command}))))
-       :class
-       "cp__commands-slash"}
-       (not filtered?)
-       (assoc :get-group-name
-              (fn [item]
-                (when (= (count item) 5) (last item))))))))
+        :class
+        "cp__commands-slash"
+
+        :complete-on-tab? true
+
+        :get-group-name
+        (fn [item]
+          (when (= (count item) 5) (last item)))})))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]

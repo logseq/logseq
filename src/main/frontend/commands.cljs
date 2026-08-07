@@ -212,6 +212,11 @@
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
+(defn- command-group-name
+  [command]
+  (when (= (count command) 5)
+    (last command)))
+
 (defn ^:large-vars/cleanup-todo commands-map
   ([get-page-ref-text] (commands-map get-page-ref-text t))
   ([get-page-ref-text t-fn]
@@ -377,8 +382,13 @@
         zh-cn?      (= lang :zh-CN)
         commands-with-meta
         (mapv (fn [cmd en-cmd]
-                (let [m (cond-> {:en-text (first en-cmd)}
-                          zh-cn? (assoc :pinyin-text (search/hanzi->initials (first cmd))))]
+                (let [group-name (command-group-name cmd)
+                      en-group-name (command-group-name en-cmd)
+                      m (cond-> {:en-text (first en-cmd)}
+                          en-group-name (assoc :en-group-name en-group-name)
+                          zh-cn? (assoc :pinyin-text (search/hanzi->initials (first cmd)))
+                          (and zh-cn? group-name) (assoc :pinyin-group-name
+                                                         (search/hanzi->initials group-name)))]
                   (with-meta cmd m)))
               commands en-commands)]
     (reset! *latest-matched-command "")
@@ -555,12 +565,18 @@
          en?         (= lang :en)
          zh-cn?      (= lang :zh-CN)
          extract-fns (cond
-                       en?    [first]
+                       en?    [first
+                               command-group-name]
                        zh-cn? [first
                                #(-> % meta :en-text)
-                               #(-> % meta :pinyin-text)]
+                               #(-> % meta :pinyin-text)
+                               command-group-name
+                               #(-> % meta :en-group-name)
+                               #(-> % meta :pinyin-group-name)]
                        :else  [first
-                               #(-> % meta :en-text)])]
+                               #(-> % meta :en-text)
+                               command-group-name
+                               #(-> % meta :en-group-name)])]
      (search/fuzzy-search-multi
       commands
       text
