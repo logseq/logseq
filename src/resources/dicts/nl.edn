@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Bestand plakken tip"
  :settings.editor/show-brackets "Toon beugels"
  :settings.editor/show-full-blocks "Volledige blokken tonen"
+ :settings.editor/show-tags-in-tag-color "Tags weergeven in tagkleur"
  :settings.editor/spell-checker "Spellingcontrole"
  :settings.editor/wide-mode "Brede modus"
 

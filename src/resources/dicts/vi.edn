@@ -536,4 +536,6 @@
  :editor.slash/upload-asset "Tải lên tệp đính kèm"
  :editor.slash/upload-asset-desc "Tải lên các loại tệp như hình ảnh, PDF, DOCX, v.v."
  :editor.slash/yesterday-desc "Chèn ngày hôm qua"
+
+ :settings.editor/show-tags-in-tag-color "Hiển thị thẻ bằng màu của thẻ"
 }

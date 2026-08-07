@@ -1596,6 +1596,7 @@
  :settings.editor/preferred-pasting-file-hint "このオプションが有効な場合、インターネットから画像を貼り付けたとき、画像をダウンロードして挿入します。無効な場合、画像へのリンクを挿入します。"
  :settings.editor/show-brackets "ブラケットを表示"
  :settings.editor/show-full-blocks "ブロック参照の全ての行を表示する"
+ :settings.editor/show-tags-in-tag-color "タグをタグの色で表示"
  :settings.editor/spell-checker "スペルチェッカー"
  :settings.editor/wide-mode "ワイドモード"
 

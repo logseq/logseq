@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Lêer plakken tip"
  :settings.editor/show-brackets "Wys hakies"
  :settings.editor/show-full-blocks "Wys volle blokke"
+ :settings.editor/show-tags-in-tag-color "Wys etikette in etiketkleur"
  :settings.editor/spell-checker "Speltoetser"
  :settings.editor/wide-mode "Wye modus"
 

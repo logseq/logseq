@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Wskazówka dotycząca wklejania plików"
  :settings.editor/show-brackets "Pokaż kwadratowe nawiasy"
  :settings.editor/show-full-blocks "Pokaż wszystkie linie referencji bloku"
+ :settings.editor/show-tags-in-tag-color "Pokazuj tagi w kolorze tagu"
  :settings.editor/spell-checker "Sprawdzanie pisowni"
  :settings.editor/wide-mode "Tryb szeroki"
 

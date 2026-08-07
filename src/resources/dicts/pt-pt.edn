@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Dica de colagem de ficheiros"
  :settings.editor/show-brackets "Mostrar parênteses retos"
  :settings.editor/show-full-blocks "Mostrar todas a linhas de uma referência de bloco"
+ :settings.editor/show-tags-in-tag-color "Mostrar etiquetas na cor da etiqueta"
  :settings.editor/spell-checker "Verificador ortográfico"
  :settings.editor/wide-mode "Modo amplo"
 

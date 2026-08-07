@@ -269,7 +269,13 @@
 
 (hsx/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]
-  (let [with-actions? (not config/publishing?)]
+  (let [page-id (:db/id page)
+        page (or (db/sub-block page-id) page)
+        with-actions? (not config/publishing?)
+        show-tags-in-tag-color? (state/show-tags-in-tag-color?)
+        tag-page? (and (ldb/class? page) (not (ldb/property? page)))
+        title-style (when (and show-tags-in-tag-color? tag-page?)
+                      (component-block/tag-color-style page))]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class "title"
       "data-testid" "page title"
@@ -290,6 +296,7 @@
         :sidebar? sidebar?
         :tag-dialog? tag-dialog?
         :display-title display-title
+        :title-style title-style
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true

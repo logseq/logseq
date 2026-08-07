@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "اگر فعال باشد، چسباندن تصویر از اینترنت آن را دانلود و درج می‌کند. اگر غیرفعال باشد، فقط پیوند تصویر چسبانده می‌شود."
  :settings.editor/show-brackets "نمایش کروشه‌ها"
  :settings.editor/show-full-blocks "نمایش کامل بلوک‌ها"
+ :settings.editor/show-tags-in-tag-color "نمایش برچسب‌ها با رنگ برچسب"
  :settings.editor/spell-checker "غلط‌یاب"
  :settings.editor/wide-mode "حالت عریض"
 

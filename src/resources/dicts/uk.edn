@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Подсказка по вставке файлов"
  :settings.editor/show-brackets "Показати дужки"
  :settings.editor/show-full-blocks "Показати всі рядки посилання на блок"
+ :settings.editor/show-tags-in-tag-color "Показувати теги кольором тега"
  :settings.editor/spell-checker "Перевірка правопису"
  :settings.editor/wide-mode "Широкий режим"
 

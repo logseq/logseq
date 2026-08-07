@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "عند التفعيل، سيؤدي لصق صورة من الإنترنت إلى تنزيلها وإدراجها. وعند التعطيل، سيُلصق رابط الصورة فقط."
  :settings.editor/show-brackets "عرض الأقواس"
  :settings.editor/show-full-blocks "عرض الكتل كاملة"
+ :settings.editor/show-tags-in-tag-color "إظهار الوسوم بلون الوسم"
  :settings.editor/spell-checker "المدقق الإملائي"
  :settings.editor/wide-mode "الوضع العريض"
 

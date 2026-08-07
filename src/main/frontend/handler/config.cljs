@@ -35,6 +35,10 @@
   (let [show-brackets? (state/show-brackets?)]
     (set-config! :ui/show-brackets? (not show-brackets?))))
 
+(defn toggle-ui-show-tags-in-tag-color! []
+  (let [show-tags-in-tag-color? (state/show-tags-in-tag-color?)]
+    (set-config! :ui/show-tags-in-tag-color? (not show-tags-in-tag-color?))))
+
 (defn toggle-logical-outdenting! []
   (let [logical-outdenting? (state/logical-outdenting?)]
     (set-config! :editor/logical-outdenting? (not logical-outdenting?))))

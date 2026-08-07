@@ -1596,6 +1596,7 @@
  :settings.editor/preferred-pasting-file-hint "啟用後，從網際網路貼上圖片將自動下載並儲存到本機"
  :settings.editor/show-brackets "顯示括號"
  :settings.editor/show-full-blocks "顯示所有區塊引用列"
+ :settings.editor/show-tags-in-tag-color "以標籤顏色顯示標籤"
  :settings.editor/spell-checker "自動拼音核對"
  :settings.editor/wide-mode "寬屏模式"
 

@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Dosya yapıştırma ipucu"
  :settings.editor/show-brackets "Köşeli ayraçları göster"
  :settings.editor/show-full-blocks "Blok referansındaki tüm satırları göster"
+ :settings.editor/show-tags-in-tag-color "Etiketleri etiket renginde göster"
  :settings.editor/spell-checker "Yazım denetleyici"
  :settings.editor/wide-mode "Geniş mod"
 
