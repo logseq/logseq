@@ -27,6 +27,23 @@
        #(w/with-page %
           (util/login-test-account))
        [@*page1 @*page2])
+      (testing "remote graph refresh waits until the button is enabled"
+        (w/with-page @*page2
+          (graph/goto-all-graphs)
+          (w/wait-for "button:not([disabled]):has-text(\"Refresh\")" {:timeout 30000})
+          (.setDefaultTimeout (w/get-page) 50)
+          (try
+            (w/eval-js
+             "() => {
+                const span = Array.from(document.querySelectorAll('span'))
+                  .find((node) => node.textContent.trim() === 'Refresh');
+                const button = span.closest('button');
+                button.disabled = true;
+                setTimeout(() => { button.disabled = false; }, 500);
+              }")
+            (graph/refresh-all-remote-graphs)
+            (finally
+              (.setDefaultTimeout (w/get-page) 10000)))))
       (w/with-page @*page1
         (graph/new-graph graph-name true false))
       (w/with-page @*page2
