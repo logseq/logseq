@@ -2,11 +2,16 @@
   (:require [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import [com.microsoft.playwright Locator$ClickOptions]))
 
-(defn- refresh-all-remote-graphs
+(defn refresh-all-remote-graphs
   []
-  (w/click "span:text(\"Refresh\")"))
+  (let [enabled-refresh "button:not([disabled]):has-text(\"Refresh\")"]
+    (w/wait-for enabled-refresh {:timeout 30000})
+    (w/click enabled-refresh
+             (-> (Locator$ClickOptions.)
+                 (.setTimeout 30000)))))
 
 (defn goto-all-graphs
   []
