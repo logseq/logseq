@@ -115,11 +115,28 @@
 }
 
 .color-picker-presets {
-  @apply flex flex-row gap-[2px];
+  @apply flex flex-col gap-1;
+
+  .color-picker-families {
+    @apply grid grid-cols-8 gap-1.5;
+  }
+
+  .color-picker-shades {
+    @apply grid grid-cols-7 gap-[2px] rounded-md p-1;
+    background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+
+    .shade {
+      @apply w-7 rounded-sm;
+    }
+  }
 
   .it {
-    @apply w-[18px] h-[18px] overflow-hidden p-0
+    @apply w-[20px] h-[20px] overflow-hidden p-0
     opacity-90 hover:opacity-100 active:opacity-80;
+
+    &.active {
+      box-shadow: 0 0 0 2px var(--lx-gray-12, var(--ls-primary-text-color));
+    }
   }
 }
 
