@@ -13,9 +13,9 @@
     (let [repo "logseq_db_ui_file_worker"
           worker-calls (atom [])
           added-styles (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           previous-js-execed @ui-handler/*js-execed]
-      (swap! state/state assoc :git/current-repo repo)
+      (state/swap-state! assoc :git/current-repo repo)
       (reset! ui-handler/*js-execed #{})
       (p/with-redefs [state/get-custom-css-link (constantly nil)
                       state/get-custom-js-link (constantly nil)
@@ -47,7 +47,7 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (reset! ui-handler/*js-execed previous-js-execed)
                (done))))))))
 
@@ -59,10 +59,10 @@
           parent-uuid #uuid "22222222-2222-2222-2222-222222222222"
           worker-calls (atom [])
           scroll-calls (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           ref #js {:scrollToIndex (fn [opts]
                                     (swap! scroll-calls conj (.-index opts)))}]
-      (swap! state/state assoc :git/current-repo repo)
+      (state/swap-state! assoc :git/current-repo repo)
       (p/with-redefs [state/get-route-match
                       (constantly {:query-params {:anchor (str "ls-block-" anchor-uuid)}})
                       ui-handler/<invoke-db-worker
@@ -95,5 +95,5 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))

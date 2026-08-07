@@ -64,12 +64,12 @@
     (let [repo "logseq_db_publish_graph_uuid"
           worker-calls (atom [])
           fetch-calls (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           original-auth-id-token state/get-auth-id-token
           original-get-graph-uuid publish-handler/<get-graph-uuid
           original-sha256 publish-handler/<sha256-hex
           original-fetch js/fetch]
-      (swap! state/state assoc :git/current-repo repo)
+      (state/swap-state! assoc :git/current-repo repo)
       (set! js/fetch
             (fn [url opts]
               (swap! fetch-calls conj [url opts])
@@ -100,7 +100,7 @@
              (is false (str error))))
           (p/finally
            (fn []
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (set! state/get-auth-id-token original-auth-id-token)
              (set! publish-handler/<get-graph-uuid original-get-graph-uuid)
              (set! publish-handler/<sha256-hex original-sha256)
@@ -114,13 +114,13 @@
           fetch-calls (atom [])
           removed-properties (atom [])
           notifications (atom [])
-          previous-state @state/state
+          previous-state (state/get-state)
           original-auth-id-token state/get-auth-id-token
           original-get-graph-uuid publish-handler/<get-graph-uuid
           original-remove-property property-handler/remove-block-property!
           original-notification-show notification/show!
           original-fetch js/fetch]
-      (swap! state/state assoc :git/current-repo repo)
+      (state/swap-state! assoc :git/current-repo repo)
       (set! js/fetch
             (fn [url opts]
               (swap! fetch-calls conj [url opts])
@@ -154,7 +154,7 @@
              (is false (str error))))
           (p/finally
            (fn []
-             (reset! state/state previous-state)
+             (state/replace-state! previous-state)
              (set! state/get-auth-id-token original-auth-id-token)
              (set! publish-handler/<get-graph-uuid original-get-graph-uuid)
              (set! property-handler/remove-block-property! original-remove-property)

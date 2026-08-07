@@ -325,7 +325,7 @@
 
 (defn get-local-dir
   [repo]
-  (path/path-join (get-in @state/state [:system/info :home-dir])
+  (path/path-join (get-in (state/get-state) [:system/info :home-dir])
                   "logseq"
                   "graphs"
                   (common-graph-dir/repo->encoded-graph-dir-name repo)))

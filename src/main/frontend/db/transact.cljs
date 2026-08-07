@@ -185,7 +185,7 @@
             opts' (-> opts
                       ensure-local-op-tx-id
                       (assoc
-                       :client-id (:client-id @state/state)
+                       :client-id (:client-id (state/get-state))
                        :ui/perf-id perf-id
                        :local-tx? true))
             worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)

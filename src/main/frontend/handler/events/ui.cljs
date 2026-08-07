@@ -162,10 +162,10 @@
         :align :end}))))
 
 (defevent! :plugin/consume-updates [[_ id prev-pending? updated?]]
-  (let [downloading?   (:plugin/updates-downloading? @state/state)
+  (let [downloading?   (:plugin/updates-downloading? (state/get-state))
         auto-checking? (plugin-handler/get-auto-checking?)]
     (when-let [coming (and (not downloading?)
-                           (get-in @state/state [:plugin/updates-coming id]))]
+                           (get-in (state/get-state) [:plugin/updates-coming id]))]
       (let [error-code (:error-code coming)
             error-code (if (= error-code (str :no-new-version)) nil error-code)
             title      (:title coming)]
@@ -184,7 +184,7 @@
         (plugin-handler/close-updates-downloading))
 
       ;; try to start consume pending item
-      (if-let [next-pending (second (first (:plugin/updates-pending @state/state)))]
+      (if-let [next-pending (second (first (:plugin/updates-pending (state/get-state))))]
         (do
           (println "Updates: take next pending - " (:id next-pending))
           (js/setTimeout

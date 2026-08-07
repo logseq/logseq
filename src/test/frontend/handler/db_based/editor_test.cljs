@@ -156,9 +156,9 @@
 (deftest batch-set-heading-loads-blocks-through-worker-test
   (async done
     (let [block-id #uuid "22222222-2222-2222-2222-222222222222"
-          previous-state @state/state
+          previous-state (state/get-state)
           calls (atom [])]
-      (swap! state/state assoc :git/current-repo "test")
+      (state/swap-state! assoc :git/current-repo "test")
       (p/with-redefs [db-async/<get-blocks
                       (fn [repo block-ids]
                         (swap! calls conj [:get-blocks repo block-ids])
@@ -184,5 +184,5 @@
                (is false (str error))))
             (p/finally
              (fn []
-               (reset! state/state previous-state)
+               (state/replace-state! previous-state)
                (done))))))))
