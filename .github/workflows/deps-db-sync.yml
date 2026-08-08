@@ -12,6 +12,8 @@ on:
       - 'deps/outliner/**'
       - 'resources/**'
       - '.dockerignore'
+      - '.github/workflows/db-sync-native-runtime.yml'
+      - '.github/workflows/db-sync-native-release.yml'
       - '.github/workflows/deps-db-sync.yml'
       - '!deps/db-sync/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow
@@ -25,6 +27,8 @@ on:
       - 'deps/outliner/**'
       - 'resources/**'
       - '.dockerignore'
+      - '.github/workflows/db-sync-native-runtime.yml'
+      - '.github/workflows/db-sync-native-release.yml'
       - '.github/workflows/deps-db-sync.yml'
       - '!deps/db-sync/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow

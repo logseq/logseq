@@ -1,0 +1,72 @@
+name: db-sync native release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to create or update'
+        required: true
+        default: 'db-sync-native'
+        type: string
+  push:
+    tags:
+      - 'db-sync-native-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: Build native runtime packages
+    uses: ./.github/workflows/db-sync-native-runtime.yml
+
+  release:
+    name: Publish runtime release
+    needs: runtime
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: logseq-sync-runtime-linux-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Prepare manager asset
+        env:
+          DEFAULT_RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          sed "s|readonly default_release_repository=\"logseq/logseq\"|readonly default_release_repository=\"${DEFAULT_RELEASE_REPOSITORY}\"|" \
+            deps/db-sync/deploy/logseq-sync-native \
+            > artifacts/logseq-sync-native
+          chmod 0755 artifacts/logseq-sync-native
+          cd artifacts
+          sha256sum logseq-sync-native > logseq-sync-native.sha256
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            release_tag="${GITHUB_REF#refs/tags/}"
+          else
+            release_tag="$REQUESTED_TAG"
+          fi
+          [[ "$release_tag" =~ ^db-sync-native(-v[0-9A-Za-z._-]+)?$ ]] || {
+            printf 'Invalid native runtime release tag: %s\n' "$release_tag" >&2
+            exit 1
+          }
+          if ! gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release create "$release_tag" \
+              --target "$GITHUB_SHA" \
+              --title "Logseq Sync native runtime" \
+              --notes "Prebuilt Linux x64 and arm64 runtimes for the native self-hosted Sync installer."
+          fi
+          gh release upload "$release_tag" artifacts/* --clobber

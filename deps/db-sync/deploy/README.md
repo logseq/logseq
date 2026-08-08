@@ -172,11 +172,13 @@ logseq-sync-runtime/
   ARCHITECTURE
 ```
 
-Pull requests build and smoke-test both architectures. Run the workflow
-manually with release tag `db-sync-native` to update the rolling installation
-channel, or push a `db-sync-native-v*` tag for a versioned release. The workflow
-uploads the runtime archives, checksums, manager, and manager checksum as GitHub
-Release assets.
+Pull requests and the existing db-sync CI build and smoke-test both
+architectures. Run the `db-sync native release` workflow manually with release
+tag `db-sync-native` to update the rolling installation channel, or push a
+`db-sync-native-v*` tag for a versioned release. The release workflow uploads
+the runtime archives, checksums, manager, and manager checksum as GitHub Release
+assets. Runtime build jobs use read-only repository permissions; only the
+explicit release job receives permission to write release assets.
 
 ## Docker alternative
 
