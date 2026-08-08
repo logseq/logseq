@@ -27,6 +27,20 @@
                                    (resolve timeout-sentinel)
                                    (reject error))))))))}))
 
+(deftest node-server-rejects-listen-failure-test
+  (async done
+         (-> (node-server/start! {:host "256.256.256.256"
+                                  :port 0
+                                  :data-dir (str "tmp/db-sync-node-listen-failure-test/"
+                                                 (random-uuid))})
+             (p/then (fn [{:keys [stop!]}]
+                       (is false "server startup should reject an invalid bind host")
+                       (-> (stop!)
+                           (p/finally done))))
+             (p/catch (fn [error]
+                        (is (= "ENOTFOUND" (.-code error)))
+                        (done))))))
+
 (deftest node-server-returns-500-when-auth-claims-rejects-test
   (async done
          (let [stop-server! (atom nil)
