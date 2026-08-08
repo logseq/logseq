@@ -64,9 +64,14 @@ jobs:
             exit 1
           }
           if ! gh release view "$release_tag" >/dev/null 2>&1; then
+            release_flags=()
+            case "$release_tag" in
+              *-test.*|*-rc.*) release_flags+=(--prerelease) ;;
+            esac
             gh release create "$release_tag" \
               --target "$GITHUB_SHA" \
               --title "Logseq Sync native runtime" \
-              --notes "Prebuilt Linux x64 and arm64 runtimes for the native self-hosted Sync installer."
+              --notes "Prebuilt Linux x64 and arm64 runtimes for the native self-hosted Sync installer." \
+              "${release_flags[@]}"
           fi
           gh release upload "$release_tag" artifacts/* --clobber
