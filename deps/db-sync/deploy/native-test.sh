@@ -27,6 +27,9 @@ make_runtime_fixture() {
 if [[ "${1:-}" == "--version" ]]; then
   printf 'v24.0.0\n'
 fi
+if [[ "${1:-}" == "-e" ]]; then
+  exit "${MOCK_SQLITE_STATUS:-0}"
+fi
 exit 0
 EOF
   printf 'mock adapter\n' > "$fixture/app/node-adapter.js"
@@ -114,6 +117,7 @@ run_manager() {
     MOCK_CADDY_LOG="$sandbox/caddy.log" \
     MOCK_DNS_STATUS="${MOCK_DNS_STATUS:-0}" \
     MOCK_DNS_IP="${MOCK_DNS_IP:-203.0.113.10}" \
+    MOCK_SQLITE_STATUS="${MOCK_SQLITE_STATUS:-0}" \
     "$manager_under_test" "$@" 2>&1)"
   last_status=$?
   set -e
@@ -229,6 +233,15 @@ test_setup_rejects_wrong_runtime_architecture() {
   run_manager "$sandbox" setup --domain sync.example.com
   assert_failure || return 1
   assert_contains "$last_output" 'architecture does not match'
+}
+
+test_setup_rejects_incompatible_sqlite_runtime() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  MOCK_SQLITE_STATUS=1 run_manager "$sandbox" setup --domain sync.example.com
+  assert_failure || return 1
+  [[ ! -e "$sandbox/config" ]] || return 1
+  assert_contains "$last_output" 'SQLite module cannot run on this server'
 }
 
 test_setup_without_options_runs_guided_wizard() {
@@ -362,6 +375,7 @@ run_test test_setup_ignores_broken_system_node_and_build_tools
 run_test test_setup_does_not_invoke_os_package_manager
 run_test test_setup_rejects_bad_runtime_checksum
 run_test test_setup_rejects_wrong_runtime_architecture
+run_test test_setup_rejects_incompatible_sqlite_runtime
 run_test test_setup_without_options_runs_guided_wizard
 run_test test_setup_accepts_custom_ports
 run_test test_public_port_never_collides_with_private_port

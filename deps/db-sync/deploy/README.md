@@ -11,8 +11,10 @@ obtains and renews the certificate, and forwards traffic to the adapter on
 Use a systemd-based Linux server on `x86_64` or `arm64`. The server does not
 need Node.js, Java, Clojure, pnpm, Python, gcc, or a Linux package manager. It
 only needs standard base utilities (`curl`, `tar`, and `sha256sum`) plus sudo.
-This keeps the same installation path for Debian, Ubuntu, OpenCloudOS,
-TencentOS, RHEL-compatible distributions, and other glibc-based Linux systems.
+The prebuilt runtime requires GLIBC 2.29 or newer, which covers current Debian,
+Ubuntu, OpenCloudOS 9, TencentOS, and RHEL 9-compatible distributions. Setup
+loads the bundled SQLite module before switching services, so an older or
+otherwise incompatible host fails before its running release is replaced.
 
 You also need:
 

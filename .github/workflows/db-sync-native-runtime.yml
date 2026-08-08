@@ -77,9 +77,9 @@ jobs:
             )"
             test -n "$highest_glibc"
             compatible_highest="$(printf '%s\n%s\n' \
-              'GLIBC_2.28' "$highest_glibc" | sort -V | tail -n 1)"
-            if [[ "$compatible_highest" != 'GLIBC_2.28' ]]; then
-              printf '%s requires %s; the runtime baseline is GLIBC_2.28.\n' \
+              'GLIBC_2.29' "$highest_glibc" | sort -V | tail -n 1)"
+            if [[ "$compatible_highest" != 'GLIBC_2.29' ]]; then
+              printf '%s requires %s; the runtime baseline is GLIBC_2.29.\n' \
                 "$binary" "$highest_glibc" >&2
               exit 1
             fi

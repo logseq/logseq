@@ -235,7 +235,9 @@ runtime_ready() {
      && -f "$install_root/current/VERSION" \
      && -f "$install_root/current/ARCHITECTURE" ]] \
     && [[ "$(<"$install_root/current/ARCHITECTURE")" == "$(architecture)" ]] \
-    && "$install_root/current/node/bin/node" --version >/dev/null 2>&1
+    && "$install_root/current/node/bin/node" --version >/dev/null 2>&1 \
+    && (cd "$install_root/current/app" \
+      && ../node/bin/node -e 'require("better-sqlite3")' >/dev/null 2>&1)
 }
 
 download_file() {
@@ -294,6 +296,9 @@ install_runtime() {
     || die "The downloaded Sync runtime architecture does not match this server."
   "$extracted_dir/node/bin/node" --version >/dev/null 2>&1 \
     || die "The bundled Node.js runtime cannot run on this server."
+  (cd "$extracted_dir/app" \
+    && ../node/bin/node -e 'require("better-sqlite3")' >/dev/null 2>&1) \
+    || die "The bundled SQLite module cannot run on this server. GLIBC 2.29 or newer is required."
   version="$(<"$extracted_dir/VERSION")"
   [[ "$version" =~ ^[A-Za-z0-9._+-]+$ ]] || die "The runtime version is invalid."
   release_id="${version}-${runtime_arch}-${actual_checksum:0:12}"

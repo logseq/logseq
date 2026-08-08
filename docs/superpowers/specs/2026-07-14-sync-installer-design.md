@@ -124,7 +124,9 @@ logseq-sync-runtime/
 ```
 
 The manager verifies the separately published SHA-256 value before extraction,
-checks the declared architecture, and executes the bundled Node.js runtime.
+checks the declared architecture, and executes both the bundled Node.js runtime
+and `better-sqlite3` loader before switching releases. Published Linux binaries
+must not require a GLIBC version newer than 2.29.
 This archive is preferred over a literal single executable because the adapter
 loads `better-sqlite3` as a native `.node` addon from the filesystem. Hiding it
 inside Node SEA or another single-file wrapper would add a fragile extraction
