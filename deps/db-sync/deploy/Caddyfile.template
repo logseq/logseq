@@ -1,3 +1,8 @@
-{DOMAIN} {
-  reverse_proxy sync:8080
+https://{DOMAIN}:10010 {
+	reverse_proxy sync:8080
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
 }

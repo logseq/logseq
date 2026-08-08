@@ -1,0 +1,725 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly checkout_source_dir="$(cd -- "$script_dir/../../.." 2>/dev/null && pwd || true)"
+readonly install_root="${LOGSEQ_SYNC_INSTALL_ROOT:-/opt/logseq-sync}"
+readonly config_dir="${LOGSEQ_SYNC_CONFIG_DIR:-/etc/logseq-sync}"
+readonly data_dir="${LOGSEQ_SYNC_DATA_DIR:-/var/lib/logseq-sync}"
+readonly systemd_dir="${LOGSEQ_SYNC_SYSTEMD_DIR:-/etc/systemd/system}"
+readonly caddy_data_dir="${LOGSEQ_SYNC_CADDY_DATA_DIR:-/var/lib/logseq-sync-caddy}"
+readonly manager_path="${LOGSEQ_SYNC_MANAGER_PATH:-/usr/local/bin/logseq-sync-native}"
+readonly sync_service="logseq-sync.service"
+readonly proxy_service="logseq-sync-caddy.service"
+readonly default_public_port="10010"
+readonly default_internal_port="10011"
+readonly node_major="24"
+readonly pnpm_version="10.33.0"
+readonly clojure_version="1.12.4.1618"
+readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
+readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
+configured_source_dir="$(sed -n 's/^LOGSEQ_SYNC_SOURCE_DIR=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_public_port="$(sed -n 's/^LOGSEQ_SYNC_PUBLIC_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_internal_port="$(sed -n 's/^LOGSEQ_SYNC_INTERNAL_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+public_port="${configured_public_port:-$default_public_port}"
+internal_port="${configured_internal_port:-$default_internal_port}"
+assume_yes="${LOGSEQ_SYNC_ASSUME_YES:-false}"
+if [[ -f "$checkout_source_dir/deps/db-sync/package.json" ]]; then
+  readonly source_dir="$checkout_source_dir"
+else
+  readonly source_dir="$configured_source_dir"
+fi
+temporary_paths=()
+
+register_temporary_path() {
+  temporary_paths+=("$1")
+}
+
+cleanup_temporary_paths() {
+  local path
+  for path in "${temporary_paths[@]-}"; do
+    case "$path" in
+      /tmp/logseq-sync-node.*|/tmp/logseq-sync-clojure.*|/tmp/logseq-sync-build.*)
+        [[ -d "$path" ]] && rm -rf -- "$path"
+        ;;
+      /tmp/logseq-sync-caddy.*)
+        [[ -f "$path" ]] && rm -f -- "$path"
+        ;;
+    esac
+  done
+  return 0
+}
+
+trap cleanup_temporary_paths EXIT
+
+die() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_linux() {
+  [[ "$(uname -s)" == "Linux" ]] || die "Native deployment requires Linux."
+}
+
+require_root() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  (( EUID == 0 )) || die "Run this command with sudo."
+}
+
+validate_install_paths() {
+  local path
+  for path in "$install_root" "$config_dir" "$data_dir" "$systemd_dir" \
+    "$caddy_data_dir" "$manager_path"; do
+    [[ "$path" == /* && "$path" != "/" && "$path" != "/opt" \
+       && "$path" != "/etc" && "$path" != "/var" && "$path" != "/var/lib" \
+       && "$path" != *$'\n'* && "$path" != *$'\r'* ]] \
+      || die "Unsafe deployment path: $path"
+  done
+}
+
+set_owner() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  chown "$@"
+}
+
+confirm() {
+  local prompt="$1"
+  local default_answer="${2:-no}"
+  local answer
+  if [[ "$assume_yes" == "true" ]]; then
+    return 0
+  fi
+  if [[ "$default_answer" == "yes" ]]; then
+    printf '%s [Y/n]: ' "$prompt" >&2
+    read -r answer || answer=""
+    [[ -z "$answer" || "$answer" == "y" || "$answer" == "Y" ]]
+  else
+    printf '%s [y/N]: ' "$prompt" >&2
+    read -r answer || answer=""
+    [[ "$answer" == "y" || "$answer" == "Y" ]]
+  fi
+}
+
+read_value() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local value
+  if [[ -n "$default_value" ]]; then
+    printf '%s [%s]: ' "$prompt" "$default_value" >&2
+    read -r value || value=""
+    printf '%s' "${value:-$default_value}"
+  else
+    printf '%s: ' "$prompt" >&2
+    read -r value || value=""
+    printf '%s' "$value"
+  fi
+}
+
+valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
+valid_domain() {
+  [[ ${#1} -le 253 \
+     && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+read_env_value() {
+  local key="$1"
+  [[ -f "$config_dir/sync.env" ]] || return 0
+  sed -n "s/^${key}=//p" "$config_dir/sync.env"
+}
+
+backup_file() {
+  local path="$1"
+  local timestamp backup suffix=0
+  [[ -e "$path" ]] || return 0
+  timestamp="$(date +%Y%m%d%H%M%S)"
+  backup="${path}.backup-${timestamp}"
+  while [[ -e "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="${path}.backup-${timestamp}-${suffix}"
+  done
+  cp -a -- "$path" "$backup"
+}
+
+write_private_file() {
+  local path="$1"
+  shift
+  umask 077
+  printf '%s' "$*" > "$path"
+}
+
+architecture() {
+  case "$(uname -m)" in
+    x86_64) printf 'x64' ;;
+    aarch64|arm64) printf 'arm64' ;;
+    *) die "Only x86_64 and arm64 Linux hosts are currently supported." ;;
+  esac
+}
+
+caddy_architecture() {
+  case "$(uname -m)" in
+    x86_64) printf 'amd64' ;;
+    aarch64|arm64) printf 'arm64' ;;
+    *) die "Only x86_64 and arm64 Linux hosts are currently supported." ;;
+  esac
+}
+
+ensure_system_packages() {
+  command -v apt-get >/dev/null 2>&1 \
+    || die "Automatic dependency installation currently supports Debian and Ubuntu."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends \
+    build-essential ca-certificates curl git openjdk-21-jdk-headless python3 tar util-linux xz-utils
+}
+
+install_node_toolchain() {
+  local node_arch version archive temp_dir checksum_file
+  node_arch="$(architecture)"
+  version="$(curl --fail --silent --show-error https://nodejs.org/dist/index.tab \
+    | awk -F '\t' -v major="v${node_major}." \
+        'NR > 1 && !found && index($1, major) == 1 {print $1; found = 1}')"
+  [[ -n "$version" ]] || die "Could not determine the latest Node.js ${node_major} release."
+  archive="node-${version}-linux-${node_arch}.tar.xz"
+  temp_dir="$(mktemp -d /tmp/logseq-sync-node.XXXXXX)"
+  register_temporary_path "$temp_dir"
+  curl --fail --location --show-error \
+    "https://nodejs.org/dist/${version}/${archive}" -o "$temp_dir/$archive"
+  curl --fail --location --show-error \
+    "https://nodejs.org/dist/${version}/SHASUMS256.txt" -o "$temp_dir/SHASUMS256.txt"
+  checksum_file="$(grep "  ${archive}$" "$temp_dir/SHASUMS256.txt" || true)"
+  [[ -n "$checksum_file" ]] || die "Node.js checksum entry is missing."
+  (cd "$temp_dir" && printf '%s\n' "$checksum_file" | sha256sum --check --status)
+  mkdir -p "$install_root/toolchain"
+  rm -rf -- "$install_root/toolchain/node"
+  mkdir -p "$install_root/toolchain/node"
+  tar -xJf "$temp_dir/$archive" --strip-components=1 -C "$install_root/toolchain/node"
+  rm -rf -- "$temp_dir"
+  "$install_root/toolchain/node/bin/npm" install --global \
+    --prefix "$install_root/toolchain" "pnpm@${pnpm_version}"
+}
+
+install_clojure_cli() {
+  local temp_dir installer
+  temp_dir="$(mktemp -d /tmp/logseq-sync-clojure.XXXXXX)"
+  register_temporary_path "$temp_dir"
+  installer="$temp_dir/linux-install-${clojure_version}.sh"
+  curl --fail --location --show-error \
+    "https://download.clojure.org/install/linux-install-${clojure_version}.sh" \
+    -o "$installer"
+  chmod +x "$installer"
+  "$installer"
+  rm -rf -- "$temp_dir"
+}
+
+install_caddy() {
+  local temp_file
+  temp_file="$(mktemp /tmp/logseq-sync-caddy.XXXXXX)"
+  register_temporary_path "$temp_file"
+  curl --fail --location --show-error \
+    "https://caddyserver.com/api/download?os=linux&arch=$(caddy_architecture)" \
+    -o "$temp_file"
+  mkdir -p "$install_root/toolchain/bin"
+  install -m 0755 "$temp_file" "$install_root/toolchain/bin/caddy"
+  rm -f -- "$temp_file"
+}
+
+dependencies_ready() {
+  command -v curl >/dev/null 2>&1 \
+    && command -v git >/dev/null 2>&1 \
+    && command -v java >/dev/null 2>&1 \
+    && command -v clojure >/dev/null 2>&1 \
+    && clojure -Sdescribe >/dev/null 2>&1 \
+    && [[ -x "$install_root/toolchain/node/bin/node" ]] \
+    && [[ -x "$install_root/toolchain/bin/pnpm" ]] \
+    && [[ -x "$install_root/toolchain/bin/caddy" ]]
+}
+
+bootstrap() {
+  local skip_confirmation="${1:-false}"
+  require_linux
+  require_root
+  validate_install_paths
+  command -v systemctl >/dev/null 2>&1 || die "systemd is required."
+  printf 'The installer will add build tools, a private Node.js runtime, Clojure CLI, and Caddy.\n'
+  if [[ "$skip_confirmation" != "true" ]]; then
+    confirm 'Install missing dependencies automatically?' yes || die "Dependency installation cancelled."
+  fi
+  ensure_system_packages
+  if [[ ! -x "$install_root/toolchain/node/bin/node" \
+        || ! -x "$install_root/toolchain/bin/pnpm" ]]; then
+    install_node_toolchain
+  fi
+  if ! command -v clojure >/dev/null 2>&1 || ! clojure -Sdescribe >/dev/null 2>&1; then
+    install_clojure_cli
+  fi
+  if [[ ! -x "$install_root/toolchain/bin/caddy" ]]; then
+    install_caddy
+  fi
+  dependencies_ready || die "Dependency installation did not complete successfully."
+  printf 'Dependencies are ready.\n'
+}
+
+ensure_dependencies() {
+  if dependencies_ready; then
+    return 0
+  fi
+  printf 'Some native build or runtime dependencies are missing.\n'
+  bootstrap true
+}
+
+ensure_service_users() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  if ! getent group logseq-sync >/dev/null; then
+    groupadd --system logseq-sync
+  fi
+  if ! id logseq-sync >/dev/null 2>&1; then
+    useradd --system --gid logseq-sync --home-dir "$data_dir" --no-create-home \
+      --shell /usr/sbin/nologin logseq-sync
+  fi
+  if ! getent group caddy >/dev/null; then
+    groupadd --system caddy
+  fi
+  if ! id caddy >/dev/null 2>&1; then
+    useradd --system --gid caddy --home-dir "$caddy_data_dir" --no-create-home \
+      --shell /usr/sbin/nologin caddy
+  fi
+}
+
+builder_identity() {
+  local candidate="${SUDO_USER:-root}"
+  if id "$candidate" >/dev/null 2>&1; then
+    printf '%s' "$candidate"
+  else
+    printf 'root'
+  fi
+}
+
+run_as_builder() {
+  local builder="$1"
+  shift
+  if [[ "$builder" == "root" ]]; then
+    "$@"
+  else
+    runuser -u "$builder" -- "$@"
+  fi
+}
+
+replace_current_release() {
+  local release_dir="$1"
+  [[ ! -e "$install_root/current" || -L "$install_root/current" ]] \
+    || die "$install_root/current must be a symbolic link."
+  ln -sfn "$release_dir" "$install_root/current.new"
+  if mv -Tf "$install_root/current.new" "$install_root/current" 2>/dev/null; then
+    return 0
+  fi
+  [[ -L "$install_root/current" ]] && unlink "$install_root/current"
+  mv -f "$install_root/current.new" "$install_root/current"
+}
+
+build_adapter() {
+  local build_root builder builder_home release_id release_dir suffix=0
+  build_root="$(mktemp -d /tmp/logseq-sync-build.XXXXXX)"
+  register_temporary_path "$build_root"
+  [[ -f "$source_dir/deps/db-sync/package.json" ]] \
+    || die "The configured Logseq source checkout is unavailable: $source_dir"
+  builder="$(builder_identity)"
+  builder_home="$(getent passwd "$builder" | cut -d: -f6)"
+  mkdir -p "$build_root/deps/db-sync"
+  cp -a "$source_dir/deps/common" "$build_root/deps/common"
+  cp -a "$source_dir/deps/db" "$build_root/deps/db"
+  cp -a "$source_dir/deps/graph-parser" "$build_root/deps/graph-parser"
+  cp -a "$source_dir/deps/outliner" "$build_root/deps/outliner"
+  cp -a "$source_dir/resources" "$build_root/resources"
+  cp -a "$source_dir/deps/db-sync/package.json" \
+    "$source_dir/deps/db-sync/pnpm-lock.yaml" \
+    "$source_dir/deps/db-sync/deps.edn" \
+    "$source_dir/deps/db-sync/shadow-cljs.edn" \
+    "$build_root/deps/db-sync/"
+  cp -a "$source_dir/deps/db-sync/src" "$build_root/deps/db-sync/src"
+  set_owner -R "$builder" "$build_root"
+  run_as_builder "$builder" env \
+    HOME="$builder_home" \
+    PATH="$install_root/toolchain/node/bin:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
+    "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
+    install --frozen-lockfile --prod
+  run_as_builder "$builder" env \
+    HOME="$builder_home" \
+    PATH="$install_root/toolchain/node/bin:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
+    "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
+    build:node-adapter
+  release_id="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+  release_dir="$install_root/releases/$release_id"
+  while [[ -e "$release_dir" ]]; do
+    suffix=$((suffix + 1))
+    release_dir="$install_root/releases/${release_id}-${suffix}"
+  done
+  mkdir -p "$release_dir"
+  cp -a "$build_root/deps/db-sync/worker/dist/node-adapter.js" "$release_dir/"
+  cp -a "$build_root/deps/db-sync/node_modules" "$release_dir/"
+  set_owner -R logseq-sync:logseq-sync "$release_dir"
+  replace_current_release "$release_dir"
+  rm -rf -- "$build_root"
+}
+
+write_configuration() {
+  local domain="$1"
+  local public_url="https://${domain}:${public_port}"
+  mkdir -p "$config_dir" "$data_dir" "$caddy_data_dir" "$systemd_dir"
+  set_owner -R logseq-sync:logseq-sync "$data_dir"
+  set_owner caddy:caddy "$caddy_data_dir"
+  set_owner root:caddy "$config_dir"
+  chmod 0750 "$config_dir" "$data_dir" "$caddy_data_dir"
+  backup_file "$config_dir/sync.env"
+  backup_file "$config_dir/Caddyfile"
+  backup_file "$systemd_dir/$sync_service"
+  backup_file "$systemd_dir/$proxy_service"
+  write_private_file "$config_dir/sync.env" "NODE_ENV=production
+LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
+LOGSEQ_SYNC_PUBLIC_PORT=${public_port}
+LOGSEQ_SYNC_INTERNAL_PORT=${internal_port}
+DB_SYNC_HOST=127.0.0.1
+DB_SYNC_PORT=${internal_port}
+DB_SYNC_BASE_URL=${public_url}
+DB_SYNC_DATA_DIR=${data_dir}
+DB_SYNC_STORAGE_DRIVER=sqlite
+DB_SYNC_ASSETS_DRIVER=filesystem
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=${default_cognito_issuer}
+COGNITO_CLIENT_ID=${default_cognito_client_id}
+COGNITO_JWKS_URL=${default_cognito_jwks_url}
+"
+  set_owner root:logseq-sync "$config_dir/sync.env"
+  chmod 0640 "$config_dir/sync.env"
+  printf '%s\n' "https://${domain}:${public_port} {" \
+    $'\t'"reverse_proxy 127.0.0.1:${internal_port}" \
+    $'\ttls {' \
+    $'\t\tissuer acme {' \
+    $'\t\t\tdisable_tlsalpn_challenge' \
+    $'\t\t}' \
+    $'\t}' \
+    '}' > "$config_dir/Caddyfile"
+  set_owner root:caddy "$config_dir/Caddyfile"
+  chmod 0640 "$config_dir/Caddyfile"
+  write_private_file "$systemd_dir/$sync_service" "[Unit]
+Description=Logseq Sync Node adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=logseq-sync
+Group=logseq-sync
+WorkingDirectory=${install_root}/current
+EnvironmentFile=${config_dir}/sync.env
+ExecStart=${install_root}/toolchain/node/bin/node ${install_root}/current/node-adapter.js
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=${data_dir}
+
+[Install]
+WantedBy=multi-user.target
+"
+  chmod 0644 "$systemd_dir/$sync_service"
+  write_private_file "$systemd_dir/$proxy_service" "[Unit]
+Description=Logseq Sync HTTPS proxy
+After=network-online.target ${sync_service}
+Wants=network-online.target ${sync_service}
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+Environment=XDG_DATA_HOME=${caddy_data_dir}
+Environment=XDG_CONFIG_HOME=${caddy_data_dir}
+ExecStart=${install_root}/toolchain/bin/caddy run --environ --config ${config_dir}/Caddyfile
+ExecReload=${install_root}/toolchain/bin/caddy reload --config ${config_dir}/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=${caddy_data_dir}
+
+[Install]
+WantedBy=multi-user.target
+"
+  chmod 0644 "$systemd_dir/$proxy_service"
+}
+
+install_manager() {
+  local manager_source="$source_dir/deps/db-sync/deploy/logseq-sync-native"
+  [[ -f "$manager_source" ]] || manager_source="${BASH_SOURCE[0]}"
+  mkdir -p "$(dirname -- "$manager_path")"
+  if [[ -e "$manager_path" ]]; then
+    if [[ "$manager_source" -ef "$manager_path" ]] || cmp -s "$manager_source" "$manager_path"; then
+      return 0
+    fi
+  fi
+  backup_file "$manager_path"
+  install -m 0755 "$manager_source" "$manager_path"
+}
+
+wait_for_url() {
+  local url="$1"
+  local attempts="$2"
+  local delay="$3"
+  local body
+  while (( attempts > 0 )); do
+    body="$(curl --fail --silent --show-error --max-time 5 "$url/health" 2>/dev/null || true)"
+    if [[ "$body" == '{"ok":true}' ]]; then
+      return 0
+    fi
+    attempts=$((attempts - 1))
+    (( attempts > 0 )) && sleep "$delay"
+  done
+  return 1
+}
+
+start_services() {
+  local public_url="$1"
+  if ! "$install_root/toolchain/bin/caddy" validate --config "$config_dir/Caddyfile"; then
+    printf 'Caddy configuration validation failed.\n' >&2
+    return 1
+  fi
+  systemctl daemon-reload
+  systemctl enable "$sync_service" "$proxy_service" >/dev/null
+  systemctl restart "$sync_service"
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2; then
+    journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
+    printf 'Sync did not become healthy.\n' >&2
+    return 1
+  fi
+  systemctl restart "$proxy_service"
+  if ! wait_for_url "$public_url" 24 5; then
+    journalctl -u "$proxy_service" --no-pager -n 30 >&2 || true
+    printf 'HTTPS did not become reachable. Confirm DNS and inbound TCP ports 80 and %s.\n' \
+      "$public_port" >&2
+    return 1
+  fi
+}
+
+setup() {
+  local domain=""
+  local requested_port=""
+  local requested_internal_port=""
+  local internal_port_default
+  local previous_url previous_domain="" previous_port="" public_url resolved_ips
+  while (( $# > 0 )); do
+    case "$1" in
+      --domain)
+        (( $# >= 2 )) || die "--domain requires a value."
+        domain="$2"
+        shift 2
+        ;;
+      --domain=*)
+        domain="${1#--domain=}"
+        shift
+        ;;
+      --public-port)
+        (( $# >= 2 )) || die "--public-port requires a value."
+        requested_port="$2"
+        shift 2
+        ;;
+      --public-port=*)
+        requested_port="${1#--public-port=}"
+        shift
+        ;;
+      --internal-port)
+        (( $# >= 2 )) || die "--internal-port requires a value."
+        requested_internal_port="$2"
+        shift 2
+        ;;
+      --internal-port=*)
+        requested_internal_port="${1#--internal-port=}"
+        shift
+        ;;
+      --yes|-y)
+        assume_yes="true"
+        shift
+        ;;
+      --help|-h)
+        usage
+        return 0
+        ;;
+      *)
+        die "Unknown setup option: $1. Use --domain, --public-port, --internal-port, or --yes."
+        ;;
+    esac
+  done
+  require_linux
+  require_root
+  validate_install_paths
+  command -v systemctl >/dev/null 2>&1 || die "systemd is required."
+  if [[ "$assume_yes" != "true" ]]; then
+    printf '\nLogseq Sync setup\n'
+    printf 'This wizard will configure Sync Node, Caddy, automatic HTTPS, and systemd.\n'
+    printf 'You only need a domain name, public HTTPS port, and private Sync port.\n\n'
+  fi
+  previous_url="$(read_env_value DB_SYNC_BASE_URL)"
+  if [[ "$previous_url" =~ ^https://([^:/]+):([0-9]+)$ ]]; then
+    previous_domain="${BASH_REMATCH[1]}"
+    previous_port="${BASH_REMATCH[2]}"
+  fi
+  if [[ -z "$domain" ]]; then
+    printf 'Domain requirements:\n'
+    printf '  - Enter a hostname only, for example sync.example.com (no https:// or path).\n'
+    printf '  - Its public A/AAAA record must already resolve to this server.\n'
+    printf '  - Wait for DNS propagation before continuing.\n\n'
+    domain="$(read_value 'Step 1/3 - Sync domain name' "$previous_domain")"
+  fi
+  valid_domain "$domain" || die "Enter a valid DNS domain name, not an IP address."
+  command -v getent >/dev/null 2>&1 || die "The getent command is required for DNS validation."
+  resolved_ips="$(getent ahosts "$domain" \
+    | awk '!seen[$1]++ {printf "%s%s", separator, $1; separator=", "}' || true)"
+  [[ -n "$resolved_ips" ]] \
+    || die "The domain does not currently resolve. Create its DNS record before setup."
+  if [[ -n "$requested_port" ]]; then
+    public_port="$requested_port"
+  else
+    printf '\nPublic HTTPS port:\n'
+    printf '  - Logseq clients connect here using HTTPS and secure WebSockets.\n'
+    printf '  - Allow this TCP port in the cloud security group and server firewall.\n'
+    printf '  - TCP 80 must also be reachable for automatic certificate validation.\n\n'
+    public_port="$(read_value 'Step 2/3 - Public HTTPS port' "${previous_port:-$default_public_port}")"
+  fi
+  valid_port "$public_port" || die "Public HTTPS port must be between 1 and 65535."
+  [[ "$public_port" != "80" ]] \
+    || die "Public HTTPS port 80 is reserved for automatic certificate validation."
+  internal_port_default="$internal_port"
+  if [[ "$public_port" == "$internal_port_default" ]]; then
+    if (( 10#$public_port < 65535 )); then
+      internal_port_default="$((10#$public_port + 1))"
+    else
+      internal_port_default="$((10#$public_port - 1))"
+    fi
+  fi
+  if [[ -n "$requested_internal_port" ]]; then
+    internal_port="$requested_internal_port"
+  else
+    printf '\nPrivate Sync port:\n'
+    printf '  - Sync Node listens on 127.0.0.1 only; Caddy forwards requests here.\n'
+    printf '  - Do not expose or allow this port in the public firewall.\n\n'
+    internal_port="$(read_value 'Step 3/3 - Private Sync port' "$internal_port_default")"
+  fi
+  valid_port "$internal_port" || die "Private Sync port must be between 1024 and 65535."
+  (( 10#$internal_port >= 1024 )) \
+    || die "Private Sync port must be between 1024 and 65535."
+  [[ "$public_port" != "$internal_port" ]] \
+    || die "Public HTTPS port and private Sync port must be different."
+  public_url="https://${domain}:${public_port}"
+  printf '\nDeployment plan:\n'
+  printf '  DNS: %s -> %s\n' "$domain" "$resolved_ips"
+  printf '  Public endpoint (enter in Logseq): %s\n' "$public_url"
+  printf '  Public inbound TCP: 80 (certificate), %s (HTTPS/WSS)\n' "$public_port"
+  printf '  Private adapter: 127.0.0.1:%s (local only, do not expose)\n' "$internal_port"
+  printf '  Data: %s\n' "$data_dir"
+  printf '  Services: Sync Node + Caddy (systemd)\n\n'
+  confirm 'Build and start Logseq Sync?' yes || die "Setup cancelled."
+  ensure_dependencies
+  ensure_service_users
+  build_adapter
+  write_configuration "$domain"
+  install_manager
+  start_services "$public_url" || die "Setup did not complete. Generated configuration and data were preserved."
+  printf '\nLogseq Sync is ready. Enter this URL in Logseq → Settings → Advanced → Sync Server URL:\n'
+  printf '  %s\n' "$public_url"
+  printf 'Manage it later with: sudo %s status\n' "$manager_path"
+}
+
+update() {
+  local public_url previous_release
+  require_linux
+  require_root
+  validate_install_paths
+  [[ -f "$config_dir/sync.env" ]] || die "Run setup first."
+  ensure_dependencies
+  public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  previous_release="$(readlink "$install_root/current" 2>/dev/null || true)"
+  [[ -n "$previous_release" && -d "$previous_release" ]] \
+    || die "The current adapter release is missing. Run setup to repair it."
+  printf 'Building the current checkout and preserving configuration and data.\n'
+  build_adapter
+  install_manager
+  systemctl restart "$sync_service"
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2; then
+    journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
+    replace_current_release "$previous_release"
+    systemctl restart "$sync_service" || true
+    die "Updated Sync process did not become healthy; the previous release was restored."
+  fi
+  if ! wait_for_url "$public_url" 6 2; then
+    replace_current_release "$previous_release"
+    systemctl restart "$sync_service" || true
+    die "Updated public endpoint is unavailable; the previous release was restored."
+  fi
+  printf 'Logseq Sync was updated successfully: %s\n' "$public_url"
+}
+
+status() {
+  local public_url internal_body public_body
+  require_root
+  validate_install_paths
+  [[ -f "$config_dir/sync.env" ]] || die "No native deployment configuration found."
+  public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  systemctl --no-pager --full status "$sync_service" "$proxy_service" || true
+  internal_body="$(curl --fail --silent --max-time 3 "http://127.0.0.1:${internal_port}/health" 2>/dev/null || true)"
+  public_body="$(curl --fail --silent --max-time 5 "$public_url/health" 2>/dev/null || true)"
+  printf 'Sync Server URL: %s\n' "$public_url"
+  [[ "$internal_body" == '{"ok":true}' ]] || die "The private Sync health check failed."
+  [[ "$public_body" == '{"ok":true}' ]] || die "The public HTTPS health check failed."
+  printf 'Health: ok\n'
+}
+
+logs() {
+  local follow="" unit="$sync_service"
+  require_root
+  validate_install_paths
+  while (( $# > 0 )); do
+    case "$1" in
+      --follow|-f) follow="--follow" ;;
+      sync) unit="$sync_service" ;;
+      proxy|caddy) unit="$proxy_service" ;;
+      *) die "Unknown logs option: $1" ;;
+    esac
+    shift
+  done
+  journalctl -u "$unit" --no-pager -n 200 $follow
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  sudo logseq-sync-native setup
+  sudo logseq-sync-native setup --domain <domain> --public-port <port> \
+    --internal-port <port> [--yes]
+  sudo logseq-sync-native update
+  sudo logseq-sync-native bootstrap
+  sudo logseq-sync-native status
+  sudo logseq-sync-native logs [--follow] [sync|proxy]
+
+The public HTTPS port defaults to 10010 when setup input is left blank. Port 80
+is used only for automatic certificate issuance and renewal. The Node adapter
+uses a separate loopback-only port managed by the installer.
+EOF
+}
+
+case "${1:-help}" in
+  setup) shift; setup "$@" ;;
+  update) shift; update "$@" ;;
+  bootstrap) shift; bootstrap false "$@" ;;
+  status) shift; status "$@" ;;
+  logs) shift; logs "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

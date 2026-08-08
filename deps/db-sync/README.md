@@ -103,6 +103,11 @@ It requires typing `DELETE` as confirmation.
 
 ### Node.js Adapter (self-hosted)
 
+For the guided native systemd setup, including automatic HTTPS, persistent
+storage, and day-two management commands, follow the
+[deployment manager quickstart](deploy/README.md). The commands below are the
+manual developer workflow.
+
 Build the adapter:
 
 ```bash
@@ -133,6 +138,7 @@ pnpm test:node-adapter
 
 | Variable | Purpose |
 | --- | --- |
+| DB_SYNC_HOST | HTTP server bind address (defaults to `127.0.0.1`) |
 | DB_SYNC_PORT | HTTP server port |
 | DB_SYNC_BASE_URL | External base URL for asset links |
 | DB_SYNC_ADMIN_TOKEN | Admin-only token for operator graph deletion endpoints |

@@ -20,6 +20,9 @@ require_docker() {
     printf 'Docker Engine with Docker Compose is required. Install it first:\n%s\n' "$docker_install_url" >&2
     exit 1
   fi
+  if ! docker info >/dev/null 2>&1; then
+    die "Docker Engine is not reachable. Start Docker and ensure the current user can access it without sudo."
+  fi
 }
 
 require_linux() {
@@ -60,6 +63,19 @@ compose() {
   docker compose --env-file "$install_dir/.env" "${files[@]}" "$@"
 }
 
+compose_https() {
+  local install_dir="$1"
+  shift
+  docker compose --env-file "$install_dir/.env" \
+    -f "$install_dir/compose.yaml" --profile https "$@"
+}
+
+read_env_value() {
+  local path="$1"
+  local key="$2"
+  sed -n "s/^${key}=//p" "$path"
+}
+
 write_file() {
   local path="$1"
   shift
@@ -76,9 +92,66 @@ valid_port() {
   [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
 }
 
+valid_hostname() {
+  local hostname="$1"
+  local label
+  local -a labels=()
+  [[ -n "$hostname" && ${#hostname} -le 253 \
+     && "$hostname" != .* && "$hostname" != *. ]] || return 1
+  IFS='.' read -r -a labels <<<"$hostname"
+  for label in "${labels[@]}"; do
+    [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
+  done
+}
+
+valid_ipv4() {
+  local address="$1"
+  local a b c d extra
+  IFS='.' read -r a b c d extra <<<"$address"
+  [[ -z "${extra:-}" && "$a" =~ ^[0-9]+$ && "$b" =~ ^[0-9]+$ \
+     && "$c" =~ ^[0-9]+$ && "$d" =~ ^[0-9]+$ \
+     && ${#a} -le 3 && ${#b} -le 3 && ${#c} -le 3 && ${#d} -le 3 ]] \
+    && (( 10#$a <= 255 && 10#$b <= 255 && 10#$c <= 255 && 10#$d <= 255 ))
+}
+
+valid_host() {
+  if [[ "$1" =~ ^[0-9.]+$ ]]; then
+    valid_ipv4 "$1"
+  else
+    valid_hostname "$1"
+  fi
+}
+
 valid_domain() {
   [[ ${#1} -le 253 \
      && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+valid_http_url() {
+  local url="$1"
+  local authority host port
+  [[ "$url" == http://* ]] || return 1
+  authority="${url#http://}"
+  [[ "$authority" != *[/?#@]* ]] || return 1
+  [[ "$authority" == *:* ]] || return 1
+  host="${authority%:*}"
+  port="${authority##*:}"
+  valid_host "$host" && valid_port "$port"
+}
+
+valid_https_url() {
+  local url="$1"
+  local remainder authority host port=""
+  [[ "$url" == https://* && "$url" != *[[:space:]?#@]* ]] || return 1
+  remainder="${url#https://}"
+  authority="${remainder%%/*}"
+  host="$authority"
+  if [[ "$authority" == *:* ]]; then
+    host="${authority%:*}"
+    port="${authority##*:}"
+    valid_port "$port" || return 1
+  fi
+  valid_host "$host"
 }
 
 confirm_existing() {
@@ -103,14 +176,20 @@ backup_existing() {
   cp -a -- "$path" "$backup"
 }
 
+service_is_healthy() {
+  local install_dir="$1"
+  local service="$2"
+  local status
+  status="$(compose "$install_dir" ps --format json "$service" 2>/dev/null || true)"
+  grep -Eq '"Health"[[:space:]]*:[[:space:]]*"healthy"' <<<"$status"
+}
+
 wait_for_service_health() {
   local install_dir="$1"
   local service="$2"
   local attempts=30
-  local status
   while (( attempts > 0 )); do
-    status="$(compose "$install_dir" ps --format json "$service" 2>/dev/null || true)"
-    if grep -q 'healthy' <<<"$status"; then
+    if service_is_healthy "$install_dir" "$service"; then
       printf '%s is healthy.\n' "$service"
       return 0
     fi
@@ -121,18 +200,25 @@ wait_for_service_health() {
   return 1
 }
 
-wait_for_https_endpoint() {
+public_endpoint_is_healthy() {
+  local public_url="$1"
+  local body
+  body="$(curl --fail --silent --max-time 5 "$public_url/health" 2>/dev/null)" || return 1
+  [[ "$body" == '{"ok":true}' ]]
+}
+
+wait_for_public_endpoint() {
   local public_url="$1"
   local attempts=12
   while (( attempts > 0 )); do
-    if curl --fail --silent --show-error --max-time 5 "$public_url/health" >/dev/null; then
-      printf 'Public HTTPS endpoint is reachable.\n'
+    if public_endpoint_is_healthy "$public_url"; then
+      printf 'Public endpoint is healthy.\n'
       return 0
     fi
     sleep 5
     attempts=$((attempts - 1))
   done
-  printf 'Public HTTPS endpoint did not become reachable: %s/health\n' "$public_url" >&2
+  printf 'Public endpoint did not return {"ok":true}: %s/health\n' "$public_url" >&2
   return 1
 }
 
@@ -140,35 +226,75 @@ setup() {
   require_linux
   require_docker
   local install_dir data_dir endpoint_mode public_url bind_address public_port domain
-  local issuer client_id jwks_url auth_mode
-  local -a profile_args=()
+  local issuer client_id jwks_url auth_mode log_level
+  local existing_env="" previous_data_dir="" previous_endpoint_mode="" previous_public_url=""
+  local previous_issuer="" previous_client_id="" previous_jwks_url="" previous_log_level=""
+  local data_default endpoint_default domain_default public_url_default auth_default exposure
+  local -a compose_args=()
 
   install_dir="$(read_value 'Deployment directory' "$default_install_dir")"
-  data_dir="$(read_value 'Persistent data directory' "$default_data_dir")"
+  if [[ -f "$install_dir/.env" ]]; then
+    existing_env="$install_dir/.env"
+    previous_data_dir="$(read_env_value "$existing_env" LOGSEQ_SYNC_DATA_DIR)"
+    previous_endpoint_mode="$(read_env_value "$existing_env" LOGSEQ_SYNC_ENDPOINT_MODE)"
+    previous_public_url="$(read_env_value "$existing_env" DB_SYNC_BASE_URL)"
+    previous_log_level="$(read_env_value "$existing_env" DB_SYNC_LOG_LEVEL)"
+    previous_issuer="$(read_env_value "$existing_env" COGNITO_ISSUER)"
+    previous_client_id="$(read_env_value "$existing_env" COGNITO_CLIENT_ID)"
+    previous_jwks_url="$(read_env_value "$existing_env" COGNITO_JWKS_URL)"
+    [[ "$previous_endpoint_mode" == "https" || "$previous_endpoint_mode" == "http" ]] \
+      || die "Existing deployment configuration has an invalid endpoint mode."
+    valid_env_value "$previous_data_dir" \
+      && valid_env_value "$previous_public_url" \
+      && valid_env_value "$previous_log_level" \
+      && valid_env_value "$previous_issuer" \
+      && valid_env_value "$previous_client_id" \
+      && valid_env_value "$previous_jwks_url" \
+      || die "Existing deployment configuration is missing required values or contains invalid values."
+  fi
+
+  data_default="${previous_data_dir:-$default_data_dir}"
+  endpoint_default="${previous_endpoint_mode:-https}"
+  data_dir="$(read_value 'Persistent data directory' "$data_default")"
   valid_env_value "$source_dir" && valid_env_value "$install_dir" && valid_env_value "$data_dir" \
     || die "Paths must not be empty or contain whitespace, $, #, or newlines."
-  endpoint_mode="$(read_value 'Endpoint mode (https/http)' 'https')"
+  endpoint_mode="$(read_value 'Endpoint mode (https/http)' "$endpoint_default")"
   [[ "$endpoint_mode" == "https" || "$endpoint_mode" == "http" ]] || die "Endpoint mode must be https or http."
+  command -v curl >/dev/null 2>&1 || die "Setup requires curl to verify the public endpoint."
 
   if [[ "$endpoint_mode" == "https" ]]; then
-    command -v curl >/dev/null 2>&1 || die "HTTPS setup requires curl to verify the public endpoint."
-    domain="$(read_value 'Public domain name')"
+    domain_default=""
+    if [[ "$previous_public_url" =~ ^https://([^:/]+):10010$ ]]; then
+      domain_default="${BASH_REMATCH[1]}"
+    fi
+    domain="$(read_value 'Public domain name' "$domain_default")"
     valid_domain "$domain" || die "HTTPS requires a valid DNS domain name, not an IP address."
-    public_url="https://${domain}"
+    public_url="https://${domain}:10010"
     bind_address="127.0.0.1"
-    public_port="8080"
-    profile_args=(--profile https)
+    public_port="10010"
+    exposure="ports 80/tcp and 10010/tcp"
   else
-    public_url="$(read_value 'Public HTTP URL (for example http://203.0.113.10:8080)')"
-    [[ "$public_url" =~ ^http://[A-Za-z0-9.-]+:[0-9]+$ ]] || die "HTTP URL must include a hostname or IPv4 address and numeric port."
+    public_url_default=""
+    if [[ "$previous_public_url" == http://* ]]; then
+      public_url_default="$previous_public_url"
+    fi
+    public_url="$(read_value 'Public HTTP URL (for example http://203.0.113.10:8080)' "$public_url_default")"
+    valid_http_url "$public_url" || die "HTTP URL must include a valid hostname or IPv4 address and port."
     printf 'Warning: HTTP exposes Logseq bearer tokens in transit.\n' >&2
     [[ "$(read_value 'Type I_ACCEPT_HTTP to continue')" == "I_ACCEPT_HTTP" ]] || die "HTTP risk acknowledgement was not accepted."
     bind_address="0.0.0.0"
     public_port="${public_url##*:}"
-    valid_port "$public_port" || die "HTTP URL port must be between 1 and 65535."
+    exposure="${bind_address}:${public_port}"
   fi
 
-  auth_mode="$(read_value 'Authentication (logseq-client/custom-client)' 'logseq-client')"
+  auth_default="logseq-client"
+  if [[ -n "$existing_env" ]] \
+     && [[ "$previous_issuer" != "$default_cognito_issuer" \
+           || "$previous_client_id" != "$default_cognito_client_id" \
+           || "$previous_jwks_url" != "$default_cognito_jwks_url" ]]; then
+    auth_default="custom-client"
+  fi
+  auth_mode="$(read_value 'Authentication (logseq-client/custom-client)' "$auth_default")"
   case "$auth_mode" in
     logseq-client)
       issuer="$default_cognito_issuer"
@@ -177,19 +303,32 @@ setup() {
       ;;
     custom-client)
       printf 'Custom JWT settings require a Logseq client built to issue matching tokens.\n' >&2
-      issuer="$(read_value 'Cognito issuer URL')"
-      client_id="$(read_value 'Cognito client ID')"
-      jwks_url="$(read_value 'Cognito JWKS URL')"
-      [[ "$issuer" =~ ^https://[^[:space:]]+$ ]] || die "Cognito issuer must be an HTTPS URL."
+      issuer="$(read_value 'Cognito issuer URL' "$previous_issuer")"
+      client_id="$(read_value 'Cognito client ID' "$previous_client_id")"
+      jwks_url="$(read_value 'Cognito JWKS URL' "$previous_jwks_url")"
+      valid_https_url "$issuer" || die "Cognito issuer must be a valid HTTPS URL."
       [[ "$client_id" =~ ^[A-Za-z0-9._-]+$ ]] || die "Cognito client ID contains unsupported characters."
-      [[ "$jwks_url" =~ ^https://[^[:space:]]+$ ]] || die "Cognito JWKS URL must be an HTTPS URL."
+      valid_https_url "$jwks_url" || die "Cognito JWKS URL must be a valid HTTPS URL."
       ;;
     *) die "Authentication must be logseq-client or custom-client." ;;
   esac
   valid_env_value "$issuer" && valid_env_value "$client_id" && valid_env_value "$jwks_url" \
-    || die "JWT settings must not contain newlines."
+    || die "JWT settings must not be empty or contain whitespace, $, #, or newlines."
+  log_level="${previous_log_level:-info}"
+  valid_env_value "$log_level" || die "The existing log level is invalid."
 
-  printf '\nDeployment plan:\n  URL: %s\n  Install: %s\n  Data: %s\n  Authentication: %s JWT over %s\n' "$public_url" "$install_dir" "$data_dir" "$auth_mode" "$endpoint_mode"
+  printf '\nDeployment plan:\n  URL: %s\n  Exposure: %s\n  Install: %s\n  Data: %s\n  Authentication: %s JWT over %s\n' "$public_url" "$exposure" "$install_dir" "$data_dir" "$auth_mode" "$endpoint_mode"
+  if [[ -n "$existing_env" && "$data_dir" != "$previous_data_dir" ]]; then
+    confirm 'The persistent data directory changed. Continue with the new directory?' \
+      || die "Cancelled before changing the persistent data directory."
+  fi
+  if [[ -n "$existing_env" ]] \
+     && [[ "$issuer" != "$previous_issuer" \
+           || "$client_id" != "$previous_client_id" \
+           || "$jwks_url" != "$previous_jwks_url" ]]; then
+    confirm 'Authentication settings changed. Existing graph identities may not match. Continue?' \
+      || die "Cancelled before changing authentication settings."
+  fi
   confirm 'Write deployment configuration and start Sync?' || die "Cancelled before writing configuration."
 
   confirm_existing "$install_dir/compose.yaml"
@@ -218,7 +357,7 @@ LOGSEQ_SYNC_ENDPOINT_MODE=${endpoint_mode}
 DB_SYNC_BASE_URL=${public_url}
 DB_SYNC_BIND_ADDRESS=${bind_address}
 DB_SYNC_PUBLIC_PORT=${public_port}
-DB_SYNC_LOG_LEVEL=info
+DB_SYNC_LOG_LEVEL=${log_level}
 COGNITO_ISSUER=${issuer}
 COGNITO_CLIENT_ID=${client_id}
 COGNITO_JWKS_URL=${jwks_url}
@@ -227,15 +366,24 @@ COGNITO_JWKS_URL=${jwks_url}
     sed "s/{DOMAIN}/${domain}/g" "$script_dir/Caddyfile.template" > "$install_dir/Caddyfile"
   fi
 
-  if ! compose "$install_dir" "${profile_args[@]}" up -d --build; then
+  if [[ "$previous_endpoint_mode" == "https" && "$endpoint_mode" == "http" ]]; then
+    compose_https "$install_dir" rm --stop --force caddy
+  fi
+
+  if [[ "$endpoint_mode" == "https" ]]; then
+    compose_args=(--profile https up -d --build --force-recreate)
+  else
+    compose_args=(up -d --build)
+  fi
+  if ! compose "$install_dir" "${compose_args[@]}"; then
     printf 'Sync startup failed. Inspect logs with:\n  %s/logseq-sync logs --follow %s\n' "$script_dir" "$install_dir" >&2
     return 1
   fi
   wait_for_service_health "$install_dir" sync
   if [[ "$endpoint_mode" == "https" ]]; then
     wait_for_service_health "$install_dir" caddy
-    wait_for_https_endpoint "$public_url"
   fi
+  wait_for_public_endpoint "$public_url"
   printf 'Logseq Sync is ready. In Logseq, set Sync Server URL to:\n  %s\n' "$public_url"
   printf 'Status: %s/logseq-sync status %s\n' "$script_dir" "$install_dir"
 }
@@ -246,21 +394,21 @@ status() {
   require_docker
   compose "$install_dir" ps
   printf 'Sync Server URL: %s\n' "$(sed -n 's/^DB_SYNC_BASE_URL=//p' "$install_dir/.env")"
-  if wait_for_service_health "$install_dir" sync; then
+  if service_is_healthy "$install_dir" sync; then
     printf 'Health endpoint: ok\n'
   else
     printf 'Health endpoint: unavailable\n' >&2
     return 1
   fi
   if [[ "$(sed -n 's/^LOGSEQ_SYNC_ENDPOINT_MODE=//p' "$install_dir/.env")" == "https" ]]; then
-    if ! wait_for_service_health "$install_dir" caddy; then
+    if ! service_is_healthy "$install_dir" caddy; then
       printf 'HTTPS proxy health: unavailable\n' >&2
       return 1
     fi
-    if ! wait_for_https_endpoint "$(sed -n 's/^DB_SYNC_BASE_URL=//p' "$install_dir/.env")"; then
-      printf 'Public HTTPS endpoint: unavailable\n' >&2
-      return 1
-    fi
+  fi
+  if ! public_endpoint_is_healthy "$(sed -n 's/^DB_SYNC_BASE_URL=//p' "$install_dir/.env")"; then
+    printf 'Public endpoint: unavailable\n' >&2
+    return 1
   fi
 }
 
@@ -287,6 +435,9 @@ logs() {
     args+=(--follow)
   fi
   if [[ -n "$service" ]]; then
+    if [[ "$service" == "proxy" ]]; then
+      service="caddy"
+    fi
     args+=("$service")
   fi
   compose "$install_dir" "${args[@]}"

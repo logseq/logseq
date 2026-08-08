@@ -10,37 +10,40 @@ RUN apt-get update \
 
 WORKDIR /workspace
 
+RUN npm install --global pnpm@10.33.0
+
+# Keep dependency installation cached when only application source changes.
+WORKDIR /workspace/deps/db-sync
+
+COPY deps/db-sync/package.json deps/db-sync/pnpm-lock.yaml ./
+
+RUN pnpm install --frozen-lockfile --prod \
+ && pnpm rebuild better-sqlite3
+
+WORKDIR /workspace
+
 COPY deps/common ./deps/common
 COPY deps/db ./deps/db
 COPY deps/graph-parser ./deps/graph-parser
 COPY deps/outliner ./deps/outliner
-COPY deps/db-sync ./deps/db-sync
+COPY deps/db-sync/deps.edn deps/db-sync/shadow-cljs.edn ./deps/db-sync/
+COPY deps/db-sync/src ./deps/db-sync/src
 COPY resources ./resources
-
-RUN npm install --global pnpm@10.33.0
-
-WORKDIR /workspace/deps/graph-parser
-
-RUN pnpm install --frozen-lockfile --prod
 
 WORKDIR /workspace/deps/db-sync
 
-# Install the Node adapter and its graph-parser runtime dependencies without
-# entering the root desktop workspace.
-RUN pnpm install --frozen-lockfile --prod \
- && pnpm rebuild better-sqlite3 \
- && pnpm build:node-adapter
+RUN pnpm build:node-adapter
 
 FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production \
+    DB_SYNC_HOST=0.0.0.0 \
     DB_SYNC_PORT=8080 \
     DB_SYNC_DATA_DIR=/var/lib/logseq-sync
 
 WORKDIR /app
 
 COPY --from=build /workspace/deps/db-sync/node_modules ./node_modules
-COPY --from=build /workspace/deps/graph-parser/node_modules ./node_modules
 COPY --from=build /workspace/deps/db-sync/worker/dist/node-adapter.js ./node-adapter.js
 
 RUN mkdir -p /var/lib/logseq-sync \

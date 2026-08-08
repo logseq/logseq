@@ -2,104 +2,97 @@
 
 ## Goal
 
-Provide a Linux-server deployment path for the experimental DB Sync Node adapter.
-The operator runs one interactive manager, makes explicit choices, and receives
-a running Docker Compose deployment plus the URL to enter in Logseq.
-
-The installer does not install Docker. When Docker Compose is unavailable, it
-stops before writing deployment files and links to the official Docker Engine
-installation guide: <https://docs.docker.com/engine/install/>.
+Provide a low-configuration Linux-server deployment path for the experimental
+DB Sync Node adapter. The primary path runs Sync Node and Caddy as native
+systemd services without requiring Docker. The operator supplies a domain,
+accepts or customizes the public and private port defaults, and receives the
+exact HTTPS URL to enter in Logseq.
 
 ## Scope
 
 The deployment assets will live under `deps/db-sync/deploy/` and include:
 
-- an interactive `logseq-sync` entrypoint;
+- a native `logseq-sync-native` entrypoint;
 - a Dockerfile that builds the Node adapter and runs it;
-- a Compose definition with a durable data volume;
-- optional Caddy reverse proxy configuration for TLS;
-- generated `.env` configuration, never committed with secrets.
+- a Compose definition retained as an alternative deployment;
+- Caddy reverse proxy configuration for automatic TLS;
+- generated `sync.env` configuration, never committed with secrets.
 
-The installer targets one Linux host and one Sync adapter instance. It does not
-install Docker, run a multi-node cluster, provide backups, or delete existing
-data.
+The native installer targets one Debian or Ubuntu systemd host and one Sync
+adapter instance. It installs its build/runtime dependencies, but does not run
+a multi-node cluster, provide backups, or delete existing data.
 
 ## Operator flow
 
-1. Run `logseq-sync setup`, which checks Linux, Docker Engine, and `docker
-   compose` availability. If missing,
-   print the official Docker documentation URL and exit without changes.
-2. Ask for a deployment directory and a persistent data directory.
-3. Ask for an endpoint mode:
-   - `https`: domain name plus Caddy-managed TLS certificate;
-   - `http`: bind a public HTTP endpoint only after the operator types an
-     explicit risk acknowledgement.
-4. Ask for an authentication mode:
-   - `logseq-client` verified JWT, using the issuer and client ID embedded in
-     the current Logseq client;
-   - `custom-client` verified JWT, which requires a separately built client
-     that issues tokens for the entered issuer and client ID.
-5. Print the full plan, including paths, URL, exposed ports, and authentication
-   choice. Require a final confirmation before creating configuration files or
-   running Compose.
-6. Start the service with `docker compose up -d`, poll the adapter `/health`.
-   For HTTPS, also require Caddy health and a successful public HTTPS
-   `/health` request before printing the Sync Server URL for Logseq settings.
+1. Run `sudo logseq-sync-native setup` to enter the guided flow.
+2. Validate Linux and systemd, explain that the domain must be a hostname whose
+   propagated public `A`/`AAAA` record points to this server, then prompt for
+   and validate it. Show the addresses returned by DNS.
+3. Prompt for the public HTTPS/WSS port with `10010` as the default, then prompt
+   for the private loopback-only adapter port with `10011` as the default. Keep
+   ACME HTTP validation on port `80`, explain the public/private exposure rules,
+   reject duplicate ports, print the topology, and require one confirmation.
+4. Install missing native build/runtime dependencies on Debian or Ubuntu.
+5. Build into a new versioned release directory, then atomically switch the
+   `current` symlink only after the build succeeds.
+6. Generate systemd, adapter, and Caddy configuration. Normal setup uses the
+   verified JWT identity embedded in the current Logseq client and does not ask
+   for Cognito settings.
+7. Start Sync Node and Caddy, then require successful private HTTP and public
+   HTTPS `/health` checks before printing the Sync Server URL.
 
 ## Management commands
 
-`logseq-sync` is a deployment manager, not an install-only script. It exposes:
+`logseq-sync-native` is a deployment manager, not an install-only script. Its
+default setup is interactive, with named options available for automation:
 
 ```bash
-logseq-sync setup
-logseq-sync status
-logseq-sync logs
-logseq-sync logs --follow
-logseq-sync logs sync
-logseq-sync logs proxy
-logseq-sync help
+logseq-sync-native setup
+logseq-sync-native setup --domain <domain> --public-port <port> \
+  --internal-port <port> --yes
+logseq-sync-native update
+logseq-sync-native status
+logseq-sync-native logs --follow sync
+logseq-sync-native logs --follow proxy
+logseq-sync-native help
 ```
 
-After `setup`, the manager checks both `docker compose ps` and the unauthenticated
-`/health` endpoint. It reports success only when the containers are running and
-the endpoint returns `{"ok":true}`.
+After `setup`, the manager checks systemd plus the unauthenticated private and
+public `/health` endpoints. It reports success only when both return
+`{"ok":true}`.
 
-`status` reports container state, the health result, and the configured Sync
-Server URL. `logs` prints the most recent 200 lines;
-`--follow` streams new lines. `sync` selects the Node adapter logs, while `proxy`
-selects Caddy logs and reports that the service is unavailable in HTTP mode.
+`status` reports service state, both health results, and the configured Sync
+Server URL. `logs` prints the most recent 200 journal lines; `--follow` streams
+new lines. `sync` selects the Node adapter and `proxy` selects Caddy.
 
-On startup or health-check failure, the manager leaves containers and persistent
-data intact, shows the failed check, and directs the operator to `logs --follow`.
+On startup or health-check failure, the manager leaves releases and persistent
+data intact, shows recent journal entries, and directs the operator to logs.
 
 ## Safety behavior
 
-- Never run recursive deletion, `docker compose down -v`, or remove volumes.
-- If a generated file already exists, offer only `cancel` or write a new
-  timestamped backup beside it; no overwrite occurs without explicit
-  confirmation.
-- Warn that public HTTP exposes bearer credentials in transit.
+- Never remove the persistent data or Caddy certificate directories.
+- Back up generated configuration with a timestamp before replacement.
+- Bind the Node adapter to `127.0.0.1`; only Caddy listens publicly.
+- Do not expose an HTTP mode in the native quickstart.
 
 ## Architecture
 
 ```text
 Logseq Desktop/Web
-  -> HTTPS/WSS or HTTP/WS
-  -> optional Caddy reverse proxy
-  -> DB Sync Node adapter (single container)
-  -> persistent host-mounted data directory
+  -> HTTPS/WSS :10010 (default, operator-configurable)
+  -> Caddy systemd service
+  -> DB Sync Node adapter at 127.0.0.1:10011
+  -> persistent host data directory
      - index.sqlite
      - graphs/
      - assets/
 ```
 
-Compose runs a single adapter because graph state and active WebSocket
+Systemd runs a single adapter because graph state and active WebSocket
 connections are held in process memory, while the adapter uses local SQLite.
-The data directory is mounted from the host so container recreation does not
-discard graphs or assets.
-
-The adapter is published on the host only in HTTP mode. HTTPS mode keeps it on
-the internal Compose network and lets Caddy provide the public ports 80 and 443.
+Caddy owns public port 80 and the selected HTTPS port. The adapter bind address
+is enforced in its own configuration rather than relying only on firewall
+rules.
 
 ## Client compatibility
 
@@ -123,12 +116,13 @@ server.
 ## Verification
 
 - Build the adapter: `pnpm --dir deps/db-sync build:node-adapter`.
-- Start the generated Compose deployment.
+- Start the generated systemd deployment.
 - Verify `GET /health` returns `{"ok":true}`.
 - Verify a client configured with the displayed URL can connect and create a
   graph using the selected verified-JWT mode.
-- Add non-interactive shell tests for missing Docker, HTTP acknowledgement,
-  existing configuration, and health-check failure paths.
+- Run the non-interactive native-manager tests for default/custom port
+  selection, default authentication, domain validation, generated service
+  files, and one-shot status checks. Keep the Docker alternative tests green.
 
 ## Open constraint
 

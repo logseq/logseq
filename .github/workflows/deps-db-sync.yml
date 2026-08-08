@@ -117,7 +117,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate shell syntax
-        run: bash -n deploy/logseq-sync
+        run: |
+          bash -n deploy/logseq-sync
+          bash -n deploy/logseq-sync-native
+          bash -n deploy/test.sh
+          bash -n deploy/native-test.sh
+
+      - name: Run deployment manager tests
+        run: |
+          bash deploy/test.sh
+          bash deploy/native-test.sh
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

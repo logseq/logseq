@@ -4,6 +4,7 @@ services:
       context: ${LOGSEQ_SYNC_SOURCE_DIR:?Set by logseq-sync}
       dockerfile: deps/db-sync/deploy/Dockerfile
     environment:
+      DB_SYNC_HOST: "0.0.0.0"
       DB_SYNC_PORT: "8080"
       DB_SYNC_BASE_URL: ${DB_SYNC_BASE_URL:?Set by logseq-sync}
       DB_SYNC_DATA_DIR: /var/lib/logseq-sync
@@ -17,7 +18,7 @@ services:
     volumes:
       - ${LOGSEQ_SYNC_DATA_DIR:?Set by logseq-sync}:/var/lib/logseq-sync
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(async (response) => { const body = await response.json(); if (!response.ok || body.ok !== true) process.exit(1) }).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -32,7 +33,7 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
-      - "443:443"
+      - "10010:10010"
     volumes:
       - ${LOGSEQ_SYNC_INSTALL_DIR:?Set by logseq-sync}/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

@@ -11,7 +11,8 @@
 
 (defn config-from-env []
   (let [env (.-env js/process)]
-    {:port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
+    {:host (env-value env "DB_SYNC_HOST")
+     :port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
      :base-url (env-value env "DB_SYNC_BASE_URL")
      :data-dir (or (env-value env "DB_SYNC_DATA_DIR") "data/db-sync")
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
@@ -22,11 +23,12 @@
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :data-dir :storage-driver :assets-driver :log-level
+  [:host :port :base-url :data-dir :storage-driver :assets-driver :log-level
    :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
-  (let [defaults {:port 8080
+  (let [defaults {:host "127.0.0.1"
+                  :port 8080
                   :data-dir "data/db-sync"
                   :storage-driver "sqlite"
                   :assets-driver "filesystem"
