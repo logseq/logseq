@@ -162,6 +162,93 @@ assert_failure() {
   }
 }
 
+run_system_package_install() {
+  local sandbox="$1"
+  local distribution_id="$2"
+  local distribution_like="$3"
+  local distribution_name="$4"
+  local available_java="$5"
+  local package_manager="${6:-dnf}"
+  printf 'ID=%s\nID_LIKE="%s"\nPRETTY_NAME="%s"\n' \
+    "$distribution_id" "$distribution_like" "$distribution_name" \
+    > "$sandbox/os-release"
+  set +e
+  (
+    source "$manager" help >/dev/null
+    mock_package_manager() {
+      printf '%s\n' "$*" >> "$sandbox/packages.log"
+      case "$*" in
+        '-y makecache'|install\ -y\ *) return 0 ;;
+        "-q list --available $available_java"|"-q list available $available_java")
+          return 0
+          ;;
+        *) return 1 ;;
+      esac
+    }
+    if [[ "$package_manager" == "dnf" ]]; then
+      dnf() { mock_package_manager "$@"; }
+    else
+      yum() { mock_package_manager "$@"; }
+    fi
+    ensure_system_packages "$sandbox/os-release"
+  ) > "$sandbox/system-packages-output.log" 2>&1
+  last_status=$?
+  last_output="$(<"$sandbox/system-packages-output.log")"
+  set -e
+}
+
+test_rpm_distribution_installs_system_dependencies_with_dnf() {
+  local sandbox package_log
+  sandbox="$(make_sandbox)"
+  run_system_package_install "$sandbox" rocky 'rhel centos fedora' \
+    'Rocky Linux 9.6' java-21-openjdk-headless
+  assert_success || return 1
+  package_log="$(<"$sandbox/packages.log")"
+  assert_contains "$last_output" 'Detected operating system: Rocky Linux 9.6' || return 1
+  assert_contains "$package_log" '-y makecache' || return 1
+  assert_contains "$package_log" '-q list --available java-21-openjdk-headless' || return 1
+  assert_contains "$package_log" 'install -y gcc gcc-c++ make' || return 1
+  assert_contains "$package_log" 'java-21-openjdk-headless' || return 1
+  assert_contains "$package_log" 'shadow-utils'
+}
+
+test_amazon_linux_uses_corretto_21() {
+  local sandbox package_log
+  sandbox="$(make_sandbox)"
+  run_system_package_install "$sandbox" amzn fedora \
+    'Amazon Linux 2023.7' java-21-amazon-corretto-headless
+  assert_success || return 1
+  package_log="$(<"$sandbox/packages.log")"
+  assert_contains "$last_output" 'Detected operating system: Amazon Linux 2023.7' || return 1
+  assert_contains "$package_log" '-q list --available java-21-amazon-corretto-headless' || return 1
+  assert_contains "$package_log" 'java-21-amazon-corretto-headless'
+}
+
+test_opencloudos_falls_back_to_kona_17() {
+  local sandbox package_log
+  sandbox="$(make_sandbox)"
+  run_system_package_install "$sandbox" opencloudos opencloudos \
+    'OpenCloudOS 9.4' java-17-konajdk
+  assert_success || return 1
+  package_log="$(<"$sandbox/packages.log")"
+  assert_contains "$last_output" 'Detected operating system: OpenCloudOS 9.4' || return 1
+  assert_contains "$package_log" '-q list --available java-21-openjdk-headless' || return 1
+  assert_contains "$package_log" '-q list --available java-17-konajdk' || return 1
+  assert_contains "$package_log" 'java-17-konajdk'
+}
+
+test_rpm_distribution_can_install_with_yum() {
+  local sandbox package_log
+  sandbox="$(make_sandbox)"
+  run_system_package_install "$sandbox" tencentos 'rhel centos fedora' \
+    'TencentOS Server 3.1' java-21-openjdk-headless yum
+  assert_success || return 1
+  package_log="$(<"$sandbox/packages.log")"
+  assert_contains "$last_output" 'Detected operating system: TencentOS Server 3.1' || return 1
+  assert_contains "$package_log" '-q list available java-21-openjdk-headless' || return 1
+  assert_contains "$package_log" 'install -y gcc gcc-c++ make'
+}
+
 test_setup_uses_public_10010_and_private_10011() {
   local sandbox
   sandbox="$(make_sandbox)"
@@ -358,6 +445,10 @@ run_test() {
 }
 
 run_test test_setup_uses_public_10010_and_private_10011
+run_test test_rpm_distribution_installs_system_dependencies_with_dnf
+run_test test_amazon_linux_uses_corretto_21
+run_test test_opencloudos_falls_back_to_kona_17
+run_test test_rpm_distribution_can_install_with_yum
 run_test test_setup_without_options_runs_guided_wizard
 run_test test_setup_rejects_ambiguous_positional_arguments
 run_test test_setup_accepts_custom_public_port

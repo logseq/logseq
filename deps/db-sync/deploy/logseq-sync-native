@@ -167,13 +167,122 @@ caddy_architecture() {
   esac
 }
 
+os_release_value() {
+  local key="$1"
+  local os_release_file="${2:-/etc/os-release}"
+  local value
+  [[ -r "$os_release_file" ]] || return 0
+  value="$(sed -n "s/^${key}=//p" "$os_release_file" | head -n 1)"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s' "$value"
+}
+
+linux_package_family() {
+  local distribution_id="$1"
+  local distribution_like="$2"
+  case "$distribution_id" in
+    debian|ubuntu) printf 'debian'; return 0 ;;
+    amzn|alinux|almalinux|anolis|centos|fedora|opencloudos|ol|rhel|rocky|tencentos)
+      printf 'rpm'
+      return 0
+      ;;
+  esac
+  case " $distribution_like " in
+    *' debian '*) printf 'debian' ;;
+    *' centos '*|*' fedora '*|*' rhel '*) printf 'rpm' ;;
+  esac
+}
+
+rpm_java_package() {
+  local package_manager="$1"
+  local distribution_id="$2"
+  local candidate
+  local -a candidates=(
+    java-21-openjdk-headless
+    java-21-openjdk-devel
+    java-17-openjdk-headless
+    java-17-openjdk-devel
+  )
+  if [[ "$distribution_id" == "amzn" ]]; then
+    candidates=(java-21-amazon-corretto-headless java-21-amazon-corretto-devel "${candidates[@]}")
+  elif [[ "$distribution_id" == "opencloudos" ]]; then
+    candidates=(
+      java-21-openjdk-headless
+      java-21-openjdk-devel
+      java-17-konajdk-headless
+      java-17-konajdk
+      java-17-openjdk-headless
+      java-17-openjdk-devel
+    )
+  fi
+  for candidate in "${candidates[@]}"; do
+    if [[ "$package_manager" == "dnf" ]]; then
+      if "$package_manager" -q list --installed "$candidate" >/dev/null 2>&1 \
+          || "$package_manager" -q list --available "$candidate" >/dev/null 2>&1; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    else
+      if "$package_manager" -q list installed "$candidate" >/dev/null 2>&1 \
+          || "$package_manager" -q list available "$candidate" >/dev/null 2>&1; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 ensure_system_packages() {
-  command -v apt-get >/dev/null 2>&1 \
-    || die "Automatic dependency installation currently supports Debian and Ubuntu."
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install -y --no-install-recommends \
-    build-essential ca-certificates curl git openjdk-21-jdk-headless python3 tar util-linux xz-utils
+  local os_release_file="${1:-/etc/os-release}"
+  local distribution_id distribution_like distribution_name package_family
+  local package_manager java_package
+  distribution_id="$(os_release_value ID "$os_release_file")"
+  distribution_like="$(os_release_value ID_LIKE "$os_release_file")"
+  distribution_name="$(os_release_value PRETTY_NAME "$os_release_file")"
+  [[ -n "$distribution_name" ]] || distribution_name="${distribution_id:-unknown Linux distribution}"
+  package_family="$(linux_package_family "$distribution_id" "$distribution_like")"
+  if [[ -z "$package_family" ]]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      package_family="debian"
+    elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+      package_family="rpm"
+    fi
+  fi
+  printf 'Detected operating system: %s\n' "$distribution_name"
+  case "$package_family" in
+    debian)
+      command -v apt-get >/dev/null 2>&1 \
+        || die "${distribution_name} is Debian-based, but apt-get is unavailable."
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        build-essential ca-certificates curl git openjdk-21-jdk-headless \
+        python3 tar util-linux xz-utils
+      ;;
+    rpm)
+      if command -v dnf >/dev/null 2>&1; then
+        package_manager="dnf"
+      elif command -v yum >/dev/null 2>&1; then
+        package_manager="yum"
+      else
+        die "${distribution_name} is RPM-based, but neither dnf nor yum is available."
+      fi
+      "$package_manager" -y makecache
+      java_package="$(rpm_java_package "$package_manager" "$distribution_id" || true)"
+      [[ -n "$java_package" ]] \
+        || die "No Java 17 or 21 runtime package was found for ${distribution_name}. Enable the distribution's supported Java repository and rerun setup."
+      "$package_manager" install -y \
+        gcc gcc-c++ make ca-certificates curl git "$java_package" python3 \
+        shadow-utils tar gzip util-linux xz
+      ;;
+    *)
+      die "Automatic dependency installation does not support ${distribution_name}. Use Debian/Ubuntu or an RPM-based distribution with apt, dnf, or yum."
+      ;;
+  esac
 }
 
 install_node_toolchain() {

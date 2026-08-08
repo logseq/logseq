@@ -7,7 +7,11 @@ forwards traffic to the adapter on `127.0.0.1:10011`.
 
 ## Before you start
 
-Use a dedicated Debian or Ubuntu server with systemd on `x86_64` or `arm64`.
+Use a dedicated systemd server on `x86_64` or `arm64`. The installer supports
+Debian/Ubuntu (`apt`) and RPM-based cloud distributions (`dnf` or `yum`) whose
+enabled repositories provide Java 17 or 21, including OpenCloudOS 9, Amazon
+Linux 2023, and current RHEL-compatible distributions. On OpenCloudOS, the
+installer also recognizes the distribution's Tencent KonaJDK 17 packages.
 You need:
 
 - a domain whose DNS `A`/`AAAA` record already points to the server;

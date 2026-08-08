@@ -18,9 +18,9 @@ The deployment assets will live under `deps/db-sync/deploy/` and include:
 - Caddy reverse proxy configuration for automatic TLS;
 - generated `sync.env` configuration, never committed with secrets.
 
-The native installer targets one Debian or Ubuntu systemd host and one Sync
-adapter instance. It installs its build/runtime dependencies, but does not run
-a multi-node cluster, provide backups, or delete existing data.
+The native installer targets one Debian/Ubuntu or RPM-based systemd host and
+one Sync adapter instance. It installs its build/runtime dependencies, but does
+not run a multi-node cluster, provide backups, or delete existing data.
 
 ## Operator flow
 
@@ -32,7 +32,7 @@ a multi-node cluster, provide backups, or delete existing data.
    for the private loopback-only adapter port with `10011` as the default. Keep
    ACME HTTP validation on port `80`, explain the public/private exposure rules,
    reject duplicate ports, print the topology, and require one confirmation.
-4. Install missing native build/runtime dependencies on Debian or Ubuntu.
+4. Install missing native build/runtime dependencies with `apt`, `dnf`, or `yum`.
 5. Build into a new versioned release directory, then atomically switch the
    `current` symlink only after the build succeeds.
 6. Generate systemd, adapter, and Caddy configuration. Normal setup uses the
