@@ -43,6 +43,10 @@ env:
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
+  native-runtime:
+    name: Build native runtime packages
+    uses: ./.github/workflows/db-sync-native-runtime.yml
+
   test:
     runs-on: ubuntu-latest
 

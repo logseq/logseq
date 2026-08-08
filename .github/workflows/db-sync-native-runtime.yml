@@ -1,16 +1,13 @@
 name: db-sync native runtime
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - 'deps/common/**'
-      - 'deps/db/**'
-      - 'deps/db-sync/**'
-      - 'deps/graph-parser/**'
-      - 'deps/outliner/**'
-      - 'resources/**'
-      - '.github/workflows/db-sync-native-runtime.yml'
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'Release tag to create or update; empty builds artifacts only'
+        required: false
+        default: ''
+        type: string
   workflow_dispatch:
     inputs:
       release_tag:
