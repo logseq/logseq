@@ -57,7 +57,9 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Install production dependencies
-        run: pnpm install --frozen-lockfile --prod
+        run: |
+          pnpm install --frozen-lockfile --prod --ignore-workspace
+          pnpm rebuild better-sqlite3 --ignore-workspace
 
       - name: Build Node adapter
         run: pnpm build:node-adapter
