@@ -6,6 +6,7 @@ readonly source_dir="$(cd -- "$script_dir/../../.." && pwd)"
 readonly docker_install_url="https://docs.docker.com/engine/install/"
 readonly default_install_dir="${HOME}/.local/share/logseq-sync"
 readonly default_data_dir="${HOME}/.local/share/logseq-sync-data"
+readonly default_public_port="443"
 readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
 readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
@@ -127,6 +128,16 @@ valid_domain() {
      && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
 }
 
+https_url() {
+  local domain="$1"
+  local port="$2"
+  if [[ "$port" == "443" ]]; then
+    printf 'https://%s' "$domain"
+  else
+    printf 'https://%s:%s' "$domain" "$port"
+  fi
+}
+
 valid_http_url() {
   local url="$1"
   local authority host port
@@ -228,6 +239,7 @@ setup() {
   local install_dir data_dir endpoint_mode public_url bind_address public_port domain
   local issuer client_id jwks_url auth_mode log_level
   local existing_env="" previous_data_dir="" previous_endpoint_mode="" previous_public_url=""
+  local previous_public_port="" previous_url_port=""
   local previous_issuer="" previous_client_id="" previous_jwks_url="" previous_log_level=""
   local data_default endpoint_default domain_default public_url_default auth_default exposure
   local -a compose_args=()
@@ -238,6 +250,7 @@ setup() {
     previous_data_dir="$(read_env_value "$existing_env" LOGSEQ_SYNC_DATA_DIR)"
     previous_endpoint_mode="$(read_env_value "$existing_env" LOGSEQ_SYNC_ENDPOINT_MODE)"
     previous_public_url="$(read_env_value "$existing_env" DB_SYNC_BASE_URL)"
+    previous_public_port="$(read_env_value "$existing_env" DB_SYNC_PUBLIC_PORT)"
     previous_log_level="$(read_env_value "$existing_env" DB_SYNC_LOG_LEVEL)"
     previous_issuer="$(read_env_value "$existing_env" COGNITO_ISSUER)"
     previous_client_id="$(read_env_value "$existing_env" COGNITO_CLIENT_ID)"
@@ -264,15 +277,17 @@ setup() {
 
   if [[ "$endpoint_mode" == "https" ]]; then
     domain_default=""
-    if [[ "$previous_public_url" =~ ^https://([^:/]+):10010$ ]]; then
+    if [[ "$previous_public_url" =~ ^https://([^:/]+)(:([0-9]+))?$ ]]; then
       domain_default="${BASH_REMATCH[1]}"
+      previous_url_port="${BASH_REMATCH[3]:-443}"
     fi
     domain="$(read_value 'Public domain name' "$domain_default")"
     valid_domain "$domain" || die "HTTPS requires a valid DNS domain name, not an IP address."
-    public_url="https://${domain}:10010"
+    public_port="${previous_public_port:-${previous_url_port:-$default_public_port}}"
+    valid_port "$public_port" || die "The configured public HTTPS port is invalid."
+    public_url="$(https_url "$domain" "$public_port")"
     bind_address="127.0.0.1"
-    public_port="10010"
-    exposure="ports 80/tcp and 10010/tcp"
+    exposure="ports 80/tcp and ${public_port}/tcp"
   else
     public_url_default=""
     if [[ "$previous_public_url" == http://* ]]; then
@@ -363,7 +378,7 @@ COGNITO_CLIENT_ID=${client_id}
 COGNITO_JWKS_URL=${jwks_url}
 "
   if [[ "$endpoint_mode" == "https" ]]; then
-    sed "s/{DOMAIN}/${domain}/g" "$script_dir/Caddyfile.template" > "$install_dir/Caddyfile"
+    sed "s|{PUBLIC_URL}|${public_url}|g" "$script_dir/Caddyfile.template" > "$install_dir/Caddyfile"
   fi
 
   if [[ "$previous_endpoint_mode" == "https" && "$endpoint_mode" == "http" ]]; then

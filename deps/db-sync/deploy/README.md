@@ -2,7 +2,7 @@
 
 The recommended lightweight deployment runs a prebuilt Sync Node runtime and
 Caddy as two native systemd services. It does not require Docker or a local
-build environment. Caddy serves `HTTPS/WSS` on public port `10010` by default,
+build environment. Caddy serves `HTTPS/WSS` on public port `443` by default,
 obtains and renews the certificate, and forwards traffic to the adapter on
 `127.0.0.1:10011`.
 
@@ -20,7 +20,7 @@ You also need:
 
 - a domain whose DNS `A`/`AAAA` record already points to the server;
 - inbound TCP port `80` for certificate issuance and renewal;
-- inbound TCP port `10010` by default, or the custom HTTPS port selected during setup;
+- inbound TCP port `443` by default, or the custom HTTPS port selected during setup;
 - `sudo` access.
 
 Do not expose the private adapter port printed in the deployment plan. The
@@ -59,7 +59,7 @@ This wizard will configure a prebuilt Sync runtime, Caddy, automatic HTTPS, and 
 You only need a domain name, public HTTPS port, and private Sync port.
 
 Step 1/3 - Sync domain name: sync.example.com
-Step 2/3 - Public HTTPS port [10010]:
+Step 2/3 - Public HTTPS port [443]:
 Step 3/3 - Private Sync port [10011]:
 ```
 
@@ -96,10 +96,11 @@ After setup succeeds, enter the printed value in **Logseq → Settings → Advan
 → Sync Server URL**:
 
 ```text
-https://sync.example.com:10010
+https://sync.example.com
 ```
 
-The URL must include `https://` and the selected port.
+The URL must include `https://`. Include the selected port only when it is not
+the default HTTPS port `443`.
 
 ## Cloud firewall
 
@@ -109,12 +110,11 @@ server firewall:
 | Port | Source | Purpose |
 | --- | --- | --- |
 | TCP 80 | Internet | Automatic HTTPS certificate validation and renewal |
-| Selected HTTPS port (default TCP 10010) | Internet | Logseq HTTPS and secure WebSocket traffic |
+| Selected HTTPS port (default TCP 443) | Internet | Logseq HTTPS and secure WebSocket traffic |
 
-Port `443` is not used when the default port is selected. The adapter's internal
-port is private and must not be opened. If another process already owns port
-`80` or the selected HTTPS port, stop it or integrate the generated Caddy site
-into the existing reverse proxy before running setup.
+The adapter's internal port is private and must not be opened. If another
+process already owns port `80` or the selected HTTPS port, stop it or integrate
+the generated Caddy site into the existing reverse proxy before running setup.
 
 ## Operate and update
 
@@ -201,5 +201,5 @@ preferred:
 ./logseq-sync setup
 ```
 
-It exposes the same public `https://domain:10010` endpoint, but requires Docker
+It exposes the same public `https://domain` endpoint on port `443`, but requires Docker
 Engine and Docker Compose.

@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
-      - "10010:10010"
+      - "${DB_SYNC_PUBLIC_PORT:-443}:${DB_SYNC_PUBLIC_PORT:-443}"
     volumes:
       - ${LOGSEQ_SYNC_INSTALL_DIR:?Set by logseq-sync}/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

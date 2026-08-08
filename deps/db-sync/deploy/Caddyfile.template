@@ -1,4 +1,4 @@
-https://{DOMAIN}:10010 {
+{PUBLIC_URL} {
 	reverse_proxy sync:8080
 	tls {
 		issuer acme {

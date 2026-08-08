@@ -165,7 +165,7 @@ LOGSEQ_SYNC_GID=1000
 LOGSEQ_SYNC_ENDPOINT_MODE=https
 DB_SYNC_BASE_URL=https://old-sync.example.com:10010
 DB_SYNC_BIND_ADDRESS=127.0.0.1
-DB_SYNC_PUBLIC_PORT=8080
+DB_SYNC_PUBLIC_PORT=10010
 DB_SYNC_LOG_LEVEL=debug
 COGNITO_ISSUER=https://issuer.example.com/pool
 COGNITO_CLIENT_ID=custom-client
@@ -202,7 +202,7 @@ LOGSEQ_SYNC_GID=1000
 LOGSEQ_SYNC_ENDPOINT_MODE=https
 DB_SYNC_BASE_URL=https://old-sync.example.com:10010
 DB_SYNC_BIND_ADDRESS=127.0.0.1
-DB_SYNC_PUBLIC_PORT=8080
+DB_SYNC_PUBLIC_PORT=10010
 DB_SYNC_LOG_LEVEL=info
 COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
 COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
@@ -236,9 +236,9 @@ test_https_setup_force_recreates_caddy() {
   assert_success || return 1
   assert_contains "$(<"$sandbox/docker.log")" '--force-recreate'
   assert_contains "$(<"$sandbox/install/.env")" \
-    'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
+    'DB_SYNC_BASE_URL=https://sync.example.com' || return 1
   assert_contains "$(<"$sandbox/install/Caddyfile")" \
-    'https://sync.example.com:10010 {'
+    'https://sync.example.com {'
 }
 
 test_http_setup_verifies_public_endpoint() {

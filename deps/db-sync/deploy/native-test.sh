@@ -171,7 +171,10 @@ test_setup_uses_prebuilt_runtime_and_default_ports() {
   env_file="$(<"$sandbox/home/config/sync.env")"
   service_file="$(<"$sandbox/systemd/logseq-sync.service")"
   proxy_service_file="$(<"$sandbox/systemd/logseq-sync-caddy.service")"
-  assert_contains "$env_file" 'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
+  assert_contains "$env_file" 'DB_SYNC_BASE_URL=https://sync.example.com' || return 1
+  assert_contains "$env_file" 'LOGSEQ_SYNC_PUBLIC_PORT=443' || return 1
+  assert_contains "$(<"$sandbox/home/config/Caddyfile")" \
+    'https://sync.example.com {' || return 1
   assert_contains "$env_file" 'LOGSEQ_SYNC_INTERNAL_PORT=10011' || return 1
   assert_contains "$env_file" 'LOGSEQ_SYNC_RELEASE_REPOSITORY=example/logseq' || return 1
   assert_contains "$env_file" "LOGSEQ_SYNC_HOME=$sandbox/home" || return 1
@@ -188,11 +191,11 @@ test_setup_uses_prebuilt_runtime_and_default_ports() {
   assert_contains "$last_output" 'Starting Sync Node on 127.0.0.1:10011.' || return 1
   assert_contains "$last_output" \
     'Waiting for the private Sync health check at 127.0.0.1:10011 ready.' || return 1
-  assert_contains "$last_output" 'Starting Caddy on public HTTPS port 10010.' || return 1
+  assert_contains "$last_output" 'Starting Caddy on public HTTPS port 443.' || return 1
   assert_contains "$last_output" \
     'Caddy will obtain or renew the TLS certificate automatically; this can take a few minutes.' || return 1
   assert_contains "$last_output" \
-    'Waiting for the public HTTPS health check at https://sync.example.com:10010 ready.'
+    'Waiting for the public HTTPS health check at https://sync.example.com ready.'
 }
 
 test_setup_prints_progress_during_health_retries() {
@@ -284,9 +287,23 @@ test_setup_without_options_runs_guided_wizard() {
   assert_success || return 1
   assert_contains "$last_output" 'Logseq Sync setup' || return 1
   assert_contains "$last_output" 'Step 1/3 - Sync domain name' || return 1
-  assert_contains "$last_output" 'Step 2/3 - Public HTTPS port [10010]' || return 1
+  assert_contains "$last_output" 'Step 2/3 - Public HTTPS port [443]' || return 1
   assert_contains "$last_output" 'Step 3/3 - Private Sync port [10011]' || return 1
   assert_contains "$last_output" 'Runtime: prebuilt Linux x64 package'
+}
+
+test_guided_setup_accepts_custom_public_port() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  MOCK_ASSUME_YES=false MOCK_MANAGER_INPUT=$'sync.example.com\n10010\n\n\n' \
+    run_manager "$sandbox" setup
+  assert_success || return 1
+  assert_contains "$(<"$sandbox/home/config/sync.env")" \
+    'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
+  assert_contains "$(<"$sandbox/home/config/sync.env")" \
+    'LOGSEQ_SYNC_PUBLIC_PORT=10010' || return 1
+  assert_contains "$(<"$sandbox/home/config/Caddyfile")" \
+    'https://sync.example.com:10010 {'
 }
 
 test_setup_accepts_custom_ports() {
@@ -410,6 +427,7 @@ run_test test_setup_rejects_bad_runtime_checksum
 run_test test_setup_rejects_wrong_runtime_architecture
 run_test test_setup_rejects_incompatible_sqlite_runtime
 run_test test_setup_without_options_runs_guided_wizard
+run_test test_guided_setup_accepts_custom_public_port
 run_test test_setup_accepts_custom_ports
 run_test test_public_port_never_collides_with_private_port
 run_test test_setup_rejects_invalid_port_and_domain_inputs

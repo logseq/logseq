@@ -20,7 +20,7 @@ readonly canonical_manager_path="$bin_dir/logseq-sync-native"
 readonly caddy_path="$bin_dir/caddy"
 readonly sync_service="logseq-sync.service"
 readonly proxy_service="logseq-sync-caddy.service"
-readonly default_public_port="10010"
+readonly default_public_port="443"
 readonly default_internal_port="10011"
 readonly default_release_repository="logseq/logseq"
 readonly default_release_tag="db-sync-native"
@@ -139,6 +139,16 @@ valid_port() {
 valid_domain() {
   [[ ${#1} -le 253 \
      && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+https_url() {
+  local domain="$1"
+  local port="$2"
+  if [[ "$port" == "443" ]]; then
+    printf 'https://%s' "$domain"
+  else
+    printf 'https://%s:%s' "$domain" "$port"
+  fi
 }
 
 read_env_value() {
@@ -399,7 +409,8 @@ ensure_runtime_components() {
 
 write_configuration() {
   local domain="$1"
-  local public_url="https://${domain}:${public_port}"
+  local public_url
+  public_url="$(https_url "$domain" "$public_port")"
   mkdir -p "$config_dir" "$data_dir" "$caddy_data_dir" "$systemd_dir"
   set_owner -R logseq-sync:logseq-sync "$data_dir"
   set_owner caddy:caddy "$caddy_data_dir"
@@ -429,7 +440,7 @@ COGNITO_JWKS_URL=${default_cognito_jwks_url}
 "
   set_owner root:logseq-sync "$config_dir/sync.env"
   chmod 0640 "$config_dir/sync.env"
-  printf '%s\n' "https://${domain}:${public_port} {" \
+  printf '%s\n' "${public_url} {" \
     $'\t'"reverse_proxy 127.0.0.1:${internal_port}" \
     $'\ttls {' \
     $'\t\tissuer acme {' \
@@ -582,9 +593,9 @@ setup() {
     printf 'You only need a domain name, public HTTPS port, and private Sync port.\n\n'
   fi
   previous_url="$(read_env_value DB_SYNC_BASE_URL)"
-  if [[ "$previous_url" =~ ^https://([^:/]+):([0-9]+)$ ]]; then
+  if [[ "$previous_url" =~ ^https://([^:/]+)(:([0-9]+))?$ ]]; then
     previous_domain="${BASH_REMATCH[1]}"
-    previous_port="${BASH_REMATCH[2]}"
+    previous_port="${BASH_REMATCH[3]:-443}"
   fi
   if [[ -z "$domain" ]]; then
     printf 'Domain requirements:\n'
@@ -632,7 +643,7 @@ setup() {
   [[ "$public_port" != "$internal_port" ]] \
     || die "Public HTTPS port and private Sync port must be different."
   select_release_source
-  public_url="https://${domain}:${public_port}"
+  public_url="$(https_url "$domain" "$public_port")"
   printf '\nDeployment plan:\n'
   printf '  DNS: %s -> %s\n' "$domain" "$resolved_ips"
   printf '  Public endpoint (enter in Logseq): %s\n' "$public_url"

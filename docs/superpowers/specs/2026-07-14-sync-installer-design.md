@@ -39,7 +39,7 @@ can select a different home once with `LOGSEQ_SYNC_HOME`.
 2. Validate Linux and systemd, explain that the domain must be a hostname whose
    propagated public `A`/`AAAA` record points to this server, then prompt for
    and validate it. Show the addresses returned by DNS.
-3. Prompt for the public HTTPS/WSS port with `10010` as the default, then prompt
+3. Prompt for the public HTTPS/WSS port with `443` as the default, then prompt
    for the private loopback-only adapter port with `10011` as the default. Keep
    ACME HTTP validation on port `80`, explain the public/private exposure rules,
    reject duplicate ports, print the topology, and require one confirmation.
@@ -98,7 +98,7 @@ data intact, shows recent journal entries, and directs the operator to logs.
 
 ```text
 Logseq Desktop/Web
-  -> HTTPS/WSS :10010 (default, operator-configurable)
+  -> HTTPS/WSS :443 (default, operator-configurable)
   -> Caddy systemd service
   -> DB Sync Node adapter at 127.0.0.1:10011
   -> persistent host data directory
