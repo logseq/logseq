@@ -53,6 +53,9 @@ on:
   # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
   #   - cron: '0 14 * * MON-FRI'
 
+permissions:
+  contents: read
+
 env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
@@ -668,6 +671,9 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
+    permissions:
+      # Publishes the nightly release and uploads the artifacts to it.
+      contents: write
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -748,6 +754,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
+    permissions:
+      # Creates the beta/stable release draft and uploads the artifacts.
+      contents: write
     outputs:
       version: ${{ steps.ref.outputs.version }}
     steps:

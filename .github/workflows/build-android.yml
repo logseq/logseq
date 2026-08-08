@@ -40,6 +40,9 @@ on:
       SENTRY_AUTH_TOKEN:
         required: true
 
+permissions:
+  contents: read
+
 env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'

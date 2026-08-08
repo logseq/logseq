@@ -10,6 +10,9 @@ on:
         required: true
         default: "master"
 
+permissions:
+  contents: read
+
 env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'

@@ -6,6 +6,9 @@ on:
   release:
     types: [released]
 
+permissions:
+  contents: read
+
 env:
   CLOJURE_VERSION: '1.12.4.1618'
 
@@ -13,6 +16,10 @@ jobs:
 
   build-docker:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      # Pushes the image to ghcr.io with the workflow token.
+      packages: write
 
     steps:
       - name: Checkout
