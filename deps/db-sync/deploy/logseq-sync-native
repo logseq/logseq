@@ -496,15 +496,20 @@ wait_for_url() {
   local url="$1"
   local attempts="$2"
   local delay="$3"
+  local description="${4:-$url}"
   local body
+  printf 'Waiting for %s' "$description"
   while (( attempts > 0 )); do
     body="$(curl --fail --silent --show-error --max-time 5 "$url/health" 2>/dev/null || true)"
     if [[ "$body" == '{"ok":true}' ]]; then
+      printf ' ready.\n'
       return 0
     fi
     attempts=$((attempts - 1))
+    printf '.'
     (( attempts > 0 )) && sleep "$delay"
   done
+  printf '\n'
   return 1
 }
 
@@ -516,14 +521,19 @@ start_services() {
   fi
   systemctl daemon-reload
   systemctl enable "$sync_service" "$proxy_service" >/dev/null
+  printf 'Starting Sync Node on 127.0.0.1:%s.\n' "$internal_port"
   systemctl restart "$sync_service"
-  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2; then
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2 \
+    "the private Sync health check at 127.0.0.1:${internal_port}"; then
     journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
     printf 'Sync did not become healthy.\n' >&2
     return 1
   fi
+  printf 'Starting Caddy on public HTTPS port %s.\n' "$public_port"
+  printf 'Caddy will obtain or renew the TLS certificate automatically; this can take a few minutes.\n'
   systemctl restart "$proxy_service"
-  if ! wait_for_url "$public_url" 24 5; then
+  if ! wait_for_url "$public_url" 24 5 \
+    "the public HTTPS health check at ${public_url}"; then
     journalctl -u "$proxy_service" --no-pager -n 30 >&2 || true
     printf 'HTTPS did not become reachable. Confirm DNS and inbound TCP ports 80 and %s.\n' \
       "$public_port" >&2
@@ -663,13 +673,15 @@ update() {
   verify_service_runtime
   install_manager
   systemctl restart "$sync_service"
-  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2; then
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2 \
+    "the private Sync health check at 127.0.0.1:${internal_port}"; then
     journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
     replace_current_release "$previous_release"
     systemctl restart "$sync_service" || true
     die "Updated Sync process did not become healthy; the previous release was restored."
   fi
-  if ! wait_for_url "$public_url" 6 2; then
+  if ! wait_for_url "$public_url" 6 2 \
+    "the public HTTPS health check at ${public_url}"; then
     replace_current_release "$previous_release"
     systemctl restart "$sync_service" || true
     die "Updated public endpoint is unavailable; the previous release was restored."

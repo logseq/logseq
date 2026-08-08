@@ -68,6 +68,15 @@ EOF
   cat > "$sandbox/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_CURL_LOG"
+curl_call_count=0
+if [[ -f "$MOCK_CURL_COUNT_FILE" ]]; then
+  curl_call_count="$(<"$MOCK_CURL_COUNT_FILE")"
+fi
+curl_call_count=$((curl_call_count + 1))
+printf '%s\n' "$curl_call_count" > "$MOCK_CURL_COUNT_FILE"
+if (( curl_call_count <= MOCK_CURL_FAILURES )); then
+  exit 22
+fi
 printf '%s' '{"ok":true}'
 EOF
 
@@ -109,6 +118,8 @@ run_manager() {
     LOGSEQ_SYNC_RUNTIME_ARCHIVE="$sandbox/logseq-sync-runtime-linux-x64.tar.gz" \
     LOGSEQ_SYNC_RUNTIME_CHECKSUM="$sandbox/logseq-sync-runtime-linux-x64.tar.gz.sha256" \
     MOCK_CURL_LOG="$sandbox/curl.log" \
+    MOCK_CURL_COUNT_FILE="$sandbox/curl-count" \
+    MOCK_CURL_FAILURES="${MOCK_CURL_FAILURES:-0}" \
     MOCK_SYSTEMCTL_LOG="$sandbox/systemctl.log" \
     MOCK_JOURNAL_LOG="$sandbox/journal.log" \
     MOCK_CADDY_LOG="$sandbox/caddy.log" \
@@ -173,7 +184,24 @@ test_setup_uses_prebuilt_runtime_and_default_ports() {
   [[ -L "$sandbox/bin/logseq-sync-native-installed" ]] || return 1
   assert_not_contains "$env_file" 'LOGSEQ_SYNC_NODE_PATH=' || return 1
   assert_not_contains "$last_output" 'Clojure' || return 1
-  assert_contains "$last_output" 'Installed Sync runtime runtime-v1 with bundled v24.0.0'
+  assert_contains "$last_output" 'Installed Sync runtime runtime-v1 with bundled v24.0.0' || return 1
+  assert_contains "$last_output" 'Starting Sync Node on 127.0.0.1:10011.' || return 1
+  assert_contains "$last_output" \
+    'Waiting for the private Sync health check at 127.0.0.1:10011 ready.' || return 1
+  assert_contains "$last_output" 'Starting Caddy on public HTTPS port 10010.' || return 1
+  assert_contains "$last_output" \
+    'Caddy will obtain or renew the TLS certificate automatically; this can take a few minutes.' || return 1
+  assert_contains "$last_output" \
+    'Waiting for the public HTTPS health check at https://sync.example.com:10010 ready.'
+}
+
+test_setup_prints_progress_during_health_retries() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  MOCK_CURL_FAILURES=1 run_manager "$sandbox" setup --domain sync.example.com
+  assert_success || return 1
+  assert_contains "$last_output" \
+    'Waiting for the private Sync health check at 127.0.0.1:10011. ready.'
 }
 
 test_setup_ignores_broken_system_node_and_build_tools() {
@@ -375,6 +403,7 @@ run_test() {
 }
 
 run_test test_setup_uses_prebuilt_runtime_and_default_ports
+run_test test_setup_prints_progress_during_health_retries
 run_test test_setup_ignores_broken_system_node_and_build_tools
 run_test test_setup_does_not_invoke_os_package_manager
 run_test test_setup_rejects_bad_runtime_checksum
