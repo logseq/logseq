@@ -1,0 +1,105 @@
+name: db-sync native release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to create or update'
+        required: true
+        default: 'db-sync-native'
+        type: string
+  workflow_run:
+    workflows:
+      - 'logseq/db-sync CI'
+    types:
+      - completed
+  push:
+    tags:
+      - 'db-sync-native-v*'
+
+concurrency:
+  group: db-sync-native-release-${{ github.ref_type == 'tag' && github.ref_name || 'rolling' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: Build native runtime packages
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master')
+    uses: ./.github/workflows/db-sync-native-runtime.yml
+
+  release:
+    name: Publish runtime release
+    needs: runtime
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Reject a superseded rolling release
+        if: github.event_name == 'workflow_run'
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          current_master_sha="$(git ls-remote origin refs/heads/master | awk '{print $1}')"
+          if [[ "$current_master_sha" != "$RELEASE_SHA" ]]; then
+            printf 'Skipping superseded release %s; master is now %s.\n' \
+              "$RELEASE_SHA" "$current_master_sha" >&2
+            exit 1
+          fi
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: logseq-sync-runtime-linux-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Prepare manager asset
+        env:
+          DEFAULT_RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          sed "s|readonly default_release_repository=\"logseq/logseq\"|readonly default_release_repository=\"${DEFAULT_RELEASE_REPOSITORY}\"|" \
+            deps/db-sync/deploy/logseq-sync-native \
+            > artifacts/logseq-sync-native
+          chmod 0755 artifacts/logseq-sync-native
+          cd artifacts
+          sha256sum logseq-sync-native > logseq-sync-native.sha256
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag || 'db-sync-native' }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            release_tag="${GITHUB_REF#refs/tags/}"
+          else
+            release_tag="$REQUESTED_TAG"
+          fi
+          [[ "$release_tag" =~ ^db-sync-native(-v[0-9A-Za-z._-]+)?$ ]] || {
+            printf 'Invalid native runtime release tag: %s\n' "$release_tag" >&2
+            exit 1
+          }
+          if ! gh release view "$release_tag" >/dev/null 2>&1; then
+            release_flags=()
+            case "$release_tag" in
+              *-test.*|*-rc.*) release_flags+=(--prerelease) ;;
+            esac
+            gh release create "$release_tag" \
+              --target "$RELEASE_SHA" \
+              --title "Logseq Sync native runtime" \
+              --notes "Prebuilt Linux x64 and arm64 runtimes for the native self-hosted Sync installer." \
+              "${release_flags[@]}"
+          fi
+          gh release upload "$release_tag" artifacts/* --clobber

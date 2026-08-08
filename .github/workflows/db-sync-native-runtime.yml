@@ -1,0 +1,143 @@
+name: db-sync native runtime
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CLOJURE_VERSION: '1.12.4.1618'
+  JAVA_VERSION: '21'
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  build:
+    name: Build Linux ${{ matrix.arch }} runtime
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: deps/db-sync
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: deps/db-sync/pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Install production dependencies
+        run: |
+          pnpm install --frozen-lockfile --prod --ignore-workspace
+          pnpm rebuild better-sqlite3 --ignore-workspace
+
+      - name: Build Node adapter
+        run: pnpm build:node-adapter
+
+      - name: Check Linux runtime compatibility baseline
+        run: |
+          sqlite_addon="$(find node_modules -path '*/better-sqlite3/build/Release/better_sqlite3.node' -print -quit)"
+          test -n "$sqlite_addon"
+          for binary in "$(command -v node)" "$sqlite_addon"; do
+            highest_glibc="$(
+              readelf --version-info "$binary" \
+                | sed -n 's/.*Name: \(GLIBC_[0-9.]*\).*/\1/p' \
+                | sort -Vu \
+                | tail -n 1
+            )"
+            test -n "$highest_glibc"
+            compatible_highest="$(printf '%s\n%s\n' \
+              'GLIBC_2.29' "$highest_glibc" | sort -V | tail -n 1)"
+            if [[ "$compatible_highest" != 'GLIBC_2.29' ]]; then
+              printf '%s requires %s; the runtime baseline is GLIBC_2.29.\n' \
+                "$binary" "$highest_glibc" >&2
+              exit 1
+            fi
+          done
+
+      - name: Package runtime
+        env:
+          DEFAULT_RELEASE_REPOSITORY: ${{ github.repository }}
+          RUNTIME_ARCH: ${{ matrix.arch }}
+          RUNTIME_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          chmod +x deploy/package-native-runtime.sh deploy/logseq-sync-native
+          deploy/package-native-runtime.sh \
+            "$RUNTIME_VERSION" "$RUNTIME_ARCH" "$RUNNER_TEMP/artifacts"
+
+      - name: Smoke test packaged runtime
+        env:
+          RUNTIME_ARCH: ${{ matrix.arch }}
+        run: |
+          runtime_test_dir="$RUNNER_TEMP/runtime-test"
+          mkdir -p "$runtime_test_dir"
+          tar -xzf \
+            "$RUNNER_TEMP/artifacts/logseq-sync-runtime-linux-${RUNTIME_ARCH}.tar.gz" \
+            -C "$runtime_test_dir"
+          runtime="$runtime_test_dir/logseq-sync-runtime"
+          test "$(cat "$runtime/ARCHITECTURE")" = "$RUNTIME_ARCH"
+          "$runtime/node/bin/node" --version
+          DB_SYNC_HOST=127.0.0.1 \
+          DB_SYNC_PORT=18080 \
+          DB_SYNC_BASE_URL=http://127.0.0.1:18080 \
+          DB_SYNC_DATA_DIR="$RUNNER_TEMP/runtime-data" \
+          DB_SYNC_STORAGE_DRIVER=sqlite \
+          DB_SYNC_ASSETS_DRIVER=filesystem \
+            "$runtime/node/bin/node" "$runtime/app/node-adapter.js" \
+              >"$RUNNER_TEMP/runtime.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health \
+                | grep -q '"ok":true'; then
+              exit 0
+            fi
+            if ! kill -0 "$runtime_pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/runtime.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/runtime.log"
+          exit 1
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-sync-runtime-linux-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/artifacts/*.tar.gz
+            ${{ runner.temp }}/artifacts/*.sha256
+          if-no-files-found: error
