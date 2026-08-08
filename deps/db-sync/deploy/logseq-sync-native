@@ -3,12 +3,21 @@ set -euo pipefail
 
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly checkout_root="$(cd -- "$script_dir/../../.." 2>/dev/null && pwd || true)"
-readonly install_root="${LOGSEQ_SYNC_INSTALL_ROOT:-/opt/logseq-sync}"
-readonly config_dir="${LOGSEQ_SYNC_CONFIG_DIR:-/etc/logseq-sync}"
-readonly data_dir="${LOGSEQ_SYNC_DATA_DIR:-/var/lib/logseq-sync}"
+resolved_script_path="$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+inferred_home=""
+if [[ "$resolved_script_path" == */bin/logseq-sync-native ]]; then
+  inferred_home="${resolved_script_path%/bin/logseq-sync-native}"
+fi
+readonly sync_home="${LOGSEQ_SYNC_HOME:-${inferred_home:-/opt/logseq-sync}}"
+readonly install_root="$sync_home"
+readonly bin_dir="$sync_home/bin"
+readonly config_dir="$sync_home/config"
+readonly data_dir="$sync_home/data"
 readonly systemd_dir="${LOGSEQ_SYNC_SYSTEMD_DIR:-/etc/systemd/system}"
-readonly caddy_data_dir="${LOGSEQ_SYNC_CADDY_DATA_DIR:-/var/lib/logseq-sync-caddy}"
+readonly caddy_data_dir="$sync_home/caddy-data"
 readonly manager_path="${LOGSEQ_SYNC_MANAGER_PATH:-/usr/local/bin/logseq-sync-native}"
+readonly canonical_manager_path="$bin_dir/logseq-sync-native"
+readonly caddy_path="$bin_dir/caddy"
 readonly sync_service="logseq-sync.service"
 readonly proxy_service="logseq-sync-caddy.service"
 readonly default_public_port="10010"
@@ -76,7 +85,7 @@ require_commands() {
 
 validate_install_paths() {
   local path
-  for path in "$install_root" "$config_dir" "$data_dir" "$systemd_dir" \
+  for path in "$sync_home" "$bin_dir" "$config_dir" "$data_dir" "$systemd_dir" \
     "$caddy_data_dir" "$manager_path"; do
     [[ "$path" == /* && "$path" != "/" && "$path" != "/opt" \
        && "$path" != "/etc" && "$path" != "/var" && "$path" != "/var/lib" \
@@ -141,7 +150,7 @@ read_env_value() {
 backup_file() {
   local path="$1"
   local timestamp backup suffix=0
-  [[ -e "$path" ]] || return 0
+  [[ -e "$path" || -L "$path" ]] || return 0
   timestamp="$(date +%Y%m%d%H%M%S)"
   backup="${path}.backup-${timestamp}"
   while [[ -e "$backup" ]]; do
@@ -316,15 +325,15 @@ install_runtime() {
 
 install_caddy() {
   local temp_file
-  [[ -x "$install_root/toolchain/bin/caddy" ]] && return 0
+  [[ -x "$caddy_path" ]] && return 0
   temp_file="$(mktemp /tmp/logseq-sync-caddy.XXXXXX)"
   register_temporary_path "$temp_file"
   printf 'Downloading Caddy for automatic HTTPS.\n'
   curl --fail --location --show-error \
     "https://caddyserver.com/api/download?os=linux&arch=$(caddy_architecture)" \
     -o "$temp_file"
-  mkdir -p "$install_root/toolchain/bin"
-  install -m 0755 "$temp_file" "$install_root/toolchain/bin/caddy"
+  mkdir -p "$bin_dir"
+  install -m 0755 "$temp_file" "$caddy_path"
   rm -f -- "$temp_file"
 }
 
@@ -337,14 +346,24 @@ verify_service_runtime() {
 install_manager() {
   local manager_source="$install_root/current/bin/logseq-sync-native"
   [[ -f "$manager_source" ]] || manager_source="${BASH_SOURCE[0]}"
-  mkdir -p "$(dirname -- "$manager_path")"
-  if [[ -e "$manager_path" ]]; then
-    if [[ "$manager_source" -ef "$manager_path" ]] || cmp -s "$manager_source" "$manager_path"; then
-      return 0
-    fi
+  mkdir -p "$bin_dir" "$(dirname -- "$manager_path")"
+  if [[ ! -e "$canonical_manager_path" ]] \
+    || ! cmp -s "$manager_source" "$canonical_manager_path"; then
+    backup_file "$canonical_manager_path"
+    install -m 0755 "$manager_source" "$canonical_manager_path"
+  fi
+  if [[ "$manager_path" == "$canonical_manager_path" ]]; then
+    return 0
+  fi
+  if [[ -L "$manager_path" \
+     && "$(readlink -f -- "$manager_path" 2>/dev/null || true)" == "$canonical_manager_path" ]]; then
+    return 0
   fi
   backup_file "$manager_path"
-  install -m 0755 "$manager_source" "$manager_path"
+  if [[ -e "$manager_path" || -L "$manager_path" ]]; then
+    unlink "$manager_path"
+  fi
+  ln -s "$canonical_manager_path" "$manager_path"
 }
 
 bootstrap() {
@@ -394,6 +413,7 @@ write_configuration() {
 LOGSEQ_SYNC_RELEASE_REPOSITORY=${release_repository}
 LOGSEQ_SYNC_RELEASE_TAG=${release_tag}
 LOGSEQ_SYNC_RUNTIME_SHA256=${runtime_sha256}
+LOGSEQ_SYNC_HOME=${sync_home}
 LOGSEQ_SYNC_PUBLIC_PORT=${public_port}
 LOGSEQ_SYNC_INTERNAL_PORT=${internal_port}
 DB_SYNC_HOST=127.0.0.1
@@ -454,8 +474,8 @@ User=caddy
 Group=caddy
 Environment=XDG_DATA_HOME=${caddy_data_dir}
 Environment=XDG_CONFIG_HOME=${caddy_data_dir}
-ExecStart=${install_root}/toolchain/bin/caddy run --environ --config ${config_dir}/Caddyfile
-ExecReload=${install_root}/toolchain/bin/caddy reload --config ${config_dir}/Caddyfile --force
+ExecStart=${caddy_path} run --environ --config ${config_dir}/Caddyfile
+ExecReload=${caddy_path} reload --config ${config_dir}/Caddyfile --force
 TimeoutStopSec=5s
 LimitNOFILE=1048576
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -490,7 +510,7 @@ wait_for_url() {
 
 start_services() {
   local public_url="$1"
-  if ! "$install_root/toolchain/bin/caddy" validate --config "$config_dir/Caddyfile"; then
+  if ! "$caddy_path" validate --config "$config_dir/Caddyfile"; then
     printf 'Caddy configuration validation failed.\n' >&2
     return 1
   fi
@@ -610,6 +630,7 @@ setup() {
   printf '  Private adapter: 127.0.0.1:%s (local only, do not expose)\n' "$internal_port"
   printf '  Runtime: prebuilt Linux %s package from %s (%s)\n' \
     "$(architecture)" "$release_repository" "$release_tag"
+  printf '  Home: %s\n' "$sync_home"
   printf '  Data: %s\n' "$data_dir"
   printf '  Services: Sync Node + Caddy (systemd)\n\n'
   confirm 'Download and start Logseq Sync?' yes || die "Setup cancelled."
@@ -706,6 +727,9 @@ It does not need system Node.js, Java, Clojure, pnpm, Python, or a compiler.
 Advanced release overrides:
   LOGSEQ_SYNC_RELEASE_REPOSITORY=<owner/repository>
   LOGSEQ_SYNC_RELEASE_TAG=<db-sync-native or versioned tag>
+
+Advanced install location override (first setup only):
+  LOGSEQ_SYNC_HOME=/srv/logseq-sync
 EOF
 }
 

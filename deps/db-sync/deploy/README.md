@@ -45,9 +45,9 @@ sudo ./logseq-sync-native setup
 ```
 
 Setup automatically selects the Linux `x64` or `arm64` runtime, verifies its
-SHA-256 checksum, installs it under `/opt/logseq-sync`, downloads Caddy, and
-creates the two systemd services. Compilation happens only in GitHub Actions,
-not on the server.
+SHA-256 checksum, installs the runtime, configuration, data, and Caddy under
+one `/opt/logseq-sync` directory, and creates the two systemd services.
+Compilation happens only in GitHub Actions, not on the server.
 
 The setup wizard asks for the domain, public HTTPS port, and private Sync port.
 Press Enter to accept the port defaults, or enter other available ports. It
@@ -143,21 +143,31 @@ sudo LOGSEQ_SYNC_RELEASE_REPOSITORY=owner/logseq \
 
 The selected repository and tag are persisted for later updates.
 
+To put the complete deployment somewhere other than `/opt/logseq-sync`, set
+one home directory on the first setup. The installed management command
+remembers its home through its symlink, so later commands need no extra option:
+
+```bash
+sudo LOGSEQ_SYNC_HOME=/srv/logseq-sync ./logseq-sync-native setup
+sudo logseq-sync-native status
+```
+
 ## What gets installed
 
 | Path | Contents |
 | --- | --- |
+| `/opt/logseq-sync/bin` | Caddy and the canonical management command |
 | `/opt/logseq-sync/releases` | versioned, self-contained Sync runtimes |
 | `/opt/logseq-sync/current` | active runtime symlink |
-| `/opt/logseq-sync/toolchain/bin/caddy` | Caddy executable |
-| `/etc/logseq-sync` | generated environment and Caddy configuration |
-| `/var/lib/logseq-sync` | graph SQLite files and assets |
-| `/var/lib/logseq-sync-caddy` | certificates and Caddy state |
+| `/opt/logseq-sync/config` | generated environment and Caddy configuration |
+| `/opt/logseq-sync/data` | graph SQLite files and assets |
+| `/opt/logseq-sync/caddy-data` | certificates and Caddy state |
 | `/etc/systemd/system` | Sync and Caddy service units |
-| `/usr/local/bin/logseq-sync-native` | management command |
+| `/usr/local/bin/logseq-sync-native` | symlink to the management command |
 
-The service is experimental. Back up `/var/lib/logseq-sync` before relying on
-it for important graphs.
+The service is experimental. Back up `/opt/logseq-sync/data` before relying on
+it for important graphs. Back up the complete `/opt/logseq-sync` directory when
+you also want to preserve configuration and existing certificates.
 
 ## Building and publishing runtimes
 

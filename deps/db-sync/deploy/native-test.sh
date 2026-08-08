@@ -44,7 +44,7 @@ EOF
 make_sandbox() {
   local sandbox
   sandbox="$(mktemp -d "$suite_tmp/case.XXXXXX")"
-  mkdir -p "$sandbox/bin" "$sandbox/install/toolchain/bin"
+  mkdir -p "$sandbox/bin" "$sandbox/home/bin"
 
   cat > "$sandbox/bin/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -83,13 +83,13 @@ printf '%s\n' "$*" >> "$MOCK_JOURNAL_LOG"
 exit 0
 EOF
 
-  cat > "$sandbox/install/toolchain/bin/caddy" <<'EOF'
+  cat > "$sandbox/home/bin/caddy" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_CADDY_LOG"
 exit 0
 EOF
 
-  chmod +x "$sandbox/bin/"* "$sandbox/install/toolchain/bin/caddy"
+  chmod +x "$sandbox/bin/"* "$sandbox/home/bin/caddy"
   make_runtime_fixture "$sandbox"
   printf '%s' "$sandbox"
 }
@@ -102,11 +102,8 @@ run_manager() {
     PATH="$sandbox/bin:$PATH" \
     LOGSEQ_SYNC_TEST_MODE=true \
     LOGSEQ_SYNC_ASSUME_YES="${MOCK_ASSUME_YES:-true}" \
-    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/install" \
-    LOGSEQ_SYNC_CONFIG_DIR="$sandbox/config" \
-    LOGSEQ_SYNC_DATA_DIR="$sandbox/data" \
+    LOGSEQ_SYNC_HOME="${MOCK_SYNC_HOME-$sandbox/home}" \
     LOGSEQ_SYNC_SYSTEMD_DIR="$sandbox/systemd" \
-    LOGSEQ_SYNC_CADDY_DATA_DIR="$sandbox/caddy-data" \
     LOGSEQ_SYNC_MANAGER_PATH="$sandbox/bin/logseq-sync-native-installed" \
     LOGSEQ_SYNC_RELEASE_REPOSITORY="example/logseq" \
     LOGSEQ_SYNC_RUNTIME_ARCHIVE="$sandbox/logseq-sync-runtime-linux-x64.tar.gz" \
@@ -156,17 +153,24 @@ assert_failure() {
 }
 
 test_setup_uses_prebuilt_runtime_and_default_ports() {
-  local sandbox env_file service_file
+  local sandbox env_file service_file proxy_service_file
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com
   assert_success || return 1
-  env_file="$(<"$sandbox/config/sync.env")"
+  env_file="$(<"$sandbox/home/config/sync.env")"
   service_file="$(<"$sandbox/systemd/logseq-sync.service")"
+  proxy_service_file="$(<"$sandbox/systemd/logseq-sync-caddy.service")"
   assert_contains "$env_file" 'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
   assert_contains "$env_file" 'LOGSEQ_SYNC_INTERNAL_PORT=10011' || return 1
   assert_contains "$env_file" 'LOGSEQ_SYNC_RELEASE_REPOSITORY=example/logseq' || return 1
+  assert_contains "$env_file" "LOGSEQ_SYNC_HOME=$sandbox/home" || return 1
+  assert_contains "$env_file" "DB_SYNC_DATA_DIR=$sandbox/home/data" || return 1
   assert_contains "$service_file" \
-    "ExecStart=$sandbox/install/current/node/bin/node $sandbox/install/current/app/node-adapter.js" || return 1
+    "ExecStart=$sandbox/home/current/node/bin/node $sandbox/home/current/app/node-adapter.js" || return 1
+  assert_contains "$proxy_service_file" \
+    "ExecStart=$sandbox/home/bin/caddy run" || return 1
+  [[ -x "$sandbox/home/bin/logseq-sync-native" ]] || return 1
+  [[ -L "$sandbox/bin/logseq-sync-native-installed" ]] || return 1
   assert_not_contains "$env_file" 'LOGSEQ_SYNC_NODE_PATH=' || return 1
   assert_not_contains "$last_output" 'Clojure' || return 1
   assert_contains "$last_output" 'Installed Sync runtime runtime-v1 with bundled v24.0.0'
@@ -240,7 +244,7 @@ test_setup_rejects_incompatible_sqlite_runtime() {
   sandbox="$(make_sandbox)"
   MOCK_SQLITE_STATUS=1 run_manager "$sandbox" setup --domain sync.example.com
   assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
+  [[ ! -e "$sandbox/home/config" ]] || return 1
   assert_contains "$last_output" 'SQLite module cannot run on this server'
 }
 
@@ -263,10 +267,10 @@ test_setup_accepts_custom_ports() {
   run_manager "$sandbox" setup --domain sync.example.com \
     --public-port 12000 --internal-port 13000
   assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'DB_SYNC_PORT=13000' || return 1
-  assert_contains "$(<"$sandbox/config/Caddyfile")" \
+  assert_contains "$(<"$sandbox/home/config/sync.env")" 'DB_SYNC_PORT=13000' || return 1
+  assert_contains "$(<"$sandbox/home/config/Caddyfile")" \
     'https://sync.example.com:12000 {' || return 1
-  assert_contains "$(<"$sandbox/config/Caddyfile")" \
+  assert_contains "$(<"$sandbox/home/config/Caddyfile")" \
     'reverse_proxy 127.0.0.1:13000'
 }
 
@@ -275,7 +279,7 @@ test_public_port_never_collides_with_private_port() {
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com --public-port 10011
   assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=10012'
+  assert_contains "$(<"$sandbox/home/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=10012'
 }
 
 test_setup_rejects_invalid_port_and_domain_inputs() {
@@ -298,8 +302,8 @@ test_unresolved_domain_stops_before_install() {
   sandbox="$(make_sandbox)"
   MOCK_DNS_STATUS=1 run_manager "$sandbox" setup --domain sync.example.com
   assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
-  [[ ! -e "$sandbox/install/current" ]] || return 1
+  [[ ! -e "$sandbox/home/config" ]] || return 1
+  [[ ! -e "$sandbox/home/current" ]] || return 1
   assert_contains "$last_output" 'domain does not currently resolve'
 }
 
@@ -308,7 +312,7 @@ test_default_auth_is_generated_without_prompts() {
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com
   assert_success || return 1
-  env_file="$(<"$sandbox/config/sync.env")"
+  env_file="$(<"$sandbox/home/config/sync.env")"
   assert_contains "$env_file" \
     'COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8' || return 1
   assert_contains "$env_file" 'COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6'
@@ -333,14 +337,14 @@ test_update_preserves_configuration_and_switches_release() {
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com
   assert_success || return 1
-  before_env="$(<"$sandbox/config/sync.env")"
-  before_release="$(readlink "$sandbox/install/current")"
+  before_env="$(<"$sandbox/home/config/sync.env")"
+  before_release="$(readlink "$sandbox/home/current")"
   make_runtime_fixture "$sandbox" runtime-v2
   run_manager "$sandbox" update
   assert_success || return 1
-  after_release="$(readlink "$sandbox/install/current")"
+  after_release="$(readlink "$sandbox/home/current")"
   [[ "$before_release" != "$after_release" ]] || return 1
-  [[ "$before_env" == "$(<"$sandbox/config/sync.env")" ]] || return 1
+  [[ "$before_env" == "$(<"$sandbox/home/config/sync.env")" ]] || return 1
   assert_contains "$last_output" 'Installed Sync runtime runtime-v2' || return 1
   assert_contains "$last_output" 'was updated successfully'
 }
@@ -353,7 +357,7 @@ test_installed_manager_can_rerun_setup() {
   installed_manager="$sandbox/bin/logseq-sync-native-installed"
   [[ -x "$installed_manager" ]] || return 1
   manager_under_test="$installed_manager"
-  run_manager "$sandbox" setup --domain sync.example.com
+  MOCK_SYNC_HOME="" run_manager "$sandbox" setup --domain sync.example.com
   manager_under_test="$manager"
   assert_success || return 1
   assert_contains "$last_output" 'https://sync.example.com:12000'

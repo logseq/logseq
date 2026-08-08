@@ -26,6 +26,13 @@ Clojure, pnpm, Python, or compiler packages. It downloads a prebuilt runtime
 and Caddy, but does not run a multi-node cluster, provide backups, or delete
 existing data.
 
+All deployment-owned files use one home directory, `/opt/logseq-sync` by
+default. Its `bin`, `current`, `releases`, `config`, `data`, and `caddy-data`
+children contain the executable tools, runtime, configuration, graph data, and
+certificate state. Only the systemd unit files and the conventional
+`/usr/local/bin/logseq-sync-native` symlink live outside that home. Operators
+can select a different home once with `LOGSEQ_SYNC_HOME`.
+
 ## Operator flow
 
 1. Run `sudo logseq-sync-native setup` to enter the guided flow.
