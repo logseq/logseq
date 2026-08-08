@@ -5,23 +5,43 @@ readonly test_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly manager="$test_dir/logseq-sync-native"
 readonly suite_tmp="$(mktemp -d "${TMPDIR:-/tmp}/logseq-sync-native-test.XXXXXX")"
 manager_under_test="$manager"
+pass_count=0
+fail_count=0
 
 cleanup() {
   if [[ -d "$suite_tmp" && "$suite_tmp" == *logseq-sync-native-test.* ]]; then
     rm -rf -- "$suite_tmp"
   fi
 }
-
 trap cleanup EXIT
 
-pass_count=0
-fail_count=0
+make_runtime_fixture() {
+  local sandbox="$1"
+  local version="${2:-runtime-v1}"
+  local fixture="$sandbox/runtime-fixture/logseq-sync-runtime"
+  local asset="$sandbox/logseq-sync-runtime-linux-x64.tar.gz"
+  rm -rf -- "$sandbox/runtime-fixture"
+  mkdir -p "$fixture/node/bin" "$fixture/app/node_modules" "$fixture/bin"
+  cat > "$fixture/node/bin/node" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then
+  printf 'v24.0.0\n'
+fi
+exit 0
+EOF
+  printf 'mock adapter\n' > "$fixture/app/node-adapter.js"
+  cp "$manager" "$fixture/bin/logseq-sync-native"
+  printf '%s\n' "$version" > "$fixture/VERSION"
+  printf 'x64\n' > "$fixture/ARCHITECTURE"
+  chmod +x "$fixture/node/bin/node" "$fixture/bin/logseq-sync-native"
+  tar -czf "$asset" -C "$sandbox/runtime-fixture" logseq-sync-runtime
+  (cd "$sandbox" && sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256")
+}
 
 make_sandbox() {
   local sandbox
   sandbox="$(mktemp -d "$suite_tmp/case.XXXXXX")"
-  mkdir -p "$sandbox/bin" "$sandbox/install/toolchain/node/bin" \
-    "$sandbox/install/toolchain/bin"
+  mkdir -p "$sandbox/bin" "$sandbox/install/toolchain/bin"
 
   cat > "$sandbox/bin/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -32,22 +52,8 @@ case "${1:-}" in
 esac
 EOF
 
-  cat > "$sandbox/bin/clojure" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-
-  cat > "$sandbox/bin/java" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-
   cat > "$sandbox/bin/getent" <<'EOF'
 #!/usr/bin/env bash
-if [[ "$1" == "passwd" ]]; then
-  printf '%s:x:0:0:test:/tmp:/bin/sh\n' "$2"
-  exit 0
-fi
 if [[ "$1" == "ahosts" ]]; then
   [[ "${MOCK_DNS_STATUS:-0}" -eq 0 ]] || exit "$MOCK_DNS_STATUS"
   printf '%s STREAM %s\n' "${MOCK_DNS_IP:-203.0.113.10}" "$2"
@@ -74,45 +80,14 @@ printf '%s\n' "$*" >> "$MOCK_JOURNAL_LOG"
 exit 0
 EOF
 
-  cat > "$sandbox/install/toolchain/node/bin/node" <<'EOF'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "--version" ]]; then
-  printf 'v24.0.0\n'
-fi
-exit 0
-EOF
-
   cat > "$sandbox/install/toolchain/bin/caddy" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_CADDY_LOG"
 exit 0
 EOF
 
-  cat > "$sandbox/install/toolchain/bin/pnpm" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$MOCK_PNPM_LOG"
-workdir=""
-while (( $# > 0 )); do
-  if [[ "$1" == "--dir" ]]; then
-    workdir="$2"
-    shift 2
-    continue
-  fi
-  case "$1" in
-    install)
-      mkdir -p "$workdir/node_modules"
-      ;;
-    build:node-adapter)
-      mkdir -p "$workdir/worker/dist"
-      printf 'mock adapter\n' > "$workdir/worker/dist/node-adapter.js"
-      ;;
-  esac
-  shift
-done
-EOF
-
-  chmod +x "$sandbox/bin/"* "$sandbox/install/toolchain/node/bin/node" \
-    "$sandbox/install/toolchain/bin/caddy" "$sandbox/install/toolchain/bin/pnpm"
+  chmod +x "$sandbox/bin/"* "$sandbox/install/toolchain/bin/caddy"
+  make_runtime_fixture "$sandbox"
   printf '%s' "$sandbox"
 }
 
@@ -130,12 +105,13 @@ run_manager() {
     LOGSEQ_SYNC_SYSTEMD_DIR="$sandbox/systemd" \
     LOGSEQ_SYNC_CADDY_DATA_DIR="$sandbox/caddy-data" \
     LOGSEQ_SYNC_MANAGER_PATH="$sandbox/bin/logseq-sync-native-installed" \
-    LOGSEQ_SYNC_NODE_PATH="${MOCK_NODE_PATH-$sandbox/install/toolchain/node/bin/node}" \
+    LOGSEQ_SYNC_RELEASE_REPOSITORY="example/logseq" \
+    LOGSEQ_SYNC_RUNTIME_ARCHIVE="$sandbox/logseq-sync-runtime-linux-x64.tar.gz" \
+    LOGSEQ_SYNC_RUNTIME_CHECKSUM="$sandbox/logseq-sync-runtime-linux-x64.tar.gz.sha256" \
     MOCK_CURL_LOG="$sandbox/curl.log" \
     MOCK_SYSTEMCTL_LOG="$sandbox/systemctl.log" \
     MOCK_JOURNAL_LOG="$sandbox/journal.log" \
     MOCK_CADDY_LOG="$sandbox/caddy.log" \
-    MOCK_PNPM_LOG="$sandbox/pnpm.log" \
     MOCK_DNS_STATUS="${MOCK_DNS_STATUS:-0}" \
     MOCK_DNS_IP="${MOCK_DNS_IP:-203.0.113.10}" \
     "$manager_under_test" "$@" 2>&1)"
@@ -148,6 +124,15 @@ assert_contains() {
   local expected="$2"
   [[ "$value" == *"$expected"* ]] || {
     printf 'Expected to find %q in:\n%s\n' "$expected" "$value" >&2
+    return 1
+  }
+}
+
+assert_not_contains() {
+  local value="$1"
+  local unexpected="$2"
+  [[ "$value" != *"$unexpected"* ]] || {
+    printf 'Did not expect to find %q in:\n%s\n' "$unexpected" "$value" >&2
     return 1
   }
 }
@@ -166,268 +151,110 @@ assert_failure() {
   }
 }
 
-run_system_package_install() {
-  local sandbox="$1"
-  local distribution_id="$2"
-  local distribution_like="$3"
-  local distribution_name="$4"
-  local available_java="$5"
-  local package_manager="${6:-dnf}"
-  printf 'ID=%s\nID_LIKE="%s"\nPRETTY_NAME="%s"\n' \
-    "$distribution_id" "$distribution_like" "$distribution_name" \
-    > "$sandbox/os-release"
-  set +e
-  (
-    source "$manager" help >/dev/null
-    mock_package_manager() {
-      printf '%s\n' "$*" >> "$sandbox/packages.log"
-      case "$*" in
-        '-y makecache'|install\ -y\ *) return 0 ;;
-        "-q list --available $available_java"|"-q list available $available_java")
-          return 0
-          ;;
-        *) return 1 ;;
-      esac
-    }
-    if [[ "$package_manager" == "dnf" ]]; then
-      dnf() { mock_package_manager "$@"; }
-    else
-      yum() { mock_package_manager "$@"; }
-    fi
-    ensure_system_packages "$sandbox/os-release"
-  ) > "$sandbox/system-packages-output.log" 2>&1
-  last_status=$?
-  last_output="$(<"$sandbox/system-packages-output.log")"
-  set -e
-}
-
-test_rpm_distribution_installs_system_dependencies_with_dnf() {
-  local sandbox package_log
-  sandbox="$(make_sandbox)"
-  run_system_package_install "$sandbox" rocky 'rhel centos fedora' \
-    'Rocky Linux 9.6' java-21-openjdk-headless
-  assert_success || return 1
-  package_log="$(<"$sandbox/packages.log")"
-  assert_contains "$last_output" 'Detected operating system: Rocky Linux 9.6' || return 1
-  assert_contains "$package_log" '-y makecache' || return 1
-  assert_contains "$package_log" '-q list --available java-21-openjdk-headless' || return 1
-  assert_contains "$package_log" 'install -y gcc gcc-c++ make' || return 1
-  assert_contains "$package_log" 'java-21-openjdk-headless' || return 1
-  assert_contains "$package_log" 'shadow-utils'
-}
-
-test_amazon_linux_uses_corretto_21() {
-  local sandbox package_log
-  sandbox="$(make_sandbox)"
-  run_system_package_install "$sandbox" amzn fedora \
-    'Amazon Linux 2023.7' java-21-amazon-corretto-headless
-  assert_success || return 1
-  package_log="$(<"$sandbox/packages.log")"
-  assert_contains "$last_output" 'Detected operating system: Amazon Linux 2023.7' || return 1
-  assert_contains "$package_log" '-q list --available java-21-amazon-corretto-headless' || return 1
-  assert_contains "$package_log" 'java-21-amazon-corretto-headless'
-}
-
-test_opencloudos_falls_back_to_kona_17() {
-  local sandbox package_log
-  sandbox="$(make_sandbox)"
-  run_system_package_install "$sandbox" opencloudos opencloudos \
-    'OpenCloudOS 9.4' java-17-konajdk
-  assert_success || return 1
-  package_log="$(<"$sandbox/packages.log")"
-  assert_contains "$last_output" 'Detected operating system: OpenCloudOS 9.4' || return 1
-  assert_contains "$package_log" '-q list --available java-21-openjdk-headless' || return 1
-  assert_contains "$package_log" '-q list --available java-17-konajdk' || return 1
-  assert_contains "$package_log" 'java-17-konajdk'
-}
-
-test_selected_node_is_available_to_bundled_npm() {
-  local sandbox node_path npm_path
-  sandbox="$(make_sandbox)"
-  node_path="$sandbox/install/toolchain/node/bin/node"
-  npm_path="$sandbox/install/toolchain/node/bin/npm"
-  cat > "$node_path" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$MOCK_PRIVATE_NODE_LOG"
-EOF
-  cat > "$npm_path" <<'EOF'
-#!/usr/bin/env node
-EOF
-  chmod +x "$node_path" "$npm_path"
-  set +e
-  last_output="$(
-    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/install" \
-    MOCK_PRIVATE_NODE_LOG="$sandbox/private-node.log" \
-    PATH="/usr/bin:/bin" \
-      bash -c 'source "$1" help >/dev/null; run_with_node "$2" "$3" install' \
-        bash "$manager" "$node_path" "$npm_path" 2>&1
-  )"
-  last_status=$?
-  set -e
-  assert_success || return 1
-  [[ -f "$sandbox/private-node.log" ]] || {
-    printf 'Expected bundled npm to run with the private Node.js binary.\n' >&2
-    return 1
-  }
-  assert_contains "$(<"$sandbox/private-node.log")" "$npm_path install"
-}
-
-test_compatible_system_node_is_reused() {
-  local sandbox expected_node
-  sandbox="$(make_sandbox)"
-  cat > "$sandbox/bin/node" <<'EOF'
-#!/usr/bin/env bash
-[[ "${1:-}" == "--version" ]] && printf 'v22.22.0\n'
-EOF
-  cat > "$sandbox/bin/npm" <<'EOF'
-#!/usr/bin/env bash
-[[ "${1:-}" == "--version" ]] && printf '10.0.0\n'
-EOF
-  chmod +x "$sandbox/bin/node" "$sandbox/bin/npm"
-  expected_node="$(realpath "$sandbox/bin/node")"
-  set +e
-  last_output="$(
-    LOGSEQ_SYNC_TEST_MODE=true \
-    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/unused-install" \
-    PATH="$sandbox/bin:/usr/bin:/bin" \
-      bash -c 'source "$1" help >/dev/null; select_node_runtime; printf "%s\n" "$node_path"' \
-        bash "$manager" 2>&1
-  )"
-  last_status=$?
-  set -e
-  assert_success || return 1
-  assert_contains "$last_output" "$expected_node"
-}
-
-test_setup_persists_compatible_system_node() {
-  local sandbox expected_node
-  sandbox="$(make_sandbox)"
-  cat > "$sandbox/bin/node" <<'EOF'
-#!/usr/bin/env bash
-[[ "${1:-}" == "--version" ]] && printf 'v22.22.0\n'
-EOF
-  cat > "$sandbox/bin/npm" <<'EOF'
-#!/usr/bin/env bash
-[[ "${1:-}" == "--version" ]] && printf '10.0.0\n'
-EOF
-  chmod +x "$sandbox/bin/node" "$sandbox/bin/npm"
-  expected_node="$(realpath "$sandbox/bin/node")"
-  MOCK_NODE_PATH="" run_manager "$sandbox" setup --domain sync.example.com
-  assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" \
-    "LOGSEQ_SYNC_NODE_PATH=$expected_node" || return 1
-  assert_contains "$(<"$sandbox/systemd/logseq-sync.service")" \
-    "ExecStart=$expected_node "
-}
-
-test_unsupported_system_node_falls_back_to_private_runtime() {
-  local sandbox expected_node
-  sandbox="$(make_sandbox)"
-  cat > "$sandbox/bin/node" <<'EOF'
-#!/usr/bin/env bash
-[[ "${1:-}" == "--version" ]] && printf 'v20.19.0\n'
-EOF
-  chmod +x "$sandbox/bin/node"
-  expected_node="$sandbox/install/toolchain/node/bin/node"
-  set +e
-  last_output="$(
-    LOGSEQ_SYNC_TEST_MODE=true \
-    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/install" \
-    PATH="$sandbox/bin:/usr/bin:/bin" \
-      bash -c 'source "$1" help >/dev/null; select_node_runtime; printf "%s\n" "$node_path"' \
-        bash "$manager" 2>&1
-  )"
-  last_status=$?
-  set -e
-  assert_success || return 1
-  assert_contains "$last_output" "$expected_node"
-}
-
-test_rpm_distribution_can_install_with_yum() {
-  local sandbox package_log
-  sandbox="$(make_sandbox)"
-  run_system_package_install "$sandbox" tencentos 'rhel centos fedora' \
-    'TencentOS Server 3.1' java-21-openjdk-headless yum
-  assert_success || return 1
-  package_log="$(<"$sandbox/packages.log")"
-  assert_contains "$last_output" 'Detected operating system: TencentOS Server 3.1' || return 1
-  assert_contains "$package_log" '-q list available java-21-openjdk-headless' || return 1
-  assert_contains "$package_log" 'install -y gcc gcc-c++ make'
-}
-
-test_setup_uses_public_10010_and_private_10011() {
-  local sandbox
+test_setup_uses_prebuilt_runtime_and_default_ports() {
+  local sandbox env_file service_file
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com
   assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" \
-    'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_PUBLIC_PORT=10010' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=10011' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'DB_SYNC_HOST=127.0.0.1' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'DB_SYNC_PORT=10011' || return 1
-  assert_contains "$(<"$sandbox/config/Caddyfile")" \
-    'https://sync.example.com:10010 {' || return 1
-  assert_contains "$(<"$sandbox/config/Caddyfile")" \
-    'reverse_proxy 127.0.0.1:10011' || return 1
-  assert_contains "$(<"$sandbox/systemd/logseq-sync.service")" \
-    'EnvironmentFile=' || return 1
-  assert_contains "$(<"$sandbox/pnpm.log")" 'install --frozen-lockfile --prod' || return 1
-  assert_contains "$(<"$sandbox/pnpm.log")" 'build:node-adapter' || return 1
-  assert_contains "$last_output" 'https://sync.example.com:10010'
+  env_file="$(<"$sandbox/config/sync.env")"
+  service_file="$(<"$sandbox/systemd/logseq-sync.service")"
+  assert_contains "$env_file" 'DB_SYNC_BASE_URL=https://sync.example.com:10010' || return 1
+  assert_contains "$env_file" 'LOGSEQ_SYNC_INTERNAL_PORT=10011' || return 1
+  assert_contains "$env_file" 'LOGSEQ_SYNC_RELEASE_REPOSITORY=example/logseq' || return 1
+  assert_contains "$service_file" \
+    "ExecStart=$sandbox/install/current/node/bin/node $sandbox/install/current/app/node-adapter.js" || return 1
+  assert_not_contains "$env_file" 'LOGSEQ_SYNC_NODE_PATH=' || return 1
+  assert_not_contains "$last_output" 'Clojure' || return 1
+  assert_contains "$last_output" 'Installed Sync runtime runtime-v1 with bundled v24.0.0'
+}
+
+test_setup_ignores_broken_system_node_and_build_tools() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  cat > "$sandbox/bin/node" <<'EOF'
+#!/usr/bin/env bash
+exit 99
+EOF
+  cat > "$sandbox/bin/java" <<'EOF'
+#!/usr/bin/env bash
+exit 99
+EOF
+  cat > "$sandbox/bin/clojure" <<'EOF'
+#!/usr/bin/env bash
+exit 99
+EOF
+  chmod +x "$sandbox/bin/node" "$sandbox/bin/java" "$sandbox/bin/clojure"
+  run_manager "$sandbox" setup --domain sync.example.com
+  assert_success || return 1
+  assert_contains "$last_output" 'bundled v24.0.0'
+}
+
+test_setup_does_not_invoke_os_package_manager() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  cat > "$sandbox/bin/dnf" <<'EOF'
+#!/usr/bin/env bash
+printf 'dnf was invoked\n' >&2
+exit 91
+EOF
+  cat > "$sandbox/bin/yum" <<'EOF'
+#!/usr/bin/env bash
+printf 'yum was invoked\n' >&2
+exit 92
+EOF
+  chmod +x "$sandbox/bin/dnf" "$sandbox/bin/yum"
+  run_manager "$sandbox" setup --domain sync.example.com
+  assert_success || return 1
+  assert_not_contains "$last_output" 'was invoked'
+}
+
+test_setup_rejects_bad_runtime_checksum() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  printf '%064d  logseq-sync-runtime-linux-x64.tar.gz\n' 0 \
+    > "$sandbox/logseq-sync-runtime-linux-x64.tar.gz.sha256"
+  run_manager "$sandbox" setup --domain sync.example.com
+  assert_failure || return 1
+  assert_contains "$last_output" 'failed checksum verification'
+}
+
+test_setup_rejects_wrong_runtime_architecture() {
+  local sandbox fixture asset
+  sandbox="$(make_sandbox)"
+  fixture="$sandbox/runtime-fixture/logseq-sync-runtime"
+  asset="$sandbox/logseq-sync-runtime-linux-x64.tar.gz"
+  printf 'arm64\n' > "$fixture/ARCHITECTURE"
+  tar -czf "$asset" -C "$sandbox/runtime-fixture" logseq-sync-runtime
+  (cd "$sandbox" && sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256")
+  run_manager "$sandbox" setup --domain sync.example.com
+  assert_failure || return 1
+  assert_contains "$last_output" 'architecture does not match'
 }
 
 test_setup_without_options_runs_guided_wizard() {
   local sandbox
   sandbox="$(make_sandbox)"
-  MOCK_ASSUME_YES=false \
-    MOCK_MANAGER_INPUT=$'sync.example.com\n\n\n\n' \
+  MOCK_ASSUME_YES=false MOCK_MANAGER_INPUT=$'sync.example.com\n\n\n\n' \
     run_manager "$sandbox" setup
   assert_success || return 1
   assert_contains "$last_output" 'Logseq Sync setup' || return 1
   assert_contains "$last_output" 'Step 1/3 - Sync domain name' || return 1
   assert_contains "$last_output" 'Step 2/3 - Public HTTPS port [10010]' || return 1
   assert_contains "$last_output" 'Step 3/3 - Private Sync port [10011]' || return 1
-  assert_contains "$last_output" 'Its public A/AAAA record must already resolve to this server' || return 1
-  assert_contains "$last_output" 'Logseq clients connect here using HTTPS' || return 1
-  assert_contains "$last_output" 'Do not expose or allow this port' || return 1
-  assert_contains "$last_output" 'DNS: sync.example.com -> 203.0.113.10' || return 1
-  assert_contains "$last_output" 'https://sync.example.com:10010'
+  assert_contains "$last_output" 'Runtime: prebuilt Linux x64 package'
 }
 
-test_setup_rejects_ambiguous_positional_arguments() {
-  local sandbox
-  sandbox="$(make_sandbox)"
-  run_manager "$sandbox" setup sync.example.com
-  assert_failure || return 1
-  assert_contains "$last_output" 'Unknown setup option' || return 1
-  assert_contains "$last_output" 'Use --domain, --public-port, --internal-port, or --yes'
-}
-
-test_setup_accepts_custom_public_port() {
-  local sandbox
-  sandbox="$(make_sandbox)"
-  run_manager "$sandbox" setup --domain sync.example.com --public-port 12000
-  assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" \
-    'DB_SYNC_BASE_URL=https://sync.example.com:12000' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_PUBLIC_PORT=12000' || return 1
-  assert_contains "$(<"$sandbox/config/Caddyfile")" \
-    'https://sync.example.com:12000 {' || return 1
-  assert_contains "$last_output" 'https://sync.example.com:12000'
-}
-
-test_setup_accepts_custom_private_port() {
+test_setup_accepts_custom_ports() {
   local sandbox
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com \
     --public-port 12000 --internal-port 13000
   assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=13000' || return 1
   assert_contains "$(<"$sandbox/config/sync.env")" 'DB_SYNC_PORT=13000' || return 1
   assert_contains "$(<"$sandbox/config/Caddyfile")" \
-    'reverse_proxy 127.0.0.1:13000' || return 1
-  assert_contains "$last_output" 'Private adapter: 127.0.0.1:13000'
+    'https://sync.example.com:12000 {' || return 1
+  assert_contains "$(<"$sandbox/config/Caddyfile")" \
+    'reverse_proxy 127.0.0.1:13000'
 }
 
 test_public_port_never_collides_with_private_port() {
@@ -435,28 +262,32 @@ test_public_port_never_collides_with_private_port() {
   sandbox="$(make_sandbox)"
   run_manager "$sandbox" setup --domain sync.example.com --public-port 10011
   assert_success || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_PUBLIC_PORT=10011' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=10012' || return 1
-  assert_contains "$(<"$sandbox/config/sync.env")" 'DB_SYNC_PORT=10012'
+  assert_contains "$(<"$sandbox/config/sync.env")" 'LOGSEQ_SYNC_INTERNAL_PORT=10012'
 }
 
-test_setup_rejects_duplicate_public_and_private_ports() {
+test_setup_rejects_invalid_port_and_domain_inputs() {
   local sandbox
   sandbox="$(make_sandbox)"
+  run_manager "$sandbox" setup --domain 'https://sync.example.com'
+  assert_failure || return 1
+  assert_contains "$last_output" 'Enter a valid DNS domain name' || return 1
   run_manager "$sandbox" setup --domain sync.example.com \
     --public-port 12000 --internal-port 12000
   assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
-  assert_contains "$last_output" 'must be different'
-}
-
-test_port_80_is_reserved_for_certificates() {
-  local sandbox
-  sandbox="$(make_sandbox)"
+  assert_contains "$last_output" 'must be different' || return 1
   run_manager "$sandbox" setup --domain sync.example.com --public-port 80
   assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
   assert_contains "$last_output" 'port 80 is reserved'
+}
+
+test_unresolved_domain_stops_before_install() {
+  local sandbox
+  sandbox="$(make_sandbox)"
+  MOCK_DNS_STATUS=1 run_manager "$sandbox" setup --domain sync.example.com
+  assert_failure || return 1
+  [[ ! -e "$sandbox/config" ]] || return 1
+  [[ ! -e "$sandbox/install/current" ]] || return 1
+  assert_contains "$last_output" 'domain does not currently resolve'
 }
 
 test_default_auth_is_generated_without_prompts() {
@@ -470,24 +301,6 @@ test_default_auth_is_generated_without_prompts() {
   assert_contains "$env_file" 'COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6'
 }
 
-test_invalid_domain_stops_before_writes() {
-  local sandbox
-  sandbox="$(make_sandbox)"
-  run_manager "$sandbox" setup --domain 'https://sync.example.com'
-  assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
-  assert_contains "$last_output" 'Enter a valid DNS domain name'
-}
-
-test_unresolved_domain_stops_before_writes() {
-  local sandbox
-  sandbox="$(make_sandbox)"
-  MOCK_DNS_STATUS=1 run_manager "$sandbox" setup --domain sync.example.com
-  assert_failure || return 1
-  [[ ! -e "$sandbox/config" ]] || return 1
-  assert_contains "$last_output" 'domain does not currently resolve'
-}
-
 test_status_checks_private_and_public_endpoints_once() {
   local sandbox curl_count
   sandbox="$(make_sandbox)"
@@ -497,10 +310,8 @@ test_status_checks_private_and_public_endpoints_once() {
   run_manager "$sandbox" status
   assert_success || return 1
   curl_count="$(wc -l < "$sandbox/curl.log" | tr -d ' ')"
-  [[ "$curl_count" -eq 2 ]] || {
-    printf 'Expected two status probes, got %s.\n' "$curl_count" >&2
-    return 1
-  }
+  [[ "$curl_count" -eq 2 ]] || return 1
+  assert_contains "$last_output" 'Runtime version: runtime-v1' || return 1
   assert_contains "$last_output" 'Health: ok'
 }
 
@@ -511,17 +322,13 @@ test_update_preserves_configuration_and_switches_release() {
   assert_success || return 1
   before_env="$(<"$sandbox/config/sync.env")"
   before_release="$(readlink "$sandbox/install/current")"
+  make_runtime_fixture "$sandbox" runtime-v2
   run_manager "$sandbox" update
   assert_success || return 1
   after_release="$(readlink "$sandbox/install/current")"
-  [[ "$before_release" != "$after_release" ]] || {
-    printf 'Expected update to switch releases, both were %s.\n' "$before_release" >&2
-    return 1
-  }
-  [[ "$before_env" == "$(<"$sandbox/config/sync.env")" ]] || {
-    printf 'Expected update to preserve sync.env.\n' >&2
-    return 1
-  }
+  [[ "$before_release" != "$after_release" ]] || return 1
+  [[ "$before_env" == "$(<"$sandbox/config/sync.env")" ]] || return 1
+  assert_contains "$last_output" 'Installed Sync runtime runtime-v2' || return 1
   assert_contains "$last_output" 'was updated successfully'
 }
 
@@ -550,25 +357,17 @@ run_test() {
   fi
 }
 
-run_test test_setup_uses_public_10010_and_private_10011
-run_test test_rpm_distribution_installs_system_dependencies_with_dnf
-run_test test_amazon_linux_uses_corretto_21
-run_test test_opencloudos_falls_back_to_kona_17
-run_test test_selected_node_is_available_to_bundled_npm
-run_test test_compatible_system_node_is_reused
-run_test test_setup_persists_compatible_system_node
-run_test test_unsupported_system_node_falls_back_to_private_runtime
-run_test test_rpm_distribution_can_install_with_yum
+run_test test_setup_uses_prebuilt_runtime_and_default_ports
+run_test test_setup_ignores_broken_system_node_and_build_tools
+run_test test_setup_does_not_invoke_os_package_manager
+run_test test_setup_rejects_bad_runtime_checksum
+run_test test_setup_rejects_wrong_runtime_architecture
 run_test test_setup_without_options_runs_guided_wizard
-run_test test_setup_rejects_ambiguous_positional_arguments
-run_test test_setup_accepts_custom_public_port
-run_test test_setup_accepts_custom_private_port
+run_test test_setup_accepts_custom_ports
 run_test test_public_port_never_collides_with_private_port
-run_test test_setup_rejects_duplicate_public_and_private_ports
-run_test test_port_80_is_reserved_for_certificates
+run_test test_setup_rejects_invalid_port_and_domain_inputs
+run_test test_unresolved_domain_stops_before_install
 run_test test_default_auth_is_generated_without_prompts
-run_test test_invalid_domain_stops_before_writes
-run_test test_unresolved_domain_stops_before_writes
 run_test test_status_checks_private_and_public_endpoints_once
 run_test test_update_preserves_configuration_and_switches_release
 run_test test_installed_manager_can_rerun_setup

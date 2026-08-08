@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly checkout_source_dir="$(cd -- "$script_dir/../../.." 2>/dev/null && pwd || true)"
+readonly checkout_root="$(cd -- "$script_dir/../../.." 2>/dev/null && pwd || true)"
 readonly install_root="${LOGSEQ_SYNC_INSTALL_ROOT:-/opt/logseq-sync}"
 readonly config_dir="${LOGSEQ_SYNC_CONFIG_DIR:-/etc/logseq-sync}"
 readonly data_dir="${LOGSEQ_SYNC_DATA_DIR:-/var/lib/logseq-sync}"
@@ -13,26 +13,22 @@ readonly sync_service="logseq-sync.service"
 readonly proxy_service="logseq-sync-caddy.service"
 readonly default_public_port="10010"
 readonly default_internal_port="10011"
-readonly node_major="24"
-readonly pnpm_version="10.33.0"
-readonly clojure_version="1.12.4.1618"
+readonly default_release_repository="logseq/logseq"
+readonly default_release_tag="db-sync-native"
 readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
 readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
-configured_source_dir="$(sed -n 's/^LOGSEQ_SYNC_SOURCE_DIR=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+
 configured_public_port="$(sed -n 's/^LOGSEQ_SYNC_PUBLIC_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
 configured_internal_port="$(sed -n 's/^LOGSEQ_SYNC_INTERNAL_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
-configured_node_path="${LOGSEQ_SYNC_NODE_PATH:-$(sed -n 's/^LOGSEQ_SYNC_NODE_PATH=//p' "$config_dir/sync.env" 2>/dev/null || true)}"
+configured_release_repository="$(sed -n 's/^LOGSEQ_SYNC_RELEASE_REPOSITORY=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_release_tag="$(sed -n 's/^LOGSEQ_SYNC_RELEASE_TAG=//p' "$config_dir/sync.env" 2>/dev/null || true)"
 public_port="${configured_public_port:-$default_public_port}"
 internal_port="${configured_internal_port:-$default_internal_port}"
+release_repository="${LOGSEQ_SYNC_RELEASE_REPOSITORY:-$configured_release_repository}"
+release_tag="${LOGSEQ_SYNC_RELEASE_TAG:-${configured_release_tag:-$default_release_tag}}"
+runtime_sha256=""
 assume_yes="${LOGSEQ_SYNC_ASSUME_YES:-false}"
-node_path="$configured_node_path"
-npm_path=""
-if [[ -f "$checkout_source_dir/deps/db-sync/package.json" ]]; then
-  readonly source_dir="$checkout_source_dir"
-else
-  readonly source_dir="$configured_source_dir"
-fi
 temporary_paths=()
 
 register_temporary_path() {
@@ -43,7 +39,7 @@ cleanup_temporary_paths() {
   local path
   for path in "${temporary_paths[@]-}"; do
     case "$path" in
-      /tmp/logseq-sync-node.*|/tmp/logseq-sync-clojure.*|/tmp/logseq-sync-build.*)
+      /tmp/logseq-sync-runtime.*)
         [[ -d "$path" ]] && rm -rf -- "$path"
         ;;
       /tmp/logseq-sync-caddy.*)
@@ -68,6 +64,14 @@ require_linux() {
 require_root() {
   [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
   (( EUID == 0 )) || die "Run this command with sudo."
+}
+
+require_commands() {
+  local command_name
+  for command_name in curl tar sha256sum systemctl getent awk sed install mktemp; do
+    command -v "$command_name" >/dev/null 2>&1 \
+      || die "Required base command is missing: $command_name"
+  done
 }
 
 validate_install_paths() {
@@ -170,305 +174,28 @@ caddy_architecture() {
   esac
 }
 
-node_version_supported() {
-  local candidate="$1"
-  local version major minor
-  [[ -x "$candidate" ]] || return 1
-  version="$("$candidate" --version 2>/dev/null || true)"
-  [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+ ]] || return 1
-  major="${BASH_REMATCH[1]}"
-  minor="${BASH_REMATCH[2]}"
-  [[ "$major" == "24" ]] && return 0
-  [[ "$major" == "22" ]] && (( 10#$minor >= 12 ))
-}
-
-system_service_node_path() {
-  local candidate="$1"
-  [[ "$candidate" == /* && -x "$candidate" ]] || return 1
-  candidate="$(realpath "$candidate" 2>/dev/null || true)"
-  [[ -n "$candidate" && -x "$candidate" ]] || return 1
-  if [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" != "true" ]]; then
-    case "$candidate" in
-      /home/*|/root/*|/run/user/*|/tmp/*|/var/tmp/*) return 1 ;;
-    esac
-  fi
-  printf '%s' "$candidate"
-}
-
-find_npm_for_node() {
-  local candidate="$1"
-  local node_dir npm_candidate
-  node_dir="$(dirname -- "$candidate")"
-  for npm_candidate in "$node_dir/npm" "$(command -v npm 2>/dev/null || true)"; do
-    [[ "$npm_candidate" == /* && -x "$npm_candidate" ]] || continue
-    if run_with_node "$candidate" "$npm_candidate" --version >/dev/null 2>&1; then
-      printf '%s' "$npm_candidate"
-      return 0
-    fi
-  done
-  return 1
-}
-
-run_with_node() {
-  local runtime="$1"
-  local runtime_dir
-  shift
-  runtime_dir="$(dirname -- "$runtime")"
-  env PATH="$runtime_dir:$install_root/toolchain/bin:${PATH:-/usr/local/bin:/usr/bin:/bin}" "$@"
-}
-
-select_node_runtime() {
-  local candidate
-  npm_path=""
-  if [[ -n "$configured_node_path" ]]; then
-    node_version_supported "$configured_node_path" \
-      || die "Configured Node.js must be version 22.12 or newer in the 22.x line, or version 24.x: $configured_node_path"
-    node_path="$configured_node_path"
-    npm_path="$(find_npm_for_node "$node_path" || true)"
-    return 0
-  fi
-  candidate="$(command -v node 2>/dev/null || true)"
-  candidate="$(system_service_node_path "$candidate" || true)"
-  if [[ -n "$candidate" ]] && node_version_supported "$candidate"; then
-    node_path="$candidate"
-    npm_path="$(find_npm_for_node "$node_path" || true)"
-    return 0
-  fi
-  candidate="$install_root/toolchain/node/bin/node"
-  if node_version_supported "$candidate"; then
-    node_path="$candidate"
-    npm_path="$(find_npm_for_node "$node_path" || true)"
-    return 0
-  fi
-  node_path=""
-}
-
-os_release_value() {
-  local key="$1"
-  local os_release_file="${2:-/etc/os-release}"
-  local value
-  [[ -r "$os_release_file" ]] || return 0
-  value="$(sed -n "s/^${key}=//p" "$os_release_file" | head -n 1)"
-  value="${value#\"}"
-  value="${value%\"}"
-  value="${value#\'}"
-  value="${value%\'}"
-  printf '%s' "$value"
-}
-
-linux_package_family() {
-  local distribution_id="$1"
-  local distribution_like="$2"
-  case "$distribution_id" in
-    debian|ubuntu) printf 'debian'; return 0 ;;
-    amzn|alinux|almalinux|anolis|centos|fedora|opencloudos|ol|rhel|rocky|tencentos)
-      printf 'rpm'
-      return 0
-      ;;
+detect_checkout_repository() {
+  local remote repository=""
+  [[ -d "$checkout_root/.git" ]] || return 0
+  remote="$(git -C "$checkout_root" config --get remote.origin.url 2>/dev/null || true)"
+  case "$remote" in
+    https://github.com/*) repository="${remote#https://github.com/}" ;;
+    git@github.com:*) repository="${remote#git@github.com:}" ;;
+    ssh://git@github.com/*) repository="${remote#ssh://git@github.com/}" ;;
   esac
-  case " $distribution_like " in
-    *' debian '*) printf 'debian' ;;
-    *' centos '*|*' fedora '*|*' rhel '*) printf 'rpm' ;;
-  esac
+  repository="${repository%.git}"
+  [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && printf '%s' "$repository"
 }
 
-rpm_java_package() {
-  local package_manager="$1"
-  local distribution_id="$2"
-  local candidate
-  local -a candidates=(
-    java-21-openjdk-headless
-    java-21-openjdk-devel
-    java-17-openjdk-headless
-    java-17-openjdk-devel
-  )
-  if [[ "$distribution_id" == "amzn" ]]; then
-    candidates=(java-21-amazon-corretto-headless java-21-amazon-corretto-devel "${candidates[@]}")
-  elif [[ "$distribution_id" == "opencloudos" ]]; then
-    candidates=(
-      java-21-openjdk-headless
-      java-21-openjdk-devel
-      java-17-konajdk-headless
-      java-17-konajdk
-      java-17-openjdk-headless
-      java-17-openjdk-devel
-    )
+select_release_source() {
+  if [[ -z "$release_repository" ]]; then
+    release_repository="$(detect_checkout_repository)"
   fi
-  for candidate in "${candidates[@]}"; do
-    if [[ "$package_manager" == "dnf" ]]; then
-      if "$package_manager" -q list --installed "$candidate" >/dev/null 2>&1 \
-          || "$package_manager" -q list --available "$candidate" >/dev/null 2>&1; then
-        printf '%s' "$candidate"
-        return 0
-      fi
-    else
-      if "$package_manager" -q list installed "$candidate" >/dev/null 2>&1 \
-          || "$package_manager" -q list available "$candidate" >/dev/null 2>&1; then
-        printf '%s' "$candidate"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
-
-ensure_system_packages() {
-  local os_release_file="${1:-/etc/os-release}"
-  local distribution_id distribution_like distribution_name package_family
-  local package_manager java_package
-  distribution_id="$(os_release_value ID "$os_release_file")"
-  distribution_like="$(os_release_value ID_LIKE "$os_release_file")"
-  distribution_name="$(os_release_value PRETTY_NAME "$os_release_file")"
-  [[ -n "$distribution_name" ]] || distribution_name="${distribution_id:-unknown Linux distribution}"
-  package_family="$(linux_package_family "$distribution_id" "$distribution_like")"
-  if [[ -z "$package_family" ]]; then
-    if command -v apt-get >/dev/null 2>&1; then
-      package_family="debian"
-    elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
-      package_family="rpm"
-    fi
-  fi
-  printf 'Detected operating system: %s\n' "$distribution_name"
-  case "$package_family" in
-    debian)
-      command -v apt-get >/dev/null 2>&1 \
-        || die "${distribution_name} is Debian-based, but apt-get is unavailable."
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get update
-      apt-get install -y --no-install-recommends \
-        build-essential ca-certificates curl git openjdk-21-jdk-headless \
-        python3 tar util-linux xz-utils
-      ;;
-    rpm)
-      if command -v dnf >/dev/null 2>&1; then
-        package_manager="dnf"
-      elif command -v yum >/dev/null 2>&1; then
-        package_manager="yum"
-      else
-        die "${distribution_name} is RPM-based, but neither dnf nor yum is available."
-      fi
-      "$package_manager" -y makecache
-      java_package="$(rpm_java_package "$package_manager" "$distribution_id" || true)"
-      [[ -n "$java_package" ]] \
-        || die "No Java 17 or 21 runtime package was found for ${distribution_name}. Enable the distribution's supported Java repository and rerun setup."
-      "$package_manager" install -y \
-        gcc gcc-c++ make ca-certificates curl git "$java_package" python3 \
-        shadow-utils tar gzip util-linux xz
-      ;;
-    *)
-      die "Automatic dependency installation does not support ${distribution_name}. Use Debian/Ubuntu or an RPM-based distribution with apt, dnf, or yum."
-      ;;
-  esac
-}
-
-install_node_toolchain() {
-  local node_arch version archive temp_dir checksum_file
-  node_arch="$(architecture)"
-  version="$(curl --fail --silent --show-error https://nodejs.org/dist/index.tab \
-    | awk -F '\t' -v major="v${node_major}." \
-        'NR > 1 && !found && index($1, major) == 1 {print $1; found = 1}')"
-  [[ -n "$version" ]] || die "Could not determine the latest Node.js ${node_major} release."
-  archive="node-${version}-linux-${node_arch}.tar.xz"
-  temp_dir="$(mktemp -d /tmp/logseq-sync-node.XXXXXX)"
-  register_temporary_path "$temp_dir"
-  curl --fail --location --show-error \
-    "https://nodejs.org/dist/${version}/${archive}" -o "$temp_dir/$archive"
-  curl --fail --location --show-error \
-    "https://nodejs.org/dist/${version}/SHASUMS256.txt" -o "$temp_dir/SHASUMS256.txt"
-  checksum_file="$(grep "  ${archive}$" "$temp_dir/SHASUMS256.txt" || true)"
-  [[ -n "$checksum_file" ]] || die "Node.js checksum entry is missing."
-  (cd "$temp_dir" && printf '%s\n' "$checksum_file" | sha256sum --check --status)
-  mkdir -p "$install_root/toolchain"
-  rm -rf -- "$install_root/toolchain/node"
-  mkdir -p "$install_root/toolchain/node"
-  tar -xJf "$temp_dir/$archive" --strip-components=1 -C "$install_root/toolchain/node"
-  rm -rf -- "$temp_dir"
-  node_path="$install_root/toolchain/node/bin/node"
-  npm_path="$install_root/toolchain/node/bin/npm"
-}
-
-install_pnpm() {
-  [[ -n "$npm_path" && -x "$npm_path" ]] \
-    || die "A compatible Node.js runtime was found, but its npm executable is unavailable."
-  run_with_node "$node_path" "$npm_path" install --global \
-    --prefix "$install_root/toolchain" "pnpm@${pnpm_version}"
-}
-
-install_clojure_cli() {
-  local temp_dir installer
-  temp_dir="$(mktemp -d /tmp/logseq-sync-clojure.XXXXXX)"
-  register_temporary_path "$temp_dir"
-  installer="$temp_dir/linux-install-${clojure_version}.sh"
-  curl --fail --location --show-error \
-    "https://download.clojure.org/install/linux-install-${clojure_version}.sh" \
-    -o "$installer"
-  chmod +x "$installer"
-  "$installer"
-  rm -rf -- "$temp_dir"
-}
-
-install_caddy() {
-  local temp_file
-  temp_file="$(mktemp /tmp/logseq-sync-caddy.XXXXXX)"
-  register_temporary_path "$temp_file"
-  curl --fail --location --show-error \
-    "https://caddyserver.com/api/download?os=linux&arch=$(caddy_architecture)" \
-    -o "$temp_file"
-  mkdir -p "$install_root/toolchain/bin"
-  install -m 0755 "$temp_file" "$install_root/toolchain/bin/caddy"
-  rm -f -- "$temp_file"
-}
-
-dependencies_ready() {
-  command -v curl >/dev/null 2>&1 \
-    && command -v git >/dev/null 2>&1 \
-    && command -v java >/dev/null 2>&1 \
-    && command -v clojure >/dev/null 2>&1 \
-    && clojure -Sdescribe >/dev/null 2>&1 \
-    && [[ -n "$node_path" ]] \
-    && node_version_supported "$node_path" \
-    && [[ -x "$install_root/toolchain/bin/pnpm" ]] \
-    && [[ -x "$install_root/toolchain/bin/caddy" ]]
-}
-
-bootstrap() {
-  local skip_confirmation="${1:-false}"
-  require_linux
-  require_root
-  validate_install_paths
-  command -v systemctl >/dev/null 2>&1 || die "systemd is required."
-  printf 'The installer will add build tools, Clojure CLI, and Caddy.\n'
-  printf 'A compatible system Node.js is reused; otherwise a private Node.js 24 runtime is installed.\n'
-  if [[ "$skip_confirmation" != "true" ]]; then
-    confirm 'Install missing dependencies automatically?' yes || die "Dependency installation cancelled."
-  fi
-  ensure_system_packages
-  select_node_runtime
-  if [[ -z "$node_path" \
-        || ( ! -x "$install_root/toolchain/bin/pnpm" && -z "$npm_path" ) ]]; then
-    install_node_toolchain
-  fi
-  printf 'Using Node.js %s at %s.\n' "$("$node_path" --version)" "$node_path"
-  if [[ ! -x "$install_root/toolchain/bin/pnpm" ]]; then
-    install_pnpm
-  fi
-  if ! command -v clojure >/dev/null 2>&1 || ! clojure -Sdescribe >/dev/null 2>&1; then
-    install_clojure_cli
-  fi
-  if [[ ! -x "$install_root/toolchain/bin/caddy" ]]; then
-    install_caddy
-  fi
-  dependencies_ready || die "Dependency installation did not complete successfully."
-  printf 'Dependencies are ready.\n'
-}
-
-ensure_dependencies() {
-  select_node_runtime
-  if dependencies_ready; then
-    return 0
-  fi
-  printf 'Some native build or runtime dependencies are missing.\n'
-  bootstrap true
+  release_repository="${release_repository:-$default_release_repository}"
+  [[ "$release_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+    || die "Invalid GitHub release repository: $release_repository"
+  [[ "$release_tag" =~ ^db-sync-native(-v[0-9A-Za-z._-]+)?$ ]] \
+    || die "Invalid native runtime release tag: $release_tag"
 }
 
 ensure_service_users() {
@@ -489,31 +216,6 @@ ensure_service_users() {
   fi
 }
 
-verify_service_node_runtime() {
-  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
-  runuser -u logseq-sync -- "$node_path" --version >/dev/null 2>&1 \
-    || die "The selected Node.js runtime is not executable by the logseq-sync service user: $node_path"
-}
-
-builder_identity() {
-  local candidate="${SUDO_USER:-root}"
-  if id "$candidate" >/dev/null 2>&1; then
-    printf '%s' "$candidate"
-  else
-    printf 'root'
-  fi
-}
-
-run_as_builder() {
-  local builder="$1"
-  shift
-  if [[ "$builder" == "root" ]]; then
-    "$@"
-  else
-    runuser -u "$builder" -- "$@"
-  fi
-}
-
 replace_current_release() {
   local release_dir="$1"
   [[ ! -e "$install_root/current" || -L "$install_root/current" ]] \
@@ -526,50 +228,149 @@ replace_current_release() {
   mv -f "$install_root/current.new" "$install_root/current"
 }
 
-build_adapter() {
-  local build_root builder builder_home node_dir release_id release_dir suffix=0
-  build_root="$(mktemp -d /tmp/logseq-sync-build.XXXXXX)"
-  register_temporary_path "$build_root"
-  [[ -f "$source_dir/deps/db-sync/package.json" ]] \
-    || die "The configured Logseq source checkout is unavailable: $source_dir"
-  builder="$(builder_identity)"
-  builder_home="$(getent passwd "$builder" | cut -d: -f6)"
-  node_dir="$(dirname -- "$node_path")"
-  mkdir -p "$build_root/deps/db-sync"
-  cp -a "$source_dir/deps/common" "$build_root/deps/common"
-  cp -a "$source_dir/deps/db" "$build_root/deps/db"
-  cp -a "$source_dir/deps/graph-parser" "$build_root/deps/graph-parser"
-  cp -a "$source_dir/deps/outliner" "$build_root/deps/outliner"
-  cp -a "$source_dir/resources" "$build_root/resources"
-  cp -a "$source_dir/deps/db-sync/package.json" \
-    "$source_dir/deps/db-sync/pnpm-lock.yaml" \
-    "$source_dir/deps/db-sync/deps.edn" \
-    "$source_dir/deps/db-sync/shadow-cljs.edn" \
-    "$build_root/deps/db-sync/"
-  cp -a "$source_dir/deps/db-sync/src" "$build_root/deps/db-sync/src"
-  set_owner -R "$builder" "$build_root"
-  run_as_builder "$builder" env \
-    HOME="$builder_home" \
-    PATH="$node_dir:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
-    "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
-    install --frozen-lockfile --prod
-  run_as_builder "$builder" env \
-    HOME="$builder_home" \
-    PATH="$node_dir:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
-    "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
-    build:node-adapter
-  release_id="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+runtime_ready() {
+  [[ -x "$install_root/current/node/bin/node" \
+     && -f "$install_root/current/app/node-adapter.js" \
+     && -d "$install_root/current/app/node_modules" \
+     && -f "$install_root/current/VERSION" \
+     && -f "$install_root/current/ARCHITECTURE" ]] \
+    && [[ "$(<"$install_root/current/ARCHITECTURE")" == "$(architecture)" ]] \
+    && "$install_root/current/node/bin/node" --version >/dev/null 2>&1
+}
+
+download_file() {
+  local source="$1"
+  local destination="$2"
+  if [[ "$source" == /* ]]; then
+    cp -a -- "$source" "$destination"
+  else
+    curl --fail --location --show-error "$source" -o "$destination"
+  fi
+}
+
+install_runtime() {
+  local runtime_arch asset release_base archive_source checksum_source
+  local temp_dir archive checksum_file expected_checksum actual_checksum
+  local extracted_dir version release_id release_dir
+  runtime_arch="$(architecture)"
+  asset="logseq-sync-runtime-linux-${runtime_arch}.tar.gz"
+  release_base="${LOGSEQ_SYNC_RELEASE_BASE_URL:-https://github.com/${release_repository}/releases/download/${release_tag}}"
+  archive_source="${LOGSEQ_SYNC_RUNTIME_ARCHIVE:-${release_base}/${asset}}"
+  checksum_source="${LOGSEQ_SYNC_RUNTIME_CHECKSUM:-${archive_source}.sha256}"
+  temp_dir="$(mktemp -d /tmp/logseq-sync-runtime.XXXXXX)"
+  register_temporary_path "$temp_dir"
+  archive="$temp_dir/$asset"
+  checksum_file="$temp_dir/$asset.sha256"
+  printf 'Downloading prebuilt Sync runtime for Linux %s from %s (%s).\n' \
+    "$runtime_arch" "$release_repository" "$release_tag"
+  download_file "$archive_source" "$archive"
+  download_file "$checksum_source" "$checksum_file"
+  expected_checksum="$(awk -v asset="$asset" '$2 == asset || $2 == "*" asset {print $1; exit}' "$checksum_file")"
+  [[ "$expected_checksum" =~ ^[0-9a-fA-F]{64}$ ]] \
+    || die "The runtime checksum file is invalid."
+  actual_checksum="$(sha256sum "$archive" | awk '{print $1}')"
+  [[ "$actual_checksum" == "$expected_checksum" ]] \
+    || die "The downloaded Sync runtime failed checksum verification."
+  while IFS= read -r archive_entry; do
+    case "$archive_entry" in
+      logseq-sync-runtime|logseq-sync-runtime/*)
+        [[ "$archive_entry" != *'/../'* && "$archive_entry" != '../'* ]] \
+          || die "The downloaded Sync runtime contains an unsafe path."
+        ;;
+      *) die "The downloaded Sync runtime contains an unexpected path." ;;
+    esac
+  done < <(tar -tzf "$archive")
+  mkdir -p "$temp_dir/extracted"
+  tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$temp_dir/extracted"
+  extracted_dir="$temp_dir/extracted/logseq-sync-runtime"
+  [[ -x "$extracted_dir/node/bin/node" \
+     && -f "$extracted_dir/app/node-adapter.js" \
+     && -d "$extracted_dir/app/node_modules" \
+     && -x "$extracted_dir/bin/logseq-sync-native" \
+     && -f "$extracted_dir/VERSION" \
+     && -f "$extracted_dir/ARCHITECTURE" ]] \
+    || die "The downloaded Sync runtime is incomplete."
+  [[ "$(<"$extracted_dir/ARCHITECTURE")" == "$runtime_arch" ]] \
+    || die "The downloaded Sync runtime architecture does not match this server."
+  "$extracted_dir/node/bin/node" --version >/dev/null 2>&1 \
+    || die "The bundled Node.js runtime cannot run on this server."
+  version="$(<"$extracted_dir/VERSION")"
+  [[ "$version" =~ ^[A-Za-z0-9._+-]+$ ]] || die "The runtime version is invalid."
+  release_id="${version}-${runtime_arch}-${actual_checksum:0:12}"
   release_dir="$install_root/releases/$release_id"
-  while [[ -e "$release_dir" ]]; do
-    suffix=$((suffix + 1))
-    release_dir="$install_root/releases/${release_id}-${suffix}"
-  done
-  mkdir -p "$release_dir"
-  cp -a "$build_root/deps/db-sync/worker/dist/node-adapter.js" "$release_dir/"
-  cp -a "$build_root/deps/db-sync/node_modules" "$release_dir/"
-  set_owner -R logseq-sync:logseq-sync "$release_dir"
+  mkdir -p "$install_root/releases"
+  if [[ ! -d "$release_dir" ]]; then
+    mv "$extracted_dir" "$release_dir"
+    set_owner -R logseq-sync:logseq-sync "$release_dir"
+  fi
   replace_current_release "$release_dir"
-  rm -rf -- "$build_root"
+  runtime_sha256="$actual_checksum"
+  printf 'Installed Sync runtime %s with bundled %s.\n' \
+    "$version" "$("$release_dir/node/bin/node" --version)"
+}
+
+install_caddy() {
+  local temp_file
+  [[ -x "$install_root/toolchain/bin/caddy" ]] && return 0
+  temp_file="$(mktemp /tmp/logseq-sync-caddy.XXXXXX)"
+  register_temporary_path "$temp_file"
+  printf 'Downloading Caddy for automatic HTTPS.\n'
+  curl --fail --location --show-error \
+    "https://caddyserver.com/api/download?os=linux&arch=$(caddy_architecture)" \
+    -o "$temp_file"
+  mkdir -p "$install_root/toolchain/bin"
+  install -m 0755 "$temp_file" "$install_root/toolchain/bin/caddy"
+  rm -f -- "$temp_file"
+}
+
+verify_service_runtime() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  runuser -u logseq-sync -- "$install_root/current/node/bin/node" --version >/dev/null 2>&1 \
+    || die "The bundled runtime is not executable by the logseq-sync service user."
+}
+
+install_manager() {
+  local manager_source="$install_root/current/bin/logseq-sync-native"
+  [[ -f "$manager_source" ]] || manager_source="${BASH_SOURCE[0]}"
+  mkdir -p "$(dirname -- "$manager_path")"
+  if [[ -e "$manager_path" ]]; then
+    if [[ "$manager_source" -ef "$manager_path" ]] || cmp -s "$manager_source" "$manager_path"; then
+      return 0
+    fi
+  fi
+  backup_file "$manager_path"
+  install -m 0755 "$manager_source" "$manager_path"
+}
+
+bootstrap() {
+  require_linux
+  require_root
+  validate_install_paths
+  require_commands
+  select_release_source
+  printf 'The installer will download a prebuilt Sync runtime and Caddy.\n'
+  printf 'It will not install or use system Node.js, Java, Clojure, or build tools.\n'
+  confirm 'Download the runtime components?' yes || die "Download cancelled."
+  ensure_service_users
+  install_runtime
+  install_caddy
+  verify_service_runtime
+  install_manager
+  printf 'Runtime components are ready.\n'
+}
+
+ensure_runtime_components() {
+  require_commands
+  select_release_source
+  ensure_service_users
+  if ! runtime_ready; then
+    install_runtime
+  else
+    runtime_sha256="$(read_env_value LOGSEQ_SYNC_RUNTIME_SHA256)"
+    printf 'Using installed prebuilt Sync runtime %s.\n' "$(<"$install_root/current/VERSION")"
+  fi
+  install_caddy
+  verify_service_runtime
 }
 
 write_configuration() {
@@ -585,10 +386,11 @@ write_configuration() {
   backup_file "$systemd_dir/$sync_service"
   backup_file "$systemd_dir/$proxy_service"
   write_private_file "$config_dir/sync.env" "NODE_ENV=production
-LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
+LOGSEQ_SYNC_RELEASE_REPOSITORY=${release_repository}
+LOGSEQ_SYNC_RELEASE_TAG=${release_tag}
+LOGSEQ_SYNC_RUNTIME_SHA256=${runtime_sha256}
 LOGSEQ_SYNC_PUBLIC_PORT=${public_port}
 LOGSEQ_SYNC_INTERNAL_PORT=${internal_port}
-LOGSEQ_SYNC_NODE_PATH=${node_path}
 DB_SYNC_HOST=127.0.0.1
 DB_SYNC_PORT=${internal_port}
 DB_SYNC_BASE_URL=${public_url}
@@ -621,9 +423,9 @@ Wants=network-online.target
 Type=simple
 User=logseq-sync
 Group=logseq-sync
-WorkingDirectory=${install_root}/current
+WorkingDirectory=${install_root}/current/app
 EnvironmentFile=${config_dir}/sync.env
-ExecStart=${node_path} ${install_root}/current/node-adapter.js
+ExecStart=${install_root}/current/node/bin/node ${install_root}/current/app/node-adapter.js
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
@@ -663,19 +465,6 @@ ReadWritePaths=${caddy_data_dir}
 WantedBy=multi-user.target
 "
   chmod 0644 "$systemd_dir/$proxy_service"
-}
-
-install_manager() {
-  local manager_source="$source_dir/deps/db-sync/deploy/logseq-sync-native"
-  [[ -f "$manager_source" ]] || manager_source="${BASH_SOURCE[0]}"
-  mkdir -p "$(dirname -- "$manager_path")"
-  if [[ -e "$manager_path" ]]; then
-    if [[ "$manager_source" -ef "$manager_path" ]] || cmp -s "$manager_source" "$manager_path"; then
-      return 0
-    fi
-  fi
-  backup_file "$manager_path"
-  install -m 0755 "$manager_source" "$manager_path"
 }
 
 wait_for_url() {
@@ -730,48 +519,31 @@ setup() {
         domain="$2"
         shift 2
         ;;
-      --domain=*)
-        domain="${1#--domain=}"
-        shift
-        ;;
+      --domain=*) domain="${1#--domain=}"; shift ;;
       --public-port)
         (( $# >= 2 )) || die "--public-port requires a value."
         requested_port="$2"
         shift 2
         ;;
-      --public-port=*)
-        requested_port="${1#--public-port=}"
-        shift
-        ;;
+      --public-port=*) requested_port="${1#--public-port=}"; shift ;;
       --internal-port)
         (( $# >= 2 )) || die "--internal-port requires a value."
         requested_internal_port="$2"
         shift 2
         ;;
-      --internal-port=*)
-        requested_internal_port="${1#--internal-port=}"
-        shift
-        ;;
-      --yes|-y)
-        assume_yes="true"
-        shift
-        ;;
-      --help|-h)
-        usage
-        return 0
-        ;;
-      *)
-        die "Unknown setup option: $1. Use --domain, --public-port, --internal-port, or --yes."
-        ;;
+      --internal-port=*) requested_internal_port="${1#--internal-port=}"; shift ;;
+      --yes|-y) assume_yes="true"; shift ;;
+      --help|-h) usage; return 0 ;;
+      *) die "Unknown setup option: $1. Use --domain, --public-port, --internal-port, or --yes." ;;
     esac
   done
   require_linux
   require_root
   validate_install_paths
-  command -v systemctl >/dev/null 2>&1 || die "systemd is required."
+  require_commands
   if [[ "$assume_yes" != "true" ]]; then
     printf '\nLogseq Sync setup\n'
-    printf 'This wizard will configure Sync Node, Caddy, automatic HTTPS, and systemd.\n'
+    printf 'This wizard will configure a prebuilt Sync runtime, Caddy, automatic HTTPS, and systemd.\n'
     printf 'You only need a domain name, public HTTPS port, and private Sync port.\n\n'
   fi
   previous_url="$(read_env_value DB_SYNC_BASE_URL)"
@@ -787,7 +559,6 @@ setup() {
     domain="$(read_value 'Step 1/3 - Sync domain name' "$previous_domain")"
   fi
   valid_domain "$domain" || die "Enter a valid DNS domain name, not an IP address."
-  command -v getent >/dev/null 2>&1 || die "The getent command is required for DNS validation."
   resolved_ips="$(getent ahosts "$domain" \
     | awk '!seen[$1]++ {printf "%s%s", separator, $1; separator=", "}' || true)"
   [[ -n "$resolved_ips" ]] \
@@ -825,22 +596,23 @@ setup() {
     || die "Private Sync port must be between 1024 and 65535."
   [[ "$public_port" != "$internal_port" ]] \
     || die "Public HTTPS port and private Sync port must be different."
+  select_release_source
   public_url="https://${domain}:${public_port}"
   printf '\nDeployment plan:\n'
   printf '  DNS: %s -> %s\n' "$domain" "$resolved_ips"
   printf '  Public endpoint (enter in Logseq): %s\n' "$public_url"
   printf '  Public inbound TCP: 80 (certificate), %s (HTTPS/WSS)\n' "$public_port"
   printf '  Private adapter: 127.0.0.1:%s (local only, do not expose)\n' "$internal_port"
+  printf '  Runtime: prebuilt Linux %s package from %s (%s)\n' \
+    "$(architecture)" "$release_repository" "$release_tag"
   printf '  Data: %s\n' "$data_dir"
   printf '  Services: Sync Node + Caddy (systemd)\n\n'
-  confirm 'Build and start Logseq Sync?' yes || die "Setup cancelled."
-  ensure_dependencies
-  ensure_service_users
-  verify_service_node_runtime
-  build_adapter
+  confirm 'Download and start Logseq Sync?' yes || die "Setup cancelled."
+  ensure_runtime_components
   write_configuration "$domain"
   install_manager
-  start_services "$public_url" || die "Setup did not complete. Generated configuration and data were preserved."
+  start_services "$public_url" \
+    || die "Setup did not complete. Generated configuration and data were preserved."
   printf '\nLogseq Sync is ready. Enter this URL in Logseq → Settings → Advanced → Sync Server URL:\n'
   printf '  %s\n' "$public_url"
   printf 'Manage it later with: sudo %s status\n' "$manager_path"
@@ -851,15 +623,18 @@ update() {
   require_linux
   require_root
   validate_install_paths
+  require_commands
   [[ -f "$config_dir/sync.env" ]] || die "Run setup first."
-  ensure_dependencies
-  verify_service_node_runtime
+  select_release_source
+  ensure_service_users
   public_url="$(read_env_value DB_SYNC_BASE_URL)"
   previous_release="$(readlink "$install_root/current" 2>/dev/null || true)"
   [[ -n "$previous_release" && -d "$previous_release" ]] \
     || die "The current adapter release is missing. Run setup to repair it."
-  printf 'Building the current checkout and preserving configuration and data.\n'
-  build_adapter
+  printf 'Downloading the current prebuilt runtime; configuration and data will be preserved.\n'
+  install_runtime
+  install_caddy
+  verify_service_runtime
   install_manager
   systemctl restart "$sync_service"
   if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2; then
@@ -877,14 +652,16 @@ update() {
 }
 
 status() {
-  local public_url internal_body public_body
+  local public_url internal_body public_body runtime_version
   require_root
   validate_install_paths
   [[ -f "$config_dir/sync.env" ]] || die "No native deployment configuration found."
   public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  runtime_version="$(<"$install_root/current/VERSION")"
   systemctl --no-pager --full status "$sync_service" "$proxy_service" || true
   internal_body="$(curl --fail --silent --max-time 3 "http://127.0.0.1:${internal_port}/health" 2>/dev/null || true)"
   public_body="$(curl --fail --silent --max-time 5 "$public_url/health" 2>/dev/null || true)"
+  printf 'Runtime version: %s\n' "$runtime_version"
   printf 'Sync Server URL: %s\n' "$public_url"
   [[ "$internal_body" == '{"ok":true}' ]] || die "The private Sync health check failed."
   [[ "$public_body" == '{"ok":true}' ]] || die "The public HTTPS health check failed."
@@ -918,18 +695,27 @@ Usage:
   sudo logseq-sync-native status
   sudo logseq-sync-native logs [--follow] [sync|proxy]
 
-The public HTTPS port defaults to 10010 when setup input is left blank. Port 80
-is used only for automatic certificate issuance and renewal. The Node adapter
-uses a separate loopback-only port managed by the installer.
+The server downloads a checksum-verified, prebuilt Linux x64 or arm64 runtime.
+It does not need system Node.js, Java, Clojure, pnpm, Python, or a compiler.
+
+Advanced release overrides:
+  LOGSEQ_SYNC_RELEASE_REPOSITORY=<owner/repository>
+  LOGSEQ_SYNC_RELEASE_TAG=<db-sync-native or versioned tag>
 EOF
 }
 
-case "${1:-help}" in
-  setup) shift; setup "$@" ;;
-  update) shift; update "$@" ;;
-  bootstrap) shift; bootstrap false "$@" ;;
-  status) shift; status "$@" ;;
-  logs) shift; logs "$@" ;;
-  help|-h|--help) usage ;;
-  *) usage; exit 1 ;;
-esac
+main() {
+  local command="${1:-help}"
+  (( $# > 0 )) && shift
+  case "$command" in
+    setup) setup "$@" ;;
+    update) update "$@" ;;
+    bootstrap) bootstrap "$@" ;;
+    status) status "$@" ;;
+    logs) logs "$@" ;;
+    help|--help|-h) usage ;;
+    *) usage >&2; die "Unknown command: $command" ;;
+  esac
+}
+
+main "$@"

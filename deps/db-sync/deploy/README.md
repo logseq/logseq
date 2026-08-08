@@ -1,18 +1,20 @@
 # Self-host Logseq Sync on Linux
 
-The recommended lightweight deployment runs the Sync Node adapter and Caddy as
-two native systemd services. It does not require Docker. Caddy serves
-`HTTPS/WSS` on public port `10010` by default, obtains and renews the certificate, and
-forwards traffic to the adapter on `127.0.0.1:10011`.
+The recommended lightweight deployment runs a prebuilt Sync Node runtime and
+Caddy as two native systemd services. It does not require Docker or a local
+build environment. Caddy serves `HTTPS/WSS` on public port `10010` by default,
+obtains and renews the certificate, and forwards traffic to the adapter on
+`127.0.0.1:10011`.
 
 ## Before you start
 
-Use a dedicated systemd server on `x86_64` or `arm64`. The installer supports
-Debian/Ubuntu (`apt`) and RPM-based cloud distributions (`dnf` or `yum`) whose
-enabled repositories provide Java 17 or 21, including OpenCloudOS 9, Amazon
-Linux 2023, and current RHEL-compatible distributions. On OpenCloudOS, the
-installer also recognizes the distribution's Tencent KonaJDK 17 packages.
-You need:
+Use a systemd-based Linux server on `x86_64` or `arm64`. The server does not
+need Node.js, Java, Clojure, pnpm, Python, gcc, or a Linux package manager. It
+only needs standard base utilities (`curl`, `tar`, and `sha256sum`) plus sudo.
+This keeps the same installation path for Debian, Ubuntu, OpenCloudOS,
+TencentOS, RHEL-compatible distributions, and other glibc-based Linux systems.
+
+You also need:
 
 - a domain whose DNS `A`/`AAAA` record already points to the server;
 - inbound TCP port `80` for certificate issuance and renewal;
@@ -20,25 +22,38 @@ You need:
 - `sudo` access.
 
 Do not expose the private adapter port printed in the deployment plan. The
-installer also makes the adapter bind only to the loopback interface.
+installer binds the adapter to the loopback interface only.
 
 ## Install
 
-Clone the repository and run one command:
+Download the small management command from the native runtime release and run
+the guided setup:
 
 ```bash
-git clone https://github.com/logseq/logseq.git
-cd logseq/deps/db-sync/deploy
+curl -fL \
+  https://github.com/logseq/logseq/releases/download/db-sync-native/logseq-sync-native \
+  -o /tmp/logseq-sync-native
+curl -fL \
+  https://github.com/logseq/logseq/releases/download/db-sync-native/logseq-sync-native.sha256 \
+  -o /tmp/logseq-sync-native.sha256
+cd /tmp
+sha256sum --check logseq-sync-native.sha256
+chmod +x logseq-sync-native
 sudo ./logseq-sync-native setup
 ```
 
-Setup starts a guided flow. It asks for the domain, public HTTPS port, and
-private Sync port. Press Enter to accept the port defaults, or enter other
-available ports. It then prints the complete deployment plan for confirmation.
+Setup automatically selects the Linux `x64` or `arm64` runtime, verifies its
+SHA-256 checksum, installs it under `/opt/logseq-sync`, downloads Caddy, and
+creates the two systemd services. Compilation happens only in GitHub Actions,
+not on the server.
+
+The setup wizard asks for the domain, public HTTPS port, and private Sync port.
+Press Enter to accept the port defaults, or enter other available ports. It
+prints the complete deployment plan before downloading or changing services.
 
 ```text
 Logseq Sync setup
-This wizard will configure Sync Node, Caddy, automatic HTTPS, and systemd.
+This wizard will configure a prebuilt Sync runtime, Caddy, automatic HTTPS, and systemd.
 You only need a domain name, public HTTPS port, and private Sync port.
 
 Step 1/3 - Sync domain name: sync.example.com
@@ -72,20 +87,6 @@ sudo ./logseq-sync-native setup \
   --yes
 ```
 
-On the first run, the installer prepares the required build tools, Clojure CLI,
-and Caddy. It reuses a system-wide Node.js 22.12+ or 24.x installation when the
-binary is in a stable service-accessible path. Node installations under a login
-home directory, such as root-only `nvm`, are not suitable for systemd services;
-when no suitable system Node.js is found, setup installs a private Node.js 24
-runtime. It then:
-
-1. builds the adapter from the checked-out revision;
-2. creates dedicated `logseq-sync` and `caddy` service users;
-3. stores graph data under `/var/lib/logseq-sync`;
-4. installs and starts both systemd services;
-5. waits for the private and public health checks to pass;
-6. prints the URL to enter in Logseq.
-
 No Cognito values are requested in the normal flow. The installer uses the
 verified JWT settings already used by an unmodified Logseq client.
 
@@ -110,9 +111,8 @@ server firewall:
 
 Port `443` is not used when the default port is selected. The adapter's internal
 port is private and must not be opened. If another process already owns port
-`80` or the selected HTTPS port, stop it or
-integrate the generated Caddy site into the existing reverse proxy before
-running setup.
+`80` or the selected HTTPS port, stop it or integrate the generated Caddy site
+into the existing reverse proxy before running setup.
 
 ## Operate and update
 
@@ -120,25 +120,34 @@ running setup.
 sudo logseq-sync-native status
 sudo logseq-sync-native logs --follow sync
 sudo logseq-sync-native logs --follow proxy
-```
-
-To update, move the checkout to the desired revision and rebuild atomically:
-
-```bash
-git -C ../../.. pull --ff-only
 sudo logseq-sync-native update
 ```
 
-Configuration and graph data are preserved. Each build is installed into a
-separate release directory before the `current` link is switched, so a partial
-build never replaces the running adapter. Rerunning `setup` preserves the data
-directory and creates timestamped backups of generated configuration files.
+`update` downloads the current checksum-verified runtime from the configured
+release channel. Configuration and graph data are preserved. Each runtime is
+installed into a separate release directory before the `current` link is
+switched. If either health check fails, the previous runtime is restored.
+The runtime also carries the corresponding management command, so updates do
+not require another repository checkout.
+
+For testing a fork or pinning a versioned runtime release, set the source on the
+first setup:
+
+```bash
+sudo LOGSEQ_SYNC_RELEASE_REPOSITORY=owner/logseq \
+  LOGSEQ_SYNC_RELEASE_TAG=db-sync-native-v1 \
+  ./logseq-sync-native setup
+```
+
+The selected repository and tag are persisted for later updates.
 
 ## What gets installed
 
 | Path | Contents |
 | --- | --- |
-| `/opt/logseq-sync` | Caddy, pnpm, optional private Node, and versioned adapter builds |
+| `/opt/logseq-sync/releases` | versioned, self-contained Sync runtimes |
+| `/opt/logseq-sync/current` | active runtime symlink |
+| `/opt/logseq-sync/toolchain/bin/caddy` | Caddy executable |
 | `/etc/logseq-sync` | generated environment and Caddy configuration |
 | `/var/lib/logseq-sync` | graph SQLite files and assets |
 | `/var/lib/logseq-sync-caddy` | certificates and Caddy state |
@@ -148,15 +157,35 @@ directory and creates timestamped backups of generated configuration files.
 The service is experimental. Back up `/var/lib/logseq-sync` before relying on
 it for important graphs.
 
+## Building and publishing runtimes
+
+The `db-sync native runtime` GitHub Actions workflow builds on native Linux x64
+and arm64 runners with Java 21 and Node.js 24. Each archive contains:
+
+```text
+logseq-sync-runtime/
+  node/bin/node
+  app/node-adapter.js
+  app/node_modules/
+  bin/logseq-sync-native
+  VERSION
+  ARCHITECTURE
+```
+
+Pull requests build and smoke-test both architectures. Run the workflow
+manually with release tag `db-sync-native` to update the rolling installation
+channel, or push a `db-sync-native-v*` tag for a versioned release. The workflow
+uploads the runtime archives, checksums, manager, and manager checksum as GitHub
+Release assets.
+
 ## Docker alternative
 
-The existing Docker Compose manager remains available when container isolation
-is preferred:
+The Docker Compose manager remains available when container isolation is
+preferred:
 
 ```bash
 ./logseq-sync setup
 ```
 
 It exposes the same public `https://domain:10010` endpoint, but requires Docker
-Engine and Docker Compose. Native deployment is the recommended path for small
-servers that should not carry a container runtime.
+Engine and Docker Compose.

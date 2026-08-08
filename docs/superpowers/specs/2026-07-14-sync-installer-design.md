@@ -13,14 +13,18 @@ exact HTTPS URL to enter in Logseq.
 The deployment assets will live under `deps/db-sync/deploy/` and include:
 
 - a native `logseq-sync-native` entrypoint;
+- checksum-verified native runtime archives built for Linux `x64` and `arm64`;
+- a GitHub Actions workflow that builds, smoke-tests, and publishes the archives;
 - a Dockerfile that builds the Node adapter and runs it;
 - a Compose definition retained as an alternative deployment;
 - Caddy reverse proxy configuration for automatic TLS;
 - generated `sync.env` configuration, never committed with secrets.
 
-The native installer targets one Debian/Ubuntu or RPM-based systemd host and
-one Sync adapter instance. It installs its build/runtime dependencies, but does
-not run a multi-node cluster, provide backups, or delete existing data.
+The native installer targets one glibc-based Linux systemd host and one Sync
+adapter instance. The server does not compile source or install Node.js, Java,
+Clojure, pnpm, Python, or compiler packages. It downloads a prebuilt runtime
+and Caddy, but does not run a multi-node cluster, provide backups, or delete
+existing data.
 
 ## Operator flow
 
@@ -32,11 +36,13 @@ not run a multi-node cluster, provide backups, or delete existing data.
    for the private loopback-only adapter port with `10011` as the default. Keep
    ACME HTTP validation on port `80`, explain the public/private exposure rules,
    reject duplicate ports, print the topology, and require one confirmation.
-4. Reuse a compatible service-accessible Node.js 22 or 24 runtime when present;
-   otherwise install a private Node.js 24 runtime. Install other missing native
-   build/runtime dependencies with `apt`, `dnf`, or `yum`.
-5. Build into a new versioned release directory, then atomically switch the
-   `current` symlink only after the build succeeds.
+4. Select the prebuilt Linux `x64` or `arm64` runtime, download its archive and
+   SHA-256 file from the configured GitHub Release, and reject incomplete,
+   corrupt, or wrong-architecture packages.
+5. Extract into a new versioned release directory, then atomically switch the
+   `current` symlink only after validation succeeds. The archive supplies its
+   own Node.js binary, compiled adapter, production `node_modules` (including
+   the architecture-specific `better-sqlite3` addon), and manager command.
 6. Generate systemd, adapter, and Caddy configuration. Normal setup uses the
    verified JWT identity embedded in the current Logseq client and does not ask
    for Cognito settings.
@@ -67,6 +73,10 @@ public `/health` endpoints. It reports success only when both return
 Server URL. `logs` prints the most recent 200 journal lines; `--follow` streams
 new lines. `sync` selects the Node adapter and `proxy` selects Caddy.
 
+`update` downloads the configured rolling or versioned release, atomically
+switches it, and restores the previous runtime if either health check fails.
+It does not require a repository checkout on the server.
+
 On startup or health-check failure, the manager leaves releases and persistent
 data intact, shows recent journal entries, and directs the operator to logs.
 
@@ -96,6 +106,35 @@ Caddy owns public port 80 and the selected HTTPS port. The adapter bind address
 is enforced in its own configuration rather than relying only on firewall
 rules.
 
+## Runtime build and release
+
+GitHub Actions builds on native Linux x64 and arm64 runners with Java 21,
+Node.js 24, and the pinned pnpm/Clojure toolchain. Compilation and native module
+installation happen there, not on the target host. Each published archive has
+this layout:
+
+```text
+logseq-sync-runtime/
+  node/bin/node
+  app/node-adapter.js
+  app/node_modules/
+  bin/logseq-sync-native
+  VERSION
+  ARCHITECTURE
+```
+
+The manager verifies the separately published SHA-256 value before extraction,
+checks the declared architecture, and executes the bundled Node.js runtime.
+This archive is preferred over a literal single executable because the adapter
+loads `better-sqlite3` as a native `.node` addon from the filesystem. Hiding it
+inside Node SEA or another single-file wrapper would add a fragile extraction
+and module-resolution layer without reducing the target host requirements.
+
+The rolling GitHub Release tag `db-sync-native` is the default install/update
+channel. Tags matching `db-sync-native-v*` provide pin-able releases. Forks can
+override the release repository during first setup; the manager persists that
+choice for later updates.
+
 ## Client compatibility
 
 The existing client accepts a custom HTTP(S) Sync Server URL and derives the
@@ -117,14 +156,18 @@ server.
 
 ## Verification
 
-- Build the adapter: `pnpm --dir deps/db-sync build:node-adapter`.
+- Build and package both runtime architectures in GitHub Actions.
+- Extract each packaged runtime and start its bundled adapter in the workflow.
+- Install the published runtime on a clean glibc/systemd host without a system
+  Node.js, Java, Clojure, pnpm, Python, or compiler toolchain.
 - Start the generated systemd deployment.
 - Verify `GET /health` returns `{"ok":true}`.
 - Verify a client configured with the displayed URL can connect and create a
   graph using the selected verified-JWT mode.
 - Run the non-interactive native-manager tests for default/custom port
-  selection, default authentication, domain validation, generated service
-  files, and one-shot status checks. Keep the Docker alternative tests green.
+  selection, default authentication, domain validation, checksum and
+  architecture rejection, generated service files, update rollback path, and
+  one-shot status checks. Keep the Docker alternative tests green.
 
 ## Open constraint
 

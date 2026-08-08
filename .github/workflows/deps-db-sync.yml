@@ -120,6 +120,7 @@ jobs:
         run: |
           bash -n deploy/logseq-sync
           bash -n deploy/logseq-sync-native
+          bash -n deploy/package-native-runtime.sh
           bash -n deploy/test.sh
           bash -n deploy/native-test.sh
 
