@@ -33,7 +33,8 @@
                   :storage-driver "sqlite"
                   :assets-driver "filesystem"
                   :log-level "info"}
-        merged (merge defaults (config-from-env) overrides)
+        env-config (into {} (remove (comp nil? val)) (config-from-env))
+        merged (merge defaults env-config overrides)
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
     (when-not (#{"sqlite"} storage-driver)

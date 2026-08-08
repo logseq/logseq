@@ -18,8 +18,10 @@
     (is (nil? (:unknown-key cfg)))
     (is (nil? (:legacy-auth-key cfg)))))
 
-(deftest normalize-config-default-host-test
-  (is (= "127.0.0.1" (:host (config/normalize-config {})))))
+(deftest normalize-config-defaults-test
+  (let [cfg (config/normalize-config {})]
+    (is (= "127.0.0.1" (:host cfg)))
+    (is (= 8080 (:port cfg)))))
 
 (deftest normalize-config-storage-driver-test
   (testing "sqlite storage driver accepted"
