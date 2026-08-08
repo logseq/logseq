@@ -32,7 +32,9 @@ not run a multi-node cluster, provide backups, or delete existing data.
    for the private loopback-only adapter port with `10011` as the default. Keep
    ACME HTTP validation on port `80`, explain the public/private exposure rules,
    reject duplicate ports, print the topology, and require one confirmation.
-4. Install missing native build/runtime dependencies with `apt`, `dnf`, or `yum`.
+4. Reuse a compatible service-accessible Node.js 22 or 24 runtime when present;
+   otherwise install a private Node.js 24 runtime. Install other missing native
+   build/runtime dependencies with `apt`, `dnf`, or `yum`.
 5. Build into a new versioned release directory, then atomically switch the
    `current` symlink only after the build succeeds.
 6. Generate systemd, adapter, and Caddy configuration. Normal setup uses the

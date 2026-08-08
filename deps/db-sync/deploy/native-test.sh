@@ -76,6 +76,9 @@ EOF
 
   cat > "$sandbox/install/toolchain/node/bin/node" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then
+  printf 'v24.0.0\n'
+fi
 exit 0
 EOF
 
@@ -127,6 +130,7 @@ run_manager() {
     LOGSEQ_SYNC_SYSTEMD_DIR="$sandbox/systemd" \
     LOGSEQ_SYNC_CADDY_DATA_DIR="$sandbox/caddy-data" \
     LOGSEQ_SYNC_MANAGER_PATH="$sandbox/bin/logseq-sync-native-installed" \
+    LOGSEQ_SYNC_NODE_PATH="${MOCK_NODE_PATH-$sandbox/install/toolchain/node/bin/node}" \
     MOCK_CURL_LOG="$sandbox/curl.log" \
     MOCK_SYSTEMCTL_LOG="$sandbox/systemctl.log" \
     MOCK_JOURNAL_LOG="$sandbox/journal.log" \
@@ -235,6 +239,108 @@ test_opencloudos_falls_back_to_kona_17() {
   assert_contains "$package_log" '-q list --available java-21-openjdk-headless' || return 1
   assert_contains "$package_log" '-q list --available java-17-konajdk' || return 1
   assert_contains "$package_log" 'java-17-konajdk'
+}
+
+test_selected_node_is_available_to_bundled_npm() {
+  local sandbox node_path npm_path
+  sandbox="$(make_sandbox)"
+  node_path="$sandbox/install/toolchain/node/bin/node"
+  npm_path="$sandbox/install/toolchain/node/bin/npm"
+  cat > "$node_path" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$MOCK_PRIVATE_NODE_LOG"
+EOF
+  cat > "$npm_path" <<'EOF'
+#!/usr/bin/env node
+EOF
+  chmod +x "$node_path" "$npm_path"
+  set +e
+  last_output="$(
+    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/install" \
+    MOCK_PRIVATE_NODE_LOG="$sandbox/private-node.log" \
+    PATH="/usr/bin:/bin" \
+      bash -c 'source "$1" help >/dev/null; run_with_node "$2" "$3" install' \
+        bash "$manager" "$node_path" "$npm_path" 2>&1
+  )"
+  last_status=$?
+  set -e
+  assert_success || return 1
+  [[ -f "$sandbox/private-node.log" ]] || {
+    printf 'Expected bundled npm to run with the private Node.js binary.\n' >&2
+    return 1
+  }
+  assert_contains "$(<"$sandbox/private-node.log")" "$npm_path install"
+}
+
+test_compatible_system_node_is_reused() {
+  local sandbox expected_node
+  sandbox="$(make_sandbox)"
+  cat > "$sandbox/bin/node" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--version" ]] && printf 'v22.22.0\n'
+EOF
+  cat > "$sandbox/bin/npm" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--version" ]] && printf '10.0.0\n'
+EOF
+  chmod +x "$sandbox/bin/node" "$sandbox/bin/npm"
+  expected_node="$(realpath "$sandbox/bin/node")"
+  set +e
+  last_output="$(
+    LOGSEQ_SYNC_TEST_MODE=true \
+    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/unused-install" \
+    PATH="$sandbox/bin:/usr/bin:/bin" \
+      bash -c 'source "$1" help >/dev/null; select_node_runtime; printf "%s\n" "$node_path"' \
+        bash "$manager" 2>&1
+  )"
+  last_status=$?
+  set -e
+  assert_success || return 1
+  assert_contains "$last_output" "$expected_node"
+}
+
+test_setup_persists_compatible_system_node() {
+  local sandbox expected_node
+  sandbox="$(make_sandbox)"
+  cat > "$sandbox/bin/node" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--version" ]] && printf 'v22.22.0\n'
+EOF
+  cat > "$sandbox/bin/npm" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--version" ]] && printf '10.0.0\n'
+EOF
+  chmod +x "$sandbox/bin/node" "$sandbox/bin/npm"
+  expected_node="$(realpath "$sandbox/bin/node")"
+  MOCK_NODE_PATH="" run_manager "$sandbox" setup --domain sync.example.com
+  assert_success || return 1
+  assert_contains "$(<"$sandbox/config/sync.env")" \
+    "LOGSEQ_SYNC_NODE_PATH=$expected_node" || return 1
+  assert_contains "$(<"$sandbox/systemd/logseq-sync.service")" \
+    "ExecStart=$expected_node "
+}
+
+test_unsupported_system_node_falls_back_to_private_runtime() {
+  local sandbox expected_node
+  sandbox="$(make_sandbox)"
+  cat > "$sandbox/bin/node" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--version" ]] && printf 'v20.19.0\n'
+EOF
+  chmod +x "$sandbox/bin/node"
+  expected_node="$sandbox/install/toolchain/node/bin/node"
+  set +e
+  last_output="$(
+    LOGSEQ_SYNC_TEST_MODE=true \
+    LOGSEQ_SYNC_INSTALL_ROOT="$sandbox/install" \
+    PATH="$sandbox/bin:/usr/bin:/bin" \
+      bash -c 'source "$1" help >/dev/null; select_node_runtime; printf "%s\n" "$node_path"' \
+        bash "$manager" 2>&1
+  )"
+  last_status=$?
+  set -e
+  assert_success || return 1
+  assert_contains "$last_output" "$expected_node"
 }
 
 test_rpm_distribution_can_install_with_yum() {
@@ -448,6 +554,10 @@ run_test test_setup_uses_public_10010_and_private_10011
 run_test test_rpm_distribution_installs_system_dependencies_with_dnf
 run_test test_amazon_linux_uses_corretto_21
 run_test test_opencloudos_falls_back_to_kona_17
+run_test test_selected_node_is_available_to_bundled_npm
+run_test test_compatible_system_node_is_reused
+run_test test_setup_persists_compatible_system_node
+run_test test_unsupported_system_node_falls_back_to_private_runtime
 run_test test_rpm_distribution_can_install_with_yum
 run_test test_setup_without_options_runs_guided_wizard
 run_test test_setup_rejects_ambiguous_positional_arguments

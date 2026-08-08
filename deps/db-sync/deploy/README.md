@@ -72,8 +72,12 @@ sudo ./logseq-sync-native setup \
   --yes
 ```
 
-On the first run, the installer prepares the required build tools, a private
-Node.js runtime, Clojure CLI, and Caddy. It then:
+On the first run, the installer prepares the required build tools, Clojure CLI,
+and Caddy. It reuses a system-wide Node.js 22.12+ or 24.x installation when the
+binary is in a stable service-accessible path. Node installations under a login
+home directory, such as root-only `nvm`, are not suitable for systemd services;
+when no suitable system Node.js is found, setup installs a private Node.js 24
+runtime. It then:
 
 1. builds the adapter from the checked-out revision;
 2. creates dedicated `logseq-sync` and `caddy` service users;
@@ -134,7 +138,7 @@ directory and creates timestamped backups of generated configuration files.
 
 | Path | Contents |
 | --- | --- |
-| `/opt/logseq-sync` | private Node/Caddy tools and versioned adapter builds |
+| `/opt/logseq-sync` | Caddy, pnpm, optional private Node, and versioned adapter builds |
 | `/etc/logseq-sync` | generated environment and Caddy configuration |
 | `/var/lib/logseq-sync` | graph SQLite files and assets |
 | `/var/lib/logseq-sync-caddy` | certificates and Caddy state |

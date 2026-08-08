@@ -22,9 +22,12 @@ readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.js
 configured_source_dir="$(sed -n 's/^LOGSEQ_SYNC_SOURCE_DIR=//p' "$config_dir/sync.env" 2>/dev/null || true)"
 configured_public_port="$(sed -n 's/^LOGSEQ_SYNC_PUBLIC_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
 configured_internal_port="$(sed -n 's/^LOGSEQ_SYNC_INTERNAL_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_node_path="${LOGSEQ_SYNC_NODE_PATH:-$(sed -n 's/^LOGSEQ_SYNC_NODE_PATH=//p' "$config_dir/sync.env" 2>/dev/null || true)}"
 public_port="${configured_public_port:-$default_public_port}"
 internal_port="${configured_internal_port:-$default_internal_port}"
 assume_yes="${LOGSEQ_SYNC_ASSUME_YES:-false}"
+node_path="$configured_node_path"
+npm_path=""
 if [[ -f "$checkout_source_dir/deps/db-sync/package.json" ]]; then
   readonly source_dir="$checkout_source_dir"
 else
@@ -167,6 +170,79 @@ caddy_architecture() {
   esac
 }
 
+node_version_supported() {
+  local candidate="$1"
+  local version major minor
+  [[ -x "$candidate" ]] || return 1
+  version="$("$candidate" --version 2>/dev/null || true)"
+  [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+ ]] || return 1
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  [[ "$major" == "24" ]] && return 0
+  [[ "$major" == "22" ]] && (( 10#$minor >= 12 ))
+}
+
+system_service_node_path() {
+  local candidate="$1"
+  [[ "$candidate" == /* && -x "$candidate" ]] || return 1
+  candidate="$(realpath "$candidate" 2>/dev/null || true)"
+  [[ -n "$candidate" && -x "$candidate" ]] || return 1
+  if [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" != "true" ]]; then
+    case "$candidate" in
+      /home/*|/root/*|/run/user/*|/tmp/*|/var/tmp/*) return 1 ;;
+    esac
+  fi
+  printf '%s' "$candidate"
+}
+
+find_npm_for_node() {
+  local candidate="$1"
+  local node_dir npm_candidate
+  node_dir="$(dirname -- "$candidate")"
+  for npm_candidate in "$node_dir/npm" "$(command -v npm 2>/dev/null || true)"; do
+    [[ "$npm_candidate" == /* && -x "$npm_candidate" ]] || continue
+    if run_with_node "$candidate" "$npm_candidate" --version >/dev/null 2>&1; then
+      printf '%s' "$npm_candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_with_node() {
+  local runtime="$1"
+  local runtime_dir
+  shift
+  runtime_dir="$(dirname -- "$runtime")"
+  env PATH="$runtime_dir:$install_root/toolchain/bin:${PATH:-/usr/local/bin:/usr/bin:/bin}" "$@"
+}
+
+select_node_runtime() {
+  local candidate
+  npm_path=""
+  if [[ -n "$configured_node_path" ]]; then
+    node_version_supported "$configured_node_path" \
+      || die "Configured Node.js must be version 22.12 or newer in the 22.x line, or version 24.x: $configured_node_path"
+    node_path="$configured_node_path"
+    npm_path="$(find_npm_for_node "$node_path" || true)"
+    return 0
+  fi
+  candidate="$(command -v node 2>/dev/null || true)"
+  candidate="$(system_service_node_path "$candidate" || true)"
+  if [[ -n "$candidate" ]] && node_version_supported "$candidate"; then
+    node_path="$candidate"
+    npm_path="$(find_npm_for_node "$node_path" || true)"
+    return 0
+  fi
+  candidate="$install_root/toolchain/node/bin/node"
+  if node_version_supported "$candidate"; then
+    node_path="$candidate"
+    npm_path="$(find_npm_for_node "$node_path" || true)"
+    return 0
+  fi
+  node_path=""
+}
+
 os_release_value() {
   local key="$1"
   local os_release_file="${2:-/etc/os-release}"
@@ -307,7 +383,14 @@ install_node_toolchain() {
   mkdir -p "$install_root/toolchain/node"
   tar -xJf "$temp_dir/$archive" --strip-components=1 -C "$install_root/toolchain/node"
   rm -rf -- "$temp_dir"
-  "$install_root/toolchain/node/bin/npm" install --global \
+  node_path="$install_root/toolchain/node/bin/node"
+  npm_path="$install_root/toolchain/node/bin/npm"
+}
+
+install_pnpm() {
+  [[ -n "$npm_path" && -x "$npm_path" ]] \
+    || die "A compatible Node.js runtime was found, but its npm executable is unavailable."
+  run_with_node "$node_path" "$npm_path" install --global \
     --prefix "$install_root/toolchain" "pnpm@${pnpm_version}"
 }
 
@@ -342,7 +425,8 @@ dependencies_ready() {
     && command -v java >/dev/null 2>&1 \
     && command -v clojure >/dev/null 2>&1 \
     && clojure -Sdescribe >/dev/null 2>&1 \
-    && [[ -x "$install_root/toolchain/node/bin/node" ]] \
+    && [[ -n "$node_path" ]] \
+    && node_version_supported "$node_path" \
     && [[ -x "$install_root/toolchain/bin/pnpm" ]] \
     && [[ -x "$install_root/toolchain/bin/caddy" ]]
 }
@@ -353,14 +437,20 @@ bootstrap() {
   require_root
   validate_install_paths
   command -v systemctl >/dev/null 2>&1 || die "systemd is required."
-  printf 'The installer will add build tools, a private Node.js runtime, Clojure CLI, and Caddy.\n'
+  printf 'The installer will add build tools, Clojure CLI, and Caddy.\n'
+  printf 'A compatible system Node.js is reused; otherwise a private Node.js 24 runtime is installed.\n'
   if [[ "$skip_confirmation" != "true" ]]; then
     confirm 'Install missing dependencies automatically?' yes || die "Dependency installation cancelled."
   fi
   ensure_system_packages
-  if [[ ! -x "$install_root/toolchain/node/bin/node" \
-        || ! -x "$install_root/toolchain/bin/pnpm" ]]; then
+  select_node_runtime
+  if [[ -z "$node_path" \
+        || ( ! -x "$install_root/toolchain/bin/pnpm" && -z "$npm_path" ) ]]; then
     install_node_toolchain
+  fi
+  printf 'Using Node.js %s at %s.\n' "$("$node_path" --version)" "$node_path"
+  if [[ ! -x "$install_root/toolchain/bin/pnpm" ]]; then
+    install_pnpm
   fi
   if ! command -v clojure >/dev/null 2>&1 || ! clojure -Sdescribe >/dev/null 2>&1; then
     install_clojure_cli
@@ -373,6 +463,7 @@ bootstrap() {
 }
 
 ensure_dependencies() {
+  select_node_runtime
   if dependencies_ready; then
     return 0
   fi
@@ -396,6 +487,12 @@ ensure_service_users() {
     useradd --system --gid caddy --home-dir "$caddy_data_dir" --no-create-home \
       --shell /usr/sbin/nologin caddy
   fi
+}
+
+verify_service_node_runtime() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  runuser -u logseq-sync -- "$node_path" --version >/dev/null 2>&1 \
+    || die "The selected Node.js runtime is not executable by the logseq-sync service user: $node_path"
 }
 
 builder_identity() {
@@ -430,13 +527,14 @@ replace_current_release() {
 }
 
 build_adapter() {
-  local build_root builder builder_home release_id release_dir suffix=0
+  local build_root builder builder_home node_dir release_id release_dir suffix=0
   build_root="$(mktemp -d /tmp/logseq-sync-build.XXXXXX)"
   register_temporary_path "$build_root"
   [[ -f "$source_dir/deps/db-sync/package.json" ]] \
     || die "The configured Logseq source checkout is unavailable: $source_dir"
   builder="$(builder_identity)"
   builder_home="$(getent passwd "$builder" | cut -d: -f6)"
+  node_dir="$(dirname -- "$node_path")"
   mkdir -p "$build_root/deps/db-sync"
   cp -a "$source_dir/deps/common" "$build_root/deps/common"
   cp -a "$source_dir/deps/db" "$build_root/deps/db"
@@ -452,12 +550,12 @@ build_adapter() {
   set_owner -R "$builder" "$build_root"
   run_as_builder "$builder" env \
     HOME="$builder_home" \
-    PATH="$install_root/toolchain/node/bin:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
+    PATH="$node_dir:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
     "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
     install --frozen-lockfile --prod
   run_as_builder "$builder" env \
     HOME="$builder_home" \
-    PATH="$install_root/toolchain/node/bin:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
+    PATH="$node_dir:$install_root/toolchain/bin:/usr/local/bin:/usr/bin:/bin" \
     "$install_root/toolchain/bin/pnpm" --dir "$build_root/deps/db-sync" \
     build:node-adapter
   release_id="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
@@ -490,6 +588,7 @@ write_configuration() {
 LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
 LOGSEQ_SYNC_PUBLIC_PORT=${public_port}
 LOGSEQ_SYNC_INTERNAL_PORT=${internal_port}
+LOGSEQ_SYNC_NODE_PATH=${node_path}
 DB_SYNC_HOST=127.0.0.1
 DB_SYNC_PORT=${internal_port}
 DB_SYNC_BASE_URL=${public_url}
@@ -524,7 +623,7 @@ User=logseq-sync
 Group=logseq-sync
 WorkingDirectory=${install_root}/current
 EnvironmentFile=${config_dir}/sync.env
-ExecStart=${install_root}/toolchain/node/bin/node ${install_root}/current/node-adapter.js
+ExecStart=${node_path} ${install_root}/current/node-adapter.js
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
@@ -737,6 +836,7 @@ setup() {
   confirm 'Build and start Logseq Sync?' yes || die "Setup cancelled."
   ensure_dependencies
   ensure_service_users
+  verify_service_node_runtime
   build_adapter
   write_configuration "$domain"
   install_manager
@@ -753,6 +853,7 @@ update() {
   validate_install_paths
   [[ -f "$config_dir/sync.env" ]] || die "Run setup first."
   ensure_dependencies
+  verify_service_node_runtime
   public_url="$(read_env_value DB_SYNC_BASE_URL)"
   previous_release="$(readlink "$install_root/current" 2>/dev/null || true)"
   [[ -n "$previous_release" && -d "$previous_release" ]] \
