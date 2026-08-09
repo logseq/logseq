@@ -48,24 +48,22 @@
   [api & args]
   (case api
     :thread-api/get-blocks
-    (let [[repo requests-transit] args
-          test-db (conn/get-db repo)
-          requests (ldb/read-transit-str requests-transit)]
+    (let [[repo requests] args
+          test-db (conn/get-db repo)]
       (p/resolved
-       (ldb/write-transit-str
-        (mapv (fn [{:keys [id opts]}]
-                (let [block (block-by-worker-id test-db id)]
-                  (cond
-                    (nil? block) nil
-                    (:children? opts)
-                    {:block block
-                     :children (mapv #(d/pull test-db
-                                              test-worker-block-pull
-                                              (:db/id %))
-                                     (ldb/get-children test-db (:db/id block)))}
-                    :else
-                    {:block block})))
-              requests))))
+       (mapv (fn [{:keys [id opts]}]
+               (let [block (block-by-worker-id test-db id)]
+                 (cond
+                   (nil? block) nil
+                   (:children? opts)
+                   {:block block
+                    :children (mapv #(d/pull test-db
+                                             test-worker-block-pull
+                                             (:db/id %))
+                                    (ldb/get-children test-db (:db/id block)))}
+                   :else
+                   {:block block})))
+             requests)))
 
     :thread-api/get-block-sibling
     (let [[repo block-id direction] args

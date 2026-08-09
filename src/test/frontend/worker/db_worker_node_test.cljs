@@ -1498,6 +1498,34 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-outliner-mutation-rejects-stale-lock-test
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-outliner-write-lease")
+               repo (str "logseq_db_outliner_write_lease_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       lock-contents (js->clj
+                                      (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                      :keywordize-keys true)
+                       replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
+                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
+                       {:keys [status body]}
+                       (invoke-raw host port "thread-api/apply-outliner-ops" [repo [] {}])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-locked" (get-in parsed [:error :code]))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
+
 (deftest db-worker-node-start-recovers-stale-lock-before-acquire
   (async done
          (let [daemon (atom nil)

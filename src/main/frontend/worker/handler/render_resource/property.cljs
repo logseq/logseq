@@ -64,8 +64,7 @@
       (common/fail! "Renderer property has no ident" {:property-uuid property-uuid}))
     [{:property-uuid property-uuid
       :property-ident property-ident
-      :value normalized-value
-      :closed-value-uuids closed-value-uuids}
+      :value normalized-value}
      (into #{[:entity property-uuid]}
            (map (fn [block-uuid] [:entity block-uuid]))
            (concat value-uuids closed-value-uuids))]))

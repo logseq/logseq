@@ -1,6 +1,17 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
-  (:require [frontend.db.hooks :as db-hooks]))
+  (:require [clojure.string :as string]
+            [frontend.db.hooks :as db-hooks]))
+
+(defn get-group-by-page
+  [{:keys [result-transform query] :as query-config}
+   {:keys [table? db-graph?]}]
+  (if (or table? db-graph?)
+    false
+    (get query-config :group-by-page?
+         (and (not result-transform)
+              (not (and (string? query)
+                        (string/includes? query "(by-page false)")))))))
 
 (defn- query-spec
   [config query]

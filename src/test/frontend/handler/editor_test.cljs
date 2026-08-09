@@ -498,12 +498,11 @@
       (set! state/<invoke-db-worker (fn [api repo & args]
                                       (case api
                                         :thread-api/get-blocks
-                                        (let [requests (ldb/read-transit-str (first args))]
+                                        (let [requests (first args)]
                                           (swap! calls conj [:get-blocks repo requests])
-                                          (p/resolved (ldb/write-transit-str
-                                                       [{:block {:db/id 10
-                                                                 :block/uuid block-id
-                                                                 :block/page {:db/id 100}}}])))
+                                          (p/resolved [{:block {:db/id 10
+                                                               :block/uuid block-id
+                                                               :block/page {:db/id 100}}}]))
 
                                         :thread-api/get-block-parents
                                         (let [[id depth] args]

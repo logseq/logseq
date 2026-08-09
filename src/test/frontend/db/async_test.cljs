@@ -4,7 +4,6 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.state :as state]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest journal-display-helpers-use-one-journal-summary-api-test
@@ -117,15 +116,13 @@
                ordinary-block-repo "logseq_db_async_ordinary_blocks"
                worker-request-counts (atom [])]
            (p/with-redefs [state/<invoke-db-worker
-                           (fn [_api repo requests-transit]
-                             (let [requests (ldb/read-transit-str requests-transit)]
-                               (swap! worker-request-counts conj [repo (count requests)])
-                               (p/resolved
-                                (ldb/write-transit-str
-                                 (mapv (fn [{:keys [id]}]
-                                         {:id id
-                                          :block {:db/id id}})
-                                       requests)))))]
+                           (fn [_api repo requests]
+                             (swap! worker-request-counts conj [repo (count requests)])
+                             (p/resolved
+                              (mapv (fn [{:keys [id]}]
+                                      {:id id
+                                       :block {:db/id id}})
+                                    requests)))]
              (-> (p/let [_ (p/all (mapv #(db-async/<get-block-with-children
                                           complete-tree-repo
                                           %
@@ -233,15 +230,13 @@
          (let [repo "logseq_db_async_bounded_batch"
                worker-request-counts (atom [])]
            (p/with-redefs [state/<invoke-db-worker
-                           (fn [_api _repo requests-transit]
-                             (let [requests (ldb/read-transit-str requests-transit)]
-                               (swap! worker-request-counts conj (count requests))
-                               (p/resolved
-                                (ldb/write-transit-str
-                                 (mapv (fn [{:keys [id]}]
-                                         {:id id
-                                          :block {:db/id id}})
-                                       requests)))))]
+                           (fn [_api _repo requests]
+                             (swap! worker-request-counts conj (count requests))
+                             (p/resolved
+                              (mapv (fn [{:keys [id]}]
+                                      {:id id
+                                       :block {:db/id id}})
+                                    requests)))]
              (-> (p/let [_ (p/all (mapv #(db-async/<get-block repo % {:children? true})
                                         (range 151)))]
                    (is (= 151 (reduce + @worker-request-counts)))
@@ -257,15 +252,13 @@
          (let [repo "logseq_db_async_duplicate_batch"
                worker-requests (atom [])]
            (p/with-redefs [state/<invoke-db-worker
-                           (fn [_api _repo requests-transit]
-                             (let [requests (ldb/read-transit-str requests-transit)]
-                               (swap! worker-requests into requests)
-                               (p/resolved
-                                (ldb/write-transit-str
-                                 (mapv (fn [{:keys [id]}]
-                                         {:id id
-                                          :block {:db/id id}})
-                                       requests)))))]
+                           (fn [_api _repo requests]
+                             (swap! worker-requests into requests)
+                             (p/resolved
+                              (mapv (fn [{:keys [id]}]
+                                      {:id id
+                                       :block {:db/id id}})
+                                    requests)))]
              (-> (p/let [results (p/all (repeatedly 17
                                                     #(db-async/<get-block repo 42 {:children? false
                                                                                  :skip-refresh? true})))]
@@ -280,8 +273,8 @@
   (async done
          (let [repo "logseq_db_async_in_flight"
                worker-calls (atom 0)
-               response (ldb/write-transit-str [{:id 42
-                                                  :block {:db/id 42}}])]
+               response [{:id 42
+                          :block {:db/id 42}}]]
            (-> (p/with-redefs [state/<invoke-db-worker
                                (fn [& _]
                                  (swap! worker-calls inc)
@@ -310,8 +303,8 @@
          (let [repo "logseq_db_async_in_flight_retry"
                worker-calls (atom 0)
                cause (js/Error. "worker failed")
-               response (ldb/write-transit-str [{:id 42
-                                                  :block {:db/id 42}}])
+               response [{:id 42
+                          :block {:db/id 42}}]
                capture-error (fn [promise]
                                (p/create
                                 (fn [resolve _reject]

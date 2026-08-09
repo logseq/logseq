@@ -56,9 +56,9 @@
                (is (= [[:graph/restored repo] [:ui/re-render-root]]
                       @events))
                (is (= [[:open repo]
+                       [:worker :thread-api/db-sync-get-all-block-conflicts repo]
                        [:current-repo repo]
                        [:reset repo]
-                       [:worker :thread-api/db-sync-get-all-block-conflicts repo]
                        [:hydrate repo conflicts-by-block]
                        [:event [:graph/restored repo]]
                        [:event [:ui/re-render-root]]]
@@ -73,4 +73,25 @@
              (fn []
                (state/replace-state! previous-state)
                (reset! db-conn/conns previous-conns)
+               (done))))))))
+
+(deftest failed-restore-keeps-current-graph-and-clears-loading-test
+  (async done
+    (let [repo "logseq_db_restore_failure"
+          previous-state (state/get-state)
+          previous-repo (state/get-current-repo)]
+      (p/with-redefs [persist-db/<open-and-fetch-schema
+                      (fn [_repo _opts]
+                        (p/resolved {:schema nil}))]
+        (-> (db-restore/restore-graph! repo)
+            (p/then (fn []
+                      (is false "Restore should reject an invalid schema.")))
+            (p/catch
+             (fn [_error]
+               (is (false? (boolean (state/get-state :graph/loading?))))
+               (is (= previous-repo (state/get-current-repo))
+                   "Current repo changes only after schema validation succeeds.")))
+            (p/finally
+             (fn []
+               (state/replace-state! previous-state)
                (done))))))))

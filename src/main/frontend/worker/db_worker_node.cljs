@@ -212,16 +212,6 @@
     :thread-api/reject-ui-request
     :thread-api/cancel-ui-requests})
 
-(def ^:private write-methods
-  #{:thread-api/transact
-    :thread-api/import-db-binary
-    :thread-api/backup-db-sqlite
-    :thread-api/import-edn
-    :thread-api/unsafe-unlink-db
-    :thread-api/search-upsert-blocks
-    :thread-api/search-delete-blocks
-    :thread-api/search-truncate-tables})
-
 (defn- repo-arg
   [args]
   (cond
@@ -349,9 +339,8 @@
                          args-for-validation [repo binary]]
                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                      (send-json! res status {:ok false :error error})
-                     (p/let [_ (when (contains? write-methods method-kw)
-                                 (let [{:keys [path lock]} @*lock-info]
-                                   (db-lock/assert-lock-owner! path lock)))
+                     (p/let [_ (let [{:keys [path lock]} @*lock-info]
+                                 (db-lock/assert-lock-owner! path lock))
                              result (<invoke-binary! proxy method-str method-kw repo binary)]
                        (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
                  (p/catch (fn [error]
@@ -384,7 +373,7 @@
                                                 args')]
                     (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                       (send-json! res status {:ok false :error error})
-                      (p/let [_ (when (contains? write-methods method-kw)
+                      (p/let [_ (when-not (contains? non-repo-methods method-kw)
                                   (let [{:keys [path lock]} @*lock-info]
                                     (db-lock/assert-lock-owner! path lock)))
                               result (<invoke! proxy method-str method-kw args')]

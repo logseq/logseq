@@ -9,7 +9,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest favorite-page-actions-load-page-through-worker-test
@@ -299,12 +298,12 @@
           calls (atom [])
           previous-worker @state/*db-worker]
       (reset! state/*db-worker
-              (fn [api repo requests-transit]
+              (fn [api repo requests]
                 (case api
                   :thread-api/get-blocks
                   (do
-                    (swap! calls conj [api repo (ldb/read-transit-str requests-transit)])
-                    (p/resolved (ldb/write-transit-str [{:id (str tag-id) :block loaded-tag}])))
+                    (swap! calls conj [api repo requests])
+                    (p/resolved [{:id (str tag-id) :block loaded-tag}]))
 
                   (p/resolved nil))))
       (-> (#'page-handler/<chosen-result

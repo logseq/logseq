@@ -158,16 +158,26 @@
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
   (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
-        referenced (mapcat :block/refs requested)
-        positioned-properties
-        (mapcat (fn [block]
-                  (->> property-handler/render-property-positions
-                       (mapcat #(property-handler/block-positioned-properties
-                                 db (:db/id block) %))
-                       (keep #(d/entity db (:db/ident %)))))
-                requested)
-        entities (distinct (concat requested referenced positioned-properties))]
+        dependencies
+        (fn [block]
+          (let [positioned-properties
+                (->> property-handler/render-property-positions
+                     (mapcat #(property-handler/block-positioned-properties
+                               db (:db/id block) %))
+                     (keep #(d/entity db (:db/ident %))))]
+            (distinct (concat [block] (:block/refs block) positioned-properties))))
+        dependencies-by-root
+        (into {}
+              (map (fn [block]
+                     [(:block/uuid block) (vec (dependencies block))]))
+              requested)
+        groups (into {}
+                     (map (fn [[block-uuid entities]]
+                            [block-uuid (into #{} (keep :block/uuid) entities)]))
+                     dependencies-by-root)
+        entities (distinct (mapcat val dependencies-by-root))]
     {:basis-rev (render-basis-rev db)
+     :groups groups
      :blocks
      (into {}
            (map (fn [entity]
@@ -489,13 +499,11 @@
                  results)
            (mapv #(-> %
                       sanitize-block-result
-                      worker-plain/with-explicit-ref-fields-recursive))
-           ldb/write-transit-str))))
+                      worker-plain/with-explicit-ref-fields-recursive))))))
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (let [requests (ldb/read-transit-str requests)]
-    (get-blocks-response repo requests)))
+  (get-blocks-response repo requests))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]

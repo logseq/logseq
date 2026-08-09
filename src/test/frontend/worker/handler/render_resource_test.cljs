@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.db.subs-loader :as subs-loader]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
@@ -705,6 +706,29 @@
             (is (= response
                    (-> response ldb/write-transit-str ldb/read-transit-str)))))))))
 
+(deftest block-snapshot-dependencies-do-not-depend-on-batch-order-test
+  (let [{:keys [conn resource-block reference-block]}
+        (render-resource-fixture)
+        request (fn [blocks]
+                  (render-engine/render-snapshots
+                   @conn {:blocks blocks :children [] :resources []} {}))
+        reference-dependencies
+        (fn [blocks]
+          (get-in (request blocks) [:groups [:block reference-block]]))]
+    (is (= (reference-dependencies [reference-block resource-block])
+           (reference-dependencies [resource-block reference-block]))
+        "Each requested root must own the same hydration slots in every batch order.")
+    (is (contains? (reference-dependencies [resource-block reference-block])
+                   [:block resource-block])
+        "A root must own its referenced block even when it is not first in the batch.")
+    (let [response (request [resource-block reference-block])
+          patch (#'subs-loader/entry-response
+                 response {:slot-key [:block reference-block]})]
+      (is (= resource-block
+             (get-in patch [:slots [:block resource-block]
+                            :value :block/uuid]))
+          "The real loader partition must retain a later root's hydrated dependency."))))
+
 (deftest render-snapshots-thread-api-fails-fast-without-a-database-test
   (when-let [api (get @thread-api/*thread-apis
                       :thread-api/get-render-snapshots)]
@@ -1085,13 +1109,11 @@
           expected {:full-properties
                     [{:property-uuid display-property
                       :property-ident :user.property/display
-                      :value property-value
-                      :closed-value-uuids [closed-value]}]
+                      :value property-value}]
                     :hidden-properties
                     [{:property-uuid hidden-property
                       :property-ident :user.property/hidden
-                      :value "secret"
-                      :closed-value-uuids []}]
+                      :value "secret"}]
                     :description-property-uuid description-property-uuid
                     :class-properties-property-uuid class-properties-property-uuid}
           response (call-resource api conn resource-key)]

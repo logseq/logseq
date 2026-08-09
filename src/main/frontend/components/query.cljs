@@ -151,7 +151,9 @@
               :table? table?
               :view-f view-f
               :result result
-              :group-by-page? false}]
+              :group-by-page? (query-result/get-group-by-page
+                               q {:table? table?
+                                  :db-graph? (:db-graph? config)})}]
        (if (:custom-query? config)
          ;; Don't display recursive results when query blocks are a query result
          [:code (if dsl-query?

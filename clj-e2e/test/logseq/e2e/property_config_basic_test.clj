@@ -81,6 +81,22 @@
     (assert/assert-is-visible
      (format ".ls-block :text('%s')" choice-after))))
 
+(deftest mod-p-creates-and-sets-text-property-test
+  (let [property-name "mod-p-text"
+        property-value "created from mod p"]
+    (b/new-block "mod p target")
+    (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
+    (w/fill ".ls-property-dialog .cp__select-input" property-name)
+    (w/click (w/get-by-text "New option:"))
+    (w/click (loc/and "span" (util/get-by-text "Text" true)))
+    (assert/assert-is-visible
+     (format ".property-pair:has-text('%s') textarea" property-name))
+    (util/input property-value)
+    (k/esc)
+    (assert/assert-is-visible (format ".property-k:text('%s')" property-name))
+    (assert/assert-is-visible
+     (format ".property-pair:has-text('%s'):has-text('%s')" property-name property-value))))
+
 (deftest property-table-hides-internal-id-column-test
   (let [property-name "table-without-internal-id"]
     (add-text-property property-name)
