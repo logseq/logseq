@@ -22,11 +22,23 @@ RUN pnpm install --frozen-lockfile --prod \
 
 WORKDIR /workspace
 
+COPY deps/common/deps.edn ./deps/common/deps.edn
+COPY deps/db/deps.edn ./deps/db/deps.edn
+COPY deps/graph-parser/deps.edn ./deps/graph-parser/deps.edn
+COPY deps/outliner/deps.edn ./deps/outliner/deps.edn
+COPY deps/db-sync/deps.edn deps/db-sync/shadow-cljs.edn ./deps/db-sync/
+
+WORKDIR /workspace/deps/db-sync
+
+# Cache Maven and Git dependencies independently from application source.
+RUN clojure -P -M:cljs
+
+WORKDIR /workspace
+
 COPY deps/common ./deps/common
 COPY deps/db ./deps/db
 COPY deps/graph-parser ./deps/graph-parser
 COPY deps/outliner ./deps/outliner
-COPY deps/db-sync/deps.edn deps/db-sync/shadow-cljs.edn ./deps/db-sync/
 COPY deps/db-sync/src ./deps/db-sync/src
 COPY resources ./resources
 

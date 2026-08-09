@@ -34,8 +34,23 @@ printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
 case "$*" in
   "compose version") exit 0 ;;
   "info") exit "${MOCK_DOCKER_INFO_STATUS:-0}" ;;
+esac
+if [[ -n "${MOCK_DOCKER_FAIL_ONCE_PATTERN:-}" \
+      && "$*" == *"$MOCK_DOCKER_FAIL_ONCE_PATTERN"* \
+      && "$(grep -F -c -- "$MOCK_DOCKER_FAIL_ONCE_PATTERN" "$MOCK_DOCKER_LOG")" -eq 1 ]]; then
+  exit 1
+fi
+if [[ "$*" == *" up -d --force-recreate"* ]]; then
+  : > "$MOCK_DOCKER_STATE_DIR/rollback-started"
+fi
+case "$*" in
   *" ps --format json "*)
-    printf '{"Health":"%s","State":"running"}\n' "${MOCK_DOCKER_HEALTH:-healthy}"
+    health="${MOCK_DOCKER_HEALTH:-healthy}"
+    if [[ "${MOCK_DOCKER_UNHEALTHY_UNTIL_ROLLBACK:-0}" == "1" \
+          && ! -f "$MOCK_DOCKER_STATE_DIR/rollback-started" ]]; then
+      health="unhealthy"
+    fi
+    printf '{"Health":"%s","State":"running"}\n' "$health"
     ;;
   *) exit "${MOCK_DOCKER_STATUS:-0}" ;;
 esac
@@ -44,6 +59,10 @@ EOF
   cat > "$sandbox/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_CURL_LOG"
+if [[ -n "${MOCK_CURL_FAIL_PATTERN:-}" \
+      && "$*" == *"$MOCK_CURL_FAIL_PATTERN"* ]]; then
+  exit 1
+fi
 if [[ "${MOCK_CURL_STATUS:-0}" -ne 0 ]]; then
   exit "$MOCK_CURL_STATUS"
 fi
@@ -55,7 +74,19 @@ EOF
 printf '%s\n' "$*" >> "$MOCK_SLEEP_LOG"
 EOF
 
-  chmod +x "$sandbox/bin/uname" "$sandbox/bin/docker" "$sandbox/bin/curl" "$sandbox/bin/sleep"
+  cat > "$sandbox/bin/mv" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$MOCK_MV_LOG"
+if [[ -n "${MOCK_MV_FAIL_ONCE_PATTERN:-}" \
+      && "$*" == *"$MOCK_MV_FAIL_ONCE_PATTERN"* \
+      && "$(grep -F -c -- "$MOCK_MV_FAIL_ONCE_PATTERN" "$MOCK_MV_LOG")" -eq 1 ]]; then
+  exit 1
+fi
+PATH=/usr/bin:/bin exec mv "$@"
+EOF
+
+  chmod +x "$sandbox/bin/uname" "$sandbox/bin/docker" "$sandbox/bin/curl" \
+    "$sandbox/bin/sleep" "$sandbox/bin/mv"
   printf '%s' "$sandbox"
 }
 
@@ -70,6 +101,8 @@ run_manager() {
     MOCK_DOCKER_LOG="$sandbox/docker.log" \
     MOCK_CURL_LOG="$sandbox/curl.log" \
     MOCK_SLEEP_LOG="$sandbox/sleep.log" \
+    MOCK_MV_LOG="$sandbox/mv.log" \
+    MOCK_DOCKER_STATE_DIR="$sandbox" \
     "$@" \
     "$manager" setup 2>&1)"
   last_status=$?
@@ -108,6 +141,15 @@ assert_failure() {
   }
 }
 
+assert_managed_configuration_matches() {
+  local expected_dir="$1"
+  local actual_dir="$2"
+  local name
+  for name in compose.yaml compose.http.yaml .env Caddyfile; do
+    cmp "$expected_dir/$name" "$actual_dir/$name" || return 1
+  done
+}
+
 test_unhealthy_service_is_rejected() {
   local sandbox input
   sandbox="$(make_sandbox)"
@@ -121,6 +163,9 @@ test_unhealthy_service_is_rejected() {
   run_manager "$sandbox" "$input" MOCK_DOCKER_HEALTH=unhealthy
   assert_failure || return 1
   assert_not_contains "$last_output" 'Logseq Sync is ready'
+  [[ -f "$sandbox/install/.env" ]] || return 1
+  assert_not_contains "$last_output" 'previous working deployment was restored'
+  assert_not_contains "$(<"$sandbox/docker.log")" ' up -d --force-recreate'
 }
 
 test_health_body_is_verified() {
@@ -136,6 +181,8 @@ test_health_body_is_verified() {
   run_manager "$sandbox" "$input" 'MOCK_CURL_BODY={"ok":false}'
   assert_failure || return 1
   assert_not_contains "$last_output" 'Logseq Sync is ready'
+  [[ -f "$sandbox/install/.env" ]] || return 1
+  assert_not_contains "$last_output" 'previous working deployment was restored'
 }
 
 test_docker_daemon_is_checked_before_writes() {
@@ -151,6 +198,27 @@ test_docker_daemon_is_checked_before_writes() {
   run_manager "$sandbox" "$input" MOCK_DOCKER_INFO_STATUS=1
   assert_failure || return 1
   [[ ! -e "$sandbox/install" ]]
+}
+
+test_first_setup_compose_failure_preserves_staged_configuration() {
+  local sandbox input
+  sandbox="$(make_sandbox)"
+  input="$(printf '%s\n' \
+    "$sandbox/install" \
+    "$sandbox/data" \
+    https \
+    sync.example.com \
+    logseq-client \
+    y)"
+  run_manager "$sandbox" "$input" \
+    'MOCK_DOCKER_FAIL_ONCE_PATTERN= up -d --build'
+  assert_failure || return 1
+  [[ -f "$sandbox/install/.env" ]] || return 1
+  [[ -f "$sandbox/install/compose.yaml" ]] || return 1
+  [[ -f "$sandbox/install/Caddyfile" ]] || return 1
+  assert_contains "$last_output" 'Sync startup failed'
+  assert_not_contains "$last_output" 'previous working deployment was restored'
+  assert_not_contains "$(<"$sandbox/docker.log")" ' up -d --force-recreate'
 }
 
 test_existing_configuration_becomes_prompt_defaults() {
@@ -224,10 +292,14 @@ EOF
   assert_contains "$(<"$sandbox/docker.log")" 'rm --stop --force caddy'
 }
 
-test_https_to_http_keeps_caddy_when_replacement_fails() {
-  local sandbox input
+test_https_to_http_restores_configuration_when_replacement_fails() {
+  local sandbox input original_dir
   sandbox="$(make_sandbox)"
   mkdir -p "$sandbox/install"
+  cp "$test_dir/compose.yaml" "$sandbox/install/compose.yaml"
+  cp "$test_dir/compose.http.yaml" "$sandbox/install/compose.http.yaml"
+  printf 'https://old-sync.example.com {\n\treverse_proxy sync:8080\n}\n' \
+    > "$sandbox/install/Caddyfile"
   cat > "$sandbox/install/.env" <<EOF
 LOGSEQ_SYNC_SOURCE_DIR=/old/source
 LOGSEQ_SYNC_INSTALL_DIR=$sandbox/install
@@ -243,6 +315,9 @@ COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
 COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
 COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json
 EOF
+  original_dir="$sandbox/original"
+  mkdir -p "$original_dir"
+  cp -a "$sandbox/install/." "$original_dir/"
   input="$(printf '%s\n' \
     "$sandbox/install" \
     "$sandbox/data" \
@@ -251,10 +326,150 @@ EOF
     I_ACCEPT_HTTP \
     logseq-client \
     y \
+    y \
+    y \
+    y \
     y)"
-  run_manager "$sandbox" "$input" MOCK_DOCKER_STATUS=1
+  run_manager "$sandbox" "$input" \
+    'MOCK_DOCKER_FAIL_ONCE_PATTERN= up -d --build'
   assert_failure || return 1
   assert_not_contains "$(<"$sandbox/docker.log")" 'rm --stop --force caddy'
+  assert_managed_configuration_matches "$original_dir" "$sandbox/install" || return 1
+  assert_contains "$last_output" 'the previous working deployment was restored'
+  assert_contains "$(<"$sandbox/docker.log")" '--profile https up -d --force-recreate'
+}
+
+test_https_reconfiguration_restores_after_service_health_failure() {
+  local sandbox input original_dir
+  sandbox="$(make_sandbox)"
+  mkdir -p "$sandbox/install"
+  cp "$test_dir/compose.yaml" "$sandbox/install/compose.yaml"
+  cp "$test_dir/compose.http.yaml" "$sandbox/install/compose.http.yaml"
+  printf 'https://old-sync.example.com {\n\treverse_proxy sync:8080\n}\n' \
+    > "$sandbox/install/Caddyfile"
+  cat > "$sandbox/install/.env" <<EOF
+LOGSEQ_SYNC_SOURCE_DIR=/old/source
+LOGSEQ_SYNC_INSTALL_DIR=$sandbox/install
+LOGSEQ_SYNC_DATA_DIR=$sandbox/data
+LOGSEQ_SYNC_UID=1000
+LOGSEQ_SYNC_GID=1000
+LOGSEQ_SYNC_ENDPOINT_MODE=https
+DB_SYNC_BASE_URL=https://old-sync.example.com
+DB_SYNC_BIND_ADDRESS=127.0.0.1
+DB_SYNC_PUBLIC_PORT=443
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
+COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
+COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json
+EOF
+  original_dir="$sandbox/original"
+  mkdir -p "$original_dir"
+  cp -a "$sandbox/install/." "$original_dir/"
+  input="$(printf '%s\n' \
+    "$sandbox/install" \
+    "$sandbox/data" \
+    https \
+    new-sync.example.com \
+    logseq-client \
+    y \
+    y \
+    y \
+    y \
+    y)"
+  run_manager "$sandbox" "$input" MOCK_DOCKER_UNHEALTHY_UNTIL_ROLLBACK=1
+  assert_failure || return 1
+  assert_managed_configuration_matches "$original_dir" "$sandbox/install" || return 1
+  assert_contains "$last_output" 'the previous working deployment was restored'
+}
+
+test_https_reconfiguration_restores_after_public_health_failure() {
+  local sandbox input original_dir
+  sandbox="$(make_sandbox)"
+  mkdir -p "$sandbox/install"
+  cp "$test_dir/compose.yaml" "$sandbox/install/compose.yaml"
+  cp "$test_dir/compose.http.yaml" "$sandbox/install/compose.http.yaml"
+  printf 'https://old-sync.example.com {\n\treverse_proxy sync:8080\n}\n' \
+    > "$sandbox/install/Caddyfile"
+  cat > "$sandbox/install/.env" <<EOF
+LOGSEQ_SYNC_SOURCE_DIR=/old/source
+LOGSEQ_SYNC_INSTALL_DIR=$sandbox/install
+LOGSEQ_SYNC_DATA_DIR=$sandbox/data
+LOGSEQ_SYNC_UID=1000
+LOGSEQ_SYNC_GID=1000
+LOGSEQ_SYNC_ENDPOINT_MODE=https
+DB_SYNC_BASE_URL=https://old-sync.example.com
+DB_SYNC_BIND_ADDRESS=127.0.0.1
+DB_SYNC_PUBLIC_PORT=443
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
+COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
+COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json
+EOF
+  original_dir="$sandbox/original"
+  mkdir -p "$original_dir"
+  cp -a "$sandbox/install/." "$original_dir/"
+  input="$(printf '%s\n' \
+    "$sandbox/install" \
+    "$sandbox/data" \
+    https \
+    new-sync.example.com \
+    logseq-client \
+    y \
+    y \
+    y \
+    y \
+    y)"
+  run_manager "$sandbox" "$input" \
+    'MOCK_CURL_FAIL_PATTERN=https://new-sync.example.com/health'
+  assert_failure || return 1
+  assert_managed_configuration_matches "$original_dir" "$sandbox/install" || return 1
+  assert_contains "$last_output" 'the previous working deployment was restored'
+  assert_contains "$(<"$sandbox/curl.log")" 'https://old-sync.example.com/health'
+}
+
+test_configuration_activation_failure_restores_previous_deployment() {
+  local sandbox input original_dir
+  sandbox="$(make_sandbox)"
+  mkdir -p "$sandbox/install"
+  cp "$test_dir/compose.yaml" "$sandbox/install/compose.yaml"
+  cp "$test_dir/compose.http.yaml" "$sandbox/install/compose.http.yaml"
+  printf 'https://old-sync.example.com {\n\treverse_proxy sync:8080\n}\n' \
+    > "$sandbox/install/Caddyfile"
+  cat > "$sandbox/install/.env" <<EOF
+LOGSEQ_SYNC_SOURCE_DIR=/old/source
+LOGSEQ_SYNC_INSTALL_DIR=$sandbox/install
+LOGSEQ_SYNC_DATA_DIR=$sandbox/data
+LOGSEQ_SYNC_UID=1000
+LOGSEQ_SYNC_GID=1000
+LOGSEQ_SYNC_ENDPOINT_MODE=https
+DB_SYNC_BASE_URL=https://old-sync.example.com
+DB_SYNC_BIND_ADDRESS=127.0.0.1
+DB_SYNC_PUBLIC_PORT=443
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
+COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
+COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json
+EOF
+  original_dir="$sandbox/original"
+  mkdir -p "$original_dir"
+  cp -a "$sandbox/install/." "$original_dir/"
+  input="$(printf '%s\n' \
+    "$sandbox/install" \
+    "$sandbox/data" \
+    https \
+    new-sync.example.com \
+    logseq-client \
+    y \
+    y \
+    y \
+    y \
+    y)"
+  run_manager "$sandbox" "$input" 'MOCK_MV_FAIL_ONCE_PATTERN=/.env '
+  assert_failure || return 1
+  assert_managed_configuration_matches "$original_dir" "$sandbox/install" || return 1
+  assert_contains "$last_output" 'the previous working deployment was restored'
+  assert_contains "$(<"$sandbox/docker.log")" '--profile https up -d --force-recreate'
+  assert_not_contains "$(<"$sandbox/docker.log")" ' up -d --build'
 }
 
 test_https_setup_force_recreates_caddy() {
@@ -404,9 +619,13 @@ run_test() {
 run_test test_unhealthy_service_is_rejected
 run_test test_health_body_is_verified
 run_test test_docker_daemon_is_checked_before_writes
+run_test test_first_setup_compose_failure_preserves_staged_configuration
 run_test test_existing_configuration_becomes_prompt_defaults
 run_test test_https_to_http_removes_caddy_container
-run_test test_https_to_http_keeps_caddy_when_replacement_fails
+run_test test_https_to_http_restores_configuration_when_replacement_fails
+run_test test_https_reconfiguration_restores_after_service_health_failure
+run_test test_https_reconfiguration_restores_after_public_health_failure
+run_test test_configuration_activation_failure_restores_previous_deployment
 run_test test_https_setup_force_recreates_caddy
 run_test test_http_setup_verifies_public_endpoint
 run_test test_invalid_http_host_is_rejected

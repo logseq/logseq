@@ -27,17 +27,21 @@ permissions:
 jobs:
   runtime:
     name: Build native runtime packages
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'master')
+    if: github.event_name != 'workflow_run'
     uses: ./.github/workflows/db-sync-native-runtime.yml
 
   release:
     name: Publish runtime release
     needs: runtime
+    if: >-
+      always() &&
+      ((github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master') ||
+      (github.event_name != 'workflow_run' && needs.runtime.result == 'success'))
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -64,6 +68,9 @@ jobs:
           pattern: logseq-sync-runtime-linux-*
           path: artifacts
           merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
 
       - name: Prepare manager asset
         env:

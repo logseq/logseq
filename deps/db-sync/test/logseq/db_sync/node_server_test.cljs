@@ -27,6 +27,11 @@
                                    (resolve timeout-sentinel)
                                    (reject error))))))))}))
 
+(defn- restore-env-value! [env key value]
+  (if (nil? value)
+    (js-delete env key)
+    (aset env key value)))
+
 (deftest node-server-rejects-listen-failure-test
   (async done
          (-> (node-server/start! {:host "256.256.256.256"
@@ -40,6 +45,28 @@
              (p/catch (fn [error]
                         (is (= "ENOTFOUND" (.-code error)))
                         (done))))))
+
+(deftest node-server-uses-bind-host-from-env-test
+  (async done
+         (let [env (.-env js/process)
+               previous-host (aget env "DB_SYNC_HOST")
+               previous-port (aget env "DB_SYNC_PORT")
+               previous-data-dir (aget env "DB_SYNC_DATA_DIR")]
+           (aset env "DB_SYNC_HOST" "127.0.0.1")
+           (aset env "DB_SYNC_PORT" "0")
+           (aset env "DB_SYNC_DATA_DIR"
+                 (str "tmp/db-sync-node-env-host-test/" (random-uuid)))
+           (-> (p/let [{:keys [server stop!]} (node-server/start! {})
+                       address (.address server)]
+                 (is (= "127.0.0.1" (.-address address)))
+                 (stop!))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally (fn []
+                            (restore-env-value! env "DB_SYNC_HOST" previous-host)
+                            (restore-env-value! env "DB_SYNC_PORT" previous-port)
+                            (restore-env-value! env "DB_SYNC_DATA_DIR" previous-data-dir)
+                            (done)))))))
 
 (deftest node-server-returns-500-when-auth-claims-rejects-test
   (async done

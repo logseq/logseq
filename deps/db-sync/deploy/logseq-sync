@@ -12,6 +12,25 @@ readonly default_public_port="443"
 readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
 readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
+temporary_paths=()
+
+register_temporary_path() {
+  temporary_paths+=("$1")
+}
+
+cleanup_temporary_paths() {
+  local path
+  for path in "${temporary_paths[@]-}"; do
+    case "$path" in
+      /tmp/logseq-sync-config.*)
+        [[ -d "$path" ]] && rm -rf -- "$path"
+        ;;
+    esac
+  done
+  return 0
+}
+
+trap cleanup_temporary_paths EXIT
 
 die() {
   printf 'Error: %s\n' "$*" >&2
@@ -189,6 +208,34 @@ backup_existing() {
   cp -a -- "$path" "$backup"
 }
 
+snapshot_configuration() {
+  local install_dir="$1"
+  local snapshot_dir="$2"
+  local name index=0
+  for name in compose.yaml compose.http.yaml .env Caddyfile; do
+    if [[ -e "$install_dir/$name" || -L "$install_dir/$name" ]]; then
+      cp -a -- "$install_dir/$name" "$snapshot_dir/$index"
+      : > "$snapshot_dir/$index.present"
+    fi
+    index=$((index + 1))
+  done
+}
+
+restore_configuration() {
+  local install_dir="$1"
+  local snapshot_dir="$2"
+  local name index=0
+  for name in compose.yaml compose.http.yaml .env Caddyfile; do
+    if [[ -e "$install_dir/$name" || -L "$install_dir/$name" ]]; then
+      rm -f -- "$install_dir/$name" || return 1
+    fi
+    if [[ -f "$snapshot_dir/$index.present" ]]; then
+      cp -a -- "$snapshot_dir/$index" "$install_dir/$name" || return 1
+    fi
+    index=$((index + 1))
+  done
+}
+
 service_is_healthy() {
   local install_dir="$1"
   local service="$2"
@@ -235,6 +282,45 @@ wait_for_public_endpoint() {
   return 1
 }
 
+start_replacement_deployment() {
+  local install_dir="$1"
+  local endpoint_mode="$2"
+  local public_url="$3"
+  local previous_endpoint_mode="$4"
+  local -a compose_args=()
+  if [[ "$endpoint_mode" == "https" ]]; then
+    compose_args=(--profile https up -d --build --force-recreate)
+  else
+    compose_args=(up -d --build)
+  fi
+  compose "$install_dir" "${compose_args[@]}" || return 1
+  wait_for_service_health "$install_dir" sync || return 1
+  if [[ "$endpoint_mode" == "https" ]]; then
+    wait_for_service_health "$install_dir" caddy || return 1
+  fi
+  wait_for_public_endpoint "$public_url" || return 1
+  if [[ "$previous_endpoint_mode" == "https" && "$endpoint_mode" == "http" ]]; then
+    compose_https "$install_dir" rm --stop --force caddy || return 1
+  fi
+}
+
+restart_previous_deployment() {
+  local install_dir="$1"
+  local endpoint_mode="$2"
+  local public_url="$3"
+  if [[ "$endpoint_mode" == "https" ]]; then
+    compose "$install_dir" --profile https up -d --force-recreate || return 1
+  else
+    compose_https "$install_dir" rm --stop --force caddy || return 1
+    compose "$install_dir" up -d --force-recreate || return 1
+  fi
+  wait_for_service_health "$install_dir" sync || return 1
+  if [[ "$endpoint_mode" == "https" ]]; then
+    wait_for_service_health "$install_dir" caddy || return 1
+  fi
+  wait_for_public_endpoint "$public_url"
+}
+
 setup() {
   require_linux
   require_docker
@@ -244,7 +330,7 @@ setup() {
   local previous_public_port="" previous_url_port=""
   local previous_issuer="" previous_client_id="" previous_jwks_url="" previous_log_level=""
   local data_default endpoint_default domain_default public_url_default auth_default exposure
-  local -a compose_args=()
+  local configuration_snapshot staging_dir activation_failed="false"
 
   install_dir="$(read_value 'Deployment directory' "$default_install_dir")"
   if [[ -f "$install_dir/.env" ]]; then
@@ -362,17 +448,16 @@ setup() {
     confirm_existing "$install_dir/Caddyfile"
   fi
 
-  mkdir -p -- "$install_dir" "$data_dir"
-  backup_existing "$install_dir/compose.yaml"
-  backup_existing "$install_dir/compose.http.yaml"
-  backup_existing "$install_dir/.env"
-  if [[ "$endpoint_mode" == "https" ]]; then
-    backup_existing "$install_dir/Caddyfile"
-  fi
+  configuration_snapshot="$(mktemp -d /tmp/logseq-sync-config.XXXXXX)"
+  register_temporary_path "$configuration_snapshot"
+  snapshot_configuration "$install_dir" "$configuration_snapshot"
+  staging_dir="$(mktemp -d /tmp/logseq-sync-config.XXXXXX)"
+  register_temporary_path "$staging_dir"
 
-  cp -- "$script_dir/compose.yaml" "$install_dir/compose.yaml"
-  cp -- "$script_dir/compose.http.yaml" "$install_dir/compose.http.yaml"
-  write_file "$install_dir/.env" "LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
+  mkdir -p -- "$install_dir" "$data_dir"
+  if ! cp -- "$script_dir/compose.yaml" "$staging_dir/compose.yaml" \
+     || ! cp -- "$script_dir/compose.http.yaml" "$staging_dir/compose.http.yaml" \
+     || ! write_file "$staging_dir/.env" "LOGSEQ_SYNC_SOURCE_DIR=${source_dir}
 LOGSEQ_SYNC_INSTALL_DIR=${install_dir}
 LOGSEQ_SYNC_DATA_DIR=${data_dir}
 LOGSEQ_SYNC_UID=$(id -u)
@@ -385,27 +470,55 @@ DB_SYNC_LOG_LEVEL=${log_level}
 COGNITO_ISSUER=${issuer}
 COGNITO_CLIENT_ID=${client_id}
 COGNITO_JWKS_URL=${jwks_url}
-"
+"; then
+    die "Deployment configuration could not be staged; the existing configuration was not changed."
+  fi
   if [[ "$endpoint_mode" == "https" ]]; then
-    sed "s|{PUBLIC_URL}|${public_url}|g" "$script_dir/Caddyfile.template" > "$install_dir/Caddyfile"
+    sed "s|{PUBLIC_URL}|${public_url}|g" "$script_dir/Caddyfile.template" \
+      > "$staging_dir/Caddyfile" \
+      || die "Caddy configuration could not be staged; the existing configuration was not changed."
   fi
 
+  backup_existing "$install_dir/compose.yaml"
+  backup_existing "$install_dir/compose.http.yaml"
+  backup_existing "$install_dir/.env"
   if [[ "$endpoint_mode" == "https" ]]; then
-    compose_args=(--profile https up -d --build --force-recreate)
-  else
-    compose_args=(up -d --build)
+    backup_existing "$install_dir/Caddyfile"
   fi
-  if ! compose "$install_dir" "${compose_args[@]}"; then
+  if ! mv -f -- "$staging_dir/compose.yaml" "$install_dir/compose.yaml" \
+     || ! mv -f -- "$staging_dir/compose.http.yaml" "$install_dir/compose.http.yaml" \
+     || ! mv -f -- "$staging_dir/.env" "$install_dir/.env"; then
+    activation_failed="true"
+  elif [[ "$endpoint_mode" == "https" ]] \
+       && ! mv -f -- "$staging_dir/Caddyfile" "$install_dir/Caddyfile"; then
+    activation_failed="true"
+  fi
+  if [[ "$activation_failed" == "true" ]]; then
+    if [[ -n "$existing_env" ]]; then
+      if restore_configuration "$install_dir" "$configuration_snapshot" \
+         && restart_previous_deployment \
+           "$install_dir" "$previous_endpoint_mode" "$previous_public_url"; then
+        die "Deployment configuration could not be activated; the previous working deployment was restored."
+      fi
+      die "Deployment configuration could not be activated, and the previous deployment could not be restarted. Use the timestamped configuration backups to recover it."
+    fi
+    restore_configuration "$install_dir" "$configuration_snapshot" \
+      || die "Deployment configuration activation failed, and partial files could not be removed."
+    die "Deployment configuration could not be activated. No services were started."
+  fi
+
+  if ! start_replacement_deployment \
+      "$install_dir" "$endpoint_mode" "$public_url" "$previous_endpoint_mode"; then
+    if [[ -n "$existing_env" ]]; then
+      if restore_configuration "$install_dir" "$configuration_snapshot" \
+         && restart_previous_deployment \
+           "$install_dir" "$previous_endpoint_mode" "$previous_public_url"; then
+        die "Replacement deployment failed; the previous working deployment was restored."
+      fi
+      die "Replacement deployment failed, and the previous deployment could not be restarted. Use the timestamped configuration backups to recover it."
+    fi
     printf 'Sync startup failed. Inspect logs with:\n  %s/logseq-sync logs --follow %s\n' "$script_dir" "$install_dir" >&2
     return 1
-  fi
-  wait_for_service_health "$install_dir" sync
-  if [[ "$endpoint_mode" == "https" ]]; then
-    wait_for_service_health "$install_dir" caddy
-  fi
-  wait_for_public_endpoint "$public_url"
-  if [[ "$previous_endpoint_mode" == "https" && "$endpoint_mode" == "http" ]]; then
-    compose_https "$install_dir" rm --stop --force caddy
   fi
   printf 'Logseq Sync is ready. In Logseq, set Sync Server URL to:\n  %s\n' "$public_url"
   printf 'Status: %s/logseq-sync status %s\n' "$script_dir" "$install_dir"
