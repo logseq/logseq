@@ -1847,6 +1847,10 @@ should be done through this fn in order to get global config and config defaults
   (set-state! [:ui/recent-pages (get-current-repo)] v)
   (storage/set :ui/recent-pages (:ui/recent-pages @state)))
 
+(defn remove-page-from-recent!
+  [page-id]
+  (set-recent-pages! (vec (remove #{page-id} (get-recent-pages)))))
+
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options @state))
 

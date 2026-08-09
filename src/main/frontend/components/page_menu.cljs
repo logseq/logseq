@@ -61,6 +61,7 @@
   [page]
   (page-handler/<delete! (:block/uuid page)
                          (fn []
+                           (state/remove-page-from-recent! (:db/id page))
                            (notification/show!
                             (if (db-model/today-journal-page? page)
                               (t :page.delete/today-journal-truncate-success)
