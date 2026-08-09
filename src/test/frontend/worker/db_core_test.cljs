@@ -2245,15 +2245,13 @@
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [{:keys [block children]}
              (-> (get-blocks! test-repo
-                              (ldb/write-transit-str
-                               [{:id journal-id
-                                 :opts {:all? true
-                                        :children? true
-                                        :render-data? false
-                                        :root-render-data? true
-                                        :block-metadata? true
-                                        :include-collapsed-children? true}}]))
-                 ldb/read-transit-str
+                              [{:id journal-id
+                                :opts {:all? true
+                                       :children? true
+                                       :render-data? false
+                                       :root-render-data? true
+                                       :block-metadata? true
+                                       :include-collapsed-children? true}}])
                  first)
              target-result (some #(when (= "Block 0" (:block/title %)) %) children)
              property-block-result (some #(when (= "Block 2" (:block/title %)) %) children)
@@ -2290,13 +2288,11 @@
          (is (true? (:block.temp/comment-thread-present? target-result)))
          (is (= 0 (:block.temp/refs-count unrelated-result)))
          (is (false? (:block.temp/comment-thread-present? unrelated-result)))
-         (let [hydrated (-> (get-blocks! test-repo
-                                         (ldb/write-transit-str
-                                          [{:id (:db/id property-block-result)
-                                            :opts {:children? false
-                                                   :render-data? true
-                                                   :block-metadata? true}}]))
-                            ldb/read-transit-str
+           (let [hydrated (-> (get-blocks! test-repo
+                                           [{:id (:db/id property-block-result)
+                                             :opts {:children? false
+                                                    :render-data? true
+                                                    :block-metadata? true}}])
                             first
                             :block)]
            (is (contains? hydrated :block.temp/display-properties))
@@ -2323,11 +2319,9 @@
                            :logseq.property.reaction/target [:block/uuid block-id]}])
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (-> (get-blocks! test-repo
-                                      (ldb/write-transit-str
-                                       [{:id block-id
-                                         :opts {:children? false
-                                                :render-data? true}}]))
-                        ldb/read-transit-str
+                                     [{:id block-id
+                                       :opts {:children? false
+                                              :render-data? true}}])
                         first
                         :block)
              positioned-properties (:block.temp/positioned-properties result)
@@ -2370,10 +2364,8 @@
                              :build/keep-uuid? true}]}])]
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [block (-> (get-blocks! test-repo
-                                    (ldb/write-transit-str
-                                     [{:id block-id
-                                       :opts {:children? false}}]))
-                       ldb/read-transit-str
+                                    [{:id block-id
+                                      :opts {:children? false}}])
                        first
                        :block)]
          (is (= "View row" (:block/title block)))
@@ -2394,12 +2386,10 @@
                              :build/keep-uuid? true}]}])]
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [block (-> (get-blocks! test-repo
-                                    (ldb/write-transit-str
-                                     [{:id block-id
-                                       :opts {:children? false
-                                              :properties [:block/title
-                                                           :block/updated-at]}}]))
-                       ldb/read-transit-str
+                                    [{:id block-id
+                                      :opts {:children? false
+                                             :properties [:block/title
+                                                          :block/updated-at]}}])
                        first
                        :block)]
          (is (= "Projected row" (:block/title block)))
@@ -2439,10 +2429,8 @@
                            :block/tags :logseq.class/Page}])
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (-> (get-blocks! test-repo
-                                      (ldb/write-transit-str
-                                       [{:id block-id
-                                         :opts {:children? false}}]))
-                        ldb/read-transit-str
+                                     [{:id block-id
+                                       :opts {:children? false}}])
                         first
                         :block)
              tag-idents (set (map :db/ident (:block/tags result)))]
@@ -2467,10 +2455,8 @@
                             [:db/retract id :block/collapsed? true]]))
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [block (-> (get-blocks! test-repo
-                                    (ldb/write-transit-str
-                                     [{:id block-id
-                                       :opts {:children? false}}]))
-                       ldb/read-transit-str
+                                    [{:id block-id
+                                      :opts {:children? false}}])
                        first
                        :block)]
          (is (= [] (:block/tags block)))

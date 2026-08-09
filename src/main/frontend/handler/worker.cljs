@@ -213,6 +213,17 @@
 (defn handle-message!
   [^js worker wrapped-worker]
   (assert worker "worker doesn't exists")
+  (let [handle-worker-failure!
+        (fn [event]
+          (when (identical? worker @state/*db-worker-thread)
+            (log/error :db-worker/stopped-unexpectedly {:event event})
+            (set! (.-onmessage worker) nil)
+            (set! (.-onerror worker) nil)
+            (set! (.-onmessageerror worker) nil)
+            (reset! state/*db-worker-thread nil)
+            (reset! state/*db-worker nil)))]
+    (set! (.-onerror worker) handle-worker-failure!)
+    (set! (.-onmessageerror worker) handle-worker-failure!))
   (set! (.-onmessage worker)
         (fn [event]
           (let [data (.-data event)]
