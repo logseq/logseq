@@ -8,7 +8,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
@@ -228,17 +227,12 @@
 
 (defn- <invoke-worker-get-blocks
   [graph requests]
-  (p/let [result-transit-str
-          (state/<invoke-db-worker :thread-api/get-blocks
-                                   graph
-                                   (ldb/write-transit-str requests))]
-    (some-> result-transit-str ldb/read-transit-str)))
+  (state/<invoke-db-worker :thread-api/get-blocks graph requests))
 
 (defonce ^:private *get-blocks-batch-state
   (atom {:scheduled? false
-         :queue []}))
-
-(defonce ^:private *get-blocks-in-flight (atom {}))
+         :queue []
+         :in-flight {}}))
 
 (def ^:private get-blocks-batch-limit 25)
 
@@ -270,25 +264,26 @@
 (defn- enqueue-get-blocks-request!
   [graph request]
   (let [request-key (get-blocks-request-key graph request)]
-    (or (get @*get-blocks-in-flight request-key)
+    (or (get-in @*get-blocks-batch-state [:in-flight request-key])
         (let [result (p/deferred)]
-          (swap! *get-blocks-in-flight assoc request-key result)
           (swap! *get-blocks-batch-state
                  (fn [state]
-                   (update state :queue conj {:graph graph
-                                              :request request
-                                              :request-key request-key
-                                              :result result})))
+                   (-> state
+                       (assoc-in [:in-flight request-key] result)
+                       (update :queue conj {:graph graph
+                                            :request request
+                                            :request-key request-key
+                                            :result result}))))
           (schedule-get-blocks-batch-flush!)
           result))))
 
 (defn- clear-get-blocks-in-flight!
   [{:keys [request-key result]}]
-  (swap! *get-blocks-in-flight
-         (fn [in-flight]
-           (if (identical? result (get in-flight request-key))
-             (dissoc in-flight request-key)
-             in-flight))))
+  (swap! *get-blocks-batch-state
+         (fn [state]
+           (if (identical? result (get-in state [:in-flight request-key]))
+             (update state :in-flight dissoc request-key)
+             state))))
 
 (defn- resolve-batched-get-block-groups!
   [entry-groups responses]

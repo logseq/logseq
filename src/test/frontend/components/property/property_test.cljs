@@ -24,6 +24,18 @@
           (gobj/set js/globalThis "React" previous-react)
           (js-delete js/globalThis "React"))))))
 
+(deftest display-property-resource-value-is-authoritative-test
+  (let [value-uuid (random-uuid)
+        value-entity {:block/uuid value-uuid :block/title "canonical"}
+        restore #'property-component/restore-resource-entity-values]
+    (is (= "new" (restore "new" {}))
+        "Scalar resource values remain authoritative.")
+    (is (= value-entity (restore value-uuid {value-uuid value-entity}))
+        "Entity UUIDs resolve from canonical block snapshots.")
+    (is (= [value-entity]
+           (restore [value-uuid] {value-uuid value-entity}))
+        "Entity collections retain their resource-owned shape.")))
+
 (deftest property-configuration-subscribes-to-current-property-data-test
   (let [property-uuid (random-uuid)
         owner-uuid (random-uuid)
