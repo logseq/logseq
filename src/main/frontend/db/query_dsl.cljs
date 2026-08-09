@@ -2,7 +2,6 @@
   "Handles executing dsl queries a.k.a. simple queries"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.reader :as reader]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -646,7 +645,7 @@ Some bindings in this fn:
       (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
             form (some->> s
                           (pre-transform)
-                          (reader/read-string custom-readers))
+                          (common-util/safe-read-string custom-readers))
             sort-by (atom nil)
             blocks? (atom nil)
             sample (atom nil)

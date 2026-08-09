@@ -664,6 +664,18 @@
     (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
     (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))"))))))
 
+(deftest unreadable-query-input-does-not-throw
+  (testing "queries the edn reader rejects parse to an empty query instead of throwing (whole-UI crash)"
+    (is (nil? (:query (query-dsl/parse-query "(between [[2020-01-01]] ::today)" (db/get-db))))
+        "auto-resolved keyword inside between")
+    (is (nil? (:query (query-dsl/parse-query "::whatever" (db/get-db))))
+        "bare auto-resolved keyword")
+    (is (nil? (:query (query-dsl/parse-query "(and [[page 1]] ::x" (db/get-db))))
+        "unbalanced parens"))
+  (testing "running such a query returns no results instead of throwing"
+    (is (empty? (dsl-query "(between [[2020-01-01]] ::today)")))
+    (is (empty? (dsl-query "::whatever")))))
+
 (deftest custom-query-test
   (load-test-files
    [{:page {:block/title "page1", :build/properties {:foo "bar"}}
