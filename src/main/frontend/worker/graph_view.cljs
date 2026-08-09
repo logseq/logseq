@@ -693,10 +693,13 @@
         property-link-tuples (property-ref-link-tuples db base-visible-page-ids :page :page)
         parent-link-tuples (page-parent-links db base-visible-page-ids)
         extends-link-tuples (all-pages-class-extends-links db base-visible-page-ids ident-by-id)
-        raw-links (vec (distinct (concat raw-links
-                                         property-link-tuples
-                                         parent-link-tuples
-                                         extends-link-tuples)))
+        raw-links (->> (concat raw-links
+                               property-link-tuples
+                               parent-link-tuples
+                               extends-link-tuples)
+                       distinct
+                       (take large-all-pages-link-limit)
+                       vec)
         linked-page-ids (set/union linked-page-ids
                                    (link-node-ids (concat property-link-tuples
                                                           parent-link-tuples

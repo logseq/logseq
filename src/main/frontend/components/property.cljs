@@ -226,7 +226,7 @@
                          :dropdown? false
                          :close-modal? false
                          :new-case-sensitive? true
-                         :show-new-when-not-exact-match? (some? properties)
+                         :show-new-when-not-exact-match? true
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                          :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!
@@ -616,34 +616,28 @@
         (not (contains? #{:default :url} type))
         (empty-panel-property-value? value))))
 
-(defn- entity-values-by-uuid
+(defn- entity-value-uuids
   [value]
   (cond
-    (map? value)
-    (cond-> (reduce merge {} (map entity-values-by-uuid (vals value)))
-      (uuid? (:block/uuid value)) (assoc (:block/uuid value) value))
+    (uuid? value)
+    [value]
 
     (coll? value)
-    (reduce merge {} (map entity-values-by-uuid value))
+    (mapcat entity-value-uuids value)
 
     :else
-    {}))
+    []))
 
 (defn- restore-resource-entity-values
-  [block property value]
-  (let [property-ident (:db/ident property)
-        value (if (contains? block property-ident)
-                (get block property-ident)
-                value)
-        entities (entity-values-by-uuid [block property])]
-    (letfn [(restore [item]
-              (cond
-                (uuid? item) (get entities item item)
-                (set? item) (into #{} (map restore) item)
-                (vector? item) (mapv restore item)
-                (sequential? item) (map restore item)
-                :else item))]
-      (restore value))))
+  [value entities]
+  (letfn [(restore [item]
+            (cond
+              (uuid? item) (get entities item item)
+              (set? item) (into #{} (map restore) item)
+              (vector? item) (mapv restore item)
+              (sequential? item) (map restore item)
+              :else item))]
+    (restore value)))
 
 (hsx/defc class-schema-property-value
   [property description-property-uuid opts]
@@ -653,9 +647,14 @@
 
 (hsx/defc property-cp
   [block {:keys [property-uuid property-ident value]} {:keys [sortable-opts description-property-uuid] :as opts}]
-  (let [property (db-hooks/use-block property-uuid)]
+  (let [property (db-hooks/use-block property-uuid)
+        value-uuids (->> (entity-value-uuids value) distinct (sort-by str) vec)
+        value-entities (db-hooks/use-blocks value-uuids)
+        value-ready? (or (empty? value-uuids) (some? value-entities))
+        entities-by-uuid (zipmap value-uuids value-entities)]
     (when (and (keyword? property-ident) property)
-      (let [value (restore-resource-entity-values block property value)
+      (let [value (when value-ready?
+                    (restore-resource-entity-values value entities-by-uuid))
             type (get property :logseq.property/type :default)
           empty-value? (empty-panel-property-value? value)
           show-panel-bullet? (show-property-panel-bullet? property value)

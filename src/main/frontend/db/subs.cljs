@@ -279,20 +279,18 @@
 (defn- schedule-resource-reload!
   [[_ resource-key :as slot-key]]
   (if (= :query (first resource-key))
-    (do
-      (when-let [timer-id (:timer-id @*query-reloads)]
-        (clear-query-reload-timeout! timer-id))
-      (swap! *query-reloads
-             (fn [state]
-               {:timer-id (set-query-reload-timeout! flush-query-reloads! 2000)
-                :slot-keys (conj (:slot-keys state) slot-key)})))
+    (swap! *query-reloads
+           (fn [{:keys [timer-id slot-keys]}]
+             {:timer-id (or timer-id
+                            (set-query-reload-timeout! flush-query-reloads! 2000))
+              :slot-keys (conj slot-keys slot-key)}))
     (request-reload! slot-key)))
 
 (defn reset-graph!
   [graph-id]
   (let [generation (inc (:generation @*store))
-        slot-keys (vec (keys @*listeners))
-        resource-slot-keys (into #{} (filter #(= :resource (first %))) slot-keys)
+        resource-slot-keys (into #{} (filter #(= :resource (first %)))
+                                 (keys @*listeners))
         listeners (mapcat vals (vals @*listeners))
         error (ex-info "Graph changed during renderer load" {:graph-id graph-id})]
     (clear-query-reloads!)
@@ -300,9 +298,20 @@
                           :resource-slot-keys resource-slot-keys))
     (reset! *in-flight {})
     (loader/reject-pending! error)
-    (run! (fn [listener] (listener)) listeners)
-    (when graph-id (run! start-load! slot-keys)))
+    (run! (fn [listener] (listener)) listeners))
   nil)
+
+(defn- retry-mounted-errors!
+  [_key _ref _old-value ready?]
+  (when ready?
+    (doseq [slot-key (keys @*listeners)
+            :when (= :error (get-in (store-slot @*store slot-key)
+                                    [:snapshot :status]))]
+      (start-load! slot-key))))
+
+(add-watch state/db-worker-ready?
+           ::retry-mounted-errors
+           retry-mounted-errors!)
 
 (defn- subscribe!
   [slot-key listener]

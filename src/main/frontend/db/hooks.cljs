@@ -1,7 +1,8 @@
 (ns frontend.db.hooks
   "Hooks for DB-backed React integration."
   (:require ["react" :as react]
-            [frontend.db.subs :as subs]))
+            [frontend.db.subs :as subs]
+            [frontend.state :as state]))
 
 (defn- use-stable-key
   [key]
@@ -10,14 +11,18 @@
       (set! (.-current key-ref) key))
     (.-current key-ref)))
 
+(defn- use-graph-key
+  [key]
+  (use-stable-key [(state/get-current-repo) key]))
+
 (defn- use-external-store-snapshot
   [subscribe! snapshot key]
-  (let [key (use-stable-key key)
+  (let [key (use-graph-key key)
         subscribe (react/useCallback
-                   (fn [listener] (subscribe! key listener))
+                   (fn [listener] (subscribe! (second key) listener))
                    #js [subscribe! key])
         get-snapshot (react/useCallback
-                      (fn [] (snapshot key))
+                      (fn [] (snapshot (second key)))
                       #js [snapshot key])
         {:keys [status] :as result}
         (react/useSyncExternalStore
@@ -41,14 +46,14 @@
 
 (defn- use-external-store-projection
   [subscribe! snapshot key project]
-  (let [key (use-stable-key key)
+  (let [key (use-graph-key key)
         projection-ref (react/useRef nil)
         subscribe (react/useCallback
-                   (fn [listener] (subscribe! key listener))
+                   (fn [listener] (subscribe! (second key) listener))
                    #js [subscribe! key])
         get-snapshot (react/useCallback
                       (fn []
-                        (let [source (snapshot key)
+                        (let [source (snapshot (second key))
                               cached (.-current projection-ref)]
                           (if (identical? source (:source cached))
                             (:snapshot cached)
@@ -79,19 +84,33 @@
   "Keep canonical block loads alive for a render-ahead window and report when
   the whole window has settled."
   [block-uuids]
-  (let [block-uuids (use-stable-key (vec block-uuids))
+  (let [key (use-graph-key (vec block-uuids))
+        block-uuids (second key)
         subscribe (react/useCallback
                    (fn [listener]
                      (let [unsubscribes
                            (mapv #(subs/subscribe-block! % listener) block-uuids)]
                        #(run! (fn [unsubscribe] (unsubscribe)) unsubscribes)))
-                   #js [block-uuids])
+                   #js [key])
         get-snapshot (react/useCallback
                       (fn []
                         (every? #(not= :loading (:status (subs/block-snapshot %)))
                                 block-uuids))
-                      #js [block-uuids])]
+                      #js [key])]
     (react/useSyncExternalStore subscribe get-snapshot get-snapshot)))
+
+(defn use-blocks
+  [block-uuids]
+  (when (use-block-prefetch block-uuids)
+    (mapv (fn [block-uuid]
+            (let [{:keys [status value error] :as snapshot}
+                  (subs/block-snapshot block-uuid)]
+              (case status
+                :ready value
+                :missing nil
+                :error (throw error)
+                (throw (ex-info "Invalid settled block snapshot" snapshot)))))
+          block-uuids)))
 
 (defn use-block-projection
   [block-uuid project]

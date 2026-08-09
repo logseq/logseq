@@ -1,7 +1,12 @@
 (ns frontend.db.subs-test
   (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [datascript.core :as d]
             [frontend.db.subs :as subs]
             [frontend.state :as state]
+            [frontend.worker.db-listener :as db-listener]
+            [frontend.worker.handler.render-resource.engine :as render-engine]
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "subs-test-graph")
@@ -144,6 +149,85 @@
                    (when-let [unsubscribe! @unsubscribe]
                      (unsubscribe!))
                    (reset! state/*db-worker previous-db-worker)))))))))
+
+(deftest mounted-error-snapshot-retries-when-worker-recovers-test
+  (async done
+         (let [resource-key [:journals]
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-resource
+                            (fn [_graph-id requested-key]
+                              (if (= 1 (swap! calls inc))
+                                (p/rejected (js/Error. "temporary worker failure"))
+                                (p/resolved
+                                 (exact-resource-patch
+                                  1 requested-key #{[:journals]} [:ready]))))]
+              (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= :error
+                                 (:status (subs/resource-snapshot resource-key))))
+                        _ (reset! state/*db-worker nil)
+                        _ (reset! state/*db-worker (fn [& _args] nil))
+                        _ (p/delay 0)]
+                  (is (= 2 @calls))
+                  (is (= {:status :ready :value [:ready]}
+                         (subs/resource-snapshot resource-key)))
+                  (unsubscribe))))))))
+
+(deftest worker-snapshot-and-delta-roundtrip-update-mounted-block-test
+  (async done
+         (let [conn (db-test/create-conn)
+               block-uuid (random-uuid)
+               _ (d/transact! conn [{:block/uuid block-uuid
+                                     :block/tx-id 1
+                                     :block/title "before"}])
+               worker (fn [api & args]
+                        (case api
+                          :thread-api/update-thread-atom
+                          (p/resolved nil)
+
+                          :thread-api/get-render-snapshots
+                          (let [[graph-id request] args]
+                            (is (= test-graph-id graph-id))
+                            (p/resolved
+                             (render-engine/render-snapshots @conn request
+                                                             {:repo graph-id})))
+
+                          (p/rejected
+                           (ex-info "Unexpected worker API" {:api api :args args}))))
+               unsubscribe (atom nil)]
+            (finish-async!
+             done
+             (->
+              (p/let [_ (reset! state/*db-worker worker)
+                      _ (reset! unsubscribe
+                                (subs/subscribe-block! block-uuid (fn [])))
+                      _ (p/delay 0)
+                      _ (is (= "before"
+                               (:block/title
+                                (:value (subs/block-snapshot block-uuid)))))
+                      report (d/transact! conn
+                                          [[:db/add [:block/uuid block-uuid]
+                                            :block/title "after"]
+                                           [:db/add [:block/uuid block-uuid]
+                                            :block/tx-id 2]])
+                      render-delta (-> (#'db-listener/build-render-delta
+                                        test-graph-id report
+                                        {:affected-keys #{}
+                                         :deleted-block-uuids #{}})
+                                       ldb/write-transit-str
+                                       ldb/read-transit-str)
+                      _ (subs/apply-delta! render-delta)]
+                (is (= {:status :ready
+                        :value (block block-uuid 2 "after")}
+                       (update (subs/block-snapshot block-uuid)
+                               :value select-keys
+                               [:block/uuid :block/tx-id :block/title]))))
+              (p/finally
+                (fn []
+                  (when-let [unsubscribe! @unsubscribe]
+                    (unsubscribe!)))))))))
 
 (deftest block-changed-uses-only-tx-id-test
   (let [block-uuid (random-uuid)
@@ -329,9 +413,14 @@
                               (if (= 1 (swap! loader-calls inc))
                                 old-request
                                 new-request))]
-              (let [unsubscribe (subs/subscribe-block! block-uuid #(swap! notifications inc))]
+              (let [unsubscribe-old (subs/subscribe-block! block-uuid #(swap! notifications inc))
+                    unsubscribe-new (atom nil)]
                 (p/let [_ (p/delay 0)
                         _ (subs/reset-graph! test-graph-id)
+                        _ (unsubscribe-old)
+                        _ (reset! unsubscribe-new
+                                  (subs/subscribe-block! block-uuid
+                                                         #(swap! notifications inc)))
                         _ (p/delay 0)
                         notification-count-after-reset @notifications
                         _ (p/resolve! old-request
@@ -351,7 +440,7 @@
                     (is (= {:status :ready
                             :value (block block-uuid 101 "new generation")}
                            (subs/block-snapshot block-uuid))))
-                  (unsubscribe))))))))
+                  (@unsubscribe-new))))))))
 
 (deftest one-block-delta-notifies-only-that-uuid-test
   (async done
@@ -831,7 +920,7 @@
                       "Open descendants must be ready with their parent membership.")
                   (unsubscribe))))))))
 
-(deftest reset-graph-restarts-every-mounted-typed-load-test
+(deftest reset-graph-does-not-replay-old-graph-slot-keys-test
   (async done
          (let [next-graph-id "subs-test-next-graph"
                block-uuid (random-uuid)
@@ -867,12 +956,8 @@
                         _ (reset! calls [])
                         _ (subs/reset-graph! next-graph-id)
                         _ (p/delay 0)]
-                  (is (= #{[:block next-graph-id block-uuid]
-                           [:children next-graph-id parent-uuid]
-                           [:resource next-graph-id resource-key]}
-                         (set @calls)))
-                  (is (= 3 (count @calls))
-                      "Each mounted typed key restarts exactly once on the new graph.")
+                  (is (empty? @calls)
+                      "Old graph-local subscription keys must not be replayed against a new graph.")
                   (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
 
 (deftest resource-invalidation-reloads-only-mounted-intersections-test
@@ -968,7 +1053,7 @@
                                   (subs/resource-snapshot resource-key)))
                   (unsubscribe))))))))
 
-(deftest custom-query-reload-waits-for-two-seconds-of-idle-test
+(deftest custom-query-reload-is-not-postponed-by-repeated-invalidations-test
   (async done
          (let [resource-key [:query {:kind :datalog :query [:find '?b]}]
                watch-key [:tasks]
@@ -1004,9 +1089,11 @@
                         _ (subs/apply-delta!
                            (delta 3 {:affected-keys #{watch-key}}))
                         _ (p/delay 0)
-                        _ (is (= [0] @cleared))
+                        _ (is (empty? @cleared)
+                              "Repeated invalidation must not postpone the pending reload.")
+                        _ (is (= 1 (count @timers)))
                         _ (is (= [] @calls))
-                        _ ((:callback (last @timers)))
+                        _ ((:callback (first @timers)))
                         _ (p/delay 0)]
                   (is (= [resource-key] @calls))
                   (unsubscribe))))))))
@@ -1472,6 +1559,11 @@
                         _ (is (= {:status :loading}
                                  (subs/resource-snapshot resource-key)))
                         _ (subs/reset-graph! next-graph-id)
+                        _ (run! (fn [unsubscribe] (unsubscribe)) unsubscribes)
+                        resumed-unsubscribes
+                        [(subs/subscribe-block! block-uuid (fn []))
+                         (subs/subscribe-children! parent-uuid (fn []))
+                         (subs/subscribe-resource! resource-key (fn []))]
                         _ (p/delay 0)]
                   (is (= #{[:block next-graph-id block-uuid]
                            [:children next-graph-id parent-uuid]
@@ -1479,7 +1571,7 @@
                          (set @calls)))
                   (is (= 3 (count @calls))
                       "Resume starts one request for each mounted exact key.")
-                  (run! (fn [unsubscribe] (unsubscribe)) unsubscribes))))))))
+                  (run! (fn [unsubscribe] (unsubscribe)) resumed-unsubscribes))))))))
 
 (deftest unmounted-deltas-do-not-create-exact-slots-test
   (async done

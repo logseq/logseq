@@ -90,13 +90,21 @@
 
 (defn- block-snapshot-slots
   [db block-uuids]
-  (let [blocks (:blocks (block-handler/canonical-blocks db block-uuids))]
-    (reduce (fn [slots block-uuid]
-              (if (contains? blocks block-uuid)
-                slots
-                (assoc slots [:block block-uuid] {:missing? true})))
-            (common/block-slots blocks)
-            block-uuids)))
+  (let [{:keys [blocks groups]}
+        (block-handler/canonical-blocks db block-uuids)]
+    {:slots (reduce (fn [slots block-uuid]
+                      (if (contains? blocks block-uuid)
+                        slots
+                        (assoc slots [:block block-uuid] {:missing? true})))
+                    (common/block-slots blocks)
+                    block-uuids)
+     :groups (into {}
+                   (map (fn [block-uuid]
+                          [[:block block-uuid]
+                           (if-let [dependency-uuids (get groups block-uuid)]
+                             (into #{} (map #(vector :block %)) dependency-uuids)
+                             #{[:block block-uuid]})]))
+                   block-uuids)}))
 
 (defn- children-snapshot-groups
   [db parent-uuids]
@@ -115,7 +123,8 @@
                                       [resource-key
                                        (resource-entry db resource-key runtime)]))
                                resources)
-        block-slots (block-snapshot-slots db blocks)
+        {block-slots :slots block-groups :groups}
+        (block-snapshot-slots db blocks)
         children-groups (children-snapshot-groups db children)
         base-slots (reduce merge-slots block-slots (vals children-groups))
         slots (reduce-kv
@@ -131,13 +140,7 @@
                resource-entries)
         groups (into {}
                      (concat
-                      (map-indexed
-                       (fn [index block-uuid]
-                         [[:block block-uuid]
-                          (if (zero? index)
-                            (set (keys block-slots))
-                            #{[:block block-uuid]})])
-                       blocks)
+                      block-groups
                       (map (fn [parent-uuid]
                              [[:children parent-uuid]
                               (set (keys (get children-groups
