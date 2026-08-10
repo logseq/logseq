@@ -14,6 +14,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
@@ -818,6 +819,38 @@
                                    :block/title "page1-renamed"}])]
         (is (= "page1-renamed"
                (:block/title (d/entity (:db-after result) (:db/id page1)))))))))
+
+(deftest legacy-journal-reference-does-not-update-protected-attributes-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260727}}
+                {:page {:block/title "page1"}
+                 :blocks [{:block/title "target"}]}]})
+        journal (db-test/find-journal-by-journal-day @conn 20260727)
+        target (db-test/find-block-by-content @conn "target")]
+    (d/transact! conn [[:db/add :logseq.class/Journal
+                        :logseq.property.journal/title-format "yyyy-MM-dd"]
+                       {:db/id (:db/id journal)
+                        :block/title "2026-07-27"
+                        :block/name "2026-07-27"}])
+    (let [reference (gp-block/page-name->map "2026-07-27" @conn true "yyyy-MM-dd")]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (let [error (try
+                      (ldb/transact! conn [{:db/id (:db/id target)
+                                            :block/title "target"
+                                            :block/refs [reference]}])
+                      nil
+                      (catch :default e
+                        e))
+              journal-after (db-test/find-journal-by-journal-day @conn 20260727)]
+          (is (nil? error))
+          (is (= "2026-07-27" (:block/title journal-after)))
+          (is (= "2026-07-27" (:block/name journal-after)))
+          (is (= (:block/uuid journal)
+                 (:block/uuid (first (:block/refs (d/entity @conn (:db/id target))))))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
 
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
