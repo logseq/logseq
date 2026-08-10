@@ -3,7 +3,6 @@
             ["react-dom/client" :as rdc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [frontend.commands :as commands]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
@@ -19,6 +18,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -44,7 +44,7 @@
 (hsx/defc pdf-highlight-finder
   [^js viewer]
   (let [*mounted? (hooks/use-ref false)
-        ref-hl (state/use-sub :pdf/ref-highlight)
+        ref-hl (rfx/use-sub [:pdf/ref-highlight])
         ref-hl-key (when ref-hl
                      (str (:id ref-hl) ":" (:page ref-hl)))]
     (hooks/use-effect!
@@ -72,10 +72,10 @@
 (hsx/defc pdf-page-finder
   [^js viewer]
   (hooks/use-effect!
-   (fn []
+     (fn []
      (when viewer
-       (when-let [_ (:pdf/current @state/state)]
-         (let [active-hl (:pdf/ref-highlight @state/state)]
+       (when-let [_ (state/get-state :pdf/current)]
+         (let [active-hl (state/get-state :pdf/ref-highlight)]
            (when-not active-hl
              (.on (.-eventBus viewer) (name :restore-last-page)
                   (fn [last-page]
@@ -141,7 +141,7 @@
         ^js cnt (.-container viewer)
         ^js body (some-> (.-ownerDocument cnt) (.-body))
         key-alt? (= (some-> body (.-dataset) (.-activeKeystroke)) "Alt")
-        auto-open-ctx-menu? (state/use-sub :pdf/auto-open-ctx-menu?)
+        auto-open-ctx-menu? (rfx/use-sub [:pdf/auto-open-ctx-menu?])
         head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.-scrollTop cnt)) head-height)
         left (+ (:x point) (.-scrollLeft cnt))
@@ -175,7 +175,7 @@
                            (do
                              (del-hl! highlight)
                              (pdf-assets/del-ref-block! highlight)
-                             (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
+                             (pdf-assets/unlink-hl-area-image$ viewer (state/get-state :pdf/current) highlight))
 
                            "hook"
                            :dune
@@ -345,7 +345,7 @@
 
                                                     (p/let [result (pdf-assets/persist-hl-area-image$
                                                                     viewer
-                                                                    (:pdf/current @state/state)
+                                                                    (state/get-state :pdf/current)
                                                                     hl' hl (:bounding to-vw-pos))]
 
                                                       (js/setTimeout
@@ -354,7 +354,7 @@
                                                           (set! (.. target -style -transform) "translate(0, 0)")
                                                           (.removeAttribute target "data-x")
                                                           (.removeAttribute target "data-y")
-                                                          (let [hl' (if (de/entity? result)
+                                                          (let [hl' (if (:db/id result)
                                                                       (assoc-in hl' [:content :image] (:db/id result))
                                                                       hl')]
                                                             (update-hl! hl')))
@@ -583,9 +583,9 @@
 
                       (if-let [vw-pos (and (pdf-assets/area-highlight? hl)
                                            (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
-                        (-> (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                        (-> (p/let [result (pdf-assets/persist-hl-area-image$ viewer (state/get-state :pdf/current)
                                                                               hl nil (:bounding vw-pos))]
-                              (if (de/entity? result)
+                              (if (:db/id result)
                                 (let [hl' (assoc-in hl [:content :image] (:db/id result))]
                                   (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
                                   hl')
@@ -739,9 +739,9 @@
                    ^js mounted-root (.-mountedRoot hls-layer)]
                (if (nil? mounted-root)
                  (let [root (rdc/createRoot hls-layer)]
-                   (.render root hls-render)
+                   (.render root (rfx/provider hls-render))
                    (set! (. hls-layer -mountedRoot) root))
-                 (.render mounted-root hls-render))))))
+                 (.render mounted-root (rfx/provider hls-render)))))))
        ;; destroy
        #())
      [loaded-pages highlights])
@@ -756,12 +756,13 @@
                           (set! (. holder -mountedRoot) root)
                           root))]
            (.render root
-                    (when (:highlight ctx-menu-state)
-                      (pdf-highlights-ctx-menu viewer ctx-menu-state
-                                               {:clear-ctx-menu! clear-ctx-menu!
-                                                :add-hl! add-hl!
-                                                :del-hl! del-hl!
-                                                :upd-hl! upd-hl!})))))
+                    (rfx/provider
+                     (when (:highlight ctx-menu-state)
+                       (pdf-highlights-ctx-menu viewer ctx-menu-state
+                                                {:clear-ctx-menu! clear-ctx-menu!
+                                                 :add-hl! add-hl!
+                                                 :del-hl! del-hl!
+                                                 :upd-hl! upd-hl!}))))))
        #())
      [ctx-menu-state])
 
@@ -1098,8 +1099,8 @@
 
 (hsx/defc default-embed-playground
   []
-  (let [pdf-current (state/use-sub :pdf/current)
-        system-win? (state/use-sub :pdf/system-win?)]
+  (let [pdf-current (rfx/use-sub [:pdf/current])
+        system-win? (rfx/use-sub [:pdf/system-win?])]
     [:div.extensions__pdf-playground
 
      (playground-effects (and (not system-win?)
@@ -1113,5 +1114,5 @@
 
 (hsx/defc system-embed-playground
   []
-  (let [pdf-current (state/use-sub :pdf/current)]
+  (let [pdf-current (rfx/use-sub [:pdf/current])]
     (pdf-container pdf-current)))

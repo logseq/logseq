@@ -111,7 +111,7 @@ html.is-ios {
 .cards-review .cp__select {
   &-main {
     margin: 0;
-    @screen lg {
+    @media (min-width: 1024px) {
       width: 240px;
     }
   }

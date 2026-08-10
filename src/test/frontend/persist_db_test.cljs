@@ -8,6 +8,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
+            [frontend.rfx :as rfx]
             [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -28,9 +29,8 @@
   (<release-access-handles [_ _repo]
     (p/resolved true))
 
-  (<fetch-initial-data [_ repo _opts]
-    (p/resolved {:schema {:repo repo}
-                 :initial-data []}))
+  (<open-and-fetch-schema [_ repo _opts]
+    (p/resolved {:schema {:repo repo}}))
 
   (<export-db [_ _repo _opts]
     (p/resolved nil))
@@ -64,13 +64,13 @@
 
 (defn- reset-runtime-state!
   []
-  (remove-watch state/state :sync-markdown-mirror-setting)
+  (rfx/unlisten! :sync-markdown-mirror-setting)
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
   (reset! persist-db/remote-runtime-state nil)
   (reset! state/*db-worker nil)
   (reset! ldb/*transact-fn nil)
-  (swap! state/state assoc :electron/user-cfgs {}))
+  (state/swap-state! assoc :electron/user-cfgs {}))
 
 (defn- success-body
   [result]
@@ -151,15 +151,15 @@
 (defn- install-electron-failover-test-env!
   [{:keys [current-repo repos results runtime-results events current-repo-updates notifications sse ipc-calls]
     :or {sse (sse-state)}}]
-  (let [originals {:original-state @state/state
+  (let [originals {:original-state (state/get-state)
                    :electron? util/electron?
                    :ipc ipc/ipc
                    :pub-event! state/pub-event!
                    :set-current-repo! state/set-current-repo!
                    :notification-show! notification/show!}]
     (reset-runtime-state!)
-    (swap! state/state assoc :git/current-repo current-repo)
-    (swap! state/state assoc-in [:me :repos] repos)
+    (state/swap-state! assoc :git/current-repo current-repo)
+    (state/swap-state! assoc-in [:me :repos] repos)
     (set! util/electron? (constantly true))
     (set! ipc/ipc (fn [channel repo]
                     (when ipc-calls
@@ -187,7 +187,7 @@
                              (p/resolved true)))
     (set! state/set-current-repo! (fn [repo]
                                     (swap! current-repo-updates conj repo)
-                                    (swap! state/state assoc :git/current-repo repo)
+                                    (state/swap-state! assoc :git/current-repo repo)
                                     nil))
     (set! notification/show! (fn [content status]
                                (swap! notifications conj [content status])
@@ -196,7 +196,7 @@
 
 (defn- restore-electron-failover-test-env!
   [{:keys [original-state electron? ipc pub-event! set-current-repo! notification-show!]}]
-  (reset! state/state original-state)
+  (state/replace-state! original-state)
   (set! util/electron? electron?)
   (set! ipc/ipc ipc)
   (set! state/pub-event! pub-event!)
@@ -211,9 +211,9 @@
 (deftest search-index-build-progress-ignores-vector-stage-in-ui-state
   (let [repo "logseq_db_graph_a"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
-        original-state @state/state]
+        original-state (state/get-state)]
     (try
-      (reset! state/state (assoc original-state
+      (state/replace-state! (assoc original-state
                                   :git/current-repo repo
                                   :search/index-build {:visible? false
                                                        :running? false
@@ -226,17 +226,17 @@
       (is (= {:visible? false
               :running? false
               :status :idle}
-             (:search/index-build @state/state)))
+             (:search/index-build (state/get-state))))
       (finally
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest search-index-build-progress-marks-current-graph-ready-after-fts-completed
   (let [repo "logseq_db_graph_a"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
-        original-state @state/state
+        original-state (state/get-state)
         events (atom [])]
     (try
-      (reset! state/state (assoc original-state :git/current-repo repo))
+      (state/replace-state! (assoc original-state :git/current-repo repo))
       (with-redefs [state/pub-event! (fn [event]
                                        (swap! events conj event)
                                        (p/resolved nil))]
@@ -248,15 +248,15 @@
                          :total 1})
         (is (= [[:graph/ready repo]] @events)))
       (finally
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest search-index-build-progress-keeps-completed-build-visible-through-idle
   (let [repo "logseq_db_graph_a"
         build-id "build-1"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
-        original-state @state/state]
+        original-state (state/get-state)]
     (try
-      (reset! state/state (assoc original-state :git/current-repo repo))
+      (state/replace-state! (assoc original-state :git/current-repo repo))
       (progress! repo {:build-id build-id
                        :status :completed
                        :progress 100
@@ -273,11 +273,11 @@
               :progress 100
               :processed 1
               :total 1}
-             (:search/index-build @state/state)))
+             (state/get-state :search/index-build)))
       (finally
         (progress! repo {:build-id build-id
                          :status :running})
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest event-stream-error-loggable-throttles-after-powers-of-two
   (let [loggable? #'persist-db/event-stream-error-loggable?]
@@ -285,7 +285,7 @@
     (is (= #{1 2 4 8 16 32 64 128}
            (set (filter loggable? (range 1 130)))))))
 
-(deftest electron-fetch-init-data-starts-remote-runtime
+(deftest electron-open-and-fetch-schema-starts-remote-runtime
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
@@ -305,10 +305,8 @@
                             (swap! start-calls conj repo)
                             (->FakeRemote repo wrapped-worker)))
       (set! remote/stop! (fn [_] (p/resolved true)))
-      (-> (p/let [result (persist-db/<fetch-init-data "logseq_db_graph_a" {})]
-            (is (= {:schema {:repo "logseq_db_graph_a"}
-                    :initial-data []}
-                   result))
+      (-> (p/let [result (persist-db/<open-and-fetch-schema "logseq_db_graph_a" {})]
+            (is (= {:schema {:repo "logseq_db_graph_a"}} result))
             (is (= [["db-worker-runtime" "logseq_db_graph_a"]] @ipc-calls))
             (is (= ["logseq_db_graph_a"] @start-calls))
             (is (= wrapped-worker @state/*db-worker)))
@@ -321,7 +319,7 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest electron-fetch-init-data-reuses-runtime-for-same-repo-and-restarts-for-new-repo
+(deftest electron-open-and-fetch-schema-reuses-runtime-for-same-repo-and-restarts-for-new-repo
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
@@ -402,12 +400,12 @@
           ensure-remote! #'persist-db/<ensure-remote!
           wrapped-worker (fn [& _] nil)
           graph-b-client (->FakeRemote "logseq_db_graph_b" wrapped-worker)
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_b"))
+      (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_b"))
       (reset! persist-db/remote-db graph-b-client)
       (reset! persist-db/remote-repo "logseq_db_graph_b")
       (reset! state/*db-worker wrapped-worker)
@@ -431,7 +429,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -446,12 +444,12 @@
           wrapped-worker-a (fn [& _] nil)
           wrapped-worker-b (fn [& _] nil)
           graph-b-client (->FakeRemote "logseq_db_graph_b" wrapped-worker-b)
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+      (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
       (set! ipc/ipc (fn [channel repo]
                       (swap! ipc-calls conj [channel repo])
                       (p/resolved {:base-url "http://127.0.0.1:9101"
@@ -459,7 +457,7 @@
                                    :repo repo})))
       (set! remote/start! (fn [{:keys [repo]}]
                             (swap! start-calls conj repo)
-                            (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                            (state/swap-state! assoc :git/current-repo "logseq_db_graph_b")
                             (reset! persist-db/remote-db graph-b-client)
                             (reset! persist-db/remote-repo "logseq_db_graph_b")
                             (reset! state/*db-worker wrapped-worker-b)
@@ -480,7 +478,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -496,12 +494,12 @@
           wrapped-worker-b (fn [& _] nil)
           graph-a-client (->FakeRemote "logseq_db_graph_a" wrapped-worker-a)
           graph-b-client (->FakeRemote "logseq_db_graph_b" wrapped-worker-b)
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+      (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
       (reset! persist-db/remote-db graph-a-client)
       (reset! persist-db/remote-repo nil)
       (reset! state/*db-worker wrapped-worker-a)
@@ -515,7 +513,7 @@
                             (->FakeRemote repo (fn [& _] nil))))
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj (:repo client))
-                           (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                           (state/swap-state! assoc :git/current-repo "logseq_db_graph_b")
                            (reset! persist-db/remote-db graph-b-client)
                            (reset! persist-db/remote-repo "logseq_db_graph_b")
                            (reset! state/*db-worker wrapped-worker-b)
@@ -531,7 +529,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -546,12 +544,12 @@
           stale-worker (fn [& _] nil)
           fresh-worker (fn [& _] nil)
           fresh-client (->FakeRemote "logseq_db_graph_a" fresh-worker)
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+      (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
       (set! ipc/ipc (fn [channel repo]
                       (swap! ipc-calls conj [channel repo])
                       (p/resolved {:base-url "http://127.0.0.1:9101"
@@ -559,11 +557,11 @@
                                    :repo repo})))
       (set! remote/start! (fn [{:keys [repo]}]
                             (swap! start-calls conj repo)
-                            (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                            (state/swap-state! assoc :git/current-repo "logseq_db_graph_b")
                             (->FakeRemote repo stale-worker)))
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj (:repo client))
-                           (swap! state/state assoc :git/current-repo "logseq_db_graph_a")
+                           (state/swap-state! assoc :git/current-repo "logseq_db_graph_a")
                            (reset! persist-db/remote-db fresh-client)
                            (reset! persist-db/remote-repo "logseq_db_graph_a")
                            (reset! state/*db-worker fresh-worker)
@@ -580,7 +578,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -608,14 +606,10 @@
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj (:repo client))
                            (p/resolved true)))
-      (-> (p/let [first-result (persist-db/<fetch-init-data "demo" {})
-                  second-result (persist-db/<fetch-init-data "logseq_db_demo" {})]
-            (is (= {:schema {:repo "demo"}
-                    :initial-data []}
-                   first-result))
-            (is (= {:schema {:repo "logseq_db_demo"}
-                    :initial-data []}
-                   second-result))
+      (-> (p/let [first-result (persist-db/<open-and-fetch-schema "demo" {})
+                  second-result (persist-db/<open-and-fetch-schema "logseq_db_demo" {})]
+            (is (= {:schema {:repo "demo"}} first-result))
+            (is (= {:schema {:repo "logseq_db_demo"}} second-result))
             (is (= [["db-worker-runtime" "demo"]] @ipc-calls))
             (is (= ["demo"] @start-calls))
             (is (empty? @stop-calls)))
@@ -628,13 +622,13 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest electron-fetch-init-data-then-set-current-repo-does-not-rebind-runtime
+(deftest electron-open-and-fetch-schema-then-set-current-repo-does-not-rebind-runtime
   (async done
     (let [ipc-calls (atom [])
           start-calls (atom [])
           stop-calls (atom [])
           wrapped-worker (fn [& _] nil)
-          original-state @state/state
+          original-state (state/get-state)
           original-electron? util/electron?
           original-ipc ipc/ipc
           original-start! remote/start!
@@ -655,7 +649,7 @@
       (set! storage/set (fn [& _] nil))
       (set! storage/remove (fn [& _] nil))
       (-> (p/let [repo "logseq_db_graph_a"
-                  _ (persist-db/<fetch-init-data repo {})
+                  _ (persist-db/<open-and-fetch-schema repo {})
                   _ (state/set-current-repo! repo)]
             (is (= [["db-worker-runtime" "logseq_db_graph_a"]
                     ["setCurrentGraph" "logseq_db_graph_a"]]
@@ -665,7 +659,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! util/electron? original-electron?)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
@@ -719,12 +713,12 @@
   (async done
     (let [worker-calls (atom [])
           ensure-remote! #'persist-db/<ensure-remote!
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (assoc-in original-state
+      (state/replace-state! (assoc-in original-state
                                     [:config "logseq_db_graph_a" :feature/markdown-mirror?]
                                     true))
       (set! ipc/ipc (fn [channel repo]
@@ -746,7 +740,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -756,12 +750,12 @@
   (async done
     (let [worker-calls (atom [])
           ensure-remote! #'persist-db/<ensure-remote!
-          original-state @state/state
+          original-state (state/get-state)
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (reset! state/state (-> original-state
+      (state/replace-state! (-> original-state
                               (assoc :electron/user-cfgs {:feature/markdown-mirror? true})
                               (assoc-in [:config ::state/global-config] {:feature/markdown-mirror? true})
                               (assoc-in [:config "logseq_db_graph_a"] {})
@@ -788,7 +782,7 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
@@ -799,13 +793,13 @@
     (let [ipc-calls (atom [])
           worker-calls (atom [])
           ensure-remote! #'persist-db/<ensure-remote!
-          original-state @state/state
+          original-state (state/get-state)
           original-electron? util/electron?
           original-ipc ipc/ipc
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (swap! state/state
+      (state/swap-state!
              (fn [state]
                (-> state
                    (assoc :electron/user-cfgs nil)
@@ -836,20 +830,20 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! util/electron? original-electron?)
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest browser-fetch-initial-data-pushes-graph-markdown-mirror-setting-test
+(deftest browser-open-and-fetch-schema-pushes-graph-markdown-mirror-setting-test
   (async done
     (let [worker-calls (atom [])
-          original-state @state/state
+          original-state (state/get-state)
           original-electron? util/electron?
           original-invoke state/<invoke-db-worker]
-      (reset! state/state (-> original-state
+      (state/replace-state! (-> original-state
                               (assoc :electron/user-cfgs {:feature/markdown-mirror? true})
                               (assoc-in [:config ::state/global-config] {:feature/markdown-mirror? true})
                               (assoc-in [:config "logseq_db_graph_a"] {})))
@@ -858,21 +852,21 @@
             (fn [qkw & args]
               (swap! worker-calls conj [qkw args])
               (case qkw
-                :thread-api/create-or-open-db (p/resolved nil)
+                :thread-api/create-or-open-db (p/resolved {:schema {:repo (first args)}})
                 :thread-api/markdown-mirror-set-enabled (p/resolved nil)
-                :thread-api/get-initial-data (p/resolved {:schema {:repo (first args)}
-                                                          :initial-data []})
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
-      (-> (protocol/<fetch-initial-data (browser/->InBrowser) "logseq_db_graph_a" {})
-          (p/then (fn [_]
+      (-> (protocol/<open-and-fetch-schema (browser/->InBrowser) "logseq_db_graph_a" {})
+          (p/then (fn [result]
+                    (is (= {:schema {:repo "logseq_db_graph_a"}} result))
                     (is (= [:thread-api/markdown-mirror-set-enabled
                             ["logseq_db_graph_a" false]]
                            (first (filter #(= :thread-api/markdown-mirror-set-enabled (first %))
-                                          @worker-calls))))))
+                                          @worker-calls))))
+                    (is (not-any? #(= :thread-api/get-db-schema (first %)) @worker-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (reset! state/state original-state)
+                       (state/replace-state! original-state)
                        (set! util/electron? original-electron?)
                        (set! state/<invoke-db-worker original-invoke)
                        (done)))))))
@@ -883,10 +877,10 @@
           sync-watch! #(when-let [f (resolve 'frontend.persist-db/sync-markdown-mirror-setting-watch!)]
                          (f))
           repo "logseq_db_graph_a"
-          original-state @state/state
+          original-state (state/get-state)
           original-invoke state/<invoke-db-worker]
       (reset-runtime-state!)
-      (reset! state/state (assoc original-state
+      (state/replace-state! (assoc original-state
                                  :git/current-repo repo
                                  :config {repo {}}))
       (reset! state/*db-worker (fn [& _] nil))
@@ -895,7 +889,7 @@
               (swap! worker-calls conj [qkw args])
               (p/resolved nil)))
       (sync-watch!)
-      (swap! state/state assoc-in [:config repo :feature/markdown-mirror?] true)
+      (state/swap-state! assoc-in [:config repo :feature/markdown-mirror?] true)
       (-> (p/delay 0)
           (p/then (fn [_]
                     (is (= [[:thread-api/markdown-mirror-set-enabled
@@ -904,8 +898,8 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
-                       (remove-watch state/state :sync-markdown-mirror-setting)
-                       (reset! state/state original-state)
+                       (rfx/unlisten! :sync-markdown-mirror-setting)
+                       (state/replace-state! original-state)
                        (set! state/<invoke-db-worker original-invoke)
                        (done)))))))
 
@@ -1127,14 +1121,14 @@
                notifications (atom [])
                session-id "session-a"
                remote-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
-               original-state @state/state
+               original-state (state/get-state)
                original-ipc ipc/ipc
                original-stop! remote/stop!
                original-pub-event! state/pub-event!
                original-set-current-repo! state/set-current-repo!
                original-notification-show! notification/show!]
            (reset-runtime-state!)
-           (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+           (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
            (reset! persist-db/remote-db remote-client)
            (reset! persist-db/remote-repo "logseq_db_graph_a")
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
@@ -1158,7 +1152,7 @@
                                     (p/resolved true)))
            (set! state/set-current-repo! (fn [repo]
                                            (swap! current-repo-updates conj repo)
-                                           (swap! state/state assoc :git/current-repo repo)
+                                           (state/swap-state! assoc :git/current-repo repo)
                                            nil))
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
@@ -1177,7 +1171,7 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (reset! state/state original-state)
+                            (state/replace-state! original-state)
                             (set! ipc/ipc original-ipc)
                             (set! remote/stop! original-stop!)
                             (set! state/pub-event! original-pub-event!)
@@ -1199,7 +1193,7 @@
                wrapped-worker (fn [& _] nil)
                old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
                new-client (->FakeRemote "logseq_db_graph_a" wrapped-worker)
-               original-state @state/state
+               original-state (state/get-state)
                original-ipc ipc/ipc
                original-start! remote/start!
                original-stop! remote/stop!
@@ -1207,7 +1201,7 @@
                original-set-current-repo! state/set-current-repo!
                original-notification-show! notification/show!]
            (reset-runtime-state!)
-           (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+           (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
            (reset! persist-db/remote-db old-client)
            (reset! persist-db/remote-repo "logseq_db_graph_a")
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
@@ -1235,7 +1229,7 @@
                                     (p/resolved true)))
            (set! state/set-current-repo! (fn [repo]
                                            (swap! current-repo-updates conj repo)
-                                           (swap! state/state assoc :git/current-repo repo)
+                                           (state/swap-state! assoc :git/current-repo repo)
                                            nil))
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
@@ -1257,7 +1251,7 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (reset! state/state original-state)
+                            (state/replace-state! original-state)
                             (set! ipc/ipc original-ipc)
                             (set! remote/start! original-start!)
                             (set! remote/stop! original-stop!)
@@ -1280,14 +1274,14 @@
                fresh-worker (fn [& _] nil)
                old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
                fresh-client (->FakeRemote "logseq_db_graph_a" fresh-worker)
-               original-state @state/state
+               original-state (state/get-state)
                original-ipc ipc/ipc
                original-stop! remote/stop!
                original-pub-event! state/pub-event!
                original-set-current-repo! state/set-current-repo!
                original-notification-show! notification/show!]
            (reset-runtime-state!)
-           (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+           (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
            (reset! persist-db/remote-db old-client)
            (reset! persist-db/remote-repo "logseq_db_graph_a")
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
@@ -1314,7 +1308,7 @@
                                     (p/resolved true)))
            (set! state/set-current-repo! (fn [repo]
                                            (swap! current-repo-updates conj repo)
-                                           (swap! state/state assoc :git/current-repo repo)
+                                           (state/swap-state! assoc :git/current-repo repo)
                                            nil))
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
@@ -1333,7 +1327,7 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (reset! state/state original-state)
+                            (state/replace-state! original-state)
                             (set! ipc/ipc original-ipc)
                             (set! remote/stop! original-stop!)
                             (set! state/pub-event! original-pub-event!)
@@ -1356,13 +1350,13 @@
                app-error (ex-info "repo locked" {:status 409
                                                  :code :repo-locked})
                transport-error (js/Error. "Failed to fetch")
-               original-state @state/state
+               original-state (state/get-state)
                original-ipc ipc/ipc
                original-start! remote/start!
                original-stop! remote/stop!
                original-notification-show! notification/show!]
            (reset-runtime-state!)
-           (reset! state/state (assoc original-state :git/current-repo repo))
+           (state/replace-state! (assoc original-state :git/current-repo repo))
            (reset! persist-db/remote-db old-client)
            (reset! persist-db/remote-repo repo)
            (reset! persist-db/remote-runtime-state {:repo repo
@@ -1404,7 +1398,7 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (reset! state/state original-state)
+                            (state/replace-state! original-state)
                             (set! ipc/ipc original-ipc)
                             (set! remote/start! original-start!)
                             (set! remote/stop! original-stop!)

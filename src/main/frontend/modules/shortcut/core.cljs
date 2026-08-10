@@ -251,7 +251,7 @@
 (defn refresh!
   "Always use this function to refresh shortcuts"
   []
-  (when-not (:ui/shortcut-handler-refreshing? @state/state)
+  (when-not (:ui/shortcut-handler-refreshing? (state/get-state))
     (state/set-state! :ui/shortcut-handler-refreshing? true)
 
     (let [ids (keys @*installed-handlers)

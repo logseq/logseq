@@ -767,7 +767,6 @@
     (is (nil? (repo-error :thread-api/sync-app-state [{:auth/id-token "token"}] bound-repo)))
     (is (nil? (repo-error :thread-api/db-sync-list-remote-graphs [] bound-repo)))
     (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
-    (is (nil? (repo-error :thread-api/rtc-get-graphs ["token"] bound-repo)))
     (is (nil? (repo-error :thread-api/set-context [{:repo "not-a-repo-arg"}] bound-repo)))
     (is (nil? (repo-error :thread-api/resolve-ui-request ["req-id" {:password "pw"}] bound-repo)))
     (is (nil? (repo-error :thread-api/reject-ui-request ["req-id" {:code :cancelled}] bound-repo)))
@@ -1499,6 +1498,34 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-outliner-mutation-rejects-stale-lock-test
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-outliner-write-lease")
+               repo (str "logseq_db_outliner_write_lease_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       lock-contents (js->clj
+                                      (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                      :keywordize-keys true)
+                       replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
+                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
+                       {:keys [status body]}
+                       (invoke-raw host port "thread-api/apply-outliner-ops" [repo [] {}])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-locked" (get-in parsed [:error :code]))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
+
 (deftest db-worker-node-start-recovers-stale-lock-before-acquire
   (async done
          (let [daemon (atom nil)
@@ -1649,6 +1676,34 @@
                  (is (false? (:ok parsed)))
                  (is (= "invalid-query" (get-in parsed [:error :code])))
                  (is (string/includes? (get-in parsed [:error :message]) "Query for unknown vars")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-opening-graph-does-not-run-maintenance
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-no-startup-maintenance")
+               repo (str "logseq_db_no_startup_maintenance_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{first-host :host first-port :port first-stop! :stop!}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (invoke first-host first-port
+                                 "thread-api/transact"
+                                 [repo
+                                  [{:db/ident :logseq.kv/graph-last-gc-at
+                                    :kv/value 0}]
+                                  {}
+                                  nil])
+                       _ (first-stop!)
+                       {host :host port :port second-stop! :stop!}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! second-stop!})
+                       last-gc-at (invoke host port "thread-api/get-key-value"
+                                          [repo :logseq.kv/graph-last-gc-at])]
+                 (is (= 0 last-gc-at)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []

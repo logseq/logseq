@@ -18,11 +18,17 @@
     (nil? input) ""
     :else (pr-str input)))
 
+(defn- remove-accents*
+  [s]
+  (if-let [remove-fn (.-remove remove-accents)]
+    (remove-fn s)
+    (remove-accents s)))
+
 (defn- normalize-text [app-config text]
   (cond-> (to-string text)
     ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
-    (:feature/enable-search-remove-accents? app-config) (remove-accents)))
+    (:feature/enable-search-remove-accents? app-config) (remove-accents*)))
 
 (defn highlight-query* [app-config query text]
   (cond
@@ -43,9 +49,11 @@
         (if (seq segs)
           (into [:span {"data-testid" text-string}]
                 (map-indexed (fn [i seg]
-                               (if (even? i)
-                                 [:span seg]
-                                 [:mark.p-0.rounded-none seg]))
+                               (with-meta
+                                 (if (even? i)
+                                   [:span seg]
+                                   [:mark {:style {:padding 0 :border-radius 0}} seg])
+                                 {:key (str "highlight-" i)}))
                              segs))
           [:span normal-text])))))
 
@@ -65,7 +73,7 @@
     [:span.cp__cmdk-current-page-badge label]))
 
 (hsx/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
-                        compact rounded on-mounted on-click on-mouse-move source-block] :as props
+                        compact rounded on-mounted on-click on-mouse-move source-block hide-inline-icon?] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [highlight-query (partial highlight-query* app-config query)
@@ -113,9 +121,11 @@
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "cp__cmdk-item-main-text text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
-        (block-handler/block-title-with-icon source-block
-                                             (highlight-query text)
-                                             icon-component/icon)
+        (if hide-inline-icon?
+          (highlight-query text)
+          (block-handler/block-title-with-icon source-block
+                                               (highlight-query text)
+                                               icon-component/icon))
         text-badge
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]

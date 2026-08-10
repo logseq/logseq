@@ -10,9 +10,9 @@
   [^js props]
   (let [props1 (sdk-util/jsx->clj props)
         page-name (some-> props1 :page)]
-    (when-let [entity (page/get-page-entity page-name)]
-      (page/page-blocks-cp
-        entity {:container-id (state/get-next-container-id)}))))
+    (when page-name
+      (page/page-cp {:page-name page-name
+                     :container-id (state/get-next-container-id)}))))
 
 (defn ^:export register_fenced_code_renderer
   [pid type ^js opts]

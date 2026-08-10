@@ -5,13 +5,17 @@
   depends on a repo."
   (:require [clojure.edn :as edn]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.handler.notification :as notification]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [promesa.core :as p]))
+
+(defn <get-file-content
+  [repo-url path]
+  (state/<invoke-db-worker :thread-api/get-file-content repo-url path))
 
 (defn- get-repo-config-content
   [repo-url]
-  (db/get-file repo-url "logseq/config.edn"))
+  (<get-file-content repo-url "logseq/config.edn"))
 
 (defn read-repo-config
   "Converts file content to edn"
@@ -33,7 +37,8 @@
 (defn restore-repo-config!
   "Sets repo config state from db"
   ([repo-url]
-   (restore-repo-config! repo-url (get-repo-config-content repo-url)))
+   (p/let [content (get-repo-config-content repo-url)]
+     (restore-repo-config! repo-url content)))
   ([repo-url config-content]
    (set-repo-config-state! repo-url config-content)))
 

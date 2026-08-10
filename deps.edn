@@ -4,6 +4,8 @@
   org.clojure/clojurescript             {:mvn/version "1.12.134"}
   io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
                                          :sha     "21615ffa2aa530cc830e3464b793a53ef4fdd18c"}
+  io.github.logseq/rfx                  {:git/url "https://github.com/logseq/rfx.git"
+                                         :git/sha "d37aaceb37fcaf969c5cd04646dfdb985d65d3c2"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}
@@ -47,13 +49,10 @@
   metosin/malli                         {:git/url "https://github.com/metosin/malli"
                                          :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.47"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
                                               :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}
   tick/tick                              {:mvn/version "1.0"}
-  io.github.rcmerci/cljs-http-missionary {:git/url "https://github.com/RCmerci/cljs-http-missionary"
-                                          :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}
 
   logseq/logseq-schema                   {:git/url "https://github.com/logseq/logseq-schema"
                                           :git/sha "6eeb51cd6d80bbffa0873c1e79790dc1f4ff68cf"}}
@@ -64,6 +63,7 @@
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.15.0"}
                                 binaryage/devtools               {:mvn/version "1.0.7"}}
+                  :jvm-opts    ["-Xmx2g"]
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
            :test {:extra-paths ["src/dev-cljs/" "src/test/"]
                   :extra-deps  {org.clojure/test.check           {:mvn/version "1.1.1"}

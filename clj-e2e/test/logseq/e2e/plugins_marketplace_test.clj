@@ -52,6 +52,59 @@
   []
   (k/esc))
 
+(defn- ensure-journals-calendar-installed!
+  []
+  (open-plugins-dialog)
+  (switch-to-marketplace)
+  (search-plugin "Journals calendar")
+  (w/wait-for ".cp__plugins-item-card h3:has-text('Journals calendar')" {:timeout 10000})
+  (when (w/visible? ".cp__plugins-item-card .ctl a.btn:has-text('Install')")
+    (click-install-button)
+    (wait-for-plugin-installed))
+  (switch-to-installed)
+  (search-plugin "Journals calendar")
+  (w/wait-for ".cp__plugins-item-card h3:has-text('Journals calendar')"))
+
+(defn- journals-calendar-card
+  []
+  (.first
+   (w/-query
+    ".cp__plugins-item-card:has(h3:has-text('Journals calendar'))")))
+
+(defn- set-journals-calendar-enabled!
+  [enabled?]
+  (let [card (journals-calendar-card)
+        toggle (.locator card "button[role='switch']")]
+    (when (not= enabled? (= "true" (.getAttribute toggle "aria-checked")))
+      (w/click toggle))
+    (assert/assert-is-visible card)))
+
+(deftest marketplace-tabs-search-and-state-test
+  (testing "installed and marketplace tabs keep their own filters and visible results"
+    (open-plugins-dialog)
+    (assert/assert-is-visible "button:has-text('Installed')")
+    (assert/assert-is-visible "button:has-text('Marketplace')")
+    (switch-to-marketplace)
+    (assert/assert-is-visible "button:has-text('Plugins')")
+    (assert/assert-is-visible "button:has-text('Themes')")
+    (search-plugin "Journals calendar")
+    (w/wait-for
+     ".cp__plugins-item-card h3:has-text('Journals calendar')"
+     {:timeout 10000})
+    (w/click "button:has-text('Themes')")
+    (assert/assert-is-hidden
+     ".cp__plugins-item-card h3:has-text('Journals calendar')")
+    (w/click "button:has-text('Plugins')")
+    (assert/assert-is-visible
+     ".cp__plugins-item-card h3:has-text('Journals calendar')")
+    (switch-to-installed)
+    (assert/assert-is-visible ".cp__plugins-installed")
+    (switch-to-marketplace)
+    (assert/assert-is-visible
+     ".cp__plugins-item-card h3:has-text('Journals calendar')")
+    (close-plugins-dialog)
+    (assert/assert-is-hidden ".cp__plugins-page")))
+
 (deftest install-plugin-from-marketplace
   (testing "Install a plugin from the marketplace"
     ;; Open plugins dialog
@@ -88,3 +141,59 @@
     (assert/assert-is-visible "a.button[data-on-click=goToToday]")
     (w/click ".ui__dropdown-menu-content a.button[data-on-click=goToToday]")
     (assert/assert-is-visible ".is-today-page")))
+
+(deftest plugin-command-registration-follows-lifecycle-test
+  (testing "a plugin command is registered once, removed on disable, and restored on enable"
+    (ensure-journals-calendar-installed!)
+    (set-journals-calendar-enabled! true)
+    (close-plugins-dialog)
+    (w/click ".toolbar-plugins-manager-trigger")
+    (assert/assert-have-count
+     ".ui__dropdown-menu-content a.button[data-on-click=goToToday]"
+     1)
+    (k/esc)
+
+    (open-plugins-dialog)
+    (switch-to-installed)
+    (search-plugin "Journals calendar")
+    (set-journals-calendar-enabled! false)
+    (close-plugins-dialog)
+    (w/click ".toolbar-plugins-manager-trigger")
+    (assert/assert-have-count
+     ".ui__dropdown-menu-content a.button[data-on-click=goToToday]"
+     0)
+    (k/esc)
+
+    (open-plugins-dialog)
+    (switch-to-installed)
+    (search-plugin "Journals calendar")
+    (set-journals-calendar-enabled! true)
+    (close-plugins-dialog)
+    (w/click ".toolbar-plugins-manager-trigger")
+    (assert/assert-have-count
+     ".ui__dropdown-menu-content a.button[data-on-click=goToToday]"
+     1)))
+
+(deftest plugin-disable-enable-and-reload-test
+  (testing "plugin UI contributions are completely removed and restored without duplicates"
+    (ensure-journals-calendar-installed!)
+    (set-journals-calendar-enabled! false)
+    (close-plugins-dialog)
+    (assert/assert-have-count "a.button[data-on-click=goToToday]" 0)
+
+    (open-plugins-dialog)
+    (switch-to-installed)
+    (search-plugin "Journals calendar")
+    (set-journals-calendar-enabled! true)
+    (close-plugins-dialog)
+    (w/click ".toolbar-plugins-manager-trigger")
+    (assert/assert-have-count
+     ".ui__dropdown-menu-content a.button[data-on-click=goToToday]"
+     1)
+    (k/esc)
+
+    (util/refresh-until-graph-loaded)
+    (w/click ".toolbar-plugins-manager-trigger")
+    (assert/assert-have-count
+     ".ui__dropdown-menu-content a.button[data-on-click=goToToday]"
+     1)))

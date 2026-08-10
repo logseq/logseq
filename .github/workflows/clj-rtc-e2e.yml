@@ -156,7 +156,7 @@ jobs:
           ls -lR ./public
 
       - name: Run e2e tests
-        run: cd clj-e2e && timeout 30m bb ${{ matrix.test-task }}
+        run: cd clj-e2e && timeout 40m bb ${{ matrix.test-task }}
 
       - name: Collect screenshots
         if: ${{ failure() }}

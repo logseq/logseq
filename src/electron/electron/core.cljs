@@ -14,6 +14,7 @@
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
             [electron.i18n :as i18n :refer [t]]
+            [electron.lifecycle :as lifecycle]
             [electron.logger :as logger]
             [electron.release-warning :as release-warning]
             [electron.server :as server]
@@ -40,6 +41,7 @@
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
+(defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
 
 (defn setup-updater! [^js win]
@@ -495,10 +497,30 @@
                                              (.quit app))))))
       (on-app-ready! app))))
 
+(defn- <run-current-teardown!
+  []
+  (if-let [teardown! @*teardown-fn]
+    (do
+      (vreset! *teardown-fn nil)
+      (try
+        (-> (or (teardown!) (p/resolved nil))
+            (p/catch (fn [e]
+                       (logger/warn :electron/teardown-failed e)
+                       nil)))
+        (catch :default e
+          (logger/warn :electron/teardown-failed e)
+          (p/resolved nil))))
+    (p/resolved nil)))
+
 (defn start []
   (logger/debug "Main - start")
-  (when @*setup-fn (@*setup-fn)))
+  (lifecycle/enqueue!
+   *lifecycle-op
+   #(-> (<run-current-teardown!)
+        (p/then (fn [_]
+                  (when-let [setup! @*setup-fn]
+                    (setup!)))))))
 
 (defn stop []
   (logger/debug "Main - stop")
-  (when @*teardown-fn (@*teardown-fn)))
+  (lifecycle/enqueue! *lifecycle-op <run-current-teardown!))

@@ -1,14 +1,10 @@
 (ns frontend.handler.graph-test
   (:require [cljs.test :refer [async deftest is testing]]
-            [datascript.core :as d]
-            [frontend.db :as db]
             [frontend.common.idb :as idb]
             [frontend.handler.graph]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
             [logseq.common.graph-registry :as graph-registry]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (deftest graph-registry-key-is-indexeddb-compatible-test
@@ -39,52 +35,73 @@
                       (done))))))))
 
 (deftest remember-current-graph-id-in-tab-test
-  (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
-        stored-graph (atom nil)]
-    (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
-    (when remember-f
-      (p/with-redefs [frontend.handler.graph/current-graph-id (constantly "remote-uuid")
-                      state/get-current-repo (constantly "logseq_db_work")
-                      frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
-                                                              (reset! stored-graph {:repo repo
-                                                                                    :graph-id graph-id}))]
-        (remember-f)
-        (is (= {:repo "logseq_db_work"
-                :graph-id "remote-uuid"}
-               @stored-graph))))))
+  (async done
+    (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
+          original-invoke-db-worker state/<invoke-db-worker
+          stored-graph (atom nil)]
+      (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
+      (when remember-f
+        (set! state/<invoke-db-worker
+              (fn [api repo]
+                (is (= :thread-api/get-graph-uuid api))
+                (is (= "logseq_db_work" repo))
+                (p/resolved #uuid "11111111-1111-1111-1111-111111111111")))
+        (p/with-redefs [state/get-current-repo (constantly "logseq_db_work")
+                        frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
+                                                                (reset! stored-graph {:repo repo
+                                                                                      :graph-id graph-id}))]
+          (-> (remember-f)
+              (p/then
+               (fn []
+                 (is (= {:repo "logseq_db_work"
+                         :graph-id "11111111-1111-1111-1111-111111111111"}
+                        @stored-graph))))
+              (p/catch
+               (fn [error]
+                 (is false (str error))))
+              (p/finally
+               (fn []
+                 (set! state/<invoke-db-worker original-invoke-db-worker)
+                 (done)))))))))
+
+(deftest current-graph-id-uses-tab-memory-test
+  (let [current-graph-id-f (some-> (resolve 'frontend.handler.graph/current-graph-id) deref)]
+    (is (fn? current-graph-id-f) "Current graph id helper should exist")
+    (when current-graph-id-f
+      (with-redefs [state/get-current-repo (constantly "logseq_db_work")
+                    frontend.handler.graph/get-tab-graph
+                    (fn []
+                      {:repo "logseq_db_work"
+                       :graph-id "11111111-1111-1111-1111-111111111111"})]
+        (is (= "11111111-1111-1111-1111-111111111111"
+               (current-graph-id-f)))))))
 
 (deftest upsert-current-graph-registry-repairs-missing-local-graph-uuid-test
   (async done
     (let [upsert-current-f (some-> (resolve 'frontend.handler.graph/<upsert-current-graph-registry!) deref)
-          conn (d/create-conn db-schema/schema)
+          local-graph-uuid #uuid "11111111-1111-1111-1111-111111111111"
           registry-entry (atom nil)]
       (is (fn? upsert-current-f) "Current graph registry upsert should exist")
-      (d/transact! conn [{:db/ident :logseq.kv/schema-version
-                          :kv/value db-schema/version}])
       (p/with-redefs [state/get-current-repo (constantly "logseq_db_broken")
-                      db/get-db (fn
-                                  ([repo]
-                                   (when (= "logseq_db_broken" repo) @conn))
-                                  ([repo deref?]
-                                   (when (= "logseq_db_broken" repo)
-                                     (if deref? @conn conn))))
-                      db/transact! (fn [repo tx-data tx-meta]
-                                     (is (= "logseq_db_broken" repo))
-                                     (d/transact! conn tx-data tx-meta)
-                                     (p/resolved nil))
+                      state/<invoke-db-worker
+                      (fn [api repo]
+                        (is (= "logseq_db_broken" repo))
+                        (case api
+                          :thread-api/ensure-local-graph-uuid (p/resolved local-graph-uuid)
+                          :thread-api/get-graph-uuid (p/resolved local-graph-uuid)
+                          (throw (ex-info "Unexpected worker API" {:api api}))))
                       frontend.handler.graph/<upsert-graph-registry-entry!
                       (fn [entry]
                         (reset! registry-entry entry)
                         (p/resolved nil))]
         (-> (upsert-current-f)
             (.then (fn [_]
-                     (let [local-graph-uuid (ldb/get-graph-local-uuid @conn)]
-                       (is (uuid? local-graph-uuid))
-                       (is (= (str local-graph-uuid)
-                              (:local-graph-id @registry-entry)))
-                       (is (= (:local-graph-id @registry-entry)
-                              (:graph-id @registry-entry)))
-                       (done))))
+                     (is (= {:repo "logseq_db_broken"
+                             :graph-name "broken"
+                             :local-graph-id (str local-graph-uuid)
+                             :graph-id (str local-graph-uuid)}
+                            @registry-entry))
+                     (done)))
             (.catch (fn [e]
                       (is false (str e))
                       (done))))))))

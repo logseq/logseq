@@ -178,7 +178,6 @@
  :cmdk.action/search "Zoeken"
  :cmdk.action/trigger "Uitvoeren"
 
- :cmdk.create/configure-tag "Tag configureren"
  :cmdk.create/page "Pagina aanmaken"
  :cmdk.create/tag "Tag aanmaken"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Recent bijgewerkt"
  :cmdk.group/themes "Thema's"
 
- :cmdk.info/configure-tag "#{1} configureren"
  :cmdk.info/create-page "Pagina '{1}' aanmaken"
  :cmdk.info/create-tag "Tag '{1}' aanmaken"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Ingebouwde elementen kunnen niet worden verwijderd."
  :node/new "Nieuw knooppunt"
 
- :notification/clear-all "Alles wissen"
  :notification/copied "Gekopieerd"
 
  :onboarding.import/desc "Beschrijving van importeren"
@@ -1718,7 +1715,6 @@
  :ui/image "afbeelding"
  :ui/label "Label"
  :ui/link "Link"
- :ui/load-more "Meer laden"
  :ui/loading "Laden"
  :ui/login "Inloggen"
  :ui/logout "Uitloggen"
