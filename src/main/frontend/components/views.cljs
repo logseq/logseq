@@ -1646,9 +1646,17 @@
                                                                           (:block/uuid (first selected)))
                                                                    (set (map :block/uuid selected))
                                                                    selected)
+                                                  ;; `selected` is always the whole selection, so re-opening
+                                                  ;; this popup and choosing again has to update the property's
+                                                  ;; existing clause instead of appending a duplicate one.
+                                                  others (vec (remove (fn [[ident operator match]]
+                                                                        (and (= ident (:db/ident property))
+                                                                             (= operator :is)
+                                                                             (set? match)))
+                                                                      (:filters filters)))
                                                   filters' (if (seq selected)
-                                                             (conj (:filters filters) [(:db/ident property) :is selected-value])
-                                                             (:filters filters))]
+                                                             (conj others [(:db/ident property) :is selected-value])
+                                                             others)]
                                               (set-filters! {:or? (:or? filters)
                                                              :filters filters'})))})))
                    :else
@@ -1942,7 +1950,13 @@
                 :variant "ghost"
                 :size :sm
                 :on-click (fn [_e]
-                            (let [new-filters (update filters :filters (fn [col] (vec (remove #{filter'} col))))]
+                            ;; Remove by position: two clauses can be equal, and removing by
+                            ;; value would drop every copy at once.
+                            (let [new-filters (update filters :filters
+                                                      (fn [col]
+                                                        (let [col (vec col)]
+                                                          (into (subvec col 0 idx)
+                                                                (subvec col (inc idx))))))]
                               (set-filters! new-filters)))}
                (ui/icon "x"))]))
          (:filters filters))]

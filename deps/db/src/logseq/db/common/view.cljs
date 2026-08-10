@@ -305,8 +305,14 @@
       (when (= 1 (count clauses))
         (let [[property-ident operator match] (first clauses)
               property (d/entity db property-ident)
-              ref-property? (= :db.type/ref (:db/valueType property))]
+              ref-property? (= :db.type/ref (:db/valueType property))
+              ;; Text types create a distinct property value block per block, so two blocks
+              ;; with the same value don't share an entity. row-matched? compares their
+              ;; content instead, which this :db/id identity fast path can't reproduce.
+              match-by-content? (contains? db-property-type/closed-value-property-types
+                                           (:logseq.property/type property))]
           (when (and ref-property?
+                     (not match-by-content?)
                      (#{:is :is-not} operator)
                      (set? match)
                      (seq match)
