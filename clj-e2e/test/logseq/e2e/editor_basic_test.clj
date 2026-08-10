@@ -940,9 +940,14 @@
   (testing "Disallow adding #Page to normal pages"
     (k/arrow-up)
     (util/move-cursor-to-end)
-    (util/press-seq " #" {:delay 20})
-    (util/press-seq "Page")
-    (assert/assert-is-hidden (format "#ac-0.menu-link:has-text('%s')" "Page"))))
+    (let [editor (w/-query "*:focus")
+          original-title (.inputValue editor)]
+      (util/press-seq " #" {:delay 20})
+      (util/press-seq "Page")
+      (assert/assert-is-hidden (format "#ac-0.menu-link:has-text('%s')" "Page"))
+      (w/fill editor original-title)
+      (is (= original-title (.inputValue editor))))
+    (util/exit-edit)))
 
 (deftest move-blocks-mod+shift+m
   (testing "move blocks using `mod+shift+m`"
