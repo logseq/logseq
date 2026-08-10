@@ -277,7 +277,7 @@
     (js/document.querySelector ".pswp")
     (some-> js/window.photoLightbox (.destroy))
 
-    (shui-dialog/has-modal?)
+    (shui-dialog/has-dialog?)
     (shui-dialog/close!)
 
     (not-empty (state/get-selection-blocks))

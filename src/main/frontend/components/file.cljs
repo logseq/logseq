@@ -2,13 +2,12 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
+            [frontend.components.file-content :as file-content]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -87,9 +86,7 @@
                           :else
                           [repo-dir path])]
          (when (and format (contains? (common-config/text-formats) format))
-           (p/let [content (if-not (string/starts-with? path "/")
-                             (db/get-file path)
-                             (fs/read-file dir path))]
+           (p/let [content (file-content/<read-file-content repo dir path)]
              (set-content! (or content "")))))
        #(state/clear-file-component!))
      [path format])

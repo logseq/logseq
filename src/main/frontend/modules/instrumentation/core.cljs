@@ -6,7 +6,7 @@
 
 (defn init
   []
-  (when-not (:instrument/disabled? @state/state)
+  (when-not (:instrument/disabled? (state/get-state))
     (posthog/init)
     (sentry/init)))
 

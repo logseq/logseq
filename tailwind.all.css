@@ -1,18 +1,27 @@
 @charset "utf-8";
 
-@import "packages/ui/src/radix.css";
-@import "packages/ui/src/radix-hsl.css";
-@import "packages/ui/src/vars-classic.css";
-@import "packages/ui/src/colors.css";
-@import "packages/ui/src/index.css";  /* Tailwind base imported here */
-@import "resources/css/shui.css";
-@import "inter-ui/inter.css";
+@import "tailwindcss" source(none);
+
+@import "./src/main/frontend/shui/radix.css";
+@import "./src/main/frontend/shui/radix-hsl.css";
+@import "./src/main/frontend/shui/vars-classic.css";
+@import "./src/main/frontend/shui/colors.css";
+@import "./src/main/frontend/shui/index.css";  /* Tailwind base imported here */
+@import "./resources/css/shui.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";
 @import "pdfjs-dist/web/pdf_viewer.css";
-@import "resources/css/tabler-extension.css";
-@import "resources/css/codemirror.lsradix.css";
-@import-glob "src/main/frontend/**/[!_]*.css";
+@import "./resources/css/tabler-extension.css";
+@import "./resources/css/codemirror.lsradix.css";
+@import-glob "./src/main/frontend/[!_]*.css";
+@import-glob "./src/main/frontend/components/**/[!_]*.css";
+@import-glob "./src/main/frontend/extensions/**/[!_]*.css";
+
+@source "./src/main/**/*.{cljs,cljc,js,css,html}";
+@source "./resources/**/*.html";
+@source "./deps/shui/src/**/*.{cljs,cljc,css}";
+
+@config "./tailwind.config.js";

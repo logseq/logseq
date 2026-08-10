@@ -8,6 +8,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.runtime.globals :as runtime-globals]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [mobile.components.app :as app]
@@ -15,6 +16,7 @@
             [mobile.events]
             [mobile.init :as init]
             [mobile.navigation :as mobile-nav]
+            [mobile.render :as mobile-render]
             [mobile.routes :refer [routes] :as mobile-routes]
             [mobile.state :as mobile-state]
             [reitit.frontend :as rf]
@@ -58,7 +60,7 @@
 
 (defn ^:export render!
   []
-  (.render root (app/main)))
+  (.render root (mobile-render/app-root (app/main))))
 
 (defn set-router!
   []
@@ -88,6 +90,7 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (runtime-globals/install!)
   (prn "[Mobile] init!")
   (log/add-handler mobile-state/log-append!)
   (mobile-nav/install-native-bridge!)

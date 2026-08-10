@@ -31,9 +31,9 @@
         (interface-ip "en1")
         (throw (ex-info "Failed to detect local network IP" {})))))
 
-(defn- dev-server-url
-  []
-  (format "https://%s:%s/mobile" (local-ip) dev-server-port))
+(defn dev-server-url
+  [ip]
+  (format "https://%s:%s/mobile/" ip dev-server-port))
 
 (defn- with-ssl-cert-lock!
   [f]
@@ -161,7 +161,7 @@
          (generate-dev-ssl-cert! ip))
        (println "Shadow CLJS HTTPS keystore:" ssl-keystore)
        (println "Install and fully trust this CA certificate on iOS:" ssl-ca-cert)
-       (println "Mobile dev server URL:" (dev-server-url))))))
+       (println "Mobile dev server URL:" (dev-server-url ip))))))
 
 (defn ensure-dev-ssl-cert-task
   []
@@ -198,7 +198,7 @@
   "Copy assets files to iOS build directory, and run app in Xcode"
   []
   (ensure-dev-ssl-cert!)
-  (open-dev-app {:extra-env {"LOGSEQ_APP_SERVER_URL" (dev-server-url)}}
+  (open-dev-app {:extra-env {"LOGSEQ_APP_SERVER_URL" (dev-server-url (local-ip))}}
                 "pnpm exec cap sync ios")
   (shell {:shutdown nil} "pnpm exec cap open ios"))
 
@@ -206,7 +206,7 @@
   "Copy assets files to Android build directory, and run app in Android Studio"
   []
   (ensure-dev-ssl-cert!)
-  (open-dev-app {:extra-env {"LOGSEQ_APP_SERVER_URL" (dev-server-url)}}
+  (open-dev-app {:extra-env {"LOGSEQ_APP_SERVER_URL" (dev-server-url (local-ip))}}
                 "pnpm exec cap sync android")
   (shell {:shutdown nil} "pnpm exec cap open android"))
 

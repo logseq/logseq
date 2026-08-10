@@ -1,14 +1,11 @@
 (ns frontend.handler.db-based.property.util
   "DB-graph only utility fns for properties"
-  (:require [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
-            [frontend.state :as state]
-            [logseq.db.frontend.property :as db-property]))
+  (:require [logseq.db.frontend.property :as db-property]))
 
 (defn get-property-value
   "Get a property's name given its id"
   [e]
-  (if-let [e (if (number? e) (db-utils/pull e) e)]
+  (if-let [e (when-not (number? e) e)]
     (db-property/property-value-content e)
     e))
 
@@ -21,17 +18,19 @@
                 :or {key-fn identity}}]
    (->> properties
         (map (fn [[k v]]
-               (let [prop-ent (db-utils/entity k)]
-                 [(key-fn (if original-key? k (-> prop-ent :block/title keyword)))
+               (let [property-key (if original-key?
+                                    k
+                                    (-> (name k) keyword))]
+                 [(key-fn property-key)
                   (cond
                     (set? v)
                     (set (map db-property/property-value-content v))
 
                     (sequential? v)
-                    (map #(get-property-value (or (:db/id %) %)) v)
+                    (map get-property-value v)
 
-                    (:db/id v)
-                    (get-property-value (or (:db/id v) v))
+                    (map? v)
+                    (get-property-value v)
 
                     :else
                     v)])))
@@ -39,6 +38,15 @@
 
 (defn get-closed-property-values
   [property-id]
-  (let [repo (state/get-current-repo)
-        db (conn/get-db repo)]
-    (db-property/get-closed-property-values db property-id)))
+  (some->> (db-property/built-in-closed-values property-id)
+           (map-indexed
+            (fn [index {:keys [db-ident value uuid icon properties]}]
+              (merge
+               {:db/ident db-ident
+                :block/title value
+                :block/uuid uuid
+                :block/order index}
+               (when icon
+                 {:logseq.property/icon icon})
+               properties)))
+           vec))

@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -19,6 +18,7 @@
             [logseq.sdk.core]
             [logseq.sdk.experiments]
             [logseq.sdk.utils :as sdk-utils]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
 (defn get_state_from_store
@@ -28,7 +28,7 @@
              (map #(if (string/starts-with? % "@")
                      (subs % 1)
                      (keyword %)))
-             (get-in @state/state)
+             (get-in (state/get-state))
              (#(if (util/atom? %) @% %))
              (sdk-utils/normalize-keyword-for-json)
              (bean/->js))))
@@ -55,8 +55,8 @@
   (fn []
     (bean/->js
      (sdk-utils/normalize-keyword-for-json
-      {:preferred-language      (:preferred-language @state/state)
-       :preferred-theme-mode    (:ui/theme @state/state)
+      {:preferred-language      (:preferred-language (state/get-state))
+       :preferred-theme-mode    (:ui/theme (state/get-state))
        :preferred-format        (state/get-preferred-format)
        :preferred-date-format   (state/get-date-formatter)
        :preferred-start-of-week (state/get-start-of-week)
@@ -84,11 +84,10 @@
 
 (def get_current_graph_recent
   (fn []
-    (some->> (recent-handler/get-recent-pages)
-             (map #(db-utils/entity (:db/id %)))
-             (remove nil?)
-             (sdk-utils/normalize-keyword-for-json)
-             (bean/->js))))
+    (p/let [recent-pages (recent-handler/get-recent-pages)]
+      (some->> recent-pages
+               (sdk-utils/normalize-keyword-for-json)
+               (bean/->js)))))
 
 (def get_current_graph
   (fn []

@@ -98,6 +98,15 @@
 
 (defn new-logseq-page
   [f]
+  (when (w/visible? ".cp__right-sidebar.open")
+    (w/click ".toggle-right-sidebar")
+    (w/wait-for-not-visible ".cp__right-sidebar.open"))
+  (w/eval-js
+   "() => {
+      const url = new URL(location.href);
+      url.searchParams.delete('virtualized');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }")
   (create-page)
   (f))
 

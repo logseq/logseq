@@ -178,7 +178,6 @@
  :cmdk.action/search "Поиск"
  :cmdk.action/trigger "Выполнить"
 
- :cmdk.create/configure-tag "Настроить тег"
  :cmdk.create/page "Создать страницу"
  :cmdk.create/tag "Создать тег"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Недавно обновлённые"
  :cmdk.group/themes "Темы"
 
- :cmdk.info/configure-tag "Настроить #{1}"
  :cmdk.info/create-page "Создать страницу '{1}'"
  :cmdk.info/create-tag "Создать тег '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Встроенные элементы нельзя удалить."
  :node/new "Новый узел"
 
- :notification/clear-all "Очистить всё"
  :notification/copied "Скопировано"
 
  :onboarding.import/desc "Описание импорта"
@@ -1718,7 +1715,6 @@
  :ui/image "изображение"
  :ui/label "Метка"
  :ui/link "Ссылка"
- :ui/load-more "Загрузить ещё"
  :ui/loading "Загрузка"
  :ui/login "Войти"
  :ui/logout "Выйти"

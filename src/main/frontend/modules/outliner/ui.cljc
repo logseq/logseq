@@ -1,7 +1,6 @@
 (ns frontend.modules.outliner.ui
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state]
-                     [frontend.db.conn]
                      [frontend.db.transact]
                      [logseq.outliner.op]
                      [frontend.modules.outliner.op]
@@ -21,8 +20,8 @@
             ;;  (js/console.groupCollapsed "ui/transact!")
             ;;  (prn :ops r#)
             ;;  (js/console.trace)
-            ;;  (js/console.groupEnd)
+           ;;  (js/console.groupEnd)
            (frontend.db.transact/apply-outliner-ops
-            (frontend.db.conn/get-db false)
+            nil
             r#
             ~opts))))))

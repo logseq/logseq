@@ -23,6 +23,14 @@
 
 #?(:cljs (def *profile (volatile! {})))
 
+#?(:cljs (defonce ^:private *worker-thread-api-call-id (atom 0)))
+
+#?(:cljs
+   (defn- log-worker-thread-api-call!
+     [data]
+     (when (and goog.DEBUG (> (:total-ms data) 10))
+       (log/info :db-worker/thread-api-handler data))))
+
 #?(:cljs
    (defn- write-transit-str-with-catch
      [v qualified-kw-str]
@@ -36,16 +44,51 @@
    (defn remote-function
      "Return a promise whose value is transit-str."
      [qualified-kw-str args-transit-str]
-     (let [qkw (keyword qualified-kw-str)]
+     (let [qkw (keyword qualified-kw-str)
+           call-id (swap! *worker-thread-api-call-id inc)
+           started-at (.now js/performance)]
        (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
-         (let [result (apply f (ldb/read-transit-str args-transit-str))
-               result-promise
-               (if (fn? result) ;; missionary task is a fn
-                 (js/Promise. result)
-                 result)]
-           (->
-            (p/let [result' result-promise]
-              (write-transit-str-with-catch result' qualified-kw-str))
-            (p/catch (fn [e] (write-transit-str-with-catch e qualified-kw-str)))))
+         (let [args (ldb/read-transit-str args-transit-str)
+               handler-started-at (.now js/performance)]
+           (try
+             (let [result-promise (apply f args)]
+               (->
+                (p/let [result result-promise
+                        handler-completed-at (.now js/performance)
+                        result-transit-str (write-transit-str-with-catch result qualified-kw-str)
+                        completed-at (.now js/performance)]
+                  (log-worker-thread-api-call!
+                   {:worker-call-id call-id
+                    :api qkw
+                    :status :ok
+                    :deserialize-ms (- handler-started-at started-at)
+                    :handler-ms (- handler-completed-at handler-started-at)
+                    :serialize-ms (- completed-at handler-completed-at)
+                    :total-ms (- completed-at started-at)})
+                  result-transit-str)
+                (p/catch
+                 (fn [error]
+                   (let [handler-completed-at (.now js/performance)
+                         error-transit-str (write-transit-str-with-catch error qualified-kw-str)
+                         completed-at (.now js/performance)]
+                     (log-worker-thread-api-call!
+                      {:worker-call-id call-id
+                       :api qkw
+                       :status :error
+                       :deserialize-ms (- handler-started-at started-at)
+                       :handler-ms (- handler-completed-at handler-started-at)
+                       :serialize-ms (- completed-at handler-completed-at)
+                       :total-ms (- completed-at started-at)})
+                     error-transit-str)))))
+             (catch :default error
+               (log-worker-thread-api-call!
+                {:worker-call-id call-id
+                 :api qkw
+                 :status :error
+                 :deserialize-ms (- handler-started-at started-at)
+                 :handler-ms (- (.now js/performance) handler-started-at)
+                 :serialize-ms 0
+                 :total-ms (- (.now js/performance) started-at)})
+               (throw error))))
          (throw (ex-info (str "not found thread-api: " qualified-kw-str) {}))))))

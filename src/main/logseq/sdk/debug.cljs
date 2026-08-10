@@ -5,8 +5,8 @@
 (defn ^:export log_app_state
   [path]
   (-> (if (string? path)
-        (get @state/state (keyword path))
-        @state/state)
+        (get (state/get-state) (keyword path))
+        (state/get-state))
       (bean/->js)))
 
 (defn- current-repo-or-throw
