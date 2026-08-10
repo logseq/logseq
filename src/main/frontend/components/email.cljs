@@ -1,5 +1,6 @@
 (ns frontend.components.email
   (:require [frontend.context.i18n :refer [t]]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util.email :as email-util]
@@ -21,7 +22,7 @@
 (hsx/defc email-address
   [{:keys [email class text-class icon-class tooltip?]
     :or {tooltip? (not (state/mobile?))}}]
-  (let [config (state/use-sub-config)
+  (let [config (rfx/use-sub [:config])
         mask-email? (email-util/mask-email? config)
         reveal-key [email mask-email?]
         [revealed-for set-revealed-for!] (hooks/use-state nil)

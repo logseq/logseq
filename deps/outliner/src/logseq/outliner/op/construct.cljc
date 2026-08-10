@@ -835,8 +835,18 @@
       :always
       seq)))
 
+(defn- reverse-inverse-entry-groups
+  [inverse-entries forward-op-group-sizes]
+  (loop [entries inverse-entries
+         sizes forward-op-group-sizes
+         groups []]
+    (if-let [group-size (first sizes)]
+      (let [[group remaining] (split-at group-size entries)]
+        (recur remaining (next sizes) (conj groups group)))
+      (mapcat identity (reverse groups)))))
+
 (defn- ^:large-vars/cleanup-todo build-strict-inverse-outliner-ops
-  [db-before db-after tx-data forward-ops]
+  [db-before db-after tx-data forward-ops forward-op-group-sizes]
   (when (seq forward-ops)
     (let [inverse-entries
           (mapv (fn [[op args]]
@@ -902,7 +912,7 @@
       ;; Any missing inverse entry means the whole semantic inverse is incomplete.
       ;; Use raw reversed tx instead of partially replaying.
       (when (every? some? inverse-entries)
-        (some->> inverse-entries
+        (some->> (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
                  (mapcat #(if (and (sequential? %)
                                    (sequential? (first %)))
                             %
@@ -1060,26 +1070,32 @@
                        (normalize-property-op-entry-ids id ids property-id op args))]
     (or normalized op-entry)))
 
-(defn- canonicalize-explicit-outliner-ops
+(defn- canonicalize-explicit-outliner-op-groups
   [db tx-data ops]
   (let [ops' (normalize-op-entries ops)]
     (cond
       (nil? ops')
-    nil
+      nil
 
       (seq ops')
       (->> ops'
-           (mapcat (fn [op]
-                     (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
-                       (if (and (sequential? canonicalized-op)
-                                (sequential? (first canonicalized-op))
-                                (keyword? (ffirst canonicalized-op)))
-                         canonicalized-op
-                         [canonicalized-op]))))
+           (mapv (fn [op]
+                   (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                     (if (and (sequential? canonicalized-op)
+                              (sequential? (first canonicalized-op))
+                              (keyword? (ffirst canonicalized-op)))
+                       (vec canonicalized-op)
+                       [canonicalized-op]))))
            vec)
 
       :else
       nil)))
+
+(defn- canonicalize-explicit-outliner-ops
+  [db tx-data ops]
+  (some->> (canonicalize-explicit-outliner-op-groups db tx-data ops)
+           (mapcat identity)
+           vec))
 
 (defn- patch-inverse-delete-block-ops
   [inverse-outliner-ops forward-outliner-ops]
@@ -1123,16 +1139,16 @@
            seq
            vec))
 
-(defn- canonicalize-outliner-ops
+(defn- canonicalize-outliner-op-groups
   [db tx-meta tx-data]
   (let [explicit-forward-ops (normalize-op-entries (:db-sync/forward-outliner-ops tx-meta))
         outliner-ops (normalize-op-entries (:outliner-ops tx-meta))]
     (cond
       (seq explicit-forward-ops)
-      (canonicalize-explicit-outliner-ops db tx-data explicit-forward-ops)
+      (canonicalize-explicit-outliner-op-groups db tx-data explicit-forward-ops)
 
       (seq outliner-ops)
-      (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
+      (canonicalize-explicit-outliner-op-groups db tx-data outliner-ops)
 
       :else
       nil)))
@@ -1240,16 +1256,23 @@
 
 (defn derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
-  (let [canonical-forward-outliner-ops (patch-forward-delete-block-op-ids
-                                        db-before
-                                        (canonicalize-outliner-ops db-after tx-meta tx-data))
-        canonical-forward-outliner-ops (some-> canonical-forward-outliner-ops
-                                               seq
-                                               vec
-                                               (->> (mapv #(normalize-op-entry-ids db-after %))))
+  (let [canonical-forward-outliner-op-groups
+        (some->> (canonicalize-outliner-op-groups db-after tx-meta tx-data)
+                 (mapv (fn [group]
+                         (->> (patch-forward-delete-block-op-ids db-before group)
+                              (mapv #(normalize-op-entry-ids db-after %))))))
+        canonical-forward-outliner-ops (some->> canonical-forward-outliner-op-groups
+                                                (mapcat identity)
+                                                seq
+                                                vec)
         _ (assert-no-stale-numeric-ids! db-after canonical-forward-outliner-ops :forward-outliner-ops)
         forward-outliner-ops canonical-forward-outliner-ops
-        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after tx-data forward-outliner-ops)
+        forward-op-group-sizes (mapv count canonical-forward-outliner-op-groups)
+        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before
+                                                                            db-after
+                                                                            tx-data
+                                                                            forward-outliner-ops
+                                                                            forward-op-group-sizes)
                                            seq
                                            vec
                                            (->> (mapv #(normalize-op-entry-ids db-before %))))

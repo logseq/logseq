@@ -110,7 +110,7 @@
                  (or @*debounce-fn d/store))]
          (f @conn))))))
 
-(defn- should-validate-tx?
+(defn- should-run-transact-pipeline?
   [conn db tx-meta]
   (and (entity-plus/db-based-graph? db)
        (not
@@ -121,6 +121,10 @@
             ;; used by `batch-transact-with-temp-conn!`
             (:skip-validate-db? @conn)
             (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+
+(defn- should-validate-pipeline-result?
+  [tx-meta]
+  (not (:fix-db? tx-meta)))
 
 (defn- tx-report-pipeline-data
   [tx-report]
@@ -150,13 +154,15 @@
   (try
     (loop []
       (let [db @conn
-            validate? (should-validate-tx? conn db tx-meta)]
-        (if validate?
+            run-pipeline? (should-run-transact-pipeline? conn db tx-meta)]
+        (if run-pipeline?
           (let [tx-report* (d/with db tx-data tx-meta)
                 pipeline-f @*transact-pipeline-fn
                 tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
                 _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-                [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
+                [validate-result errors] (if (should-validate-pipeline-result? tx-meta)
+                                           (db-validate/validate-tx-report tx-report nil)
+                                           [true nil])]
             (cond
               (not validate-result)
               (if (identical? db @conn)
@@ -426,6 +432,31 @@
     (when (not= (:db/id right) (:db/id block))
       right)))
 
+(defn- get-ordinary-sibling
+  [block direction]
+  (let [db (.-db block)
+        parent-id (:db/id (:block/parent block))
+        block-order (:block/order block)
+        [eligible? closer?] (case direction
+                              :left [neg? pos?]
+                              :right [pos? neg?])
+        [sibling-id _]
+        (reduce (fn [[_ best-order :as best] datom]
+                  (let [child-id (:e datom)
+                        child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
+                    (if (and child-order
+                             (eligible? (compare child-order block-order))
+                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
+                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (or (nil? best-order)
+                                 (closer? (compare child-order best-order))))
+                      [child-id child-order]
+                      best)))
+                [nil nil]
+                (d/datoms db :avet :block/parent parent-id))]
+    (when sibling-id
+      (d/entity db sibling-id))))
+
 (defn get-right-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
@@ -438,19 +469,7 @@
       (get-right-sibling-for-property-children block parent)
 
       :else
-      (let [db (.-db block)
-            datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (->> (map (fn [d]
-                                     [(:e d)
-                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                              (sort-by last))
-            block-order (:block/order block)]
-
-        (some (fn [[e child-order]]
-                (when (and (> (compare child-order block-order) 0)
-                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
-                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
-                  (d/entity db e))) child-orders)))))
+      (get-ordinary-sibling block :right))))
 
 (defn- get-left-sibling-for-property-children
   [block parent]
@@ -472,19 +491,7 @@
       (get-left-sibling-for-property-children block parent)
 
       :else
-      (let [db (.-db block)
-            datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (->> (map (fn [d]
-                                     [(:e d)
-                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                              (sort-by last)
-                              reverse)
-            block-order (:block/order block)]
-        (some (fn [[e child-order]]
-                (when (and (< (compare child-order block-order) 0)
-                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
-                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
-                  (d/entity db e))) child-orders)))))
+      (get-ordinary-sibling block :left))))
 
 (defn get-down
   [block]
@@ -851,11 +858,14 @@
 (def get-class-title-with-extends db-db/get-class-title-with-extends)
 
 (defn- bidirectional-property-attr?
-  [attr]
+  [db attr]
   (when (qualified-keyword? attr)
     (let [attr-ns (namespace attr)]
-      (or (db-property/user-property-namespace? attr-ns)
-          (db-property/plugin-property? attr)))))
+      (and (or (db-property/user-property-namespace? attr-ns)
+               (db-property/plugin-property? attr))
+           (when-let [property (d/entity db attr)]
+             (and (= :db.type/ref (:db/valueType property))
+                  (seq (:logseq.property/classes property))))))))
 
 (defn- get-bidirectional-property-attrs
   [db]
@@ -865,7 +875,7 @@
               [?property :db/valueType :db.type/ref]
               [?property :logseq.property/classes ?class]]
             db)
-       (filter bidirectional-property-attr?)))
+       (filter (partial bidirectional-property-attr? db))))
 
 (defn- get-ea-by-v
   [db attrs v]

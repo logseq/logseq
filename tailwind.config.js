@@ -1,6 +1,5 @@
 const colors = require('tailwindcss/colors')
 const plugin = require('tailwindcss/plugin')
-const radix = require('@radix-ui/colors')
 
 const accent = {
   'DEFAULT': 'hsl(var(--accent))',
@@ -100,20 +99,16 @@ const withOverride = plugin(function ({ matchUtilities }) {
   })
 })
 
-function mapRadixColorToTailwind (color) {
-  const radixColor = radix[color]
-  if (!radixColor) throw new Error(`[radix color] not exist for ${color}`)
+function mapCssVarColorToTailwind (color, baseColor = {}) {
   const twSteps = [10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
   const rxSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
   const colors = {}
 
   twSteps.forEach((twStep, index) => {
     const rxStep = rxSteps[index]
-    // base color
-    colors[twStep] = radixColor[`${color}${rxStep}`]
-    // theme vars color
     const rxStepName = `${(rxStep < 10) ? '0' : ''}${rxStep}`
     const rxVarName = `--rx-${color}-${rxStepName}`
+    colors[twStep] = baseColor[twStep] || `var(${rxVarName})`
     colors[`rx-${rxStepName}`] = `var(${rxVarName})`
     colors[`rx-${rxStepName}-alpha`] = `var(${rxVarName}-alpha)`
   })
@@ -128,9 +123,7 @@ module.exports = {
     './src/**/*.cljs',
     './resources/**/*.html',
     './deps/shui/src/**/*.cljs',
-    './deps/shui/src/**/*.cljc',
-    './packages/ui/@/components/**/*.{ts,tsx}',
-    './packages/ui/src/amplify/**/*.{ts,tsx}'
+    './deps/shui/src/**/*.cljc'
   ],
   safelist: [
     'bg-black', 'bg-white',
@@ -243,35 +236,35 @@ module.exports = {
       black: colors.black,
       white: colors.white,
 
-      red: mapRadixColorToTailwind('red'),
-      pink: mapRadixColorToTailwind('pink'),
-      orange: mapRadixColorToTailwind('orange'),
-      yellow: mapRadixColorToTailwind('yellow'),
-      green: mapRadixColorToTailwind('green'),
-      blue: mapRadixColorToTailwind('blue'),
-      indigo: mapRadixColorToTailwind('indigo'),
-      purple: mapRadixColorToTailwind('purple'),
+      red: mapCssVarColorToTailwind('red', colors.red),
+      pink: mapCssVarColorToTailwind('pink', colors.pink),
+      orange: mapCssVarColorToTailwind('orange', colors.orange),
+      yellow: mapCssVarColorToTailwind('yellow', colors.yellow),
+      green: mapCssVarColorToTailwind('green', colors.green),
+      blue: mapCssVarColorToTailwind('blue', colors.blue),
+      indigo: mapCssVarColorToTailwind('indigo', colors.indigo),
+      purple: mapCssVarColorToTailwind('purple', colors.purple),
 
-      rose: mapRadixColorToTailwind('red'),
-      amber: mapRadixColorToTailwind('amber'),
-      bronze: mapRadixColorToTailwind('bronze'),
-      brown: mapRadixColorToTailwind('brown'),
-      crimson: mapRadixColorToTailwind('crimson'),
-      cyan: mapRadixColorToTailwind('cyan'),
-      gold: mapRadixColorToTailwind('gold'),
-      grass: mapRadixColorToTailwind('grass'),
-      lime: mapRadixColorToTailwind('lime'),
-      mauve: mapRadixColorToTailwind('mauve'),
-      mint: mapRadixColorToTailwind('mint'),
-      olive: mapRadixColorToTailwind('olive'),
-      plum: mapRadixColorToTailwind('plum'),
-      sage: mapRadixColorToTailwind('sage'),
-      sand: mapRadixColorToTailwind('sand'),
-      sky: mapRadixColorToTailwind('sky'),
-      slate: mapRadixColorToTailwind('slate'),
-      teal: mapRadixColorToTailwind('teal'),
-      tomato: mapRadixColorToTailwind('tomato'),
-      violet: mapRadixColorToTailwind('violet'),
+      rose: mapCssVarColorToTailwind('red', colors.rose),
+      amber: mapCssVarColorToTailwind('amber', colors.amber),
+      bronze: mapCssVarColorToTailwind('bronze'),
+      brown: mapCssVarColorToTailwind('brown'),
+      crimson: mapCssVarColorToTailwind('crimson'),
+      cyan: mapCssVarColorToTailwind('cyan', colors.cyan),
+      gold: mapCssVarColorToTailwind('gold'),
+      grass: mapCssVarColorToTailwind('grass'),
+      lime: mapCssVarColorToTailwind('lime', colors.lime),
+      mauve: mapCssVarColorToTailwind('mauve'),
+      mint: mapCssVarColorToTailwind('mint'),
+      olive: mapCssVarColorToTailwind('olive'),
+      plum: mapCssVarColorToTailwind('plum'),
+      sage: mapCssVarColorToTailwind('sage'),
+      sand: mapCssVarColorToTailwind('sand'),
+      sky: mapCssVarColorToTailwind('sky', colors.sky),
+      slate: mapCssVarColorToTailwind('slate', colors.slate),
+      teal: mapCssVarColorToTailwind('teal', colors.teal),
+      tomato: mapCssVarColorToTailwind('tomato'),
+      violet: mapCssVarColorToTailwind('violet', colors.violet),
     }
   },
   corePlugins: {

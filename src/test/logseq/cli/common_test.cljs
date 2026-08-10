@@ -42,3 +42,20 @@
           "Space-preserving graph directory should be moved to Unlinked graphs")
       (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
           "Graph contents should be preserved after move"))))
+
+(deftest unlink-graph-moves-unencoded-unicode-dir
+  (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph-unicode")
+        graph-name "副本"
+        repo (str common-config/db-version-prefix graph-name)
+        graph-path (node-path/join graphs-dir graph-name)
+        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir graph-name)]
+    (fs/mkdirSync graph-path #js {:recursive true})
+    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
+    (with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)]
+      (cli-common/unlink-graph! repo)
+      (is (not (fs/existsSync graph-path))
+          "Original unencoded Unicode graph directory should no longer exist")
+      (is (fs/existsSync unlinked-path)
+          "Unencoded Unicode graph directory should be moved to Unlinked graphs")
+      (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
+          "Graph contents should be preserved after move"))))

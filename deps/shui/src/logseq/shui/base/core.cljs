@@ -1,11 +1,12 @@
 (ns logseq.shui.base.core
   (:require [cljs-bean.core :as bean]
+            ["react" :as react]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.icon.v2 :as tabler-icon]
             [logseq.shui.util :as util]))
 
-(def button-base (util/lsui-wrap "Button" {:static? false}))
-(def link (util/lsui-wrap "Link"))
+(def button-base (util/ui-wrap "Button" {:static? false}))
+(def link (util/ui-wrap "Link"))
 
 ;; Note: used for the shui popup trigger
 (defn trigger-as
@@ -32,7 +33,7 @@
         children (if (map? props) children (cons props children))
         children (when (seq children) (hsx/create-element children))
         props (if (map? props) props {})]
-    (apply js/React.createElement "div" (bean/->js props) children)))
+    (apply react/createElement "div" (bean/->js props) children)))
 
 ;; Note: keep this as a plain function
 ;; to be compatible for the radix as-child option
@@ -49,6 +50,7 @@
   (button
    (merge (dissoc props :icon-props :button-size)
           {:variant variant
+           :size :icon
            :data-button :icon
            :style (when button-size {:width button-size :height button-size})})
    (tabler-icon/root (name icon-name) (merge {:size 20} icon-props))

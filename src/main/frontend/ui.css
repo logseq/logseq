@@ -1,39 +1,37 @@
-#ui__ac {
-  &-inner {
-    overflow-x: hidden;
-    overflow-y: auto;
-    position: relative;
-    -webkit-overflow-scrolling: touch;
+#ui__ac-inner {
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
 
-    .menu-link {
-      @apply break-all rounded;
+  .menu-link {
+    @apply break-all rounded;
 
-      .has-help {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+    .has-help {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
 
-        small {
-          @apply cursor-help visible flex;
+      small {
+        @apply cursor-help visible flex;
 
-          svg {
-            @apply opacity-30 hover:opacity-90;
-          }
+        svg {
+          @apply opacity-30 hover:opacity-90;
         }
       }
+    }
 
-      &:hover, &.chosen {
-        background-color: var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))));
+    &:hover, &.chosen {
+      background-color: var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))));
 
-        .has-help small {
-          visibility: visible;
-        }
+      .has-help small {
+        visibility: visible;
       }
+    }
 
-      &:not(.chosen):hover {
-        background-color: unset !important;
-        color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--secondary))));
-      }
+    &:not(.chosen):hover {
+      background-color: unset !important;
+      color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--secondary))));
     }
   }
 }
@@ -50,116 +48,6 @@
 
 .search-all #ui__ac-inner {
   max-height: none;
-}
-
-.ui__notifications {
-  @apply fixed top-12 pointer-events-none w-full;
-
-  z-index: var(--ls-z-index-level-5);
-
-  &-content {
-    @apply inset-0 flex items-end justify-center px-4 py-2
-    pointer-events-none sm:px-6 sm:py-2 sm:items-start
-    sm:justify-end;
-  }
-
-  .notification-area {
-    @apply border;
-
-    background-color: var(--ls-notification-background, var(--lx-gray-02, var(--ls-tertiary-background-color, var(--rx-gray-03))));
-    color: var(--ls-notification-text-color, var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11))));
-
-    &:has(.ls-wrap-widen) {
-      @apply w-[680px] max-w-[96vw];
-    }
-  }
-}
-
-.ui__toggle {
-  .wrapper {
-    @apply relative flex-shrink-0
-    h-6 w-11 border-2 border-transparent flex
-    rounded-full cursor-pointer focus:outline-none;
-  }
-
-  .switcher {
-    @apply inline-block h-5 w-5 rounded-full bg-white shadow;
-  }
-
-  &.is-small {
-    .wrapper {
-      @apply h-4 w-8;
-    }
-
-    .switcher {
-      @apply h-3 w-3;
-    }
-  }
-}
-
-.ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center
-  top-12 sm:top-[calc(3vh+50px)];
-
-  &-overlay {
-    @apply fixed inset-0;
-  }
-
-  &-overlay div {
-    --from: var(--ls-modal-overlay-gradient-start, var(--lx-gray-03, var(--ls-primary-background-color)));
-    --to: var(--ls-modal-overlay-gradient-end, var(--lx-gray-06, var(--ls-quaternary-background-color)));
-    background-image: linear-gradient(to bottom, var(--from), var(--to));
-  }
-
-  &-panel {
-    @apply relative rounded-md shadow-lg border border-gray-06 overflow-hidden;
-
-    background: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--popover))));
-
-    .panel-content {
-      overflow-y: auto;
-      overflow-x: hidden;
-      width: calc(96vw - 2rem);
-      max-height: 89vh;
-      padding: 2rem 1.5rem;
-
-      @screen sm {
-        overflow-y: overlay;
-        max-height: 85vh;
-        padding: 2rem;
-        width: auto;
-        min-width: 600px;
-
-        .ls-card,
-        .ls-search {
-          width: 740px;
-        }
-
-        .ls-card {
-          min-height: 60vh;
-        }
-
-        .ls-search {
-          width: var(--ls-main-content-max-width);
-        }
-      }
-
-      @screen md {
-        min-width: 720px;
-      }
-    }
-  }
-
-  &-close {
-    @apply text-gray-400 hover:text-gray-500
-    focus:outline-none focus:text-gray-500
-    transition ease-in-out duration-150 opacity-60
-    hover:opacity-100;
-
-    &-wrap {
-      @apply z-10 absolute top-0 right-0 pt-2 pr-2;
-    }
-  }
 }
 
 .ui__dialog-content {
@@ -182,7 +70,7 @@
 .instruction {
   height: 40%;
 
-  @screen sm {
+  @media (min-width: 640px) {
     height: 70%;
   }
 }
@@ -199,22 +87,6 @@ html.is-native-iphone-without-notch {
 
   .ls-card {
     min-height: 65vh;
-  }
-}
-
-html.is-mobile {
-  .ui__modal {
-    @apply bottom-0 inset-x-0 top-20;
-
-    &[label="ls-modal-search"] {
-      .panel-content {
-        padding-bottom: 0;
-      }
-
-      .ls-search {
-        padding-bottom: 0;
-      }
-    }
   }
 }
 
@@ -322,14 +194,6 @@ html.is-mobile {
   @apply grid grid-flow-col gap-2;
 }
 
-.ui__toggle-background-on {
-  @apply bg-primary;
-}
-
-.ui__toggle-background-off {
-  background: var(--lx-gray-08, rgb(212, 212, 212));
-}
-
 input[type='range'] {
   accent-color: var(--lx-accent-10, var(--rx-blue-10));
 }
@@ -384,7 +248,6 @@ input[type='range'] {
   .ls-nlp-calendar,
   .ui__calendar {
     box-sizing: border-box;
-    width: 100%;
     min-width: 0;
     max-width: 100%;
   }

@@ -86,6 +86,7 @@
                     :dev? dev?
                     :built-in? true
                     :enable-snippet? true
+                    :include-breadcrumb? true
                     :include-matched-count? true}]
     (case filter-group
       :code
@@ -99,6 +100,7 @@
       (cond-> {:limit nodes-limit
                :search-limit 100
                :enable-snippet? true
+               :include-breadcrumb? true
                :include-matched-count? true}
         page-uuid
         (assoc :page (str page-uuid)))

@@ -1,15 +1,20 @@
 (ns user
   "fns used on repl"
   (:require [clojure.test :refer [run-tests run-test]]
+            [logseq.e2e.assets-basic-test]
             [logseq.e2e.bidirectional-properties-test]
+            [logseq.e2e.block-property-basic-test]
             [logseq.e2e.block :as b]
             [logseq.e2e.cmdk-scroll-basic-test]
             [logseq.e2e.commands-basic-test]
             [logseq.e2e.config :as config]
             [logseq.e2e.editor-basic-test]
+            [logseq.e2e.export-basic-test]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.flashcards-basic-test]
             [logseq.e2e.graph :as graph]
+            [logseq.e2e.graph-navigation-basic-test]
+            [logseq.e2e.import-basic-test]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.multi-tabs-basic-test]
@@ -17,13 +22,16 @@
             [logseq.e2e.plugins-basic-test]
             [logseq.e2e.plugins-marketplace-test]
             [logseq.e2e.property-basic-test]
+            [logseq.e2e.property-config-basic-test]
             [logseq.e2e.property-scoped-choices-test]
             [logseq.e2e.reference-basic-test]
+            [logseq.e2e.right-sidebar-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-part2-test]
             [logseq.e2e.rtc-extra-test]
             [logseq.e2e.tag-basic-test]
             [logseq.e2e.util :as util]
+            [logseq.e2e.view-basic-test]
             [wally.main :as w]
             [wally.repl :as repl]))
 
@@ -123,15 +131,24 @@
 (defn run-all-basic-test
   [& _]
   (run-tests 'logseq.e2e.editor-basic-test
+             'logseq.e2e.assets-basic-test
+             'logseq.e2e.block-property-basic-test
+             'logseq.e2e.cmdk-scroll-basic-test
              'logseq.e2e.commands-basic-test
+             'logseq.e2e.export-basic-test
+             'logseq.e2e.flashcards-basic-test
+             'logseq.e2e.graph-navigation-basic-test
+             'logseq.e2e.import-basic-test
              'logseq.e2e.multi-tabs-basic-test
              'logseq.e2e.outliner-basic-test
-             'logseq.e2e.rtc-basic-test
              'logseq.e2e.plugins-basic-test
-             'logseq.e2e.reference-basic-test
              'logseq.e2e.property-basic-test
+             'logseq.e2e.property-config-basic-test
+             'logseq.e2e.reference-basic-test
+             'logseq.e2e.right-sidebar-basic-test
+             'logseq.e2e.rtc-basic-test
              'logseq.e2e.tag-basic-test
-             'logseq.e2e.flashcards-basic-test)
+             'logseq.e2e.view-basic-test)
   (System/exit 0))
 
 (defn start

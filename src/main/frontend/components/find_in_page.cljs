@@ -1,6 +1,7 @@
 (ns frontend.components.find-in-page
   (:require [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.search :as search-handler :refer [debounced-search, stop-debounced-search!]]
@@ -109,6 +110,6 @@
 
 (hsx/defc search
   []
-  (let [{:keys [active?] :as opt} (state/use-sub :ui/find-in-page)]
+  (let [{:keys [active?] :as opt} (rfx/use-sub [:ui/find-in-page])]
     (when active?
       (search-inner opt))))

@@ -140,7 +140,7 @@
   height: 24px;
 }
 
-@screen sm {
+@media (min-width: 640px) {
   .cp__header {
     @apply shadow-none;
   }
@@ -158,7 +158,7 @@
   @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
 
   &:hover {
-    @screen md {
+    @media (min-width: 768px) {
       background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
   }
@@ -204,7 +204,7 @@ html.is-native-ipad {
     padding-top: 0;
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
 
-    @screen sm {
+    @media (min-width: 640px) {
       padding-left: 2rem;
     }
 
@@ -265,10 +265,6 @@ html.is-native-iphone {
     .create {
       padding-bottom: 32px;
     }
-  }
-
-  .ui__notifications {
-    top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
   }
 
   @media (orientation: landscape) {

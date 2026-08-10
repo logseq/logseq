@@ -1,6 +1,6 @@
 .block-content-wrapper {
   user-select: text;
-  @screen sm {
+  @media (min-width: 640px) {
     overflow-x: visible;
   }
 }
@@ -438,7 +438,7 @@ html.is-mobile .ls-block-content-indent {
 
 .ls-comment-actions {
   position: absolute;
-  top: -10px;
+  top: 0;
   right: 8px;
   z-index: 2;
   display: flex;
@@ -1007,7 +1007,6 @@ html.is-mobile .ls-block-content-indent {
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
     @apply absolute -top-5 opacity-0;
-    left: -2px;
   }
 
   &:hover {

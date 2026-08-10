@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.components.select :as components-select]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -35,17 +34,19 @@
     (components-select/select
      {:items items
       :extract-fn :label
-      :extract-chosen-fn :value
-      :selected-choices selected-choices
-      :on-chosen (fn [chosen selected?]
-                   (if selected?
-                     (let [chosen-block (db/entity chosen)]
-                       (editor-handler/move-blocks! [chosen-block] library-page {:bottom? true})
-                       (set-selected-choices! (conj selected-choices chosen)))
+	      :extract-chosen-fn :value
+	      :selected-choices selected-choices
+	      :on-chosen (fn [chosen selected?]
+	                   (if selected?
+	                     (let [chosen-block (some #(when (= chosen (:db/id %)) %) result)]
+	                       (editor-handler/move-blocks! [chosen-block] library-page {:bottom? true})
+	                       (set-selected-choices! (conj selected-choices chosen)))
                      (do
-                       (db/transact! (state/get-current-repo)
-                                     [[:db/retract chosen :block/parent]]
-                                     {:outliner-op :save-block})
+	                       (state/<invoke-db-worker :thread-api/transact
+	                                                (state/get-current-repo)
+	                                                [[:db/retract chosen :block/parent]]
+	                                                {:outliner-op :save-block}
+	                                                nil)
                        (set-selected-choices! (disj selected-choices chosen)))))
       :multiple-choices? true
       :input-default-placeholder (t :library/add-pages)

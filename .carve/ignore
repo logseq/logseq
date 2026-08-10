@@ -52,6 +52,8 @@ frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop
 ;; Used in macro
 frontend.state/get-current-edit-block-and-position
+;; Public adapter API asserted by remove_ui_db_test
+frontend.modules.outliner.tree/filter-top-level-blocks
 ;; For debugging
 frontend.db.model/get-all-classes
 ;; Initial loaded

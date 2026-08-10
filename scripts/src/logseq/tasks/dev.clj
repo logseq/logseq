@@ -90,14 +90,15 @@
   (mapcat (fn [test-ns] ["-n" test-ns]) test-namespaces))
 
 (defn run-test-namespaces
-  "Run compiled tests in parallel by namespace. Pass args through to each static/tests.js namespace run."
+  "Run compiled tests in isolated Node processes, in parallel by namespace."
   [& args]
   (let [test-namespaces (selected-test-namespaces args)]
     (run-parallel! test-jobs
                    (mapv (fn [bucket]
-                           #(apply run-shell {:shutdown nil
-                                              :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
-                                   "node" "static/tests.js" (concat (namespace-args bucket) args)))
+                           #(doseq [test-ns bucket]
+                              (apply run-shell {:shutdown nil
+                                                :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
+                                     "node" "static/tests.js" (concat ["-n" test-ns] args))))
                          (namespace-buckets test-namespaces)))))
 
 (defn parallel-test

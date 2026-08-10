@@ -50,7 +50,7 @@ when a plugin is installed, updated or removed"
 
 (defn- create-plugin-config-file-if-not-exists
   []
-  (let [content (-> (:plugin/installed-plugins @state/state)
+  (let [content (-> (:plugin/installed-plugins (state/get-state))
                     (update-vals #(select-keys % common-plugin-keys))
                     pprint/pprint
                     with-out-str)]
@@ -89,7 +89,7 @@ returns map of plugins to install and uninstall"
                              :error)
          (log/error :plugin-edn-errors errors))
        (let [plugins-to-change (determine-plugins-to-change
-                                (:plugin/installed-plugins @state/state)
+                                (:plugin/installed-plugins (state/get-state))
                                 edn-plugins)]
          (state/pub-event! [:go/plugins-from-file plugins-to-change]))))
    (fn [e]

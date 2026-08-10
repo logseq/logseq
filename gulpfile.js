@@ -4,7 +4,6 @@ const cp = require('child_process')
 const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
-const webpack = require('webpack')
 
 const outputPath = path.join(__dirname, 'static')
 const outputJsPath = path.join(outputPath, 'js')
@@ -21,58 +20,6 @@ const resourceSyncGlobs = [
 const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
-const browserGlobalEntryPath = (file) =>
-  path.join(__dirname, 'scripts', 'browser-globals', file)
-const runWebpack = (config) =>
-  new Promise((resolve, reject) => {
-    webpack(config, (err, stats) => {
-      if (err) {
-        reject(err)
-      } else if (stats.hasErrors()) {
-        reject(new Error(stats.toString({
-          all: false,
-          errors: true,
-          warnings: true,
-        })))
-      } else {
-        resolve()
-      }
-    })
-  })
-const browserGlobalConfig = (mode, outputDir, entry, externals = {}) => ({
-  mode,
-  target: 'web',
-  devtool: false,
-  entry,
-  externals,
-  output: {
-    path: outputDir,
-    filename: '[name].js',
-    clean: false,
-  },
-})
-const bundleBrowserGlobals = (outputDir) =>
-  Promise.all([
-    runWebpack(browserGlobalConfig('production', outputDir, {
-      'react.production.min': browserGlobalEntryPath('react.js'),
-    })),
-    runWebpack(browserGlobalConfig('development', outputDir, {
-      'react.development': browserGlobalEntryPath('react.js'),
-    })),
-    runWebpack(browserGlobalConfig('production', outputDir, {
-      'react-dom.production.min': browserGlobalEntryPath('react-dom.js'),
-      'react-dom-client.production.min': browserGlobalEntryPath('react-dom-client.js'),
-      'react-jsx-runtime.production.min': browserGlobalEntryPath('react-jsx-runtime.js'),
-      'react-jsx-dev-runtime.production.min': browserGlobalEntryPath('react-jsx-dev-runtime.js'),
-      'tabler-icons-react.min': browserGlobalEntryPath('tabler-icons-react.js'),
-    }, { react: 'React' })),
-    runWebpack(browserGlobalConfig('development', outputDir, {
-      'react-dom.development': browserGlobalEntryPath('react-dom.js'),
-      'react-dom-client.development': browserGlobalEntryPath('react-dom-client.js'),
-      'react-jsx-runtime.development': browserGlobalEntryPath('react-jsx-runtime.js'),
-      'react-jsx-dev-runtime.development': browserGlobalEntryPath('react-jsx-dev-runtime.js'),
-    }, { react: 'React' })),
-  ])
 const removeUnsupportedIOSFontSources = (cssText) =>
   cssText.
     replace(/@font-face\s*{[^{}]*url\(["']?web\/Inter-[^{}]*?\.woff2[^{}]*}\s*/g, '').
@@ -174,12 +121,10 @@ const common = {
         'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
-        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/dompurify/dist/purify.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
-      () => bundleBrowserGlobals(path.join(outputPath, 'js')),
       () => rawCopySrc([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
@@ -210,10 +155,8 @@ const common = {
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
-      () => bundleBrowserGlobals(path.join(outputPath, 'mobile', 'js')),
       () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
@@ -308,28 +251,6 @@ const common = {
     cb()
   },
 
-  switchReactDevelopmentMode (cb) {
-    try {
-      [
-        ['react.development.js', 'react.production.min.js'],
-        ['react-dom.development.js', 'react-dom.production.min.js'],
-        ['react-dom-client.development.js', 'react-dom-client.production.min.js'],
-        ['react-jsx-runtime.development.js', 'react-jsx-runtime.production.min.js'],
-        ['react-jsx-dev-runtime.development.js', 'react-jsx-dev-runtime.production.min.js'],
-      ].forEach(([from, to]) => {
-        fs.renameSync(
-          path.join(outputPath, 'js', from),
-          path.join(outputPath, 'js', to),
-        )
-      })
-
-      cb()
-    } catch (err) {
-      console.error('Error during switchReactDevelopmentMode:', err)
-      cb(err)
-    }
-  },
-
   pruneDesktopPackageFiles () {
     for (const entry of ['mobile', 'android', 'ios']) {
       fs.rmSync(path.join(outputPath, entry), {
@@ -418,7 +339,7 @@ exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
 exports.watch = gulp.series(
   common.syncResourceFile,
-  common.syncAssetFiles, common.switchReactDevelopmentMode,
+  common.syncAssetFiles,
   gulp.parallel(common.keepSyncResourceFile, common.keepSyncUIAssetFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,
