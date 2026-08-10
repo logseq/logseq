@@ -141,6 +141,27 @@
           (is (not= child-uuid
                     (get-in insert-op [1 1]))))))))
 
+(deftest compound-history-inverses-run-in-reverse-dependency-order-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "target"}
+                          {:block/title "source"
+                           :build/children [{:block/title "nested"}]}]}]})
+        target (db-test/find-block-by-content @conn "target")
+        source (db-test/find-block-by-content @conn "source")
+        nested (db-test/find-block-by-content @conn "nested")
+        tx-meta {:outliner-op :delete-blocks
+                 :outliner-ops [[:move-blocks [[(:db/id nested)]
+                                                (:db/id target)
+                                                {:sibling? false}]]
+                                [:delete-blocks [[(:db/id source)] {}]]
+                                [:save-block [(assoc (into {} target) :block/title "combined") nil]]]}
+        {:keys [inverse-outliner-ops]}
+        (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
+    (is (= [:save-block :insert-blocks :move-blocks]
+           (mapv first inverse-outliner-ops)))))
+
 (deftest derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id-test
   (testing "delete-blocks derive-history keeps unresolved numeric ids in forward ops"
     (let [conn (db-test/create-conn-with-blocks

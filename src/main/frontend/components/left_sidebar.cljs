@@ -8,32 +8,37 @@
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defn get-default-home-if-valid
+(defn use-default-home-if-valid
   []
-  (when-let [default-home (state/get-default-home)]
-    (let [page (:page default-home)
-          page (when (and (string? page)
-                          (not (string/blank? page)))
-                 (db/get-page page))]
-      (if page
+  (let [default-home (state/get-default-home)
+        page (:page default-home)
+        valid-page? (and (string? page)
+                         (not (string/blank? page)))
+        {:keys [status value]}
+        (db-hooks/use-resource-snapshot
+         (when valid-page? [:page-identity page]))]
+    (when default-home
+      (if (and (= :ready status) value)
         default-home
         (dissoc default-home :page)))))
 
@@ -72,14 +77,13 @@
 (hsx/defc ^:large-vars/cleanup-todo page-name
   [page recent?]
   (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)
-        id (:db/id page)
-        page (db/sub-block id)]
+        id (:db/id page)]
     (when id
       (let [icon (icon/get-node-icon-cp page {:size 16})
             title (:block/title page)
-            untitled? (db-model/untitled-page? title)
+            untitled? (util/uuid-string? title)
             display-title (cond
-                            (not (db/page? page))
+                            (not (entity/page? page))
                             (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
                             untitled? (t :ui/untitled)
                             :else (block-handler/block-unique-title page))
@@ -128,7 +132,7 @@
            {:key "more actions"
             :size :sm
             :variant :ghost
-            :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
+            :class "sidebar-page-actions absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hover:opacity-80 active:opacity-100"
             :on-click #(do
                          (shui/popup-show! (.-target %) (x-menu-content)
                                            {:as-dropdown? true
@@ -194,7 +198,7 @@
 
 (hsx/defc sidebar-content-group
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
-  (let [collapsed? (state/use-sub [:ui/navigation-item-collapsed? class])]
+  (let [collapsed? (rfx/use-sub [:ui/navigation-item-collapsed? class])]
     [:div.sidebar-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :has-children (and (number? count) (> count 0))}])}
@@ -217,16 +221,26 @@
 (hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
-        _preferred-language (state/use-sub [:preferred-language])
-        cards-due-count (state/use-sub :srs/cards-due-count)
+        _preferred-language (rfx/use-sub [:preferred-language])
+        repo (state/get-current-repo)
+        [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
-       (when (vector? checked-navs)
-         (storage/set :ls-sidebar-navigations checked-navs)))
-     [checked-navs])
+	       (when (vector? checked-navs)
+	         (storage/set :ls-sidebar-navigations checked-navs)))
+	     [checked-navs])
+    (hooks/use-effect!
+     (fn []
+       (p/let [classes (p/all (map (fn [class-ident]
+                                     (db-async/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
+                                   [:logseq.class/Asset :logseq.class/Task]))]
+         (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
+                                         (map :block/uuid classes))))
+       nil)
+     [repo])
 
     (sidebar-content-group
       [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]
@@ -271,16 +285,17 @@
         (cond
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
-            (sidebar-item
-             {:class "flashcards-nav"
-              :title (t :nav/flashcards)
-              :icon "cards"
-              :shortcut :go/flashcards
-              :active srs-open?
-              :on-click-handler #(do (fsrs/update-due-cards-count)
-                                     (state/pub-event! [:modal/show-cards]))
-              :more (when (and cards-due-count (not (zero? cards-due-count)))
-                      [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in cards-due-count])}))
+            (let [num (rfx/use-sub [:srs/cards-due-count])]
+              (sidebar-item
+               {:class "flashcards-nav"
+                :title (t :nav/flashcards)
+                :icon "cards"
+                :shortcut :go/flashcards
+                :active srs-open?
+                :on-click-handler #(do (fsrs/update-due-cards-count)
+                                       (state/pub-event! [:modal/show-cards]))
+                :more (when (and num (not (zero? num)))
+                        [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])})))
 
           (= nav :graph-view)
           (sidebar-item
@@ -299,25 +314,20 @@
             :active (and (not srs-open?) (= route-name :all-pages))
             :icon "files"})
 
-          (= (namespace nav) "tag")
-          (let [name'' (name nav)
-                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
-            (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
-              (sidebar-item
+	          (= (namespace nav) "tag")
+	          (let [name'' (name nav)
+	                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
+	            (when-let [tag-uuid (and class-ident (get class-ident->uuid class-ident))]
+	              (sidebar-item
                {:class (str "tag-view-nav " name'')
                 :title (t (navigation-label-key nav))
                 :href (rfe/href :page {:name tag-uuid})
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
 
-(hsx/defc sidebar-favorites
+(hsx/defc sidebar-favorites-loaded
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        db-restoring? (state/use-sub :db/restoring?)
-        _favorites-updated? (state/use-sub :favorites/updated?)
-        _preferred-language (state/use-sub [:preferred-language])
-        favorite-entities (when (and current-repo (false? db-restoring?))
-                            (page-handler/get-favorites))]
+  (let [favorite-entities (db-hooks/use-resource [:favorites])]
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -340,14 +350,17 @@
                                               (page-handler/<reorder-favorites! favorites'))
                                :parent-node :ul.favorites.text-sm}))))))
 
-(hsx/defc sidebar-recent-pages
+(hsx/defc sidebar-favorites
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        db-restoring? (state/use-sub :db/restoring?)
-        _recent-page-ids (state/use-sub [:ui/recent-pages current-repo])
-        _preferred-language (state/use-sub [:preferred-language])
-        pages (when (and current-repo (false? db-restoring?))
-                (recent-handler/get-recent-pages))]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-favorites-loaded))))
+
+(hsx/defc sidebar-recent-pages-loaded
+  []
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        recent-page-ids (vec (rfx/use-sub [:ui/recent-pages current-repo]))
+        pages (db-hooks/use-resource [:recent-pages recent-page-ids])]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
@@ -360,6 +373,12 @@
             {:key (str "recent-" (:db/id page))}
             (page-name page true)])])))
 
+(hsx/defc sidebar-recent-pages
+  []
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-recent-pages-loaded))))
+
 (hsx/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
@@ -367,7 +386,7 @@
         [el-rect set-el-rect!] (hooks/use-state nil)
         ref-el (hooks/use-ref nil)
         ref-open? (hooks/use-ref left-sidebar-open?)
-        default-home (get-default-home-if-valid)
+        default-home (use-default-home-if-valid)
         route-name (get-in route-match [:data :name])
         on-contents-scroll #(when-let [^js el (.-target %)]
                               (let [top (.-scrollTop el)
@@ -506,7 +525,7 @@
         [touch-state set-touch-state!] (hooks/use-state nil)
         [close-signal set-close-signal!] (hooks/use-state -1)
         touch-point-fn (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
-        srs-open? (= :srs (state/use-sub :modal/id))
+        srs-open? (= :srs (rfx/use-sub [:modal/id]))
         touching-x-offset (and (some-> touch-state :after)
                                (some->> touch-state
                                         ((juxt :after :before))

@@ -29,7 +29,11 @@
      :$current_url masked
      :$pathname masked})))
 
-(def config
+(defn- enabled? []
+  (and (not config/dev?)
+       (not-empty POSTHOG-TOKEN)))
+
+(def posthog-config
   {:api_host "https://app.posthog.com"
    :persistence "localStorage"
    :autocapture false
@@ -39,23 +43,25 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (when (and (not config/dev?) (not-empty POSTHOG-TOKEN))
-    (posthog/init POSTHOG-TOKEN (clj->js config))))
+  (when (enabled?)
+    (posthog/init POSTHOG-TOKEN (clj->js posthog-config))))
 
 (defn opt-out [opt-out?]
-  (if opt-out?
-    (posthog/opt_out_capturing)
-    (do
-      (init)
-      (posthog/opt_in_capturing))))
+  (when (enabled?)
+    (if opt-out?
+      (posthog/opt_out_capturing)
+      (do
+        (init)
+        (posthog/opt_in_capturing)))))
 
 (defn capture [id data]
-  (try
-    (posthog/capture (str id) (bean/->js data))
-    (catch :default e
-      (js/console.error e)
-      ;; opt out or network issues
-      nil)))
+  (when (enabled?)
+    (try
+      (posthog/capture (str id) (bean/->js data))
+      (catch :default e
+        (js/console.error e)
+        ;; opt out or network issues
+        nil))))
 
 (comment
   (posthog/debug))

@@ -201,19 +201,6 @@
     :thread-api/sync-app-state
     :thread-api/update-thread-atom
     :thread-api/mobile-logs
-    :thread-api/rtc-start
-    :thread-api/rtc-stop
-    :thread-api/rtc-toggle-auto-push
-    :thread-api/rtc-toggle-remote-profile
-    :thread-api/rtc-grant-graph-access
-    :thread-api/rtc-get-graphs
-    :thread-api/rtc-delete-graph
-    :thread-api/rtc-get-users-info
-    :thread-api/rtc-get-block-content-versions
-    :thread-api/rtc-get-debug-state
-    :thread-api/rtc-request-download-graph
-    :thread-api/rtc-wait-download-graph-info-ready
-    :thread-api/rtc-download-graph-from-s3
     :thread-api/get-user-rsa-key-pair
     :thread-api/init-user-rsa-key-pair
     :thread-api/reset-user-rsa-key-pair
@@ -224,16 +211,6 @@
     :thread-api/resolve-ui-request
     :thread-api/reject-ui-request
     :thread-api/cancel-ui-requests})
-
-(def ^:private write-methods
-  #{:thread-api/transact
-    :thread-api/import-db-binary
-    :thread-api/backup-db-sqlite
-    :thread-api/import-edn
-    :thread-api/unsafe-unlink-db
-    :thread-api/search-upsert-blocks
-    :thread-api/search-delete-blocks
-    :thread-api/search-truncate-tables})
 
 (defn- repo-arg
   [args]
@@ -362,9 +339,8 @@
                          args-for-validation [repo binary]]
                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                      (send-json! res status {:ok false :error error})
-                     (p/let [_ (when (contains? write-methods method-kw)
-                                 (let [{:keys [path lock]} @*lock-info]
-                                   (db-lock/assert-lock-owner! path lock)))
+                     (p/let [_ (let [{:keys [path lock]} @*lock-info]
+                                 (db-lock/assert-lock-owner! path lock))
                              result (<invoke-binary! proxy method-str method-kw repo binary)]
                        (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
                  (p/catch (fn [error]
@@ -397,7 +373,7 @@
                                                 args')]
                     (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                       (send-json! res status {:ok false :error error})
-                      (p/let [_ (when (contains? write-methods method-kw)
+                      (p/let [_ (when-not (contains? non-repo-methods method-kw)
                                   (let [{:keys [path lock]} @*lock-info]
                                     (db-lock/assert-lock-owner! path lock)))
                               result (<invoke! proxy method-str method-kw args')]

@@ -549,7 +549,7 @@
     (hooks/use-effect!
      (fn []
        (when (seq handbooks-nodes)
-         (let [c (:handbook/route-chan @state/state)]
+         (let [c (state/get-state :handbook/route-chan)]
            (async/go-loop []
              (let [v (<! c)]
                (when (not= v :return)

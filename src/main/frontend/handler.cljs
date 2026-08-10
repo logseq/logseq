@@ -12,7 +12,6 @@
             [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
@@ -50,13 +49,6 @@
           (when-not (error/ignored? message)
             (log/error :exception error)))))
 
-(defn- watch-for-date!
-  []
-  (let [f (fn []
-            (page-handler/create-today-journal!))]
-    (f)
-    (js/setInterval f 3000)))
-
 (defn restore-and-setup!
   [repo]
   (when repo
@@ -87,7 +79,7 @@
 
            (page-handler/init-commands!)
 
-           (watch-for-date!)))
+           (page-handler/watch-for-date!)))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
@@ -147,6 +139,7 @@
 
 (defn start!
   [render]
+  (state/set-db-restoring! true)
   (let [t1 (util/time-ms)
         ui-ready (p/do!
                   (idb/start)
@@ -159,14 +152,11 @@
       (register-components-fns!)
       (user-handler/restore-tokens-from-localstorage)
       (user.login/setup-configure!)
-      (state/set-db-restoring! true)
       (when (util/electron?)
         (el/listen!))
 
       (i18n/start)
       (instrument/init)
-
-      (react/run-custom-queries-when-idle!)
 
       (events/run!)
 

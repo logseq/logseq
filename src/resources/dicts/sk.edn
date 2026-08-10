@@ -178,7 +178,6 @@
  :cmdk.action/search "Hľadať"
  :cmdk.action/trigger "Spustiť"
 
- :cmdk.create/configure-tag "Konfigurovat štítok"
  :cmdk.create/page "Vytvoriť stránku"
  :cmdk.create/tag "Vytvoriť štítok"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Nedávno aktualizované"
  :cmdk.group/themes "Motívy"
 
- :cmdk.info/configure-tag "Konfigurovat #{1}"
  :cmdk.info/create-page "Vytvoriť stránku '{1}'"
  :cmdk.info/create-tag "Vytvoriť štítok '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Vstavaný prvky nemožno smazat."
  :node/new "Nový uzel"
 
- :notification/clear-all "Zmazať všetko"
  :notification/copied "Skopírované"
 
  :onboarding.import/desc "Popis importu"
@@ -1718,7 +1715,6 @@
  :ui/image "obrázok"
  :ui/label "Štítok"
  :ui/link "Odkaz"
- :ui/load-more "Načítať viac"
  :ui/loading "Načítavanie"
  :ui/login "Prihlásiť sa"
  :ui/logout "Odhlásiť sa"

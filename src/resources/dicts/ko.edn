@@ -178,7 +178,6 @@
  :cmdk.action/search "검색"
  :cmdk.action/trigger "실행"
 
- :cmdk.create/configure-tag "태그 설정"
  :cmdk.create/page "페이지 만들기"
  :cmdk.create/tag "태그 만들기"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "최근 업데이트"
  :cmdk.group/themes "테마"
 
- :cmdk.info/configure-tag "#{1} 설정"
  :cmdk.info/create-page "페이지 '{1}' 만들기"
  :cmdk.info/create-tag "태그 '{1}' 만들기"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "내장 항목은 삭제할 수 없습니다."
  :node/new "새 노드"
 
- :notification/clear-all "모두 지우기"
  :notification/copied "복사했습니다"
 
  :onboarding.import/desc "EDN 또는 Markdown 형식의 노트를 Logseq에서 가져올 수 있습니다."
@@ -1718,7 +1715,6 @@
  :ui/image "이미지"
  :ui/label "라벨"
  :ui/link "링크"
- :ui/load-more "더 불러오기"
  :ui/loading "로딩 중"
  :ui/login "로그인"
  :ui/logout "로그아웃"

@@ -856,6 +856,26 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
+(deftest export-grouped-view-nodes-by-uuid
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "Alpha"}
+                          {:block/title "Beta"}]}]})
+        block-uuids (mapv :block/uuid
+                          [(db-test/find-block-by-content @conn "Alpha")
+                           (db-test/find-block-by-content @conn "Beta")])
+        exported (sqlite-export/build-export
+                  @conn
+                  {:export-type :view-nodes
+                   :rows [["group" block-uuids]]
+                   :group-by? true})]
+    (is (= #{"Alpha" "Beta"}
+           (->> (:pages-and-blocks exported)
+                (mapcat :blocks)
+                (map :block/title)
+                set)))))
+
 (deftest import-selected-nodes
   (let [original-data
         ;; Test a mix of pages and blocks

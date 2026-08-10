@@ -15,6 +15,12 @@
   [s]
   (bean/->js (seq s)))
 
+(defn remove-accents
+  [s]
+  (if-let [remove-fn (.-remove removeAccents)]
+    (remove-fn s)
+    (removeAccents s)))
+
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
   ;; normalized multiplier 0-1
@@ -37,7 +43,7 @@
     (let [s' (if lower-case? (string/lower-case s) s)
           normalize-str (.normalize s' "NFKC")]
       (if remove-accents?
-        (removeAccents normalize-str)
+        (remove-accents normalize-str)
         normalize-str))))
 
 (defn score

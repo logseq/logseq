@@ -11,8 +11,6 @@ files:
   - "!mobile/**"
   - "!android/**"
   - "!ios/**"
-  - "!js/react.development.js"
-  - "!js/react-dom.development.js"
   - "!js/publishing/*.map"
   - "!js/publishing/manifest.edn"
   - "!js/publishing/module-loader.*"

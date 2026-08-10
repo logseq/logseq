@@ -129,12 +129,14 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.calc :as calc]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.schema.handler.common-config :refer [Config-edn]]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -391,7 +393,9 @@
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block (or (:code-block config) (:block config))]
-     (let [block (db/entity [:block/uuid (:block/uuid block)])]
+     (p/let [block (db-async/<get-block (state/get-current-repo)
+                                        (:block/uuid block)
+                                        {:children? false})]
        (state/set-state! :editor/raw-mode-block block)
        (editor-handler/edit-block! block :max {:save-code-editor? false})))))
 
@@ -585,8 +589,8 @@
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
         calc? (calc-mode? attr)
         [calc-lines set-calc-lines!] (hooks/use-state #(when calc? (calc/eval-lines code)))
-        current-theme (state/use-sub :ui/theme)
-        radix-color? (state/use-sub :ui/radix-color)
+        current-theme (rfx/use-sub [:ui/theme])
+        radix-color? (rfx/use-sub [:ui/radix-color])
         code-options (hooks/use-memo #(atom options) [id])
         last-theme (hooks/use-memo #(atom (theme-name current-theme radix-color?)) [id])
         component-state {:config config
@@ -633,6 +637,8 @@
                          :default-value code} attr)]
       (when calc?
         (calc/results calc-lines))]]))
+
+(lazy-editor/register-editor! editor)
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

@@ -24,6 +24,61 @@
 (def ^:private rtc-log-orig rtc-log-and-state/rtc-log)
 (def ^:private update-local-tx-orig client-op/update-local-tx)
 (def ^:private broadcast-to-clients-orig shared-service/broadcast-to-clients!)
+;; Keep this compact to satisfy lint:large-vars while still checking full coverage.
+(def ^:private expected-db-core-thread-apis
+  (into #{}
+        (concat
+         [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config :thread-api/get-key-value
+          :thread-api/db-sync-status :thread-api/db-sync-start :thread-api/db-sync-stop :thread-api/db-sync-update-presence
+          :thread-api/db-sync-request-asset-download :thread-api/db-sync-download-missing-assets
+          :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
+          :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
+          :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
+          :thread-api/db-sync-get-all-block-conflicts :thread-api/db-sync-clear-block-conflicts
+          :thread-api/db-sync-download-graph-by-id
+          :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
+          :thread-api/get-block-refs :thread-api/get-block-source
+          :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
+          :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
+          :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
+          :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
+          :thread-api/get-date-scheduled-or-deadlines
+          :thread-api/unsafe-unlink-db :thread-api/close-db
+          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
+          :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
+          :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
+          :thread-api/export-db-binary :thread-api/import-file-graph
+          :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
+          :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
+          :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
+          :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
+          :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
+          :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
+          :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn
+          :thread-api/get-fsrs-due-card-block-ids :thread-api/get-view-data
+          :thread-api/get-class-objects :thread-api/validate-block-tag
+          :thread-api/convert-tag-to-page
+          :thread-api/convert-page-to-tag
+          :thread-api/set-page-favorite
+          :thread-api/reorder-favorites
+          :thread-api/get-page-route-info :thread-api/query-custom :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
+          :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
+          :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
+          :thread-api/resolve-query-inputs :thread-api/get-block-parent
+          :thread-api/get-block-page-info
+          :thread-api/get-block-immediate-children :thread-api/get-block-sibling
+          :thread-api/get-page-blocks-tree :thread-api/get-block-class-default-properties
+          :thread-api/get-all-classes :thread-api/get-structured-children :thread-api/get-class-extends-children-tree
+          :thread-api/get-alias-source-page :thread-api/get-property-closed-values
+          :thread-api/get-first-url-property-value
+          :thread-api/get-display-properties :thread-api/reorder-display-property
+          :thread-api/get-all-properties :thread-api/get-property-values :thread-api/get-bidirectional-properties
+          :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
+          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid
+          :thread-api/ensure-local-graph-uuid
+          :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
+          :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
+          :thread-api/api-list-tags :thread-api/api-list-pages :thread-api/api-build-upsert-nodes-edn])))
 
 (defn- get-thread-api
   [k]
@@ -495,6 +550,26 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest imported-snapshot-blocks-receive-local-revisions-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               block-uuid (random-uuid)
+               datoms [{:e 100 :a :block/uuid :v block-uuid}
+                       {:e 100 :a :block/title :v "downloaded"}
+                       {:e 100 :a :block/tx-id :v 42}]]
+           (-> (#'sync-download/import-datoms-batch! conn nil false datoms)
+               (p/then (fn [_]
+                         (let [block (d/entity @conn [:block/uuid block-uuid])]
+                           (is (= "downloaded" (:block/title block)))
+                           (is (not= 42 (:block/tx-id block))
+                               "A remote snapshot cannot supply a renderer revision.")
+                           (is (= (:max-tx @conn) (:block/tx-id block))
+                               "Snapshot import stamps the local DataScript transaction."))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest thread-api-export-client-ops-db-binary-checkpoints-and-exports-client-ops-file-test
   (async done
     (restoring-worker-state
@@ -597,6 +672,159 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done))))))))))
+
+(deftest thread-api-db-core-registers-all-thread-apis-test
+  (let [missing (->> expected-db-core-thread-apis
+                     (remove #(contains? @thread-api/*thread-apis %))
+                     sort
+                     vec)
+        non-functions (->> expected-db-core-thread-apis
+                           (filter #(not (fn? (get @thread-api/*thread-apis %))))
+                           sort
+                           vec)]
+    (is (empty? missing) (str "Missing thread apis: " missing))
+    (is (empty? non-functions) (str "Non-function thread apis: " non-functions))))
+
+(defn- with-db-sync-core-wrapper-redefs
+  [calls f]
+  (let [results {:status {:state :connected}
+                 :ensure-keys {:ok true}
+                 :list-graphs [{:graph-id "g1"}]
+                 :upload-stopped? true
+                 :download-missing-assets {:total 2 :downloaded 2 :skipped-existing 0}}]
+    (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
+                                                (swap! calls conj [:db-sync-dbs-open? repo])
+                                                true)
+                  db-sync/status (fn [repo]
+                                   (swap! calls conj [:status repo])
+                                   (:status results))
+                  db-sync/start! (fn [repo]
+                                   (swap! calls conj [:start repo])
+                                   :started)
+                  db-sync/stop! (fn []
+                                  (swap! calls conj [:stop])
+                                  :stopped)
+                  db-sync/update-presence! (fn [editing-block-uuid]
+                                             (swap! calls conj [:update-presence editing-block-uuid])
+                                             :presence-updated)
+                  db-sync/request-asset-download! (fn [repo asset-uuid]
+                                                    (swap! calls conj [:request-asset-download repo asset-uuid])
+                                                    :asset-requested)
+                  db-sync/download-missing-assets! (fn [repo graph-id]
+                                                     (swap! calls conj [:download-missing-assets repo graph-id])
+                                                     (:download-missing-assets results))
+                  sync-crypt/<grant-graph-access! (fn [repo graph-id target-email]
+                                                    (swap! calls conj [:grant-graph-access repo graph-id target-email])
+                                                    :granted)
+                  sync-crypt/ensure-user-rsa-keys! (fn [opts]
+                                                     (swap! calls conj [:ensure-user-rsa-keys opts])
+                                                     (:ensure-keys results))
+                  db-sync/list-remote-graphs! (fn []
+                                                (swap! calls conj [:list-remote-graphs])
+                                                (:list-graphs results))
+                  db-sync/upload-graph! (fn [repo]
+                                          (swap! calls conj [:upload-graph repo])
+                                          :uploading)
+                  db-sync/create-remote-graph! (fn [repo opts]
+                                                 (swap! calls conj [:create-remote-graph repo opts])
+                                                 :created)
+                  db-sync/stop-upload! (fn [repo]
+                                         (swap! calls conj [:stop-upload repo])
+                                         :stopped-upload)
+                  db-sync/resume-upload! (fn [repo]
+                                           (swap! calls conj [:resume-upload repo])
+                                           :resumed-upload)
+                  db-sync/upload-stopped? (fn [repo]
+                                            (swap! calls conj [:upload-stopped? repo])
+                                            (:upload-stopped? results))
+                  client-op/clear-sync-conflicts! (fn [repo block-uuid]
+                                                    (swap! calls conj [:clear-sync-conflicts repo block-uuid])
+                                                    nil)
+                  shared-service/broadcast-to-clients! (fn [event payload]
+                                                         (swap! calls conj [:broadcast event payload])
+                                                         nil)]
+      (f results))))
+
+(defn- assert-db-sync-core-wrapper-results!
+  [calls results request]
+  (let [{:keys [repo graph-id block asset email opts]} request]
+    (is (= (:status results) ((get-thread-api :thread-api/db-sync-status) repo)))
+    (is (= :started ((get-thread-api :thread-api/db-sync-start) repo)))
+    (is (= :stopped ((get-thread-api :thread-api/db-sync-stop))))
+    (is (= :presence-updated ((get-thread-api :thread-api/db-sync-update-presence) block)))
+    (is (= :asset-requested ((get-thread-api :thread-api/db-sync-request-asset-download) repo asset)))
+    (is (= (:download-missing-assets results)
+           ((get-thread-api :thread-api/db-sync-download-missing-assets) repo graph-id)))
+    (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) repo graph-id email)))
+    (is (= (:ensure-keys results) ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys) opts)))
+    (is (= (:ensure-keys results) ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys))))
+    (is (= (:list-graphs results) ((get-thread-api :thread-api/db-sync-list-remote-graphs))))
+    (is (= :uploading ((get-thread-api :thread-api/db-sync-upload-graph) repo)))
+    (is (= :created ((get-thread-api :thread-api/db-sync-create-remote-graph) repo true false)))
+    (is (= :stopped-upload ((get-thread-api :thread-api/db-sync-stop-upload) repo)))
+    (is (= :resumed-upload ((get-thread-api :thread-api/db-sync-resume-upload) repo)))
+    (is (= (:upload-stopped? results) ((get-thread-api :thread-api/db-sync-upload-stopped?) repo)))
+    ((get-thread-api :thread-api/db-sync-clear-block-conflicts) repo block)
+    (is (some #(= [:broadcast
+                   :sync-conflicts-updated
+                   {:repo repo
+                    :block-uuid block
+                    :conflicts []}]
+                  %)
+              @calls))
+    (is (some #(= [:ensure-user-rsa-keys nil] %) @calls))
+    (is (some #(= [:create-remote-graph repo
+                   {:graph-e2ee? true
+                    :graph-ready-for-use? false}]
+                  %)
+              @calls))))
+
+(deftest thread-api-db-sync-wrappers-delegate-core-ops-test
+  (restoring-worker-state
+   (fn []
+     (let [calls (atom [])
+           request {:repo "graph-a"
+                    :graph-id "remote-graph-id"
+                    :block "block-1"
+                    :asset "asset-1"
+                    :email "user@example.com"
+                    :opts {:force? true}}]
+       (with-db-sync-core-wrapper-redefs
+        calls
+        #(assert-db-sync-core-wrapper-results! calls % request))))))
+
+(deftest thread-api-db-sync-wrappers-delegate-import-ops-test
+  (restoring-worker-state
+   (fn []
+     (let [calls (atom [])
+           request-repo "graph-a"
+           request-graph-id "remote-graph-id"
+           download-result {:downloaded true}
+           import-prepare-result {:import-id "import-1"}
+           rows-result {:rows-imported 2}
+           finalize-result {:ok true}
+           rehydrate-result {:rehydrated 3}]
+       (with-redefs [sync-download/download-graph-by-id! (fn [repo graph-id graph-e2ee?]
+                                                            (swap! calls conj [:download-graph-by-id repo graph-id graph-e2ee?])
+                                                            download-result)
+                     db-sync/rehydrate-large-titles-from-db! (fn [repo graph-id]
+                                                               (swap! calls conj [:rehydrate-large-titles repo graph-id])
+                                                               rehydrate-result)
+                     sync-download/prepare-import! (fn [repo reset? graph-id graph-e2ee? total-datoms]
+                                                     (swap! calls conj [:prepare-import repo reset? graph-id graph-e2ee? total-datoms])
+                                                     import-prepare-result)
+                     sync-download/import-rows-chunk! (fn [rows graph-id import-id]
+                                                        (swap! calls conj [:import-rows-chunk rows graph-id import-id])
+                                                        rows-result)
+                     sync-download/finalize-import! (fn [repo graph-id remote-tx import-id]
+                                                     (swap! calls conj [:finalize-import repo graph-id remote-tx import-id])
+                                                     finalize-result)]
+         (is (= download-result ((get-thread-api :thread-api/db-sync-download-graph-by-id) request-repo request-graph-id true)))
+         (is (= rehydrate-result ((get-thread-api :thread-api/db-sync-rehydrate-large-titles) request-repo request-graph-id)))
+         (is (= import-prepare-result ((get-thread-api :thread-api/db-sync-import-prepare) request-repo true request-graph-id true 99)))
+         (is (= rows-result ((get-thread-api :thread-api/db-sync-import-rows-chunk) [[1 "row" nil]] request-graph-id "import-1")))
+         (is (= finalize-result ((get-thread-api :thread-api/db-sync-import-finalize) request-repo request-graph-id 77 "import-1")))
+         (is (some #(= [:prepare-import request-repo true request-graph-id true 99] %) @calls)))))))
 
 (deftest thread-api-set-and-get-db-sync-config-uses-sanitized-config-test
   (restoring-worker-state

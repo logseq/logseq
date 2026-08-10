@@ -126,7 +126,10 @@
   [config repo page-uuid]
   (p/let [result (transport/invoke config :thread-api/apply-outliner-ops
                                    [repo [[:delete-page [page-uuid {}]]] {}])]
-    (if (nil? result) true result)))
+    (cond
+      (nil? result) true
+      (and (map? result) (contains? result :result)) (:result result)
+      :else result)))
 
 (defn- remove-block-id
   [config repo id]
