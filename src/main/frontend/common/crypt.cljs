@@ -153,9 +153,13 @@
                                    #js ["decrypt"])]
      private-key)
    (p/catch (fn [e]
-              (when-not (expected-crypto-operation-error? e)
-                (log/error "decrypt-private-key" e))
-              (ex-info "decrypt-private-key" {} e)))))
+              (let [invalid-password? (expected-crypto-operation-error? e)]
+                (when-not invalid-password?
+                  (log/error "decrypt-private-key" e))
+                (ex-info "decrypt-private-key"
+                         (cond-> {}
+                           invalid-password? (assoc :invalid-password? true))
+                         e))))))
 
 (defn <encrypt-aes-key
   "Encrypts an AES key with a public key."
