@@ -99,7 +99,9 @@
               (rtc-indicator/on-upload-finished-task
                hide-upload-log!)
               (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
-                  (p/catch handle-cloud-graph-error!)
+                  (p/catch (fn [error]
+                             (handle-cloud-graph-error! error)
+                             (p/rejected error)))
                   (p/finally hide-upload-log!)))))))))
 
 (hsx/defc normalized-graph-label

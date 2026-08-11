@@ -153,6 +153,6 @@
   [new-state]
   (when (and (contains? new-state :git/current-repo)
              (nil? (:git/current-repo new-state)))
-    (log/error :thread-api/sync-app-state new-state))
+    (log/error :thread-api/sync-app-state {:reason :nil-current-repo}))
   (worker-state/set-new-state! new-state)
   nil)

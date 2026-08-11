@@ -563,6 +563,7 @@
                                        :graph-id graph-id
                                        :graph-e2ee? graph-e2ee?
                                        :stage @stage*
+                                       :code (:code (ex-data error))
                                        :error-message (or (ex-message error)
                                                            (when (instance? js/Error error)
                                                              (.-message error)))
