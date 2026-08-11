@@ -146,6 +146,48 @@
                           (is false (str e))
                           (finish-async-test! done)))))))
 
+(deftest rtc-worker-error-values-reject-test
+  (async done
+         (let [state-prev (state/get-state)
+               worker-prev @state/*db-worker
+               error (ex-info "invalid-e2ee-password"
+                              {:code :db-sync/invalid-e2ee-password})
+               continued-calls (atom [])
+               capture (fn [promise]
+                         (-> promise
+                             (p/then (fn [result] [:resolved result]))
+                             (p/catch (fn [reason] [:rejected reason]))))]
+           (state/set-state! :rtc/uploading? false)
+           (reset! state/*db-worker
+                   (fn [op & _args]
+                     (if (contains? #{:thread-api/db-sync-create-remote-graph
+                                      :thread-api/db-sync-upload-graph}
+                                    op)
+                       (p/resolved error)
+                       (p/resolved :ok))))
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-sync/<get-remote-graphs (fn []
+                                                            (swap! continued-calls conj :refresh)
+                                                            (p/resolved []))
+                               db-sync/<rtc-start! (fn [& _]
+                                                     (swap! continued-calls conj :start)
+                                                     (p/resolved :ok))]
+                 (p/all [(capture (db-sync/<rtc-create-graph! "logseq_db_demo" true))
+                         (capture (db-sync/<rtc-upload-graph! "logseq_db_demo" true))]))
+               (p/then (fn [results]
+                         (is (= [:rejected :rejected] (mapv first results)))
+                         (is (every? #(= :db-sync/invalid-e2ee-password
+                                         (:code (ex-data (second %))))
+                                     results))
+                         (is (empty? @continued-calls))
+                         (finish-async-test! done)))
+               (p/catch (fn [failure]
+                          (is false (str failure))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
+
 (deftest rtc-upload-graph-creates-remote-graph-as-not-ready-test
   (async done
          (let [upload-calls (atom [])
@@ -401,6 +443,7 @@
                                           :auth/id-token "id-token"
                                           :auth/access-token "access-token"
                                           :auth/refresh-token "refresh-token"
+                                          :auth/oauth-token-url nil
                                           :user/info {:sub "user-1"}}
                                    (seq config/OAUTH-DOMAIN)
                                    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
