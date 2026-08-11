@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.db-based.sync :as rtc-handler]
+            [frontend.handler.events.rtc-error :as rtc-error]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -49,6 +50,12 @@
   [op & args]
   (apply state/<invoke-db-worker op args))
 
+(defn- handle-cloud-graph-error!
+  [error]
+  (log/error :db-sync/cloud-graph-failed error)
+  (when (rtc-error/e2ee-decrypt-failed? error)
+    (notification/show! (t :encryption/wrong-password) :error false)))
+
 (defn- graph-e2ee-enabled?
   [{:keys [url graph-e2ee?] :as graph}]
   (cond
@@ -92,6 +99,7 @@
               (rtc-indicator/on-upload-finished-task
                hide-upload-log!)
               (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
+                  (p/catch handle-cloud-graph-error!)
                   (p/finally hide-upload-log!)))))))))
 
 (hsx/defc normalized-graph-label
@@ -650,8 +658,7 @@
                              (->
                               (p/do
                                 (rtc-handler/<rtc-create-graph-and-start-sync! repo graph-e2ee?))
-                              (p/catch (fn [error]
-                                         (log/error :create-db-failed error)))
+                              (p/catch handle-cloud-graph-error!)
                               (p/finally (fn []
                                            (set-creating-db? false)))))
                            (shui/dialog-close!))))))
