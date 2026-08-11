@@ -10,7 +10,6 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -83,8 +82,7 @@
         <init-sync-done? (p/deferred)
         last-state (atom ::not-set)
         app-state (fn []
-                    (cond-> (common-util/remove-nils-non-nested
-                             (update-vals state-atoms deref))
+                    (cond-> (update-vals state-atoms deref)
                       (seq config/OAUTH-DOMAIN)
                       (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
