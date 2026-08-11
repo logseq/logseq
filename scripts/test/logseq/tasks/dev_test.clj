@@ -33,6 +33,79 @@
    "frontend.delta-test"
    "frontend.epsilon-test"])
 
+(deftest run-test-namespaces-batches-namespaces-across-workers
+  (let [started-node-runs (atom [])]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
+                                  (let [cmd-args (mapv str args)]
+                                    (if (some #{"--list-namespaces"} cmd-args)
+                                      {:out (string/join "\n" test-namespaces)}
+                                      (swap! started-node-runs conj cmd-args))))]
+      (dev/run-test-namespaces)
+      (is (= 2 (count @started-node-runs)))
+      (is (= (set test-namespaces)
+             (->> @started-node-runs
+                  (mapcat identity)
+                  (filter (set test-namespaces))
+                  set))))))
+
+(deftest run-test-namespaces-isolates-stateful-namespaces
+  (let [namespaces ["frontend.alpha-test"
+                    "frontend.components.block.drop-boundary-test"
+                    "frontend.handler.editor-test"
+                    "frontend.worker.db-core-test"]
+        started-node-runs (atom [])]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
+                                  (let [cmd-args (mapv str args)]
+                                    (if (some #{"--list-namespaces"} cmd-args)
+                                      {:out (string/join "\n" namespaces)}
+                                      (swap! started-node-runs conj cmd-args))))]
+      (dev/run-test-namespaces)
+      (is (= 4 (count @started-node-runs)))
+      (doseq [isolated-ns ["frontend.components.block.drop-boundary-test"
+                           "frontend.handler.editor-test"
+                           "frontend.worker.db-core-test"]]
+        (is (= 1 (count (filter #(some #{isolated-ns} %) @started-node-runs))))
+        (is (= 1 (->> @started-node-runs
+                      (some #(when (some #{isolated-ns} %) %))
+                      (filter (set namespaces))
+                      count)))))))
+
+(deftest run-test-namespaces-runs-performance-tests-after-parallel-tests
+  (let [namespaces ["frontend.alpha-test"
+                    "frontend.db.query-dsl-test"
+                    "frontend.worker.search-test"]
+        completed-runs (atom [])
+        parallel-finished? (atom false)]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
+                                  (let [cmd-args (mapv str args)]
+                                    (if (some #{"--list-namespaces"} cmd-args)
+                                      {:out (string/join "\n" namespaces)}
+                                      (let [selected (filter (set namespaces) cmd-args)]
+                                        (when (some #{"frontend.alpha-test"} selected)
+                                          (reset! parallel-finished? true))
+                                        (when (some dev/serial-test-namespaces selected)
+                                          (is @parallel-finished?))
+                                        (swap! completed-runs into selected)))))]
+      (dev/run-test-namespaces)
+      (is (= namespaces @completed-runs)))))
+
+(deftest run-test-namespaces-handles-an-empty-selection
+  (let [node-runs (atom 0)]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
+                                  (if (some #{"--list-namespaces"} (map str args))
+                                    {:out ""}
+                                    (swap! node-runs inc)))]
+      (dev/run-test-namespaces)
+      (is (zero? @node-runs)))))
+
 (deftest parallel-test-runs-test-namespaces-concurrently
   (let [compile-ran? (atom false)
         listed-namespaces? (atom false)
@@ -44,7 +117,9 @@
                                              (pos? remaining-attempts))
                                     (Thread/sleep 50)
                                     (recur (dec remaining-attempts)))))]
-    (with-redefs [dev/run-shell (fn [& args]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
                                   (let [cmd-text (string/join " " (map str args))]
                                     (cond
                                       (string/includes? cmd-text "pnpm cljs:test")
@@ -87,7 +162,9 @@
                                              (pos? remaining-attempts))
                                     (Thread/sleep 50)
                                     (recur (dec remaining-attempts)))))]
-    (with-redefs [dev/run-shell (fn [& args]
+    (with-redefs [dev/test-jobs 2
+                  dev/test-batches-per-job 1
+                  dev/run-shell (fn [& args]
                                   (let [cmd-text (string/join " " (map str args))]
                                     (cond
                                       (string/includes? cmd-text "--list-namespaces")
