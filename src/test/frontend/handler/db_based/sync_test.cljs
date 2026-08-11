@@ -186,6 +186,29 @@
                (p/finally (fn []
                             (state/replace-state! state-prev)))))))
 
+(deftest rtc-upload-graph-syncs-cleared-refresh-token-test
+  (async done
+         (let [worker-calls (atom [])
+               state-prev (state/get-state)]
+           (state/set-auth-refresh-token nil)
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               db-sync/<get-remote-graphs (fn [] (p/resolved []))
+                               db-sync/<rtc-start! (fn [& _] (p/resolved :ok))]
+                 (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
+               (p/then (fn [_]
+                         (let [payload (second (first @worker-calls))]
+                           (is (contains? payload :auth/refresh-token))
+                           (is (nil? (:auth/refresh-token payload))))
+                         (finish-async-test! done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (state/replace-state! state-prev)))))))
+
 (deftest rtc-download-graph-rejects-while-another-download-is-active-test
   (async done
          (let [state-prev (state/get-state)
