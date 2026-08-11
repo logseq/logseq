@@ -33,6 +33,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.entity :as entity]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -1552,10 +1553,17 @@
    {:value :custom-date
     :label (t :view.filter/custom-date)}])
 
+(defn- remove-filter-at
+  [filters idx]
+  (let [filters (vec filters)]
+    (into (subvec filters 0 idx)
+          (subvec filters (inc idx)))))
+
 (hsx/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
         [filter-data set-filter-data!] (hooks/use-state nil)
+        [picker-filter-idx set-picker-filter-idx!] (hooks/use-state nil)
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
@@ -1577,7 +1585,9 @@
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality property))
                                        (not= (:type column) :string))
-                                 (set-property! (or property internal-property))
+                                 (do
+                                   (set-picker-filter-idx! nil)
+                                   (set-property! (or property internal-property)))
                                  (do
                                    (shui/popup-hide!)
                                    (let [property internal-property
@@ -1646,17 +1656,30 @@
                                                                           (:block/uuid (first selected)))
                                                                    (set (map :block/uuid selected))
                                                                    selected)
-                                                  ;; `selected` is always the whole selection, so re-opening
-                                                  ;; this popup and choosing again has to update the property's
-                                                  ;; existing clause instead of appending a duplicate one.
-                                                  others (vec (remove (fn [[ident operator match]]
-                                                                        (and (= ident (:db/ident property))
-                                                                             (= operator :is)
-                                                                             (set? match)))
-                                                                      (:filters filters)))
-                                                  filters' (if (seq selected)
-                                                             (conj others [(:db/ident property) :is selected-value])
-                                                             others)]
+                                                  clauses (vec (:filters filters))
+                                                  new-filter [(:db/ident property) :is selected-value]
+                                                  filters' (cond
+                                                             (and (seq selected) (some? picker-filter-idx))
+                                                             (assoc clauses picker-filter-idx new-filter)
+
+                                                             (seq selected)
+                                                             (conj clauses new-filter)
+
+                                                             (some? picker-filter-idx)
+                                                             (remove-filter-at clauses picker-filter-idx)
+
+                                                             :else
+                                                             clauses)
+                                                  next-picker-filter-idx (when (seq selected)
+                                                                           (or picker-filter-idx
+                                                                               (count clauses)))]
+                                              (log/debug :event :view-filter/picker-update
+                                                         :property-ident (:db/ident property)
+                                                         :picker-filter-idx picker-filter-idx
+                                                         :selected-count (count selected)
+                                                         :filter-count-before (count clauses)
+                                                         :filter-count-after (count filters'))
+                                              (set-picker-filter-idx! next-picker-filter-idx)
                                               (set-filters! {:or? (:or? filters)
                                                              :filters filters'})))})))
                    :else
@@ -1952,11 +1975,7 @@
                 :on-click (fn [_e]
                             ;; Remove by position: two clauses can be equal, and removing by
                             ;; value would drop every copy at once.
-                            (let [new-filters (update filters :filters
-                                                      (fn [col]
-                                                        (let [col (vec col)]
-                                                          (into (subvec col 0 idx)
-                                                                (subvec col (inc idx))))))]
+                            (let [new-filters (update filters :filters remove-filter-at idx)]
                               (set-filters! new-filters)))}
                (ui/icon "x"))]))
          (:filters filters))]

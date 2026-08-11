@@ -306,26 +306,29 @@
         (let [[property-ident operator match] (first clauses)
               property (d/entity db property-ident)
               ref-property? (= :db.type/ref (:db/valueType property))
-              ;; Text types create a distinct property value block per block, so two blocks
-              ;; with the same value don't share an entity. row-matched? compares their
-              ;; content instead, which this :db/id identity fast path can't reproduce.
               match-by-content? (contains? db-property-type/closed-value-property-types
                                            (:logseq.property/type property))]
           (when (and ref-property?
-                     (not match-by-content?)
                      (#{:is :is-not} operator)
                      (set? match)
                      (seq match)
                      (not (contains? match :empty)))
-            (let [match-ids (set (keep #(->filter-match-id db %) match))]
-              (when (seq match-ids)
+            (let [match-values (if match-by-content?
+                                 (set (map (comp db-property/property-value-content
+                                                 #(d/entity db [:block/uuid %]))
+                                           match))
+                                 (set (keep #(->filter-match-id db %) match)))]
+              (when (seq match-values)
                 (fn [row]
                   (let [v (get row property-ident)
                         value-col (cond
                                     (set? v) v
                                     (nil? v) nil
                                     :else #{v})
-                        hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
+                        row-values (if match-by-content?
+                                     (map db-property/property-value-content value-col)
+                                     (keep #(->filter-match-id db %) value-col))
+                        hit? (boolean (some match-values row-values))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
 (defn- get-exclude-page-ids
