@@ -50,8 +50,16 @@
         blocks (:blocks delta)
         deleted (:deleted delta)]
     (when (= repo (state/get-current-repo))
-      (when-let [ids (not-empty (keep :db/id (vals deleted)))]
-        (state/sidebar-remove-deleted-block! ids))
+      (let [deleted-ids (not-empty (keep :db/id (vals deleted)))
+            recycled-ids (keep (fn [block]
+                                 (when (and (ldb/page? block)
+                                            (ldb/recycled? block))
+                                   (:db/id block)))
+                               (vals blocks))]
+        (when deleted-ids
+          (state/sidebar-remove-deleted-block! deleted-ids))
+        (when-let [removed-page-ids (not-empty (concat deleted-ids recycled-ids))]
+          (state/remove-pages-from-recent! removed-page-ids)))
       (when (and (current-page-deleted? current-page deleted)
                  (not (util/mobile?)))
         (route-handler/redirect-to-home!))
