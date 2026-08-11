@@ -80,6 +80,7 @@
 
 (def ^:private non-retriable-user-rsa-key-error-codes
   #{:ui-interaction-required
+    :db-sync/invalid-e2ee-password
     :ui-request-cancelled
     :ui-request-rejected
     :ui-request-timeout})
@@ -347,7 +348,12 @@
   (p/let [encrypted-private-key (if (string? encrypted-private-key-or-str)
                                   (ldb/read-transit-str encrypted-private-key-or-str)
                                   encrypted-private-key-or-str)
-          private-key (crypt/<decrypt-private-key password encrypted-private-key)
+          private-key (-> (crypt/<decrypt-private-key password encrypted-private-key)
+                          (p/catch (fn [error]
+                                     (p/rejected
+                                      (ex-info "invalid-e2ee-password"
+                                               {:code :db-sync/invalid-e2ee-password}
+                                               error)))))
           _ (<save-e2ee-password password)]
     private-key))
 

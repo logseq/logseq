@@ -20,11 +20,12 @@
        (error-texts (:error data))
        (error-texts (ex-cause error))))))
 
-(defn download-decrypt-failed?
+(defn e2ee-decrypt-failed?
   [error]
   (boolean
    (some (fn [text]
            (and (string? text)
-                (or (string/includes? text "decrypt-aes-key")
+                (or (string/includes? text "invalid-e2ee-password")
+                    (string/includes? text "decrypt-aes-key")
                     (string/includes? text "decrypt-private-key"))))
          (error-texts error))))
