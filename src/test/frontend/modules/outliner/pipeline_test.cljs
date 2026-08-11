@@ -70,3 +70,63 @@
             "Deleted block tombstones drop the matching sidebar entries."))
       (finally
         (state/replace-state! original-state)))))
+
+(deftest recycled-pages-are-removed-from-recents-test
+  (let [original-state (state/get-state)
+        repo "recycled-page-recents-test"
+        page-uuid (random-uuid)
+        delta {:graph-id repo
+               :rev 10
+               :blocks {page-uuid {:db/id 42
+                                   :block/uuid page-uuid
+                                   :block/tags [{:db/ident :logseq.class/Page}]
+                                   :logseq.property/deleted-at 1}}
+               :deleted {}
+               :children {}
+               :affected-keys #{[:entity page-uuid]}}
+        tx-meta {:client-id "client"
+                 :outliner-op :delete-page
+                 :deleted-page "Deleted page"}]
+    (try
+      (state/replace-state! {:client-id "client"
+                             :git/current-repo repo
+                             :ui/recent-pages {repo [42 7]}})
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-page (constantly nil)
+                    state/pub-event! (constantly nil)]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta tx-meta
+                                :delta delta})
+        (is (= [7] (state/get-recent-pages))
+            "Recycling a page removes only that page from recent history."))
+      (finally
+        (state/replace-state! original-state)))))
+
+(deftest hard-deleted-pages-are-removed-from-recents-test
+  (let [original-state (state/get-state)
+        repo "hard-deleted-page-recents-test"
+        page-uuid (random-uuid)
+        delta {:graph-id repo
+               :rev 11
+               :blocks {}
+               :deleted {page-uuid {:rev 11 :db/id 42}}
+               :children {}
+               :affected-keys #{[:entity page-uuid]}}
+        tx-meta {:client-id "client"
+                 :outliner-op :delete-page
+                 :deleted-page "Deleted page"}]
+    (try
+      (state/replace-state! {:client-id "client"
+                             :git/current-repo repo
+                             :ui/recent-pages {repo [42 7]}})
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-page (constantly nil)
+                    state/sidebar-remove-deleted-block! (constantly nil)
+                    state/pub-event! (constantly nil)]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta tx-meta
+                                :delta delta})
+        (is (= [7] (state/get-recent-pages))
+            "Hard deletion removes only that page from recent history."))
+      (finally
+        (state/replace-state! original-state)))))
