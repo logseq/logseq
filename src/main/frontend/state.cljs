@@ -1736,6 +1736,16 @@ should be done through this fn in order to get global config and config defaults
   (set-state! [:ui/recent-pages (get-current-repo)] v)
   (storage/set :ui/recent-pages (:ui/recent-pages (rfx/snapshot))))
 
+(defn remove-pages-from-recent!
+  [page-ids]
+  (when (seq page-ids)
+    (let [page-ids (set page-ids)
+          recent-pages (get-recent-pages)
+          remaining-pages (vec (remove page-ids recent-pages))]
+      (when (and (seq recent-pages)
+                 (not= recent-pages remaining-pages))
+        (set-recent-pages! remaining-pages)))))
+
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options (rfx/snapshot)))
 
