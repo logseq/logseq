@@ -312,6 +312,40 @@
            (result-titles :is-not))
         "Distinct property-value entities with equal text are both excluded by :is-not.")))
 
+(deftest get-view-data-class-objects-default-property-filter-preserves-ident-identity-test
+  (let [property-ident :user.property/label
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :properties {property-ident {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Objects"}
+                 :blocks [{:block/title "Same A"
+                           :build/tags [:Topic]
+                           :build/properties {:user.property/label "same"}}
+                          {:block/title "Same B"
+                           :build/tags [:Topic]
+                           :build/properties {:user.property/label "same"}}]}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        same-a (db-test/find-block-by-content @conn "Same A")
+        same-b (db-test/find-block-by-content @conn "Same B")
+        value-a (get same-a property-ident)
+        value-b (get same-b property-ident)
+        _ (d/transact! conn [[:db/add (:db/id value-a) :db/ident :user.value/same-a]
+                             [:db/add (:db/id value-b) :db/ident :user.value/same-b]])
+        selected-value-uuid (:block/uuid value-a)
+        result-titles
+        (fn [operator]
+          (let [result (db-view/get-view-data
+                        @conn view-id
+                        {:view-feature-type :class-objects
+                         :view-for-id class-id
+                         :filters {:or? false
+                                   :filters [[property-ident operator #{selected-value-uuid}]]}})]
+            (set (map (fn [id] (:block/title (d/entity @conn id))) (:data result)))))]
+    (is (= #{"Same A"} (result-titles :is)))
+    (is (= #{"Same B"} (result-titles :is-not)))))
+
 (deftest get-view-data-class-objects-groups-by-number-property-sorts-numerically-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}

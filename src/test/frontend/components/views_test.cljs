@@ -294,14 +294,14 @@
         value-a (random-uuid)
         value-b (random-uuid)
         value-c (random-uuid)
-        filters* (atom {:or? false
-                        :filters [[property-ident :is #{value-a}]]})
+        initial-filters {:or? false
+                         :filters [[property-ident :is #{value-a}]]}
+        filters* (atom initial-filters)
         property-state* (atom {:db/ident property-ident
                                :block/title "Tags"
                                :logseq.property/type :default})
         filter-data-state* (atom {:values []})
-        picker-filter-idx-state* (atom nil)
-        state-atoms [property-state* filter-data-state* picker-filter-idx-state*]
+        state-atoms [property-state* filter-data-state*]
         render-picker-option
         (fn []
           (let [state-call* (atom -1)
@@ -319,7 +319,8 @@
                 nil
                 []
                 {:data-fns {:set-filters! #(reset! filters* %)}
-                 :state {:filters @filters*}}
+                 ;; Popup content keeps the table props captured when it opens.
+                 :state {:filters initial-filters}}
                 {}))
               @option*)))]
     ((:on-chosen (render-picker-option))
@@ -336,7 +337,12 @@
            (:filters @filters*))
         "Further choices update only the clause created by this picker session.")
 
-    ((:on-chosen (render-picker-option)) nil false [])
+    (let [error (try
+                  ((:on-chosen (render-picker-option)) nil false [])
+                  nil
+                  (catch :default e
+                    e))]
+      (is (nil? error) "Clearing the picker does not throw."))
     (is (= [[property-ident :is #{value-a}]]
            (:filters @filters*))
         "Clearing this picker removes only its own clause.")))

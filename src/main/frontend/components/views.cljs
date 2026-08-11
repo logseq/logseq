@@ -1563,7 +1563,6 @@
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
         [filter-data set-filter-data!] (hooks/use-state nil)
-        [picker-filter-idx set-picker-filter-idx!] (hooks/use-state nil)
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
@@ -1585,9 +1584,7 @@
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality property))
                                        (not= (:type column) :string))
-                                 (do
-                                   (set-picker-filter-idx! nil)
-                                   (set-property! (or property internal-property)))
+                                 (set-property! (or property internal-property))
                                  (do
                                    (shui/popup-hide!)
                                    (let [property internal-property
@@ -1658,28 +1655,16 @@
                                                                    selected)
                                                   clauses (vec (:filters filters))
                                                   new-filter [(:db/ident property) :is selected-value]
-                                                  filters' (cond
-                                                             (and (seq selected) (some? picker-filter-idx))
-                                                             (assoc clauses picker-filter-idx new-filter)
-
-                                                             (seq selected)
+                                                  filters' (if (seq selected)
                                                              (conj clauses new-filter)
-
-                                                             (some? picker-filter-idx)
-                                                             (remove-filter-at clauses picker-filter-idx)
-
-                                                             :else
-                                                             clauses)
-                                                  next-picker-filter-idx (when (seq selected)
-                                                                           (or picker-filter-idx
-                                                                               (count clauses)))]
+                                                             clauses)]
                                               (log/debug :event :view-filter/picker-update
                                                          :property-ident (:db/ident property)
-                                                         :picker-filter-idx picker-filter-idx
+                                                         :picker-filter-idx (when (seq selected)
+                                                                              (count clauses))
                                                          :selected-count (count selected)
                                                          :filter-count-before (count clauses)
                                                          :filter-count-after (count filters'))
-                                              (set-picker-filter-idx! next-picker-filter-idx)
                                               (set-filters! {:or? (:or? filters)
                                                              :filters filters'})))})))
                    :else

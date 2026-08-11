@@ -305,29 +305,33 @@
       (when (= 1 (count clauses))
         (let [[property-ident operator match] (first clauses)
               property (d/entity db property-ident)
-              ref-property? (= :db.type/ref (:db/valueType property))
-              match-by-content? (contains? db-property-type/closed-value-property-types
-                                           (:logseq.property/type property))]
+              ref-property? (= :db.type/ref (:db/valueType property))]
           (when (and ref-property?
                      (#{:is :is-not} operator)
                      (set? match)
                      (seq match)
                      (not (contains? match :empty)))
-            (let [match-values (if match-by-content?
-                                 (set (map (comp db-property/property-value-content
-                                                 #(d/entity db [:block/uuid %]))
-                                           match))
-                                 (set (keep #(->filter-match-id db %) match)))]
-              (when (seq match-values)
+            (let [match-entities (keep #(d/entity db [:block/uuid %]) match)
+                  match-entity-ids (set (keep #(->filter-match-id db %) match))
+                  match-content-values (set (map db-property/property-value-content match-entities))]
+              (when (seq match-entities)
                 (fn [row]
                   (let [v (get row property-ident)
                         value-col (cond
                                     (set? v) v
                                     (nil? v) nil
                                     :else #{v})
-                        row-values (if match-by-content?
-                                     (map db-property/property-value-content value-col)
-                                     (keep #(->filter-match-id db %) value-col))
+                        entity? (de/entity? (first value-col))
+                        match-as-entity? (and entity?
+                                              (match-property-value-as-entity? (first value-col) property))
+                        match-values (cond
+                                       match-as-entity? match-entity-ids
+                                       entity? match-content-values
+                                       :else match)
+                        row-values (cond
+                                     match-as-entity? (keep #(->filter-match-id db %) value-col)
+                                     entity? (map db-property/property-value-content value-col)
+                                     :else value-col)
                         hit? (boolean (some match-values row-values))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
