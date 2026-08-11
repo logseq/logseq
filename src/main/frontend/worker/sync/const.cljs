@@ -5,6 +5,8 @@
             [logseq.db.frontend.property :as db-property]))
 
 (defkeywords
+  :db-sync/invalid-e2ee-password
+  {:doc "The supplied E2EE password cannot decrypt the current server private key."}
   :rtc/ignore-attr-when-syncing
   {:doc "keyword option for RTC. ignore this *attr* when syncing graph. Default false"}
   :rtc/ignore-entity-when-init-upload

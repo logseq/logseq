@@ -80,7 +80,6 @@
 
 (def ^:private non-retriable-user-rsa-key-error-codes
   #{:ui-interaction-required
-    :db-sync/invalid-e2ee-password
     :ui-request-cancelled
     :ui-request-rejected
     :ui-request-timeout})
@@ -341,7 +340,7 @@
                                                  :reason :empty-ui-password}))
     password))
 
-(defn- <verify-and-save-e2ee-password!
+(defn- <verify-e2ee-password
   [password encrypted-private-key-or-str]
   (when-not (seq password)
     (fail-missing-e2ee-password! {:reason :empty-password}))
@@ -350,10 +349,17 @@
                                   encrypted-private-key-or-str)
           private-key (-> (crypt/<decrypt-private-key password encrypted-private-key)
                           (p/catch (fn [error]
-                                     (p/rejected
-                                      (ex-info "invalid-e2ee-password"
-                                               {:code :db-sync/invalid-e2ee-password}
-                                               error)))))
+                                     (if (true? (:invalid-password? (ex-data error)))
+                                       (p/rejected
+                                        (ex-info "invalid-e2ee-password"
+                                                 {:code :db-sync/invalid-e2ee-password}
+                                                 error))
+                                       (p/rejected error)))))]
+    private-key))
+
+(defn- <verify-and-save-e2ee-password!
+  [password encrypted-private-key-or-str]
+  (p/let [private-key (<verify-e2ee-password password encrypted-private-key-or-str)
           _ (<save-e2ee-password password)]
     private-key))
 
@@ -363,7 +369,7 @@
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base
                                          :field :e2ee-base}))
-    (p/let [{:keys [encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
+    (p/let [{:keys [encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
       (when-not (string? encrypted-private-key)
         (fail-fast :db-sync/missing-field {:base base
                                            :field :encrypted-private-key}))
@@ -444,32 +450,42 @@
          (p/resolved nil))))))
 
 (defn- <decrypt-private-key
-  [encrypted-private-key-str]
-  (let [<decrypt-with-ui-request
-        (fn [encrypted-private-key]
-          (p/let [password (<request-e2ee-password-from-ui {:reason :decrypt-user-rsa-private-key})]
-            (<verify-and-save-e2ee-password! password encrypted-private-key)))
+  ([encrypted-private-key-str]
+   (<decrypt-private-key encrypted-private-key-str nil))
+  ([encrypted-private-key-str {:keys [ui-password* save-ui-password?]
+                               :or {save-ui-password? true}}]
+   (let [<decrypt-with-ui-request
+         (fn [encrypted-private-key]
+           (p/let [password (or (when (and ui-password* (seq @ui-password*))
+                                  @ui-password*)
+                                (<request-e2ee-password-from-ui {:reason :decrypt-user-rsa-private-key}))
+                   _ (when ui-password*
+                       (reset! ui-password* password))
+                   private-key (<verify-e2ee-password password encrypted-private-key)
+                   _ (when save-ui-password?
+                       (<save-e2ee-password password))]
+             private-key))
 
-        <decrypt-in-headless
-        (fn [encrypted-private-key]
-          (let [refresh-token (:auth/refresh-token @worker-state/*state)]
-            (p/let [text (<read-e2ee-password-text refresh-token)]
-              (if (seq text)
-                (p/let [password (<decrypt-e2ee-password-text refresh-token text)]
-                  (when-not (seq password)
-                    (fail-missing-e2ee-password! {:reason :headless-empty-password
-                                                  :hint "Provide --e2ee-password to persist it."}))
-                  (crypt/<decrypt-private-key password encrypted-private-key))
-                (p/rejected (missing-e2ee-password-ex {:reason :missing-persisted-password
-                                                       :hint "Provide --e2ee-password to persist it."}))))))]
-    (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
-      (-> (<decrypt-in-headless encrypted-private-key)
-          (p/catch (fn [headless-error]
-                     (if-not (interactive-runtime?)
-                       (p/rejected headless-error)
-                       (-> (<decrypt-with-ui-request encrypted-private-key)
-                           (p/catch (fn [ui-error]
-                                      (p/rejected ui-error)))))))))))
+         <decrypt-in-headless
+         (fn [encrypted-private-key]
+           (let [refresh-token (:auth/refresh-token @worker-state/*state)]
+             (p/let [text (<read-e2ee-password-text refresh-token)]
+               (if (seq text)
+                 (p/let [password (<decrypt-e2ee-password-text refresh-token text)]
+                   (when-not (seq password)
+                     (fail-missing-e2ee-password! {:reason :headless-empty-password
+                                                   :hint "Provide --e2ee-password to persist it."}))
+                   (<verify-e2ee-password password encrypted-private-key))
+                 (p/rejected (missing-e2ee-password-ex {:reason :missing-persisted-password
+                                                        :hint "Provide --e2ee-password to persist it."}))))))]
+     (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
+       (if (and ui-password* (seq @ui-password*))
+         (<decrypt-with-ui-request encrypted-private-key)
+         (-> (<decrypt-in-headless encrypted-private-key)
+             (p/catch (fn [headless-error]
+                        (if-not (interactive-runtime?)
+                          (p/rejected headless-error)
+                          (<decrypt-with-ui-request encrypted-private-key))))))))))
 
 (defn- <import-public-key
   [public-key-str]
@@ -509,32 +525,41 @@
 
 (defn- <load-user-rsa-key-material
   [base user-id graph-id]
-  (letfn [(<load-once []
-            (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base nil)
-                    _ (when-not (and (string? public-key) (string? encrypted-private-key))
-                        (fail-fast :db-sync/missing-field
-                                   {:base base
-                                    :user-id user-id
-                                    :graph-id graph-id
-                                    :field :user-rsa-key-pair}))
-                    public-key' (<import-public-key public-key)
-                    private-key' (<decrypt-private-key encrypted-private-key)]
-              {:public-key public-key'
-               :private-key private-key'}))]
-    (-> (<load-once)
-        (p/catch (fn [error]
-                   (if-not (user-rsa-key-cache-retryable-error? error)
-                     (p/rejected error)
-                     (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)]
-                           (<load-once))
-                         (p/catch (fn [retry-error]
-                                    (log/warn :db-sync/user-rsa-key-cache-invalid
-                                              {:base base
-                                               :user-id user-id
-                                               :graph-id graph-id
-                                               :first-error error
-                                               :retry-error retry-error})
-                                    (throw retry-error))))))))))
+  (let [ui-password* (atom nil)]
+    (letfn [(<load-once []
+              (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base nil)
+                      _ (when-not (and (string? public-key) (string? encrypted-private-key))
+                          (fail-fast :db-sync/missing-field
+                                     {:base base
+                                      :user-id user-id
+                                      :graph-id graph-id
+                                      :field :user-rsa-key-pair}))
+                      public-key' (<import-public-key public-key)
+                      private-key' (<decrypt-private-key encrypted-private-key
+                                                         {:ui-password* ui-password*
+                                                          :save-ui-password? false})]
+                {:public-key public-key'
+                 :private-key private-key'}))]
+      (-> (<load-once)
+          (p/catch (fn [error]
+                     (if-not (user-rsa-key-cache-retryable-error? error)
+                       (p/rejected error)
+                       (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)]
+                             (<load-once))
+                           (p/catch (fn [retry-error]
+                                      (log/warn :db-sync/user-rsa-key-cache-invalid
+                                                {:base base
+                                                 :user-id user-id
+                                                 :graph-id graph-id
+                                                 :first-error error
+                                                 :retry-error retry-error})
+                                      (throw retry-error)))))))
+          (p/then (fn [key-material]
+                    (if-let [password (when (seq @ui-password*)
+                                       @ui-password*)]
+                      (p/let [_ (<save-e2ee-password password)]
+                        key-material)
+                      key-material)))))))
 
 (defn <preflight-upload-e2ee!
   [repo encrypted-graph?]
