@@ -12,7 +12,6 @@
             [frontend.worker.sync.transport :as sync-transport]
             [frontend.worker.sync.util :as sync-util]
             [lambdaisland.glogi :as log]
-            [logseq.db-sync.checksum :as sync-checksum]
             [promesa.core :as p]
             [frontend.worker-common.util :as worker-util]))
 
@@ -28,6 +27,7 @@
     :get-client-ops-conn worker-state/get-client-ops-conn
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+    :get-missing-asset-upload-files sync-assets/get-missing-asset-upload-files
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
@@ -135,28 +135,23 @@
   [repo]
   (pos? (or (client-op/get-pending-local-tx-count repo) 0)))
 
-(defn- checksum-compare-ready?
+(defn- synced-checksum-ready?
   [repo client local-t remote-t]
   (and (= local-t remote-t)
        (not (pending-local-tx? repo))
        (empty? @(:inflight client))))
 
-(defn- local-sync-checksum
-  [repo]
-  (if-let [checksum (client-op/get-local-checksum repo)]
-    checksum
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [checksum (sync-checksum/recompute-checksum @conn)]
-        (client-op/update-local-checksum repo checksum)
-        checksum)
-      (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
+(defn- checksum-compare-ready?
+  [repo client local-t remote-t]
+  (and (synced-checksum-ready? repo client local-t remote-t)
+       (string? (client-op/get-local-checksum repo))))
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
   (when worker-util/dev-or-test?
     (when (and (string? remote-checksum)
                (checksum-compare-ready? repo client local-tx remote-tx))
-      (let [local-checksum (local-sync-checksum repo)]
+      (let [local-checksum (client-op/get-local-checksum repo)]
         (when-not (= local-checksum remote-checksum)
           (let [mismatch-data (merge context
                                      {:type :db-sync/checksum-mismatch
@@ -171,10 +166,12 @@
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
+  (sync-apply/clear-upload-response-timeout! client)
   (let [reason (:reason message)
         remote-tx (:t message)
         success-tx-ids (:success-tx-ids message)
-        failed-tx-id (:failed-tx-id message)]
+        failed-tx-id (:failed-tx-id message)
+        missing-block-uuids (:missing-block-uuids message)]
     (when (nil? reason)
       (fail-fast :db-sync/missing-field
                  {:repo repo :type "tx/reject" :field :reason}))
@@ -186,6 +183,10 @@
         (require-uuid tx-id {:repo repo :type "tx/reject" :field :success-tx-ids})))
     (when (contains? message :failed-tx-id)
       (require-uuid failed-tx-id {:repo repo :type "tx/reject" :field :failed-tx-id}))
+    (when (contains? message :missing-block-uuids)
+      (require-seq missing-block-uuids {:repo repo :type "tx/reject" :field :missing-block-uuids})
+      (doseq [block-uuid missing-block-uuids]
+        (require-uuid block-uuid {:repo repo :type "tx/reject" :field :missing-block-uuids})))
     (case reason
       "stale"
       (request-pull! client local-tx)
@@ -210,15 +211,16 @@
                             (contains? message :t) (assoc :t remote-tx)
                             (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
                             (some? failed-tx-id) (assoc :failed-tx-id failed-tx-id)
+                            (seq missing-block-uuids) (assoc :missing-block-uuids (vec missing-block-uuids))
                             (some? data) (assoc :data data))]
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))
           (do
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
             (when failed-tx-id
-              (sync-apply/mark-failed-txs! repo [failed-tx-id])))
+              (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
           ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/mark-failed-txs! repo inflight))
+          (sync-apply/rollback-and-mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
@@ -263,13 +265,14 @@
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
+  (sync-apply/ack-upload-response! repo client)
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
     (sync-util/clear-last-sync-error! client)
-    (broadcast-rtc-state! client)
     (sync-apply/mark-pending-txs-false! repo @(:inflight client))
     (reset! (:inflight client) [])
+    (broadcast-rtc-state! client)
     (verify-sync-checksum! repo client next-local-tx remote-tx remote-checksum {:type "tx/batch/ok"})
     (sync-apply/enqueue-flush-pending! repo client)))
 
@@ -338,6 +341,9 @@
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
   (clear-pending-pull! client)
+  ;; (log/info ::handle-pull-ok! {:repo repo
+  ;;                              :remote-tx remote-tx
+  ;;                              :local-tx local-tx})
   (when (> remote-tx local-tx)
     (let [txs (:txs message)]
       (require-non-negative remote-tx {:repo repo :type "pull/ok"})
@@ -347,24 +353,27 @@
                                 :outliner-op (:outliner-op data)
                                 :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
                              txs)]
+        ;; (log/info ::handle-pull-remote-txs-count {:count (count remote-txs)})
         (when (seq remote-txs)
           (->
            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                   ;; _ (log/info ::handle-pull-request-aes-key {})
                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                   ;; _ (when (some? aes-key)
+                   ;;     (log/info ::handle-pull-request-aes-key-success {}))
                    _ (when (and graph-e2ee? (nil? aes-key))
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                    remote-txs* (if aes-key
-                                 (p/all (mapv (fn [{:keys [t tx-data]}]
+                                 (p/all (mapv (fn [{:keys [tx-data] :as remote-tx}]
                                                 (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
-                                                  {:t t
-                                                   :tx-data tx-data*}))
+                                                  (assoc remote-tx :tx-data tx-data*)))
                                               remote-txs))
-                                 (p/resolved remote-txs))]
-             (try
-               (sync-apply/apply-remote-txs! repo client remote-txs*)
-               (catch :default e
-                 (log/error ::apply-remote-tx e)
-                 (throw e)))
+                                 (p/resolved remote-txs))
+                   _ (try
+                       (sync-apply/apply-remote-txs! repo client remote-txs*)
+                       (catch :default e
+                         (log/error ::apply-remote-tx e)
+                         (throw e)))]
              (client-op/update-local-tx repo remote-tx)
              (broadcast-rtc-state! client)
              (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})

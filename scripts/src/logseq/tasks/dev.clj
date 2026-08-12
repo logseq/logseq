@@ -30,9 +30,28 @@
   (shell "pnpm cljs:test-no-worker")
   (apply shell "pnpm cljs:run-test-no-worker" args))
 
-(def test-jobs 2)
+(def test-jobs (min 5 (.availableProcessors (Runtime/getRuntime))))
+(def test-batches-per-job 6)
 
 (def default-test-args ["-r" "^(?!logseq.db-sync.).*"])
+
+(def isolated-test-namespaces
+  #{"frontend.components.block.drop-boundary-test"
+    "frontend.handler.db-based.page-test"
+    "frontend.handler.editor-async-test"
+    "frontend.handler.editor-lifecycle-test"
+    "frontend.handler.editor-test"
+    "frontend.handler.route-test"
+    "frontend.rfx-test"
+    "frontend.worker.db-core-test"})
+
+(def serial-test-namespaces
+  #{"frontend.db.query-dsl-test"
+    "frontend.worker.search-test"})
+
+(defn isolated-test-namespace?
+  [test-ns]
+  (contains? isolated-test-namespaces test-ns))
 
 (defn- run-parallel!
   ([tasks]
@@ -73,32 +92,66 @@
        (remove string/blank?)
        vec))
 
-(defn- namespace-buckets
+(defn- round-robin-batches
+  [items batch-count]
+  (when (pos? batch-count)
+    (->> items
+         (map-indexed (fn [idx item]
+                        [(mod idx batch-count) item]))
+         (group-by first)
+         (sort-by first)
+         (mapv (fn [[_ indexed-items]]
+                 (mapv second indexed-items))))))
+
+(defn- namespace-batches
   [test-namespaces]
-  (let [bucket-count (min test-jobs (count test-namespaces))]
-    (when (pos? bucket-count)
-      (->> test-namespaces
-           (map-indexed (fn [idx test-ns]
-                          [(mod idx bucket-count) test-ns]))
-           (group-by first)
-           (sort-by first)
-           (mapv (fn [[_ indexed-namespaces]]
-                   (mapv second indexed-namespaces)))))))
+  (let [priority-namespaces ["frontend.handler.editor-test"
+                             "frontend.worker.db-core-test"
+                             "frontend.handler.editor-async-test"]
+        priority-set (set priority-namespaces)
+        priority (->> priority-namespaces
+                      (filter (set test-namespaces))
+                      (mapv vector))
+        isolated (->> test-namespaces
+                      (filter isolated-test-namespace?)
+                      (remove priority-set)
+                      (mapv vector))
+        shared (remove isolated-test-namespace? test-namespaces)
+        batch-count (min (* test-jobs test-batches-per-job) (count shared))
+        batches (round-robin-batches shared batch-count)]
+    (into priority
+          (loop [batches (seq batches)
+                 isolated (seq isolated)
+                 result []]
+            (if (or batches isolated)
+              (recur (next batches)
+                     (next isolated)
+                     (cond-> result
+                       batches (conj (first batches))
+                       isolated (conj (first isolated))))
+              result)))))
 
 (defn- namespace-args
   [test-namespaces]
   (mapcat (fn [test-ns] ["-n" test-ns]) test-namespaces))
 
 (defn run-test-namespaces
-  "Run compiled tests in parallel by namespace. Pass args through to each static/tests.js namespace run."
+  "Run compiled tests in isolated Node processes, in parallel by namespace."
   [& args]
-  (let [test-namespaces (selected-test-namespaces args)]
+  (let [test-namespaces (selected-test-namespaces args)
+        parallel-namespaces (remove serial-test-namespaces test-namespaces)
+        serial-namespaces (filter serial-test-namespaces test-namespaces)
+        run-namespaces! (fn [namespaces]
+                          (apply run-shell {:shutdown nil
+                                            :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
+                                 "node" "static/tests.js"
+                                 (concat (namespace-args namespaces) args)))]
     (run-parallel! test-jobs
-                   (mapv (fn [bucket]
-                           #(apply run-shell {:shutdown nil
-                                              :extra-env {"LOGSEQ_STABLE_IDENTS" "1"}}
-                                   "node" "static/tests.js" (concat (namespace-args bucket) args)))
-                         (namespace-buckets test-namespaces)))))
+                   (mapv (fn [test-namespaces]
+                           #(run-namespaces! test-namespaces))
+                         (namespace-batches parallel-namespaces)))
+    (doseq [test-ns serial-namespaces]
+      (run-namespaces! [test-ns]))))
 
 (defn parallel-test
   "Compile tests, then run them in parallel by namespace."

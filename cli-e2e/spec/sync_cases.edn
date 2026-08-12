@@ -157,7 +157,7 @@
     :stdout-json-paths
     {[:status] "error",
      [:error :code] "graph-already-exists",
-     [:error :context :graph-name] "{{graph}}"},
+     [:error :data :graph-name] "{{graph}}"},
     :stdout-contains ["delete it before uploading again"]},
    :id "sync-upload-rejects-duplicate-remote-graph",
    :graph "sync-e2e-upload-rejects-duplicate-remote-graph"}

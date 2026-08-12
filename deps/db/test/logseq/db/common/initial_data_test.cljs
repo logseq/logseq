@@ -4,8 +4,10 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest async use-fixtures is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -44,6 +46,17 @@
                          :where [?b :file/content] [?b :file/path "logseq/config.edn"]])
                   (map first)))
           "Correct file with content is found"))))
+
+(deftest get-initial-data-includes-property-description-datoms
+  (create-graph-dir "tmp/graphs" "test-db")
+  (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
+        _ (d/transact! conn* (sqlite-create-graph/build-db-initial-data "{}"))
+        {:keys [schema initial-data]} (common-initial-data/get-initial-data @conn*)
+        conn (d/conn-from-datoms initial-data schema)
+        description (-> (d/entity @conn :logseq.property/deadline)
+                        :logseq.property/description)]
+    (is (string/includes? (str (db-property/property-value-content description))
+                          "finish something"))))
 
 (deftest restore-initial-data
   (create-graph-dir "tmp/graphs" "test-db")

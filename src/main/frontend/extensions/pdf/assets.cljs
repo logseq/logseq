@@ -2,9 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.fs :as fs]
@@ -37,10 +35,17 @@
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
         protocol-link? (common-config/protocol-path? href)
+        local-asset-link? (common-config/local-protocol-asset? href)
         filename (util/node-path.basename original-path)
         ext-name "pdf"
-        url (if protocol-link?
+        url (cond
+              local-asset-link?
+              (assets-handler/normalize-asset-resource-url (fs/asset-path-normalize href))
+
+              protocol-link?
               href
+
+              :else
               (assets-handler/normalize-asset-resource-url original-path))
         filename' (if protocol-link?
                     filename
@@ -63,38 +68,53 @@
 
 (defonce ^:private *pending-area-image-asset-ids-by-repo (atom {}))
 
+(defn- asset-identities
+  [asset]
+  (if (map? asset)
+    (set (keep asset [:db/id :block/uuid]))
+    #{asset}))
+
 (defn pending-area-image-asset?
   [repo asset-id]
   (contains? (get @*pending-area-image-asset-ids-by-repo repo) asset-id))
 
 (defn- mark-pending-area-image-asset!
-  [repo asset-id]
-  (swap! *pending-area-image-asset-ids-by-repo update repo (fnil conj #{}) asset-id))
+  [repo asset]
+  (swap! *pending-area-image-asset-ids-by-repo update repo
+         (fnil into #{}) (asset-identities asset)))
 
 (defn- clear-pending-area-image-asset!
-  [repo asset-id]
+  [repo asset]
   (swap! *pending-area-image-asset-ids-by-repo
          (fn [repo->asset-ids]
-           (let [asset-ids (disj (get repo->asset-ids repo #{}) asset-id)]
+           (let [asset-ids (apply disj (get repo->asset-ids repo #{})
+                                  (asset-identities asset))]
              (if (seq asset-ids)
                (assoc repo->asset-ids repo asset-ids)
                (dissoc repo->asset-ids repo))))))
 
+(defn <highlight-color-id
+  [repo color]
+  (when color
+    (p/let [closed-values (db-async/<get-property-closed-values repo :logseq.property.pdf/hl-color)]
+      (some (fn [color-block]
+              (when (= (:block/title color-block) color)
+                (:db/id color-block)))
+            closed-values))))
+
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
   (when-let [pdf-block (:block pdf-current)]
-    (let [ref-block (db-model/query-block-by-uuid id)]
+    (p/let [ref-block (db-async/<get-block (state/get-current-repo) id {:children? false})]
       (if (:block/title ref-block)
         (do
           (println "[existed ref block]" ref-block)
           ref-block)
-        (let [ref-asset-id (:image content)
-              image? (not (nil? ref-asset-id))
-              text (if image? (i18n/locale-format-date (js/Date.))
-                       (:text content))
-              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
-                                           (:db/id color))) colors)]
+        (p/let [ref-asset-id (:image content)
+                image? (not (nil? ref-asset-id))
+                text (if image? (i18n/locale-format-date (js/Date.))
+                         (:text content))
+                color-id (<highlight-color-id (state/get-current-repo) (:color properties))]
           (when color-id
             (let [properties (cond->
                               {:block/tags #{:logseq.class/Pdf-annotation}
@@ -124,7 +144,7 @@
     (p/do!
      (when asset-block
        (p/let [_ (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})]
-         (clear-pending-area-image-asset! (state/get-current-repo) (:db/id asset-block))))
+         (clear-pending-area-image-asset! (state/get-current-repo) asset-block)))
      ref-block)))
 
 (defn db-based-load-hls-data$
@@ -134,10 +154,9 @@
                             '[:find (pull ?e [*])
                               :in $ ?ref-id
                               :where [?e :logseq.property/asset ?ref-id]]
-                            ref-id)
-          block-entity (db/entity ref-id)]
+                            ref-id)]
     (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))
-          extra {:page (:logseq.property.asset/last-visit-page block-entity)}]
+          extra {:page (:logseq.property.asset/last-visit-page block)}]
       {:highlights highlights
        :extra (when (some #(not (nil? (% extra))) [:page]) extra)})))
 
@@ -154,8 +173,8 @@
   [repo-url _repo-dir _current _new-hl _old-hl png]
   (p/let [result (db-based-persist-hl-area-image repo-url png)
           asset (first result)]
-    (when-let [asset-id (:db/id asset)]
-      (mark-pending-area-image-asset! repo-url asset-id))
+    (when asset
+      (mark-pending-area-image-asset! repo-url asset))
     asset))
 
 (defn persist-hl-area-image$
@@ -192,13 +211,13 @@
 
 (defn update-hl-block!
   [highlight]
-  (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (when-let [color (get-in highlight [:properties :color])]
-      (let [k :logseq.property.pdf/hl-color
-            color' (let [colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
-                     (some (fn [color-block] (when (= (:block/title color-block) color)
-                                               (:db/id color-block))) colors))]
-        (property-handler/set-block-property! (:block/uuid block) k color')))))
+  (when-let [repo (state/get-current-repo)]
+    (p/let [block (db-async/<get-block repo (:id highlight) {:children? false})]
+      (when-let [color (get-in highlight [:properties :color])]
+        (p/let [color-id (<highlight-color-id repo color)]
+          (property-handler/set-block-property! (:block/uuid block)
+                                                :logseq.property.pdf/hl-color
+                                                color-id))))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
@@ -214,8 +233,10 @@
 
 (defn del-ref-block!
   [{:keys [id]}]
-  (when-let [block (db-model/get-block-by-uuid id)]
-    (editor-handler/delete-block-aux! block)))
+  (when-let [repo (state/get-current-repo)]
+    (p/let [block (db-async/<get-block repo id {:children? false})]
+      (when block
+        (editor-handler/delete-block-aux! block)))))
 
 (defn copy-hl-ref!
   [highlight ^js viewer]

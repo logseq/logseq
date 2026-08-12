@@ -4,7 +4,6 @@
             [frontend.components.assets.pdf-annotations :as pdf-annotations]
             [frontend.components.property.value :as pv]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -62,7 +61,7 @@
 
 (hsx/defc asset-pdf-title-cell
   [original-cell table row column style annotation-index set-expanded-pdf-ids!]
-  (let [pdf-id (:db/id row)
+  (let [pdf-id (pdf-annotations/row-id row)
         annotations (get-in annotation-index [:pdf-id->annotations pdf-id])
         expanded? (:asset-table/expanded? row)]
     (if (seq annotations)
@@ -106,8 +105,8 @@
 (defn- annotation-title-row
   "Adds title rendering metadata to an Asset annotation image row."
   [row annotation-index]
-  (let [annotation (or (some-> row :asset-table/annotation-id db/entity)
-                       (get-in annotation-index [:image-id->annotation (:db/id row)]))]
+  (let [annotation (get-in annotation-index [:image-id->annotation
+                                              (pdf-annotations/row-id row)])]
     (assoc row
            :table/hide-title-actions? true
            :table/title-only-editor? (some? annotation)
@@ -178,7 +177,8 @@
                      (original-cell table (annotation-title-row row annotation-index) column style)
 
                      (and (pdf-annotations/pdf-asset? row)
-                          (seq (get-in annotation-index [:pdf-id->annotations (:db/id row)])))
+                          (seq (get-in annotation-index [:pdf-id->annotations
+                                                        (pdf-annotations/row-id row)])))
                      (asset-pdf-title-cell original-cell table row column style annotation-index
                                            set-expanded-pdf-ids!)
 

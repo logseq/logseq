@@ -2,10 +2,9 @@
   "Orphan Asset file discovery and cleanup UI."
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -43,17 +42,24 @@
       (catch :default _
         (common-uuid/gen-uuid :view-block-uuid file-name)))))
 
-(defn- asset-tagged-file-names
-  []
-  (let [db (db/get-db)]
-    (if-let [asset-class-id (:db/id (d/entity db :logseq.class/Asset))]
-      (->> (d/datoms db :avet :block/tags asset-class-id)
-           (keep (fn [{:keys [e]}]
-                   (let [asset (d/entity db e)]
-                     (when-not (ldb/recycled? asset)
-                       (local-asset-file-name asset)))))
-           set)
-      #{})))
+(defn- <asset-tagged-file-names
+  [repo]
+  (p/let [result (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find (pull ?asset
+                                [:block/uuid
+                                 :logseq.property.asset/type
+                                 :logseq.property.asset/external-url
+                                 :logseq.property/deleted-at
+                                 {:block/parent ...}])
+                    :where
+                    [?asset :block/tags :logseq.class/Asset]])]
+    (->> result
+         (keep (fn [[asset]]
+                 (when-not (ldb/recycled? asset)
+                   (local-asset-file-name asset))))
+         set)))
 
 (defn- asset-file->orphan
   [file-path stat]
@@ -69,7 +75,7 @@
   "Loads local files under the Asset root that have no Asset block."
   []
   (if-let [assets-root (config/get-current-repo-assets-root)]
-    (-> (p/let [existing (asset-tagged-file-names)
+    (-> (p/let [existing (<asset-tagged-file-names (state/get-current-repo))
                 file-paths (fs/readdir assets-root {:path-only? true})
                 missing-file-paths (remove #(contains? existing (path/filename %)) file-paths)]
           (p/all (keep (fn [file-path]

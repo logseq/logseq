@@ -1,18 +1,13 @@
 (ns frontend.components.reference
-  (:require [frontend.common.missionary :as c.m]
-            [frontend.components.reference-filters :as filters]
+  (:require [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.db.common.reference :as db-reference]
-            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
-            [io.factorhouse.hsx.core :as hsx]
-            [promesa.core :as p]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (hsx/defc references-aux
   [page-entity config]
@@ -43,56 +38,39 @@
                                                :else
                                                "text-warning")})))]
     (views/view
-     {:view-parent page-entity
+     {:view-parent-uuid (:block/uuid page-entity)
       :view-feature-type :linked-references
       :show-items-count? true
       :additional-actions [reference-filter]
-      :columns (views/build-columns config [] {})
+      :columns (views/build-columns config [] {:add-page-column? true})
       :config config
       :foldable-options (when (and (:linked-refs-section? config)
                                    (zero? open-blocks-level))
                           {:default-collapsed? true})})))
 
-(hsx/defc references-cp
-  [entity config]
-  (let [block (db/sub-block (:db/id entity))]
-       (references-aux block config)))
-
 (hsx/defc references
-  [entity config]
-  (when-let [id (:db/id entity)]
-    (let [[refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
-      (hooks/use-effect!
-       #(c.m/run-task*
-         (m/sp
-           (if-let [refs-count (:refs-count config)]
-             (set-refs-total-count! refs-count)
-             (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
-               (set-refs-total-count! result)))))
-       [id (:refs-count config)])
-      (when (> refs-total-count 0)
-        (ui/catch-error
-         (ui/component-error
-          "Linked References: Unexpected error.")
-         [:div.references
-          (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
+  [page-uuid config]
+  (let [page-entity (db-hooks/use-block page-uuid)
+        refs-total-count (db-hooks/use-resource [:block-ref-count page-uuid])]
+    (when (and page-entity
+               (number? refs-total-count)
+               (pos? refs-total-count))
+      (ui/catch-error
+       (ui/component-error
+        "Linked References: Unexpected error.")
+       [:div.references
+        (references-aux page-entity (assoc config :refs-total-count refs-total-count))]))))
 
 (hsx/defc unlinked-references
-  [entity config]
-  (when-let [id (:db/id entity)]
-    (let [[has-references? set-has-references!] (hooks/use-state nil)]
-      (hooks/use-effect!
-       (fn []
-         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check
-                                                 (state/get-current-repo) id {:unlinked? true})]
-           (set-has-references! result)))
-       [])
-      (when has-references?
-        (let [config (assoc config :highlight-query (:block/title entity))]
-          [:div.unlinked-references
-           (views/view
-            {:view-parent entity
-             :view-feature-type :unlinked-references
-             :columns (views/build-columns config [] {})
-             :foldable-options {:default-collapsed? true}
-             :config config})])))))
+  [page-uuid config]
+  (let [page-entity (db-hooks/use-block page-uuid)
+        has-references? (db-hooks/use-resource [:block-unlinked-ref-exists page-uuid])]
+    (when (and page-entity has-references?)
+      (let [config (assoc config :highlight-query (:block/title page-entity))]
+        [:div.unlinked-references
+         (views/view
+          {:view-parent-uuid page-uuid
+           :view-feature-type :unlinked-references
+           :columns (views/build-columns config [] {:add-page-column? true})
+           :defer-resource? true
+           :config config})]))))

@@ -35,7 +35,8 @@
                      sockets (.getWebSockets state)]
                  (doseq [^js ws sockets]
                    (when-let [attachment (.deserializeAttachment ws)]
-                     (swap! presence assoc ws (js->clj attachment :keywordize-keys true))))
+                     (when-let [user (presence/attachment->user attachment)]
+                       (swap! presence assoc ws user))))
                  (.setWebSocketAutoResponse
                   state
                   (js/WebSocketRequestResponsePair. "ping" "pong"))))

@@ -1,10 +1,8 @@
 (ns frontend.components.assets.pdf-annotations
   "PDF annotation row data helpers for Asset tables."
-  (:require [frontend.db :as db]
-            [frontend.db.async :as db-async]
+  (:require [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.state :as state]
-            [logseq.shui.table.core :as shui-table]
             [promesa.core :as p]))
 
 (def empty-pdf-annotation-asset-index
@@ -32,19 +30,36 @@
   (or (:db/id x)
       (when (number? x) x)))
 
+(defn- entity-identities
+  [x]
+  (cond
+    (map? x) (keep x [:block/uuid :db/id])
+    (or (uuid? x) (string? x) (number? x)) [x]
+    :else nil))
+
+(defn row-id
+  "Returns the worker-backed table identity for `row`."
+  [row]
+  (if (map? row)
+    (or (:block/uuid row) (:db/id row))
+    row))
+
 (defn- build-pdf-annotation-asset-index
   "Builds lookup maps from PDF annotation blocks."
   [annotations]
   (let [index (reduce
                (fn [index annotation]
-                 (let [pdf-asset (:logseq.property/asset annotation)
-                       image-asset (:logseq.property.pdf/hl-image annotation)
-                       pdf-id (:db/id pdf-asset)
-                       image-id (:db/id image-asset)]
-                   (if (and pdf-id image-id)
-                     (-> index
-                         (assoc-in [:image-id->annotation image-id] annotation)
-                         (update-in [:pdf-id->annotations pdf-id] (fnil conj []) annotation))
+                 (let [pdf-ids (entity-identities (:logseq.property/asset annotation))
+                       image-ids (entity-identities (:logseq.property.pdf/hl-image annotation))]
+                   (if (and (seq pdf-ids) (seq image-ids))
+                     (let [index (reduce (fn [index image-id]
+                                          (assoc-in index [:image-id->annotation image-id] annotation))
+                                        index
+                                        image-ids)]
+                       (reduce (fn [index pdf-id]
+                                 (update-in index [:pdf-id->annotations pdf-id] (fnil conj []) annotation))
+                               index
+                               pdf-ids))
                      index)))
                empty-pdf-annotation-asset-index
                annotations)]
@@ -64,6 +79,7 @@
                   {:transact-db? false}
                   '[:find (pull ?annotation
                                 [:db/id
+                                 :block/uuid
                                  :block/order
                                  {:logseq.property/asset
                                   [:db/id
@@ -71,7 +87,7 @@
                                    :logseq.property.asset/external-url
                                    :logseq.property.asset/external-file-name]}
                                  {:logseq.property.pdf/hl-image
-                                  [:db/id]}
+                                  [:db/id :block/uuid]}
                                  :logseq.property.pdf/hl-page
                                  :logseq.property.pdf/hl-value])
                     :where
@@ -85,13 +101,20 @@
 
 (defn- pending-pdf-area-image-asset?
   [row]
-  (when-let [id (shui-table/table-row-id row)]
+  (when-let [id (row-id row)]
     (pdf-assets/pending-area-image-asset? (state/get-current-repo) id)))
 
 (defn- annotation-image-id
   "Returns the image asset id attached to `annotation`."
   [annotation]
   (entity-id (:logseq.property.pdf/hl-image annotation)))
+
+(defn- annotation-image-identity
+  [annotation reference-id]
+  (let [image (:logseq.property.pdf/hl-image annotation)]
+    (if (or (uuid? reference-id) (string? reference-id))
+      (or (:block/uuid image) (:db/id image))
+      (or (:db/id image) (:block/uuid image)))))
 
 (defn- normalize-pdf-annotation
   "Normalizes numeric asset refs in `annotation` into db id maps."
@@ -104,14 +127,17 @@
     (update :logseq.property.pdf/hl-image #(hash-map :db/id %))
 
     (nil? (:logseq.property.pdf/hl-image annotation))
-    (assoc :logseq.property.pdf/hl-image {:db/id image-id})))
+    (assoc :logseq.property.pdf/hl-image
+           (if (or (uuid? image-id) (string? image-id))
+             {:block/uuid image-id}
+             {:db/id image-id}))))
 
 (defn- pdf-annotation-block?
   "Returns true when `annotation` looks like the parent of image asset `image-id`."
   [annotation image-id]
   (and annotation
-       (= image-id (annotation-image-id annotation))
-       (entity-id (:logseq.property/asset annotation))
+       (some #{image-id} (entity-identities (:logseq.property.pdf/hl-image annotation)))
+       (seq (entity-identities (:logseq.property/asset annotation)))
        (or (= :annotation (:logseq.property/ls-type annotation))
            (:logseq.property.pdf/hl-page annotation)
            (:logseq.property.pdf/hl-value annotation)
@@ -121,17 +147,16 @@
 (defn- row-pdf-annotation
   "Returns the PDF annotation parent attached to an image asset row."
   [row]
-  (when-let [id (shui-table/table-row-id row)]
-    (let [asset (or (db/entity id)
-                    (when (map? row) row))
-          annotation (:block/parent asset)]
-      (when (pdf-annotation-block? annotation id)
-        (normalize-pdf-annotation annotation id)))))
+  (when (map? row)
+    (when-let [id (row-id row)]
+      (let [annotation (:block/parent row)]
+        (when (pdf-annotation-block? annotation id)
+          (normalize-pdf-annotation annotation id))))))
 
 (defn augment-pdf-annotation-asset-index
   "Adds annotation parents found on current `rows` to `annotation-index`."
   [annotation-index rows]
-  (if (every? #(or (number? %) (map? %)) rows)
+  (if (every? #(or (number? %) (uuid? %) (string? %) (map? %)) rows)
     (let [row-annotations (keep row-pdf-annotation rows)]
       (if (seq row-annotations)
         (->> (concat (mapcat identity (vals (:pdf-id->annotations annotation-index)))
@@ -149,13 +174,15 @@
 (defn- pdf-annotation-image-ids
   "Returns annotation image asset ids for `pdf-id`."
   [annotation-index pdf-id]
-  (keep annotation-image-id (get-in annotation-index [:pdf-id->annotations pdf-id])))
+  (keep #(annotation-image-identity % pdf-id)
+        (get-in annotation-index [:pdf-id->annotations pdf-id])))
 
 (defn asset-row-selection-related-ids
   "Returns annotation image ids selected together with a PDF parent row."
   [row annotation-index]
   (when (pdf-asset? row)
-    (pdf-annotation-image-ids annotation-index (:db/id row))))
+    (let [id (row-id row)]
+      (pdf-annotation-image-ids annotation-index id))))
 
 (defn expand-selected-asset-row-ids
   "Expands selected PDF parent rows to include their annotation image ids."
@@ -178,24 +205,30 @@
   ([rows annotation-index expanded-pdf-ids]
    (build-pdf-annotation-table-data rows annotation-index expanded-pdf-ids pending-pdf-area-image-asset?))
   ([rows annotation-index expanded-pdf-ids pending-area-image-asset?]
-   (if (every? #(or (number? %) (map? %)) rows)
-     (let [row-ids (set (keep shui-table/table-row-id rows))
+   (if (every? #(or (number? %) (uuid? %) (string? %) (map? %)) rows)
+     (let [row-ids (set (keep row-id rows))
            image-id->annotation (:image-id->annotation annotation-index)
            pdf-id->annotations (:pdf-id->annotations annotation-index)
            nested-image-id? (fn [id]
                               (contains? image-id->annotation id))
            child-rows (fn [annotations]
                         (keep (fn [annotation]
-                                (when-let [image-id (annotation-image-id annotation)]
+                                (when-let [image-id (some row-ids
+                                                         (entity-identities
+                                                          (:logseq.property.pdf/hl-image annotation)))]
                                   (when (contains? row-ids image-id)
-                                    {:db/id image-id
-                                     :asset-table/nested? true
-                                     :asset-table/annotation-id (:db/id annotation)})))
+                                    (cond-> {:asset-table/nested? true
+                                             :asset-table/annotation-id (:db/id annotation)}
+                                      (or (uuid? image-id) (string? image-id))
+                                      (assoc :block/uuid image-id)
+
+                                      (number? image-id)
+                                      (assoc :db/id image-id)))))
                               annotations))]
        (vec
         (reduce
          (fn [result row]
-           (let [id (shui-table/table-row-id row)]
+           (let [id (row-id row)]
              (cond
                (nested-image-id? id)
                result
@@ -205,7 +238,10 @@
 
                (seq (get pdf-id->annotations id))
                (let [expanded? (contains? expanded-pdf-ids id)
-                     row' (if (map? row) row {:db/id row})
+                     row' (cond
+                            (map? row) row
+                            (or (uuid? row) (string? row)) {:block/uuid row}
+                            :else {:db/id row})
                      result' (conj result (assoc row' :asset-table/expanded? expanded?))]
                  (if expanded?
                    (into result' (child-rows (get pdf-id->annotations id)))

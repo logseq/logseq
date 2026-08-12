@@ -1,20 +1,47 @@
 (ns frontend.components.table.columns
   "Column construction helpers for Logseq table views."
-  (:require [datascript.impl.entity :as de]
-            [frontend.components.property.value :as pv]
+  (:require [frontend.components.property.value :as pv]
             [frontend.components.table.property-cell :as table-property-cell]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.shui.table.core :as shui-table]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def hidden-property-idents
   "Property columns hidden from regular table column construction."
   #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
     :block/created-at :block/updated-at :block/order :block/collapsed?
     :logseq.property/created-from-property})
+
+(defn- built-in-property
+  [ident]
+  (if-let [{:keys [title schema closed-values]} (get db-property/built-in-properties ident)]
+    (cond-> {:db/ident ident
+             :block/title title
+             :logseq.property/type (:type schema)}
+      (:cardinality schema)
+      (assoc :db/cardinality
+             (case (:cardinality schema)
+               :many :db.cardinality/many
+               :one :db.cardinality/one
+               (:cardinality schema)))
+
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))
+    (some (fn [[_ {:keys [closed-values]}]]
+            (some (fn [{:keys [db-ident value icon]}]
+                    (when (= ident db-ident)
+                      {:db/ident db-ident
+                       :block/title value
+                       :logseq.property/icon icon}))
+                  closed-values))
+          db-property/built-in-properties)))
+
+(defn- table-row-id
+  [row]
+  (if (map? row)
+    (or (:block/uuid row) (:db/id row))
+    row))
 
 (defn- column-behavior->table-column
   "Converts an internal column behavior map to the shui table column map."
@@ -45,11 +72,11 @@
    :name "#"
    :render-header (fn [_table _column] (header-index))
    :render-cell (fn [table row _column]
-                  (let [row-id (:db/id row)
+                  (let [row-id (table-row-id row)
                         row-idx (first
                                  (keep-indexed
                                   (fn [idx item]
-                                    (when (= row-id (shui-table/table-row-id item))
+                                    (when (= row-id (table-row-id item))
                                       idx))
                                   (:rows table)))]
                     (some-> row-idx inc)))
@@ -78,17 +105,17 @@
 
 (defn- normalize-column-property
   [property ident]
-  (if (de/entity? property)
+  (if (:db/ident property)
     property
-    (or (merge (db/entity ident) property) property)))
+    (or (some-> (built-in-property ident) (merge property)) property)))
 
 (defn- property-column-behavior
   [config context {:keys [header-cp block-title]} property]
   (when-let [ident (or (:db/ident property) (:id property))]
     (let [property (normalize-column-property property ident)
-          editable? (and (de/entity? property)
+          editable? (and (:db/ident property)
                          (table-property-cell/editable? context property))
-          get-value (when (de/entity? property)
+          get-value (when (:db/ident property)
                       (fn [row] (db-view/get-property-value-for-search row property)))]
       {:id ident
        :kind :property
@@ -98,11 +125,12 @@
        :render-header (or (:header property)
                           header-cp)
        :render-cell (or (:cell property)
-                        (when (de/entity? property)
+                        (when (:db/ident property)
                           (fn [_table row _column style]
                             (let [opts (cond->
                                          {:view? true
                                           :table-view? true
+                                          :view-parent (:view-parent config)
                                           :closed-value-display (when (or (= :block/tags (:db/ident property))
                                                                           (seq (:property/closed-values property)))
                                                                   :chip)
@@ -147,6 +175,7 @@
   | `:header-cp`       | Default property header renderer.
   | `:block-title`     | Title/value renderer used by title and text property cells.
   | `:timestamp-cell`  | Cell renderer for readonly timestamp system columns.
+  | `:page-column`     | Synthetic page column definition.
 
   Options:
 
@@ -155,10 +184,11 @@
   | `:with-object-name?`        | Include the object title column.
   | `:with-id?`                 | Include the `#` index column.
   | `:add-tags-column?`         | Add `:block/tags` when it is not already present.
+  | `:add-page-column?`         | Include the synthetic page column.
   | `:advanced-query?`          | Only include requested timestamp columns for advanced query tables.
   | `:readonly-property-idents` | Property idents that should render as readonly columns.
   | `:class-ident`              | Class ident used by column editability policy."
-  [config properties renderers & {:keys [with-object-name? with-id? add-tags-column? advanced-query?
+  [config properties renderers & {:keys [with-object-name? with-id? add-tags-column? add-page-column? advanced-query?
                                          readonly-property-idents class-ident]
                                   :or {with-object-name? true
                                        with-id? true
@@ -167,7 +197,7 @@
   (let [properties' (->>
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
-                       (conj properties (db/entity :block/tags)))
+                       (conj properties (built-in-property :block/tags)))
                      (remove (fn [property]
                                (or (nil? property)
                                    (contains? #{:logseq.property/hide?} (:db/ident property))))))
@@ -192,6 +222,8 @@
              (timestamp-column-behavior :block/created-at (t :page/created-at) renderers))
            (when (or (not advanced-query?)
                      (and advanced-query? (property-keys :block/updated-at)))
-             (timestamp-column-behavior :block/updated-at (t :page/updated-at) renderers))])
+             (timestamp-column-behavior :block/updated-at (t :page/updated-at) renderers))
+           (when add-page-column?
+             (:page-column renderers))])
          (remove nil?)
          (map column-behavior->table-column))))

@@ -67,6 +67,14 @@
       background-color: hsl(var(--muted));
     }
 
+    &:has([data-table-row-select] .ui__checkbox[data-checked]) {
+      @apply bg-muted;
+
+      > .sticky-columns {
+        background-color: hsl(var(--muted));
+      }
+    }
+
     &[data-asset-table-nested] {
       --ls-table-asset-annotation-text-color: hsl(var(--muted-foreground));
 

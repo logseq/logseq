@@ -50,11 +50,13 @@
     (catch :default _e
       nil)))
 
+(def ^:private default-video-width 560)
+(def ^:private default-video-height 315)
+
 (hsx/defc youtube-video
-  [id {:keys [width height start] :as _opts}]
-  (let [width  (or width (min (- (util/get-width) 96)
-                              560))
-        height (or height (int (* width (/ 315 560))))
+  [id {:keys [width height start iframe-only?] :as _opts}]
+  (let [width (or width default-video-width)
+        height (or height default-video-height)
         origin (.. js/window -location -origin)
         origin-valid? (and (string? origin)
                            (re-matches #"^https?://.+" origin))
@@ -79,17 +81,22 @@
            (<! (load-youtube-api))
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
-    [:iframe.aspect-video
-     {:id                (str "youtube-player-" id)
-      :ref               *iframe-ref
-      :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      :referrer-policy   "strict-origin-when-cross-origin"
-      :referer           "https://logseq.com"
-      :frame-border      "0"
-      :src               url
-      :height            height
-      :width             width}]))
+    (let [iframe [:iframe
+                  {:id                (str "youtube-player-" id)
+                   :ref               *iframe-ref
+                   :allow-full-screen "allowfullscreen"
+                   :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                   :referrer-policy   "strict-origin-when-cross-origin"
+                   :referer           "https://logseq.com"
+                   :frame-border      "0"
+                   :src               url}]]
+      (if iframe-only?
+        iframe
+        [:div.video-embed-shell
+         [:div.video-embed-frame
+          {:style {:width width
+                   :height height}}
+          iframe]]))))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
@@ -124,7 +131,7 @@
                            last)]
       (let [id (gobj/get iframe "id" "")
             id (string/replace-first id #"youtube-player-" "")]
-        (get (get @state/state :youtube/players) id)))))
+        (get (state/get-state :youtube/players) id)))))
 
 (defn- notify-timestamp-unavailable! []
   (notification/show!
@@ -138,7 +145,7 @@
 
 (hsx/defc timestamp
   [seconds]
-  [:a.svg-small.youtube-timestamp
+  [:a.youtube-timestamp
    {:on-click (fn [e]
                 (util/stop e)
                 (if (use-youtube-wrapper?)
@@ -150,8 +157,8 @@
                        (t :youtube/player-not-ready)
                        :warning
                        false)))))}
-   svg/clock
-   (seconds->display seconds)])
+   [:span.youtube-timestamp-icon svg/clock]
+   [:span.youtube-timestamp-label (seconds->display seconds)]])
 
 (defn gen-youtube-ts-macro []
   (if (use-youtube-wrapper?)

@@ -54,7 +54,7 @@ pre {
 #time-repeater {
   min-width: 300px;
 
-  @screen sm {
+  @media (min-width: 640px) {
     width: 135px;
   }
 }
@@ -72,12 +72,20 @@ pre {
   &[data-editor-popup-ref=commands] {
     @apply w-72;
 
+    #ui__ac-inner {
+      max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
+    }
+
     &[data-side=top] {
-      max-height: min(calc(var(--radix-popover-content-available-height) - 60px), 460px);
+      #ui__ac-inner {
+        max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
+      }
     }
 
     &[data-side=bottom] {
-      max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
+      #ui__ac-inner {
+        max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
+      }
     }
   }
 
@@ -87,9 +95,23 @@ pre {
     @apply w-full sm:w-128;
   }
 
+  &[data-editor-popup-ref=page-search] #ui__ac-inner,
+  &[data-editor-popup-ref=block-search] #ui__ac-inner,
+  &[data-editor-popup-ref=page-search-hashtag] #ui__ac-inner {
+    max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
+  }
+
   &[data-editor-popup-ref=datepicker] {
     @apply w-auto;
   }
+}
+
+[data-side=top] > .ui__popover-content[data-editor-popup-ref=commands] #ui__ac-inner {
+  max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
+}
+
+[data-side=bottom] > .ui__popover-content[data-editor-popup-ref=commands] #ui__ac-inner {
+  max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
 }
 
 .cp__commands-slash {

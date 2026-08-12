@@ -1,7 +1,6 @@
 (ns frontend.components.table.core
   "Generic table row and cell rendering for Logseq views."
   (:require [dommy.core :as dom]
-            [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -62,6 +61,10 @@
       :else
       true)))
 
+(defn- table-row-id
+  [row]
+  (or (:block/uuid row) (:db/id row)))
+
 (defn- navigate-to-cell
   "Moves keyboard focus from `cell` in `direction`."
   [e cell direction]
@@ -118,7 +121,7 @@
             :ref *ref
             :on-click (fn [e]
                         (when (and editable?
-                                   (not (dom/has-class? (.-target e) "jtrigger")))
+                                   (not (some-> (.-target e) (.closest ".jtrigger"))))
                           (activate-cell-editor (hooks/deref *ref))))
             :on-key-down (fn [e]
                            (let [container (hooks/deref *ref)]
@@ -155,8 +158,9 @@
      body)))
 
 (hsx/defc table-row-inner
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
+  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling? view-feature-type]}]
   (let [*ref (hooks/use-ref nil)
+        eager-cells? (= :all-pages view-feature-type)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -166,7 +170,7 @@
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
-                     (let [id (str (:id row) "-" (:id column))
+                     (let [id (str (table-row-id row) "-" (:id column))
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
                            index? (= (:id column) :id)
@@ -183,21 +187,21 @@
                        (if (and scrolling? (not (:block/title row)))
                          cell-placeholder
                          (when-let [render (get column :cell)]
-                           (lazy-table-cell
-                            (fn []
-                              (table-cell-container
-                               cell-opts (render table row column style)))
-                            cell-placeholder)))))]
+                           (let [cell-render (fn []
+                                               (table-cell-container
+                                                cell-opts (render table row column style)))]
+                             (if eager-cells?
+                               [:div.h-full (cell-render)]
+                               (lazy-table-cell cell-render cell-placeholder)))))))]
     (shui/table-row
      (merge
       props
-      (cond-> {:key (str (:db/id row))
+      (cond-> {:key (str (table-row-id row))
                :tabIndex 0
                :ref *ref
                :data-state (when (row-selected? row) "selected")
-               :data-id (:db/id row)
+               :data-id (table-row-id row)
                :blockid (str (:block/uuid row))
-               :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
                :on-key-down (fn [e]
                               (let [container (hooks/deref *ref)]
                                 (when (dom/has-class? container "selected")
@@ -236,8 +240,10 @@
         (:asset-table/nested? row)
         (assoc :data-asset-table-nested true)))
      (when (seq pinned-columns)
-       [:div.sticky-columns.flex.flex-row
-        (map #(row-cell-f % {}) pinned-columns)])
+       (into
+        [:div.sticky-columns.flex.flex-row]
+        (map #(row-cell-f % {}) pinned-columns)))
      (when (seq unpinned-columns)
-       [:div.flex.flex-row
-        (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))
+       (into
+        [:div.flex.flex-row]
+        (map #(row-cell-f % {:lazy? true}) unpinned-columns))))))

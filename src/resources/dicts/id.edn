@@ -178,7 +178,6 @@
  :cmdk.action/search "Cari"
  :cmdk.action/trigger "Jalankan"
 
- :cmdk.create/configure-tag "Konfigurasi tag"
  :cmdk.create/page "Buat halaman"
  :cmdk.create/tag "Buat tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Baru diperbarui"
  :cmdk.group/themes "Tema"
 
- :cmdk.info/configure-tag "Konfigurasi #{1}"
  :cmdk.info/create-page "Buat halaman '{1}'"
  :cmdk.info/create-tag "Buat tag '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Elemen bawaan tidak dapat dihapus."
  :node/new "Node baru"
 
- :notification/clear-all "Hapus semua"
  :notification/copied "Disalin"
 
  :onboarding.import/desc "Jika ia dalam format EDN atau Markdown, Logseq dapat bekerja dengannya."
@@ -1204,6 +1201,7 @@
  :plugin.package-config/remove-installed-success "Plugin rusak \"{1}\" telah dihapus."
 
  :plugin.proxy/direct "Langsung"
+ :plugin.proxy/host-port-required "Host dan port diperlukan"
  :plugin.proxy/system "Sistem"
  :plugin.proxy/test-url "Uji URL"
  :plugin.proxy/testing "Menguji"
@@ -1245,7 +1243,6 @@
  :property/drag-to-reorder "Seret untuk mengurutkan"
  :property/existing-values "Nilai yang ada"
  :property/go-to-this-property "Buka halaman properti"
- :property/hidden-properties "Properti tersembunyi"
  :property/hide-by-default "Sembunyikan secara default"
  :property/hide-choice-for-tag "Sembunyikan pilihan untuk tag"
  :property/hide-empty-value "Sembunyikan nilai kosong"
@@ -1587,10 +1584,8 @@
  :settings.editor/wide-mode "Mode lebar"
 
  :settings.features/enable-flashcards "Kartu Belajar"
- :settings.features/enable-journals "Jurnal"
  :settings.features/home-default-page "Atur halaman beranda default"
  :settings.features/home-default-page-update-success "Halaman default diperbarui"
- :settings.features/journals-enable-success "Jurnal diaktifkan"
  :settings.features/login-prompt "Untuk mengakses fitur-fitur baru sebelum orang lain, Anda harus menjadi Sponsor atau Pendukung Logseq di Open Collective dan oleh karena itu harus masuk terlebih dahulu."
  :settings.features/page-not-found "Halaman \"{1}\" belum ada. Harap buat halaman itu terlebih dahulu, lalu coba lagi."
  :settings.features/plugin-system "Pengaya"
@@ -1720,7 +1715,6 @@
  :ui/image "gambar"
  :ui/label "Label"
  :ui/link "Tautan"
- :ui/load-more "Muat lebih banyak"
  :ui/loading "Memuat"
  :ui/login "Masuk"
  :ui/logout "Keluar"

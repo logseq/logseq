@@ -178,7 +178,6 @@
  :cmdk.action/search "Szukaj"
  :cmdk.action/trigger "Uruchom"
 
- :cmdk.create/configure-tag "Skonfiguruj tag"
  :cmdk.create/page "Utwórz stronę"
  :cmdk.create/tag "Utwórz tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Ostatnio zaktualizowane"
  :cmdk.group/themes "Motywy"
 
- :cmdk.info/configure-tag "Skonfiguruj #{1}"
  :cmdk.info/create-page "Utwórz stronę '{1}'"
  :cmdk.info/create-tag "Utwórz tag '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Wbudowanych elementów nie można usunąć."
  :node/new "Nowy węzeł"
 
- :notification/clear-all "Wyczyść wszystkie"
  :notification/copied "Skopiowano"
 
  :onboarding.import/desc "Opis importu"
@@ -1204,6 +1201,7 @@
  :plugin.package-config/remove-installed-success "Usunięto uszkodzoną wtyczkę \"{1}\"."
 
  :plugin.proxy/direct "Bezpośredni"
+ :plugin.proxy/host-port-required "Host i port są wymagane"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Testuj URL"
  :plugin.proxy/testing "Testowanie"
@@ -1245,7 +1243,6 @@
  :property/drag-to-reorder "Przeciągnij aby zmienić kolejność"
  :property/existing-values "Istniejące wartości"
  :property/go-to-this-property "Przejdź do strony właściwości"
- :property/hidden-properties "Ukryte właściwości"
  :property/hide-by-default "Ukryj domyślnie"
  :property/hide-choice-for-tag "Ukryj opcję dla tagu"
  :property/hide-empty-value "Ukryj puste wartości"
@@ -1587,10 +1584,8 @@
  :settings.editor/wide-mode "Tryb szeroki"
 
  :settings.features/enable-flashcards "Włącz fiszki"
- :settings.features/enable-journals "Dzienniki"
  :settings.features/home-default-page "Ustaw domyślną stronę startową"
  :settings.features/home-default-page-update-success "Strona domowa zaktualizowana"
- :settings.features/journals-enable-success "Dzienniki włączone"
  :settings.features/login-prompt "Żeby zyskać dostęp do nowych funkcjonalności przed innymi, musisz mieć status Open Collective Sponsor lub Logseq Backer i musisz się zalogować."
  :settings.features/page-not-found "Strona „{1}” jeszcze nie istnieje. Najpierw utwórz tę stronę, a następnie spróbuj ponownie."
  :settings.features/plugin-system "System wtyczek"
@@ -1720,7 +1715,6 @@
  :ui/image "obraz"
  :ui/label "Etykieta"
  :ui/link "Link"
- :ui/load-more "Wczytaj więcej"
  :ui/loading "Ładowanie"
  :ui/login "Zaloguj się"
  :ui/logout "Wyloguj się"

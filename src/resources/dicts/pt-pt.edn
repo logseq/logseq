@@ -178,7 +178,6 @@
  :cmdk.action/search "Pesquisar"
  :cmdk.action/trigger "Executar"
 
- :cmdk.create/configure-tag "Configurar tag"
  :cmdk.create/page "Criar página"
  :cmdk.create/tag "Criar tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Atualizados recentemente"
  :cmdk.group/themes "Temas"
 
- :cmdk.info/configure-tag "Configurar #{1}"
  :cmdk.info/create-page "Criar a página '{1}'"
  :cmdk.info/create-tag "Criar a tag '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Elementos integrados não podem ser eliminados."
  :node/new "Novo nó"
 
- :notification/clear-all "Limpar tudo"
  :notification/copied "Copiado"
 
  :onboarding.import/desc "Descrição da importação"
@@ -1204,6 +1201,7 @@
  :plugin.package-config/remove-installed-success "Plugin corrompido \"{1}\" removido."
 
  :plugin.proxy/direct "Direto"
+ :plugin.proxy/host-port-required "Host e porta são obrigatórios"
  :plugin.proxy/system "Sistema"
  :plugin.proxy/test-url "URL de teste"
  :plugin.proxy/testing "A testar"
@@ -1245,7 +1243,6 @@
  :property/drag-to-reorder "Arraste para reordenar"
  :property/existing-values "Valores existentes"
  :property/go-to-this-property "Ir para a página da propriedade"
- :property/hidden-properties "Propriedades ocultas"
  :property/hide-by-default "Ocultar por padrão"
  :property/hide-choice-for-tag "Ocultar opção para tag"
  :property/hide-empty-value "Ocultar valores vazios"
@@ -1587,10 +1584,8 @@
  :settings.editor/wide-mode "Modo amplo"
 
  :settings.features/enable-flashcards "Ativar flashcards"
- :settings.features/enable-journals "Páginas Diárias"
  :settings.features/home-default-page "Definir a página inicial predefinida"
  :settings.features/home-default-page-update-success "Página inicial predefinida atualizada"
- :settings.features/journals-enable-success "Diários ativados"
  :settings.features/login-prompt "Para aceder a novas funcionalidades antes de qualquer outra pessoa tem de ser um \"Sponsor\" ou \"Backer\" na Open Collective do Logseq e, portanto, tem de iniciar sessão primeiro."
  :settings.features/page-not-found "A página \"{1}\" ainda não existe. Crie essa página primeiro e tente novamente."
  :settings.features/plugin-system "Sistema de extensões"
@@ -1720,7 +1715,6 @@
  :ui/image "imagem"
  :ui/label "Etiqueta"
  :ui/link "Ligação"
- :ui/load-more "Carregar mais"
  :ui/loading "A carregar"
  :ui/login "Iniciar sessão"
  :ui/logout "Terminar sessão"

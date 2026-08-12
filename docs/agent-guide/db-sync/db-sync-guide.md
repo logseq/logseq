@@ -30,7 +30,9 @@ This guide helps AI agents implement and review db-sync features consistently ac
   - Response parse/coercion failures (e.g., transit decode, malli coercion).
   - Unexpected WS/HTTP message type or reason value on the client.
   - Asset operations missing required fields when processing client-side metadata.
-  - Invariant violations in tx apply (e.g., tx-data empty after normalization).
+  - Invariant violations in tx apply (e.g., an originally empty delete tx).
+- Retry-safe operations may normalize to an intentional no-op. For example, a
+  non-empty delete tx is already satisfied when its target no longer exists.
 - Server-side validation of client input should not throw. Respond with `tx/reject` or `400` errors for:
   - tx payload type mismatch (e.g., `:txs` not a sequence of strings).
   - Invalid graph identity (missing/empty graph id or uuid in sync path).

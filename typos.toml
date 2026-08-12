@@ -5,6 +5,7 @@ datas = "datas"
 juxt = "juxt"
 Ded = "Ded"         # Shows up in ANDed
 referer = "referer" # This is a misspelling in the http spec so not much we can do
+WRONLY = "WRONLY"
 
 # False positives
 collapsable = "collapsable" # This an ok alternative to collapsible
@@ -24,5 +25,4 @@ extend-exclude = ["resources/*",
                   "src/test/fixtures/*",
                   "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",
                   "clj-e2e/resources/*",
-                  "deps/common/src/logseq/common/plural.cljs",
-                  "packages/ui/src/amplify/lang.ts"]
+                  "deps/common/src/logseq/common/plural.cljs"]
