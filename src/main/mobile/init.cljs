@@ -64,6 +64,12 @@
                                             (js/window.location.reload)))))))))
   (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
+(defn- sync-current-network-status! []
+  (-> (.getStatus Network)
+      (p/then #(reset! mobile-flows/*mobile-network-status %))
+      (p/catch (fn [error]
+                 (log/warn ::network-status-read-failed error)))))
+
 (defn- general-init!
   "Initialize event listeners used by both iOS and Android"
   []
@@ -96,6 +102,7 @@
                      #(util/scroll-to-top true))
 
   (.addListener App "appStateChange" app-state-change-handler)
+  (sync-current-network-status!)
   (.addListener Network "networkStatusChange" #(reset! mobile-flows/*mobile-network-status %)))
 
 (defn init! []

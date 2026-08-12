@@ -13,7 +13,9 @@
   [atom' key' f]
   (when-not config/publishing?
     (remove-watch atom' key')
-    (add-watch atom' key' (fn [_ _ _ value] (f value)))))
+    (add-watch atom' key' (fn [_ _ _ value] (f value)))
+    (when-some [value @atom']
+      (f value))))
 
 (add-watch-when-not-publishing!
  rtc-flows/rtc-try-restart
