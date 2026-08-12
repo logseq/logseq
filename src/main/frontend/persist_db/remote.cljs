@@ -26,6 +26,10 @@
   [base-url]
   (str (normalize-base-url base-url) "/v1/events"))
 
+(defn- health-url
+  [base-url]
+  (str (normalize-base-url base-url) "/healthz"))
+
 (defn- base-headers
   [auth-token]
   (cond-> {"Content-Type" "application/json"
@@ -129,6 +133,18 @@
                 (when on-invoke-failure
                   (on-invoke-failure method args error))
                 (throw error))))))
+
+(defn <healthy?
+  [client]
+  (let [{:keys [base-url auth-token fetch-fn]} (create-client client)]
+    (-> (p/let [{:keys [status body]}
+                (fetch-fn {:method "GET"
+                           :url (health-url base-url)
+                           :headers (base-headers auth-token)})
+                parsed (parse-response-body body)]
+          (and (<= 200 status 299)
+               (= "ready" (:status parsed))))
+        (p/catch (fn [_] false)))))
 
 (defn- import-db-binary!
   [{:keys [base-url auth-token fetch-fn on-invoke-success on-invoke-failure]} repo data]

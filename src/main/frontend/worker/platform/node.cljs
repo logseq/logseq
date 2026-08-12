@@ -721,6 +721,10 @@
                  :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
                  :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))
                  :delete-file! (fn [path] (delete-file! write-guard-fn data-dir path))
+                 :read-file-bytes! (fn [path] (fs/readFile path))
+                 :file-stat (fn [path]
+                              (when (node-path/isAbsolute path)
+                                (fs/stat path)))
                  :asset-read-bytes! (fn [repo file-name]
                                       (asset-read-bytes! data-dir repo file-name))
                  :asset-write-bytes! (fn [repo file-name payload]

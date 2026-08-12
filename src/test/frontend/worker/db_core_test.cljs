@@ -2552,11 +2552,32 @@
                   conn (d/create-conn db-schema/schema)
                   pipeline-before @ldb/*transact-pipeline-fn
                   renderer-payloads (atom [])
+                  read-paths (atom [])
+                  written-assets (atom [])
                   config-file {:path "logseq/config.edn"
-                               :file/content "{}"}
+                               :fs-path "/source/logseq/config.edn"}
                   files [config-file
                          {:path "pages/Home.md"
-                          :file/content "- imported block"}]]
+                          :fs-path "/source/pages/Home.md"}
+                         {:path "assets/image.png"
+                          :fs-path "/source/assets/image.png"
+                          :asset/size 3}]
+                  import-platform
+                  (-> (platform/current)
+                      (assoc-in [:storage :read-text!]
+                                (fn [path]
+                                  (swap! read-paths conj path)
+                                  (p/resolved
+                                   (get {"/source/logseq/config.edn" "{}"
+                                         "/source/pages/Home.md" "- imported block"}
+                                        path))))
+                      (assoc-in [:storage :read-file-bytes!]
+                                (fn [path]
+                                  (swap! read-paths conj path)
+                                  (p/resolved (js/Uint8Array.from #js [1 2 3]))))
+                      (assoc-in [:storage :asset-write-bytes!]
+                                (fn [_repo file-name payload]
+                                  (swap! written-assets conj [file-name (.-byteLength payload)]))))]
               (is (fn? import-file-graph!))
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (reset! worker-state/*datascript-conns {test-repo conn})
@@ -2564,6 +2585,7 @@
               (p/with-redefs
                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
                  db-sync/handle-local-tx! (fn [& _] nil)
+                 platform/current (constantly import-platform)
                  shared-service/broadcast-to-clients!
                  (fn [event payload]
                    (when (= :sync-db-changes event)
@@ -2582,8 +2604,16 @@
                          (into #{}
                                (mapcat #(keys (get-in % [:delta :blocks])))
                                @renderer-payloads)]
-                   (is (= #{"pages/Home.md" "logseq/config.edn"}
+                   (is (= #{"assets/image.png" "pages/Home.md" "logseq/config.edn"}
                           (set (map :path (:files result)))))
+                   (is (= #{"/source/assets/image.png"
+                            "/source/logseq/config.edn"
+                            "/source/pages/Home.md"}
+                          (set @read-paths)))
+                   (is (= 1 (count @written-assets)))
+                   (is (string/ends-with? (ffirst @written-assets) ".png"))
+                   (is (= 3 (second (first @written-assets))))
+                   (is (empty? (:staged-assets result)))
                    (is (= "Home" (:block/title page)))
                    (is (= "imported block" (:block/title block)))
                    (doseq [entity [page block]]
