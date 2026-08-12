@@ -931,62 +931,84 @@
   (let [inflight @(:inflight client)
         local-tx (client-op/get-local-tx repo)
         remote-tx (get @*repo->latest-remote-tx repo)
-        conn (worker-state/get-datascript-conn repo)]
-    (when (and conn (= local-tx remote-tx) (empty? inflight)) ; rebase
-      (when-let [ws (:ws client)]
-        (when (and (ws-open? ws) (worker-state/online?) (not (upload-stopped? repo)))
-          (let [batch (pending-txs repo {:limit 50})]
-            (when (seq batch)
-              (let [{:keys [tx-entries drop-tx-ids drop-txs]} (prepare-upload-tx-entries repo conn batch)]
-                (when (seq drop-tx-ids)
-                  (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids
-                                                  :drops drop-txs})
-                  (mark-pending-txs-false! repo drop-tx-ids))
-                (-> (p/let [aes-key (when (and (seq tx-entries) (sync-crypt/graph-e2ee? repo))
-                                      (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
-                            _ (when (and (seq tx-entries) (sync-crypt/graph-e2ee? repo) (nil? aes-key))
-                                (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                            tx-entries* (p/all
-                                         (mapv (fn [{:keys [tx-data] :as tx-entry}]
-                                                 (p/let [tx-data* (offload-large-titles
-                                                                   tx-data
-                                                                   {:repo repo
-                                                                    :graph-id (:graph-id client)
-                                                                    :aes-key aes-key})
-                                                         tx-data** (if aes-key
-                                                                     (sync-crypt/<encrypt-tx-data aes-key tx-data*)
-                                                                     tx-data*)]
-                                                   (assoc tx-entry :tx-data tx-data**)))
-                                               tx-entries))
-                            payload (mapv (fn [{:keys [tx-id tx-data outliner-op]}]
-                                            (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
-                                              tx-id
-                                              (assoc :tx-id (str tx-id))
-                                              outliner-op
-                                              (assoc :outliner-op outliner-op)))
-                                          tx-entries*)
-                            tx-ids (into [] (keep :tx-id) tx-entries)]
-                      (when (seq tx-entries)
-                        (reset! (:inflight client) tx-ids)
-                        (p/do!
-                         (send! ws {:type "tx/batch"
-                                    :client-revision (build-version/revision)
-                                    :t-before local-tx
-                                    :txs payload})
-                         (start-upload-response-timeout!
-                          client
-                          {:tx-ids tx-ids
-                           :outliner-ops (->> tx-entries
-                                              (keep :outliner-op)
-                                              distinct
-                                              vec)
-                           :large-upload-progress (large-upload-progress tx-entries*)
-                           :t-before local-tx}))))
-                    (p/catch (fn [error]
-                               (sync-util/set-last-sync-error! client error)
-                               (log/error :db-sync/flush-pending-failed
-                                          {:repo repo
-                                           :error error}))))))))))))
+        conn (worker-state/get-datascript-conn repo)
+        ws (:ws client)
+        ws-open-state? (when ws (ws-open? ws))
+        online? (worker-state/online?)
+        upload-stopped-state? (upload-stopped? repo)
+        pending-count (client-op/get-pending-local-tx-count repo)
+        ready? (and conn
+                    (= local-tx remote-tx)
+                    (empty? inflight)
+                    ws-open-state?
+                    online?
+                    (not upload-stopped-state?))]
+    (when (and (pos? (or pending-count 0))
+               (not ready?))
+      (log/info :db-sync/flush-pending-skipped
+                {:repo repo
+                 :pending-local-tx-count pending-count
+                 :has-db? (some? conn)
+                 :local-tx local-tx
+                 :remote-tx remote-tx
+                 :inflight-count (count inflight)
+                 :ws-open? ws-open-state?
+                 :ws-ready-state (ws-ready-state ws)
+                 :online? online?
+                 :upload-stopped? upload-stopped-state?}))
+    (when ready?
+      (let [batch (pending-txs repo {:limit 50})]
+        (when (seq batch)
+          (let [{:keys [tx-entries drop-tx-ids drop-txs]} (prepare-upload-tx-entries repo conn batch)]
+            (when (seq drop-tx-ids)
+              (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids
+                                              :drops drop-txs})
+              (mark-pending-txs-false! repo drop-tx-ids))
+            (-> (p/let [aes-key (when (and (seq tx-entries) (sync-crypt/graph-e2ee? repo))
+                                  (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
+                        _ (when (and (seq tx-entries) (sync-crypt/graph-e2ee? repo) (nil? aes-key))
+                            (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                        tx-entries* (p/all
+                                     (mapv (fn [{:keys [tx-data] :as tx-entry}]
+                                             (p/let [tx-data* (offload-large-titles
+                                                               tx-data
+                                                               {:repo repo
+                                                                :graph-id (:graph-id client)
+                                                                :aes-key aes-key})
+                                                     tx-data** (if aes-key
+                                                                 (sync-crypt/<encrypt-tx-data aes-key tx-data*)
+                                                                 tx-data*)]
+                                               (assoc tx-entry :tx-data tx-data**)))
+                                           tx-entries))
+                        payload (mapv (fn [{:keys [tx-id tx-data outliner-op]}]
+                                        (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
+                                          tx-id
+                                          (assoc :tx-id (str tx-id))
+                                          outliner-op
+                                          (assoc :outliner-op outliner-op)))
+                                      tx-entries*)
+                        tx-ids (into [] (keep :tx-id) tx-entries)]
+                  (when (seq tx-entries)
+                    (reset! (:inflight client) tx-ids)
+                    (p/do!
+                     (send! ws {:type "tx/batch"
+                                :client-revision (build-version/revision)
+                                :t-before local-tx
+                                :txs payload})
+                     (start-upload-response-timeout!
+                      client
+                      {:tx-ids tx-ids
+                       :outliner-ops (->> tx-entries
+                                          (keep :outliner-op)
+                                          distinct
+                                          vec)
+                       :large-upload-progress (large-upload-progress tx-entries*)
+                       :t-before local-tx}))))
+                (p/catch (fn [error]
+                           (sync-util/set-last-sync-error! client error)
+                           (log/error :db-sync/flush-pending-failed
+                                      {:repo repo
+                                       :error error}))))))))))
 
 (defn enqueue-flush-pending!
   [repo client]
