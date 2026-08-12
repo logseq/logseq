@@ -1708,17 +1708,22 @@
 
 (hsx/defc video-embed-cp
   [{:keys [render id src start aspect-ratio width on-width-change!] :as _embed}]
-  (let [[local-width set-local-width!] (hooks/use-state nil)
+  (let [embed-width width
+        [local-width set-local-width!] (hooks/use-state nil)
         *shell-ref (hooks/use-ref nil)
         resizable? (not (mobile-util/native-platform?))
         max-width (or (video-embed-parent-width *shell-ref)
                     (max 0 (- (util/get-width) 96)))
         width (clamp-video-embed-width
-                (or local-width width default-video-embed-width)
+                (or local-width embed-width default-video-embed-width)
                 max-width)
         [ratio-width ratio-height] (or aspect-ratio [16 9])
         frame-style {:width width
                      :aspect-ratio (str ratio-width " / " ratio-height)}]
+    (hooks/use-layout-effect!
+     (fn []
+       (set-local-width! nil))
+     [embed-width])
     (when-let [iframe
                (case render
                  :youtube-player
