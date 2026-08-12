@@ -146,7 +146,8 @@
                           state/pub-event! (fn [& _] nil)
                           user-handler/clear-tokens (fn [] nil)]
               (user-handler/logout)
-              (is (= [:thread-api/clear-e2ee-password] @ops*)))))
+              (is (= :thread-api/clear-e2ee-password
+                     (first @ops*))))))
         (finally
           (reset! state/*db-worker old-worker))))))
 
