@@ -818,7 +818,6 @@
  :import/assets-imported "{1} recursos importats."
  :import/assets-skipped "{1} recursos omesos. Detalls a la consola."
  :import/block-icons-cannot-be-imported "Les icones de blocs no es poden importar. Importeu-les manualment al bloc {1}."
- :import/cannot-import-block-into-non-block-entity "No es pot importar un bloc en una entitat que no és bloc."
  :import/db-edn-desc "Importar l'exportació EDN d'un graf DB a un graf DB nou"
  :import/db-edn-title "EDN a graf DB"
  :import/debug-transit-desc "Importar fitxer de depuració transit a un graf DB nou"

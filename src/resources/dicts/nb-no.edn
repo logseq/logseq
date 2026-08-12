@@ -818,7 +818,6 @@
  :import/assets-imported "{1} filer importert."
  :import/assets-skipped "{1} filer hoppet over. Detaljer i konsollen."
  :import/block-icons-cannot-be-imported "Blokkikoner kan ikke importeres. Importer manuelt i blokk {1}."
- :import/cannot-import-block-into-non-block-entity "Kan ikke importere blokk til ikke-blokkentitet."
  :import/db-edn-desc "Importer en DB-grafs EDN-eksport til en ny DB-graf"
  :import/db-edn-title "EDN til DB-graf"
  :import/debug-transit-desc "Importer debug transit-fil til en ny DB-graf"

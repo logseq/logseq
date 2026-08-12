@@ -818,7 +818,6 @@
  :import/assets-imported "{1} souborů importováno."
  :import/assets-skipped "{1} souborů přeskočeno. Podrobnosti v konzoli."
  :import/block-icons-cannot-be-imported "Ikony bloků nelze importovat. Importujte ručně v bloku {1}."
- :import/cannot-import-block-into-non-block-entity "Nelze importovat blok do entity, která není blokem."
  :import/db-edn-desc "Importovat EDN export DB grafu do nového DB grafu"
  :import/db-edn-title "EDN do DB grafu"
  :import/debug-transit-desc "Importovat ladicí transit soubor do nového DB grafu"

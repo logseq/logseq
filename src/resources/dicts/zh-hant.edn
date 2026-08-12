@@ -818,7 +818,6 @@
  :import/assets-imported "已匯入 {1} 個資源。"
  :import/assets-skipped "已略過 {1} 個資源。詳情請查看主控台。"
  :import/block-icons-cannot-be-imported "塊圖示無法匯入，請在塊 {1} 中手動匯入。"
- :import/cannot-import-block-into-non-block-entity "不能把區塊匯入到非區塊實體中。請在其他位置匯入該區塊。"
  :import/db-edn-desc "將 DB 圖譜的 EDN 匯出匯入至新的 DB 圖譜"
  :import/db-edn-title "EDN 至 DB 圖譜"
  :import/debug-transit-desc "將除錯 transit 檔案匯入至新的 DB 圖譜"

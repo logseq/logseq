@@ -1210,7 +1210,7 @@
                 [k v])))
        (into {})))
 
-(defn- check-for-existing-entities
+(defn- ^:large-vars/cleanup-todo check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map}

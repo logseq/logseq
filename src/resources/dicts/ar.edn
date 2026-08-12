@@ -818,7 +818,6 @@
  :import/assets-imported "{1} ملف تم استيرادها."
  :import/assets-skipped "{1} ملف تم تخطيها. التفاصيل في وحدة التحكم."
  :import/block-icons-cannot-be-imported "لا يمكن استيراد أيقونات الكتل. استوردها يدوياً في الكتلة {1}."
- :import/cannot-import-block-into-non-block-entity "لا يمكن استيراد كتلة إلى كيان غير كتلة."
  :import/db-edn-desc "استيراد تصدير EDN لرسم بياني DB إلى رسم بياني DB جديد"
  :import/db-edn-title "EDN إلى رسم بياني DB"
  :import/debug-transit-desc "استيراد ملف transit للتصحيح إلى رسم بياني DB جديد"
