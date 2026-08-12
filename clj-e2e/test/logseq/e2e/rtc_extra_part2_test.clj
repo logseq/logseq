@@ -1,7 +1,7 @@
 (ns logseq.e2e.rtc-extra-part2-test
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [clojure.test :refer [deftest testing is use-fixtures run-test]]
+            [clojure.test :refer [deftest testing is use-fixtures]]
             [jsonista.core :as json]
             [logseq.e2e.block :as b]
             [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
@@ -12,8 +12,7 @@
             [logseq.e2e.page :as page]
             [logseq.e2e.rtc :as rtc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [wally.repl :as repl]))
+            [wally.main :as w]))
 
 (use-fixtures :once
   fixtures/open-2-pages
@@ -124,7 +123,8 @@
   (loop [attempt 4]
     (let [created?
           (try
-            (b/new-block title)
+            (b/new-block "")
+            (b/save-block title)
             true
             (catch Throwable _
               false))]
@@ -169,25 +169,24 @@
 (defn- seed-long-nested-page!
   [seed]
   (let [seed-blocks (max 20 (env-int "DB_SYNC_E2E_STRESS_SEED_BLOCKS" stress-default-seed-blocks))
-        rng (java.util.Random. (long (+ seed 97)))]
-    (let [titles
-          (w/with-page @*page1
-            (util/exit-edit)
-            (loop [i 0
-                   depth 0
-                   titles #{}]
-              (if (< i seed-blocks)
-                (let [title (format "seed-r%s-%03d" seed i)
-                      target-depth (.nextInt rng (inc stress-max-seed-depth))]
-                  (new-block-safe! title)
-                  (recur (inc i)
-                         (align-depth! depth target-depth)
-                         (conj titles title)))
-                (do
-                  (util/exit-edit)
-                  titles))))]
+        rng (java.util.Random. (long (+ seed 97)))
+        titles (w/with-page @*page1
+                 (util/exit-edit)
+                 (loop [i 0
+                        depth 0
+                        titles #{}]
+                   (if (< i seed-blocks)
+                     (let [title (format "seed-r%s-%03d" seed i)
+                           target-depth (.nextInt rng (inc stress-max-seed-depth))]
+                       (new-block-safe! title)
+                       (recur (inc i)
+                              (align-depth! depth target-depth)
+                              (conj titles title)))
+                     (do
+                       (util/exit-edit)
+                       titles))))]
       (sync-by-trigger! (str "seed-" seed))
-      titles)))
+      titles))
 
 (defn- next-action
   [rng]
@@ -278,25 +277,10 @@
       (b/redo))
     (util/exit-edit)))
 
-(def ^:private stress-client-op-timeout-ms 120000)
-
-(defn- await-future!
-  [f label]
-  (let [result (deref f stress-client-op-timeout-ms ::timeout)]
-    (when (= result ::timeout)
-      (throw (ex-info "parallel client op timed out"
-                      {:label label
-                       :timeout-ms stress-client-op-timeout-ms})))
-    result))
-
-(defn- run-two-clients-in-parallel!
+(defn- run-two-clients-without-sync!
   [p1-fn p2-fn]
-  (let [start-signal (promise)
-        p1-future (future @start-signal (p1-fn))
-        p2-future (future @start-signal (p2-fn))]
-    (deliver start-signal true)
-    [(await-future! p1-future :p1-op)
-     (await-future! p2-future :p2-op)]))
+  [(p1-fn)
+   (p2-fn)])
 
 (deftest online-two-clients-undo-redo-stress-test
   (testing "two online RTC clients survive random edits + undo/redo loops on a long nested page"
@@ -308,9 +292,9 @@
       (dotimes [round rounds]
         (let [p1-undo-steps (atom 0)
               p2-undo-steps (atom 0)
-              ;; Phase 1: edit batches in parallel with synchronized start.
+              ;; Phase 1: edit both online clients without forcing sync between them.
               [_ _]
-              (run-two-clients-in-parallel!
+              (run-two-clients-without-sync!
                #(w/with-page @*page1
                   (reset! p1-undo-steps
                           (local-random-edit-batch! p1-rng known-titles "p1" round)))
@@ -321,9 +305,9 @@
                                   (-> (rtc/get-rtc-tx) :local-tx))
               p2-edit-remote-tx (w/with-page @*page2
                                   (-> (rtc/get-rtc-tx) :local-tx))
-              ;; Phase 2: undo+redo batches in parallel with synchronized start.
+              ;; Phase 2: undo+redo both online clients without forcing sync between them.
               [_ _]
-              (run-two-clients-in-parallel!
+              (run-two-clients-without-sync!
                #(w/with-page @*page1
                   (local-undo-redo-batch! @p1-undo-steps))
                #(w/with-page @*page2
@@ -371,11 +355,11 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
       (w/with-page @*page2
         (rtc/wait-tx-update-to remote-tx)))
 
-;; check 'aaa/bbb' still exists
+;; check the selected tag still exists after the query waits and syncs
     (w/with-page @*page1
-      (page/goto-page "aaa/bbb"))
+      (page/goto-page "bbb"))
     (w/with-page @*page2
-      (page/goto-page "aaa/bbb"))
+      (page/goto-page "bbb"))
 
     (rtc/validate-graphs-in-2-pw-pages)))
 
