@@ -2108,9 +2108,18 @@ html.is-mac {
   width: fit-content;
   max-width: max-content;
   white-space: nowrap;
-  vertical-align: text-top;
-  line-height: normal;
+  line-height: 1;
   color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
+
+  &-icon {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+  }
+
+  &-label {
+    line-height: 1;
+  }
 
   svg {
     display: block;
@@ -2123,6 +2132,18 @@ html.is-mac {
     color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
     text-decoration: none;
   }
+}
+
+.block-title-wrap:not(.as-heading):has(> .youtube-timestamp) {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.w-full.inline:has(> .block-title-wrap > .youtube-timestamp) {
+  display: flex;
+  align-items: center;
 }
 
 .asset-video {

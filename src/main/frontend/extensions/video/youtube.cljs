@@ -157,8 +157,8 @@
                        (t :youtube/player-not-ready)
                        :warning
                        false)))))}
-   [:span.inline-flex.relative.-bottom-1 svg/clock]
-   (seconds->display seconds)])
+   [:span.youtube-timestamp-icon svg/clock]
+   [:span.youtube-timestamp-label (seconds->display seconds)]])
 
 (defn gen-youtube-ts-macro []
   (if (use-youtube-wrapper?)
