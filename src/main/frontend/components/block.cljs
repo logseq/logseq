@@ -3145,15 +3145,23 @@
        (let [^js el (.-current *pills-el)
              measure! #(measure-bottom-pills-overflow! el *overflow-state expanded?)
              observer (when (and el (exists? js/ResizeObserver))
-                        (js/ResizeObserver. measure!))]
+                        (js/ResizeObserver. measure!))
+             mutation-observer (when (and el (exists? js/MutationObserver))
+                                 (js/MutationObserver. measure!))]
          (measure!)
          (if observer
            (.observe observer el)
            (.addEventListener js/window "resize" measure!))
+         (when mutation-observer
+           (.observe mutation-observer el #js {:childList true
+                                               :subtree true
+                                               :characterData true}))
          (fn []
            (if observer
              (.disconnect observer)
-             (.removeEventListener js/window "resize" measure!)))))
+             (.removeEventListener js/window "resize" measure!))
+           (when mutation-observer
+             (.disconnect mutation-observer)))))
      [(:block/uuid block) (:block/updated-at block) property-uuids show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
