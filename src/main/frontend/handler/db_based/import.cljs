@@ -3,10 +3,8 @@
   (:require ["jszip" :as JSZip]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -18,11 +16,18 @@
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- <transact-import-marker!
+  [graph import-type]
+  (state/<invoke-db-worker :thread-api/transact
+                           graph
+                           (sqlite-util/import-tx import-type)
+                           {:import-db? true}
+                           nil))
 
 (defn- zip-entries
   [^js zip]
@@ -106,7 +111,7 @@
       (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
-      (db/transact! graph (sqlite-util/import-tx :sqlite-db) {:import-db? true})
+      (<transact-import-marker! graph :sqlite-db)
       (finished-ok-handler))
      (p/catch
       (fn [e]
@@ -174,15 +179,13 @@
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]
-  (let [graph (str config/db-version-prefix bare-graph-name)
-        db-or-datoms (ldb/read-transit-str raw)
-        datoms (if (d/db? db-or-datoms) (vec (d/datoms db-or-datoms :eavt)) db-or-datoms)]
+  (let [graph (str config/db-version-prefix bare-graph-name)]
     (p/do!
      (persist-db/<new graph {:import-type :debug-transit
-                             :datoms datoms})
+                             :debug-transit-raw raw})
      (state/add-repo! {:url graph})
      (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
-     (db/transact! graph (sqlite-util/import-tx :debug-transit) {:import-db? true})
+     (<transact-import-marker! graph :debug-transit)
      (state/set-current-repo! graph)
      (finished-ok-handler))))
 
@@ -227,6 +230,21 @@
                                    :error)
                (finished-error-handler))))))))
 
+(defn- <import-block-target
+  [target-block-id]
+  (if target-block-id
+    (p/let [ent (state/<invoke-db-worker :thread-api/pull
+                                         (state/get-current-repo)
+                                         [:block/uuid {:block/page [:block/uuid]}]
+                                         [:block/uuid target-block-id])]
+      (if-not (:block/page ent)
+        {:error (t :import/cannot-import-block-into-non-block-entity)}
+        (merge (select-keys ent [:block/uuid])
+               {:block/page (select-keys (:block/page ent) [:block/uuid])})))
+    (p/resolved {:error (t :import/block-target-required-warning)
+                 :status :warning
+                 :clear? false})))
+
 (defn- set-import-submitting!
   [import-inputs ^js submit-button submitting?]
   (swap! import-inputs assoc :submitting? submitting?)
@@ -237,6 +255,29 @@
   []
   (shui/dialog-close! :ls-dialog-import-edn-data))
 
+(defn- <submit-import-edn-data!
+  [import-inputs export-map]
+  (p/let [block (when (::sqlite-export/block export-map)
+                  (<import-block-target (:target-block-id @import-inputs)))]
+    (if-let [error (:error block)]
+      (do
+        (notification/show! error (or (:status block) :error) (:clear? block))
+        (close-import-dialog!))
+      (p/let [{:keys [error]}
+              (ui-outliner-tx/transact!
+               {:outliner-op :batch-import-edn}
+               (outliner-op/batch-import-edn!
+                export-map
+                (cond-> {:existing-pages-keep-properties? true
+                         :import-edn-data? true}
+                  block (assoc :current-block block))))]
+        (if error
+          (notification/show! error :error)
+          (do
+            (close-import-dialog!)
+            (ui-handler/re-render-root!)
+            (notification/show! (t :import/successful) :success)))))))
+
 (defn- import-edn-data-from-form [import-inputs ^js e]
   (when-not (:submitting? @import-inputs)
     (let [submit-button (.-currentTarget e)
@@ -244,18 +285,7 @@
                        (edn/read-string (:import-data @import-inputs))
                        (catch :default _error ::invalid-import))
           import-shape (when (map? export-map)
-                         (sqlite-export/import-edn-data-shape export-map))
-          import-block? (::sqlite-export/block export-map)
-          block (when import-block?
-                  (if-let [eid (:target-block-id @import-inputs)]
-                    (let [ent (db/entity [:block/uuid eid])]
-                      (if-not (:block/page ent)
-                        {:error (t :import/cannot-import-block-into-non-block-entity)}
-                        (merge (select-keys ent [:block/uuid])
-                               {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                    {:error (t :import/block-target-required-warning)
-                     :status :warning
-                     :clear? false}))]
+                         (sqlite-export/import-edn-data-shape export-map))]
       (cond
         (or (= ::invalid-import export-map) (not (map? export-map)))
         (notification/show! (t :import/submitted-edn-invalid) :warning)
@@ -268,28 +298,10 @@
         (= :unsupported import-shape)
         (notification/show! (t :import/unsupported-edn-data) :warning)
 
-        (:error block)
-        (do
-          (notification/show! (:error block) (or (:status block) :error) (:clear? block))
-          (close-import-dialog!))
-
         :else
         (do
           (set-import-submitting! import-inputs submit-button true)
-          (-> (p/let [{:keys [error]}
-                      (ui-outliner-tx/transact!
-                       {:outliner-op :batch-import-edn}
-                       (outliner-op/batch-import-edn!
-                        export-map
-                        (cond-> {:existing-pages-keep-properties? true
-                                 :import-edn-data? true}
-                          block (assoc :current-block block))))]
-                (if error
-                  (notification/show! error :error)
-                  (do
-                    (close-import-dialog!)
-                    (ui-handler/re-render-root!)
-                    (notification/show! (t :import/successful) :success))))
+          (-> (<submit-import-edn-data! import-inputs export-map)
               (p/catch (fn [error]
                          (notification/show! (or (ex-message error) (str error)) :error)))
               (p/finally (fn []
@@ -299,7 +311,8 @@
   "Displays dialog which allows users to paste and import sqlite.build EDN Data"
   []
   (let [target-block-id (or (:block-id (first (state/get-editor-args)))
-                            (get-in @state/state [:search/args :editor-info :block-uuid]))
+                            (get-in (state/get-state :search/args)
+                                    [:editor-info :block-uuid]))
         import-inputs (atom {:import-data ""
                              :target-block-id target-block-id})]
     (shui/dialog-open!

@@ -48,3 +48,11 @@
         dd-node (nth entry 2)]
     (is (= :dd.property-value (first dd-node)))
     (is (= "auto" (get-in dd-node [1 :dir])))))
+
+(deftest block-content-nodes-embeds-youtube-shorts-player
+  (let [node (render/block-content-nodes
+              {:block/title "{{video https://www.youtube.com/shorts/xu9p5ynlhZk}}"}
+              {:uuid->title {} :graph-uuid "g"}
+              1)
+        html (render/render-hiccup node)]
+    (is (re-find #"https://www\.youtube\.com/embed/xu9p5ynlhZk" html))))

@@ -2,10 +2,7 @@
   "Block related apis"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -14,7 +11,8 @@
             [frontend.util :as util]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.sdk.utils :as sdk-utils]))
+            [logseq.sdk.utils :as sdk-utils]
+            [promesa.core :as p]))
 
 (def plugin-property-prefix "plugin.property.")
 (def plugin-class-prefix "plugin.class.")
@@ -80,15 +78,16 @@
 
 (defn parse-property-json-value-if-need
   [ident property-value]
-  (when-let [prop (and (string? property-value)
-                       (plugin-property-key? ident)
-                       (some-> ident (db-utils/entity)))]
-    (if (= (:logseq.property/type prop) :json)
-      (try
-        (js/JSON.parse property-value)
-        (catch js/Error _e
-          property-value))
-      property-value)))
+  (if (and (string? property-value)
+           (plugin-property-key? ident))
+    (p/let [prop (db-async/<get-block (state/get-current-repo) ident {:children? false})]
+      (if (= (:logseq.property/type prop) :json)
+        (try
+          (js/JSON.parse property-value)
+          (catch js/Error _e
+            property-value))
+        property-value))
+    property-value))
 
 (defn ensure-property-upsert-control
   "Plugin should only upsert its own properties"
@@ -123,16 +122,16 @@
     :else :default))
 
 (defn- set-block-properties!
-  [plugin block-id properties {:keys [reset-property-values]}]
+  [plugin block-id properties {:keys [page-id reset-property-values]}]
   (ui-outliner-tx/transact!
-   {:outliner-op :set-block-properties}
-   (doseq [[property-id property-ident value schema] properties]
+   {:outliner-op :set-block-properties
+    :ui/page-id page-id}
+   (doseq [[property-id property-ident value schema property] properties]
      (when-not (qualified-keyword? property-ident)
        (js/console.error (str "Invalid property id: " property-id))
        (throw (ex-info "Invalid property id" {:property-id property-id
                                               :property-ident property-ident})))
-     (let [property (db/entity property-ident)
-           property-type (or (:logseq.property/type property)
+     (let [property-type (or (:logseq.property/type property)
                              (some-> (:type schema) keyword)
                              (and (nil? property)
                                   (infer-property-type value)))
@@ -182,39 +181,73 @@
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  [block properties & {:keys [plugin schema reset-property-values]}]
-  (when-let [block-id (and (seq properties) (:db/id block))]
-    (let [properties (->> properties
-                          (map (fn [[k v]]
-                                 (let [ident (get-db-ident-from-property-name k plugin)
-                                       property-schema (get schema k)]
-                                   [k ident v property-schema]))))]
-      (set-block-properties! plugin block-id properties {:reset-property-values reset-property-values}))))
+  [block properties & {:keys [page-id plugin schema reset-property-values]}]
+  (when-let [block-id (and (seq properties) (:block/uuid block))]
+    (let [properties (mapv (fn [[k v]]
+                             (let [ident (get-db-ident-from-property-name k plugin)
+                                   property-schema (get schema k)]
+                               [k ident v property-schema]))
+                           properties)
+          property-idents (mapv second properties)]
+      (p/let [property-results (db-async/<get-blocks (state/get-current-repo)
+                                                     property-idents
+                                                     {:children? false})
+              property-by-ident (into {}
+                                      (keep (fn [{:keys [id block]}]
+                                              (when block [id block])))
+                                      property-results)
+              properties (mapv (fn [[property-id ident value property-schema]]
+                                 [property-id ident value property-schema (get property-by-ident ident)])
+                               properties)]
+        (set-block-properties! plugin block-id properties {:page-id page-id
+                                                           :reset-property-values reset-property-values})))))
 
 (defn <sync-children-blocks!
   [block]
   (when block
-    (db-async/<get-block (state/get-current-repo)
-                         (:block/uuid (:block/parent block)) {:children? true})))
+    (p/let [parent (db-async/<get-block-parent (state/get-current-repo) (:block/uuid block))]
+      (when-let [parent-uuid (:block/uuid parent)]
+        (db-async/<get-block (state/get-current-repo) parent-uuid {:children? true})))))
+
+(defn- immediate-children
+  [block children]
+  (filter #(= (:db/id block) (get-in % [:block/parent :db/id])) children))
+
+(defn- compact-normalized-refs
+  [block]
+  (cond-> block
+    (contains? block "refs")
+    (update "refs" #(mapv (fn [ref] (select-keys ref ["id"])) %))
+
+    (:refs block)
+    (update :refs #(mapv (fn [ref] (select-keys ref [:id])) %))))
 
 (defn get_block
   [id-or-uuid ^js opts]
-  (when-let [block (if (number? id-or-uuid)
-                     (db-utils/pull id-or-uuid)
-                     (and id-or-uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid))))]
-    (when (or (true? (some-> opts (.-includePage)))
-              (not (contains? block :block/name)))
-      (when-let [uuid (:block/uuid block)]
-        (let [{:keys [includeChildren]} (bean/->clj opts)
-              repo (state/get-current-repo)
-              block (if includeChildren
-                      ;; nested children results
-                      (let [blocks (->> (db-model/get-block-and-children repo uuid)
-                                        (map (fn [b]
-                                               (dissoc (db-utils/pull (:db/id b)) :block.temp/load-status))))]
-                        (first (outliner-tree/blocks->vec-tree blocks uuid)))
-                      ;; attached shallow children
+  (when id-or-uuid
+    (p/let [{:keys [includeChildren]} (bean/->clj opts)
+            repo (state/get-current-repo)
+            id (cond
+                 (number? id-or-uuid) id-or-uuid
+                 (uuid? id-or-uuid) id-or-uuid
+                 :else (sdk-utils/uuid-or-throw-error id-or-uuid))
+            {:keys [block children]}
+            (if includeChildren
+              (db-async/<get-block-with-children repo id {:children? true
+                                                          :include-collapsed-children? true})
+              (p/let [block (db-async/<get-block repo id {:children? false})
+                      children (when block
+                                 (db-async/<get-block-immediate-children repo (:block/uuid block)))]
+                {:block block
+                 :children children}))]
+      (when (and block
+                 (or (true? (some-> opts (.-includePage)))
+                     (not (contains? block :block/name))))
+        (let [block (if includeChildren
+                      (-> (outliner-tree/blocks->vec-tree (cons block children) (:block/uuid block))
+                          first)
                       (assoc block :block/children
                              (map #(list :uuid (:block/uuid %))
-                                  (db/get-block-immediate-children repo uuid))))]
-          (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
+                                 (immediate-children block children))))]
+          (bean/->js (compact-normalized-refs
+                      (sdk-utils/normalize-keyword-for-json block))))))))

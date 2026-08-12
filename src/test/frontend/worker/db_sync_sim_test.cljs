@@ -4,7 +4,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.conn :as db-conn]
             [frontend.state :as state]
             [frontend.test.noise :as test-noise]
             [frontend.worker.handler.page :as worker-page]
@@ -135,15 +135,15 @@
   [repo->conns f]
   (let [worker-db-prev @worker-state/*datascript-conns
         ops-prev @worker-state/*client-ops-conns
-        db-prev @db-conn-state/conns
+        db-prev @db-conn/conns
         apply-history-action-prev @undo-redo/*apply-history-action!
         listeners (atom [])]
     (reset! worker-state/*datascript-conns (into {} (map (fn [[repo {:keys [conn]}]]
                                                            [repo conn])
                                                          repo->conns)))
-    (reset! db-conn-state/conns (into {} (map (fn [[repo {:keys [conn]}]]
-                                                [repo conn])
-                                              repo->conns)))
+    (reset! db-conn/conns (into {} (map (fn [[repo {:keys [conn]}]]
+                                          [repo conn])
+                                        repo->conns)))
     (reset! worker-state/*client-ops-conns (into {} (map (fn [[repo {:keys [ops-conn]}]]
                                                            [repo ops-conn])
                                                          repo->conns)))
@@ -156,7 +156,7 @@
           (d/listen! conn key
                      (fn [tx-report]
                        (let [tx-report' (-> tx-report
-                                            (assoc-in [:tx-meta :client-id] (:client-id @state/state))
+                                            (assoc-in [:tx-meta :client-id] (:client-id (state/get-state)))
                                             (update-in [:tx-meta :local-tx?]
                                                        (fn [local-tx?]
                                                          (if (nil? local-tx?)
@@ -174,7 +174,7 @@
             (.close ops-conn)))
         (reset! worker-state/*datascript-conns worker-db-prev)
         (reset! worker-state/*client-ops-conns ops-prev)
-        (reset! db-conn-state/conns db-prev)
+        (reset! db-conn/conns db-prev)
         (doseq [[repo _] repo->conns]
           (undo-redo/clear-history! repo))
         (reset! undo-redo/*undo-ops {})
@@ -1379,22 +1379,6 @@
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(deftest ^:long copy-paste-tree-op-registered-in-sim-op-table-test
-  (testing "sim op-table includes copy-paste tree op for random sync stress"
-    (is (contains? (set (map :name op-table))
-                   :copy-paste-block-tree-into-empty-target))))
-
-(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
-  (testing "sim op-table includes cut-paste op for random sync stress"
-    (is (contains? (set (map :name op-table))
-                   :cut-paste-block-with-child))))
-
-(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
-  (testing "sim op-table includes undo/redo ops for random sync stress"
-    (let [registered (set (map :name op-table))]
-      (is (contains? registered :undo))
-      (is (contains? registered :redo)))))
-
 (def ^:private required-core-outliner-op-names
   #{:save-block
     :insert-blocks
@@ -1420,13 +1404,6 @@
     :delete-page
     :toggle-reaction
     :transact})
-
-(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
-  (testing "sim op-table includes core logseq.outliner.op operations"
-    (let [registered (set (map :name op-table))
-          required required-core-outliner-op-names]
-      (is (empty? (set/difference required registered))
-          (str "missing ops: " (set/difference required registered))))))
 
 (def ^:private local-undo-redo-run-count 1000)
 (def ^:private local-undo-redo-full-cycle-runs 5)

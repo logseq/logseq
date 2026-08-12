@@ -1,8 +1,8 @@
 (ns frontend.handler.property
   "Property fns"
-  (:require [frontend.db.model :as db-model]
+  (:require [frontend.db.async :as db-async]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.state :as state]))
+            [promesa.core :as p]))
 
 (defn remove-block-property!
   [block-id property-id-or-key & [opts]]
@@ -50,8 +50,7 @@
 
 (defn get-class-property-choices
   []
-  (->>
-   (db-model/get-all-properties (state/get-current-repo)
-                                {:remove-ui-non-suitable-properties? true})
-   (remove (fn [p]
-             (contains? class-property-excludes (:db/ident p))))))
+  (p/let [properties (db-async/<get-all-properties :remove-ui-non-suitable-properties? true)]
+    (remove (fn [property]
+              (contains? class-property-excludes (:db/ident property)))
+            properties)))

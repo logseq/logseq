@@ -125,6 +125,17 @@ export const scrollToHighlight = (viewer, highlight) => {
     const id = highlight?.id
     const el = document.getElementById(`hl_${id}`)
     if (!el) return
+    const rect = el.getBoundingClientRect()
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+    const inViewport =
+      rect.bottom >= 0 &&
+      rect.top <= viewportHeight &&
+      rect.right >= 0 &&
+      rect.left <= viewportWidth
+    if (!inViewport) {
+      el.scrollIntoView({ block: 'center', inline: 'nearest' })
+    }
     el.classList.add('hl-flash')
     setTimeout(() => el?.classList.remove('hl-flash'), 1200)
   }

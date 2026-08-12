@@ -261,6 +261,7 @@
    :editor/add-property                     {:binding (if mac? "mod+p" "ctrl+alt+p")
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
+                                                        (state/pub-event! [:editor/hide-action-bar])
                                                         (state/pub-event! [:editor/new-property {}]))}
    :editor/set-tags                         {:binding "p t"
                                              :selection? true
@@ -270,7 +271,7 @@
    :editor/add-property-deadline            {:binding "p d"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/deadline}]))}
 
    :editor/add-property-status              {:binding "p s"
                                              :selection? true

@@ -58,14 +58,15 @@
   (let [dismissing? (.-dismissing data)]
     (cond
       dismissing?
-      (when (some? @mobile-state/*popup-data)
-        (p/do!
+      (p/do!
+       (when (some? @mobile-state/*popup-data)
          (state/pub-event! [:mobile/clear-edit])
          (mobile-state/set-popup! nil)
-         (reset! *last-popup-data nil)
          (when-let [plugin ^js mobile-util/native-editor-toolbar]
-           (.dismiss plugin))
-         (notify-native-sheet-content-ready!)))
+           (.dismiss plugin)))
+       (reset! *last-popup? false)
+       (reset! *last-popup-data nil)
+       (notify-native-sheet-content-ready!))
 
       :else
       nil)))

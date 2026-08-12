@@ -68,8 +68,7 @@
     (hooks/use-effect!
      #(let [doc js/document.documentElement
             preferred-language' (i18n/locale-tag preferred-language)]
-        (.setAttribute doc "lang" preferred-language')
-        (js/LSI18N.setLocale preferred-language'))
+        (.setAttribute doc "lang" preferred-language'))
      [preferred-language])
 
     (hooks/use-effect!
@@ -133,7 +132,9 @@
           (fn [] [:div.settings-modal (settings/settings settings-open?)])
           {:label :app-settings
            :align :top
-           :content-props {:onOpenAutoFocus #(.preventDefault %)}
+           :content-props {:onOpenAutoFocus #(.preventDefault %)
+                           :style {:width "min(1024px, calc(100vw - 2rem))"
+                                   :max-width "calc(100vw - 2rem)"}}
            :id :app-settings})
          (shui/dialog-close! :app-settings)))
      [settings-open?])

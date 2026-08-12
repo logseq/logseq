@@ -2,10 +2,12 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.db-sync.common :as common :refer [cors-headers]]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
+(def max-encrypted-asset-size (* 200 1024 1024))
 
 (def ^:private asset-type->content-type
   {"png" "image/png"
@@ -213,7 +215,7 @@
       (js/Response. nil #js {:status 204 :headers (cors-headers)})
 
       :else
-      (if-let [{:keys [key asset-type]} (parse-asset-path path)]
+      (if-let [{:keys [graph-id key asset-type]} (parse-asset-path path)]
         (let [^js bucket (.-LOGSEQ_SYNC_ASSETS env)]
           (if-not bucket
             (http/error-response "missing assets bucket" 500)
@@ -222,19 +224,19 @@
               (handle-get-asset bucket key asset-type)
 
               "PUT"
-              (.then (.arrayBuffer request)
-                     (fn [buf]
-                       (if (> (.-byteLength buf) max-asset-size)
-                         (http/error-response "asset too large" 413)
-                         (.then (.put bucket
-                                      key
-                                      buf
-                                      #js {:httpMetadata #js {:contentType (or (.get (.-headers request) "content-type")
-                                                                               "application/octet-stream")}
-                                           :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
-                                                                :type asset-type}})
-                                (fn [_]
-                                  (http/json-response :assets/put {:ok true} 200))))))
+              (p/let [e2ee? (index/<graph-e2ee? (.-DB env) graph-id)
+                      buf (.arrayBuffer request)
+                      size-limit (if e2ee? max-encrypted-asset-size max-asset-size)]
+                (if (> (.-byteLength buf) size-limit)
+                  (http/error-response "asset too large" 413)
+                  (p/let [_ (.put bucket
+                                  key
+                                  buf
+                                  #js {:httpMetadata #js {:contentType (or (.get (.-headers request) "content-type")
+                                                                           "application/octet-stream")}
+                                       :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
+                                                            :type asset-type}})]
+                    (http/json-response :assets/put {:ok true} 200))))
 
               "DELETE"
               (.then (.delete bucket key)
