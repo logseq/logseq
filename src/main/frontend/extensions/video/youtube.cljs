@@ -54,7 +54,7 @@
 (def ^:private default-video-height 315)
 
 (hsx/defc youtube-video
-  [id {:keys [width height start bare-frame?] :as _opts}]
+  [id {:keys [width height start iframe-only?] :as _opts}]
   (let [width (or width default-video-width)
         height (or height default-video-height)
         origin (.. js/window -location -origin)
@@ -81,10 +81,7 @@
            (<! (load-youtube-api))
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
-    (let [frame [:div.video-embed-frame
-                 {:style {:width width
-                          :height height}}
-                 [:iframe
+    (let [iframe [:iframe
                   {:id                (str "youtube-player-" id)
                    :ref               *iframe-ref
                    :allow-full-screen "allowfullscreen"
@@ -92,10 +89,14 @@
                    :referrer-policy   "strict-origin-when-cross-origin"
                    :referer           "https://logseq.com"
                    :frame-border      "0"
-                   :src               url}]]]
-      (if bare-frame?
-        frame
-        [:div.video-embed-shell frame]))))
+                   :src               url}]]
+      (if iframe-only?
+        iframe
+        [:div.video-embed-shell
+         [:div.video-embed-frame
+          {:style {:width width
+                   :height height}}
+          iframe]]))))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)

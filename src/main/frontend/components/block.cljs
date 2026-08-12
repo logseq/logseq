@@ -1654,12 +1654,6 @@
         (max min-video-embed-width)
         (min upper-bound))))
 
-(defn- video-embed-dimensions
-  [aspect-ratio width]
-  (let [[ratio-width ratio-height] (or aspect-ratio [16 9])
-        height (int (* width (/ ratio-height ratio-width)))]
-    [width height]))
-
 (hsx/defc video-resize-handle
   [{:keys [width *shell-ref set-width! on-width-change!]}]
   (let [*drag (hooks/use-ref nil)]
@@ -1722,34 +1716,33 @@
         width (clamp-video-embed-width
                 (or local-width width default-video-embed-width)
                 max-width)
-        [width height] (video-embed-dimensions aspect-ratio width)]
-    (when-let [frame
+        [ratio-width ratio-height] (or aspect-ratio [16 9])
+        frame-style {:width width
+                     :aspect-ratio (str ratio-width " / " ratio-height)}]
+    (when-let [iframe
                (case render
                  :youtube-player
-                 (let [opts (cond-> {:width width
-                                     :height height
-                                     :bare-frame? true}
+                 (let [opts (cond-> {:iframe-only? true}
                               (seq start)
                               (assoc :start start))]
                    [youtube/youtube-video id opts])
 
                  :iframe
-                 [:div.video-embed-frame
-                  {:style {:width width
-                           :height height}}
-                  [:iframe
-                   {:allow-full-screen true
-                    :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                    :framespacing "0"
-                    :frame-border "no"
-                    :border "0"
-                    :scrolling "no"
-                    :src src}]]
+                 [:iframe
+                  {:allow-full-screen true
+                   :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                   :framespacing "0"
+                   :frame-border "no"
+                   :border "0"
+                   :scrolling "no"
+                   :src src}]
 
                  nil)]
       [:div.video-embed-shell
        {:ref *shell-ref}
-       frame
+       [:div.video-embed-frame
+        {:style frame-style}
+        iframe]
        (when resizable?
          (video-resize-handle {:width width
                                :*shell-ref *shell-ref
