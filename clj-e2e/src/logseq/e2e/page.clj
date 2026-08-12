@@ -57,15 +57,18 @@
 
 (defn- set-tag-extends
   [extends & [retry-count]]
-  (let [retry-count (or retry-count 5)]
-    (util/wait-timeout 500)
-    (w/click (loc/filter ".property-value" :has-text "root tag"))
-    (let [extends-visible? (mapv #(w/visible? (format "div:has(> button):has(div:text('%s'))" %)) extends)]
-      (if (every? identity extends-visible?)
-        (doseq [extend extends]
-          (w/click (format "div:has(> button):has(div:text('%s'))" extend)))
+  (let [retry-count (or retry-count 20)]
+    (try
+      (util/wait-timeout 500)
+      (w/click (loc/filter ".property-value" :has-text "root tag"))
+      (let [option-selector #(format ".ui__dropdown-menu-content a.menu-link:has-text('%s')" %)]
+        (doseq [parent-tag extends]
+          (w/click (option-selector parent-tag)))
+        (when-not (some #{"Root Tag"} extends)
+          (w/click (option-selector "Root Tag"))))
+      (catch TimeoutError e
         (if (zero? retry-count)
-          (throw (ex-info "parent-tag not found" {:extends extends :visible? extends-visible?}))
+          (throw (ex-info "parent-tag not found" {:extends extends} e))
           (do (k/esc)
               (set-tag-extends extends (dec retry-count))))))))
 
