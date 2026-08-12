@@ -1,18 +1,30 @@
 (ns frontend.handler.notification
-  "Provides notification related functionality"
-  (:require [frontend.state :as state]
-            [frontend.util :as util]))
+  "Provides notification related functionality."
+  (:require [frontend.util :as util]
+            [logseq.shui.ui :as shui]))
+
+(defn- toast-id
+  [uid]
+  (some-> uid str))
+
+(defn- status-icon
+  [status]
+  (shui/tabler-icon
+   (case status
+     :success "circle-check"
+     :warning "alert-circle"
+     :error "circle-x"
+     "info-circle")
+   {:class (str "ui__toast-status-icon " (name status))
+    :size 20}))
 
 (defn clear!
   [uid]
-  (let [contents (state/get-notification-contents)
-        close-cb (:close-cb (get contents uid))]
-    (state/set-state! :notification/contents (dissoc contents uid))
-    (when (fn? close-cb) (close-cb uid))))
+  (shui/toast-dismiss! (toast-id uid)))
 
 (defn clear-all!
   []
-  (state/set-state! :notification/contents nil))
+  (shui/toast-dismiss!))
 
 (defn show!
   "status: :info/:warning/:error/:success"
@@ -28,14 +40,16 @@
    (show! content status clear? uid timeout nil))
   ([content status clear? uid timeout close-cb]
    (assert (keyword? status) "status should be a keyword")
-   (let [contents (state/get-notification-contents)
-         uid (or uid (keyword (util/unique-id)))]
-     (state/set-state! :notification/contents (assoc contents
-                                                     uid {:content content
-                                                          :status status
-                                                          :close-cb close-cb}))
-
-     (when (and (not= status :error) (not (false? clear?)))
-       (js/setTimeout #(clear! uid) (or timeout 2000)))
-
+   (let [uid (or uid (keyword (util/unique-id)))
+         auto-dismiss? (and (not= status :error)
+                            (not (false? clear?)))]
+     (shui/toast!
+      {:id (toast-id uid)
+       :description content
+       :variant status
+       :duration (if auto-dismiss? (or timeout 2000) 0)
+       :icon (status-icon status)
+       :on-dismiss (fn [_id]
+                     (when (fn? close-cb)
+                       (close-cb uid)))})
      uid)))

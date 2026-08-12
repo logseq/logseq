@@ -455,6 +455,25 @@
                             remote-t
                             now]))))))))
 
+(defn- sync-conflict-row->map
+  [row]
+  {:id (aget row "id")
+   :block-uuid (parse-uuid-str (aget row "block_uuid"))
+   :attr (str->qualified-kw (aget row "attr"))
+   :value (aget row "value")
+   :remote-t (aget row "remote_t")
+   :created-at (aget row "created_at")})
+
+(defn get-all-sync-conflicts
+  [repo]
+  (when-let [store (sqlite-store-or-throw repo)]
+    (->> (sqlite-rows store
+                      (str "select id, block_uuid, attr, value, remote_t, created_at "
+                           "from sync_conflicts order by created_at desc, id desc")
+                      [])
+         (map sync-conflict-row->map)
+         (group-by :block-uuid))))
+
 (defn get-sync-conflicts
   [repo block-uuid]
   (when (uuid? block-uuid)
@@ -464,13 +483,7 @@
                              "from sync_conflicts where block_uuid = ? "
                              "order by created_at desc, id desc")
                         [(str block-uuid)])
-           (mapv (fn [row]
-                   {:id (aget row "id")
-                    :block-uuid (parse-uuid-str (aget row "block_uuid"))
-                    :attr (str->qualified-kw (aget row "attr"))
-                    :value (aget row "value")
-                    :remote-t (aget row "remote_t")
-                    :created-at (aget row "created_at")}))))))
+           (mapv sync-conflict-row->map)))))
 
 (defn clear-sync-conflicts!
   [repo block-uuid]

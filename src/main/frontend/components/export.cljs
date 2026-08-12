@@ -4,7 +4,7 @@
             [cljs.pprint :as pprint]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node interpolate-sentence t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.export :as export]
@@ -17,18 +17,49 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn- <get-key-value
+  [repo key]
+  (state/<invoke-db-worker :thread-api/get-key-value repo key))
+
+(def ^:private page-tag-idents
+  #{:logseq.class/Page
+    :logseq.class/Journal
+    :logseq.class/Tag
+    :logseq.class/Property})
+
+(defn- page-entity?
+  [entity]
+  (boolean (some (fn [tag]
+                   (contains? page-tag-idents (:db/ident tag)))
+                 (:block/tags entity))))
+
+(defn- <page-block?
+  [top-block-id]
+  (when-let [repo (and (uuid? top-block-id) (state/get-current-repo))]
+    (p/let [block (state/<invoke-db-worker :thread-api/pull
+                                           repo
+                                           [{:block/tags [:db/ident]}]
+                                           [:block/uuid top-block-id])]
+      (page-entity? block))))
+
 (hsx/defc auto-backup
   []
-  (let [*backup-folder (hooks/use-memo #(atom (ldb/get-key-value (db/get-db) :logseq.kv/graph-backup-folder)) [])
+  (let [*backup-folder (hooks/use-memo #(atom nil) [])
         [backup-folder] (hooks/use-atom *backup-folder)
         repo (state/get-current-repo)]
+    (hooks/use-effect!
+     (fn []
+       (if repo
+         (p/let [backup-folder (<get-key-value repo :logseq.kv/graph-backup-folder)]
+           (reset! *backup-folder backup-folder))
+         (reset! *backup-folder nil)))
+     [repo])
     [:div.flex.flex-col.gap-4
      [:div.font-medium.opacity-50
       (t :export.backup/schedule)]
@@ -44,7 +75,11 @@
              :title (t :export.backup/cancel)
              :on-click (fn []
                          (p/do!
-                          (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                          (state/<invoke-db-worker :thread-api/transact
+                                                   repo
+                                                   [[:db/retractEntity :logseq.kv/graph-backup-folder]]
+                                                   nil
+                                                   nil)
                           (reset! *backup-folder nil)))
              :size :sm}
             (ui/icon "x"))]
@@ -163,9 +198,16 @@
              {:indent-style text-indent-style :remove-options text-remove-options :other-options text-other-options})
       :opml (export-opml/export-blocks-as-opml
              current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
-      :html (export-html/export-blocks-as-html
-             current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
-      ""))))
+	      :html (export-html/export-blocks-as-html
+	             current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
+	      ""))))
+
+(defn- reset-export-content!
+  ([*content top-level-ids]
+   (reset-export-content! *content top-level-ids {}))
+  ([*content top-level-ids export-options]
+   (p/let [content (export-helper top-level-ids export-options)]
+     (reset! *content content))))
 
 (defn- <export-edn-helper
   [root-block-uuids-or-page-uuid export-type]
@@ -194,41 +236,46 @@
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
   (let [top-block-id (if (coll? block-uuids-or-page-name) (first block-uuids-or-page-name) block-uuids-or-page-name)
         style (js/window.getComputedStyle js/document.body)
-        background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
-        page? (and (uuid? top-block-id) (db/page? (db/entity [:block/uuid top-block-id])))
-        selector (if page?
-                   "#main-content-container"
-                   (str "[blockid='" top-block-id "']"))
-        container  (js/document.querySelector selector)
-        scale (if page? (/ 1 (or zoom 1)) 1)
-        options #js {:allowTaint true
-                     :useCORS true
-                     :backgroundColor (or background "transparent")
-                     :x (or (/ x scale) 0)
-                     :y (or (/ y scale) 0)
-                     :width (when width (/ width scale))
-                     :height (when height (/ height scale))
-                     :scrollX 0
-                     :scrollY 0
-                     :scale scale
-                     :windowHeight (when page?
-                                     (.-scrollHeight container))}]
-    (-> (js/html2canvas container options)
-        (.then (fn [canvas] (.toBlob canvas (fn [blob]
-                                              (when blob
-                                                (let [img (js/document.getElementById "export-preview")
-                                                      img-url (image/create-object-url blob)]
-                                                  (set! (.-src img) img-url)
-                                                  (callback blob)))) "image/png"))))))
+        background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))]
+    (p/let [page? (<page-block? top-block-id)
+            selector (if page?
+                       "#main-content-container"
+                       (str "[blockid='" top-block-id "']"))
+            container (js/document.querySelector selector)
+            scale (if page? (/ 1 (or zoom 1)) 1)
+            options #js {:allowTaint true
+                         :useCORS true
+                         :backgroundColor (or background "transparent")
+                         :x (or (/ x scale) 0)
+                         :y (or (/ y scale) 0)
+                         :width (when width (/ width scale))
+                         :height (when height (/ height scale))
+                         :scrollX 0
+                         :scrollY 0
+                         :scale scale
+                         :windowHeight (when page?
+                                         (.-scrollHeight container))}
+            canvas (js/html2canvas container options)]
+      (.toBlob canvas (fn [blob]
+                        (when blob
+                          (let [img (js/document.getElementById "export-preview")
+                                img-url (image/create-object-url blob)]
+                            (set! (.-src img) img-url)
+                            (callback blob)))) "image/png"))))
 
-(defn- get-top-level-uuids
+(defn- <get-top-level-uuids
   [selection-ids]
-  (->> (block-handler/get-top-level-blocks (map #(db/entity [:block/uuid %]) selection-ids))
-       (map :block/uuid)))
+  (when-let [repo (and (seq selection-ids) (state/get-current-repo))]
+    (p/let [results (db-async/<get-blocks repo selection-ids)
+            blocks (keep :block results)]
+      (when (seq blocks)
+        (->> (block-handler/get-top-level-blocks blocks)
+             (map :block/uuid))))))
 
 (hsx/defc ^:large-vars/cleanup-todo export-blocks
   [_selection-ids {:keys [export-type] :as options}]
-  (let [top-level-uuids (hooks/use-memo #(get-top-level-uuids _selection-ids) [_selection-ids])
+  (let [*top-level-uuids (hooks/use-memo #(atom nil) [])
+        [top-level-uuids] (hooks/use-atom *top-level-uuids)
         *text-other-options (hooks/use-memo #(atom nil) [])
         *text-remove-options (hooks/use-memo #(atom nil) [])
         *text-indent-style (hooks/use-memo #(atom nil) [])
@@ -242,34 +289,43 @@
         tp @*export-block-type]
     (hooks/use-effect!
      (fn []
-       (let [current-remove-options (set (state/get-export-block-text-remove-options))
-             current-indent-style (state/get-export-block-text-indent-style)
-             current-other-options (state/get-export-block-text-other-options)]
-         (reset! *export-block-type :text)
-         (reset! *text-remove-options current-remove-options)
-         (reset! *text-indent-style current-indent-style)
-         (reset! *text-other-options current-other-options)
-         (reset! *content (export-helper top-level-uuids
-                                         {:indent-style current-indent-style
-                                          :remove-options current-remove-options
-                                          :other-options current-other-options}))))
+       (reset! *top-level-uuids nil)
+       (p/let [top-level-uuids (<get-top-level-uuids _selection-ids)]
+         (reset! *top-level-uuids top-level-uuids)))
+     [_selection-ids])
+    (hooks/use-effect!
+     (fn []
+       (when top-level-uuids
+         (let [current-remove-options (set (state/get-export-block-text-remove-options))
+               current-indent-style (state/get-export-block-text-indent-style)
+               current-other-options (state/get-export-block-text-other-options)]
+           (reset! *export-block-type :text)
+           (reset! *text-remove-options current-remove-options)
+           (reset! *text-indent-style current-indent-style)
+           (reset! *text-other-options current-other-options)
+	           (reset-export-content! *content top-level-uuids
+	                                  {:indent-style current-indent-style
+	                                   :remove-options current-remove-options
+	                                   :other-options current-other-options}))))
      [top-level-uuids])
     [:div.export.resize
      {:class "-m-5"}
-     [:div.p-6
+     (if (nil? top-level-uuids)
+       [:div.p-6 (ui/loading "")]
+       [:div.p-6
       [:div.flex.pb-3
        (ui/button (t :export/format-text)
                   :class "mr-4 w-20"
-                  :on-click #(do (reset! *export-block-type :text)
-                                 (reset! *content (export-helper top-level-uuids))))
+	                  :on-click #(do (reset! *export-block-type :text)
+	                                 (reset-export-content! *content top-level-uuids)))
        (ui/button "OPML"
                   :class "mr-4 w-20"
-                  :on-click #(do (reset! *export-block-type :opml)
-                                 (reset! *content (export-helper top-level-uuids))))
+	                  :on-click #(do (reset! *export-block-type :opml)
+	                                 (reset-export-content! *content top-level-uuids)))
        (ui/button "HTML"
                   :class "mr-4 w-20"
-                  :on-click #(do (reset! *export-block-type :html)
-                                 (reset! *content (export-helper top-level-uuids))))
+	                  :on-click #(do (reset! *export-block-type :html)
+	                                 (reset-export-content! *content top-level-uuids)))
        ;; TODO: Remove if this is no longer used after whiteboard removal
        (when-not (seq? top-level-uuids)
          (ui/button "PNG"
@@ -311,11 +367,12 @@
                                 (let [next-indent-style (util/evalue e)]
                                   (state/set-export-block-text-indent-style! next-indent-style)
                                   (reset! *text-indent-style next-indent-style)
-                                  (reset! *content
-                                          (export-helper top-level-uuids
-                                                         {:indent-style next-indent-style
-                                                          :remove-options text-remove-options
-                                                          :other-options text-other-options}))))}
+	                                  (reset-export-content!
+	                                   *content
+	                                   top-level-uuids
+	                                   {:indent-style next-indent-style
+	                                    :remove-options text-remove-options
+	                                    :other-options text-other-options})))}
                   (for [{:keys [title-key value]} options]
                     [:option {:key title-key
                               :value value}
@@ -327,7 +384,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :page-ref)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              (t :export/page-ref-text)]
 
@@ -337,7 +394,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :emphasis)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              (t :export/remove-emphasis)]
@@ -348,7 +405,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :tag)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              (t :export/remove-tags)]]
@@ -361,7 +418,7 @@
                                        (state/update-export-block-text-other-options!
                                         :newline-after-block (boolean (util/echecked? e)))
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              (t :export/newline-after-block)]
 
@@ -371,7 +428,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :property)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              (t :export/remove-properties)]]
 
@@ -383,7 +440,7 @@
                                        (state/update-export-block-text-other-options!
                                         :open-blocks-only (boolean (util/echecked? e)))
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
-                                       (reset! *content (export-helper top-level-uuids)))})
+	                                       (reset-export-content! *content top-level-uuids))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              (t :export/open-blocks-only)]]
 
@@ -398,7 +455,7 @@
                                  level (if (= "all" value) :all (util/safe-parse-int value))]
                              (state/update-export-block-text-other-options! :keep-only-level<=N level)
                              (reset! *text-other-options (state/get-export-block-text-other-options))
-                             (reset! *content (export-helper top-level-uuids))))}
+	                             (reset-export-content! *content top-level-uuids)))}
              (for [n (cons "all" (range 1 10))]
                [:option {:key n :value n} n])]]]))
 
@@ -412,8 +469,5 @@
                                   (util/copy-to-clipboard! content :html (when (= tp :html) content)))
                                 (reset! *copied? true)))
          (ui/button (t :export/save-to-file)
-                    :on-click #(let [file-name (if (uuid? top-level-uuids)
-                                                 (-> (db/get-page top-level-uuids)
-                                                     (util/get-page-title))
-                                                 (t/now))]
-                                 (utils/saveToFile (js/Blob. [content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))
+                    :on-click #(let [file-name (t/now)]
+                                 (utils/saveToFile (js/Blob. [content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])])]))

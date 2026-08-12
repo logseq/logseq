@@ -26,8 +26,8 @@ env:
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
-  e2e-test-build:
-    name: Test
+  build:
+    name: Build
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -65,12 +65,14 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn', 'clj-e2e/deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:cljs -P
+        run: |
+          clojure -A:cljs -P
+          cd clj-e2e && clojure -P -M:test
 
       - name: Shadow-cljs cache
         uses: actions/cache@v4
@@ -90,10 +92,93 @@ jobs:
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true frontend.worker.handler.transaction/OUTLINER-PERF-LOGGING true}}" --debug && pnpm webpack-app-build
+
+      - name: Upload E2E test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-build
+          path: static/
+          retention-days: 1
+
+  test:
+    name: Test ${{ matrix.shard }}
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - shard: editor
+            namespaces: logseq.e2e.editor-basic-test
+          - shard: commands
+            namespaces: >-
+              logseq.e2e.commands-basic-test
+              logseq.e2e.multi-tabs-basic-test
+              logseq.e2e.reference-basic-test
+          - shard: outliner-rtc
+            namespaces: >-
+              logseq.e2e.outliner-basic-test
+              logseq.e2e.rtc-basic-test
+              logseq.e2e.assets-basic-test
+          - shard: graph-properties
+            namespaces: >-
+              logseq.e2e.graph-navigation-basic-test
+              logseq.e2e.block-property-basic-test
+              logseq.e2e.cmdk-scroll-basic-test
+          - shard: remaining
+            namespaces: >-
+              logseq.e2e.view-basic-test
+              logseq.e2e.property-basic-test
+              logseq.e2e.plugins-basic-test
+              logseq.e2e.property-config-basic-test
+              logseq.e2e.tag-basic-test
+              logseq.e2e.right-sidebar-basic-test
+              logseq.e2e.export-basic-test
+              logseq.e2e.flashcards-basic-test
+              logseq.e2e.import-basic-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Clojure cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn', 'clj-e2e/deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Download E2E test build
+        uses: actions/download-artifact@v4
+        with:
+          name: static-build
+          path: static
 
       - name: Run e2e tests
-        run: cd clj-e2e && timeout 30m bb dev
+        env:
+          E2E_NAMESPACES: ${{ matrix.namespaces }}
+        run: |
+          read -r -a namespaces <<< "$E2E_NAMESPACES"
+          for namespace in "${namespaces[@]}"; do
+            bb dev -n "$namespace"
+          done
+        working-directory: clj-e2e
         # env:
         #   DEBUG: "pw:api"
 
@@ -101,10 +186,15 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots
+          name: e2e-screenshots-${{ matrix.shard }}
           path: clj-e2e/e2e-dump/*
           retention-days: 1
 
+  success:
+    name: Mark success
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
       - name: Mark success
         if: ${{ success() }}
         run: echo "E2E OK" > e2e-success.txt

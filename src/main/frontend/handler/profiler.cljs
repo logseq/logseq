@@ -103,12 +103,12 @@
    :ref-hash->ref @*ref-hash->ref})
 
 (comment
-  (register-fn! 'datascript.core/entity)
+  (register-fn! 'frontend.handler.profiler/test-fn-to-profile)
   (prn :profiling (keys @*fn-symbol->origin-fn))
   (prn :report)
   (pprint/pprint (profile-report))
   (reset-report!)
-  (unregister-fn! 'datascript.core/entity))
+  (unregister-fn! 'frontend.handler.profiler/test-fn-to-profile))
 
 (comment
   ;; test multi-arity, variadic fn

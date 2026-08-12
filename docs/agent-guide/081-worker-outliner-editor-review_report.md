@@ -1,0 +1,451 @@
+# PR #12892 Core Worker, Outliner, and Editor Review
+
+Date: 2026-07-16
+
+PR: [#12892 — refactor: move UI DB access to worker](https://github.com/logseq/logseq/pull/12892)
+
+Review range: `998207ffd5339386607328d3c71fd190dbf58cb7..fbaecc73f0`
+
+## Executive summary
+
+The worker-owned DB direction is sound. The review confirmed two blocking issues and fifteen important or maintainability issues in the outliner/editor hot path. All seventeen findings have now been reproduced or reduced to an executable contract, fixed one at a time, and verified with focused regression coverage.
+
+The highest-risk pattern was an incomplete transaction-completion contract between the direct worker response and the worker broadcast. The remediation keeps one worker-owned mutation path, restores the broadcast payload required by shared hooks, limits the direct response to renderer/editor work, and prevents stale responses from publishing into a new graph or route.
+
+The review also removed UI-derived ordering as a second structural authority, bounded `get-blocks` requests and discarded descendant scans, fixed page-window hydration, and deleted compatibility/dead-code layers instead of extending them. The remaining items in this report are explicit runtime/E2E coverage gaps, not known unfixed findings.
+
+The initial review changed only this document. The remediation log below records later source and unit-test changes one finding at a time.
+
+## Scope
+
+The PR contains 493 changed files (`+34,694/-27,882`). This report focuses on 132 core files in these areas:
+
+- `deps/db`
+- `deps/outliner`
+- `src/main/frontend/worker`
+- `src/main/frontend/db`
+- `src/main/frontend/state*`
+- `src/main/frontend/handler/editor*`
+- `src/main/frontend/modules/outliner/pipeline.cljs`
+- block/page/page-window rendering
+- related unit and Clojure E2E coverage
+
+The Base UI migration, CSS-only changes, and unrelated CLI changes were outside this focused review.
+
+## Confirmed findings
+
+### 1. A multi-block paste can create duplicate pages with the same name
+
+- **Severity:** Blocking
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Data contract
+- **Location:** `deps/outliner/src/logseq/outliner/core.cljs:197`, `deps/outliner/src/logseq/outliner/core.cljs:616`
+- **Issue:** Each block resolves its page references independently against the same pre-transaction DB. Two pasted blocks referencing the same previously nonexistent page can therefore each create a different page UUID with the same `:block/name`.
+- **Evidence:** `build-insert-blocks-tx` calls `resolve-page-refs` once per block and concatenates all returned `page-txs`. `:block/name` is indexed but not unique. An in-memory `:paste` + `:paste-text` reproduction inserted two blocks referencing `fresh-page-3`; the resulting DB contained two page entities with distinct UUIDs, and the two blocks referenced different UUIDs.
+- **Impact:** The graph can persist duplicate page entities for one logical page name. Page lookup becomes ambiguous and the pasted blocks no longer reference the same page.
+- **Fix:** `build-insert-blocks-tx` now advances an in-memory DataScript value only when a block produces new page transactions. Later blocks in the same insert resolve against those pending pages and reuse the canonical UUID. Inserts without new page references do not perform the extra `d/with`. No cache, fallback, editor special case, or alternate page-reference rule was added.
+- **Regression test:** `frontend.modules.outliner.core-test/paste-text-reuses-new-page-references-across-blocks` exercises the real `:paste` + `:paste-text` transaction options. Before the fix it failed with two same-name page entities and two distinct referenced UUIDs. After the fix it passes with one page entity and one shared UUID.
+- **Verification:** The focused test passed with 2 assertions. The complete `frontend.modules.outliner.core-test` namespace passed with 31 tests and 229 assertions. `clojure -M:clj-kondo` reported 0 errors and 0 warnings for both changed CLJS files, and `git diff --check` passed. The repository wrapper `bb lint:kondo-git-changes` could not start because `clj-kondo` was absent from `PATH`; the equivalent repo aliases were run directly instead.
+
+---
+
+### 2. Render mounts can produce one unbounded descendant-loading worker request
+
+- **Severity:** Blocking
+- **Status:** Fixed and verified across two focused commits
+- **Category:** Performance
+- **Location:** `src/main/frontend/components/block.cljs:4834`, `src/main/frontend/db/async.cljs:232`, `src/main/frontend/worker/db_core.cljs:2288`
+- **Issue:** Every non-flat `block-container` can call `<get-block-with-children`, all calls scheduled in the same turn are merged into one unbounded batch, and the worker serially expands every requested root with `children? true`.
+- **Evidence:** The supplied `test lambda` log contains one 23,001-byte `:thread-api/get-blocks` payload with 469 unique IDs. The first request declares `children? true`; the remaining 468 requests reuse the same Transit key/value aliases, so all 469 request descendants. `flush-get-blocks-batch!` has no batch-size or visible-region bound, and `get-blocks-response` maps every request synchronously.
+- **Impact:** Task/query/reference pages can monopolize the DB worker, repeat overlapping subtree traversal, overflow recursive entity access, and remain blank before first paint.
+- **Fix:** The existing single batched worker path now partitions each graph queue into payloads of at most 50 requests. In the worker, `get-block-children` stops its iterative descendant scan at the existing 100-row large-subtree threshold; because large subtrees return only direct children, continuing to traverse the rest of the subtree was discarded work. Deferred results and the returned block/children shape are unchanged. There is no retry, fallback, renderer DB path, recursive replacement, or change to collapse/expand semantics.
+- **Regression tests:** `frontend.db.async-test/block-batching-bounds-worker-request-size-test` issues 151 public `<get-block` calls in one scheduling turn. Before the fix the worker received one payload of 151 requests; after the fix every payload contains at most 50. `frontend.worker.db-core-test/get-block-children-stops-scanning-large-subtrees` builds a 1k-deep chain and counts `:block/parent` index scans. Before the fix it performed 1,002 scans and then returned one direct child; after the fix it performs at most 101 scans and returns the same `large-page?` flag and direct child.
+- **Verification:** The async focused test and full namespace passed with 7 tests and 32 assertions. The subtree focused test passed with 3 assertions. The complete `frontend.worker.db-core-test` namespace passed with 159 tests and 425 assertions. The 10k-deep page-window test remains green. CLJS lint reported 0 errors; `db_core.cljs:3071` still emits the pre-existing unresolved `sqlite-export/validate-import-txs` warning outside this change.
+- **Remaining scope:** Mounts can still generate multiple bounded chunks. Any further reduction to visible/expanded rows should be driven by a new runtime profile and must preserve the current list/reference expansion behavior; it is no longer required to prevent the captured unbounded payload and full-subtree discard.
+- **Suggestion:** Keep one worker-owned data path, but make result views request bounded render-complete visible rows. Load descendants only for an expanded block. Do not restore a renderer DB cache or add retry/fallback logic.
+
+Current runtime note: a read-only Chrome navigation to the current `test lambda` Task page rendered `Children (5)` within three seconds and did not reproduce the stall. That does not invalidate the captured 469-request failure, but it means the current Task page is not unconditionally broken.
+
+---
+
+### 3. The originating client skips the entire transaction pipeline
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Correctness
+- **Location:** `src/main/frontend/handler/events.cljs:487`, `src/main/frontend/db/transact.cljs:194`
+- **Issue:** `apply-outliner-ops` marks every local operation with `:ui/handled-by-response? true`. The matching client then skips all of `pipeline/invoke-hooks`, although the direct response path only publishes block/page-window state and runs the editor callback.
+- **Evidence:** A runtime event probe recorded zero `pipeline/invoke-hooks` calls for a handled response from the current client and one call for another client. The skipped pipeline still owns reactive-query refresh, deleted-sidebar cleanup, page rename/delete events, editor start-position reset, editing-title synchronization, and plugin DB transaction hooks. The direct response does not implement those responsibilities.
+- **Impact:** Local edits can leave linked references/custom queries, sidebar items, page lifecycle state, and plugin observers stale even though the block row itself refreshed.
+- **Fix:** `:db/sync-changes` now always enters `pipeline/invoke-hooks`. The pipeline recognizes a handled response from the originating client and skips only the two steps owned by the direct response: publishing `:db/latest-transacted-entity-uuids` and taking the queued editor callback. Reactive-query refresh, deleted-sidebar/page routing, editing-state reset, plugin hooks, and page lifecycle events continue through the one pipeline.
+- **Regression tests:** The event wiring contract rejects a local-client `when-not` guard. The pipeline behavior test verifies that a handled local response does not republish renderer state or take the editor callback, while it still resets editor start state and calls `react/refresh!`.
+- **Verification:** `frontend.modules.outliner.pipeline-test` passed 2 tests and 6 assertions; `frontend.db.transact-test` passed 12 tests and 45 assertions; `frontend.remove-ui-db-test` passed 165 tests and 340 assertions. CLJS lint passed for the event, pipeline, and test files with 0 errors and 0 warnings.
+
+---
+
+### 4. The lightweight worker broadcast no longer satisfies the main-thread pipeline contract
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Data contract
+- **Location:** `src/main/frontend/worker/db_listener.cljs:90`, `src/main/frontend/modules/outliner/pipeline.cljs:29`
+- **Issue:** The worker broadcast intentionally omits `:tx-data`, but the receiving pipeline still consumes `:tx-data` for deleted sidebar entity IDs, editing-title synchronization, and plugin hook payloads.
+- **Evidence:** `main-thread-sync-result` builds `:data` from `tx-meta`, summary IDs, and `(dissoc result :tx-report)`; it never includes `(:tx-data tx-report')`. The receiver still passes `tx-data` to `deleted-block-db-ids`, `update-editing-block-title-if-changed!`, and `:plugin/hook-db-tx`. The new `changed-entity-ids`, `task-route-candidate-ids`, and `comment-route-candidate-ids` are not consumed by this pipeline.
+- **Impact:** Remote and other-tab transactions can leave sidebar/editor state stale and publish empty transaction payloads to plugins.
+- **Fix:** The worker broadcast now includes `:tx-data` from the processed `tx-report`, which is the same report used to build blocks, deleted entities, and affected query keys. The unused `changed-entity-ids`, task-route, and comment-route summaries and their second datom scan were removed. This restores one transaction contract for sidebar/editor/plugin consumers without a DB re-query, fallback, or parallel summary format.
+- **Regression test:** `frontend.worker.db-listener-test/db-listener-broadcasts-processed-transaction-data-test` verifies the title datom before and after a real Transit roundtrip and rejects the three unused summary fields. Before the fix the transaction data was empty; after the first contract fix the obsolete summary assertion provided a second RED before that code was removed.
+- **Verification:** `frontend.worker.db-listener-test` passed 4 tests and 8 assertions; `frontend.worker.pipeline-test` passed 20 tests and 98 assertions; `frontend.modules.outliner.pipeline-test` passed 2 tests and 6 assertions. CLJS lint passed for the changed listener and test with 0 errors and 0 warnings.
+
+---
+
+### 5. A persistence-listener failure happens after commit but before UI reconciliation
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Failure mode
+- **Location:** `src/main/frontend/worker/db_listener.cljs:151`
+- **Issue:** Checksum update and DB-sync persistence run inside the DataScript listener before main-thread sync and broadcast. If either throws, the DataScript connection is already committed, but the worker request rejects and the UI refresh is not broadcast.
+- **Evidence:** A runtime DataScript probe installed a throwing listener, called `d/transact!`, caught `"listener boom"`, and then queried the connection. The new datom was present despite the thrown transaction call. The Logseq listener ordering places persistence at lines 168–179 and broadcast at lines 181–191 with no failure boundary.
+- **Impact:** The editor can report failure and remain visually stale even though the DB mutation succeeded. A retry can duplicate or conflict with the already-committed structural operation.
+- **Fix:** Checksum update and local-tx persistence now have independent post-commit error boundaries. Each failure emits a structured worker log and `:capture-error`, then the listener continues to the other persistence stage and the normal UI pipeline/broadcast. The DataScript operation therefore completes as committed instead of rejecting as though it rolled back.
+- **Regression test:** `frontend.worker.db-listener-test/db-listener-reports-post-commit-failures-without-blocking-ui-sync-test` runs both failure stages. Before the fix each error escaped after the datom committed, no capture error was sent, and UI sync stopped; a checksum error also prevented local-tx persistence. After the fix the datom remains, both persistence stages run, one separate error is reported, and UI sync completes.
+- **Verification:** The focused test passed 8 assertions; `frontend.worker.db-listener-test` passed 5 tests and 16 assertions; the complete `frontend.worker.db-core-test` passed 159 tests and 425 assertions. CLJS lint passed for the changed listener and test with 0 errors and 0 warnings.
+
+---
+
+### 6. A missing graph connection is returned as a successful `nil` operation
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Failure mode
+- **Location:** `src/main/frontend/worker/db_core.cljs:2888`, `src/main/frontend/db/transact.cljs:223`
+- **Issue:** `:thread-api/apply-outliner-ops` is wrapped in `when-let`; an unknown or closed graph therefore resolves to `nil` instead of rejecting. The main thread destructures `nil`, publishes its inferred affected IDs, and can run an editor callback as though the operation committed.
+- **Evidence:** A runtime call to `:thread-api/apply-outliner-ops` for `__review_missing_graph__` resolved successfully with `nil`.
+- **Impact:** Graph-close/switch races can focus or display an unpersisted block and hide the real missing-connection error.
+- **Fix:** `:thread-api/apply-outliner-ops` now resolves the Datascript connection with an explicit fail-fast boundary. A missing graph throws `ex-info` with `:type :db/missing-connection` and the requested repo before undo metadata, DB work, UI publication, or editor callbacks run. No main-thread default or retry was added.
+- **Regression test:** `frontend.worker.db-core-test/apply-outliner-ops-rejects-missing-connection-test` invokes the real thread API with an absent repo. Before the fix it returned `nil`; after the fix it exposes the typed error and repo.
+- **Verification:** The focused test passed 2 assertions and the complete `frontend.worker.db-core-test` passed 160 tests and 427 assertions. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains at `db_core.cljs:3069` outside this change.
+
+---
+
+### 7. Operation completion is incorrectly coupled to next-frame editor callbacks
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Failure mode
+- **Location:** `src/main/frontend/db/transact.cljs:40`, `src/main/frontend/db/transact.cljs:232`
+- **Issue:** After the worker has committed and state has been published, every operation waits for `requestAnimationFrame` (or `setTimeout(0)`) to run the editor callback. A callback exception then rejects the outliner operation promise even though the DB change already committed. Conversely, a worker rejection before this point does not centrally remove the queued callback.
+- **Evidence:** A runtime probe of `on-next-frame!` with a throwing callback rejected with `"editor callback boom"`. The call occurs after `refresh-worker-op-blocks!`. Several call sites register callbacks without a shared `finally` cleanup path.
+- **Impact:** Enter/delete/indent/move gain an unconditional extra-frame boundary, callers can receive failure for an already-committed edit, and rejected worker calls can retain stale cursor/focus callbacks.
+- **Fix:** `on-next-frame!` is now a contained scheduler rather than a Promise. After the worker response and one state publication, `apply-outliner-ops` schedules cursor/focus work and paint telemetry, then immediately returns the DB result. Frame-callback exceptions are logged without changing the committed operation outcome. A real worker rejection removes the callback for that transaction ID before rethrowing the worker error. No polling or transition path was added.
+- **Regression tests:** The completion test holds the animation frame, verifies the DB result resolves first, then throws inside the queued editor callback and verifies the result remains resolved. The failure test rejects the worker request and verifies the tagged callback is removed. Before the fix the first result remained pending and then rejected; the second callback remained queued.
+- **Verification:** `frontend.db.transact-test` passed 14 tests and 48 assertions. Targeted Enter/insert and Enter/Delete callback tests passed 2 tests and 2 assertions. CLJS lint passed for the transaction and test files with 0 errors and 0 warnings.
+
+---
+
+### 8. Page-window rows have an implicit mixed shape that can publish blank blocks
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Data contract
+- **Location:** `src/main/frontend/worker/db_core.cljs:2226`, `src/main/frontend/components/page_window.cljs:7`
+- **Issue:** `:rows` mixes render-complete rows and layout-only rows. The consumer guesses the shape from the presence of `:block/title`. If a structural refresh introduces a new layout-only row not present in the current window, there is no render data to merge into it.
+- **Evidence:** In addition to the original pure-function probe, a real worker transaction reproduced the contract failure: a page had 151 rows, the renderer window contained 150, and deleting one visible row pulled the final row into the response without `:block/title`.
+- **Impact:** Delete/move/indent around a long-page window edge can display a blank block until another full hydration request completes.
+- **Fix:** The worker records the pre-transaction window membership and uses one rule for every structural operation: operation rows and rows newly entering the window receive complete render data; rows already present may remain layout-only and reuse their existing renderer data. This replaces the separate expand-descendant traversal and avoids hydrating or rerendering the whole 150-row window.
+- **Regression test:** `frontend.worker.db-core-test/delete-block-returns-complete-new-window-row-test` performs the real delete at the 150-row boundary and requires the newly visible row to carry `:block/title`. The existing insert and expand tests verify that their newly visible rows remain complete.
+- **Verification:** The focused RED failed on a layout-only row and the GREEN passed 2 assertions. Insert and expand coverage passed 3 assertions. The complete `frontend.worker.db-core-test` passed 161 tests and 429 assertions; `frontend.components.page-test` passed 3 tests and 3 assertions. The focused worker apply timing remained about 7ms. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains outside this change.
+
+---
+
+### 9. Quick Add reads a Promise as though it were a block map
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Data contract
+- **Location:** `src/main/frontend/handler/editor.cljs:4294`
+- **Issue:** `quick-add-ensure-new-block-exists!` calls `(:db/id (db-async/<get-block ...))` inside a `p/let` binding instead of awaiting the returned block first.
+- **Evidence:** A multi-user handler test supplied one Quick Add block owned by another user and asynchronously resolved the current user entity. Before the fix, no current-user block was inserted because `user-db-id` was `nil` and the other user's block remained in the unfiltered child list.
+- **Impact:** In multi-user graphs, Quick Add does not filter blocks by the current user and can reuse or suppress the wrong user's Quick Add block.
+- **Fix:** The existing `p/let` now binds the resolved user block first and reads `:db/id` in the next binding. No fallback or alternate path was added.
+- **Regression test:** `frontend.handler.editor-async-test/quick-add-creates-block-for-current-user` requires another user's child not to suppress insertion for the current user.
+- **Verification:** The focused test failed before the fix and passed after it. The complete `frontend.handler.editor-async-test` passed 27 tests and 76 assertions. CLJS lint passed with 0 errors and 0 warnings.
+
+---
+
+### 10. Insert order has both a renderer authority and a worker-DB authority
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Repository convention
+- **Location:** `src/main/frontend/components/block.cljs:5305`, `src/main/frontend/handler/editor.cljs:324`, `deps/outliner/src/logseq/outliner/core.cljs:571`
+- **Issue:** The renderer computes `:end-order-state` from its current visible window. Outliner core trusts `[:known ...]` and skips the worker DB's `get-right-sibling`/`get-down` lookup. Other callers continue to use the DB path.
+- **Evidence:** A real outliner test captured the renderer's original right order, inserted a concurrent right sibling into the DB, and then inserted with the stale boundary. Before the fix, the new block and current right sibling received the same fractional order (`compare = 0`).
+- **Impact:** A stale renderer window can calculate an insertion order against old neighbors, while non-renderer callers use the authoritative DB. This violates the intended single worker-owned mutation path.
+- **Fix:** The renderer no longer derives child/right order state, the editor no longer sends `:end-order-state`, and outliner core always resolves the insertion boundary from its transaction DB. The flat renderer still supplies the previous visible block used by editor navigation. This removes the second authority rather than validating or retrying it.
+- **Regression tests:** `logseq.outliner.core-test/insert-blocks-does-not-trust-stale-right-order` preserves the concurrent stale-boundary reproduction. `insert-blocks-finds-right-order-on-1k-sibling-page` enforces a 100ms upper bound for the authoritative lookup. The virtualized source-contract test requires all renderer order-state plumbing to remain absent.
+- **Verification:** The focused RED failed because the two orders compared equal. The selective outliner core suite passed 13 tests and 40 assertions after the fix. Virtualized block tests passed 19/66, editor async passed 27/76, and editor tests passed 61/168. CLJS lint passed with 0 errors and 0 warnings. The all-namespace outliner NBB runner could not start because of the pre-existing unresolved `sqlite-export/validate-import-txs`; the core namespace was loaded and run directly in the same NBB environment.
+
+## Confirmed maintainability and hack findings
+
+### 11. The frontend duplicates outliner tree construction
+
+- **Severity:** Minor
+- **Status:** Simplified and verified in the commit containing this report update
+- **Category:** Repository convention
+- **Location:** `deps/outliner/src/logseq/outliner/tree.cljs:11`, `src/main/frontend/modules/outliner/tree.cljs:37`
+- **Issue:** `blocks->vec-tree-data` duplicates grouping, order sorting, recursion, level assignment, and root handling from `deps/outliner/src/logseq/outliner/tree.cljs`. The copies already differ in transient attribute handling. The frontend API also retains an unused `_repo` compatibility arity.
+- **Impact:** Worker/plain-data and DB-backed tree semantics can drift.
+- **Reproduction:** A source-contract test found both a local `(group-by ...)` builder and no call to a shared helper. No current tree-shape bug was reproduced. The only output difference was intentional: the renderer has preserved `:block/tx-id` since the UI-DB removal while the older deps path removes it.
+- **Fix:** `logseq.outliner.tree/blocks->vec-tree-data` is now the single grouping, sorting, level, parent, child, and root builder. The frontend is a plain-data root adapter that requests `:block/tx-id` preservation; the existing deps wrapper keeps its old removal behavior. The unused frontend `_repo` arity and one redundant child sort were removed.
+- **Regression tests:** The source-contract test requires the frontend adapter to call the shared helper and contain no `group-by`. The deps helper test verifies both transient-field policies. The frontend tree test verifies sorted levels and retained worker tx IDs.
+- **Verification:** The focused source RED failed 2 assertions and passed after the refactor. The deps tree test passed 1 test and 3 assertions, frontend outliner core passed 32/232, and remove-UI-DB passed 166/342. CLJS lint passed with 0 errors and 0 warnings.
+
+---
+
+### 12. Page-tree response plumbing is dead code
+
+- **Severity:** Minor
+- **Status:** Removed and verified in the commit containing this report update
+- **Category:** Repository convention
+- **Location:** `src/main/frontend/db/transact.cljs:133`
+- **Issue:** `outliner-ops-need-page-tree?` always returns `false`, but the transaction path still computes flags, destructures `page-tree`, passes it through refresh functions, and retains an impossible branch.
+- **Impact:** The core transaction path advertises two refresh modes although only page-window refresh is active.
+- **Reproduction:** Repository search found no worker producer for an outliner `page-tree` response and no sender for `:ui/include-page-tree?`. The existing unit tests explicitly proved every operation returned false and every supplied page tree was discarded. A source-contract RED then failed on all three dead-path markers.
+- **Fix:** Removed the constant predicate, response destructuring, refresh argument and impossible assoc, perf flag, and unused worker compatibility key. The content and structural tests now exercise the actual updated-block/page-window paths directly.
+- **Verification:** The source-contract GREEN passed 3 assertions. `frontend.db.transact-test` passed 13 tests and 42 assertions, remove-UI-DB passed 167/345, and worker DB core passed 161/429. CLJS lint reported 0 errors; the pre-existing unresolved `sqlite-export/validate-import-txs` warning remains outside this change.
+
+---
+
+### 13. The new state modules are mostly compatibility scaffolding
+
+- **Severity:** Minor
+- **Status:** Removed and verified in the commit containing this report update
+- **Category:** Repository convention
+- **Location:** Removed `src/main/frontend/state/*.cljs` façade directory
+- **Issue:** `state.core` re-exports `frontend.state`, `state.init` explicitly describes a compatibility phase, and several domain namespaces contain only an `ns` form. Production code does not consume the new domain modules; only the alias-oriented state test references them.
+- **Impact:** The PR adds namespaces and an advertised architecture without reducing ownership or dependencies. It also preserves the reverse dependency direction that the state-module plan intended to remove.
+- **Reproduction:** Repository-wide require search found zero production consumers across all 13 namespaces. Five files contained only an `ns` form; the others re-exported `frontend.state` vars and were referenced only by tests proving the aliases pointed back to the monolith. The absence source-contract RED failed all 13 assertions.
+- **Fix:** Removed all 13 unowned namespaces and the alias-only tests. The actual `frontend.state` implementation and its state/RFX/editor-queue behavior tests remain unchanged. No replacement façade or partial domain migration was added.
+- **Verification:** The absence GREEN passed 13 assertions and the CLJS compile input dropped from 1,197 to 1,189 files. `frontend.state-test` retained 8 behavior tests and 22 assertions, all passing; remove-UI-DB passed 168/358. CLJS lint passed with 0 errors and 0 warnings.
+
+---
+
+### 14. Worker fetch errors use raw console logging and discard their cause
+
+- **Severity:** Minor
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Repository convention
+- **Location:** `src/main/frontend/db/async.cljs:294`
+- **Issue:** `<get-block` and `<get-block-with-children` log with `js/console.error` and throw a fresh `ex-info` without the original cause or `ex-data`.
+- **Impact:** The now-central worker fetch path loses structured diagnostic context and violates the repository logging convention.
+- **Reproduction:** Both real loader catch paths were fed the same rejected worker Promise. Their wrapper `ex-data` retained the requested block, but both `ex-cause` values were nil; the raw console also printed two unstructured stacks.
+- **Fix:** One `block-fetch-error` helper emits `:db/block-fetch-failed` with operation, block and original error, then constructs the existing wrapper message/data with the worker exception as its cause. No retry, fallback, or alternate fetch path was added.
+- **Verification:** The focused RED failed both cause assertions and the GREEN passed all 4 assertions. The complete `frontend.db.async-test` passed 8 tests and 36 assertions. CLJS lint passed with 0 errors and 0 warnings.
+
+---
+
+### 15. A stale worker response can publish into a new graph or route
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Failure mode
+- **Location:** `src/main/frontend/db/transact.cljs:190`
+- **Issue:** `apply-outliner-ops` captures the repo only when invoking the worker. When the response resolves it unconditionally publishes global UI state and schedules the editor callback, even if the user has switched graph or route.
+- **Reproduction:** A deferred worker test issued an edit in `old-repo/old-page`, switched to `new-repo/new-page`, installed new-context UI state, and then resolved the old response. Before the fix, the old page window replaced the new state and the old editor callback ran.
+- **Fix:** The request captures its repo and route snapshot. A response still returns its committed DB result to the caller, but publishes UI state and schedules editor work only while that snapshot remains current. A stale response removes its tagged callback. No retry, cancellation loop, or alternate mutation path was added.
+- **Verification:** The focused RED failed the state and callback assertions; the GREEN passed 4 assertions. The complete `frontend.db.transact-test` passed 14 tests and 46 assertions. CLJS lint passed with 0 errors and 0 warnings.
+
+---
+
+### 16. The page lookup reference is reported as an updated entity
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Performance
+- **Location:** `src/main/frontend/db/transact.cljs:138`
+- **Issue:** `:ui/page-id` is a polymorphic lookup reference used by the worker to resolve a page window, but the renderer also inserted it into `updated-ids` and `entity-tx-ids`. A block edit with a numeric page lookup therefore reported the unchanged page entity as updated and notified page/page-reference subscribers unnecessarily.
+- **Reproduction:** A focused renderer test published a `:save-block` operation with block UUID and numeric page lookup. Before the fix, both the block UUID and page DB id appeared in `updated-ids`, and the page DB id received the transaction id.
+- **Fix:** Renderer invalidation now comes only from outliner operation entity IDs and the worker's separate `affected-page-uuids`. `:ui/page-id` remains only a worker page-window lookup reference. The fix removes one identity-mixing branch and adds no replacement path.
+- **Verification:** The focused RED failed both identity assertions and the GREEN passed them. The complete `frontend.db.transact-test` passed 15 tests and 48 assertions, `frontend.components.page-test` passed 3/3, and `frontend.rfx-test` passed 9 tests and 14 assertions.
+
+---
+
+### 17. A missing linked-reference outdent parent silently changes semantics
+
+- **Severity:** Important
+- **Status:** Fixed and verified in the commit containing this report update
+- **Category:** Correctness
+- **Location:** `deps/outliner/src/logseq/outliner/op.cljs:293`
+- **Issue:** The renderer sends a linked-reference `parent-original` as a UUID-only map. The worker resolves it to a DataScript entity, but an unresolved supplied UUID was silently replaced with `nil`. Outliner core then selected ordinary outdent semantics instead of the explicit linked-reference target semantics.
+- **Reproduction:** A real `:thread-api/apply-outliner-ops` test outdented a child with a missing `parent-original` UUID. Before the fix, the worker returned successfully and moved the child from its parent to the page root.
+- **Fix:** When `parent-original` is supplied, the worker must resolve it before starting the outliner transaction. A missing entity now throws `:logseq.outliner.op/missing-parent-original` with the requested UUID. An intentionally absent `parent-original` still uses ordinary outdent semantics. No fallback or retry was added.
+- **Verification:** The focused RED failed because no typed error was returned and the child's parent changed; the GREEN passed both assertions and left the DB unchanged. The complete `frontend.worker.db-core-test` passed 162 tests and 431 assertions on the confirming run, and the focused editor page-window test passed 1/1. The first full worker run hit only the existing strict 10k window timing gate at 80.056ms/80.268ms against `<80ms`; the focused 10k test and the complete rerun passed without changing the test. Lint reported 0 errors; the two unresolved-var warnings in `op.cljs` predate this change.
+
+## Important test coverage gaps
+
+### Batching and worker response contracts
+
+- `src/test/frontend/db/async_test.cljs` now exercises the public queue and bounded request size, but does not cover per-graph grouping, a deliberate response-count mismatch, or rejection fan-out.
+- `src/test/frontend/worker/db_core_test.cljs` covers insert, expand, delete-window hydration, and invalid outdent input, but not multi-block move/indent/outdent response windows and affected pages.
+- Add targeted behavior tests only for the remaining grouping, mismatch/rejection, and structural response cases.
+
+### Editor and long-page behavior
+
+- Rapid Enter tests stop before queued prefixes are fully persisted and do not assert final cursor/focus.
+- The long-page E2E covers 100-block scrolling/copy, not 1k+ bottom Enter, repeated Enter/Backspace, top/bottom jumps, or mixed image/iframe heights.
+- Collapse coverage is source-string and worker-response oriented; it does not assert immediate hide/show in the mounted UI.
+- Add one narrow editor sequence test and one narrow long-page E2E workflow rather than expanding every outliner E2E.
+
+### Linked references
+
+- The DB view test uses a table view, while the default linked-reference UI uses list + group-by-page.
+- Add a list-view contract test that asserts the nested page/parent group shape and one UI behavior test for immediate local refresh.
+
+## Migration validation
+
+No migration change is required for the reviewed core changes:
+
+- no persisted schema attribute changed
+- no built-in property or class changed
+- schema version remains `65.33`
+- no `schema-version->updates` or `:migrate-updates` entry is required
+- no deleted attribute requires db-sync sanitizer coverage
+
+## Verification summary
+
+### Review process
+
+Eight independent review passes were run serially at the user's request:
+
+1. Correctness
+2. Data contract
+3. Regression
+4. Failure mode
+5. Migration validation
+6. Performance
+7. Test coverage
+8. Repository convention
+
+The reports were deduplicated and each retained finding was checked again against the current source and diff.
+
+### Runtime and targeted evidence
+
+- Chrome web runtime on `http://localhost:3001/#/`, current `test lambda` graph, read-only navigation only.
+- Current Task page rendered `Children (5)` within three seconds; no current stall was claimed.
+- Parsed the supplied 23,001-byte worker log: 469 unique block requests, all reusing `children? true`.
+- `:app` runtime pure/in-memory probes confirmed:
+  - two `:paste` + `:paste-text` blocks created two same-name page entities with distinct UUIDs
+  - `merge-layout` published a new layout-only row without `:block/title`
+  - keyword lookup on a resolved Promise returned `nil`
+  - a throwing DataScript listener left the datom committed
+  - missing-graph `apply-outliner-ops` resolved `nil`
+  - a throwing next-frame editor callback rejected the completion promise
+  - handled same-client sync invoked pipeline hooks zero times; another client invoked them once
+- Targeted tests run by the performance pass:
+  - `bb dev:test -v frontend.worker.db-core-test/get-page-blocks-window-handles-10k-deep-page` — 1 test, 5 assertions, passed
+  - `bb dev:test -v frontend.db.async-test/block-loaders-return-worker-data-without-renderer-db-test` — 1 test, 10 assertions, passed
+- Finding 1 remediation:
+  - RED: `frontend.modules.outliner.core-test/paste-text-reuses-new-page-references-across-blocks` — 1 test, 2 assertions, both failed because two pages and two UUIDs were produced
+  - GREEN: the same focused test — 1 test, 2 assertions, passed
+  - regression: `frontend.modules.outliner.core-test` — 31 tests, 229 assertions, passed
+  - lint: changed production and test files — 0 errors, 0 warnings
+- Finding 2 payload-bound remediation:
+  - RED: `frontend.db.async-test/block-batching-bounds-worker-request-size-test` — one worker payload contained all 151 queued requests
+  - GREEN: the same focused test — all 151 requests resolved and each payload contained at most 50 requests
+  - regression: `frontend.db.async-test` — 7 tests, 32 assertions, passed
+  - related worker coverage — 4 tests, 21 assertions, passed
+  - lint: changed production and test files — 0 errors, 0 warnings
+- Finding 2 descendant-bound remediation:
+  - RED: `frontend.worker.db-core-test/get-block-children-stops-scanning-large-subtrees` — a 1k-deep chain caused 1,002 parent-index scans before returning one direct child
+  - GREEN: the same focused test — at most 101 parent-index scans with the same returned shape
+  - regression: `frontend.worker.db-core-test` — 159 tests, 425 assertions, passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3071` outside the changed code
+- Finding 3 transaction-pipeline remediation:
+  - RED: the event wiring test found the local-client pipeline guard; the behavior test found duplicate renderer publication and premature editor-callback consumption
+  - GREEN: all local broadcasts enter the pipeline, which skips only direct-response-owned work
+  - regression: pipeline 2 tests/6 assertions, transact 12/45, remove-UI-DB 165/340, all passed
+  - lint: changed event, pipeline, and test files — 0 errors, 0 warnings
+- Finding 4 broadcast-contract remediation:
+  - RED: processed transaction datoms were absent from the main-thread payload; after restoring them, the payload still contained three unused summary contracts
+  - GREEN: the Transit-safe payload carries processed `tx-data` and no unused change-summary fields
+  - regression: listener 4 tests/8 assertions, worker pipeline 20/98, frontend pipeline 2/6, all passed
+  - lint: changed listener and test files — 0 errors, 0 warnings
+- Finding 5 post-commit failure remediation:
+  - RED: checksum and persistence exceptions escaped after commit, sent no separate error, and stopped UI sync
+  - GREEN: each side effect reports independently while persistence stages and UI broadcast continue
+  - regression: listener 5 tests/16 assertions and worker DB core 159/425, all passed
+  - lint: changed listener and test files — 0 errors, 0 warnings
+- Finding 6 missing-connection remediation:
+  - RED: missing-repo `apply-outliner-ops` returned successful `nil` with no error data
+  - GREEN: the worker API fails before any operation side effect with typed repo context
+  - regression: worker DB core 160 tests/427 assertions, passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3069` outside the changed code
+- Finding 7 operation-completion remediation:
+  - RED: a committed operation waited for the frame and inherited its exception; worker rejection left its callback queued
+  - GREEN: DB completion follows state publication, while frame work is contained and request failures clean up by tx-id
+  - regression: transact 14 tests/48 assertions and editor callback coverage 2/2, all passed
+  - lint: changed transaction and test files — 0 errors, 0 warnings
+- Finding 8 page-window boundary remediation:
+  - RED: deleting one of 150 visible rows pulled a previously unseen row into the worker response without `:block/title`
+  - GREEN: transaction responses render operation rows and any row absent from the pre-transaction window
+  - regression: worker DB core 161 tests/429 assertions and page-window merge 3/3, all passed
+  - performance: the focused worker apply remained about 7ms; unchanged rows still reuse their renderer data
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
+- Finding 9 Quick Add remediation:
+  - RED: another user's Quick Add child suppressed insertion because the current-user Promise produced a nil DB ID
+  - GREEN: the current user entity is awaited before filtering the Quick Add children
+  - regression: editor async 27 tests/76 assertions, all passed
+  - lint: changed handler and test files — 0 errors, 0 warnings
+- Finding 10 insert-order authority remediation:
+  - RED: a stale UI right boundary generated the same order as a newly inserted current right sibling
+  - GREEN: all insert boundaries come from the outliner transaction DB; renderer order-state plumbing was removed
+  - performance: authoritative insertion on 1k siblings passed the 100ms unit-test gate
+  - regression: outliner core 13/40, virtualized block 19/66, editor async 27/76, and editor 61/168, all passed
+  - lint: changed outliner, renderer, editor, and unit-test files — 0 errors, 0 warnings
+- Finding 11 tree-builder simplification:
+  - RED: frontend source duplicated grouping and recursion instead of using a shared builder
+  - GREEN: one deps/outliner pure helper owns the tree algorithm; caller-specific tx-id behavior is explicit
+  - regression: deps tree 1/3, frontend outliner 32/232, and remove-UI-DB 166/342, all passed
+  - lint: changed tree and test files — 0 errors, 0 warnings
+- Finding 12 dead page-tree remediation:
+  - RED: source contract found the constant predicate, impossible state assoc, and unused perf flag
+  - GREEN: outliner completion has one page-window/updated-block refresh shape
+  - regression: transact 13/42, remove-UI-DB 167/345, and worker DB core 161/429, all passed
+  - lint: 0 errors; one pre-existing unresolved-var warning remains at `db_core.cljs:3061` outside the changed code
+- Finding 13 state-scaffolding remediation:
+  - RED: all 13 domain namespaces existed without a production consumer
+  - GREEN: compatibility façades and alias-only tests were removed; real `frontend.state` behavior remains directly tested
+  - regression: state 8/22 and remove-UI-DB 168/358, all passed
+  - compile: test build input decreased from 1,197 to 1,189 files
+  - lint: changed tests — 0 errors, 0 warnings
+- Finding 14 worker-fetch diagnostics remediation:
+  - RED: both block loaders wrapped the error with a nil cause
+  - GREEN: one structured helper preserves operation context, block context, and the original cause
+  - regression: async 8/36, all passed
+  - lint: changed async and test files — 0 errors, 0 warnings
+- Finding 15 stale-response remediation:
+  - RED: an old graph response overwrote new-context UI state and ran its editor callback
+  - GREEN: response-owned UI/editor work is scoped to the request repo and route snapshot
+  - regression: transact 14/46, all passed
+  - lint: changed transaction and test files — 0 errors, 0 warnings
+- Finding 16 page-lookup invalidation remediation:
+  - RED: an unchanged numeric page lookup was published as an updated entity
+  - GREEN: renderer invalidation contains only operation entities and explicit affected pages
+  - regression: transact 15/48, page 3/3, rfx 9/14; all passed
+- Finding 17 missing-parent remediation:
+  - RED: a missing linked-reference parent silently performed an ordinary outdent and changed the DB
+  - GREEN: an explicitly supplied missing parent fails before the outliner transaction
+  - regression: worker DB core 162/431 and focused editor 1/1; all passed on the confirming run
+  - performance rerun: focused 10k window and complete worker suite passed without changing the strict gate
+  - lint: 0 errors; two pre-existing unresolved-var warnings in `op.cljs`
+- Static checks:
+  - `git diff --check` passed
+  - no migration/schema object changed across the review range
+  - no polling loop was found in `handler/editor.cljs`
+
+### Not verified
+
+- No Desktop/Electron runtime was used; the reviewed hot paths are renderer/browser-worker paths, and the user had previously scoped this performance work to `pnpm app-watch` rather than Electron.
+- No user graph was mutated.
+- No broad lint, unit, or E2E suite was run for this review.

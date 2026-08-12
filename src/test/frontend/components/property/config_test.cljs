@@ -5,7 +5,7 @@
 (deftest closed-choice-scope-opts-test
   (let [owner-class {:db/id 123 :block/tags [{:db/ident :logseq.class/Tag}]}
         owner-page {:db/id 456 :block/tags []}]
-    (testing "Create defaults to global choice even in class context"
+    (testing "Closed choice scope opts stay global when the toggle is off"
       (is (= {}
              (property-config/->closed-choice-scope-opts {:owner-block owner-class
                                                           :scoped-to-owner? false}))

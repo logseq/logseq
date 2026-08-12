@@ -48,8 +48,12 @@
       ;; ensure cursor exists
       ;; Sometimes when the editor exists, there isn't a blinking cursor,
       ;; causing subsequent operations (like pressing Enter) to fail.
-      (.focus editor)
-      editor)))
+      (try
+        (.focus editor)
+        editor
+        (catch TimeoutError error
+          (when (w/visible? editor-q)
+            (throw error)))))))
 
 (defn get-edit-block-container
   []
@@ -69,17 +73,18 @@
 
 (defn exit-edit
   []
-  (when (get-editor)
-    (k/esc))
+  (dotimes [_ 2]
+    (when (get-editor)
+      (k/esc)))
   (assert/assert-non-editor-mode))
 
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc))
   (exit-edit)
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc)))
 
 (defn search
@@ -125,7 +130,7 @@
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
+  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"))
 
 (defn get-text
   [locator]
@@ -195,7 +200,9 @@
   (press-seq "/" {:delay 20})
   (w/wait-for ".ui__popover-content")
   (press-seq command {:delay 20})
-  (w/click "a.menu-link.chosen"))
+  (let [command-item (w/-query "a.menu-link.chosen")]
+    (assert/assert-is-visible command-item)
+    (w/click command-item)))
 
 (defn set-tag
   "`hidden?`: some tags may be hidden from the UI, e.g. Page"

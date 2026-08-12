@@ -36,6 +36,7 @@
    [logseq.db-sync.storage :as sync-storage]
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
+   [logseq.db.common.delete-blocks :as delete-blocks]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
@@ -1361,8 +1362,15 @@
                      :get-graph-uuid (constantly "graph-1")
                      :latest-remote-tx {test-repo 42}
                      :latest-remote-checksum {test-repo "fresh"}}
-                    test-repo)]
-        (is (= cached-checksum (:local-checksum counts)))))))
+                    test-repo)
+            payload (sync-presence/rtc-state-payload
+                     (constantly counts)
+                     {:repo test-repo
+                      :ws-state (atom :open)
+                      :online-users (atom [])})]
+        (is (= cached-checksum (:local-checksum counts)))
+        (is (= "graph-1" (:graph-id counts)))
+        (is (= "graph-1" (:graph-uuid payload)))))))
 
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
@@ -2070,6 +2078,35 @@
                       nil
                       (catch :default e
                         e)))))))))
+
+(deftest apply-remote-txs-updates-journal-title-format-test
+  (testing "remote journal title format changes apply without blocking sync"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:build/journal 20250314}}]})
+          client-ops-conn (new-client-ops-db)
+          journal (db-test/find-journal-by-journal-day @conn 20250314)
+          tx-id-before (:block/tx-id journal)
+          journal-class (d/entity @conn :logseq.class/Journal)
+          title-format "EEE, dd.MM.yyyy"
+          title "Fri, 14.03.2025"]
+      (reset! ldb/*transact-pipeline-fn worker-pipeline/transact-pipeline)
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add (:db/id journal-class)
+                        :logseq.property.journal/title-format title-format]
+                       [:db/add (:db/id journal) :block/title title]]}])
+          (is (= title-format
+                 (:logseq.property.journal/title-format
+                  (d/entity @conn :logseq.class/Journal))))
+          (is (= title
+                 (:block/title
+                  (db-test/find-journal-by-journal-day @conn 20250314))))
+          (is (not= tx-id-before
+                    (:block/tx-id
+                     (db-test/find-journal-by-journal-day @conn 20250314)))))))))
 
 (deftest apply-remote-txs-applies-db-migration-entry-test
   (testing "pulled db migration txs apply with migration transact semantics"
@@ -4988,6 +5025,28 @@
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
 
+(deftest tx-batch-ok-broadcasts-cleared-pending-state-test
+  (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+        client {:repo test-repo
+                :graph-id "graph-1"
+                :inflight (atom [])
+                :online-users (atom [])
+                :ws-state (atom :open)}
+        raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                 :t 1}))
+        broadcasts (atom [])]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (worker-page/create! conn "Ack Page" :uuid (random-uuid))
+        (reset! (:inflight client)
+                (mapv :tx-id (#'sync-apply/pending-txs test-repo)))
+        (with-redefs [shared-service/broadcast-to-clients!
+                      (fn [event payload]
+                        (when (= :rtc-sync-state event)
+                          (swap! broadcasts conj payload)))]
+          (sync-handle-message/handle-message! test-repo client raw-message))
+        (is (= 0 (:unpushed-block-update-count (last @broadcasts))))))))
+
 (deftest tx-batch-ok-removes-only-inflight-acked-pending-txs-test
   (testing "tx/batch/ok should only clear pending txs tracked in inflight"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
@@ -6516,6 +6575,45 @@
           (let [validation (db-validate/validate-local-db! @conn)]
             (is (empty? (non-recycle-validation-entities validation))
                 (str (:errors validation)))))))))
+
+(deftest delete-expansion-includes-generated-property-value-children-test
+  (testing "physical delete expansion includes generated property value children"
+    (let [property-value-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/delete-expansion {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/properties
+                             {:user.property/delete-expansion
+                              {:build/property-value :block
+                               :block/title "property value"
+                               :block/uuid property-value-uuid
+                               :build/keep-uuid? true
+                               :build/children [{:block/title "nested property child"}]}}}]}]})
+          parent (db-test/find-block-by-content @conn "parent")
+          property-value (d/entity @conn [:block/uuid property-value-uuid])
+          nested-child (db-test/find-block-by-content @conn "nested property child")
+          root-retract [:db/retractEntity (:db/id parent)]
+          generic-expanded (delete-blocks/expand-delete-blocks-tx
+                            @conn [root-retract] {:outliner-op :delete-blocks})
+          sync-expanded (#'sync-apply/expand-block-retracts-to-descendants
+                         @conn [root-retract])
+          property-value-retract [:db/retractEntity (:db/id property-value)]
+          nested-child-retract [:db/retractEntity (:db/id nested-child)]
+          sync-retracted-ids (->> sync-expanded
+                                  (keep (fn [[op ref]]
+                                          (when (= :db/retractEntity op)
+                                            (:db/id (d/entity @conn ref)))))
+                                  set)]
+      (is (some? (:logseq.property/created-from-property property-value)))
+      (is (empty? (:block/_parent parent)))
+      (is (= [(:db/id property-value)]
+             (mapv :db/id (:block/_raw-parent parent))))
+      (is (some #{property-value-retract} generic-expanded))
+      (is (some #{nested-child-retract} generic-expanded))
+      (is (contains? sync-retracted-ids (:db/id property-value)))
+      (is (contains? sync-retracted-ids (:db/id nested-child))))))
 
 (deftest apply-remote-txs-computes-remote-deletes-once-per-batch-test
   (testing "a large remote batch keeps delete filtering without repeatedly rescanning the pull"
