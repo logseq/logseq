@@ -250,6 +250,12 @@
      (state/set-search-mode! search-mode args))
    (state/pub-event! [:go/search])))
 
+(defn current-editing-block-search-args
+  []
+  (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+    {:editing-block {:repo (state/get-current-repo)
+                     :block-uuid block-uuid}}))
+
 (defn sidebar-journals!
   []
   (when-let [repo (state/get-current-repo)]

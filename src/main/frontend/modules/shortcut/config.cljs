@@ -29,8 +29,7 @@
 
 (defn- search
   [mode]
-  (let [search-args (when-let [editor-info (state/get-editor-info)]
-                      {:editor-info editor-info})]
+  (let [search-args (route-handler/current-editing-block-search-args)]
     (editor-handler/escape-editing {:select? true})
     (if (state/get-search-mode)
       (js/setTimeout #(route-handler/go-to-search! mode search-args) 128)

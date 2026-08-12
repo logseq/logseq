@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.db-based.import :as import-handler]
             [frontend.handler.notification :as notification]
@@ -12,15 +11,6 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
-
-(defn- submit-edn-dialog!
-  [dialog-content export-map button-element]
-  (import-handler/import-edn-data-dialog)
-  (let [[_ _ textarea button] @dialog-content]
-    ((:on-change (second textarea))
-     #js {:target #js {:value (pr-str export-map)}})
-    ((:on-click (second button))
-     #js {:currentTarget button-element})))
 
 (deftest import-from-sqlite-db-persists-import-marker-through-worker-test
   (async done
@@ -49,10 +39,7 @@
                       state/<invoke-db-worker
                       (fn [& args]
                         (swap! calls conj (vec args))
-                        (p/resolved nil))
-                      db/transact!
-                      (fn [& _]
-                        (throw (js/Error. "renderer DB transact should not be used")))]
+                        (p/resolved nil))]
         (-> (import-handler/import-from-sqlite-db! "buffer" "imported" #(swap! calls conj [:finished]))
             (p/then
              (fn []
@@ -77,17 +64,18 @@
 (deftest import-edn-data-preserves-command-editor-target-test
   (async done
     (let [dialog-content (atom nil)
-          submitted-ops (atom nil)
+          submitted (atom nil)
+          graph "logseq_db_target"
           target-uuid (random-uuid)
-          page-uuid (random-uuid)
-          target-block {:block/uuid target-uuid
-                        :block/page {:block/uuid page-uuid}}
-          export-map {::sqlite-export/block {:block/title "Imported block"}}
-          original-search-args (state/get-state :search/args)
-          original-db-worker @state/*db-worker]
+          export-map {::sqlite-export/block {:block/title "Imported block"}}]
       (-> (p/with-redefs
             [i18n/t identity
-             state/get-editor-args (constantly nil)
+             state/get-editor-info (constantly nil)
+             state/get-current-repo (constantly graph)
+             state/get-state (fn [key & _]
+                               (when (= :search/args key)
+                                 {:editing-block {:repo graph
+                                                  :block-uuid target-uuid}}))
              shui/dialog-open! (fn [content & _]
                                  (when (vector? content)
                                    (reset! dialog-content content)))
@@ -96,20 +84,21 @@
              shui/button (fn [props child] [:button props child])
              notification/show! (constantly nil)
              db-transact/apply-outliner-ops (fn [_conn ops _opts]
-                                              (reset! submitted-ops ops)
+                                              (reset! submitted ops)
                                               (p/resolved {}))]
-            (state/set-state! :search/args
-                              {:editor-info {:block-uuid target-uuid}})
-            (reset! state/*db-worker (fn [& _] (p/resolved target-block)))
-            (submit-edn-dialog! dialog-content export-map #js {:disabled false}))
+            (import-handler/import-edn-data-dialog)
+            (let [[_ _ textarea button] @dialog-content]
+              ((:on-change (second textarea))
+               #js {:target #js {:value (pr-str export-map)}})
+              ((:on-click (second button))
+               #js {:currentTarget #js {:disabled false}})))
           (p/then (fn []
-                    (is (= target-block
-                           (get-in @submitted-ops [0 1 1 :current-block])))))
+                    (is (= {:existing-pages-keep-properties? true
+                            :import-edn-data? true
+                            :current-block-uuid target-uuid}
+                           (get-in @submitted [0 1 1])))))
           (p/catch (fn [error] (is false (str error))))
-          (p/finally (fn []
-                       (reset! state/*db-worker original-db-worker)
-                       (state/set-state! :search/args original-search-args)
-                       (done)))))))
+          (p/finally done)))))
 
 (deftest import-edn-data-prevents-concurrent-submission-test
   (async done

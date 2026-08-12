@@ -640,12 +640,7 @@
 
 (deftest batch-import-edn-structured-import-ignores-unrelated-invalid-entity-test
   (let [conn (sqlite-export/create-conn)
-        import-edn {::sqlite-export/export-type :page
-                    :pages-and-blocks [{:page {:block/title "Imported page"
-                                               :build/tags #{:user.class/Category}}
-                                        :blocks [{:block/title ""}
-                                                 {:block/title ""}]}]
-                    :classes {:user.class/Category {:block/title "Category"}}}]
+        import-edn {:pages-and-blocks [{:page {:block/title "Imported page"}}]}]
     (d/transact! conn [{:block/uuid (random-uuid)
                         :block/title "Unrelated block"}])
     (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)

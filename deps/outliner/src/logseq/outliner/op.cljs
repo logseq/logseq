@@ -214,26 +214,37 @@
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
   (let [datom-import? (= :datoms (::sqlite-export/graph-format export-map))
-        validate-full-db? (or datom-import? (:import-edn-data? import-options))
-        {:keys [error] :as txs}
-        (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
-             (catch :default e
-               (js/console.error "Import EDN error: " e)
-               {:error "An unexpected error occurred building the import. See the javascript console for details."}))
-        validation (when (and (not error) validate-full-db?)
+        block-import? (and (:import-edn-data? import-options)
+                           (contains? export-map ::sqlite-export/block))
+        current-block (when block-import?
+                        (some-> (:current-block-uuid import-options)
+                                (#(d/entity @conn [:block/uuid %]))))
+        target-error (when block-import?
+                       (cond
+                         (nil? current-block)
+                         :import/block-target-required-warning
+
+                         (nil? (:block/page current-block))
+                         :import/cannot-import-block-into-non-block-entity))
+        import-options' (cond-> (dissoc import-options :current-block-uuid :tx-meta)
+                          current-block (assoc :current-block current-block))
+        txs (when-not target-error
+              (try (sqlite-export/build-import export-map @conn import-options')
+                   (catch :default e
+                     (js/console.error "Import EDN error: " e)
+                     {:error "An unexpected error occurred building the import. See the javascript console for details."})))
+        validation (when (and txs (not (:error txs)))
                      (sqlite-export/validate-import-txs
-                      txs @conn {:import-edn-data? (:import-edn-data? import-options)}))]
-    ;; (cljs.pprint/pprint txs)
-    (if (or error (:error validation))
-      (reset! *result {:error (or error (:error validation))})
+                      txs @conn {:import-edn-data? (:import-edn-data? import-options)
+                                 :validate-full-db? datom-import?}))
+        error (or (:error txs) (:error validation))]
+    (if (or target-error error)
+      (reset! *result (if target-error
+                        {:error-code target-error}
+                        {:error error}))
       (try
-        ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
-        (ldb/transact! conn (if validate-full-db?
-                              (:tx-data validation)
-                              (sqlite-export/import-tx-data txs))
-                       (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
-                         datom-import?
-                         (assoc :initial-db? true)))
+        (ldb/transact! conn (:tx-data validation)
+                       (merge {::sqlite-export/imported-data? true} tx-meta))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
