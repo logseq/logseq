@@ -117,7 +117,6 @@
     "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
     "ios:dev": "cross-env PLATFORM=ios gulp cap",
     "android:dev": "cross-env PLATFORM=android gulp cap",
-    "ui:build": "cd packages/ui && pnpm install --config.confirmModulesPurge=false",
     "postinstall": "pnpm ui:build"
   },
   "dependencies": {
