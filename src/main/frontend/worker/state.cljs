@@ -132,7 +132,7 @@
   []
   (if (node-runtime?)
     (node-online?)
-    @(:thread-atom/online-event @*state)))
+    (not (false? @(:thread-atom/online-event @*state)))))
 
 (comment
   (defn mobile?

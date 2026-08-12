@@ -1134,7 +1134,7 @@ abc
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
       (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
-      (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
+      (is (= 8 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
       (is (= 13
@@ -1488,6 +1488,10 @@ abc
                           db-test/readable-properties)
                      :logseq.property.pdf/hl-value :logseq.property/ls-type))
           "Pdf area highlight has correct properties")
+      (is (= ""
+             (:block/title
+              (d/entity @conn [:block/uuid #uuid "68702499-159a-4a14-a0cf-cf5f015535c2"])))
+          "Pdf annotation without text imports with an empty title")
       (is (= {:block/tags [:logseq.class/Pdf-annotation]
               :logseq.property/asset "Understanding EXPLAIN"
               :logseq.property.pdf/hl-color :logseq.property/color.yellow

@@ -300,18 +300,31 @@
   [{:keys [e a v]}]
   [:db/add e a v])
 
+(def ^:private snapshot-local-only-attrs
+  #{:block/tx-id})
+
 (defn- import-datoms-batch!
   [conn aes-key graph-e2ee? datoms]
   (p/let [datoms-batch (if graph-e2ee?
                          (sync-crypt/<decrypt-snapshot-datoms-batch aes-key datoms)
                          datoms)
+          datoms-batch (remove #(contains? snapshot-local-only-attrs (:a %))
+                               datoms-batch)
+          block-eids (into #{}
+                           (comp (filter #(= :block/uuid (:a %)))
+                                 (map :e))
+                           datoms-batch)
           schema-tx-data (into [] (comp (filter #(= "db" (namespace (:a %))))
                                         (map datom->tx))
                                datoms-batch)
           regular-tx-data (into [] (comp (remove #(= "db" (namespace (:a %))))
                                          (map datom->tx))
                                 datoms-batch)
-          tx-data (into schema-tx-data regular-tx-data)]
+          tx-id (inc (:max-tx @conn))
+          tx-data (into (into schema-tx-data regular-tx-data)
+                        (map (fn [block-eid]
+                               [:db/add block-eid :block/tx-id tx-id]))
+                        block-eids)]
     (when (seq tx-data)
       (d/transact! conn tx-data {:sync-download-graph? true}))))
 

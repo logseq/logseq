@@ -4,8 +4,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -17,7 +15,7 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(defn- <sha256-hex
+(defn <sha256-hex
   [text]
   (p/let [encoder (js/TextEncoder.)
           data (.encode encoder text)
@@ -39,6 +37,15 @@
 (defn- asset-upload-endpoint
   []
   (str (config/publish-api-base) "/assets"))
+
+(defn <get-file-content
+  [repo path]
+  (state/<invoke-db-worker :thread-api/get-file-content repo path))
+
+(defn <get-graph-uuid
+  [repo]
+  (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-graph-uuid repo)]
+    (some-> graph-uuid str)))
 
 (defn- asset-content-type
   [ext]
@@ -196,7 +203,7 @@
                         :headers headers
                         :body blob}))))
 
-(defn- <upload-raw-asset!
+(defn <upload-raw-asset!
   [asset-token asset-meta content-type content]
   (let [headers (cond-> {"content-type" content-type
                          "x-asset-meta" (js/JSON.stringify (clj->js asset-meta))}
@@ -296,7 +303,7 @@
         asset-uuid "publish"]
     (p/let [results (p/all
                      (map (fn [{:keys [path type content-type meta-key asset-name]}]
-                            (p/let [content (db-model/get-file repo path)]
+                            (p/let [content (<get-file-content repo path)]
                               (when (and (string? content) (not (string/blank? content)))
                                 (p/let [checksum (<sha256-hex content)
                                         meta {:graph graph-uuid
@@ -327,7 +334,7 @@
             body (ldb/write-transit-str payload)
             content-hash (<sha256-hex body)
             graph-uuid (or (:graph-uuid payload)
-                           (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str))
+                           (<get-graph-uuid (state/get-current-repo)))
             _ (when-not graph-uuid
                 (throw (ex-info "Missing graph UUID" {:repo (state/get-current-repo)})))
             publish-meta {:graph graph-uuid
@@ -363,16 +370,13 @@
   "Prepares and uploads the publish payload for a page."
   [page & [{:keys [password]}]]
   (let [repo (state/get-current-repo)]
-    (when-let [db* (and repo (db/get-db repo))]
-      (if (and page (:db/id page))
-        (p/let [graph-id (some->
-                          (or (ldb/get-graph-rtc-uuid db*)
-                              (ldb/get-graph-local-uuid db*))
-                          str)
-                payload (state/<invoke-db-worker :thread-api/build-publish-page-payload
-                                                 repo
-                                                 (:db/id page))]
-          (if payload
+    (if (and repo page (:db/id page))
+      (p/let [payload (state/<invoke-db-worker :thread-api/build-publish-page-payload
+                                               repo
+                                               (:db/id page))]
+        (if payload
+          (p/let [graph-id (or (:graph-uuid payload)
+                               (<get-graph-uuid repo))]
             (-> (p/let [_ (<upload-assets! repo graph-id payload)
                         custom-assets (<upload-custom-publish-assets! repo graph-id)]
                   (<post-publish! payload {:password password
@@ -405,20 +409,17 @@
                                  false))))))
                 (p/catch (fn [error]
                            (js/console.error error)
-                           (notification/show! (t :publish/publish-error) :error))))
-            (notification/show! (t :publish/publish-error) :error)))
-        (notification/show! (t :publish/invalid-page-error) :error)))))
+                           (notification/show! (t :publish/publish-error) :error)))))
+          (notification/show! (t :publish/publish-error) :error)))
+      (notification/show! (t :publish/invalid-page-error) :error))))
 
 (defn unpublish-page!
   [page]
-  (let [token (state/get-auth-id-token)
+  (let [repo (state/get-current-repo)
+        token (state/get-auth-id-token)
         headers (cond-> {}
-                  token (assoc "authorization" (str "Bearer " token)))
-        db (db/get-db (state/get-current-repo))]
-    (p/let [graph-uuid (some->
-                        (or (ldb/get-graph-rtc-uuid db)
-                            (ldb/get-graph-local-uuid db))
-                        str)
+                  token (assoc "authorization" (str "Bearer " token)))]
+    (p/let [graph-uuid (<get-graph-uuid repo)
             page-uuid (some-> (:block/uuid page) str)]
       (if (and graph-uuid page-uuid)
         (-> (p/let [resp (js/fetch (publish-page-endpoint graph-uuid page-uuid)

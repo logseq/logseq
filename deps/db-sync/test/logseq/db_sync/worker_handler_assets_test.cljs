@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-handler-assets-test
   (:require [cljs.test :refer [async deftest is]]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.handler.assets :as assets]
             [promesa.core :as p]))
 
@@ -9,6 +10,67 @@
    #js {:start (fn [controller]
                  (.enqueue controller payload)
                  (.close controller))}))
+
+(defn- put-request-with-size
+  [size]
+  #js {:url "http://localhost/assets/graph-1/asset-1.bin"
+       :method "PUT"
+       :headers #js {:get (constantly nil)}
+       :arrayBuffer (fn [] (p/resolved #js {:byteLength size}))})
+
+(deftest encrypted-assets-allow-upload-at-larger-limit-test
+  (async done
+         (let [request (put-request-with-size (* 200 1024 1024))
+               put-calls (atom 0)
+               env #js {:DB #js {}
+                        :LOGSEQ_SYNC_ASSETS
+                        #js {:put (fn [& _]
+                                    (swap! put-calls inc)
+                                    (p/resolved nil))}}]
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved true))]
+                 (p/let [resp (assets/handle request env)]
+                   (is (= 200 (.-status resp)))
+                   (is (= 1 @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest unencrypted-assets-keep-existing-upload-limit-test
+  (async done
+         (let [request (put-request-with-size (* 150 1024 1024))
+               put-calls (atom 0)
+               env #js {:DB #js {}
+                        :LOGSEQ_SYNC_ASSETS
+                        #js {:put (fn [& _]
+                                    (swap! put-calls inc)
+                                    (p/resolved nil))}}]
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved false))]
+                 (p/let [resp (assets/handle request env)]
+                   (is (= 413 (.-status resp)))
+                   (is (zero? @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest encrypted-assets-still-reject-uploads-above-larger-limit-test
+  (async done
+         (let [request (put-request-with-size (inc (* 200 1024 1024)))
+               put-calls (atom 0)
+               env #js {:DB #js {}
+                        :LOGSEQ_SYNC_ASSETS
+                        #js {:put (fn [& _]
+                                    (swap! put-calls inc)
+                                    (p/resolved nil))}}]
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved true))]
+                 (p/let [resp (assets/handle request env)]
+                   (is (= 413 (.-status resp)))
+                   (is (zero? @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest assets-get-includes-content-length-header-test
   (async done

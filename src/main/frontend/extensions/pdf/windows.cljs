@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.windows
   (:require ["react-dom/client" :as rdc]
             [cljs-bean.core :as bean]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]))
 
@@ -88,16 +89,16 @@
                       ^js doc-el (.-documentElement doc)
                       ^js base   (js/document.createElement "base")
                       ^js main   (js/document.createElement "main")
-                      theme-mode (:ui/theme @state/state)]
+                      theme-mode (state/get-state :ui/theme)]
                   (set! (.-href base) js/location.href)
                   (.appendChild (.-head doc) base)
                   (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
                   (set! (.-dataset doc-el) -theme (str theme-mode))
-                  (set! (.-dataset doc-el) -color (or (some-> (:ui/radix-color @state/state) (name)) "logseq"))
+                  (set! (.-dataset doc-el) -color (or (some-> (state/get-state :ui/radix-color) (name)) "logseq"))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)
-                  (.render (rdc/createRoot main) (pdf-playground pdf-current))
+                  (.render (rdc/createRoot main) (rfx/provider (pdf-playground pdf-current)))
 
                   ;; events
                   (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))

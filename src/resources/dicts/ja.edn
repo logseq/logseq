@@ -178,7 +178,6 @@
  :cmdk.action/search "検索"
  :cmdk.action/trigger "実行"
 
- :cmdk.create/configure-tag "タグを設定"
  :cmdk.create/page "ページを作成"
  :cmdk.create/tag "タグを作成"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "テーマ"
 
- :cmdk.info/configure-tag "#{1} を設定"
  :cmdk.info/create-page "ページ「{1}」を作成"
  :cmdk.info/create-tag "タグ「{1}」を作成"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "組み込み項目は削除できません。"
  :node/new "新しいノード"
 
- :notification/clear-all "すべてクリア"
  :notification/copied "コピーしました"
 
  :onboarding.import/desc "EDN、Markdown形式のいずれかであればLogseqはうまく処理できます。"
@@ -1731,7 +1728,6 @@
  :ui/image "画像"
  :ui/label "ラベル"
  :ui/link "リンク"
- :ui/load-more "さらに読み込む"
  :ui/loading "読み込み中"
  :ui/login "ログイン"
  :ui/logout "ログアウト"

@@ -44,8 +44,8 @@
 
 (deftest set-tokens-persists-auth-json-with-latest-token-values-test
   (let [writes* (atom [])
-        old-state @state/state]
-    (reset! state/state (assoc-in old-state [:system/info :home-dir] "/tmp/home"))
+        old-state (state/get-state)]
+    (state/replace-state! (assoc-in old-state [:system/info :home-dir] "/tmp/home"))
     (try
       (with-mocked-local-storage
         (fn []
@@ -64,14 +64,14 @@
                    (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
                                 [:id-token :access-token :refresh-token]))))))
       (finally
-        (reset! state/state old-state)))))
+        (state/replace-state! old-state)))))
 
 (deftest set-tokens-without-refresh-token-persists-existing-refresh-token-test
   (let [writes* (atom [])
-        old-state @state/state]
-    (reset! state/state (-> old-state
-                            (assoc :auth/refresh-token "refresh-token-existing")
-                            (assoc-in [:system/info :home-dir] "/tmp/home")))
+        old-state (state/get-state)]
+    (state/replace-state! (-> old-state
+                              (assoc :auth/refresh-token "refresh-token-existing")
+                              (assoc-in [:system/info :home-dir] "/tmp/home")))
     (try
       (with-mocked-local-storage
         (fn []
@@ -90,21 +90,21 @@
                    (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
                                 [:id-token :access-token :refresh-token]))))))
       (finally
-        (reset! state/state old-state)))))
+        (state/replace-state! old-state)))))
 
 (deftest restore-tokens-preserves-refresh-token-before-refreshing-expired-id-token-test
   (async done
-    (let [old-state @state/state
+    (let [old-state (state/get-state)
           old-refresh user-handler/<refresh-id-token&access-token
           old-pub-event! state/pub-event!
           refresh-called (a/chan)
           expired-id-token (jwt {:exp 0})
           refresh-token "refresh-token-from-local-storage"
           restore! (fn []
-                     (reset! state/state old-state)
+                     (state/replace-state! old-state)
                      (set! user-handler/<refresh-id-token&access-token old-refresh)
                      (set! state/pub-event! old-pub-event!))]
-      (reset! state/state (assoc old-state
+      (state/replace-state! (assoc old-state
                                  :auth/id-token nil
                                  :auth/access-token nil
                                  :auth/refresh-token nil))
@@ -146,7 +146,8 @@
                           state/pub-event! (fn [& _] nil)
                           user-handler/clear-tokens (fn [] nil)]
               (user-handler/logout)
-              (is (= [:thread-api/clear-e2ee-password] @ops*)))))
+              (is (= :thread-api/clear-e2ee-password
+                     (first @ops*))))))
         (finally
           (reset! state/*db-worker old-worker))))))
 

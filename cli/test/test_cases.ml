@@ -2303,7 +2303,8 @@ let () =
           else fail_promise ("expected empty list result\n" ^ output.stdout)));
 
   let run_sync_progress_case name root_prefix handle_events
-      ?(delay_download_response = false) assert_progress =
+      ?(delay_download_response = false) ?(delay_events_response = false)
+      assert_progress =
     test_promise name (fun () ->
         let root = temp_dir root_prefix in
         let events_requests = ref 0 in
@@ -2316,7 +2317,9 @@ let () =
               req_on_end req "end" (fun[@u] () ->
                   if req_method req = "GET" && req_url req = "/v1/events" then (
                     incr events_requests;
-                    handle_events res)
+                    if delay_events_response then
+                      set_timeout (fun () -> handle_events res) 100
+                    else handle_events res)
                   else if req_method req = "POST" && req_url req = "/v1/invoke"
                   then
                     try
@@ -2391,7 +2394,7 @@ let () =
         (expect_named_contains "progress output" stdout "downloaded 1 block"));
 
   run_sync_progress_case "sync download decodes JSON escaped progress payload"
-    "logseq-cli-sync-progress-escaped-"
+    "logseq-cli-sync-progress-escaped-" ~delay_events_response:true
     (fun res ->
       let payload =
         "[\"~:rtc-log\",[\"^ \

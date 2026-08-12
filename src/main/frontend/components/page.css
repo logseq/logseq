@@ -145,7 +145,7 @@ html.is-native-ios {
   .block-content-wrapper {
     /* 38px is the width of block-control */
     width: calc(100% - 35px);
-    @screen sm {
+    @media (min-width: 640px) {
       width: calc(100% - 33px);
     }
   }

@@ -42,6 +42,37 @@
         (let [block-entity (d/entity @conn [:block/uuid target-uuid])]
           (is (empty? (:logseq.property.reaction/_target block-entity))))))))
 
+(deftest collapse-expand-blocks-op
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "Parent"}]}])
+        block (db-test/find-block-by-content @conn "Parent")
+        block-id (:block/uuid block)]
+    (outliner-op/apply-ops!
+     conn
+     [[:collapse-expand-blocks [[{:block/uuid block-id
+                                  :block/collapsed? true}]
+                                {}]]]
+     {})
+    (is (true? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))
+    (outliner-op/apply-ops!
+     conn
+     [[:collapse-expand-blocks [[{:block/uuid block-id
+                                  :block/collapsed? false}]
+                                {}]]]
+     {})
+    (is (false? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))))
+
+(deftest resolve-indent-outdent-parent-original-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "Original"}]}])
+        original (db-test/find-block-by-content @conn "Original")
+        opts (#'outliner-op/resolve-indent-outdent-opts
+              @conn
+              {:parent-original {:block/uuid (:block/uuid original)}})]
+    (is (= (:db/id original) (get-in opts [:parent-original :db/id])))))
+
 (deftest apply-ops-plugin-property-sequence-test
   (testing "plugin property ops remain visible after a single apply-ops! batch"
     (let [conn (db-test/create-conn-with-blocks
