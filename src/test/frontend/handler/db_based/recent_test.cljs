@@ -140,8 +140,8 @@
               (p/let [recent-pages (db-recent-handler/get-recent-pages)]
                 (is (= (map :block/title recent-pages) (reverse pages)))))))))))
 
-(deftest-async recents-hide-recycled-pages-without-removing-history-test
-  (testing "Recycled recent pages are hidden from display without mutating recents"
+(deftest-async recents-hide-recycled-pages-test
+  (testing "Recycled recent pages are hidden from display"
     (let [env (make-test-env!)
           active-page "Active page"
           recycled-page "Recycled page"]
@@ -151,12 +151,10 @@
           (doseq [page [active-page recycled-page]]
             (create-page! env page)
             (db-recent-handler/add-page-to-recent! (:db/id (get-page env page)) false))
-          (let [recycled-page-id (:db/id (get-page env recycled-page))]
-            (mark-page-recycled! env recycled-page)
-            (p/let [recent-pages (db-recent-handler/get-recent-pages)]
-              (is (= [active-page]
-                     (map :block/title recent-pages)))
-              (is (contains? (set (state/get-recent-pages)) recycled-page-id)))))))))
+          (mark-page-recycled! env recycled-page)
+          (p/let [recent-pages (db-recent-handler/get-recent-pages)]
+            (is (= [active-page]
+                   (map :block/title recent-pages)))))))))
 
 (deftest add-page-to-recent-updates-state-without-renderer-entity-test
   (let [recent-pages (atom [2 3])

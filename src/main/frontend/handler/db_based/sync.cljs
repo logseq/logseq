@@ -197,8 +197,13 @@
 
 (defn <rtc-stop!
   []
-  (log/info :db-sync/stop true)
-  (state/<invoke-db-worker :thread-api/db-sync-stop))
+  (if @state/*db-worker
+    (do
+      (log/info :db-sync/stop true)
+      (state/<invoke-db-worker :thread-api/db-sync-stop))
+    (do
+      (log/info :db-sync/stop-skipped {:reason :db-worker-not-ready})
+      (p/resolved nil))))
 
 (defn- sync-app-state-payload
   []
