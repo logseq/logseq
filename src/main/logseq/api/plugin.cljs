@@ -358,7 +358,7 @@
   ([pid]
    (let [pid-key (keyword pid)
          pid-name (name pid-key)
-         command-ids (->> (get-in @state/state [:plugin/simple-commands pid-key])
+         command-ids (->> (get-in (state/get-state) [:plugin/simple-commands pid-key])
                           (keep (fn [[_type {:keys [key]} _action _pid]]
                                   (when key
                                     (plugin-command-id pid-name key))))

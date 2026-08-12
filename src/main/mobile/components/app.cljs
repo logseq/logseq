@@ -11,7 +11,9 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -27,14 +29,13 @@
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
             [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (hsx/defc component-with-restoring
   [component]
-  (let [db-restoring? (state/use-sub :db/restoring?)]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (if db-restoring?
       [:div.space-y-2.mt-8.mx-0.opacity-75
        (shui/skeleton {:class "h-10 w-full mb-6"})
@@ -57,7 +58,7 @@
      (state/sync-system-theme!)
      (ui/setup-system-theme-effect!)
      (let [handler (fn [^js e]
-                     (when (:ui/system-theme? @state/state)
+                     (when (:ui/system-theme? (state/get-state))
                        (let [is-dark? (boolean (some-> e .-detail .-isDark))]
                          (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
        (.addEventListener js/window "logseq:native-system-theme-changed" handler)
@@ -199,13 +200,13 @@
 
 (defn- use-native-graphs-effects!
   []
-  (let [[id-token] (hooks/use-atom-in state/state :auth/id-token)
-        [repos] (hooks/use-atom-in state/state [:me :repos])
-        [remotes] (hooks/use-atom-in state/state :rtc/graphs)
-        [downloading-graph-id] (hooks/use-atom-in state/state :rtc/downloading-graph-uuid)
-        [loading-graphs?] (hooks/use-atom-in state/state :rtc/loading-graphs?)
-        [route-match] (hooks/use-atom-in state/state :route-match)
-        [_preferred-language] (hooks/use-atom-in state/state :preferred-language)
+  (let [id-token (rfx/use-sub [:auth/id-token])
+        repos (rfx/use-sub [:me :repos])
+        remotes (rfx/use-sub [:rtc/graphs])
+        downloading-graph-id (rfx/use-sub [:rtc/downloading-graph-uuid])
+        loading-graphs? (rfx/use-sub [:rtc/loading-graphs?])
+        route-match (rfx/use-sub [:route-match])
+        _preferred-language (rfx/use-sub [:preferred-language])
         [tab] (hooks/use-atom mobile-state/*tab)
         login? (boolean id-token)
         route-name (get-in route-match [:data :name])
@@ -306,8 +307,8 @@
 (hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
-        preferred-language (state/use-sub :preferred-language)
-        [theme] (hooks/use-atom-in state/state :ui/theme)]
+        preferred-language (rfx/use-sub [:preferred-language])
+        theme (rfx/use-sub [:ui/theme])]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
@@ -343,11 +344,11 @@
 
 (hsx/defc main
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        show-action-bar? (state/use-sub :mobile/show-action-bar?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
         [{:keys [open? content-fn opts]}] (hooks/use-atom mobile-state/*popup-data)
         show-popup? (and open? content-fn)
-        route-match (state/use-sub :route-match)]
+        route-match (rfx/use-sub [:route-match])]
     [:main#app-container-wrapper.ls-fold-button-on-right
      [:div#app-container {:class (when show-popup? "invisible")}
       [:div#main-container.flex.flex-1.overflow-x-hidden
@@ -361,9 +362,8 @@
      (when show-action-bar?
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
-     (ui-component/install-notifications)
      (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)
+     (shui-dialog/install-dialogs)
      [:div.download
       [:a#download.hidden]
       [:a#download-as-transit-debug.hidden]

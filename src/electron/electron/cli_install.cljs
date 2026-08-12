@@ -58,7 +58,7 @@
       (str error)))
 
 (defn install-cli-launcher!
-  [{:keys [windows? cli-path cli-dir cli-dir! path-join exists? show-message-box!
+  [{:keys [windows? cli-path cli-dir cli-dir! path-join exists?
            show-error-box! t log-info! log-warn!]
     :as deps}]
   (try
@@ -78,14 +78,11 @@
               exe-path (launcher-exe-path deps)
               content (if windows?
                         (render-win-cli-launcher exe-path cli-path)
-                        (render-unix-cli-launcher exe-path cli-path))
-              display-dir (if windows? cli-dir "~/.local/bin")]
+                        (render-unix-cli-launcher exe-path cli-path))]
           (when (write-cli-launcher! (assoc deps
                                             :target-path target-path
                                             :content content))
-            (log-info! :cli/install (str "Installed launcher at " target-path))
-            (show-message-box! {:title "Logseq"
-                                :message (t :electron/cli-installed display-dir)})))))
+            (log-info! :cli/install (str "Installed launcher at " target-path))))))
     (catch :default error
       (let [message (error-message error)]
         (log-warn! :cli/install "Failed to install logseq launcher" error)

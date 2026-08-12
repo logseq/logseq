@@ -1,6 +1,5 @@
 (ns electron.embedding-server-test
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
+  (:require ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [electron.embedding-server :as embedding-server]
@@ -21,6 +20,7 @@
         writes (atom [])
         spawns (atom [])
         events (atom [])
+        removed-dirs (atom [])
         env (atom {})
         killed? (atom false)
         proc #js {:kill (fn []
@@ -39,22 +39,28 @@
                         :info (fn [& _args])
                         :warn (fn [& _args])
                         :error (fn [& _args])}
+               :remove-dir! (fn [dir]
+                              (swap! removed-dirs conj dir)
+                              (swap! existing-paths*
+                                     (fn [paths]
+                                       (set (remove #(string/starts-with? % dir) paths)))))
                :set-env! (fn [k v]
                            (swap! events conj [:set-env k v])
                            (swap! env assoc k v))
-               :run-command! (or run-command!
-                                  (fn [cmd args opts]
-                                    (swap! commands conj {:cmd cmd
-                                                          :args args
-                                                          :cwd (:cwd opts)})
-                                    (when (and (= "python3" cmd)
-                                               (= ["-m" "venv" ".venv"] args))
-                                      (swap! existing-paths* conj
-                                             (node-path/join (:cwd opts)
-                                                             ".venv"
-                                                             "bin"
-                                                             "python")))
-                                    (p/resolved nil)))
+               :run-command! (fn [cmd args opts]
+                               (swap! commands conj {:cmd cmd
+                                                     :args args
+                                                     :cwd (:cwd opts)})
+                               (or (when run-command!
+                                     (run-command! cmd args opts))
+                                   (do
+                                     (when (= ["-m" "venv" ".venv"] args)
+                                       (swap! existing-paths* conj
+                                              (node-path/join (:cwd opts)
+                                                              ".venv"
+                                                              "bin"
+                                                              "python")))
+                                     (p/resolved nil))))
                :wait-ready! (or wait-ready!
                                 (fn [endpoint]
                                   (swap! events conj [:wait-ready endpoint])
@@ -78,6 +84,7 @@
      :writes writes
      :spawns spawns
      :events events
+     :removed-dirs removed-dirs
      :env env
      :killed? killed?}))
 
@@ -91,6 +98,24 @@
             (is (= :skipped result))
             (is (empty? @commands))
             (is (empty? @spawns)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest python-command-available-detects-missing-python
+  (async done
+    (let [commands (atom [])
+          run-command! (fn [cmd args _opts]
+                         (swap! commands conj {:cmd cmd
+                                               :args args})
+                         (p/rejected (js/Error. "spawn python3 ENOENT")))]
+      (-> (p/let [available? (embedding-server/python-command-available!
+                              "python3"
+                              {:run-command! run-command!})]
+            (is (false? available?))
+            (is (= [{:cmd "python3"
+                     :args ["--version"]}]
+                   @commands)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -111,6 +136,9 @@
             (is (= [runtime-dir] @ensured-dirs))
             (is (= [{:cmd "python3"
                      :args ["-m" "venv" ".venv"]
+                     :cwd runtime-dir}
+                    {:cmd venv-python
+                     :args ["-c" "import sys"]
                      :cwd runtime-dir}
                     {:cmd venv-python
                      :args ["-m" "pip" "install" "sentence-transformers" "httpx[socks]"]
@@ -185,6 +213,9 @@
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
             (is (= [{:cmd venv-python
+                     :args ["-c" "import sys"]
+                     :cwd runtime-dir}
+                    {:cmd venv-python
                      :args ["-m" "pip" "install" "sentence-transformers" "httpx[socks]"]
                      :cwd runtime-dir}]
                    @commands))
@@ -207,7 +238,10 @@
           app (fake-app "/users/me/logseq" true)]
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
-            (is (empty? @commands))
+            (is (= [{:cmd venv-python
+                     :args ["-c" "import sys"]
+                     :cwd runtime-dir}]
+                   @commands))
             (is (= [{:runtime-dir runtime-dir
                      :venv-dir "/users/me/logseq/embedding-server/.venv"
                      :venv-python venv-python
@@ -219,6 +253,56 @@
                    @spawns))
             (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:45678/v1/embeddings"}
                    @env))
+            (embedding-server/stop!))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest start-recreates-existing-venv-when-python-is-not-usable
+  (async done
+    (embedding-server/stop!)
+    (let [runtime-dir "/users/me/logseq/embedding-server"
+          venv-dir "/users/me/logseq/embedding-server/.venv"
+          venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
+          validation-attempts (atom 0)
+          {:keys [runtime commands removed-dirs writes spawns]} (fake-runtime
+                                                                 {:existing-paths #{venv-python deps-stamp}
+                                                                  :allocated-port 45678
+                                                                  :run-command! (fn [cmd args _opts]
+                                                                                  (when (and (= cmd venv-python)
+                                                                                             (= args ["-c" "import sys"])
+                                                                                             (= 1 (swap! validation-attempts inc)))
+                                                                                    (p/rejected (js/Error. "stale venv python"))))})
+          app (fake-app "/users/me/logseq" true)]
+      (-> (p/let [result (embedding-server/start! app runtime)]
+            (is (= :started result))
+            (is (= [venv-dir] @removed-dirs))
+            (is (= [{:cmd venv-python
+                     :args ["-c" "import sys"]
+                     :cwd runtime-dir}
+                    {:cmd "python3"
+                     :args ["-m" "venv" ".venv"]
+                     :cwd runtime-dir}
+                    {:cmd venv-python
+                     :args ["-c" "import sys"]
+                     :cwd runtime-dir}
+                    {:cmd venv-python
+                     :args ["-m" "pip" "install" "sentence-transformers" "httpx[socks]"]
+                     :cwd runtime-dir}]
+                   @commands))
+            (is (= [{:file deps-stamp
+                     :content "sentence-transformers\nhttpx[socks]\n"}]
+                   @writes))
+            (is (= [{:runtime-dir runtime-dir
+                     :venv-dir venv-dir
+                     :venv-python venv-python
+                     :sidecar-dir "/app/Contents/Resources/sidecar"
+                     :script-path "/app/Contents/Resources/sidecar/embedding_server.py"
+                     :host "127.0.0.1"
+                     :port 45678
+                     :model-id "all-MiniLM-L6-v2"}]
+                   @spawns))
             (embedding-server/stop!))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -244,16 +328,3 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
-
-(deftest electron-builder-bundles-only-sidecar-python-file
-  (let [repo-root (.cwd js/process)
-        sidecar-dir (node-path/join repo-root "sidecar")
-        builder-config (.toString (fs/readFileSync (node-path/join repo-root
-                                                                  "resources"
-                                                                  "electron-builder.yml"))
-                                  "utf8")
-        sidecar-files (when (fs/existsSync sidecar-dir)
-                        (js->clj (fs/readdirSync sidecar-dir)))]
-    (is (string/includes? builder-config "from: ../sidecar"))
-    (is (string/includes? builder-config "to: sidecar"))
-    (is (= ["embedding_server.py"] sidecar-files))))

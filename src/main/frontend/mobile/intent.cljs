@@ -11,7 +11,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.date :as date]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -123,8 +123,7 @@
 
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
-          page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
-          format (db/get-page-format page)]
+          format :markdown]
     (-> (embed-asset-file url format)
         (p/catch (fn [error]
                    (log/error :share-import-media-failed {:error error :url url})
@@ -132,8 +131,9 @@
 
 (defn- handle-received-application [result]
   (p/let [{:keys [url type]} result
-          page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
-          format (db/get-page-format page)
+          today-page-title (db-async/<get-today-journal-title (state/get-current-repo))
+          page (or (state/get-current-page) (string/lower-case today-page-title))
+          format :markdown
           application-type (last (string/split type "/"))
           content (cond
                     (contains? (set/union config/doc-formats config/media-formats)
@@ -220,8 +220,9 @@
   "Mobile share intent handler v2, use complex payload to support more types of content."
   [payload]
   ;; use :text template, use {url} as rich text placeholder
-  (p/let [page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
-          format (db/get-page-format page)
+  (p/let [today-page-title (db-async/<get-today-journal-title (state/get-current-repo))
+          page (or (state/get-current-page) (string/lower-case today-page-title))
+          format :markdown
 
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
@@ -241,7 +242,7 @@
                                   (keyword (:ext resource))))
                      resources)))
       (let [time (date/get-current-time)
-            date-ref-name (db/get-today-journal-title)
+            date-ref-name today-page-title
             content (-> template
                         (string/replace "{time}" time)
                         (string/replace "{date}" date-ref-name)

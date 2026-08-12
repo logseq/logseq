@@ -1,5 +1,9 @@
 .cp__user-login {
-  @apply px-1;
+  @apply mx-auto w-full max-w-[440px] px-1;
+
+  .ls-authenticator-content {
+    @apply w-full;
+  }
 
   span.opacity-50, a.opacity-60 {
     @apply opacity-80;
@@ -24,7 +28,7 @@
 }
 
 .ui__dialog-content[label=user-login] {
-  @apply flex items-center top-0 px-6 pt-0 w-auto;
+  @apply flex items-center px-6 pt-0 w-auto max-w-none;
 
   .ui__card-header {
     @apply pb-7;
@@ -34,7 +38,7 @@
     @apply p-0 w-[70vw] relative max-w-[500px] sm:w-[440px];
   }
 
-  .ui__modal-close-wrap {
+  .ui__dialog-close {
     @apply z-10 top-[4px];
   }
 }

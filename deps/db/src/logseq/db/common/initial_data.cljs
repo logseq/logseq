@@ -45,6 +45,66 @@
     (:alias rules/rules))
    distinct))
 
+(defn- datom-v
+  [db eid attr]
+  (some-> (first (d/datoms db :eavt eid attr)) :v))
+
+(defn- datom-vs
+  [db eid attr]
+  (map :v (d/datoms db :eavt eid attr)))
+
+(defn- get-block-alias-ids
+  [db eid]
+  (distinct
+   (concat
+    (datom-vs db eid :block/alias)
+    (map :e (d/datoms db :avet :block/alias eid)))))
+
+(defn- hidden-eid-pred
+  [db]
+  (let [*cache (volatile! {})]
+    (letfn [(hidden? [eid seen]
+              (cond
+                (nil? eid)
+                false
+
+                (contains? @*cache eid)
+                (get @*cache eid)
+
+                (contains? seen eid)
+                false
+
+                :else
+                (let [result (boolean
+                              (or (datom-v db eid :logseq.property/hide?)
+                                  (datom-v db eid :logseq.property/deleted-at)
+                                  (hidden? (datom-v db eid :block/parent) (conj seen eid))))]
+                  (vswap! *cache assoc eid result)
+                  result)))]
+      (fn [eid]
+        (hidden? eid #{})))))
+
+(defn- hidden-ref-id-pred
+  ([db id]
+   (hidden-ref-id-pred db id (hidden-eid-pred db)))
+  ([db id hidden-eid?]
+   (let [entity (d/entity db id)
+         entity-ident (:db/ident entity)
+         class-ids (when (entity-util/class? entity)
+                     (let [children (db-class/get-structured-children db id)]
+                       (set (conj children id))))]
+     (fn [ref-eid]
+       (or
+        (= ref-eid id)
+        (= id (datom-v db ref-eid :block/page))
+        (= id (datom-v db ref-eid :logseq.property/view-for))
+        (hidden-eid? (datom-v db ref-eid :block/page))
+        (hidden-eid? ref-eid)
+        (and class-ids
+             (some class-ids (datom-vs db ref-eid :block/tags)))
+        (and entity-ident
+             (seq (d/datoms db :eavt ref-eid entity-ident))))))))
+
 (comment
   (defn- get-built-in-files
     [db]
@@ -194,16 +254,15 @@
 
 (defn get-block-refs-count
   [db id]
-  (let [with-alias (->> (get-block-alias db id)
+  (let [with-alias (->> (get-block-alias-ids db id)
                         (cons id)
                         distinct)
-        hidden-ref?* (hidden-ref-pred db id)
-        entity-by-id (memoize (fn [eid] (d/entity db eid)))]
+        hidden-ref?* (hidden-ref-id-pred db id)]
     (reduce
      (fn [total alias-id]
        (+ total
           (reduce (fn [n datom]
-                    (if (hidden-ref?* (entity-by-id (:e datom)))
+                    (if (hidden-ref?* (:e datom))
                       n
                       (inc n)))
                   0
@@ -281,7 +340,8 @@
                      (when (and (entity-util/journal? e)
                                 (:db/id e)
                                 (not (entity-util/recycled? e)))
-                       e))))))))
+                       e)))))
+         (common-util/distinct-by :db/id))))
 
 (defn- get-structured-datoms
   [db]
@@ -292,12 +352,12 @@
           (d/datoms db :avet :block/closed-value-property))
          (mapcat (fn [d]
                    (let [block-datoms (d/datoms db :eavt (:e d))
-                         properties-of-property-datoms
+                         property-description-datoms
                          (when (= (:v d) class-property-id)
-                           (when-let [desc (:logseq.property/default-value (d/entity db (:e d)))]
+                           (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
                              (d/datoms db :eavt (:db/id desc))))]
-                     (if (seq properties-of-property-datoms)
-                       (concat block-datoms properties-of-property-datoms)
+                     (if (seq property-description-datoms)
+                       (concat block-datoms property-description-datoms)
                        block-datoms)))))))
 
 (defn- get-favorites
@@ -336,10 +396,16 @@
 (defn- get-all-user-datoms
   [db]
   (when (d/entity db :logseq.property.user/email)
-    (mapcat
-     (fn [d]
-       (d/datoms db :eavt (:e d)))
-     (d/datoms db :avet :logseq.property.user/email))))
+    (->> (d/datoms db :avet :logseq.property.user/email)
+         (mapcat
+          (fn [d] (d/datoms db :eavt (:e d)))))))
+
+(defn- get-list-style-values
+  [db]
+  (->> (d/datoms db :avet :logseq.property/order-list-type)
+       (map :v)
+       (distinct)
+       (mapcat (fn [v] (d/datoms db :eavt v)))))
 
 (defn get-initial-data
   "Returns current database schema and initial data"
@@ -364,6 +430,7 @@
         all-files (get-all-files db)
         structured-datoms (get-structured-datoms db)
         user-datoms (get-all-user-datoms db)
+        list-style-datoms (get-list-style-values db)
         pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
                            capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
                            views-id (get-first-page-by-title db common-config/views-page-name)
@@ -373,6 +440,7 @@
         data (->> (concat idents
                           structured-datoms
                           user-datoms
+                          list-style-datoms
                           favorites
                           recent-updated-pages
                           all-files

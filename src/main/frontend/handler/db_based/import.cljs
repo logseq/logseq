@@ -3,10 +3,8 @@
   (:require ["jszip" :as JSZip]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -18,11 +16,18 @@
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- <transact-import-marker!
+  [graph import-type]
+  (state/<invoke-db-worker :thread-api/transact
+                           graph
+                           (sqlite-util/import-tx import-type)
+                           {:import-db? true}
+                           nil))
 
 (defn- zip-entries
   [^js zip]
@@ -106,7 +111,7 @@
       (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
-      (db/transact! graph (sqlite-util/import-tx :sqlite-db) {:import-db? true})
+      (<transact-import-marker! graph :sqlite-db)
       (finished-ok-handler))
      (p/catch
       (fn [e]
@@ -174,15 +179,13 @@
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]
-  (let [graph (str config/db-version-prefix bare-graph-name)
-        db-or-datoms (ldb/read-transit-str raw)
-        datoms (if (d/db? db-or-datoms) (vec (d/datoms db-or-datoms :eavt)) db-or-datoms)]
+  (let [graph (str config/db-version-prefix bare-graph-name)]
     (p/do!
      (persist-db/<new graph {:import-type :debug-transit
-                             :datoms datoms})
+                             :debug-transit-raw raw})
      (state/add-repo! {:url graph})
      (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
-     (db/transact! graph (sqlite-util/import-tx :debug-transit) {:import-db? true})
+     (<transact-import-marker! graph :debug-transit)
      (state/set-current-repo! graph)
      (finished-ok-handler))))
 
@@ -203,44 +206,55 @@
                      (finished-error-handler)
                      nil))]
     (when (some? edn-data)
-      (-> (p/let
-           [_ (persist-db/<new graph {:import-type :edn})
-            _ (state/add-repo! {:url graph})
-            _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
-            _ (state/set-current-repo! graph)
-            {:keys [error]} (ui-outliner-tx/transact!
-                             {:outliner-op :batch-import-edn}
-                             (outliner-op/batch-import-edn! edn-data {:tx-meta {:import-db? true}}))]
-            (if error
-              (do
-                (notification/show! error :error)
-                (finished-error-handler))
-              (finished-ok-handler)))
-          (p/catch
-           (fn [e]
-             (js/console.error e)
-             (notification/show! (t :import/unexpected-error (.-message e))
-                                 :error)
-             (finished-error-handler)))))))
+      (if-let [error (:error (sqlite-export/validate-export edn-data))]
+        (do
+          (notification/show! error :error)
+          (finished-error-handler))
+        (-> (p/let
+             [_ (persist-db/<new graph {:import-type :edn})
+              _ (state/add-repo! {:url graph})
+              _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
+              _ (state/set-current-repo! graph)
+              {:keys [error]} (ui-outliner-tx/transact!
+                               {:outliner-op :batch-import-edn}
+                               (outliner-op/batch-import-edn! edn-data {:tx-meta {:import-db? true}}))]
+              (if error
+                (do
+                  (notification/show! error :error)
+                  (finished-error-handler))
+                (finished-ok-handler)))
+            (p/catch
+             (fn [e]
+               (js/console.error e)
+               (notification/show! (t :import/unexpected-error (.-message e))
+                                   :error)
+               (finished-error-handler))))))))
+
+(defn- <current-import-block
+  []
+  (if-let [eid (:block-id (first (state/get-editor-args)))]
+    (p/let [ent (state/<invoke-db-worker :thread-api/pull
+                                         (state/get-current-repo)
+                                         [:block/uuid {:block/page [:block/uuid]}]
+                                         [:block/uuid eid])]
+      (if-not (:block/page ent)
+        {:error (t :import/cannot-import-block-into-non-block-entity)}
+        (merge (select-keys ent [:block/uuid])
+               {:block/page (select-keys (:block/page ent) [:block/uuid])})))
+    (do
+      (notification/show! (t :block/not-found-warning) :warning)
+      (p/resolved nil))))
 
 (defn- import-edn-data-from-form [import-inputs _e]
-  (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
-        import-block? (::sqlite-export/block export-map)
-        block (when import-block?
-                (if-let [eid (:block-id (first (state/get-editor-args)))]
-                  (let [ent (db/entity [:block/uuid eid])]
-                    (if-not (:block/page ent)
-                      {:error (t :import/cannot-import-block-into-non-block-entity)}
-                      (merge (select-keys ent [:block/uuid])
-                             {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                  (notification/show! (t :block/not-found-warning) :warning)))]
-    (cond (or (= ::invalid-import export-map) (not (map? export-map)))
-          (notification/show! (t :import/submitted-edn-invalid) :warning)
-          (:error block)
+  (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))]
+    (if (or (= ::invalid-import export-map) (not (map? export-map)))
+      (notification/show! (t :import/submitted-edn-invalid) :warning)
+      (p/let [block (when (::sqlite-export/block export-map)
+                      (<current-import-block))]
+        (if (:error block)
           (do
             (notification/show! (:error block) :error)
             (shui/dialog-close-all!))
-          :else
           (p/let [{:keys [error]}
                   (ui-outliner-tx/transact!
                    {:outliner-op :batch-import-edn}
@@ -250,7 +264,7 @@
             (ui-handler/re-render-root!)
             (if error
               (notification/show! error :error)
-              (notification/show! (t :import/successful) :success))))))
+              (notification/show! (t :import/successful) :success))))))))
 
 (defn ^:export import-edn-data-dialog
   "Displays dialog which allows users to paste and import sqlite.build EDN Data"
@@ -266,6 +280,10 @@
                       :class "overflow-y-auto"
                       :rows 10
                       :auto-focus true
+                      :ref (fn [element]
+                             (when element
+                               (js/requestAnimationFrame
+                                (fn [_] (.focus element)))))
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}

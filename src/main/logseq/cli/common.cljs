@@ -6,22 +6,34 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]))
 
+(defn- existing-graph-dir-name
+  [graphs-dir repo]
+  (let [graph-dir-key (graph-dir/repo->graph-dir-key repo)
+        encoded-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (or
+     (when (fs/existsSync (node-path/join graphs-dir encoded-name))
+       encoded-name)
+     (when (fs/existsSync graphs-dir)
+       (->> (common-graph/read-directories graphs-dir)
+            (remove #(= % common-config/unlinked-graphs-dir))
+            (some #(when (= graph-dir-key (graph-dir/decode-graph-dir-name %))
+                     %)))))))
+
 (defn unlink-graph!
   "Unlinks the given repo by moving it to the 'Unlinked graphs' dir.
    Returns path of unlinked dir if move is successful or nil if not"
   ([repo]
    (unlink-graph! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
   ([graphs-dir repo]
-   (let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)
-         graphs-dir (common-graph/expand-home graphs-dir)
-         path (node-path/join graphs-dir graph-dir-name)
-         unlinked (node-path/join graphs-dir common-config/unlinked-graphs-dir)
-         new-path (node-path/join unlinked graph-dir-name)
-         new-path-exists? (fs/existsSync new-path)
-         new-path' (if new-path-exists?
-                     (node-path/join unlinked (str graph-dir-name "-" (random-uuid)))
-                     new-path)]
-     (when (fs/existsSync path)
-       (fs/ensureDirSync unlinked)
-       (fs/moveSync path new-path')
-       new-path'))))
+   (let [graphs-dir (common-graph/expand-home graphs-dir)]
+     (when-let [graph-dir-name (existing-graph-dir-name graphs-dir repo)]
+       (let [path (node-path/join graphs-dir graph-dir-name)
+             unlinked (node-path/join graphs-dir common-config/unlinked-graphs-dir)
+             new-path (node-path/join unlinked graph-dir-name)
+             new-path-exists? (fs/existsSync new-path)
+             new-path' (if new-path-exists?
+                         (node-path/join unlinked (str graph-dir-name "-" (random-uuid)))
+                         new-path)]
+         (fs/ensureDirSync unlinked)
+         (fs/moveSync path new-path')
+         new-path')))))

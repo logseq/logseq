@@ -66,9 +66,7 @@
 
 (defmethod handle :sync-conflicts-updated [_ _worker {:keys [repo block-uuid conflicts]}]
   (when (and (seq repo) block-uuid)
-    (state/set-state! :sync/block-conflicts
-                      (or conflicts [])
-                      :path-in-sub-atom [repo (str block-uuid)])))
+    (state/set-sync-block-conflicts! repo block-uuid conflicts)))
 
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
@@ -215,6 +213,17 @@
 (defn handle-message!
   [^js worker wrapped-worker]
   (assert worker "worker doesn't exists")
+  (let [handle-worker-failure!
+        (fn [event]
+          (when (identical? worker @state/*db-worker-thread)
+            (log/error :db-worker/stopped-unexpectedly {:event event})
+            (set! (.-onmessage worker) nil)
+            (set! (.-onerror worker) nil)
+            (set! (.-onmessageerror worker) nil)
+            (reset! state/*db-worker-thread nil)
+            (reset! state/*db-worker nil)))]
+    (set! (.-onerror worker) handle-worker-failure!)
+    (set! (.-onmessageerror worker) handle-worker-failure!))
   (set! (.-onmessage worker)
         (fn [event]
           (let [data (.-data event)]

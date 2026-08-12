@@ -288,17 +288,15 @@
    (utils/save-proxy-settings options)))
 
 (defmethod handle :testProxyUrl [_win [_ url options]]
-  ;; FIXME: better not to set proxy while testing url
-  (let [_ (utils/<set-proxy options)
-        start-ms (.getTime (js/Date.))]
-    (-> (utils/fetch url)
+  (let [start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url {:proxy options})
         (p/timeout 10000)
         (p/then (fn [resp]
                   (let [code (.-status resp)
                         response-ms (- (.getTime (js/Date.)) start-ms)]
                     (if (<= 200 code 299)
-                      #js {:code code
-                           :response-ms response-ms}
+                      {:code code
+                       :response-ms response-ms}
                       (p/rejected (js/Error. (str "HTTP status " code)))))))
         (p/catch (fn [e]
                    (if (instance? p/TimeoutException e)
@@ -326,18 +324,29 @@
 (defmethod handle :quitApp []
   (.quit app))
 
+(defn- enabling-semantic-search?
+  [k v]
+  (and (= k :feature/enable-semantic-search?)
+       (true? v)))
+
 (defmethod handle :userAppCfgs [window [_ k v]]
   (let [config (cfgs/get-config)]
     (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (do (cfgs/set-item! k v)
-            (when (= k :spell-check)
-              (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
-            (when (and (= k :feature/enable-semantic-search?)
-                       (false? v))
-              (embedding-server/stop!))
-            (state/set-state! [:config k] v)
-            nil)
+        (p/let [python-available? (if (enabling-semantic-search? k v)
+                                    (embedding-server/python-command-available! "python3")
+                                    true)]
+          (if-not python-available?
+            (p/rejected (ex-info "python3 is required to enable semantic search"
+                                 {:code :missing-python3}))
+            (do (cfgs/set-item! k v)
+                (when (= k :spell-check)
+                  (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
+                (when (and (= k :feature/enable-semantic-search?)
+                           (false? v))
+                  (embedding-server/stop!))
+                (state/set-state! [:config k] v)
+                nil)))
         (cfgs/get-item k))
       config)))
 

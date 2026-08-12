@@ -23,13 +23,19 @@
 (defonce *state
   (atom nil))
 
+(defn- normalize-tokens
+  [tokens]
+  (if (nil? tokens)
+    []
+    (vec tokens)))
+
 (defn- reset-state!
   []
   (reset! *state {:status    nil                            ;; :running :starting :closing :closed :error
                   :error     nil
                   :host      (get-host)
                   :port      (get-port)
-                  :tokens    (cfgs/get-item :server/tokens)
+                  :tokens    (normalize-tokens (cfgs/get-item :server/tokens))
                   :autostart (cfgs/get-item :server/autostart)
                   :mcp-enabled? (cfgs/get-item :server/mcp-enabled?)}))
 
@@ -47,10 +53,13 @@
 (defn set-config!
   [config]
   (when-let [config (and (map? config) (dissoc config :status))]
-    (reset! *state (merge @*state config))
-    (doseq [[k v] config]
-      (cfgs/set-item! (keyword (str "server/" (name k))) v))
-    (load-state-to-renderer!)))
+    (let [config (cond-> config
+                   (contains? config :tokens)
+                   (update :tokens normalize-tokens))]
+      (reset! *state (merge @*state config))
+      (doseq [[k v] config]
+        (cfgs/set-item! (keyword (str "server/" (name k))) v))
+      (load-state-to-renderer!))))
 
 (defn- setup-state-watch!
   []

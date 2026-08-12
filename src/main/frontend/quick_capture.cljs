@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.video :as video]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -21,7 +21,8 @@
         (re-matches #"^https://x\.com/.*?/status/.*?$" url))))
 
 (defn quick-capture [args]
-  (if-let [today-page-title (db/get-today-journal-title)]
+  (p/let [today-page-title (db-async/<get-today-journal-title (state/get-current-repo))]
+   (if today-page-title
     (let [{:keys [url title content page append]} (bean/->clj args)
           title (or title "")
           url (or url "")
@@ -39,9 +40,8 @@
           default-page (get-in (state/get-config)
                                [:quick-capture-options :default-page])
           page (cond
-                 (and (state/enable-journals?)
-                      (or (= page "TODAY")
-                          (and (string/blank? page) insert-today?)))
+                 (or (= page "TODAY")
+                     (and (string/blank? page) insert-today?))
                  today-page
 
                  (not-empty page)
@@ -54,9 +54,7 @@
                  current-page
 
                  :else
-                 (if (state/enable-journals?) ;; default to "quick capture" page if journals are not enabled
-                   today-page
-                   "quick capture"))
+                 today-page)
           time (date/get-current-time)
           text (or (and content (not-empty (string/trim content))) "")
           link (cond
@@ -101,4 +99,4 @@
                                                                         :edit-block? true
                                                                         :replace-empty-target? true})
                         100))))
-    (notification/show! (t :journal/parse-date-to-name-error) :error)))
+    (notification/show! (t :journal/parse-date-to-name-error) :error))))

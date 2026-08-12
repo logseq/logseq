@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
@@ -148,7 +149,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 (def vector-embedding-dimension 384)
-(def vector-context-version 2)
+(def vector-context-version 3)
 (def ^:private rrf-k 60)
 (def ^:private keyword-rrf-weight 1.25)
 (def ^:private vector-rrf-weight 1.0)
@@ -549,162 +550,6 @@ DROP TRIGGER IF EXISTS blocks_au;
            (string/join " "))
       title)))
 
-(def ^:private vector-context-parent-depth 3)
-(def ^:private vector-context-child-limit 2)
-(def ^:private vector-context-segment-max-length 320)
-
-(defn- truncate-vector-context-segment
-  [text]
-  (let [text (str text)]
-    (if (> (count text) vector-context-segment-max-length)
-      (subs text 0 vector-context-segment-max-length)
-      text)))
-
-(defn- vector-context-title
-  [block]
-  (let [title (some-> (:block/title block)
-                      str
-                      string/trim)]
-    (when-not (string/blank? title)
-      (truncate-vector-context-segment title))))
-
-(defn- vector-context-segment
-  [label text]
-  (when-not (string/blank? text)
-    (str label ": " text)))
-
-(defn- vector-context-page-title
-  [block]
-  (vector-context-title (:block/page block)))
-
-(defn- vector-context-parent-path
-  [block]
-  (->> (loop [parent (:block/parent block)
-              result []]
-         (cond
-           (nil? parent)
-           result
-
-           (ldb/page? parent)
-           result
-
-           (>= (count result) vector-context-parent-depth)
-           result
-
-           :else
-           (recur (:block/parent parent) (conj result parent))))
-       reverse
-       (keep vector-context-title)
-       (string/join " > ")))
-
-(defn- vector-context-block-id
-  [block]
-  (or (:db/id block) (:block/uuid block)))
-
-(defn- same-vector-context-block?
-  [a b]
-  (let [a-id (vector-context-block-id a)]
-    (and a-id
-         (= a-id (vector-context-block-id b)))))
-
-(defn- vector-context-siblings
-  [block]
-  (some->> (:block/_parent (:block/parent block))
-           seq
-           ldb/sort-by-order
-           vec))
-
-(defn- vector-context-sibling
-  [block offset]
-  (let [siblings (vector-context-siblings block)
-        idx (some->> siblings
-                     (keep-indexed (fn [i sibling]
-                                     (when (same-vector-context-block? sibling block)
-                                       i)))
-                     first)
-        sibling-idx (when idx (+ idx offset))]
-    (when (and sibling-idx
-               (<= 0 sibling-idx)
-               (< sibling-idx (count siblings)))
-      (nth siblings sibling-idx))))
-
-(defn- vector-context-child-titles
-  [block]
-  (some->> (:block/_parent block)
-           seq
-           ldb/sort-by-order
-           (take vector-context-child-limit)
-           (keep vector-context-title)
-           (string/join " | ")))
-
-(defn- vector-context-child-titles-from-cache
-  [children-by-parent-id block]
-  (some->> (get children-by-parent-id (vector-context-block-id block))
-           seq
-           (take vector-context-child-limit)
-           (keep vector-context-title)
-           (string/join " | ")))
-
-(defn- vector-context-children-by-parent-id
-  [blocks]
-  (let [children-by-parent-id (reduce (fn [result block]
-                                        (if-let [parent-id (some-> (:block/parent block)
-                                                                   vector-context-block-id)]
-                                          (update result parent-id (fnil conj []) block)
-                                          result))
-                                      {}
-                                      blocks)]
-    (into {}
-          (map (fn [[parent-id children]]
-                 [parent-id (vec (ldb/sort-by-order children))]))
-          children-by-parent-id)))
-
-(defn- vector-context-neighbor-title-by-id
-  [children-by-parent-id]
-  (reduce-kv
-   (fn [result _parent-id children]
-     (reduce (fn [result [idx child]]
-               (let [block-id (vector-context-block-id child)]
-                 (if block-id
-                   (assoc result block-id
-                          {:previous-title (vector-context-title (get children (dec idx)))
-                           :next-title (vector-context-title (get children (inc idx)))})
-                   result)))
-             result
-             (map-indexed vector children)))
-   {}
-   children-by-parent-id))
-
-(defn build-vector-context-cache
-  [blocks]
-  (let [children-by-parent-id (vector-context-children-by-parent-id blocks)]
-    {:children-by-parent-id children-by-parent-id
-     :neighbor-title-by-id (vector-context-neighbor-title-by-id children-by-parent-id)}))
-
-(defn- block->vector-title
-  ([block title]
-   (block->vector-title nil block title))
-  ([context block title]
-   (let [block-id (vector-context-block-id block)
-         neighbor-titles (get-in context [:neighbor-title-by-id block-id])
-         previous-title (if context
-                          (:previous-title neighbor-titles)
-                          (vector-context-title (vector-context-sibling block -1)))
-         next-title (if context
-                      (:next-title neighbor-titles)
-                      (vector-context-title (vector-context-sibling block 1)))
-         child-titles (if context
-                        (vector-context-child-titles-from-cache (:children-by-parent-id context) block)
-                        (vector-context-child-titles block))]
-    (->> [(vector-context-segment "Page" (vector-context-page-title block))
-          (vector-context-segment "Path" (vector-context-parent-path block))
-          (vector-context-segment "Previous" previous-title)
-          (vector-context-segment "Block" (truncate-vector-context-segment title))
-          (vector-context-segment "Children" child-titles)
-          (vector-context-segment "Next" next-title)]
-         (keep identity)
-         (string/join "\n")))))
-
 (defn- block-result-title
   [block]
   (db-content/recur-replace-uuid-in-block-title block))
@@ -721,8 +566,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                             first)]
         (select-keys alias [:block/uuid :block/title])))))
 
-(defn- block->index*
-  [context {:block/keys [uuid page title] :as block}]
+(defn block->index
+  "Convert a block to the index for searching."
+  ([block]
+   (block->index block {:include-vector-title? false}))
+  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title?]
+                                               :or {include-vector-title? false}}]
   (when-not (or
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
@@ -730,23 +579,14 @@ DROP TRIGGER IF EXISTS blocks_au;
     (try
       (let [title (block-search-title block)]
         (when uuid
-          {:id (str uuid)
-           :page (str (or (:block/uuid page) uuid))
-           :title (if (page-or-object? block) title (sanitize title))
-           :vector-title (block->vector-title context block title)}))
+          (cond-> {:id (str uuid)
+                   :page (str (or (:block/uuid page) uuid))
+                   :title (if (page-or-object? block) title (sanitize title))}
+            include-vector-title?
+            (assoc :vector-title title))))
       (catch :default e
         (prn "Error: failed to run block->index on block " (:db/id block))
-        (js/console.error e)))))
-
-(defn block->index
-  "Convert a block to the index for searching"
-  [block]
-  (block->index* nil block))
-
-(defn block->index-with-context
-  "Convert a block with a precomputed vector context cache."
-  [context block]
-  (block->index* context block))
+        (js/console.error e))))))
 
 (def ^:private search-result-block-key ::block)
 
@@ -754,7 +594,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   '[:db/id
     :block/uuid
     :block/title
-    {:block/page [:block/uuid]}
+    {:block/page [:block/uuid :block/name :block/title]}
     {:block/parent [:db/id :block/uuid :block/title :logseq.property/built-in?
                     :logseq.property/hide? :logseq.property/deleted-at]}
     {:block/tags [:db/id :db/ident :block/title :logseq.property/icon]}
@@ -910,40 +750,45 @@ DROP TRIGGER IF EXISTS blocks_au;
                                               [keyword-rrf-weight vector-rrf-weight]))
          unique-results (unique-search-results (concat keyword-results vector-results))
          block-by-id (pull-search-result-blocks db unique-results)
-         merged (keep (fn [{:keys [id] :as result}]
-                        (let [block (get block-by-id id)]
-                          (when-not (ldb/hidden? block)
-                            (let [keyword-score (if (ldb/page? block)
-                                                  (+ (or (:keyword-score result) 0.0) 2)
-                                                  (or (:keyword-score result) 0.0))
-                                  vector-score (or (:vector-score result) 0.0)
-                                  base-score (if use-rrf?
-                                               (or (get fused-score-by-id id) 0.0)
-                                               keyword-score)
-                                  vector-match-score (if use-rrf?
-                                                       (vector-term-match-score q result block)
-                                                       0)
-                                  combined-score (+ base-score
-                                                    vector-match-score
-                                                    (* source-score-tie-break-weight
-                                                       (+ keyword-score vector-score))
-                                                    (if-not use-rrf?
-                                                      (cond
-                                                        (ldb/page? block)
-                                                        0.02
-                                                        (:block/tags block)
-                                                        0.01
-                                                        :else
-                                                        0)
-                                                      0))]
-                              (assoc result
-                                     search-result-block-key block
-                                     :title (or (:title result) (:block/title block))
-                                     :combined-score combined-score
-                                     :keyword-score keyword-score)))))
-                      unique-results)
-         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
-     sorted-result)))
+         merged (reduce (fn [acc {:keys [id] :as result}]
+                          (let [block (get block-by-id id)]
+                            (if (ldb/hidden? block)
+                              acc
+                              (let [page? (ldb/page? block)
+                                    keyword-score (if page?
+                                                    (+ (or (:keyword-score result) 0.0) 2)
+                                                    (or (:keyword-score result) 0.0))
+                                    vector-score (or (:vector-score result) 0.0)
+                                    base-score (if use-rrf?
+                                                 (or (get fused-score-by-id id) 0.0)
+                                                 keyword-score)
+                                    vector-match-score (if use-rrf?
+                                                         (vector-term-match-score q result block)
+                                                         0)
+                                    combined-score (+ base-score
+                                                      vector-match-score
+                                                      (* source-score-tie-break-weight
+                                                         (+ keyword-score vector-score))
+                                                      (if-not use-rrf?
+                                                        (cond
+                                                          page?
+                                                          0.02
+                                                          (:block/tags block)
+                                                          0.01
+                                                          :else
+                                                          0)
+                                                        0))]
+                                (conj acc
+                                      (assoc result
+                                             search-result-block-key block
+                                             :title (or (:title result) (:block/title block))
+                                             :combined-score combined-score
+                                             :keyword-score keyword-score))))))
+                        []
+                        unique-results)
+         sorted-result (to-array merged)]
+     (.sort sorted-result #(compare (:combined-score %2) (:combined-score %1)))
+     (or (array-seq sorted-result) '()))))
 
 (defn- code-block?
   [code-class block]
@@ -997,7 +842,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                           (when (and page (common-util/uuid-string? page))
                             (uuid page)))
               parent-id (:db/id (:block/parent block))
-              tag-ids (seq (map :db/id (:block/tags block)))
+              tags (not-empty
+                    (mapv #(select-keys % [:db/id :db/ident :block/title
+                                           :logseq.property/icon])
+                          (:block/tags block)))
               icon (:logseq.property/icon block)
               alias (or alias-source alias-match)
               unique-title (db-block-title/block-unique-title
@@ -1012,14 +860,18 @@ DROP TRIGGER IF EXISTS blocks_au;
                    :block.temp/original-title (:block/title block)
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
+            (:include-breadcrumb? option)
+            (assoc :block.temp/breadcrumb
+                   (block-breadcrumb/block-breadcrumb @conn block))
+
             block-page
             (assoc :block/page block-page)
 
             parent-id
             (assoc :block/parent parent-id)
 
-            tag-ids
-            (assoc :block/tags tag-ids)
+            tags
+            (assoc :block/tags tags)
 
             icon
             (assoc :logseq.property/icon icon)
@@ -1033,6 +885,40 @@ DROP TRIGGER IF EXISTS blocks_au;
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
       (include-search-block? conn block code-class option))))
+
+(defn- direct-page-results
+  [conn q code-class option limit]
+  (when (d/db? @conn)
+    (let [needle (some-> q
+                         (fuzzy/search-normalize true)
+                         fuzzy/clean-str
+                         string/lower-case)]
+      (when-not (string/blank? needle)
+      (let [pages (->> (d/datoms @conn :avet :block/name)
+                       (keep #(d/entity @conn (:e %)))
+                       (filter (fn [page]
+                                 (and (ldb/page? page)
+                                      (:block/name page)
+                                      (:block/title page))))
+                       (filter (fn [page]
+                                 (let [haystack (some-> (:block/title page)
+                                                        (fuzzy/search-normalize true)
+                                                        fuzzy/clean-str
+                                                        string/lower-case)]
+                                   (and haystack (string/includes? haystack needle)))))
+                       (take limit)
+                       vec)]
+        (keep (fn [page]
+                (search-result->block-result
+                 conn
+                 q
+                 code-class
+                 option
+                 {:id (str (:block/uuid page))
+                  :page (str (:block/uuid page))
+                  :title (:block/title page)
+                  search-result-block-key page}))
+              pages))))))
 
 (defn- vector-search-blocks
   [vector-index {:keys [limit page query-embedding]}]
@@ -1113,7 +999,16 @@ DROP TRIGGER IF EXISTS blocks_au;
                            (count (filter #(search-result-visible? conn code-class option %) combined-result)))
            result (->> combined-result
                        (common-util/distinct-by :id)
-                       (keep #(search-result->block-result conn q code-class option %)))]
+                       (keep #(search-result->block-result conn q code-class option %)))
+           result (cond->> result
+                    (not code-only?)
+                    (concat (direct-page-results conn q code-class option limit))
+                    true
+                    (remove nil?)
+                    true
+                    (common-util/distinct-by :block/uuid))
+           matched-count (when include-matched-count?
+                           (max (or matched-count 0) (count result)))]
        (if include-matched-count?
          {:items (take limit result)
           :matched-count matched-count}
@@ -1161,55 +1056,45 @@ DROP TRIGGER IF EXISTS blocks_au;
          (remove hidden-entity?))))
 
 (defn build-blocks-indice
-  [db]
-  (let [blocks (vec (get-all-blocks db))
-        context (build-vector-context-cache blocks)]
-    (->> blocks
-         (keep #(block->index* context %)))))
+  ([db]
+   (build-blocks-indice db {:include-vector-title? false}))
+  ([db {:as opts}]
+   (->> (get-all-blocks db)
+        (keep #(block->index % opts)))))
 
-(defn expand-vector-context-blocks
-  [blocks]
-  (->> blocks
-       (mapcat (fn [block]
-                 (let [parent (:block/parent block)]
-                   (concat [block
-                            parent
-                            (vector-context-sibling block -1)
-                            (vector-context-sibling block 1)]
-                           (some->> (:block/_parent block)
-                                    seq
-                                    ldb/sort-by-order)))))
-       (remove nil?)
-       (remove hidden-entity?)
-       (common-util/distinct-by vector-context-block-id)))
+(defn- page-descendants
+  [page]
+  (loop [pages [page]
+         result []]
+    (if-let [page' (first pages)]
+      (let [children (->> (:block/_parent page')
+                          (filter ldb/page?)
+                          ldb/sort-by-order)]
+        (recur (concat (rest pages) children)
+               (conj result page')))
+      result)))
+
+(defn- page-tree
+  [db page]
+  (->> (page-descendants page)
+       (mapcat (fn [page']
+                 (concat
+                  [page']
+                  (mapcat #(ldb/get-block-and-children db (:block/uuid %))
+                          (ldb/sort-by-order (:block/_page page'))))))
+       distinct))
+
+(defn- entity-tree
+  [db entity]
+  (cond
+    (nil? entity) []
+    (ldb/page? entity) (page-tree db entity)
+    (:block/uuid entity) (ldb/get-block-and-children db (:block/uuid entity))
+    :else [entity]))
 
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
-  (letfn [(page-descendants [page]
-            (loop [pages [page]
-                   result []]
-              (if-let [page' (first pages)]
-                (let [children (->> (:block/_parent page')
-                                    (filter ldb/page?)
-                                    ldb/sort-by-order)]
-                  (recur (concat (rest pages) children)
-                         (conj result page')))
-                result)))
-          (page-tree [db page]
-            (->> (page-descendants page)
-                 (mapcat (fn [page']
-                           (concat
-                            [page']
-                            (mapcat #(ldb/get-block-and-children db (:block/uuid %))
-                                    (ldb/sort-by-order (:block/_page page'))))))
-                 distinct))
-          (entity-tree [db entity]
-            (cond
-              (nil? entity) []
-              (ldb/page? entity) (page-tree db entity)
-              (:block/uuid entity) (ldb/get-block-and-children db (:block/uuid entity))
-              :else [entity]))
-          (referrer-eids [db eids]
+  (letfn [(referrer-eids [db eids]
             (->> eids
                  (mapcat (fn [id]
                            (let [entity (d/entity db id)]
@@ -1217,22 +1102,39 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (map :db/id (:block/_refs entity))
                               (map :db/id (:block/_alias entity))))))
                  set))
-          (entities-for [db eids {:keys [include-tree? include-refs?]}]
-            (let [entities (keep #(d/entity db %) eids)
-                  entities' (if include-tree?
-                              (mapcat #(entity-tree db %) entities)
-                              entities)
-                  entities'' (if include-refs?
-                               (concat entities'
-                                       (keep #(d/entity db %)
-                                             (referrer-eids db eids)))
-                               entities')]
-              (->> entities''
-                   distinct
-                   (remove nil?))))]
+          (page-descendant-eids [page]
+            (set (map :db/id (page-descendants page))))
+          (entity-tree-eids [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 (mapcat #(entity-tree db %))
+                 (map :db/id)
+                 set))
+          (entities-for [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 distinct))
+          (page-eids-for [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 (filter ldb/page?)
+                 (map :db/id)
+                 set))
+          (page-descendant-eids-for [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 (mapcat page-descendant-eids)
+                 set))
+          (hidden-status-changed-eids-for [eids]
+            (->> eids
+                 (filter (fn [id]
+                           (not= (boolean (some-> (d/entity db-before id) hidden-entity?))
+                                 (boolean (some-> (d/entity db-after id) hidden-entity?)))))
+                 set))]
     (when (seq datoms)
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
-            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page :block/order}
+            direct-visibility-affecting-attrs #{:block/parent :block/page :block/order}
+            page-hierarchy-affecting-attrs #{:block/parent :block/page}
             ref-eids (->> datoms
                           (filter #(contains? ref-affecting-attrs (:a %)))
                           (mapcat (fn [{:keys [a e v]}]
@@ -1240,14 +1142,40 @@ DROP TRIGGER IF EXISTS blocks_au;
                                       (= :block/alias a)
                                       (conj v))))
                           set)
-            visibility-eids (->> datoms
-                                 (filter #(contains? visibility-affecting-attrs (:a %)))
+            direct-visibility-eids (->> datoms
+                                        (filter #(contains? direct-visibility-affecting-attrs (:a %)))
+                                        (map :e)
+                                        set)
+            block-page-eids (->> datoms
+                                 (filter #(= :block/page (:a %)))
                                  (map :e)
-                                 set)]
-        {:blocks-to-remove (concat (entities-for db-before ref-eids {:include-refs? true})
-                                   (entities-for db-before visibility-eids {:include-tree? true}))
-         :blocks-to-add (->> (concat (entities-for db-after ref-eids {:include-refs? true})
-                                     (entities-for db-after visibility-eids {:include-tree? true}))
+                                 set)
+            page-hierarchy-eids (->> datoms
+                                     (filter #(contains? page-hierarchy-affecting-attrs (:a %)))
+                                     (map :e)
+                                     set
+                                     (#(set/difference % block-page-eids)))
+            page-hierarchy-before-eids (page-eids-for db-before page-hierarchy-eids)
+            page-hierarchy-after-eids (page-eids-for db-after page-hierarchy-eids)
+            hidden-status-changed-eids (hidden-status-changed-eids-for direct-visibility-eids)
+            deleted-eids (->> datoms
+                              (filter #(= :logseq.property/deleted-at (:a %)))
+                              (map :e)
+                              set)
+            remove-eids (set/union ref-eids
+                                   (referrer-eids db-before ref-eids)
+                                   direct-visibility-eids
+                                   (entity-tree-eids db-before hidden-status-changed-eids)
+                                   (page-descendant-eids-for db-before page-hierarchy-before-eids)
+                                   (entity-tree-eids db-before deleted-eids))
+            add-eids (set/union ref-eids
+                                (referrer-eids db-after ref-eids)
+                                direct-visibility-eids
+                                (entity-tree-eids db-after hidden-status-changed-eids)
+                                (page-descendant-eids-for db-after page-hierarchy-after-eids)
+                                (entity-tree-eids db-after deleted-eids))]
+        {:blocks-to-remove (entities-for db-before remove-eids)
+         :blocks-to-add (->> (entities-for db-after add-eids)
                              (remove hidden-entity?))}))))
 
 (defn- get-affected-blocks
@@ -1256,26 +1184,27 @@ DROP TRIGGER IF EXISTS blocks_au;
         datoms (filter
                 (fn [datom]
                   ;; Capture direct changes on searchable content and outline structure
-                  ;; because vector embeddings include parent, child, and sibling context.
                   (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias
-                               :block/parent :block/page :block/order}
+                               :block/parent :block/page :block/order :logseq.property/deleted-at}
                              (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl tx-report datoms))))
 
 (defn sync-search-indice
-  [tx-report]
-  (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
-    ;; update block indice
-    (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (let [blocks-to-add (expand-vector-context-blocks blocks-to-add)
-            blocks-to-add' (keep block->index blocks-to-add)
-            blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
-                                          (->>
-                                           (set/difference
-                                            (set (map :block/uuid blocks-to-add))
-                                            (set (map :block/uuid blocks-to-add')))
-                                           (map str))))]
-        {:blocks-to-remove-set blocks-to-remove
-         :blocks-to-add        blocks-to-add'}))))
+  ([tx-report]
+   (sync-search-indice tx-report {:include-vector-title? false}))
+  ([tx-report {:keys [include-vector-title?]
+               :or {include-vector-title? false}}]
+   (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
+     ;; update block indice
+     (when (or (seq blocks-to-add) (seq blocks-to-remove))
+       (let [blocks-to-add' (keep #(block->index % {:include-vector-title? include-vector-title?}) blocks-to-add)
+             blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
+                                           (->>
+                                            (set/difference
+                                             (set (map :block/uuid blocks-to-add))
+                                             (set (map :block/uuid blocks-to-add')))
+                                            (map str))))]
+         {:blocks-to-remove-set blocks-to-remove
+          :blocks-to-add        blocks-to-add'})))))

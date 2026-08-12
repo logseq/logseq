@@ -41,9 +41,19 @@
 
         "tx/batch"
         (let [txs (:txs message)
+              user (presence/get-user self ws)
               t-before (sync-handler/parse-int (:t-before message))]
           (if (sequential? txs)
-            (ws/send! ws (sync-handler/handle-tx-batch! self ws txs t-before))
+            (ws/send! ws (sync-handler/handle-tx-batch!
+                          self
+                          ws
+                          txs
+                          t-before
+                          (cond-> {:graph-id (aget self "graph-id")}
+                            (:client-revision message)
+                            (assoc :client-revision (:client-revision message))
+                            (:username user)
+                            (assoc :username (:username user)))))
             (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
 
         (ws/send! ws {:type "error" :message "unknown type"})))))
@@ -57,11 +67,12 @@
               client (aget pair 0)
               server (aget pair 1)
               state (.-state self)]
+          (aset self "graph-id" graph-id)
           (.acceptWebSocket state server)
           (let [token (auth/token-from-request request)
                 claims (auth/unsafe-jwt-claims token)
                 user (presence/claims->user claims)]
             (when user
               (presence/add-presence! self server user))
-            (presence/broadcast-online-users! self))
-          (js/Response. nil #js {:status 101 :webSocket client}))))))
+            (presence/broadcast-online-users! self)
+            (js/Response. nil #js {:status 101 :webSocket client})))))))

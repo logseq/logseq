@@ -39,8 +39,14 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (= :logseq.property.embedding/hnsw-label (:db/ident entity))
+                           (db-migrate/delete-property db :logseq.property.embedding/hnsw-label)
                            (some? (:logseq.property/parent entity))
                            [[:db/retract (:db/id entity) :logseq.property/parent]]
+                           (and (ldb/class? entity) (:block/order entity))
+                           [[:db/retract (:db/id entity) :block/order]]
+                           (and (not (ldb/page? entity)) (:block/name entity))
+                           [[:db/retract (:db/id entity) :block/name]]
                            (some? (:hide? entity))
                            [[:db/retract (:db/id entity) :hide?]]
                            (some? (:public? entity))
@@ -183,7 +189,7 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (let [tx-report (d/transact! conn tx-data {:fix-db? true})]
+      (let [tx-report (ldb/transact! conn tx-data {:fix-db? true})]
         (seq (:tx-data tx-report))))))
 
 (defn- fix-num-prefix-db-idents!
@@ -240,7 +246,7 @@
                  properties)]
     (when (seq tx-data)
       (prn :debug :fix-non-closed-values tx-data)
-      (d/transact! conn tx-data {:fix-db? true}))))
+      (ldb/transact! conn tx-data {:fix-db? true}))))
 
 (defn- fix-icon-wrong-type!
   [conn]
@@ -250,16 +256,16 @@
             tx-data (cons
                      [:db/retract (:db/id icon) :db/valueType]
                      (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))]
-        (d/transact! conn tx-data {:fix-db? true})))))
+        (ldb/transact! conn tx-data {:fix-db? true})))))
 
 (defn- fix-extends-cardinality!
   [conn]
   (when (not= :db.cardinality/many (:db/cardinality (d/entity @conn :logseq.property.class/extends)))
-    (d/transact! conn
-                 [{:db/ident :logseq.property.class/extends
-                   :db/cardinality :db.cardinality/many
-                   :db/index true}]
-                 {:fix-db? true})))
+    (ldb/transact! conn
+                   [{:db/ident :logseq.property.class/extends
+                     :db/cardinality :db.cardinality/many
+                     :db/index true}]
+                   {:fix-db? true})))
 
 (defn- validate-db-result
   [db]
@@ -300,7 +306,8 @@
           (let [{:keys [errors] :as result} (validate-db-result @conn)]
             (log-validation-errors! errors)
             result))
-        db @conn]
+        db @conn
+        counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)]
 
     (if errors
       (do
@@ -314,11 +321,11 @@
                                                :warning false]))
 
       (shared-service/broadcast-to-clients! :notification
-                                            [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
+                                            [(str "Your graph is valid! " counts)
                                              :success false]))
-    {:errors errors
-     :datom-count datom-count
-     :invalid-entity-ids invalid-entity-ids}))
+    (merge {:errors errors
+            :invalid-entity-ids invalid-entity-ids}
+           counts)))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]

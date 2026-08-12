@@ -210,6 +210,33 @@
       (is (not= before-checksum full))
       (is (= full incremental)))))
 
+(deftest incremental-checksum-matches-recompute-when-ineligible-referenced-entity-is-retracted-test
+  (testing "incremental checksum tracks children when normalized tx data retracts a referenced non-checksum-eligible entity"
+    (let [parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          page-uuid (random-uuid)
+          db-before (-> (d/empty-db db-schema/schema)
+                        (d/db-with [{:db/id 1
+                                     :block/uuid page-uuid
+                                     :block/name "page-a"
+                                     :block/title "Page A"}
+                                    {:db/id 2
+                                     :block/uuid parent-uuid
+                                     :block/title "Orphan parent"}
+                                    {:db/id 3
+                                     :block/uuid child-uuid
+                                     :block/title "Child"
+                                     :block/parent 2
+                                     :block/page 1}]))
+          before-checksum (checksum/recompute-checksum db-before)
+          tx-report* (d/with db-before [[:db/retractEntity [:block/uuid parent-uuid]]])
+          tx-report (assoc tx-report*
+                           :tx-data [[:db/retractEntity [:block/uuid parent-uuid]]])
+          full (checksum/recompute-checksum (:db-after tx-report))
+          incremental (checksum/update-checksum before-checksum tx-report)]
+      (is (not= before-checksum full))
+      (is (= full incremental)))))
+
 (deftest incremental-checksum-matches-recompute-when-block-is-readded-test
   (testing "incremental checksum remains equal to recompute when a block is deleted and re-added with the same UUID"
     (let [db0 (sample-db)
@@ -223,6 +250,51 @@
                                               :block/title "Child"
                                               :block/parent [:block/uuid parent-uuid]
                                               :block/page [:block/uuid page-uuid]}]))))
+
+(deftest incremental-checksum-matches-recompute-when-block-is-readded-with-uuid-tempid-test
+  (testing "server rebase txs can delete and recreate the same block using a UUID string tempid"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          block-uuid (random-uuid)
+          block-tempid (str block-uuid)
+          page-uuid (:block/uuid (d/entity db0 1))
+          parent-uuid (:block/uuid (d/entity db0 3))
+          tx-data [[:db/add block-tempid :block/uuid block-uuid 536871536]
+                   [:db/add block-tempid :block/title "undo redo block" 536871536]
+                   [:db/add block-tempid :block/parent [:block/uuid parent-uuid] 536871536]
+                   [:db/add block-tempid :block/order "a0" 536871536]
+                   [:db/add block-tempid :block/page [:block/uuid page-uuid] 536871536]]
+          {:keys [db checksum]} (assert-incremental=full! db0 checksum0 tx-data)
+          {:keys [db checksum]} (assert-incremental=full! db checksum [[:db/retractEntity [:block/uuid block-uuid]]])]
+      (assert-incremental=full!
+       db
+       checksum
+       [[:db/add block-tempid :block/uuid block-uuid 536871538]
+        [:db/add block-tempid :block/title "undo redo block" 536871538]
+        [:db/add block-tempid :block/parent [:block/uuid parent-uuid] 536871538]
+        [:db/add block-tempid :block/order "a0" 536871538]
+        [:db/add block-tempid :block/page [:block/uuid page-uuid] 536871538]]))))
+
+(deftest incremental-checksum-matches-recompute-with-normalized-vector-tx-data-test
+  (testing "incremental checksum tracks normalized tx vectors persisted in server tx_log"
+    (let [db-before (sample-db)
+          checksum-before (checksum/recompute-checksum db-before)
+          block-uuid (random-uuid)
+          block-tempid (str block-uuid)
+          parent-uuid (:block/uuid (d/entity db-before 3))
+          page-uuid (:block/uuid (d/entity db-before 1))
+          normalized-tx-data [[:db/add block-tempid :block/uuid block-uuid 536871538]
+                              [:db/add block-tempid :block/title "normalized block" 536871538]
+                              [:db/add block-tempid :block/parent [:block/uuid parent-uuid] 536871538]
+                              [:db/add block-tempid :block/order "a0" 536871538]
+                              [:db/add block-tempid :block/page [:block/uuid page-uuid] 536871538]]
+          tx-report (d/with db-before normalized-tx-data)
+          full (checksum/recompute-checksum (:db-after tx-report))
+          incremental (checksum/update-checksum
+                       checksum-before
+                       (assoc tx-report :tx-data normalized-tx-data))]
+      (is (not= checksum-before full))
+      (is (= full incremental)))))
 
 (deftest incremental-checksum-matches-recompute-when-delete-tree-undo-and-delete-again-test
   (testing "incremental checksum matches recompute across delete-tree, undo-all, then delete-tree-again"

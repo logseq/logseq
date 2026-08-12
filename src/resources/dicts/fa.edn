@@ -178,7 +178,6 @@
  :cmdk.action/search "جستجو"
  :cmdk.action/trigger "اجرا"
 
- :cmdk.create/configure-tag "پیکربندی برچسب"
  :cmdk.create/page "ایجاد صفحه"
  :cmdk.create/tag "ایجاد برچسب"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "اخیراً به‌روزرسانی شده"
  :cmdk.group/themes "پوسته‌ها"
 
- :cmdk.info/configure-tag "پیکربندی #{1}"
  :cmdk.info/create-page "ایجاد صفحه '{1}'"
  :cmdk.info/create-tag "ایجاد برچسب '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "عناصر داخلی قابل حذف نیستند."
  :node/new "گره جدید"
 
- :notification/clear-all "پاک کردن همه"
  :notification/copied "کپی شد"
 
  :onboarding.import/desc "توضیحات وارد کردن"
@@ -1204,6 +1201,7 @@
  :plugin.package-config/remove-installed-success "افزونهٔ خراب «{1}» حذف شد."
 
  :plugin.proxy/direct "مستقیم"
+ :plugin.proxy/host-port-required "میزبان و پورت الزامی است"
  :plugin.proxy/system "سیستم"
  :plugin.proxy/test-url "آزمون URL"
  :plugin.proxy/testing "در حال آزمایش"
@@ -1245,7 +1243,6 @@
  :property/drag-to-reorder "برای مرتب‌سازی بکشید"
  :property/existing-values "مقادیر موجود"
  :property/go-to-this-property "رفتن به صفحه ویژگی"
- :property/hidden-properties "ویژگی‌های پنهان"
  :property/hide-by-default "مخفی به‌طور پیش‌فرض"
  :property/hide-choice-for-tag "مخفی کردن گزینه برای برچسب"
  :property/hide-empty-value "مخفی کردن مقادیر خالی"
@@ -1587,10 +1584,8 @@
  :settings.editor/wide-mode "حالت عریض"
 
  :settings.features/enable-flashcards "فعال‌سازی فلش‌کارت‌ها"
- :settings.features/enable-journals "فعال‌سازی روزنامه‌ها"
  :settings.features/home-default-page "صفحه پیش‌فرض خانه"
  :settings.features/home-default-page-update-success "صفحه پیش‌فرض به‌روزرسانی شد"
- :settings.features/journals-enable-success "روزنامه‌ها فعال شد"
  :settings.features/login-prompt "برای همگام‌سازی وارد شوید"
  :settings.features/page-not-found "صفحه «{1}» هنوز وجود ندارد. لطفاً ابتدا آن صفحه را ایجاد کنید و سپس دوباره امتحان کنید."
  :settings.features/plugin-system "سیستم افزونه"
@@ -1720,7 +1715,6 @@
  :ui/image "تصویر"
  :ui/label "برچسب"
  :ui/link "پیوند"
- :ui/load-more "بارگذاری بیشتر"
  :ui/loading "در حال بارگذاری"
  :ui/login "ورود"
  :ui/logout "خروج"
