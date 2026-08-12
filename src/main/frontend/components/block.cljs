@@ -1778,12 +1778,24 @@
     (some-> (state/get-edit-input-id)
             gdom/getElement)))
 
+(defn- remap-video-edit-position
+  [content content' position]
+  (when (number? position)
+    (let [change-start (count (take-while true? (map = content content')))
+          length-delta (- (count content') (count content))]
+      (if (<= position change-start)
+        position
+        (max change-start (+ position length-delta))))))
+
 (defn- save-video-macro-width!
   [config name arguments width event]
   (when-let [block (:block config)]
     (let [input (editing-block-input block)
           content (or (some-> input .-value)
                       (:block/title block))
+          selection-start (some-> input .-selectionStart)
+          selection-end (some-> input .-selectionEnd)
+          selection-direction (some-> input .-selectionDirection)
           occurrence (or (video-macro-dom-occurrence event name arguments) 0)
           content' (block-video/update-video-macro-width-in-content
                     content
@@ -1794,7 +1806,11 @@
       (when (and (seq content)
                  (not= content content'))
         (when input
-          (state/set-edit-content! (.-id input) content'))
+          (let [selection-start' (remap-video-edit-position content content' selection-start)
+                selection-end' (remap-video-edit-position content content' selection-end)]
+            (state/set-edit-content! (.-id input) content')
+            (when (and selection-start' selection-end')
+              (.setSelectionRange input selection-start' selection-end' selection-direction))))
         (editor-handler/save-block-if-changed! block content')))))
 
 (defn- macro-video-cp
