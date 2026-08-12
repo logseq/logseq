@@ -1274,6 +1274,203 @@
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
+(defn- default-pat-expiration-date
+  []
+  (let [date (js/Date. (+ (.now js/Date) (* 365 24 60 60 1000)))]
+    (subs (.toISOString date) 0 10)))
+
+(defn- pat-expiration-ms
+  [date]
+  (when (and (string? date) (not (string/blank? date)))
+    (let [timestamp (js/Date.parse (str date "T23:59:59.999"))]
+      (when-not (js/isNaN timestamp)
+        timestamp))))
+
+(defn- pat-permission-label
+  [permission]
+  (case permission
+    "read" (t :sync.personal-access-token.permission/read)
+    "write" (t :sync.personal-access-token.permission/write)
+    "both" (t :sync.personal-access-token.permission/both)
+    permission))
+
+(hsx/defc personal-access-token-select
+  [label value items on-value-change]
+  (let [labels (into {} (map (juxt :value :label)) items)]
+    [:div.flex.flex-col.gap-1
+     [:label.text-sm.opacity-70 label]
+     (shui/select
+      {:value value
+       :items items
+       :on-value-change on-value-change}
+      (shui/select-trigger
+       {:class "h-9 w-full"}
+       (shui/select-value (fn [selected] (get labels selected selected))))
+      (shui/select-content
+       {:container (.-body js/document)}
+       (shui/select-group
+        (for [{:keys [value label]} items]
+          (shui/select-item {:key value :value value} label)))))]))
+
+(hsx/defc personal-access-token-create-form
+  [graph-items pending? set-pending! on-created!]
+  (let [[selected-graph set-selected-graph!] (hooks/use-state nil)
+        [permission set-permission!] (hooks/use-state "both")
+        [expiration set-expiration!] (hooks/use-state (default-pat-expiration-date))
+        permission-items [{:value "read" :label (pat-permission-label "read")}
+                          {:value "write" :label (pat-permission-label "write")}
+                          {:value "both" :label (pat-permission-label "both")}]
+        create! (fn []
+                  (let [expires-at (pat-expiration-ms expiration)]
+                    (when (and selected-graph expires-at (> expires-at (.now js/Date)))
+                      (set-pending! true)
+                      (-> (rtc-handler/<create-personal-access-token!
+                           {:graph-id selected-graph
+                            :permission permission
+                            :expires-at expires-at})
+                          (p/then on-created!)
+                          (p/catch (fn [error]
+                                     (notification/show!
+                                      (t :sync.personal-access-token/request-error)
+                                      :error)
+                                     (log/error :db-sync/pat-create-failed {:error error})))
+                          (p/finally #(set-pending! false))))))]
+    (hooks/use-effect!
+     (fn []
+       (when (and (nil? selected-graph) (seq graph-items))
+         (set-selected-graph! (:value (first graph-items))))
+       nil)
+     [graph-items selected-graph])
+    [:section.flex.flex-col.gap-3
+     [:h2.text-base.font-semibold (t :sync.personal-access-token/create-title)]
+     (if (seq graph-items)
+       [:div.grid.gap-3.md:grid-cols-3
+        (personal-access-token-select
+         (t :sync.personal-access-token/graph)
+         selected-graph graph-items set-selected-graph!)
+        (personal-access-token-select
+         (t :sync.personal-access-token/permission)
+         permission permission-items set-permission!)
+        [:div.flex.flex-col.gap-1
+         [:label.text-sm.opacity-70 (t :sync.personal-access-token/expiration)]
+         (shui/input
+          {:type "date"
+           :value expiration
+           :min (subs (.toISOString (js/Date.)) 0 10)
+           :on-change #(set-expiration! (util/evalue %))})]]
+       [:p.text-sm.opacity-70 (t :sync.personal-access-token/no-graphs)])
+     (shui/button
+      {:class "self-start"
+       :disabled (or pending? (empty? graph-items))
+       :on-click create!}
+      (ui/icon "key" {:size 16})
+      (t :sync.personal-access-token/create))]))
+
+(hsx/defc personal-access-token-created
+  [created-token]
+  (when-let [token (:token created-token)]
+    [:section.flex.flex-col.gap-2.border.p-3.rounded
+     [:h2.text-base.font-semibold (t :sync.personal-access-token/created-title)]
+     [:p.text-sm.opacity-70 (t :sync.personal-access-token/created-warning)]
+     [:div.flex.items-center.gap-2
+      [:code.flex-1.break-all.select-all token]
+      (shui/button
+       {:variant "outline"
+        :size :sm
+        :title (t :ui/copy)
+        :on-click (fn []
+                    (util/copy-to-clipboard! token)
+                    (notification/show!
+                     (t :sync.personal-access-token/copied)
+                     :success))}
+       (ui/icon "copy" {:size 16}))]]))
+
+(hsx/defc personal-access-token-list
+  [tokens load-error? pending? revoke!]
+  [:section.flex.flex-col.gap-2
+   [:h2.text-base.font-semibold (t :sync.personal-access-token/existing-title)]
+   (cond
+     load-error?
+     [:p.text-sm.text-red-500 (t :sync.personal-access-token/request-error)]
+
+     (nil? tokens)
+     (ui/loading (t :ui/loading))
+
+     (empty? tokens)
+     [:p.text-sm.opacity-70 (t :sync.personal-access-token/empty)]
+
+     :else
+     [:div.divide-y
+      (for [{:keys [id graph-name token-prefix permission created-at expires-at]} tokens]
+        [:div.flex.items-center.justify-between.gap-4.py-3
+         {:key id}
+         [:div.min-w-0.flex.flex-col.gap-1
+          [:div.flex.items-center.gap-2.flex-wrap
+           [:code (str token-prefix "...")]
+           [:span.text-sm.font-medium (or graph-name (t :sync.personal-access-token/deleted-graph))]
+           [:span.text-xs.opacity-60 (pat-permission-label permission)]]
+          [:div.text-xs.opacity-60
+           (t :sync.personal-access-token/date-summary
+              (locale-format-date (js/Date. created-at))
+              (locale-format-date (js/Date. expires-at)))]]
+         (shui/button
+          {:variant "ghost"
+           :size :sm
+           :disabled pending?
+           :on-click #(revoke! id)}
+          (ui/icon "trash" {:size 16})
+          (t :sync.personal-access-token/revoke))])])])
+
+(hsx/defc settings-personal-access-tokens
+  []
+  (let [graphs (rfx/use-sub [:rtc/graphs])
+        [tokens set-tokens!] (hooks/use-state nil)
+        [created-token set-created-token!] (hooks/use-state nil)
+        [pending? set-pending!] (hooks/use-state false)
+        [load-error? set-load-error!] (hooks/use-state false)
+        graph-items (->> graphs
+                         (filter (fn [{:keys [graph-e2ee? graph-ready-for-use?]}]
+                                   (and (false? graph-e2ee?)
+                                        (not= false graph-ready-for-use?))))
+                         (mapv (fn [{:keys [GraphName GraphUUID]}]
+                                 {:value (str GraphUUID) :label GraphName})))
+        load-tokens! (fn []
+                       (set-load-error! false)
+                       (-> (rtc-handler/<personal-access-tokens)
+                           (p/then (fn [result]
+                                     (set-tokens! (:tokens result))))
+                           (p/catch (fn [error]
+                                      (set-load-error! true)
+                                      (log/error :db-sync/pat-list-failed {:error error})))))
+        on-created! (fn [result]
+                      (set-created-token! result)
+                      (load-tokens!))
+        revoke! (fn [token-id]
+                  (when (js/confirm (t :sync.personal-access-token/revoke-confirm))
+                    (set-pending! true)
+                    (-> (rtc-handler/<revoke-personal-access-token! token-id)
+                        (p/then (fn []
+                                  (set-tokens! (filterv #(not= token-id (:id %)) tokens))))
+                        (p/catch (fn [error]
+                                   (notification/show!
+                                    (t :sync.personal-access-token/request-error)
+                                    :error)
+                                   (log/error :db-sync/pat-revoke-failed {:error error})))
+                        (p/finally #(set-pending! false)))))]
+    (hooks/use-effect!
+     (fn []
+       (load-tokens!)
+       (when (empty? graphs)
+         (rtc-handler/<get-remote-graphs))
+       nil)
+     [])
+    [:div.panel-wrap.is-personal-access-tokens.mb-8.flex.flex-col.gap-6
+     [:p.text-sm.opacity-70 (t :sync.personal-access-token/description)]
+     (personal-access-token-create-form
+      graph-items pending? set-pending! on-created!)
+     (personal-access-token-created created-token)
+     (personal-access-token-list tokens load-error? pending? revoke!)]))
+
 (hsx/defc forgot-password
   [token refresh-token user-uuid]
   (let [[new-password set-new-password!] (hooks/use-state "")
@@ -1483,6 +1680,9 @@
                (when logged-in?
                  [:collaboration (t :settings/collaboration) (ui/icon "users")])
 
+               (when (and logged-in? (user-handler/rtc-group?))
+                 [:personal-access-tokens (t :settings/personal-access-tokens) (ui/icon "key")])
+
                (when logged-in?
                  [:encryption (t :settings/encryption) (ui/icon "lock")])
 
@@ -1539,6 +1739,9 @@
 
         :collaboration
         (settings-collaboration)
+
+        :personal-access-tokens
+        (settings-personal-access-tokens)
 
         :encryption
         (encryption)
