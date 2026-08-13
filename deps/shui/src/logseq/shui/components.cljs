@@ -988,8 +988,6 @@
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
        (apply-default-collision-avoidance! positioner-props)
-       (set-prop! popup-props "style"
-                  (merge-object-props! #js {} popup-scroll-style (prop popup-props "style")))
        (set-prop! popup-props "data-state" "open")
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)

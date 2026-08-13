@@ -313,7 +313,7 @@
             {:logseq.property.table/ordered-columns [:block/title]}
             columns)))))
 
-(deftest ordered-columns-sync-for-empty-hidden-should-only-run-for-persisted-empty-hidden
+(deftest ordered-columns-sync-for-empty-hidden-preserves-visible-columns
   (let [columns [{:id :select}
                  {:id :id}
                  {:id :block/title}
@@ -326,11 +326,21 @@
             entity columns visible-columns [])))
     (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
                entity columns visible-columns [:id])))
-    (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
-               {} columns visible-columns [])))
+    (is (= [:id :block/title :user.property/style]
+           (#'views/ordered-columns-sync-for-empty-hidden
+            {} columns (assoc visible-columns :id true) [])))
     (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
                {:logseq.property.table/ordered-columns [:block/title :user.property/style]}
                columns visible-columns [])))))
+
+(deftest view-prefetch-row-uuids-normalizes-row-metadata
+  (let [plain-row-uuid (random-uuid)
+        asset-row-uuid (random-uuid)]
+    (is (= [plain-row-uuid asset-row-uuid]
+           (#'views/view-prefetch-row-uuids
+            [plain-row-uuid
+             {:block/uuid asset-row-uuid
+              :asset-table/expanded? false}])))))
 
 (deftest gallery-lazy-item-opts-should-request-view-properties
   (let [properties [:block/title :user.property/cover :block/uuid]]

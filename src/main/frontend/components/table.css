@@ -27,8 +27,29 @@
     @apply flex items-center cursor-pointer;
   }
 
-  .ls-table-asset-file-preview .asset-container img {
-    @apply cursor-pointer;
+  .ls-table-asset-file-preview {
+    .asset-container {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .asset-container img {
+      @apply cursor-pointer;
+    }
+
+    .asset-action-bar {
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .asset-action-bar > button {
+      box-sizing: border-box;
+      width: 24px !important;
+      height: 24px !important;
+      padding: 0 !important;
+    }
   }
 
   .ls-table-rows {

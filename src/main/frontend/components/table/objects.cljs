@@ -11,7 +11,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [io.factorhouse.hsx.core :as hsx]
-            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -88,8 +87,11 @@
   (let [*ref (hooks/use-ref nil)
         config' (assoc config :view-parent class)
         [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
-        [annotation-index set-annotation-index!] (hooks/use-state nil)
-        annotation-index-revision (db-hooks/use-resource [:pdf-annotation-asset-index-revision])
+        annotations (db-hooks/use-resource [:pdf-annotation-assets])
+        annotation-index (hooks/use-memo
+                          #(when (some? annotations)
+                             (pdf-annotations/build-pdf-annotation-asset-index annotations))
+                          [annotations])
         table-data-transform (hooks/use-callback
                               (fn [rows]
                                 (pdf-annotations/build-pdf-annotation-table-data
@@ -122,26 +124,10 @@
                                {:on-change (fn [_e files]
                                              (p/let [_ (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
                                                (shui/dialog-close!)))})])))]
-    (hooks/use-effect!
-     (fn []
-       (if-let [repo (state/get-current-repo)]
-         (let [cancelled? (atom false)]
-           (-> (pdf-annotations/<pdf-annotation-asset-index repo)
-               (p/then (fn [index]
-                         (when-not @cancelled?
-                           (set-annotation-index! index))))
-               (p/catch (fn [error]
-                          (log/error :msg "Failed to load PDF annotation asset index"
-                                     :error error)
-                          (when-not @cancelled?
-                            (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))))
-           (fn [] (reset! cancelled? true)))
-         (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))
-     [(state/get-current-repo) annotation-index-revision])
-
     (if (nil? annotation-index)
       [:div.flex.flex-col.space-2.gap-2.my-2
-       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+       (for [idx (range 3)]
+         (shui/skeleton {:key idx :class "h-6 w-full"}))]
       (class-objects-view
        *ref config' class columns
        {:table-data-transform table-data-transform

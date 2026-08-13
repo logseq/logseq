@@ -250,14 +250,32 @@
     :logseq.property.pdf/hl-value
     :logseq.property/asset})
 
-(defn- pdf-annotation-asset-index-revision
+(defn- pdf-annotation-assets
   [db _resource-key _runtime]
   (let [annotation-class (d/entity db :logseq.class/Pdf-annotation)
-        annotation-class-uuid (common/entity-uuid! db (:db/id annotation-class))]
+        annotation-class-uuid (common/entity-uuid! db (:db/id annotation-class))
+        annotations (d/q
+                     '[:find [(pull ?annotation
+                                    [:db/id
+                                     :block/uuid
+                                     :block/order
+                                     :block/title
+                                     {:logseq.property/asset
+                                      [:db/id
+                                       :block/uuid
+                                       :logseq.property.asset/external-url
+                                       :logseq.property.asset/external-file-name]}
+                                     {:logseq.property.pdf/hl-image
+                                      [:db/id :block/uuid]}
+                                     :logseq.property.pdf/hl-page
+                                     :logseq.property.pdf/hl-value]) ...]
+                       :where
+                       [?annotation :block/tags :logseq.class/Pdf-annotation]]
+                     db)]
     [(into #{[:class-membership annotation-class-uuid]}
            (map (fn [attr] [:attr attr]))
            pdf-annotation-asset-index-attrs)
-     (:max-tx db)]))
+     annotations]))
 
 (defn- route-block
   [db resource-key _runtime]
@@ -423,6 +441,6 @@
    :block-comment-threads (common/renderer 2 block-comment-threads)
    :block-comment-summary (common/renderer 2 block-comment-summary)
    :block-task-time (common/renderer 2 block-task-time)
-   :pdf-annotation-asset-index-revision (common/renderer 1 pdf-annotation-asset-index-revision)
+   :pdf-annotation-assets (common/renderer 1 pdf-annotation-assets)
    :route-block (common/renderer 3 route-block)
    :page-membership (common/renderer nil page-membership)})

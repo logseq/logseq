@@ -1901,8 +1901,7 @@
 
 (defn- ordered-columns-sync-for-empty-hidden
   [entity columns visible-columns hidden-columns]
-  (when (and (empty? hidden-columns)
-             (seq (:logseq.property.table/ordered-columns entity)))
+  (when (empty? hidden-columns)
     (let [current-ordered-columns (:logseq.property.table/ordered-columns entity)
           next-ordered-columns (visible-ordered-column-ids columns visible-columns)]
       (when (not= next-ordered-columns current-ordered-columns)
@@ -1971,6 +1970,10 @@
                                        (quot view-prefetch-limit 2))))]
         (subvec rows start-index (+ start-index view-prefetch-limit))))))
 
+(defn- view-prefetch-row-uuids
+  [rows]
+  (mapv table-row-id rows))
+
 (defn- rendered-item-index
   [^js item]
   (.-index item))
@@ -1991,7 +1994,7 @@
 
                          :else
                          (subvec (vec rows) 0 (min (count rows) initial-prefetch-count)))
-         prefetch-ready? (db-hooks/use-block-prefetch prefetch-rows)
+         prefetch-ready? (db-hooks/use-block-prefetch (view-prefetch-row-uuids prefetch-rows))
          [initial-prefetch-ready? set-initial-prefetch-ready!] (hooks/use-state prefetch-ready?)]
      (hooks/use-effect!
       (fn []
@@ -2803,10 +2806,12 @@
        :on-mouse-down prevent-view-action-button-focus}
 
       (when (seq additional-actions)
-        [:<> (for [action additional-actions]
-               (if (fn? action)
-                 (action option)
-                 action))])
+        (into [:<>]
+              (map (fn [action]
+                     (if (fn? action)
+                       (action option)
+                       action)))
+              additional-actions))
 
       (view-sorting table columns sorting)
 

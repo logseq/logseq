@@ -1,9 +1,7 @@
 (ns frontend.components.assets.pdf-annotations
   "PDF annotation row data helpers for Asset tables."
-  (:require [frontend.db.async :as db-async]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.state :as state]
-            [promesa.core :as p]))
+  (:require [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.state :as state]))
 
 (def empty-pdf-annotation-asset-index
   "Empty PDF annotation index keyed by image asset and PDF asset ids."
@@ -44,7 +42,7 @@
     (or (:block/uuid row) (:db/id row))
     row))
 
-(defn- build-pdf-annotation-asset-index
+(defn build-pdf-annotation-asset-index
   "Builds lookup maps from PDF annotation blocks."
   [annotations]
   (let [index (reduce
@@ -70,29 +68,6 @@
                  (assoc m pdf-id (sort-by annotation-sort-key annotations)))
                {}
                pdf-id->annotations)))))
-
-(defn <pdf-annotation-asset-index
-  "Loads the PDF annotation index for `repo`."
-  [repo]
-  (p/let [result (db-async/<q
-                  repo
-                  {:transact-db? false}
-                  '[:find (pull ?annotation
-                                [:db/id
-                                 :block/uuid
-                                 :block/order
-                                 {:logseq.property/asset
-                                  [:db/id
-                                   :block/uuid
-                                   :logseq.property.asset/external-url
-                                   :logseq.property.asset/external-file-name]}
-                                 {:logseq.property.pdf/hl-image
-                                  [:db/id :block/uuid]}
-                                 :logseq.property.pdf/hl-page
-                                 :logseq.property.pdf/hl-value])
-                    :where
-                    [?annotation :block/tags :logseq.class/Pdf-annotation]])]
-    (build-pdf-annotation-asset-index (map first result))))
 
 (defn pdf-asset?
   "Returns true when `row` is a PDF asset row."

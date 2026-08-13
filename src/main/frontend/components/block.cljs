@@ -330,9 +330,10 @@
                                                           :logseq.property.asset/align
                                                           align)))]
             (when asset-block
-              [:.asset-action-bar {:aria-hidden "true"}
+              [:.asset-action-bar {:aria-hidden "true"
+                                   :on-pointer-down util/stop-propagation}
                (shui/dropdown-menu
-                {:on-pointer-down util/stop}
+                {}
                 (shui/dropdown-menu-trigger
                  {:as-child true}
                  (shui/button
