@@ -1,6 +1,6 @@
 (ns logseq.e2e.rtc-basic-test
   (:require
-   [clojure.test :refer [deftest testing use-fixtures]]
+   [clojure.test :refer [deftest is testing use-fixtures]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]

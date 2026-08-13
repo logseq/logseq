@@ -46,7 +46,7 @@
 (defn- column-behavior->table-column
   "Converts an internal column behavior map to the shui table column map."
   [column]
-  (cond-> (dissoc column :kind :property :render-header :render-cell)
+  (cond-> (dissoc column :kind :render-header :render-cell)
     (:render-header column)
     (assoc :header (:render-header column))
 
