@@ -473,7 +473,7 @@
               (log/error :rtc-download-graph-failed e)
               (when (util/mobile?)
                 (download-progress/hide!))
-              (when (rtc-error/download-decrypt-failed? e)
+              (when (rtc-error/e2ee-decrypt-failed? e)
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 
 ;; db-worker -> UI
