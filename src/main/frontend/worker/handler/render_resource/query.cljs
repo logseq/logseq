@@ -2,6 +2,7 @@
   "DSL and Datalog query execution and result normalization."
   (:require [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.render-resource.common :as common]
             [frontend.worker.handler.search :as search-handler]
@@ -50,6 +51,7 @@
     :current-page-title
     :current-block-uuid
     :today-day
+    :query/eager-load-results?
     :remove-block-children?
     :result-transform-edn})
 
@@ -82,6 +84,8 @@
                        (uuid? (:current-block-uuid query-spec)))
                    (or (not (contains? query-spec :today-day))
                        (valid-today-day? (:today-day query-spec)))
+                   (or (not (contains? query-spec :query/eager-load-results?))
+                       (boolean? (:query/eager-load-results? query-spec)))
                    (or (not (contains? query-spec :remove-block-children?))
                        (boolean? (:remove-block-children? query-spec)))
                    (or (not (contains? query-spec :result-transform-edn))
@@ -200,6 +204,19 @@
         rows (apply-result-transform rows (:result-transform-edn query-spec))]
     (mapv normalize-query-row rows)))
 
+(defn- eager-result-slots
+  [db rows {:query/keys [eager-load-results?]}]
+  (if (and (true? eager-load-results?)
+           (seq rows)
+           (every? uuid? rows))
+    (let [block-uuids (->> rows
+                           distinct
+                           (take common/max-blocks-per-snapshot)
+                           vec)
+          blocks (:blocks (block-handler/canonical-blocks db block-uuids))]
+      (common/block-slots blocks))
+    {}))
+
 (defn- dependency-watch
   [{:keys [attrs task-attrs tasks? opaque?]}]
   (let [watch-keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
@@ -220,10 +237,12 @@
 
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))]
+  (let [query-spec (require-query-spec! (second resource-key))
+        rows (query-result-rows (execute-query-spec db query-spec runtime)
+                                query-spec)]
     [(query-watch-keys db query-spec)
-     {:rows (query-result-rows (execute-query-spec db query-spec runtime)
-                               query-spec)}]))
+     {:rows rows}
+     (eager-result-slots db rows query-spec)]))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})
