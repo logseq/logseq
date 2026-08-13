@@ -24,6 +24,8 @@
     :handler :semantic/pages-update :operation-id "updatePage" :scope "logseq/write" :rate-class :write}
    {:method "GET" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
     :handler :semantic/blocks-get :operation-id "getBlock" :scope "logseq/read" :rate-class :read}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/blocks/:block-id/references" :internal-path "/semantic/blocks/:block-id/references"
+    :handler :semantic/blocks-references :operation-id "listBlockReferences" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
     :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq/write" :rate-class :write}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
@@ -90,6 +92,7 @@
    "updatePage" ["Update a page" "Renames one page identified by its block UUID."]
    "deletePage" ["Delete a page" "Deletes one page through Logseq's page deletion rules, including its block tree."]
    "getBlock" ["Get a block" "Returns one block or page by UUID without loading an unbounded tree."]
+   "listBlockReferences" ["List references to a block" "Returns a cursor-paginated flat list of blocks and pages that reference the addressed block through Logseq's block/refs index."]
    "updateBlock" ["Update a block" "Replaces the title of one block identified by UUID."]
    "deleteBlock" ["Delete a block" "Deletes one block and its descendants. Asset blocks are deleted through this same operation."]
    "moveBlocks" ["Move blocks" "Moves one or more blocks together before, after, into the first-child position, or into the last-child position of a target block. Logseq preserves the blocks' outliner order."]
@@ -165,7 +168,10 @@
     :schema {:type "integer" :minimum 0}}])
 
 (def ^:private asset-upload-parameters
-  [{:name "file-name" :in "query" :required true :schema {:type "string"}}
+  [{:name "uuid" :in "query"
+    :description "Optional client-generated UUID for idempotent offline creation."
+    :schema {:type "string" :format "uuid"}}
+   {:name "file-name" :in "query" :required true :schema {:type "string"}}
    {:name "size" :in "query" :required true
     :description "Exact decoded file size in bytes. The trusted MCP host recalculates it for encoding=base64; direct API uploads must supply it. Uploads larger than 100MB are rejected before R2."
     :schema {:type "integer" :minimum 0 :maximum 104857600}}
@@ -216,7 +222,8 @@
     "captureToToday" {:required ["blocks"]
                       :properties {:blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
     "createTask" {:required ["title"]
-                  :properties {:title {:type "string"}
+                  :properties {:uuid {:type "string" :format "uuid"}
+                               :title {:type "string"}
                                :page-id {:type "string"
                                          :description "Destination page UUID. Omit to append to today's journal."}
                                :status {:$ref "#/components/schemas/TaskStatusSelector"}
@@ -234,7 +241,7 @@
 
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
-    (contains? #{"listGraphs" "listPages" "listBlocks" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
+    (contains? #{"listGraphs" "listPages" "listBlocks" "listPageBlocks" "listPageReferences" "listBlockReferences" "listTasks" "listTags"
                  "listTagObjects" "listProperties" "listAssets" "searchGraph"} operation-id)
     (into pagination-parameters)
     (contains? #{"listPages" "listTasks" "listTags" "listTagObjects" "listProperties" "listAssets" "searchGraph"}
@@ -298,6 +305,7 @@
                   "listPageBlocks"
                   (list-response :blocks "BlockResponse" "A cursor page of top-level block trees")
                   "listPageReferences" (list-response :references "BlockResponse" "A cursor page of page references")
+                  "listBlockReferences" (list-response :references "BlockResponse" "A cursor page of block references")
                   "listTasks"
                   (list-response :tasks "TaskResponse" "A cursor page of DB Task objects")
                   "listTags" (list-response :tags "TagResponse" "A cursor page of tags")
@@ -340,8 +348,13 @@
    :components
    {:schemas (ordered-map
               :BlockTree {:type "object" :required ["title"]
-                          :properties {:title {:type "string"}
+                          :properties {:uuid {:type "string" :format "uuid"}
+                                       :title {:type "string"}
                                        :children {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
+              :EntitySummary {:type "object" :required ["uuid" "kind" "title"]
+                              :properties {:uuid {:type "string"}
+                                           :kind {:type "string"}
+                                           :title {:type "string"}}}
               :BlockResponse {:type "object" :required ["uuid" "kind" "title"]
                               :properties {:uuid {:type "string"}
                                            :kind {:type "string"}
@@ -352,6 +365,14 @@
                                            :created-at {:type "integer"}
                                            :updated-at {:type "integer"}
                                            :journal-day {:type "integer"}
+                                           :tags {:type "array"
+                                                  :items {:$ref "#/components/schemas/EntitySummary"}}
+                                           :references {:type "array"
+                                                        :items {:$ref "#/components/schemas/EntitySummary"}}
+                                           :status {:$ref "#/components/schemas/PropertyChoice"}
+                                           :asset-type {:type "string"}
+                                           :asset-size {:type "integer"}
+                                           :asset-checksum {:type "string"}
                                            :children {:type "array"
                                                       :items {:$ref "#/components/schemas/BlockResponse"}}}}
               :PageResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}]}
@@ -383,6 +404,9 @@
                                :properties {:uuid {:type "string"}
                                             :ident {:type "string"}
                                             :title {:type "string"}
+                                            :icon {:type "object"
+                                                   :properties {:type {:type "string"}
+                                                                :id {:type "string"}}}
                                             :value {}}}
               :PropertyResponse {:type "object" :required ["uuid" "title" "type" "cardinality"]
                                  :properties {:uuid {:type "string"}

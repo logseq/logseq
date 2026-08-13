@@ -57,7 +57,29 @@
   (let [document (semantic-routes/openapi-document "https://issuer.example")
         block-properties (get-in document [:components :schemas :BlockResponse :properties])]
     (is (= {:type "integer"} (:created-at block-properties)))
-    (is (= {:type "integer"} (:updated-at block-properties)))))
+    (is (= {:type "integer"} (:updated-at block-properties)))
+    (is (= {:type "array" :items {:$ref "#/components/schemas/EntitySummary"}}
+           (:tags block-properties)))
+    (is (= {:type "array" :items {:$ref "#/components/schemas/EntitySummary"}}
+           (:references block-properties)))
+    (is (= {:$ref "#/components/schemas/PropertyChoice"}
+           (:status block-properties)))
+    (is (= {:type "string"} (:asset-type block-properties)))
+    (is (= {:type "integer"} (:asset-size block-properties)))
+    (is (= {:type "string"} (:asset-checksum block-properties)))))
+
+(deftest semantic-create-operations-accept-client-uuids-test
+  (let [document (semantic-routes/openapi-document "https://issuer.example")
+        schemas (get-in document [:components :schemas])
+        create-task (get-in document [:paths "/api/v1/graphs/{graph-id}/tasks" :post])
+        task-schema (get-in create-task [:requestBody :content "application/json" :schema])
+        asset-parameters (get-in document [:paths "/api/v1/graphs/{graph-id}/assets" :post :parameters])]
+    (is (= {:type "string" :format "uuid"}
+           (get-in schemas [:BlockTree :properties :uuid])))
+    (is (= {:type "string" :format "uuid"}
+           (get-in task-schema [:properties :uuid])))
+    (is (= {:type "string" :format "uuid"}
+           (:schema (first (filter #(= "uuid" (:name %)) asset-parameters)))))))
 
 (deftest semantic-search-block-response-exposes-journal-context-test
   (let [document (semantic-routes/openapi-document "https://issuer.example")
@@ -93,6 +115,14 @@
                     "GET" "/api/v1/graphs/graph-1/pages/page-1/references"))))
   (is (= :semantic/pages-references
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages/page-1/references")))))
+
+(deftest semantic-block-reference-route-test
+  (is (= :semantic/blocks-references
+         (:handler (semantic-routes/match-public
+                    "GET" "/api/v1/graphs/graph-1/blocks/block-1/references"))))
+  (is (= :semantic/blocks-references
+         (:handler (semantic-routes/match-internal
+                    "GET" "/semantic/blocks/block-1/references")))))
 
 (deftest semantic-task-routes-test
   (doseq [[method handler] [["GET" :semantic/tasks-list]

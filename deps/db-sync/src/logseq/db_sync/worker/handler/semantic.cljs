@@ -12,6 +12,7 @@
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -60,28 +61,55 @@
     (page? entity) "page"
     :else "block"))
 
+(defn- entity-summary [entity]
+  {:uuid (uuid-string (:block/uuid entity))
+   :kind (block-kind entity)
+   :title (:block/title entity)})
+
+(defn- user-tag? [entity]
+  (let [ident (:db/ident entity)]
+    (and (entity-util/class? entity)
+       (not (entity-util/built-in? entity))
+       (or (nil? ident) (not (db-class/logseq-class? ident))))))
+
+(defn- icon-response [icon]
+  (when (map? icon)
+    (cond-> {}
+      (:type icon) (assoc :type (name (:type icon)))
+      (:id icon) (assoc :id (:id icon)))))
+
+(defn- property-choice-response [entity]
+  (cond-> {:uuid (uuid-string (:block/uuid entity))
+           :ident (entity-ident entity)
+           :title (or (:block/title entity) (:logseq.property/value entity))
+           :value (:logseq.property/value entity)}
+    (:logseq.property/icon entity) (assoc :icon (icon-response (:logseq.property/icon entity)))))
+
 (defn- block-response [block]
-  (cond-> {:uuid (uuid-string (:block/uuid block))
-           :kind (block-kind block)
-           :title (:block/title block)
-           :order (:block/order block)}
-    (number? (:block/created-at block)) (assoc :created-at (:block/created-at block))
-    (number? (:block/updated-at block)) (assoc :updated-at (:block/updated-at block))
-    (number? (:block/journal-day block)) (assoc :journal-day (:block/journal-day block))
-    (:block/parent block) (assoc :parent-id (uuid-string (:block/uuid (:block/parent block))))
-    (:block/page block) (assoc :page-id (uuid-string (:block/uuid (:block/page block))))
-    (seq (:block/children block)) (assoc :children (mapv block-response (:block/children block)))))
+  (let [user-tags (filter user-tag? (:block/tags block))]
+    (cond-> {:uuid (uuid-string (:block/uuid block))
+             :kind (block-kind block)
+             :title (:block/title block)
+             :order (:block/order block)}
+      (number? (:block/created-at block)) (assoc :created-at (:block/created-at block))
+      (number? (:block/updated-at block)) (assoc :updated-at (:block/updated-at block))
+      (number? (:block/journal-day block)) (assoc :journal-day (:block/journal-day block))
+      (:block/parent block) (assoc :parent-id (uuid-string (:block/uuid (:block/parent block))))
+      (:block/page block) (assoc :page-id (uuid-string (:block/uuid (:block/page block))))
+      (seq user-tags) (assoc :tags (mapv entity-summary user-tags))
+      (seq (:block/refs block)) (assoc :references (mapv entity-summary (:block/refs block)))
+      (:logseq.property/status block)
+      (assoc :status (property-choice-response (:logseq.property/status block)))
+      (:logseq.property.asset/type block) (assoc :asset-type (:logseq.property.asset/type block))
+      (number? (:logseq.property.asset/size block)) (assoc :asset-size (:logseq.property.asset/size block))
+      (:logseq.property.asset/checksum block)
+      (assoc :asset-checksum (:logseq.property.asset/checksum block))
+      (seq (:block/children block)) (assoc :children (mapv block-response (:block/children block))))))
 
 (defn- tag-response [entity]
   {:uuid (uuid-string (:block/uuid entity))
    :ident (entity-ident entity)
    :title (:block/title entity)})
-
-(defn- property-choice-response [entity]
-  {:uuid (uuid-string (:block/uuid entity))
-   :ident (entity-ident entity)
-   :title (:block/title entity)
-   :value (:logseq.property/value entity)})
 
 (defn- property-response [entity]
   (cond-> {:uuid (uuid-string (:block/uuid entity))
@@ -98,6 +126,12 @@
    :type (:logseq.property.asset/type entity)
    :size (:logseq.property.asset/size entity)
    :checksum (:logseq.property.asset/checksum entity)})
+
+(defn- matching-asset [db asset-id checksum]
+  (let [asset (when asset-id (d/entity db [:block/uuid asset-id]))]
+    (when (and (asset? asset)
+               (= checksum (:logseq.property.asset/checksum asset)))
+      asset)))
 
 (defn- entities-by-avet [db attribute & [value]]
   (->> (if (some? value)
@@ -395,7 +429,12 @@
      :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
 
 (defn- tree-block [conn node]
-  (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
+  (let [block-id (if-let [client-id (:uuid node)]
+                   (if (common-util/uuid-string? client-id)
+                     (uuid client-id)
+                     (throw (ex-info "invalid block uuid" {:uuid client-id})))
+                   (random-uuid))]
+    (assoc (prepare-block-title! conn (:title node)) :block/uuid block-id)))
 
 (defn- insert-tree! [conn target nodes position]
   (let [nodes (vec nodes)
@@ -542,11 +581,10 @@
         response (case kind
                    "tag" (tag-response entity)
                    "property" (property-response entity)
-                   "asset" (asset-response entity)
                    (block-response entity))
         journal (:block/page entity)]
     (cond-> (assoc response :resource type)
-      (and (= "block" kind) (number? (:block/journal-day journal)))
+      (and (#{"block" "asset"} kind) (number? (:block/journal-day journal)))
       (assoc :journal-day (:block/journal-day journal)
              :journal-title (:block/title journal)))))
 
@@ -630,6 +668,11 @@
     :semantic/blocks-get
     (if-let [block (find-visible-entity db (:block-id path-params))]
       (http/json-response nil (block-response block))
+      (http/not-found))
+
+    :semantic/blocks-references
+    (if-let [block (find-visible-entity db (:block-id path-params))]
+      (indexed-reference-response db url :references :block/refs (:db/id block))
       (http/not-found))
 
     :semantic/blocks-update
@@ -865,7 +908,9 @@
                (let [target (if target
                               (d/entity @temp-conn [:block/uuid (:block/uuid target)])
                               (ensure-today-page! temp-conn))
-                     inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append"))
+                     inserted (first (insert-tree! temp-conn target
+                                                   [(select-keys body [:uuid :title])]
+                                                   "append"))
                      task-uuid (uuid (:uuid inserted))
                      task (d/entity @temp-conn [:block/uuid task-uuid])]
                  (reset! task-id task-uuid)
@@ -893,6 +938,8 @@
 
     :semantic/assets-create
     (let [file-name (.get (.-searchParams url) "file-name")
+          raw-asset-id (.get (.-searchParams url) "uuid")
+          asset-id (when (common-util/uuid-string? raw-asset-id) (uuid raw-asset-id))
           raw-size (.get (.-searchParams url) "size")
           size (when (and raw-size (re-matches #"\d+" raw-size))
                  (js/parseInt raw-size 10))
@@ -904,17 +951,20 @@
           ^js bucket (some-> (.-env self) (aget "LOGSEQ_SYNC_ASSETS"))]
       (cond
         (or (not (seq file-name)) (not (seq asset-type))) (http/bad-request "invalid asset file-name")
+        (and raw-asset-id (nil? asset-id)) (http/bad-request "invalid asset uuid")
         (nil? size) (http/bad-request "invalid asset size")
         (> size assets-handler/max-asset-size) (http/error-response "asset too large" 413)
         (not (and (string? checksum) (re-matches #"[0-9a-f]{64}" checksum)))
         (http/bad-request "invalid asset checksum")
         (and encoding (not= "base64" encoding)) (http/bad-request "invalid asset encoding")
         (and page-id (not (page? target))) (http/bad-request "invalid asset page-id")
+        (matching-asset db asset-id checksum)
+        (http/json-response nil (asset-response (matching-asset db asset-id checksum)) 200)
         (nil? bucket) (http/error-response "missing assets bucket" 500)
         (seq (d/datoms db :avet :logseq.property.asset/checksum checksum))
         (http/error-response "asset checksum already exists" 409)
         :else
-        (let [asset-id (random-uuid)
+        (let [asset-id (or asset-id (random-uuid))
               key (str (.get (.-searchParams url) "graph-id") "/" asset-id "." asset-type)
               title (or (.get (.-searchParams url) "title")
                         (db-asset/asset-name->title file-name))]
@@ -1024,7 +1074,8 @@
     :semantic/pages-update :semantic/pages-delete})
 
 (def ^:private block-handlers
-  #{:semantic/blocks-list :semantic/blocks-get :semantic/blocks-update :semantic/blocks-delete :semantic/blocks-move
+  #{:semantic/blocks-list :semantic/blocks-get :semantic/blocks-references
+    :semantic/blocks-update :semantic/blocks-delete :semantic/blocks-move
     :semantic/blocks-insert-children :semantic/blocks-insert-tree})
 
 (def ^:private block-property-handlers
