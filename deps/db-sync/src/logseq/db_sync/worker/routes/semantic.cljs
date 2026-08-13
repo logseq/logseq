@@ -10,6 +10,8 @@
     :handler :semantic/pages-list :operation-id "listPages" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
     :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write}
+   {:method "GET" :path "/api/v1/graphs/:graph-id/blocks" :internal-path "/semantic/blocks"
+    :handler :semantic/blocks-list :operation-id "listBlocks" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/blocks" :internal-path "/semantic/pages/:page-id/blocks"
     :handler :semantic/pages-blocks :operation-id "listPageBlocks" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/references" :internal-path "/semantic/pages/:page-id/references"
@@ -81,6 +83,7 @@
   {"listGraphs" ["List available graphs" "Returns cursor-paginated non-E2EE graphs available to the authenticated user. Use the optional exact name filter to resolve a graph name to its UUID."]
    "listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
    "createPage" ["Create a page" "Creates a page block with the supplied title."]
+   "listBlocks" ["List blocks" "Returns non-empty journal blocks with separate journal metadata for grouping, optionally restricted by journal date and sorted by creation time."]
    "listPageBlocks" ["List a page's blocks" "Returns a cursor-paginated list of the page's top-level blocks, including each selected block's descendant tree."]
    "listPageReferences" ["List references to a page" "Returns a cursor-paginated flat list of blocks and pages that reference the addressed page. Results are not recursively expanded."]
    "getPage" ["Get a page" "Returns one page block by UUID without loading its block tree."]
@@ -231,12 +234,18 @@
 
 (defn- operation-parameters [{:keys [operation-id path]}]
   (cond-> (path-parameters path)
-    (contains? #{"listGraphs" "listPages" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
+    (contains? #{"listGraphs" "listPages" "listBlocks" "listPageBlocks" "listPageReferences" "listTasks" "listTags"
                  "listTagObjects" "listProperties" "listAssets" "searchGraph"} operation-id)
     (into pagination-parameters)
     (contains? #{"listPages" "listTasks" "listTags" "listTagObjects" "listProperties" "listAssets" "searchGraph"}
                operation-id)
     (into time-filter-parameters)
+    (= "listBlocks" operation-id)
+    (into [{:name "journal-only" :in "query" :schema {:type "boolean" :default false}}
+           {:name "journal-day-at-most" :in "query"
+            :description "Latest journal date to include, formatted as YYYYMMDD."
+            :schema {:type "integer" :minimum 0}}
+           {:name "sort" :in "query" :schema {:type "string" :enum ["created-at-desc"]}}])
     (= "createAsset" operation-id)
     (into asset-upload-parameters)
     (= "listGraphs" operation-id)
@@ -276,6 +285,16 @@
 (defn- operation-responses [operation-id]
   (merge {"200" (case operation-id
                   "listPages" (list-response :pages "PageResponse" "A cursor page of pages")
+                  "listBlocks"
+                  {:description "A cursor page of journal blocks with journal metadata for grouping"
+                   :content {"application/json"
+                             {:schema {:type "object"
+                                       :required ["blocks" "journals"]
+                                       :properties {:blocks {:type "array"
+                                                             :items {:$ref "#/components/schemas/BlockResponse"}}
+                                                    :journals {:type "array"
+                                                               :items {:$ref "#/components/schemas/PageResponse"}}
+                                                    :next-cursor {:type "string"}}}}}}
                   "listPageBlocks"
                   (list-response :blocks "BlockResponse" "A cursor page of top-level block trees")
                   "listPageReferences" (list-response :references "BlockResponse" "A cursor page of page references")
@@ -330,6 +349,9 @@
                                            :order {:type "string"}
                                            :parent-id {:type "string"}
                                            :page-id {:type "string"}
+                                           :created-at {:type "integer"}
+                                           :updated-at {:type "integer"}
+                                           :journal-day {:type "integer"}
                                            :children {:type "array"
                                                       :items {:$ref "#/components/schemas/BlockResponse"}}}}
               :PageResponse {:allOf [{:$ref "#/components/schemas/BlockResponse"}]}
@@ -340,6 +362,12 @@
               :SearchResultResponse {:type "object" :required ["uuid" "title" "resource"]
                                      :properties {:uuid {:type "string"}
                                                   :title {:type "string"}
+                                                  :page-id {:type "string"}
+                                                  :parent-id {:type "string"}
+                                                  :created-at {:type "integer"}
+                                                  :updated-at {:type "integer"}
+                                                  :journal-day {:type "integer"}
+                                                  :journal-title {:type "string"}
                                                   :resource {:enum ["blocks" "tags" "properties" "assets"]}}}
               :EntitySelector {:type "string"
                                :description "An existing entity UUID, qualified ident, or exact title."}

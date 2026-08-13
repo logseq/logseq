@@ -53,6 +53,28 @@
   (is (= :semantic/pages-list
          (:handler (semantic-routes/match-internal "GET" "/semantic/pages")))))
 
+(deftest semantic-block-api-exposes-timestamps-test
+  (let [document (semantic-routes/openapi-document "https://issuer.example")
+        block-properties (get-in document [:components :schemas :BlockResponse :properties])]
+    (is (= {:type "integer"} (:created-at block-properties)))
+    (is (= {:type "integer"} (:updated-at block-properties)))))
+
+(deftest semantic-search-block-response-exposes-journal-context-test
+  (let [document (semantic-routes/openapi-document "https://issuer.example")
+        result-properties (get-in document [:components :schemas :SearchResultResponse :properties])]
+    (is (= {:type "string"} (:page-id result-properties)))
+    (is (= {:type "integer"} (:created-at result-properties)))
+    (is (= {:type "integer"} (:updated-at result-properties)))
+    (is (= {:type "integer"} (:journal-day result-properties)))
+    (is (= {:type "string"} (:journal-title result-properties)))))
+
+(deftest semantic-block-list-route-test
+  (let [public (semantic-routes/match-public "GET" "/api/v1/graphs/graph-1/blocks")
+        internal (semantic-routes/match-internal "GET" "/semantic/blocks")]
+    (is (= :semantic/blocks-list (:handler public)))
+    (is (= "graph-1" (get-in public [:path-params :graph-id])))
+    (is (= :semantic/blocks-list (:handler internal)))))
+
 (deftest semantic-move-blocks-route-test
   (is (= :semantic/blocks-move
          (:handler (semantic-routes/match-public "POST" "/api/v1/graphs/graph-1/block-moves"))))

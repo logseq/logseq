@@ -65,6 +65,9 @@
            :kind (block-kind block)
            :title (:block/title block)
            :order (:block/order block)}
+    (number? (:block/created-at block)) (assoc :created-at (:block/created-at block))
+    (number? (:block/updated-at block)) (assoc :updated-at (:block/updated-at block))
+    (number? (:block/journal-day block)) (assoc :journal-day (:block/journal-day block))
     (:block/parent block) (assoc :parent-id (uuid-string (:block/uuid (:block/parent block))))
     (:block/page block) (assoc :page-id (uuid-string (:block/uuid (:block/page block))))
     (seq (:block/children block)) (assoc :children (mapv block-response (:block/children block)))))
@@ -254,6 +257,7 @@
 
 (def ^:private page-block-pull-keys
   [:db/id :block/uuid :block/title :block/order
+   :block/created-at :block/updated-at
    :logseq.property/hide? :logseq.property/deleted-at
    {:block/parent [:db/id :block/uuid]}
    {:block/page [:db/id :block/uuid]}])
@@ -284,6 +288,60 @@
          nil
          (cond-> {:blocks (mapv #(page-block-tree db %) roots)}
            next-cursor (assoc :next-cursor next-cursor)))))))
+
+(defn- parse-journal-day-at-most [url]
+  (let [raw (.get (.-searchParams url) "journal-day-at-most")]
+    (when (and raw (re-matches #"\d{8}" raw))
+      (js/parseInt raw 10))))
+
+(defn- recent-created-at-key [entity]
+  (let [created-at (or (:block/created-at entity) 0)
+        descending (- js/Number.MAX_SAFE_INTEGER created-at)]
+    [(.padStart (str descending) 16 "0")
+     (uuid-string (:block/uuid entity))]))
+
+(defn- journal-feed-entities [db journal-day-at-most]
+  (let [journals (->> (entities-by-avet db :block/journal-day)
+                      (filter #(or (nil? journal-day-at-most)
+                                   (<= (:block/journal-day %) journal-day-at-most))))
+        journal-ids (set (map :db/id journals))]
+    (->> (entities-by-avet db :block/page)
+         (filter #(contains? journal-ids (some-> % :block/page :db/id)))
+         (filter #(seq (string/trim (or (:block/title %) "")))))))
+
+(defn- paginated-blocks-response [db url]
+  (let [{:keys [limit raw-cursor cursor]} (pagination-options url)
+        params (.-searchParams url)
+        journal-only? (= "true" (.get params "journal-only"))
+        raw-journal-day (.get params "journal-day-at-most")
+        journal-day-at-most (parse-journal-day-at-most url)
+        sort-value (.get params "sort")]
+    (cond
+      (nil? limit) (http/bad-request "invalid limit")
+      (and raw-cursor (nil? cursor)) (http/bad-request "invalid cursor")
+      (and raw-journal-day (nil? journal-day-at-most)) (http/bad-request "invalid journal day")
+      (not journal-only?) (http/bad-request "journal-only must be true")
+      (not= "created-at-desc" sort-value) (http/bad-request "sort must be created-at-desc")
+      :else
+      (let [entities (sort-by recent-created-at-key
+                              (journal-feed-entities db journal-day-at-most))
+            remaining (if cursor
+                        (drop-while #(not (pos? (compare (recent-created-at-key %) cursor))) entities)
+                        entities)
+            selected (vec (take (inc limit) remaining))
+            more? (> (count selected) limit)
+            page (vec (take limit selected))
+            journals (->> page
+                          (keep :block/page)
+                          (reduce (fn [by-id journal]
+                                    (assoc by-id (:db/id journal) journal)) {})
+                          vals
+                          (sort-by :block/journal-day >))]
+        (http/json-response
+         nil
+         (cond-> {:blocks (mapv block-response page)
+                  :journals (mapv block-response journals)}
+           more? (assoc :next-cursor (encode-cursor (recent-created-at-key (last page))))))))))
 
 (defn- body-clj [request]
   (p/let [body (common/read-json request)]
@@ -485,8 +543,12 @@
                    "tag" (tag-response entity)
                    "property" (property-response entity)
                    "asset" (asset-response entity)
-                   (block-response entity))]
-    (assoc response :resource type)))
+                   (block-response entity))
+        journal (:block/page entity)]
+    (cond-> (assoc response :resource type)
+      (and (= "block" kind) (number? (:block/journal-day journal)))
+      (assoc :journal-day (:block/journal-day journal)
+             :journal-title (:block/title journal)))))
 
 (defn- search-results [db query types]
   (let [needle (string/lower-case query)
@@ -559,8 +621,11 @@
           (js/Response. nil #js {:status 204})))
       (http/not-found))))
 
-(defn- handle-blocks [{:keys [^js self request conn db handler path-params]}]
+(defn- handle-blocks [{:keys [^js self request ^js url conn db handler path-params]}]
   (case handler
+
+    :semantic/blocks-list
+    (paginated-blocks-response db url)
 
     :semantic/blocks-get
     (if-let [block (find-visible-entity db (:block-id path-params))]
@@ -959,7 +1024,7 @@
     :semantic/pages-update :semantic/pages-delete})
 
 (def ^:private block-handlers
-  #{:semantic/blocks-get :semantic/blocks-update :semantic/blocks-delete :semantic/blocks-move
+  #{:semantic/blocks-list :semantic/blocks-get :semantic/blocks-update :semantic/blocks-delete :semantic/blocks-move
     :semantic/blocks-insert-children :semantic/blocks-insert-tree})
 
 (def ^:private block-property-handlers

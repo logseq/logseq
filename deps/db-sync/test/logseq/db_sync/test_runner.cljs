@@ -14,6 +14,7 @@
             [logseq.db-sync.worker-dispatch-test]
             [logseq.db-sync.worker-handler-assets-test]
             [logseq.db-sync.worker-handler-index-test]
+            [logseq.db-sync.worker-routes-test]
             [logseq.db-sync.worker-handler-sync-test]
             [logseq.db-sync.worker-handler-ws-test]
             [shadow.test :as st]

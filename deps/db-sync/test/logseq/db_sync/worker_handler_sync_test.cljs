@@ -75,6 +75,103 @@
   (p/let [text (.text response)]
     (js->clj (js/JSON.parse text) :keywordize-keys true)))
 
+(deftest semantic-list-blocks-groups-recent-blocks-with-journal-metadata-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   journal-id (random-uuid)
+                   future-journal-id (random-uuid)
+                   ordinary-page-id (random-uuid)
+                   older-id (random-uuid)
+                   newer-id (random-uuid)
+                   request (semantic-json-request
+                            "/semantic/blocks?journal-only=true&journal-day-at-most=20260813&sort=created-at-desc&limit=2"
+                            "GET" nil)]
+               (d/transact! conn
+                            [{:db/ident :logseq.class/Journal}
+                             {:db/ident :logseq.class/Page}
+                             {:block/uuid journal-id :block/title "Aug 13th, 2026"
+                              :block/journal-day 20260813 :block/tags :logseq.class/Journal}
+                             {:block/uuid future-journal-id :block/title "Aug 14th, 2026"
+                              :block/journal-day 20260814 :block/tags :logseq.class/Journal}
+                             {:block/uuid ordinary-page-id :block/title "Project"
+                              :block/tags :logseq.class/Page}
+                             {:block/uuid older-id :block/title "Older"
+                              :block/page [:block/uuid journal-id] :block/created-at 100}
+                             {:block/uuid newer-id :block/title "Newer"
+                              :block/page [:block/uuid journal-id] :block/created-at 200}
+                             {:block/uuid (random-uuid) :block/title " "
+                              :block/page [:block/uuid journal-id] :block/created-at 300}
+                             {:block/uuid (random-uuid) :block/title "Future"
+                              :block/page [:block/uuid future-journal-id] :block/created-at 400}
+                             {:block/uuid (random-uuid) :block/title "Ordinary"
+                              :block/page [:block/uuid ordinary-page-id] :block/created-at 500}])
+               (-> (sync-handler/handle-http self request)
+                   (p/then json-body)
+                   (p/then (fn [body]
+                             (is (= ["Newer" "Older"] (mapv :title (:blocks body))))
+                             (is (every? #(= "block" (:kind %)) (:blocks body)))
+                             (is (= ["Aug 13th, 2026"] (mapv :title (:journals body))))
+                             (is (= [20260813] (mapv :journal-day (:journals body))))
+                             (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-search-block-includes-journal-context-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   journal-id (random-uuid)
+                   block-id (random-uuid)
+                   request (semantic-json-request
+                            "/semantic/search?q=needle&types=blocks&limit=10"
+                            "GET" nil)]
+               (d/transact! conn
+                            [{:db/ident :logseq.class/Journal}
+                             {:block/uuid journal-id :block/title "Aug 13th, 2026"
+                              :block/journal-day 20260813 :block/tags :logseq.class/Journal}
+                             {:block/uuid block-id :block/title "Needle block"
+                              :block/page [:block/uuid journal-id]
+                              :block/created-at 100 :block/updated-at 200}])
+               (-> (sync-handler/handle-http self request)
+                   (p/then json-body)
+                   (p/then (fn [body]
+                             (let [result (first (:results body))]
+                               (is (= (str journal-id) (:page-id result)))
+                               (is (= 100 (:created-at result)))
+                               (is (= 200 (:updated-at result)))
+                               (is (= 20260813 (:journal-day result)))
+                               (is (= "Aug 13th, 2026" (:journal-title result))))
+                             (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-list-blocks-rejects-malformed-journal-day-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/blocks?journal-only=true&journal-day-at-most=20260813x&sort=created-at-desc"
+                            "GET" nil)]
+               (-> (sync-handler/handle-http self request)
+                   (p/then json-body)
+                   (p/then (fn [body]
+                             (is (= "invalid journal day" (:error body)))
+                             (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
   (async done
          (with-memory-sql-async
