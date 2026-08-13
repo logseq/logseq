@@ -11,6 +11,7 @@
 (def ^:private permissions #{"read" "write" "both"})
 (def ^:private rtc-groups #{"team" "rtc_2025_07_10"})
 (def ^:private collection-path "/api/v1/personal-access-tokens")
+(def ^:private user-info-url "https://api.logseq.com/file-sync/user_info")
 
 (defn route?
   [path]
@@ -27,17 +28,32 @@
                             set)
       :else #{})))
 
-(defn- rtc-claims?
-  [claims]
-  (seq (set/intersection rtc-groups (claims-groups claims))))
+(defn- <rtc-user?
+  [request claims]
+  (let [claim-groups (claims-groups claims)]
+    (if (seq claim-groups)
+      (p/resolved (boolean (seq (set/intersection rtc-groups claim-groups))))
+      (p/let [token (auth/token-from-request request)
+              response (js/fetch user-info-url
+                                 #js {:method "POST"
+                                      :headers #js {"authorization" (str "Bearer " token)
+                                                    "content-type" "application/json"}
+                                      :body "{}"})
+              _ (when-not (.-ok response)
+                  (throw (ex-info "user info request failed"
+                                  {:status (.-status response)})))
+              user-info (.json response)
+              user-groups (claims-groups
+                           #js {"cognito:groups" (aget user-info "UserGroups")})]
+        (boolean (seq (set/intersection rtc-groups user-groups)))))))
 
 (defn- random-hex
   [size]
   (let [payload (js/Uint8Array. size)]
     (.getRandomValues js/crypto payload)
     (->> (array-seq payload)
-         (map (fn [byte]
-                (.padStart (.toString byte 16) 2 "0")))
+         (map (fn [octet]
+                (.padStart (.toString octet 16) 2 "0")))
          (apply str))))
 
 (defn- generate-token
@@ -111,27 +127,27 @@
   (let [path (.-pathname (js/URL. (.-url request)))
         method (.-method request)
         user-id (aget claims "sub")]
-    (cond
-      (not (string? user-id))
+    (if-not (string? user-id)
       (http/unauthorized)
+      (p/let [rtc-user? (<rtc-user? request claims)]
+        (cond
+          (not rtc-user?)
+          (http/forbidden)
 
-      (not (rtc-claims? claims))
-      (http/forbidden)
+          (and (= method "GET") (= path collection-path))
+          (p/let [tokens (index/<personal-access-tokens-list (aget env "DB") user-id)]
+            (http/json-response nil {:tokens tokens}))
 
-      (and (= method "GET") (= path collection-path))
-      (p/let [tokens (index/<personal-access-tokens-list (aget env "DB") user-id)]
-        (http/json-response nil {:tokens tokens}))
+          (and (= method "POST") (= path collection-path))
+          (<create! request env user-id)
 
-      (and (= method "POST") (= path collection-path))
-      (<create! request env user-id)
+          (and (= method "DELETE") (token-id-from-path path))
+          (p/let [_ (index/<personal-access-token-delete!
+                     (aget env "DB") (token-id-from-path path) user-id)]
+            (common/options-response))
 
-      (and (= method "DELETE") (token-id-from-path path))
-      (p/let [_ (index/<personal-access-token-delete!
-                 (aget env "DB") (token-id-from-path path) user-id)]
-        (common/options-response))
-
-      :else
-      (http/not-found))))
+          :else
+          (http/not-found))))))
 
 (defn handle
   [request env]
