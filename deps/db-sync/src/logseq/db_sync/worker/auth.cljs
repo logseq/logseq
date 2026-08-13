@@ -96,8 +96,8 @@
   (p/let [payload (.encode (js/TextEncoder.) value)
           digest (.digest (.-subtle js/crypto) "SHA-256" payload)]
     (->> (array-seq (js/Uint8Array. digest))
-         (map (fn [byte]
-                (.padStart (.toString byte 16) 2 "0")))
+         (map (fn [octet]
+                (.padStart (.toString octet 16) 2 "0")))
          (apply str))))
 
 (defn- permission->scope
