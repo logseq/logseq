@@ -12,6 +12,10 @@
  ;; Default value: true
  ;; :ui/show-brackets? true
 
+ ;; Display a page's full hierarchy in links, e.g. Superhuman/Docs instead of Docs.
+ ;; Default value: false
+ ;; :ui/show-hierarchy false
+
  ;; Display all lines of a block when referencing ((block)).
  ;; Default value: false
  :ui/show-full-blocks? false
