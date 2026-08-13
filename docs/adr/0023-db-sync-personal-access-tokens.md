@@ -72,9 +72,10 @@ Add these endpoints:
   current user.
 
 Management endpoints accept only a verified Logseq login JWT. They do not accept
-a PAT. The server checks that the JWT belongs to the current RTC rollout groups
-and rejects all other users. Creation also requires the user to have current
-access to the requested graph.
+a PAT. The server checks Cognito group claims when present and otherwise uses the
+existing authenticated `user_info` endpoint as the authoritative source for the
+current RTC rollout groups. It rejects all other users. Creation also requires
+the user to have current access to the requested graph.
 
 Revocation and listing are owner-scoped. A caller cannot inspect or revoke
 another user's tokens by guessing an identifier.
