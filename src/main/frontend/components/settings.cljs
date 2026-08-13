@@ -1465,7 +1465,14 @@
        nil)
      [])
     [:div.panel-wrap.is-personal-access-tokens.mb-8.flex.flex-col.gap-6
-     [:p.text-sm.opacity-70 (t :sync.personal-access-token/description)]
+     [:p.text-sm.opacity-70
+      (t :sync.personal-access-token/description)
+      " "
+      [:a.external-link
+       {:href "https://api.logseq.io/api-docs"
+        :target "_blank"
+        :rel "noreferrer"}
+       (t :sync.personal-access-token/api-docs)]]
      (personal-access-token-create-form
       graph-items pending? set-pending! on-created!)
      (personal-access-token-created created-token)

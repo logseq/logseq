@@ -1854,6 +1854,7 @@
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "User doesn't exist yet."
 
+ :sync.personal-access-token/api-docs "API documentation"
  :sync.personal-access-token/copied "Personal access token copied."
  :sync.personal-access-token/create "Create token"
  :sync.personal-access-token/create-title "Create a personal access token"
@@ -1861,7 +1862,7 @@
  :sync.personal-access-token/created-warning "Copy this token now. It cannot be shown again."
  :sync.personal-access-token/date-summary "Created {1}; expires {2}"
  :sync.personal-access-token/deleted-graph "Deleted graph"
- :sync.personal-access-token/description "Create graph-specific credentials for the Logseq REST API. Tokens cannot access the raw sync protocol."
+ :sync.personal-access-token/description "Create graph-specific credentials for the Logseq REST API."
  :sync.personal-access-token/empty "No personal access tokens."
  :sync.personal-access-token/existing-title "Existing tokens"
  :sync.personal-access-token/expiration "Expiration"
