@@ -316,7 +316,7 @@
 
 (defn openapi-document [issuer]
   {:openapi "3.1.0"
-   :info {:title "Logseq Semantic API" :version "1.0.0"}
+   :info {:title "Logseq Server API" :version "1.0.0"}
    :servers [{:url "/"}]
    :components
    {:schemas (ordered-map

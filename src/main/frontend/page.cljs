@@ -9,11 +9,13 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             ))
@@ -114,7 +116,7 @@
                  (t :page/open-issue-desc)
                  :links
                  [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
-     (ui/notification)]))
+     (shui-toaster/install-toaster)]))
 
 (hsx/defc not-found
   []
@@ -137,16 +139,15 @@
      (plugin-handler/host-mounted!)
      (setup-fns!))
    [])
-  (let [route-match (state/use-sub :route-match)]
-    (if route-match
-      (when-let [view (:view (:data route-match))]
-        (ui/catch-error-and-notify
-         (helpful-default-error-screen)
-         [:<>
-          (container/root-container
-           route-match
-           ^{:key (:path route-match)}
-           [view route-match])
-          (when config/lsp-enabled?
-            (plugin/hook-daemon-renderers))]))
-      (not-found))))
+  (if-let [route-match (rfx/use-sub [:route-match])]
+    (when-let [view (:view (:data route-match))]
+      (ui/catch-error-and-notify
+       (helpful-default-error-screen)
+       [:<>
+        (container/root-container
+         route-match
+         ^{:key (:path route-match)}
+         [view route-match])
+        (when config/lsp-enabled?
+          (plugin/hook-daemon-renderers))]))
+    (not-found)))

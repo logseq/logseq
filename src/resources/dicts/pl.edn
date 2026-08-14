@@ -178,7 +178,6 @@
  :cmdk.action/search "Szukaj"
  :cmdk.action/trigger "Uruchom"
 
- :cmdk.create/configure-tag "Skonfiguruj tag"
  :cmdk.create/page "Utwórz stronę"
  :cmdk.create/tag "Utwórz tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Ostatnio zaktualizowane"
  :cmdk.group/themes "Motywy"
 
- :cmdk.info/configure-tag "Skonfiguruj #{1}"
  :cmdk.info/create-page "Utwórz stronę '{1}'"
  :cmdk.info/create-tag "Utwórz tag '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Wbudowanych elementów nie można usunąć."
  :node/new "Nowy węzeł"
 
- :notification/clear-all "Wyczyść wszystkie"
  :notification/copied "Skopiowano"
 
  :onboarding.import/desc "Opis importu"
@@ -1718,7 +1715,6 @@
  :ui/image "obraz"
  :ui/label "Etykieta"
  :ui/link "Link"
- :ui/load-more "Wczytaj więcej"
  :ui/loading "Ładowanie"
  :ui/login "Zaloguj się"
  :ui/logout "Wyloguj się"

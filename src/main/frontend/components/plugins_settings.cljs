@@ -111,17 +111,20 @@
   [schema ^js pl]
   (let [^js plugin-settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings!] (hooks/use-state (bean/->clj (.toJSON plugin-settings)))
+        [settings, set-settings!] (hooks/use-state (some-> plugin-settings (.toJSON) (bean/->clj)))
         [edit-mode, set-edit-mode!] (hooks/use-state nil) ;; code
-        update-setting! (fn [k v] (.set plugin-settings (name k) (bean/->js v)))]
+        update-setting! (fn [k v]
+                          (when plugin-settings
+                            (.set plugin-settings (name k) (bean/->js v))))]
 
     (hooks/use-effect!
      (fn []
-       (let [on-change (fn [^js s]
-                         (when-let [s (bean/->clj s)]
-                           (set-settings! s)))]
-         (.on plugin-settings "change" on-change)
-         #(.off plugin-settings "change" on-change)))
+       (when plugin-settings
+         (let [on-change (fn [^js s]
+                           (when-let [s (bean/->clj s)]
+                             (set-settings! s)))]
+           (.on plugin-settings "change" on-change)
+           #(.off plugin-settings "change" on-change))))
      [pid])
 
     (if (seq schema)

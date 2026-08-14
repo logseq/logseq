@@ -791,7 +791,7 @@
                               [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]})]
     (is (string? (:error validation))
         "Datom import validation should reject invalid graph datoms")
-    (is (re-find #"exported EDN" (:error validation))
+    (is (re-find #"Exported EDN" (:error validation))
         "Export validation error should describe exported EDN")
     (is (not (contains? validation :db))
         "Invalid export validation should not return a transient DB snapshot")))
@@ -855,6 +855,26 @@
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(deftest export-grouped-view-nodes-by-uuid
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "Alpha"}
+                          {:block/title "Beta"}]}]})
+        block-uuids (mapv :block/uuid
+                          [(db-test/find-block-by-content @conn "Alpha")
+                           (db-test/find-block-by-content @conn "Beta")])
+        exported (sqlite-export/build-export
+                  @conn
+                  {:export-type :view-nodes
+                   :rows [["group" block-uuids]]
+                   :group-by? true})]
+    (is (= #{"Alpha" "Beta"}
+           (->> (:pages-and-blocks exported)
+                (mapcat :blocks)
+                (map :block/title)
+                set)))))
 
 (deftest import-selected-nodes
   (let [original-data

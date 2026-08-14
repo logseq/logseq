@@ -39,16 +39,21 @@
 (defn wait-tx-update-to
   [new-tx]
   (assert (int? new-tx))
-  (loop [i 5]
-    (when (zero? i) (throw (ex-info "wait-tx-update-to" {:update-to new-tx})))
+  (loop [i 15
+         last-rtc-tx nil]
+    (when (zero? i)
+      (throw (ex-info "wait-tx-update-to"
+                      {:update-to new-tx
+                       :last-rtc-tx last-rtc-tx})))
     (util/wait-timeout 1000)
+    (w/wait-for "button.cloud.on.idle" {:timeout 35000})
     (let [m (get-rtc-tx)
           local-tx (or (:local-tx m) 0)
           ;; remote-tx (or (:remote-tx m) 0)
           ]
       (if (>= local-tx new-tx)
         local-tx
-        (recur (dec i))))))
+        (recur (dec i) m)))))
 
 (defn rtc-start
   []

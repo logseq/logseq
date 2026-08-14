@@ -8,10 +8,16 @@
             [frontend.util :as util]))
 
 ;; TODO: refactor: separate side effects
+(defn- local-storage
+  []
+  (when-not util/node-test?
+    (some-> js/globalThis (.-localStorage))))
+
 (defn get
   [key]
-  (when-not util/node-test?
-    (reader/read-string ^js (.getItem js/localStorage (name key)))))
+  (some-> (local-storage)
+          (.getItem (name key))
+          reader/read-string))
 
 (defn set
   [key value]
@@ -19,22 +25,22 @@
   (s/assert ::storage-spec/local-storage
             ;; Translate key to keyword for spec as not all keys are keywords
             {(keyword key) value})
-  (when-not util/node-test?
-    (.setItem ^js js/localStorage (name key) (pr-str value))))
+  (when-let [storage (local-storage)]
+    (.setItem ^js storage (name key) (pr-str value))))
 
 (comment
   (defn get-transit
     [key]
-    (when-not util/node-test?
-      (dt/read-transit-str ^js (.getItem js/localStorage (name key))))))
+    (when-let [storage (local-storage)]
+      (dt/read-transit-str ^js (.getItem storage (name key))))))
 
 (defn remove
   [key]
-  (when-not util/node-test?
-    (.removeItem ^js js/localStorage (name key))))
+  (when-let [storage (local-storage)]
+    (.removeItem ^js storage (name key))))
 
 (comment
   (defn clear
     []
-    (when-not util/node-test?
-      (.clear ^js js/localStorage))))
+    (when-let [storage (local-storage)]
+      (.clear ^js storage))))

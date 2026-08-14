@@ -1,13 +1,17 @@
 (ns logseq.e2e.graph
   (:require [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
-            [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import [com.microsoft.playwright Locator$ClickOptions]))
 
-(defn- refresh-all-remote-graphs
+(defn refresh-all-remote-graphs
   []
-  (w/click "span:text(\"Refresh\")"))
+  (let [enabled-refresh "button:not([disabled]):has-text(\"Refresh\")"]
+    (w/wait-for enabled-refresh {:timeout 30000})
+    (w/click enabled-refresh
+             (-> (Locator$ClickOptions.)
+                 (.setTimeout 30000)))))
 
 (defn goto-all-graphs
   []
@@ -85,9 +89,8 @@
     (maybe-input-e2ee-password)
     (w/wait-for cloud-ready-indicator {:timeout 20000}))
 
-  ;; new graph can blocks the ui because the db need to be created and restored,
-  ;; I have no idea why `search-and-click` failed to auto-wait sometimes.
-  (util/wait-timeout 1000))
+  (w/wait-for-not-visible new-graph-dialog {:timeout 30000})
+  (assert/assert-graph-loaded?))
 
 (defn new-graph
   ([graph-name enable-sync?]
@@ -131,12 +134,12 @@
 
 (defn validate-graph
   []
-  (k/esc)
-  (k/esc)
-  (util/search-and-click "(Dev) Validate current graph")
-  (assert/assert-is-visible
-   (loc/and ".notifications div.notification-success div"
-            (w/get-by-text "Your graph is valid")))
-  (when (w/visible? ".notifications div.notification-success .ls-icon-x")
-    (w/click ".notifications div.notification-success .ls-icon-x"))
-  {:valid? true})
+  (let [success-toast ".ui__toast:has-text('Your graph is valid')"]
+    (k/esc)
+    (k/esc)
+    (util/search-and-click "(Dev) Validate current graph")
+    (w/wait-for success-toast {:timeout 30000})
+    (w/eval-js
+     "() => document.querySelectorAll('.ui__toast.success button')
+       .forEach((button) => button.click())")
+    {:valid? true}))

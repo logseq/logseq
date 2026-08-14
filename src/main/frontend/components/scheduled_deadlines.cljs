@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.components.editor :as editor]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -17,7 +16,8 @@
   [page-name]
   (and (date/valid-journal-title? (string/capitalize page-name))
        (not (true? (state/scheduled-deadlines-disabled?)))
-       (db/today-journal-page? page-name)))
+       (= (date/journal-title->int (string/capitalize page-name))
+          (date/today-journal-day))))
 
 (hsx/defc scheduled-and-deadlines
   [page-name]

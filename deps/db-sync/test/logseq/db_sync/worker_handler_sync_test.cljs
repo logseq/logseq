@@ -11,6 +11,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.handler.semantic :as semantic-handler]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
@@ -252,6 +253,73 @@
                    (p/catch (fn [error]
                               (is false (str error))
                               (done)))))))))
+
+(deftest semantic-page-blocks-only-expands-paginated-roots-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (storage/open-conn sql)
+                   page-id (random-uuid)
+                   root-a-id (random-uuid)
+                   root-b-id (random-uuid)
+                   child-a-id (random-uuid)
+                   child-b-id (random-uuid)
+                   _ (d/transact! conn [{:db/ident :logseq.class/Page}
+                                        {:block/uuid page-id
+                                         :block/name "inbox"
+                                         :block/title "Inbox"
+                                         :block/tags :logseq.class/Page}
+                                        {:block/uuid root-a-id
+                                         :block/title "Root A"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "a0"}
+                                        {:block/uuid child-a-id
+                                         :block/title "Child A"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid root-a-id]
+                                         :block/order "a0"}
+                                        {:block/uuid root-b-id
+                                         :block/title "Root B"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid page-id]
+                                         :block/order "b0"}
+                                        {:block/uuid child-b-id
+                                         :block/title "Child B"
+                                         :block/page [:block/uuid page-id]
+                                         :block/parent [:block/uuid root-b-id]
+                                         :block/order "a0"}])
+                   url (js/URL. (str "https://example.test/semantic/pages/" page-id
+                                    "/blocks?graph-id=graph-1&limit=1"))
+                   response (#'semantic-handler/paginated-page-blocks-response
+                             @conn
+                             (d/entity @conn [:block/uuid page-id])
+                             url)]
+               (-> (p/let [body (json-body response)]
+                       (is (= 200 (.-status response)))
+                       (is (= 1 (count (:blocks body))))
+                       (is (= (str root-a-id) (get-in body [:blocks 0 :uuid])))
+                       (is (= "Child A" (get-in body [:blocks 0 :children 0 :title])))
+                       (is (string? (:next-cursor body))))
+                     (p/then (fn [] (done)))
+                     (p/catch (fn [error]
+                                (is false (str error))
+                                (done)))))))))
+
+(deftest semantic-search-results-remain-lazy-before-pagination-test
+  (with-memory-sql
+    (fn [sql]
+      (storage/init-schema! sql)
+      (let [conn (storage/open-conn sql)]
+        (d/transact! conn [{:db/ident :logseq.class/Page}
+                           {:block/uuid (random-uuid)
+                            :block/title "Roadmap one"
+                            :block/tags :logseq.class/Page}
+                           {:block/uuid (random-uuid)
+                            :block/title "Roadmap two"
+                            :block/tags :logseq.class/Page}])
+        (is (not (vector? (#'semantic-handler/search-results @conn "roadmap" "blocks"))))))))
 
 (deftest semantic-move-blocks-moves-all-addressed-blocks-test
   (async done
@@ -2335,8 +2403,50 @@
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
 
-(deftest tx-batch-rejects-stale-delete-before-later-failure-test
-  (testing "stale delete-blocks entries are not reported as successfully applied"
+(deftest tx-batch-accepts-stale-delete-as-idempotent-test
+  (doseq [outliner-op [:delete-blocks :delete-page]]
+    (testing (str outliner-op " succeeds when the target is already absent")
+      (let [sql (test-sql/make-sql)
+            conn (storage/open-conn sql)
+            self #js {:sql sql
+                      :conn conn
+                      :schema-ready true}
+            stale-delete-tx-id (random-uuid)
+            missing-delete-uuid (random-uuid)
+            t-before (storage/get-t sql)
+            checksum-before (storage/get-checksum sql)
+            stale-delete-entry {:tx-id stale-delete-tx-id
+                                :tx (protocol/tx->transit
+                                     [[:db/retractEntity [:block/uuid missing-delete-uuid]]])
+                                :outliner-op outliner-op}
+            changed-messages (atom [])
+            response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                   (swap! changed-messages conj payload))]
+                       (sync-handler/handle-tx-batch! self nil [stale-delete-entry] t-before))]
+        (is (= "tx/batch/ok" (:type response)))
+        (is (= t-before (:t response)))
+        (is (= checksum-before (:checksum response)))
+        (is (empty? @changed-messages))))))
+
+(deftest tx-batch-rejects-empty-delete-input-test
+  (testing "an originally empty delete remains invalid"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          empty-delete-tx-id (random-uuid)
+          t-before (storage/get-t sql)
+          empty-delete-entry {:tx-id empty-delete-tx-id
+                              :tx (protocol/tx->transit [])
+                              :outliner-op :delete-blocks}
+          response (sync-handler/handle-tx-batch! self nil [empty-delete-entry] t-before)]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= empty-delete-tx-id (:failed-tx-id response))))))
+
+(deftest tx-batch-reports-stale-delete-success-before-later-failure-test
+  (testing "an idempotent delete is acknowledged before a later tx fails"
     (let [sql (test-sql/make-sql)
           conn (storage/open-conn sql)
           self #js {:sql sql
@@ -2362,8 +2472,8 @@
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
       (is (= t-before (:t response)))
-      (is (= stale-delete-tx-id (:failed-tx-id response)))
-      (is (nil? (:success-tx-ids response)))
+      (is (= later-failed-tx-id (:failed-tx-id response)))
+      (is (= [stale-delete-tx-id] (:success-tx-ids response)))
       (is (empty? @changed-messages)))))
 
 (deftest tx-batch-ignores-empty-rebase-entry-test

@@ -4,7 +4,7 @@ import test from "node:test";
 import { apiDocsResponse } from "./api_docs.mjs";
 
 test("API docs are served as standalone HTML from both docs paths", async () => {
-  const html = "<!doctype html><title>Logseq Semantic API</title>";
+  const html = "<!doctype html><title>Logseq Server API</title>";
 
   for (const path of ["/api-docs", "/api-docs/"]) {
     const response = apiDocsResponse(path, html);

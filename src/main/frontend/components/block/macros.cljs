@@ -1,11 +1,8 @@
 (ns frontend.components.block.macros
   "Logseq macros that render and evaluate in blocks"
   (:require [clojure.walk :as walk]
-            [datascript.core :as d]
-            [frontend.db.conn :as db-conn]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
-            [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
             [logseq.db.frontend.property :as db-property]))
@@ -13,17 +10,18 @@
 (defn- properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by
   property idents and titles"
-  [db block]
+  [block]
   (->> (db-property/properties block)
        (mapcat (fn [[k v]]
-                 ;; For now just support cardinality :one
-                 (when-not (set? v)
-                   (let [prop-val (some->> (:db/id v)
-                                           (d/entity db)
-                                           db-property/property-value-content)
-                         property (d/entity db k)]
-                     [[(keyword (:block/title property)) prop-val]
-                      [(:db/ident property) prop-val]]))))
+	                 ;; For now just support cardinality :one
+	                 (when-not (set? v)
+	                   (let [prop-val (if (map? v)
+	                                    (db-property/property-value-content v)
+	                                    v)
+	                         property-title (or (get-in db-property/built-in-properties [k :title])
+	                                            (name k))]
+	                     [[(keyword property-title) prop-val]
+	                      [k prop-val]]))))
        (into {})))
 
 (defn- normalize-query-function
@@ -66,11 +64,8 @@
                        ;; Ungroup results grouped by page in page view
                        (mapcat val query-result*)
                        query-result*)
-        repo (state/get-current-repo)
-        db (db-conn/get-db repo)
         query-result' (->> query-result
-                           (map #(d/entity db (:db/id %)))
-                           (map #(hash-map :block/properties (properties-by-name db %))))
+	                           (map #(hash-map :block/properties (properties-by-name %))))
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
                       (normalize-query-function query-result')
