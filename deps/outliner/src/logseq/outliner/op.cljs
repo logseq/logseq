@@ -2,6 +2,7 @@
   "Transact outliner ops"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -14,6 +15,9 @@
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
             [logseq.outliner.op.construct :as op-construct]))
+
+(defkeywords
+  ::missing-parent-original {:doc "The linked-reference parent supplied to an outdent no longer exists."})
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -46,6 +50,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::block-ids :boolean ::option]]]]
+   [:collapse-expand-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::blocks ::option]]]]
 
    ;; properties
    [:upsert-property
@@ -216,11 +224,8 @@
     (if (or error (:error validation))
       (reset! *result {:error (or error (:error validation))})
       (try
-        ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
         (ldb/transact! conn (:tx-data validation)
-                       (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
-                         (= :datoms (::sqlite-export/graph-format export-map))
-                         (assoc :initial-db? true)))
+                       (merge {::sqlite-export/imported-data? true} tx-meta))
         (catch :default e
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
@@ -282,6 +287,16 @@
                                                           :outliner-op :insert-template-blocks))]
           (reset! *result result))))))
 
+(defn- resolve-indent-outdent-opts
+  [db opts]
+  (if-let [parent-original-uuid (get-in opts [:parent-original :block/uuid])]
+    (let [parent-original (or (d/entity db [:block/uuid parent-original-uuid])
+                              (throw (ex-info "Missing outdent parent original"
+                                              {:type ::missing-parent-original
+                                               :block/uuid parent-original-uuid})))]
+      (assoc opts :parent-original parent-original))
+    opts))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -315,9 +330,14 @@
 
     :indent-outdent-blocks
     (let [[block-ids indent? opts] args
-          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)
+          opts (resolve-indent-outdent-opts @conn opts)]
       (when (seq blocks)
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
+
+    :collapse-expand-blocks
+    (let [[blocks opts] args]
+      (ldb/transact! conn blocks opts))
 
     ;; properties
     :upsert-property
@@ -403,11 +423,6 @@
   [[op _args]]
   (= :batch-import-edn op))
 
-(defn- datom-import-op?
-  [[op args]]
-  (and (= :batch-import-edn op)
-       (= :datoms (::sqlite-export/graph-format (first args)))))
-
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
@@ -424,15 +439,12 @@
                 (assoc :outliner-op single-op-outliner-op)
 
                 (some import-edn-op? ops)
-                (assoc ::sqlite-export/imported-data? true)
-
-                (some datom-import-op? ops)
-                (assoc :initial-db? true))
+                (assoc ::sqlite-export/imported-data? true))
         *result (atom nil)]
 
     (outliner-tx/transact!
-      opts'
-      (doseq [op-entry ops]
-        (apply-op! conn opts' *result op-entry)))
+     opts'
+     (doseq [op-entry ops]
+       (apply-op! conn opts' *result op-entry)))
 
     @*result))

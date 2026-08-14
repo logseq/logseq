@@ -178,7 +178,6 @@
  :cmdk.action/search "Cerca"
  :cmdk.action/trigger "Esegui"
 
- :cmdk.create/configure-tag "Configura tag"
  :cmdk.create/page "Crea pagina"
  :cmdk.create/tag "Crea tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Aggiornati di recente"
  :cmdk.group/themes "Temi"
 
- :cmdk.info/configure-tag "Configura #{1}"
  :cmdk.info/create-page "Crea la pagina '{1}'"
  :cmdk.info/create-tag "Crea il tag '{1}'"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Gli elementi predefiniti non possono essere eliminati."
  :node/new "Nuovo nodo"
 
- :notification/clear-all "Pulisci tutte"
  :notification/copied "Copiato"
 
  :onboarding.import/desc "Se sono in formato EDN o Markdown Logseq può lavorarci."
@@ -1718,7 +1715,6 @@
  :ui/image "immagine"
  :ui/label "Etichetta"
  :ui/link "Link"
- :ui/load-more "Carica altro"
  :ui/loading "Caricamento"
  :ui/login "Accedi"
  :ui/logout "Esci"

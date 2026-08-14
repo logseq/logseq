@@ -4,6 +4,7 @@
             [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -27,10 +28,10 @@
   [dom-id format]
   (hooks/use-effect!
    (fn []
-     (when-not (:date-picker/date @state/state)
+     (when-not (state/get-state :date-picker/date)
        (state/set-state! :date-picker/date (t/today))))
    [])
-  (let [selected-date (state/use-sub :date-picker/date)
+  (let [selected-date (rfx/use-sub [:date-picker/date])
         select-handler! (hooks/use-callback
                          (fn [^js d]
                            (when-let [d (or d selected-date)]

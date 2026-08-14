@@ -22,6 +22,25 @@
          :editing-same-block? false
          :active-selection? true}))))
 
+(deftest select-on-hover-keeps-active-selection-in-virtualized-list
+  (let [opts {:last-client-y 320
+              :client-y 300
+              :dragging? false
+              :editing-same-block? false
+              :active-selection? true
+              :virtualized? true}]
+    (is (true? (selection/select-on-hover? opts)))))
+
+(deftest select-on-hover-does-not-shrink-virtualized-selection-under-stationary-pointer
+  (is (false?
+       (selection/select-on-hover?
+        {:last-client-y 320
+         :client-y 320
+         :dragging? false
+         :editing-same-block? false
+         :active-selection? true
+         :virtualized? true}))))
+
 (deftest select-on-hover-preserves-existing-guards
   (are [expected opts] (= expected (selection/select-on-hover? opts))
     true  {:last-client-y 320
@@ -55,13 +74,19 @@
     nil :missing :c
     nil :a :missing))
 
-(deftest mounted-node-range-uses-current-rendered-order
-  (let [upper #js {:isConnected true}
-        middle #js {:isConnected true}
-        lower #js {:isConnected true}]
-    (is (true? (selection/mounted-nodes? lower upper)))
-    (is (= {:direction :up
-            :nodes [lower middle upper]}
-           (selection/mounted-node-range [upper middle lower] lower upper)))
-    (set! (.-isConnected lower) false)
-    (is (false? (selection/mounted-nodes? lower upper)))))
+(deftest virtual-range-boundary-id-uses-the-complete-membership-order
+  (let [block-ids [:empty :first :middle :last]]
+    (is (= :last
+           (selection/virtual-range-boundary-id block-ids :down 1 3)))
+    (is (= :first
+           (selection/virtual-range-boundary-id block-ids :up 1 3)))
+    (is (nil?
+         (selection/virtual-range-boundary-id block-ids nil 1 3)))))
+
+(deftest unselected-block-ids-preserves-order-without-duplicate-ids
+  (is (= [:d :e]
+         (selection/unselected-block-ids [:a :b :c]
+                                         [:b :c :d :d :e])))
+  (is (= []
+         (selection/unselected-block-ids [:a :b]
+                                         [:a :b :a]))))

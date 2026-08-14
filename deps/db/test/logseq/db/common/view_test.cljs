@@ -15,6 +15,25 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
+(deftest get-view-data-journals-returns-ordered-compact-index-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               (mapv (fn [journal-day]
+                       {:page {:build/journal journal-day}
+                        :blocks [{:block/title (str "Block " journal-day)}]})
+                     [20260716 20260715 20260714 20260713 20260712])})
+        result (db-view/get-view-data @conn nil {:journals? true})
+        index (:data result)]
+    (is (= 5 (:count result)))
+    (is (= [20260716 20260715 20260714 20260713 20260712]
+           (mapv :block/journal-day index)))
+    (is (every? map? index))
+    (when (every? map? index)
+      (is (every? #(= #{:db/id :block/journal-day} (set (keys %))) index)
+          "The journal index should include only the identity and placeholder title data."))
+    (is (not (contains? result :selection-block-ids))
+        "Blocks are loaded only for visible journals.")))
+
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -121,6 +140,36 @@
     (is (= #{"Movie A" "Movie B"} (get group->titles "Sci-Fi")))
     (is (= #{"Movie A"} (get group->titles "Drama")))))
 
+(deftest get-view-data-list-view-keeps-one-row-shape-for-pages-and-blocks-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "Tagged page"
+                        :build/tags [:Topic]}}
+                {:page {:block/title "Block page"}
+                 :blocks [{:block/title "Tagged block"
+                           :build/tags [:Topic]}]}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id
+                              :logseq.property.view/group-by-property
+                              :block/page]
+                             [:db/add view-id
+                              :logseq.property.view/type
+                              :logseq.property.view/type.list]])
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :class-objects
+                                       :view-for-id class-id})]
+    (is (= 2 (:count result)))
+    (is (every? (fn [[_group partitions]]
+                  (every? (fn [[breadcrumb-uuid rows]]
+                            (and (uuid? breadcrumb-uuid)
+                                 (sequential? rows)
+                                 (every? map? rows)))
+                          partitions))
+                (:data result))
+        "A list view must not mix flat row IDs with nested partitions.")))
+
 (deftest get-view-data-linked-references-page-view-does-not-crash-on-missing-db-ident-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -142,6 +191,48 @@
                                                      :view-for-id foo-id})]
     (is (number? (:count result)))
     (is (contains? (set (:data result)) bar-id))))
+
+(deftest get-view-data-groups-page-level-linked-references-under-the-referring-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Target"}}
+                {:page {:block/title "Referring page"}}]})
+        target-id (d/q '[:find ?e .
+                         :in $ ?title
+                         :where [?e :block/title ?title]]
+                       @conn
+                       "Target")
+        referring-page-id (d/q '[:find ?e .
+                                 :in $ ?title
+                                 :where [?e :block/title ?title]]
+                               @conn
+                               "Referring page")
+        target (d/entity @conn target-id)
+        referring-page (d/entity @conn referring-page-id)
+        view-id (create-view-id conn :linked-references
+                                :view-for-id (:db/id target))
+        _ (d/transact! conn
+                       [[:db/add (:db/id referring-page)
+                         :block/refs
+                         (:db/id target)]
+                        [:db/add view-id
+                         :logseq.property.view/type
+                         :logseq.property.view/type.list]
+                        [:db/add view-id
+                         :logseq.property.view/group-by-property
+                         :block/page]])
+        result (db-view/get-view-data
+                @conn view-id
+                {:view-feature-type :linked-references
+                 :view-for-id (:db/id target)})
+        [[group partitions]] (:data result)]
+    (is (= (:block/uuid referring-page) (:block/uuid group)))
+    (is (= [[(:block/uuid referring-page)
+             [{:db/id (:db/id referring-page)
+               :block/parent nil}]]]
+           (mapv (fn [[breadcrumb rows]]
+                   [breadcrumb (vec rows)])
+                 partitions)))))
 
 (deftest get-view-data-class-objects-ref-filter-fast-path-test
   (let [conn (db-test/create-conn-with-blocks

@@ -1,13 +1,67 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
             [frontend.components.property.value :as property-value]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest alias-node-selection-preserves-entity-id-semantics-test
+  (async done
+         (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               block {:db/id 1
+                      :block/uuid block-uuid
+                      :block/alias []}
+               property {:db/ident :block/alias
+                         :db/valueType :db.type/ref
+                         :db/cardinality :db.cardinality/many}
+               calls* (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [])
+                               state/get-state (constantly nil)
+                               db-async/<get-block (fn [_repo _block-ref _opts]
+                                                     (p/resolved block))
+                               db-property-handler/batch-set-property!
+                               (fn [block-ids property-ident value opts]
+                                 (swap! calls* conj [(vec block-ids) property-ident value opts])
+                                 (p/resolved nil))]
+               (#'property-value/add-or-remove-property-value
+                  block property 42 false {}))
+               (p/then (fn [_]
+                         (is (= [[[block-uuid]
+                                  :block/alias
+                                  42
+                                  {:entity-id? true}]]
+                                @calls*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest alias-value-click-opens-property-selector-test
+  (let [popup-event* (atom nil)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}
+        open-selector! (#'property-value/alias-value-on-pointer-down
+                        {:db/ident :block/alias}
+                        #(reset! popup-event* %))]
+    (is (fn? open-selector!))
+    (open-selector! event)
+    (is (= event @popup-event*))))
+
+(deftest compact-closed-values-require-worker-loading-test
+  (is (#'property-value/compact-closed-values?
+       {:property/closed-values
+        [{:db-ident :logseq.property.view/type.table}
+         {:db-ident :logseq.property.view/type.list}]}))
+  (is (not (#'property-value/compact-closed-values?
+            {:property/closed-values
+             [{:db/id 1 :db/ident :logseq.property.view/type.table}
+              {:db/id 2 :db/ident :logseq.property.view/type.list}]})))
+  (is (not (#'property-value/compact-closed-values? {}))))
 
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])
@@ -86,81 +140,6 @@
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
 
-(deftest bottom-property-edit-pointer-dismiss-handler-test
-  (let [edit-button (js-obj "closest" (fn [selector]
-                                        (when (= selector ".bottom-property-edit-icon")
-                                          #js {})))
-        other-target (js-obj "closest" (constantly nil))
-        prevent-default-called? (atom false)
-        edit-event (js-obj "target" edit-button
-                           "preventDefault" #(reset! prevent-default-called? true))
-        other-event (js-obj "target" other-target)]
-    (is (false? (#'property-value/prevent-bottom-property-edit-pointer-dismiss edit-event)))
-    (is (true? @prevent-default-called?))
-    (is (nil? (#'property-value/prevent-bottom-property-edit-pointer-dismiss other-event)))))
-
-(deftest date-page-link-stops-click-propagation-in-bottom-properties-test
-  (is (fn? (:on-click (#'property-value/date-page-link-props true))))
-  (is (nil? (:on-click (#'property-value/date-page-link-props false)))))
-
-(deftest direct-value-picker-type-test
-  (is (true? (property-value/direct-value-picker-type? :date)))
-  (is (true? (property-value/direct-value-picker-type? :datetime)))
-  (is (true? (property-value/direct-value-picker-type? :asset)))
-  (is (false? (property-value/direct-value-picker-type? :default))))
-
-(deftest asset-picker-layout-is-viewport-constrained-test
-  (is (= "min(640px, calc(100vw - 32px))"
-         (:width property-value/asset-picker-grid-style)))
-  (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
-  (is (= "repeat(auto-fill, minmax(140px, 1fr))"
-         (:grid-template-columns property-value/asset-picker-items-grid-style))))
-
-(defn- class-set
-  [class-str]
-  (set (string/split (or class-str "") #"\s+")))
-
-(deftest block-multiple-node-values-stay-in-one-row-test
-  (let [opts {:other-position? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "min-w-0"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-nowrap"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "multi-values-nowrap"))
-    (is (contains? (class-set (property-value/multiple-value-item-class opts))
-                   "shrink-0"))))
-
-(deftest expanded-multiple-node-values-can-wrap-test
-  (let [opts {:expanded? true
-              :other-position? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-wrap"))
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "multi-values-expanded"))
-    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                        "flex-nowrap")))
-    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
-                        "shrink-0")))))
-
-(deftest page-multiple-node-values-can-wrap-test
-  (let [opts {:page-property? true
-              :show-popup! identity}]
-    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                   "flex-wrap"))
-    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
-                        "flex-nowrap")))
-    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
-                        "shrink-0")))))
-
-(deftest non-positioned-multiple-node-values-can-wrap-test
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                 "flex-wrap"))
-  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                      "flex-nowrap"))))
-
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]
     (is (= #{1}
@@ -219,25 +198,66 @@
            (#'property-value/add-initial-node-choice [existing] new-choice)))))
 
 (deftest scoped-class-nodes-skips-broad-node-property-preload-test
-  (let [calls* (atom [])
-        property {:logseq.property/type :node}
+  (let [property {:logseq.property/type :node}
         page-class {:db/id 1
                     :db/ident :logseq.class/Page}
         tag-class {:db/id 2
                    :db/ident :logseq.class/Tag}]
-    (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (swap! calls* conj class-id)
-                                            [{:db/id 100
-                                              :block/title "Page 100"}])
-                  model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= []
-             (#'property-value/scoped-class-nodes
-              "repo" property [page-class tag-class] nil)))
-      (is (= [] @calls*)))))
+    (is (= []
+           (#'property-value/scoped-class-nodes
+            property [page-class tag-class] nil {})))))
+
+(deftest property-value-selected-detects-current-ref-value-test
+  (is (true? (#'property-value/property-value-selected?
+              [{:db/id 4
+                :db/ident :logseq.class/Page}]
+              4)))
+  (is (false? (#'property-value/property-value-selected?
+               [{:db/id 5
+                 :db/ident :logseq.class/Tag}]
+               4))))
+
+(deftest property-multiple-values-treats-tags-as-many-test
+  (is (true? (#'property-value/property-multiple-values?
+              {:db/ident :block/tags})))
+  (is (false? (#'property-value/property-multiple-values?
+               {:db/ident :block/title}))))
+
+(deftest get-operating-blocks-ignores-single-selected-block-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}]
+    (with-redefs [state/get-selection-block-ids (constantly [(:block/uuid selected)])
+                  state/get-selection-blocks (constantly [selected])
+                  state/get-state (constantly nil)
+                  block-handler/get-top-level-blocks identity]
+      (is (= [target]
+             (property-value/get-operating-blocks target))))))
+
+(deftest get-operating-blocks-uses-current-multi-selection-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}]
+    (with-redefs [state/get-selection-block-ids (constantly (map :block/uuid [target selected]))
+                  state/get-selection-blocks (constantly [target selected])
+                  state/get-state (constantly nil)
+                  block-handler/get-top-level-blocks identity]
+      (is (= [target selected]
+             (property-value/get-operating-blocks target))))))
+
+(deftest get-operating-blocks-prefers-view-selection-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        stale-selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+        view-selected {:block/uuid #uuid "33333333-3333-3333-3333-333333333333"}]
+    (with-redefs [state/get-selection-block-ids (constantly [(:block/uuid target) (:block/uuid stale-selected)])
+                  state/get-selection-blocks (constantly [target stale-selected])
+                  state/get-state (fn [key]
+                                    (when (= key :view/selected-blocks)
+                                      [view-selected]))
+                  block-handler/get-top-level-blocks identity]
+      (is (= [view-selected]
+             (property-value/get-operating-blocks target))))))
 
 (deftest scoped-class-nodes-filters-search-results-by-scoped-classes-test
-  (let [calls* (atom [])
-        property {:logseq.property/type :node}
+  (let [property {:logseq.property/type :node}
         topic-class {:db/id 10
                      :db/ident :user.class/Topic}
         matching-parent {:db/id 100
@@ -256,68 +276,27 @@
         unrelated {:db/id 102
                    :block/title "Other"
                    :block/tags [20]}]
-    (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (swap! calls* conj class-id)
-                                            [])
-                  model/get-structured-children (fn [_repo class-id]
-                                                  (case class-id
-                                                    10 [11]
-                                                    []))]
-      (is (= [matching-parent matching-child matching-wrapped matching-entity-tags]
-             (#'property-value/scoped-class-nodes
-              "repo" property [topic-class] [matching-parent matching-child matching-wrapped matching-entity-tags unrelated])))
-      (is (= [] @calls*)))))
-
-(deftest scoped-class-nodes-preloads-narrow-node-property-choices-test
-  (let [property {:logseq.property/type :node}
-        topic-class {:db/id 10
-                     :db/ident :user.class/Topic}
-        choices [{:db/id 100
-                  :block/title "Topic 100"}]]
-    (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (when (= 10 class-id)
-                                              choices))
-                  model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= choices
-             (#'property-value/scoped-class-nodes
-              "repo" property [topic-class] nil))))))
-
-(deftest scoped-class-nodes-preloads-tag-only-node-property-choices-test
-  (let [property {:logseq.property/type :node}
-        tag-class {:db/id 2
-                   :db/ident :logseq.class/Tag}
-        choices [{:db/id 100
-                  :block/title "Tag 100"}]]
-    (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (when (= 2 class-id)
-                                              choices))
-                  model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= choices
-             (#'property-value/scoped-class-nodes
-              "repo" property [tag-class] nil))))))
+    (is (= [matching-parent matching-child matching-wrapped matching-entity-tags]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching-parent matching-child matching-wrapped matching-entity-tags unrelated]
+            {10 [11]})))))
 
 (deftest scoped-class-nodes-keeps-hydrated-broad-scope-initial-choices-test
   (let [property {:logseq.property/type :node}
         page-class {:db/id 1
                     :db/ident :logseq.class/Page}
         matching-choice {:value {:db/id 100
-                                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                 :block/tags [1]}
                          :label "Existing page"}
         unrelated-choice {:value {:db/id 101
                                   :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
                           :label "Unrelated block"}]
-    (with-redefs [db/entity (fn [id]
-                              (case id
-                                100 {:db/id 100
-                                     :block/title "Existing page"
-                                     :block/tags [1]}
-                                101 {:db/id 101
-                                     :block/title "Unrelated block"}
-                                nil))
-                  model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= [matching-choice]
-             (#'property-value/scoped-class-nodes
-              "repo" property [page-class] [matching-choice unrelated-choice]))))))
+    (is (= [matching-choice]
+           (#'property-value/scoped-class-nodes
+            property [page-class] [matching-choice unrelated-choice] {})))))
 
 (deftest load-initial-node-choices-loads-existing-values-for-broad-page-scope-test
   (async done
@@ -332,16 +311,52 @@
                                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
                                  :label "page 2"}]
                queried-properties* (atom [])]
-           (with-redefs [db-async/<get-property-values (fn [property-ident]
-                                                         (swap! queried-properties* conj property-ident)
-                                                         (p/resolved existing-values))
-                         db-async/<get-tag-objects (fn [_repo _class-id]
-                                                     (p/resolved []))]
-             (-> (#'property-value/<load-initial-node-choices "repo" property (:logseq.property/classes property))
-                 (p/then (fn [result]
-                           (is (= [:user.property/p1] @queried-properties*))
-                           (is (= existing-values result))
-                           (done)))
-                 (p/catch (fn [error]
-                            (is false (str error))
-                            (done))))))))
+           (-> (#'property-value/<load-initial-node-choices
+                "repo"
+                property
+                (:logseq.property/classes property)
+                (fn [property-ident]
+                  (swap! queried-properties* conj property-ident)
+                  (p/resolved existing-values))
+                (fn [_repo _class-id]
+                  (p/resolved [])))
+               (p/then (fn [result]
+                         (is (= [:user.property/p1] @queried-properties*))
+                         (is (= existing-values result))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest load-initial-node-choices-loads-scoped-tag-objects-test
+  (async done
+         (let [property {:db/ident :user.property/p1
+                         :logseq.property/type :node}
+               classes [{:db/id 10
+                         :db/ident :user.class/Topic}
+                        {:db/id 11
+                         :db/ident :user.class/Task}]
+               topic-choices [{:db/id 100
+                               :block/title "Topic"}]
+               task-choices [{:db/id 101
+                              :block/title "Task"}]
+               queried-classes* (atom [])]
+           (-> (#'property-value/<load-initial-node-choices
+                "repo"
+                property
+                classes
+                (fn [_property-ident]
+                  (p/resolved []))
+                (fn [_repo class-id]
+                  (swap! queried-classes* conj class-id)
+                  (p/resolved
+                   (case class-id
+                     10 topic-choices
+                     11 task-choices))))
+               (p/then (fn [result]
+                         (is (= [10 11] @queried-classes*))
+                         (is (= (concat topic-choices task-choices) result))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

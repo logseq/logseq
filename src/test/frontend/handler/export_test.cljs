@@ -1,8 +1,13 @@
 (ns frontend.handler.export-test
-  (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
+  (:require ["/frontend/utils" :as browser-utils]
+            [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
+            [datascript.core :as d]
             [electron.ipc :as ipc]
+            [frontend.common.idb :as idb]
             [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
@@ -12,6 +17,8 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.util :as util]
+            [frontend.worker.export :as worker-export]
+            [logseq.db.sqlite.build :as sqlite-build]
             [promesa.core :as p]))
 
 (def test-files
@@ -89,17 +96,54 @@
          :build/properties {:logseq.property.node/display-type :code
                             :logseq.property.code/lang "clojure"}}]}]))
 
+(defn- load-export-test-files!
+  []
+  (let [{:keys [init-tx block-props-tx]}
+        (sqlite-build/build-blocks-tx {:pages-and-blocks test-files
+                                       :auto-create-ontology? true})
+        init-index (map #(select-keys % [:block/uuid]) init-tx)]
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 (concat init-index init-tx block-props-tx))))
+
 (use-fixtures :once
   {:before (fn []
-             (async done
-                    (test-helper/start-test-db!)
-                    (p/let [_ (test-helper/load-test-files test-files)]
-                      (done))))
+             (test-helper/start-test-db!)
+             (load-export-test-files!))
    :after test-helper/destroy-test-db!})
 
 (use-fixtures :each
   {:before (fn []
              (state/set-current-repo! test-helper/test-db))})
+
+(defn- <export-blocks-as-markdown
+  [root-block-uuids-or-page-uuid options]
+  (p/with-redefs [state/<invoke-db-worker
+                  (fn [api repo & args]
+                    (case api
+                      :thread-api/export-get-blocks-data
+                      (let [[root-block-uuids-or-page-uuid opts content-config] args]
+                        (p/resolved
+                         (worker-export/get-blocks-export-data
+                          (conn/get-db repo)
+                          root-block-uuids-or-page-uuid
+                          opts
+                          content-config)))
+
+                      :thread-api/export-blocks-as-format
+                      (let [[root-block-uuids-or-page-uuid format-type options content-config] args]
+                        (p/resolved
+                         (worker-export/export-blocks-as-format
+                          (conn/get-db repo)
+                          root-block-uuids-or-page-uuid
+                          format-type
+                          options
+                          content-config)))
+
+                      (throw (ex-info "Unexpected worker API" {:api api}))))]
+    (export-text/export-blocks-as-markdown
+     (state/get-current-repo)
+     root-block-uuids-or-page-uuid
+     options)))
 
 (deftest export-sqlite-db-on-electron-uses-worker-file-export
   (async done
@@ -241,45 +285,205 @@
              (set! notification/show! original-notification-show!)
              (done)))))))
 
+(deftest auto-db-backup-reads-backup-folder-through-worker-test
+  (async done
+    (let [repo "logseq_db_backup_worker"
+          worker-calls (atom [])
+          intervals (atom [])
+          previous-interval @export/*backup-interval
+          original-web-platform? util/web-platform?
+          original-capacitor? util/capacitor?
+          original-invoke-db-worker state/<invoke-db-worker
+          original-set-interval js/setInterval
+          original-clear-interval js/clearInterval]
+      (reset! export/*backup-interval nil)
+      (set! util/web-platform? true)
+      (set! util/capacitor? (constantly false))
+      (set! state/<invoke-db-worker
+            (fn [api repo' key]
+              (swap! worker-calls conj [api repo' key])
+              (p/resolved "Backups")))
+      (set! js/setInterval
+            (fn [f ms]
+              (swap! intervals conj [f ms])
+              :interval-id))
+      (set! js/clearInterval
+            (fn [_] nil))
+      (letfn [(cleanup! []
+                (reset! export/*backup-interval previous-interval)
+                (set! util/web-platform? original-web-platform?)
+                (set! util/capacitor? original-capacitor?)
+                (set! state/<invoke-db-worker original-invoke-db-worker)
+                (set! js/setInterval original-set-interval)
+                (set! js/clearInterval original-clear-interval)
+                (done))]
+        (try
+          (let [result (export/auto-db-backup! repo)
+                result (if (p/promise? result)
+                         result
+                         (p/resolved result))]
+          (-> result
+              (p/then
+               (fn [_]
+                 (is (= [[:thread-api/get-key-value repo :logseq.kv/graph-backup-folder]]
+                        @worker-calls))
+                 (is (= 1 (count @intervals)))
+                 (is (= (* 1 60 60 1000)
+                        (second (first @intervals))))
+                 (is (= :interval-id @export/*backup-interval))))
+              (p/catch
+               (fn [error]
+                 (is false (str error))))
+              (p/finally cleanup!)))
+          (catch :default error
+            (is false (str error))
+            (cleanup!)))))))
+
+(deftest choose-backup-folder-persists-folder-through-worker-test
+  (async done
+    (let [repo "logseq_db_backup_worker"
+          handle #js {:name "Backups"}
+          idb-call (atom nil)
+          worker-call (atom nil)
+          original-open-directory browser-utils/openDirectory
+          original-idb-set-item! idb/set-item!
+          original-invoke-db-worker state/<invoke-db-worker
+          original-db-transact! db/transact!]
+      (set! browser-utils/openDirectory
+            (fn [_opts]
+              (p/resolved #js [handle])))
+      (set! idb/set-item!
+            (fn [key value]
+              (reset! idb-call [key value])
+              nil))
+      (set! state/<invoke-db-worker
+            (fn [& args]
+              (reset! worker-call args)
+              (p/resolved nil)))
+      (set! db/transact!
+            (fn [& _]
+              (throw (js/Error. "renderer DB should not persist graph backup folder"))))
+      (letfn [(cleanup! []
+                (set! browser-utils/openDirectory original-open-directory)
+                (set! idb/set-item! original-idb-set-item!)
+                (set! state/<invoke-db-worker original-invoke-db-worker)
+                (set! db/transact! original-db-transact!)
+                (done))]
+        (-> (export/choose-backup-folder repo)
+            (p/then
+             (fn [result]
+               (is (= ["Backups" handle] result))
+               (is (= [(str "handle/" (js/btoa repo) "/Backups") handle]
+                      @idb-call))
+               (is (= [:thread-api/transact
+                       repo
+                       [{:db/ident :logseq.kv/graph-backup-folder
+                         :kv/value "Backups"}]
+                       nil
+                       nil]
+                      @worker-call))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test
+  (async done
+    (let [repo "logseq_db_backup_worker"
+          intervals (atom [])
+          previous-interval @export/*backup-interval
+          original-web-platform? util/web-platform?
+          original-capacitor? util/capacitor?
+          original-invoke-db-worker state/<invoke-db-worker
+          original-set-interval js/setInterval
+          original-clear-interval js/clearInterval]
+      (reset! export/*backup-interval nil)
+      (set! util/web-platform? true)
+      (set! util/capacitor? (constantly false))
+      (set! state/<invoke-db-worker
+            (fn [api repo' key]
+              (is (= [:thread-api/get-key-value repo :logseq.kv/graph-backup-folder]
+                     [api repo' key]))
+              (p/resolved nil)))
+      (set! js/setInterval
+            (fn [& args]
+              (swap! intervals conj args)
+              :interval-id))
+      (set! js/clearInterval
+            (fn [_] nil))
+      (letfn [(cleanup! []
+                (reset! export/*backup-interval previous-interval)
+                (set! util/web-platform? original-web-platform?)
+                (set! util/capacitor? original-capacitor?)
+                (set! state/<invoke-db-worker original-invoke-db-worker)
+                (set! js/setInterval original-set-interval)
+                (set! js/clearInterval original-clear-interval)
+                (done))]
+        (try
+          (let [result (export/auto-db-backup! repo)
+                result (if (p/promise? result)
+                         result
+                         (p/resolved result))]
+          (-> result
+              (p/then
+               (fn [_]
+                 (is (empty? @intervals))
+                 (is (nil? @export/*backup-interval))))
+              (p/catch
+               (fn [error]
+                 (is false (str error))))
+              (p/finally cleanup!)))
+          (catch :default error
+            (is false (str error))
+            (cleanup!)))))))
+
 (deftest export-blocks-as-markdown-without-properties
-  (are [expect block-uuid-s]
-       (= expect
-          (string/trim (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)]
-                                                              {:remove-options #{:property}})))
-    (string/trim "
+  (async done
+    (p/let [first-content (<export-blocks-as-markdown
+                           [(uuid "61506710-484c-46d5-9983-3d1651ec02c8")]
+                           {:remove-options #{:property}})
+            second-content (<export-blocks-as-markdown
+                            [(uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616")]
+                            {:remove-options #{:property}})]
+      (is (= (string/trim "
 - 1
 	- 2
 		- 3
 		- [[3]]")
-    "61506710-484c-46d5-9983-3d1651ec02c8"
+             (string/trim first-content)))
 
-    (string/trim "
+      (is (= (string/trim "
 - 3
 	- 1
 		- 2
 			- 3
 			- [[3]]
 	- 4")
-    "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
+             (string/trim second-content)))
+      (done))))
 
 (deftest export-blocks-as-markdown-with-properties
-  (is (= (string/trim "
+  (async done
+    (p/let [with-properties (<export-blocks-as-markdown
+                             [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+                             {:remove-options #{}})
+            without-properties (<export-blocks-as-markdown
+                                [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+                                {:remove-options #{:property}})]
+      (is (= (string/trim "
 - issue
   reproducible-steps:: Switch to a password protected graph")
-         (string/trim
-          (export-text/export-blocks-as-markdown
-           (state/get-current-repo)
-           [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
-           {:remove-options #{}}))))
-  (is (= "- issue"
-         (string/trim
-          (export-text/export-blocks-as-markdown
-           (state/get-current-repo)
-           [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
-           {:remove-options #{:property}})))))
+             (string/trim with-properties)))
+      (is (= "- issue"
+             (string/trim without-properties)))
+      (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
-  (is (= (string/trim "
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [(uuid "9dfeae55-c426-4957-8de9-40ff71c622f0")]
+                     {:remove-options #{:property}})]
+      (is (= (string/trim "
 - ## Heading block
 - > quote line 1
   > quote line 2
@@ -287,34 +491,42 @@
   (println \"hi\")
   (+ 1 2)
   ```")
-         (string/trim
-          (export-text/export-blocks-as-markdown
-           (state/get-current-repo)
-           [(uuid "9dfeae55-c426-4957-8de9-40ff71c622f0")]
-           {:remove-options #{:property}})))))
+             (string/trim content)))
+      (done))))
 
 (deftest export-blocks-as-markdown-level<N
-  (are [expect block-uuid-s]
-       (= expect (string/trim (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)]
-                                                                     {:remove-options #{:property}
-                                                                      :other-options {:keep-only-level<=N 2}})))
-    (string/trim "
+  (async done
+    (p/let [first-content (<export-blocks-as-markdown
+                           [(uuid "61506710-484c-46d5-9983-3d1651ec02c8")]
+                           {:remove-options #{:property}
+                            :other-options {:keep-only-level<=N 2}})
+            second-content (<export-blocks-as-markdown
+                            [(uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616")]
+                            {:remove-options #{:property}
+                             :other-options {:keep-only-level<=N 2}})]
+      (is (= (string/trim "
 - 1
 	- 2")
-    "61506710-484c-46d5-9983-3d1651ec02c8"
+             (string/trim first-content)))
 
-    (string/trim "
+      (is (= (string/trim "
 - 3
 	- 1
 	- 4")
-    "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
+             (string/trim second-content)))
+      (done))))
 
 (deftest export-blocks-as-markdown-newline-after-block
-  (are [expect block-uuid-s]
-       (= expect (string/trim (export-text/export-blocks-as-markdown (state/get-current-repo) [(uuid block-uuid-s)]
-                                                                     {:remove-options #{:property}
-                                                                      :other-options {:newline-after-block true}})))
-    (string/trim "
+  (async done
+    (p/let [first-content (<export-blocks-as-markdown
+                           [(uuid "61506710-484c-46d5-9983-3d1651ec02c8")]
+                           {:remove-options #{:property}
+                            :other-options {:newline-after-block true}})
+            second-content (<export-blocks-as-markdown
+                            [(uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616")]
+                            {:remove-options #{:property}
+                             :other-options {:newline-after-block true}})]
+      (is (= (string/trim "
 - 1
 
 	- 2
@@ -322,8 +534,8 @@
 		- 3
 
 		- [[3]]")
-    "61506710-484c-46d5-9983-3d1651ec02c8"
-    (string/trim "
+             (string/trim first-content)))
+      (is (= (string/trim "
 - 3
 
 	- 1
@@ -335,47 +547,48 @@
 			- [[3]]
 
 	- 4")
-    "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
+             (string/trim second-content)))
+      (done))))
 
 (deftest export-blocks-as-markdown-open-blocks-only
-  (testing "collapsed descendants are excluded when :open-blocks-only is enabled"
-    (is (= (string/trim "
+  (async done
+    (testing "collapsed descendants are excluded when :open-blocks-only is enabled"
+      (p/let [open-content (<export-blocks-as-markdown
+                            [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
+                            {:remove-options #{:property}
+                             :other-options {:open-blocks-only true}})
+              all-content (<export-blocks-as-markdown
+                           [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
+                           {:remove-options #{:property}
+                            :other-options {:open-blocks-only false}})]
+        (is (= (string/trim "
 - collapsed-parent")
-           (string/trim
-            (export-text/export-blocks-as-markdown
-             (state/get-current-repo)
-             [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
-             {:remove-options #{:property}
-              :other-options {:open-blocks-only true}}))))
-    (is (= (string/trim "
+               (string/trim open-content)))
+        (is (= (string/trim "
 - collapsed-parent
 	- hidden-child")
-           (string/trim
-            (export-text/export-blocks-as-markdown
-             (state/get-current-repo)
-             [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
-             {:remove-options #{:property}
-              :other-options {:open-blocks-only false}}))))))
+               (string/trim all-content)))
+        (done)))))
 
 (deftest export-page-as-markdown-open-blocks-only
-  (testing "page export also excludes collapsed descendants when :open-blocks-only is enabled"
-    (is (= (string/trim "
+  (async done
+    (testing "page export also excludes collapsed descendants when :open-blocks-only is enabled"
+      (p/let [open-content (<export-blocks-as-markdown
+                            [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
+                            {:remove-options #{:property}
+                             :other-options {:open-blocks-only true}})
+              all-content (<export-blocks-as-markdown
+                           [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
+                           {:remove-options #{:property}
+                            :other-options {:open-blocks-only false}})]
+        (is (= (string/trim "
 - collapsed-parent")
-           (string/trim
-            (export-text/export-blocks-as-markdown
-             (state/get-current-repo)
-             [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
-             {:remove-options #{:property}
-              :other-options {:open-blocks-only true}}))))
-    (is (= (string/trim "
+               (string/trim open-content)))
+        (is (= (string/trim "
 - collapsed-parent
 	- hidden-child")
-           (string/trim
-            (export-text/export-blocks-as-markdown
-             (state/get-current-repo)
-             [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
-             {:remove-options #{:property}
-              :other-options {:open-blocks-only false}}))))))
+               (string/trim all-content)))
+        (done)))))
 
 (deftest-async export-files-as-markdown
   (p/do!

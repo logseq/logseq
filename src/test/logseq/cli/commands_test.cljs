@@ -3965,7 +3965,7 @@
                                                                       []))
                                                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
                                                                                      (reset! ops* ops)
-                                                                                     nil)
+                                                                                     {:result true})
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
                  (p/let [result (commands/execute {:type :remove-page :repo "demo" :page "Home"} {})]
                    (is (= :ok (:status result)))
