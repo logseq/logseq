@@ -20,6 +20,17 @@
       (finally
         (reset! worker-state/*state state-prev)))))
 
+(deftest online?-treats-uninitialized-thread-online-event-as-online
+  (let [state-prev @worker-state/*state]
+    (try
+      (with-redefs [platform/current (fn []
+                                       {:env {:runtime :web}})]
+        (reset! worker-state/*state (with-online-event nil))
+        (testing "an uninitialized mobile network status should not block sync uploads"
+          (is (true? (worker-state/online?)))))
+      (finally
+        (reset! worker-state/*state state-prev)))))
+
 (deftest online?-node-runtime-does-not-require-main-thread-online-event
   (let [state-prev @worker-state/*state]
     (try

@@ -3,7 +3,7 @@
             [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [electron.backup-file :as backup-file]
-            [electron.db :as electron-db]
+            [electron.db :as electron-store]
             [electron.db-worker :as db-worker]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
@@ -28,7 +28,7 @@
 (deftest ensure-graph-dir-uses-encoded-directory-name
   (let [graphs-dir (node-helper/create-tmp-dir "electron-db-graph-dir")]
     (with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)]
-      (let [graph-dir (electron-db/ensure-graph-dir! "logseq_db_foo/bar")]
+      (let [graph-dir (electron-store/ensure-graph-dir! "logseq_db_foo/bar")]
         (is (= (node-path/join graphs-dir "foo~2Fbar") graph-dir))
         (is (fs/existsSync graph-dir))))))
 
@@ -42,7 +42,7 @@
         (fs/writeFileSync db-path payload))
       (is (fs/existsSync (node-path/join graphs-dir "foo~2Fbar" "db.sqlite")))
       (is (= "db-data"
-             (.toString (electron-db/get-db db-name)))))))
+             (.toString (electron-store/get-db db-name)))))))
 
 (defn- read-edn-file
   [file-path]
@@ -77,7 +77,7 @@
           (.exec source-db "create table kvs (addr text primary key, content text);")
           (.exec source-db "insert into kvs (addr, content) values ('a', 'alpha')")
           (.close source-db))
-        (-> (p/let [_ (electron-db/backup-db! db-name nil)
+        (-> (p/let [_ (electron-store/backup-db! db-name nil)
                     backups (graph-backup/list-backups graphs-dir db-name)
                     backup-path (graph-backup/backup-db-path graphs-dir db-name (:name (first backups)))
                     backup-db (new DatabaseSync backup-path)
@@ -115,7 +115,7 @@
                                                                               :content (.toString content)
                                                                               :opts opts})
                                                     nil)]
-            (p/let [_ (electron-db/backup-db! db-name nil)]
+            (p/let [_ (electron-store/backup-db! db-name nil)]
               (is (= 1 (count @sqlite-calls)))
               (is (= db-path (first (first @sqlite-calls))))
               (is (empty? @backup-calls))
@@ -152,7 +152,7 @@
                                                                               :content (.toString content)
                                                                               :opts opts})
                                                     nil)]
-            (p/let [_ (electron-db/backup-db-with-sqlite-backup!
+            (p/let [_ (electron-store/backup-db-with-sqlite-backup!
                        db-name
                        {:force-backup? true
                         :sqlite-backup! (fn [src dst]
@@ -192,7 +192,7 @@
                           backup-file/backup-file (fn [& args]
                                                     (swap! backup-calls conj args)
                                                     (p/resolved nil))]
-            (p/let [result (electron-db/backup-db-via-worker! db-name 7 {:force-backup? true})
+            (p/let [result (electron-store/backup-db-via-worker! db-name 7 {:force-backup? true})
                     backups (graph-backup/list-backups graphs-dir db-name)
                     backup-name (:name (first backups))
                     final-db-path (graph-backup/backup-db-path graphs-dir db-name backup-name)
@@ -229,8 +229,8 @@
                                                  (swap! worker-calls conj [:invoke runtime' method args])
                                                  (fs/writeFileSync (second args) "worker-copy" "utf8")
                                                  (p/resolved {:path (second args)}))]
-            (p/let [first-result (electron-db/backup-db-via-worker! db-name 7 {})
-                    second-result (electron-db/backup-db-via-worker! db-name 7 {})]
+            (p/let [first-result (electron-store/backup-db-via-worker! db-name 7 {})
+                    second-result (electron-store/backup-db-via-worker! db-name 7 {})]
               (is (= true (:created? first-result)))
               (is (= {:backup-name nil
                       :path nil
@@ -260,7 +260,7 @@
                                                  (swap! worker-calls conj [:invoke runtime' method args])
                                                  (fs/writeFileSync (second args) "worker-copy" "utf8")
                                                  (p/resolved {:path (second args)}))]
-            (p/let [result (electron-db/backup-db-via-worker! db-name 7 {})
+            (p/let [result (electron-store/backup-db-via-worker! db-name 7 {})
                     backup-names (set (map :name (graph-backup/list-backups graphs-dir db-name)))]
               (is (= true (:created? result)))
               (is (not (contains? backup-names "auto-0")))
@@ -291,7 +291,7 @@
                           backup-file/backup-file (fn [& args]
                                                     (swap! backup-calls conj args)
                                                     (p/resolved nil))]
-            (p/let [result (electron-db/export-db-via-worker! db-name 7 dst-path)]
+            (p/let [result (electron-store/export-db-via-worker! db-name 7 dst-path)]
               (is (= {:path dst-path} result))
               (is (= "sqlite-copy" (fs/readFileSync dst-path "utf8")))
               (is (= [[:ensure-runtime db-name 7]
@@ -315,7 +315,7 @@
                           cli-transport/invoke (fn [_runtime method args]
                                                  (swap! worker-calls conj [:invoke method args])
                                                  (p/resolved {:path (second args)}))]
-            (p/let [result (electron-db/export-db-to-export-dir-via-worker!
+            (p/let [result (electron-store/export-db-to-export-dir-via-worker!
                             db-name 7 "../export.sqlite")]
               (let [expected-path (node-path/join graphs-dir "demo" "export" "export.sqlite")]
                 (is (= expected-path (:path result)))
@@ -334,20 +334,20 @@
           timer-id #js {:id 1}
           original-set-interval js/setInterval
           original-clear-interval js/clearInterval]
-      (electron-db/reset-auto-backup!)
+      (electron-store/reset-auto-backup!)
       (set! js/setInterval (fn [f ms]
                              (swap! set-interval-calls conj [f ms])
                              timer-id))
       (set! js/clearInterval (fn [id]
                                (swap! clear-interval-calls conj id)))
-      (-> (p/with-redefs [electron-db/backup-db-via-worker! (fn [repo window-id _]
+      (-> (p/with-redefs [electron-store/backup-db-via-worker! (fn [repo window-id _]
                                                               (swap! backup-calls conj [repo window-id])
                                                               (p/resolved nil))]
-            (p/let [_ (electron-db/sync-auto-backup-repo! 1 "logseq_db_demo")
-                    _ (electron-db/sync-auto-backup-repo! 2 "logseq_db_demo")
+            (p/let [_ (electron-store/sync-auto-backup-repo! 1 "logseq_db_demo")
+                    _ (electron-store/sync-auto-backup-repo! 2 "logseq_db_demo")
                     _ ((ffirst @set-interval-calls))
-                    _ (electron-db/sync-auto-backup-repo! 1 nil)
-                    _ (electron-db/sync-auto-backup-repo! 2 nil)]
+                    _ (electron-store/sync-auto-backup-repo! 1 nil)
+                    _ (electron-store/sync-auto-backup-repo! 2 nil)]
               (is (= 1 (count @set-interval-calls)))
               (is (= [timer-id] @clear-interval-calls))
               (is (= [3600000] (mapv second @set-interval-calls)))
@@ -357,5 +357,5 @@
           (p/finally (fn []
                        (set! js/setInterval original-set-interval)
                        (set! js/clearInterval original-clear-interval)
-                       (electron-db/reset-auto-backup!)
+                       (electron-store/reset-auto-backup!)
                        (done)))))))

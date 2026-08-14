@@ -46,3 +46,14 @@
        (fn []
          (fs-node/unlinkSync some-file)
          (fs-node/rmdirSync dir))))))
+
+(deftest-async write-plain-text-file-propagates-write-failure-test
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
+  (let [dir (node-path/resolve (test-node-helper/create-tmp-dir))]
+    (-> (fs/write-plain-text-file! nil dir dir "content" {})
+        (p/then (fn [_]
+                  (is false "Writing to a directory must reject.")))
+        (p/catch (fn [error]
+                   (is (some? error))))
+        (p/finally #(fs-node/rmdirSync dir)))))

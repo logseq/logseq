@@ -1,5 +1,6 @@
 (ns frontend.components.plugins
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.plugins-settings :as plugins-settings]
@@ -13,6 +14,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.rfx :as rfx]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -81,9 +83,10 @@
         *cursor (hooks/use-memo #(atom 0) [])
         *total (hooks/use-memo #(atom 0) [])
         [cursor] (hooks/use-atom *cursor)
-        mode (state/use-sub :ui/theme)
-        all-themes (state/use-sub :plugin/installed-themes)
-        selected (state/use-sub :plugin/selected-theme)]
+        mode (rfx/use-sub [:ui/theme])
+        all-themes (rfx/use-sub [:plugin/installed-themes])
+        installed-plugins (rfx/use-sub [:plugin/installed-plugins])
+        selected (rfx/use-sub [:plugin/selected-theme])]
     (hooks/use-effect!
      (fn []
        (let [mode-title (t (case mode
@@ -123,7 +126,7 @@
       (fn [idx opt]
         (let [current-selected? (:selected opt)
               group-first?      (:group-first opt)
-              plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+              plg               (get installed-plugins (keyword (:pid opt)))]
           [:div
            {:key (str idx (:name opt))}
            (when (and group-first? (not= idx 0)) [:hr.my-2])
@@ -191,7 +194,7 @@
 
 (hsx/defc local-markdown-display
   []
-  (let [[content item] (state/use-sub :plugin/active-readme)]
+  (let [[content item] (rfx/use-sub [:plugin/active-readme])]
     [:div.cp__plugins-details
      {:on-click (fn [^js/MouseEvent e]
                   (when-let [target (.-target e)]
@@ -440,9 +443,8 @@
      :auto-focus true
      :on-key-down (fn [^js e]
                     (when (= 27 (.-keyCode e))
-                      (util/stop e)
-                      (if (string/blank? search-key)
-                        (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
+                      (when-not (string/blank? search-key)
+                        (util/stop e)
                         (reset! *search-key nil))))
      :on-change #(let [^js target (.-target %)]
                    (reset! *search-key (some-> (.-value target) (string/triml))))
@@ -457,53 +459,75 @@
    :intent "link"
    :target "_blank"))
 
-(hsx/defc user-proxy-settings-container
+(hsx/defc ^:large-vars/cleanup-todo user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
-  (let [type        (or (not-empty type) (not-empty protocol) "system")
+  (let [selected-type    (or (not-empty (:type agent-opts)) (not-empty protocol) (not-empty type) "system")
         [opts set-opts!] (hooks/use-state agent-opts)
         [testing? set-testing?!] (hooks/use-state false)
-        *test-input (hooks/create-ref)
-        disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
+        current-type     (or (:type opts) selected-type)
+        disabled?        (or (= current-type "system") (= current-type "direct"))
+        needs-host-port? (or (= current-type "http") (= current-type "socks5"))
+        host-port-valid? (and (not (string/blank? (:host opts)))
+                              (not (string/blank? (:port opts))))
+        normalize-opts   (fn [{test-url :test :keys [host port type]}]
+                           (let [type (or type selected-type)
+                                 test-url (util/trim-safe test-url)]
+                             (cond-> {:type type
+                                      :test test-url}
+                               (contains? #{"http" "socks5"} type)
+                               (assoc :protocol type
+                                      :host (util/trim-safe host)
+                                      :port (util/normalize-port-input port)))))
+        validate!        (fn []
+                           (when (and needs-host-port? (not host-port-valid?))
+                             (notification/show! (t :plugin.proxy/host-port-required) :error)
+                             true))]
     [:div.cp__settings-network-proxy-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings.advanced/network-proxy)]
-     [:div.p-2
-      [:p [:label [:strong (t :ui/type)]
-             (ui/select [{:label (t :plugin.proxy/system) :value "system" :selected (= type "system")}
-                         {:label (t :plugin.proxy/direct) :value "direct" :selected (= type "direct")}
-                         {:label "HTTP" :value "http" :selected (= type "http")}
-                         {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
-                      (fn [_e value]
-                        (set-opts! (assoc opts :type value :protocol value))))]]
-      [:p.flex
-       [:label.pr-4
-        {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :ui/host)]
-        [:input.form-input.is-small
-         {:value     (:host opts)
-          :disabled  disabled?
-          :on-change #(set-opts!
-                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+     [:div.flex.flex-col.gap-4.p-2
+      [:div.flex.items-center.gap-3
+       [:span.shrink-0.font-medium.text-sm (t :ui/type)]
+       (shui/select
+        {:value current-type
+         :on-value-change (fn [v] (set-opts! (assoc opts :type v :protocol v)))}
+        (shui/select-trigger {:class "h-8 flex-1"} (shui/select-value {}))
+        (shui/select-content
+         (shui/select-group
+          (shui/select-item {:value "system"} (t :plugin.proxy/system))
+          (shui/select-item {:value "direct"} (t :plugin.proxy/direct))
+          (shui/select-item {:value "http"} "HTTP")
+          (shui/select-item {:value "socks5"} "SOCKS5"))))]
 
-       [:label
-        {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :ui/port)]
+      [:div.flex.items-end.gap-3
+       [:div.flex.flex-col.gap-1.flex-1.min-w-0
+        [:strong.text-sm.font-medium {:class (when disabled? "opacity-50")} (t :ui/host)]
         [:input.form-input.is-small
-         {:value     (:port opts) :type "number" :min 1 :max 65535
+         {:style     {:marginTop 0}
+          :value     (or (:host opts) "")
           :disabled  disabled?
-          :on-change #(set-opts!
-                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
-
-      [:hr]
-      [:p.flex.items-center.space-x-2
-       [:span.w-60
+          :on-change #(set-opts! (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+       [:div.flex.flex-col.gap-1.flex-none {:class "w-28"}
+        [:strong.text-sm.font-medium {:class (when disabled? "opacity-50")} (t :ui/port)]
         [:input.form-input.is-small
-         {:ref         *test-input
-          :list        "proxy-test-url-datalist"
+         {:class     "text-right"
+          :style     {:marginTop 0}
+          :value     (or (:port opts) "")
+          :type      "text"
+          :inputMode "numeric"
+          :pattern   "[0-9]*"
+          :disabled  disabled?
+          :on-change #(set-opts! (assoc opts :port (util/sanitize-port-input (util/evalue %))))
+          :on-blur   #(set-opts! (assoc opts :port (util/normalize-port-input (util/evalue %))))}]]]
+
+      [:hr.my-2]
+      [:div.flex.items-center.gap-3
+       [:div.flex-1
+        [:input.form-input.is-small.w-full
+         {:list        "proxy-test-url-datalist"
           :type        "url"
           :placeholder "https://"
-          :on-change   #(set-opts!
-                         (assoc opts :test (util/trim-safe (util/evalue %))))
-          :value       (:test opts)}]
+          :on-change   #(set-opts! (assoc opts :test (util/trim-safe (util/evalue %))))
+          :value       (or (:test opts) "")}]
         [:datalist#proxy-test-url-datalist
          [:option "https://api.logseq.com/logseq/version"]
          [:option "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing"]
@@ -513,24 +537,31 @@
 
        (ui/button (if testing? (ui/loading (t :plugin.proxy/testing)) (t :plugin.proxy/test-url))
                   :intent "logseq"
-                  :on-click #(let [val (util/trim-safe (.-value (hooks/deref *test-input)))]
+                  :on-click #(let [normalized-opts (normalize-opts opts)
+                                   val (util/trim-safe (:test normalized-opts))]
                                (when (and (not testing?) (not (string/blank? val)))
-                                 (set-testing?! true)
-                                 (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
-                                       (js->clj result :keywordize-keys true))
-                                     (p/then (fn [{:keys [code response-ms]}]
-                                               (notification/clear! :proxy-net-check)
-                                               (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
-                                     (p/catch (fn [e]
-                                                (notification/show! (str e) :error false :proxy-net-check)))
-                                     (p/finally (fn [] (set-testing?! false)))))))]
+                                 (when-not (validate!)
+                                   (set-testing?! true)
+                                   (-> (p/let [result (ipc/ipc :testProxyUrl val normalized-opts)]
+                                         (js->clj result :keywordize-keys true))
+                                       (p/then (fn [{:keys [code response-ms]}]
+                                                 (notification/clear! :proxy-net-check)
+                                                 (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
+                                       (p/catch (fn [e]
+                                                  (notification/show! (str e) :error false :proxy-net-check)))
+                                       (p/finally (fn [] (set-testing?! false))))))))]
 
-      [:p.pt-2
+      [:div.pt-2
        (ui/button (t :ui/save)
                   :on-click (fn []
-                              (p/let [_ (ipc/ipc :setProxy opts)]
-                                (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
-
+                              (let [normalized-opts (normalize-opts opts)]
+                                (when-not (validate!)
+                                  (state/set-state! [:electron/user-cfgs :settings/agent] normalized-opts)
+                                  (shui/dialog-close!)
+                                  (-> (ipc/ipc :setProxy normalized-opts)
+                                      (p/catch (fn [e]
+                                                 (state/set-state! [:electron/user-cfgs :settings/agent] agent-opts)
+                                                 (notification/show! (str e) :error))))))))]]]))
 (hsx/defc load-from-web-url-container
   []
   (let [[url set-url!] (hooks/use-state "http://127.0.0.1:8080/")
@@ -693,7 +724,7 @@
     [:div.p-4.flex.flex-col.gap-3
      [:h1.text-xl.font-bold (t :plugin/bulk-remove-disabled-title)]
      (if (seq plugins)
-       [:<>
+      [:<>
         [:p.opacity-70.text-sm (t :plugin/bulk-remove-disabled-desc)]
         [:ul.max-h-96.overflow-y-auto.flex.flex-col.gap-2.ml-0
          (for [{:keys [id name title version icon]} plugins
@@ -1037,14 +1068,13 @@
   []
   (let [*root-ref          (hooks/use-ref nil)
         *list-node-ref     (hooks/use-ref nil)
-        pkgs               (->> (state/use-sub :plugin/marketplace-pkgs)
-                                (remove (fn [pkg] (false? (:supportsDB pkg)))))
-        stats              (state/use-sub :plugin/marketplace-stats)
-        installed-plugins  (state/use-sub :plugin/installed-plugins)
-        installing         (state/use-sub :plugin/installing)
-        online?            (state/use-sub :network/online?)
-        develop-mode?      (state/use-sub :ui/developer-mode?)
-        agent-opts         (state/use-sub [:electron/user-cfgs :settings/agent])
+        pkgs               (rfx/use-sub [:plugin/marketplace-pkgs])
+        stats              (rfx/use-sub [:plugin/marketplace-stats])
+        installed-plugins  (rfx/use-sub [:plugin/installed-plugins])
+        installing         (rfx/use-sub [:plugin/installing])
+        online?            (rfx/use-sub [:network/online?])
+        develop-mode?      (rfx/use-sub [:ui/developer-mode?])
+        agent-opts         (rfx/use-sub [:electron/user-cfgs :settings/agent])
         *search-key        (hooks/use-memo #(atom "") [])
         *category          (hooks/use-memo #(atom :plugins) [])
         *sort-by           (hooks/use-memo #(atom :default) []) ;; default (weighted) / downloads / stars / letters / updates / date-added
@@ -1176,12 +1206,12 @@
   []
   (let [*root-ref             (hooks/use-ref nil)
         *list-node-ref        (hooks/use-ref nil)
-        installed-plugins'    (vals (state/use-sub [:plugin/installed-plugins]))
-        updating              (state/use-sub :plugin/installing)
-        develop-mode?         (state/use-sub :ui/developer-mode?)
-        selected-unpacked-pkg (state/use-sub :plugin/selected-unpacked-pkg)
-        coming-updates        (state/use-sub :plugin/updates-coming)
-        agent-opts            (state/use-sub [:electron/user-cfgs :settings/agent])
+        installed-plugins'    (vals (rfx/use-sub [:plugin/installed-plugins]))
+        updating              (rfx/use-sub [:plugin/installing])
+        develop-mode?         (rfx/use-sub [:ui/developer-mode?])
+        selected-unpacked-pkg (rfx/use-sub [:plugin/selected-unpacked-pkg])
+        coming-updates        (rfx/use-sub [:plugin/updates-coming])
+        agent-opts            (rfx/use-sub [:electron/user-cfgs :settings/agent])
         *filter-by            (hooks/use-memo #(atom :default) [])
         *sort-by              (hooks/use-memo #(atom :default) [])
         *search-key           (hooks/use-memo #(atom "") [])
@@ -1278,9 +1308,9 @@
 (hsx/defc waiting-coming-updates
   []
   (hooks/use-effect! #(state/reset-unchecked-update) [])
-  (let [_            (state/use-sub :plugin/updates-coming)
-        downloading? (state/use-sub :plugin/updates-downloading?)
-        unchecked    (state/use-sub :plugin/updates-unchecked)
+  (let [_            (rfx/use-sub [:plugin/updates-coming])
+        downloading? (rfx/use-sub [:plugin/updates-downloading?])
+        unchecked    (rfx/use-sub [:plugin/updates-unchecked])
         updates      (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
@@ -1469,8 +1499,8 @@
                        {:title [auto-check-for-updates-control]}])
                      (remove nil?)))]
 
-    [:div.toolbar-plugins-manager
-     {:on-pointer-down
+    [:div.toolbar-plugins-manager.flex.items-center
+     {:on-click
       (fn [^js e]
         (shui/popup-show! (.-target e)
                           (fn [{:keys [id]}]
@@ -1491,9 +1521,9 @@
 (hsx/defc hook-ui-items
   "type of :toolbar, :pagebar"
   [type]
-  (let [installed-ui-items (state/use-sub [:plugin/installed-ui-items])
-        pinned-items       (state/use-sub [:plugin/preferences :pinnedToolbarItems])
-        updates-coming     (state/use-sub :plugin/updates-coming)
+  (let [installed-ui-items (rfx/use-sub [:plugin/installed-ui-items])
+        pinned-items       (rfx/use-sub [:plugin/preferences :pinnedToolbarItems])
+        updates-coming     (rfx/use-sub [:plugin/updates-coming])
         toolbar?           (= :toolbar type)
         pinned-items       (and (sequential? pinned-items) (into #{} pinned-items))]
     (when installed-ui-items
@@ -1544,7 +1574,7 @@
                (#(if editor-active?
                    (.add % "is-active")
                    (.remove % "is-active"))))
-       (when-let [cm (hooks/deref *cm)]
+       (when-let [^js cm (hooks/deref *cm)]
          (.refresh cm)
          (.focus cm)
          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
@@ -1553,14 +1583,14 @@
     (hooks/use-effect!
      (fn []
        (let [t (js/setTimeout
-                #(when-let [^js cm (some-> (hooks/deref *el)
-                                           (.closest ".ui-fenced-code-wrap")
-                                           (.querySelector ".CodeMirror")
-                                           (.-CodeMirror))]
-                   (hooks/set-ref! *cm cm)
-                   (doto cm
-                     (.on "change" (fn []
-                                     (some-> cm (.getDoc) (.getValue) (set-content1!))))))
+                #(let [^js el (hooks/deref *el)
+                       ^js wrapper (when el (.closest el ".ui-fenced-code-wrap"))
+                       ^js cm-element (when wrapper (.querySelector wrapper ".CodeMirror"))
+                       ^js cm (when cm-element (.-CodeMirror cm-element))]
+                   (when cm
+                     (hooks/set-ref! *cm cm)
+                     (.on cm "change" (fn []
+                                        (some-> cm (.getDoc) (.getValue) (set-content1!))))))
                   ;; wait for the cm loaded
                 1000)]
          #(js/clearTimeout t)))
@@ -1578,7 +1608,7 @@
        (ui/button (ui/icon "source-code" {:size 14})
                   :on-click #(editor-handler/edit-block! block (count content1)))]
       (when (fn? render)
-        (js/React.createElement render #js {:content content1}))]]))
+        (react/createElement render #js {:content content1}))]]))
 
 (hsx/defc plugins-page
   []
@@ -1704,18 +1734,18 @@
 
 (hsx/defc updates-notifications
   []
-  (let [updates-pending (state/use-sub :plugin/updates-pending)
-        online?         (state/use-sub :network/online?)
-        auto-checking?  (state/use-sub :plugin/updates-auto-checking?)
+  (let [updates-pending (rfx/use-sub [:plugin/updates-pending])
+        online?         (rfx/use-sub [:network/online?])
+        auto-checking?  (rfx/use-sub [:plugin/updates-auto-checking?])
         check-pending?  (boolean (seq updates-pending))]
     (updates-notifications-impl check-pending? auto-checking? online?)))
 
 (hsx/defc focused-settings-content
   [title]
-  (let [focused (state/use-sub :plugin/focused-settings)
+  (let [focused (rfx/use-sub [:plugin/focused-settings])
         [cache set-cache!] (hooks/use-state focused)
-        nav?    (state/use-sub :plugin/navs-settings?)
-        _       (state/use-sub :plugin/installed-plugins)]
+        nav?    (rfx/use-sub [:plugin/navs-settings?])
+        _       (rfx/use-sub [:plugin/installed-plugins])]
     (hooks/use-effect!
      (fn []
        (let [timeout-id (js/setTimeout #(set-cache! focused) 100)]

@@ -550,10 +550,62 @@
                                  :i18n-key :property.validation/cant-set-self-value
                                  :type :error}})))))
 
+(defn- remove-status!
+  [conn block-ids {:keys [preserve-task-tag?]} tx-meta]
+  (let [blocks (keep #(d/entity @conn (->eid %)) block-ids)
+        task-properties (:logseq.property.class/properties
+                         (d/entity @conn :logseq.class/Task))
+        other-task-properties (disj (set (map :db/ident task-properties))
+                                    :logseq.property/status)]
+    (validate-batch-deletion-of-property blocks :logseq.property/status)
+    (when (seq blocks)
+      (let [txs (mapcat
+                 (fn [block]
+                   (let [status (:logseq.property/status block)
+                         direct-status? (contains? (d/pull @conn
+                                                           [:logseq.property/status]
+                                                           (:db/id block))
+                                                   :logseq.property/status)
+                         empty-placeholder? (and direct-status?
+                                                 (= :logseq.property/empty-placeholder
+                                                    (:db/ident status)))
+                         task? (some #(= :logseq.class/Task (:db/ident %))
+                                     (:block/tags block))
+                         status-provided? (or task?
+                                              (block-classes-provide-property?
+                                               @conn block :logseq.property/status))
+                         remove-task? (and task?
+                                           (not empty-placeholder?)
+                                           (not preserve-task-tag?)
+                                           (not-any? #(get block %) other-task-properties))]
+                     (cond
+                       empty-placeholder?
+                       []
+
+                       remove-task?
+                       [[:db/retract (:db/id block) :logseq.property/status]
+                        [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
+
+                       status-provided?
+                       [{:db/id (:db/id block)
+                         :logseq.property/status :logseq.property/empty-placeholder}]
+
+                       direct-status?
+                       [[:db/retract (:db/id block) :logseq.property/status]]
+
+                       :else
+                       [])))
+                 blocks)]
+        (ldb/transact! conn txs tx-meta)))))
+
 (defn batch-remove-property!
-  [conn block-ids property-id]
-  (throw-error-if-read-only-property property-id)
-  (let [block-eids (map ->eid block-ids)
+  ([conn block-ids property-id]
+   (batch-remove-property! conn block-ids property-id {}))
+  ([conn block-ids property-id opts]
+   (throw-error-if-read-only-property property-id)
+   (if (= :logseq.property/status property-id)
+     (remove-status! conn block-ids opts {:outliner-op :batch-remove-property})
+    (let [block-eids (map ->eid block-ids)
         blocks (keep (fn [id] (d/entity @conn id)) block-eids)
         block-id-set (set (map :db/id blocks))]
     (validate-batch-deletion-of-property blocks property-id)
@@ -599,7 +651,7 @@
                    blocks)]
           (when (seq txs)
             (ldb/transact! conn txs
-                           {:outliner-op :batch-remove-property})))))))
+                           {:outliner-op :batch-remove-property})))))))))
 
 (defn- validate-batch-set-property
   [conn block-eids property-id v]
@@ -684,7 +736,7 @@
    (assert property-id "property-id is nil")
    (throw-error-if-read-only-property property-id)
    (if (nil? v)
-     (batch-remove-property! conn block-ids property-id)
+     (batch-remove-property! conn block-ids property-id options)
      (let [block-eids (map ->eid block-ids)
            _ (throw-error-if-batch-alias-targets block-eids property-id)
            _ (validate-batch-set-property conn block-eids property-id v)
@@ -741,7 +793,7 @@
         block (d/entity @conn eid)
         property (d/entity @conn property-id)
         tx-meta {:outliner-op :remove-block-property}]
-    (when-not (= :logseq.property.class/extends property-id)
+    (when-not (contains? #{:logseq.property.class/extends :logseq.property/status} property-id)
       (validate-batch-deletion-of-property [block] property-id))
     (when block
       (cond
@@ -749,10 +801,7 @@
         nil
 
         (= :logseq.property/status property-id)
-        (ldb/transact! conn
-                       [[:db/retract (:db/id block) property-id]
-                        [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
-                       tx-meta)
+        (remove-status! conn [eid] {} tx-meta)
 
         (and (:logseq.property/default-value property)
              (= (:logseq.property/default-value property) (get block property-id)))
@@ -991,32 +1040,83 @@
       (:classes-properties (get-block-classes-properties db eid)))
      (common-util/distinct-by :db/id))))
 
+(defn- schema-or-tag-related-property?
+  [property-id]
+  (let [property-ns (some-> property-id namespace)]
+    (or (= :block/tags property-id)
+        (= "logseq.property.class" property-ns)
+        (contains? db-property/schema-properties property-id))))
+
+(defn- tag-class-page?
+  [db block]
+  (or (= :logseq.class/Tag (:db/ident block))
+      (and db
+           (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Tag) block))))
+
+(defn- bottom-position-property?
+  [_db _block property]
+  (let [property-id (:db/ident property)
+        property-type (:logseq.property/type property)
+        node-many? (and (= :node property-type)
+                        (= :db.cardinality/many (:db/cardinality property)))
+        default-bottom? (and (not (contains? #{:url :asset} property-type))
+                             (or node-many?
+                                 (not= :default property-type)
+                                 (seq (:property/closed-values property)))
+                             (not (schema-or-tag-related-property? property-id)))]
+    default-bottom?))
+
+(defn- resolved-property-position
+  [db block property]
+  (let [ui-position (:logseq.property/ui-position property)]
+    (cond
+      (contains? #{:properties :block-left :block-right :block-below} ui-position)
+      ui-position
+
+      (bottom-position-property? db block property)
+      :block-below
+
+      :else
+      :properties)))
+
 (defn- property-with-position?
-  [db property-id block position]
+  [db property-id block position {:keys [allow-empty-block-below?]}]
   (when-let [property (entity-plus/entity-memoized db property-id)]
-    (let [property-position (:logseq.property/ui-position property)]
+    (let [property-position' (resolved-property-position db block property)]
       (and
-       (= property-position position)
+       (not (false? (:logseq.property/public? property)))
+       (= property-position' position)
        (not (and (:logseq.property/hide-empty-value property)
                  (nil? (get block property-id))))
        (not (:logseq.property/hide? property))
        (not (and
-             (= property-position :block-below)
-             (nil? (get block property-id))))))))
+             (= property-position' :block-below)
+             (nil? (get block property-id))
+             (not allow-empty-block-below?)
+             (not (tag-class-page? db block))))))))
 
 (defn property-with-other-position?
-  [property]
-  (not (contains? #{:properties nil} (:logseq.property/ui-position property))))
+  [db block property]
+  (not= :properties (resolved-property-position db block property)))
 
 (defn get-block-positioned-properties
   [db eid position]
   (let [block (d/entity db eid)
-        own-properties (:block.temp/property-keys block)]
-    (->> (:classes-properties (get-block-classes-properties db eid))
-         (map :db/ident)
-         (concat own-properties)
-         (distinct)
-         (filter (fn [id] (property-with-position? db id block position)))
+        own-properties (:block.temp/property-keys block)
+        classes-properties (when-not (tag-class-page? db block)
+                             (:classes-properties (get-block-classes-properties db eid)))
+        classes-properties-set (set (map :db/ident classes-properties))
+        positioned-property-ids (if (tag-class-page? db block)
+                                  (distinct own-properties)
+                                  (->> classes-properties
+                                       (map :db/ident)
+                                       (concat own-properties)
+                                       distinct))]
+    (->> positioned-property-ids
+         (filter (fn [id]
+                   (property-with-position? db id block position
+                                            {:allow-empty-block-below?
+                                             (contains? classes-properties-set id)})))
          (map #(d/entity db %))
          (ldb/sort-by-order))))
 

@@ -129,12 +129,14 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.calc :as calc]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.schema.handler.common-config :refer [Config-edn]]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -391,7 +393,9 @@
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block (or (:code-block config) (:block config))]
-     (let [block (db/entity [:block/uuid (:block/uuid block)])]
+     (p/let [block (db-async/<get-block (state/get-current-repo)
+                                        (:block/uuid block)
+                                        {:children? false})]
        (state/set-state! :editor/raw-mode-block block)
        (editor-handler/edit-block! block :max {:save-code-editor? false})))))
 
@@ -568,12 +572,25 @@
       (let [editor (render! state)]
         (reset! editor-atom editor)))))
 
+(defn- calc-mode?
+  [attr]
+  (= (:data-lang attr) "calc"))
+
+(defn- sync-editor-code!
+  [editor code]
+  (when (and editor
+             (string? code)
+             (not (.hasFocus editor))
+             (not= (.getValue editor) code))
+    (.setValue editor code)))
+
 (hsx/defc editor
   [config id attr code options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
-        [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))
-        current-theme (state/use-sub :ui/theme)
-        radix-color? (state/use-sub :ui/radix-color)
+        calc? (calc-mode? attr)
+        [calc-lines set-calc-lines!] (hooks/use-state #(when calc? (calc/eval-lines code)))
+        current-theme (rfx/use-sub [:ui/theme])
+        radix-color? (rfx/use-sub [:ui/radix-color])
         code-options (hooks/use-memo #(atom options) [id])
         last-theme (hooks/use-memo #(atom (theme-name current-theme radix-color?)) [id])
         component-state {:config config
@@ -593,8 +610,10 @@
      [id])
     (hooks/use-effect!
      (fn []
-       (set-calc-lines! (calc/eval-lines code)))
-     [id code])
+       (sync-editor-code! @editor-atom code)
+       (when calc?
+         (set-calc-lines! (calc/eval-lines code))))
+     [id code calc?])
     (hooks/use-effect!
      (fn []
        (let [next-theme (theme-name current-theme radix-color?)
@@ -605,19 +624,21 @@
            (.setOption editor' "theme" next-theme)))
        (reset! code-options options))
      [options current-theme radix-color?])
-  [:div.extensions__code.flex.flex-1
-   (cond-> {}
-     (= (:data-lang attr) "calc")
-     (assoc :data-lang "calc"))
-   (when-let [mode (:data-lang attr)]
-     (when-not (= mode "calc")
-       [:div.extensions__code-lang
-        (string/lower-case mode)]))
-   [:div.code-editor.flex.flex-1.flex-row.w-full
-    [:textarea (merge {:id id
-                       :default-value code} attr)]
-    (when (= (:data-lang attr) "calc")
-      (calc/results calc-lines))]]))
+    [:div.extensions__code.flex.flex-1
+     (cond-> {}
+       calc?
+       (assoc :data-lang "calc"))
+     (when-let [mode (:data-lang attr)]
+       (when-not (= mode "calc")
+         [:div.extensions__code-lang
+          (string/lower-case mode)]))
+     [:div.code-editor.flex.flex-1.flex-row.w-full
+      [:textarea (merge {:id id
+                         :default-value code} attr)]
+      (when calc?
+        (calc/results calc-lines))]]))
+
+(lazy-editor/register-editor! editor)
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

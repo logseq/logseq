@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.presence
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [logseq.db-sync.worker.ws :as ws]))
 
 (defn claims->user
@@ -17,6 +18,14 @@
           (string? username) (assoc :username username)
           (string? name) (assoc :name name))))))
 
+(defn attachment->user
+  [attachment]
+  (:presence/user (bean/->clj attachment)))
+
+(defn- serialize-attachment!
+  [^js ws user]
+  (.serializeAttachment ws (bean/->js {:presence/user user})))
+
 (defn presence*
   [^js self]
   (or (.-presence self)
@@ -33,7 +42,7 @@
 (defn add-presence!
   [^js self ^js ws user]
   (swap! (presence* self) assoc ws user)
-  (.serializeAttachment ws (clj->js user)))
+  (serialize-attachment! ws user))
 
 (defn update-presence!
   [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
@@ -46,7 +55,7 @@
                              (assoc user :editing-block-uuid editing-block-uuid)
                              (dissoc user :editing-block-uuid))
                            user)]
-               (.serializeAttachment ws (clj->js user'))
+               (serialize-attachment! ws user')
                (assoc presence ws user'))
              presence))))
 

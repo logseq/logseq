@@ -10,6 +10,15 @@
             [frontend.util :as util]
             [promesa.core :as p]))
 
+(defn- finish-async-test!
+  [done]
+  (js/setTimeout done 0))
+
+(deftest coerce-http-request-does-not-add-client-revision-to-member-request-test
+  (is (= {:email "user@example.com"}
+         (#'db-sync/coerce-http-request :graph-members/create
+                                        {:email "user@example.com"}))))
+
 (deftest remove-member-request-test
   (async done
          (let [called (atom nil)]
@@ -17,16 +26,15 @@
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! called {:url url :opts opts})
                                                     (p/resolved {:ok true}))
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))]
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))]
                  (p/let [_ (db-sync/<rtc-remove-member! "graph-1" "user-2")
                          {:keys [url opts]} @called]
                    (is (= "http://base/graphs/graph-1/members/user-2" url))
                    (is (= "DELETE" (:method opts)))
-                   (done)))
+                   (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest leave-graph-uses-current-user-test
   (async done
@@ -35,17 +43,16 @@
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! called {:url url :opts opts})
                                                     (p/resolved {:ok true}))
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                user-handler/user-uuid (fn [] "user-1")]
                  (p/let [_ (db-sync/<rtc-leave-graph! "graph-1")
                          {:keys [url opts]} @called]
                    (is (= "http://base/graphs/graph-1/members/user-1" url))
                    (is (= "DELETE" (:method opts)))
-                   (done)))
+                   (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest leave-graph-missing-user-test
   (async done
@@ -53,17 +60,49 @@
                (db-sync/<rtc-leave-graph! "graph-1"))
              (p/then (fn [_]
                        (is false "expected rejection")
-                       (done)))
+                       (finish-async-test! done)))
              (p/catch (fn [e]
                         (is (= :db-sync/invalid-member (:type (ex-data e))))
-                        (done))))))
+                        (finish-async-test! done))))))
+
+(deftest rtc-get-users-info-uses-cached-members-test
+  (async done
+         (let [state-prev (state/get-state)
+               fetch-calls (atom 0)]
+           (state/replace-state! (assoc state-prev :rtc/users-info {}))
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               db-sync/<get-rtc-graph-uuid
+                               (fn [repo]
+                                 (is (= "repo-1" repo))
+                                 (p/resolved "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+                               state/get-current-repo (fn [] "repo-1")
+                               db-sync/fetch-json (fn [url opts _]
+                                                    (swap! fetch-calls inc)
+                                                    (is (= "http://base/graphs/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/members" url))
+                                                    (is (= "GET" (:method opts)))
+                                                   (p/resolved {:members [{:user-id "user-1"
+                                                                           :role "member"
+                                                                           :email "user@example.com"
+                                                                           :username "User"}]}))
+                               user-handler/<ensure-id&access-token! (fn []
+                                                                       (p/resolved true))]
+                 (p/let [first-result (db-sync/<rtc-get-users-info)
+                         second-result (db-sync/<rtc-get-users-info)
+                         refreshed-result (db-sync/<rtc-get-users-info true)]
+                   (is (= 2 @fetch-calls))
+                   (is (= first-result second-result))
+                   (is (= first-result refreshed-result))
+                   (is (= {"repo-1" first-result} (state/get-state :rtc/users-info)))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (state/replace-state! state-prev)
+                            (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved {:graph-id "graph-1"
@@ -78,17 +117,16 @@
                                   false
                                   true]]
                                 @worker-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-defaults-e2ee-enabled-test
   (async done
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved {:graph-id "graph-2"
@@ -103,19 +141,66 @@
                                   true
                                   true]]
                                 @worker-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-worker-error-values-reject-test
+  (async done
+         (let [state-prev (state/get-state)
+               worker-prev @state/*db-worker
+               error (ex-info "invalid-e2ee-password"
+                              {:code :db-sync/invalid-e2ee-password})
+               continued-calls (atom [])
+               capture (fn [promise]
+                         (-> promise
+                             (p/then (fn [result] [:resolved result]))
+                             (p/catch (fn [reason] [:rejected reason]))))]
+           (state/set-state! :rtc/uploading? false)
+           (reset! state/*db-worker
+                   (fn [op & _args]
+                     (if (contains? #{:thread-api/db-sync-create-remote-graph
+                                      :thread-api/db-sync-upload-graph}
+                                    op)
+                       (p/resolved error)
+                       (p/resolved :ok))))
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-sync/<get-remote-graphs (fn []
+                                                            (swap! continued-calls conj :refresh)
+                                                            (p/resolved []))
+                               db-sync/<rtc-start! (fn [& _]
+                                                     (swap! continued-calls conj :start)
+                                                     (p/resolved :ok))]
+                 (p/all [(capture (db-sync/<rtc-create-graph! "logseq_db_demo" true))
+                         (capture (db-sync/<rtc-upload-graph! "logseq_db_demo" true))]))
+               (p/then (fn [results]
+                         (is (= [:rejected :rejected] (mapv first results)))
+                         (is (every? #(= :db-sync/invalid-e2ee-password
+                                         (:code (ex-data (second %))))
+                                     results))
+                         (is (empty? @continued-calls))
+                         (finish-async-test! done)))
+               (p/catch (fn [failure]
+                          (is false (str failure))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-upload-graph-creates-remote-graph-as-not-ready-test
   (async done
          (let [upload-calls (atom [])
                refresh-calls (atom 0)
-               start-calls (atom [])]
+               start-calls (atom [])
+               state-prev (state/get-state)]
+           (state/set-auth-id-token "id-token-1")
+           (state/set-auth-access-token "access-token-1")
+           (state/set-auth-refresh-token "refresh-token-1")
+           (state/set-state! :auth/oauth-token-url "http://oauth/token")
+           (state/set-state! :auth/oauth-client-id "client-1")
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! upload-calls conj args)
                                                          (p/resolved :ok))
@@ -127,25 +212,55 @@
                                                      (p/resolved :ok))]
                  (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
                (p/then (fn [_]
-                         (is (= [[:thread-api/db-sync-upload-graph "logseq_db_demo"]]
-                                @upload-calls))
+                         (is (= [:thread-api/sync-app-state
+                                  :thread-api/db-sync-upload-graph]
+                                (mapv first @upload-calls)))
+                         (is (= "refresh-token-1"
+                                (:auth/refresh-token (second (first @upload-calls)))))
+                         (is (= [:thread-api/db-sync-upload-graph "logseq_db_demo"]
+                                (second @upload-calls)))
                          (is (= 1 @refresh-calls))
                          (is (= ["logseq_db_demo"] @start-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (state/replace-state! state-prev)))))))
+
+(deftest rtc-upload-graph-syncs-cleared-refresh-token-test
+  (async done
+         (let [worker-calls (atom [])
+               state-prev (state/get-state)]
+           (state/set-auth-refresh-token nil)
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               db-sync/<get-remote-graphs (fn [] (p/resolved []))
+                               db-sync/<rtc-start! (fn [& _] (p/resolved :ok))]
+                 (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
+               (p/then (fn [_]
+                         (let [payload (second (first @worker-calls))]
+                           (is (contains? payload :auth/refresh-token))
+                           (is (nil? (:auth/refresh-token payload))))
+                         (finish-async-test! done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-download-graph-rejects-while-another-download-is-active-test
   (async done
-         (let [state-prev @state/state
+         (let [state-prev (state/get-state)
                worker-calls (atom [])]
-           (swap! state/state assoc
+           (state/swap-state! assoc
                   :rtc/downloading-graph-uuid "graph-1"
                   :rtc/uploading? false)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] false)
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -153,25 +268,24 @@
                  (db-sync/<rtc-download-graph! "demo-graph" "graph-2" false))
                (p/then (fn [_]
                          (is false "expected rejection")
-                         (reset! state/state state-prev)
-                         (done)))
+                         (state/replace-state! state-prev)
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
                           (is (empty? @worker-calls))
-                          (reset! state/state state-prev)
-                          (done)))))))
+                          (state/replace-state! state-prev)
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-rejects-while-upload-is-active-test
   (async done
-         (let [state-prev @state/state
+         (let [state-prev (state/get-state)
                worker-calls (atom [])]
-           (swap! state/state assoc
+           (state/swap-state! assoc
                   :rtc/downloading-graph-uuid nil
                   :rtc/uploading? true)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -179,22 +293,22 @@
                  (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
                (p/then (fn [_]
                          (is false "expected rejection")
-                         (reset! state/state state-prev)
-                         (done)))
+                         (state/replace-state! state-prev)
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
                           (is (empty? @worker-calls))
-                          (reset! state/state state-prev)
-                          (done)))))))
+                          (state/replace-state! state-prev)
+                          (finish-async-test! done)))))))
 
 (deftest rtc-upload-graph-rejects-while-download-is-active-test
   (async done
-         (let [state-prev @state/state
+         (let [state-prev (state/get-state)
                upload-calls (atom [])
                refresh-calls (atom 0)
                start-calls (atom [])]
-           (swap! state/state assoc
+           (state/swap-state! assoc
                   :rtc/downloading-graph-uuid "graph-1"
                   :rtc/uploading? false)
            (-> (p/with-redefs [state/<invoke-db-worker (fn [& args]
@@ -209,16 +323,16 @@
                  (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
                (p/then (fn [_]
                          (is false "expected rejection")
-                         (reset! state/state state-prev)
-                         (done)))
+                         (state/replace-state! state-prev)
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
                           (is (empty? @upload-calls))
                           (is (zero? @refresh-calls))
                           (is (empty? @start-calls))
-                          (reset! state/state state-prev)
-                          (done)))))))
+                          (state/replace-state! state-prev)
+                          (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-and-start-sync-does-not-upload-snapshot-test
   (async done
@@ -244,18 +358,18 @@
                          (is (= 1 @refresh-calls))
                          (is (= ["logseq_db_demo"] @start-calls))
                          (is (empty? @upload-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-start-skips-while-graph-upload-is-active-test
   (async done
          (let [worker-prev @state/*db-worker
-               state-prev @state/state
+               state-prev (state/get-state)
                calls (atom [])]
            (reset! state/*db-worker :worker)
-           (swap! state/state assoc
+           (state/swap-state! assoc
                   :rtc/uploading? true
                   :rtc/loading-graphs? false)
            (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "demo-graph"}])
@@ -266,21 +380,21 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
-                            (reset! state/state state-prev)))))))
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-start-skips-when-remote-graph-is-not-ready-for-use-test
   (async done
          (let [worker-prev @state/*db-worker
-               state-prev @state/state
+               state-prev (state/get-state)
                calls (atom [])]
            (reset! state/*db-worker :worker)
-           (swap! state/state assoc
+           (state/swap-state! assoc
                   :rtc/uploading? false
                   :rtc/loading-graphs? false)
            (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "demo-graph"
@@ -292,21 +406,21 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
-                            (reset! state/state state-prev)))))))
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-start-syncs-auth-state-before-db-sync-start-test
   (async done
          (let [worker-prev @state/*db-worker
-               state-prev @state/state
+               state-prev (state/get-state)
                calls (atom [])]
            (reset! state/*db-worker :worker)
-           (reset! state/state (assoc state-prev
+           (state/replace-state! (assoc state-prev
                                       :git/current-repo "demo-graph"
                                       :auth/id-token "id-token"
                                       :auth/access-token "access-token"
@@ -315,8 +429,7 @@
                                       :config {:a 1}
                                       :rtc/uploading? false
                                       :rtc/loading-graphs? false))
-           (-> (p/with-redefs [user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/get-rtc-graphs (fn [] [{:url "demo-graph"
                                                              :graph-ready-for-use? true}])
                                state/<invoke-db-worker (fn [& args]
@@ -330,6 +443,7 @@
                                           :auth/id-token "id-token"
                                           :auth/access-token "access-token"
                                           :auth/refresh-token "refresh-token"
+                                          :auth/oauth-token-url nil
                                           :user/info {:sub "user-1"}}
                                    (seq config/OAUTH-DOMAIN)
                                    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
@@ -339,13 +453,13 @@
                                 (second (first @calls))))
                          (is (= [:thread-api/db-sync-start "demo-graph"]
                                 (second @calls)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
-                            (reset! state/state state-prev)))))))
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
@@ -359,7 +473,7 @@
                                        (swap! trace conj :log)
                                        (swap! log-events conj e)))
                   ;; Keep auth pending so we only validate immediate click-time feedback.
-                  user-handler/task--ensure-id&access-token (fn [_resolve _reject] nil)
+                  user-handler/<ensure-id&access-token! (fn [] (p/deferred))
                   db-sync/fetch-json (fn [url _opts _schema]
                                        (swap! trace conj [:fetch url])
                                        (p/resolved {:t 1}))]
@@ -381,8 +495,7 @@
                ensure-calls (atom [])]
            (reset! state/*db-worker :worker)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                db-sync/fetch-json (fn [_url _opts _schema]
                                                     (p/resolved {:graphs [{:graph-id "graph-1"
                                                                            :graph-name "demo"
@@ -407,10 +520,10 @@
                          (is (= false (:graph-ready-for-use? (first graphs))))
                          (is (= false (:graph-ready-for-use? (first @graphs-state))))
                          (is (empty? @ensure-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
 
@@ -420,8 +533,7 @@
                ensure-calls (atom [])]
            (reset! state/*db-worker :worker)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                db-sync/fetch-json (fn [_url _opts _schema]
                                                     (p/resolved {:graphs []
                                                                  :user-rsa-keys-exists? false}))
@@ -438,19 +550,56 @@
                                   {:ensure-server? true
                                    :server-rsa-keys-exists? false}]]
                                 @ensure-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
+
+(deftest get-remote-graphs-syncs-auth-before-ensuring-user-rsa-keys-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev (state/get-state)
+               worker-calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (state/swap-state! assoc
+                  :auth/id-token "id-token-1"
+                  :auth/access-token "access-token-1"
+                  :auth/refresh-token "refresh-token-1"
+                  :auth/oauth-token-url "http://oauth/token"
+                  :auth/oauth-client-id "client-1")
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn []
+                                                                       (p/resolved true))
+                               db-sync/fetch-json (fn [_url _opts _schema]
+                                                    (p/resolved {:graphs []
+                                                                 :user-rsa-keys-exists? false}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved {:public-key "pk"}))
+                               state/set-state! (fn [& _] nil)
+                               repo-handler/refresh-repos! (fn [] nil)]
+                 (db-sync/<get-remote-graphs))
+               (p/then (fn [_]
+                         (is (= [:thread-api/sync-app-state
+                                  :thread-api/db-sync-ensure-user-rsa-keys]
+                                (mapv first @worker-calls)))
+                         (is (= "refresh-token-1"
+                                (:auth/refresh-token (second (first @worker-calls)))))
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
 
 (deftest rtc-download-graph-delegates-to-worker-download-api-test
   (async done
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -464,10 +613,10 @@
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= "graph-1" graph-uuid))
                            (is (= false graph-e2ee?)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-sets-and-clears-downloading-state-test
   (async done
@@ -475,8 +624,7 @@
                worker-prev @state/*db-worker]
            (reset! state/*db-worker nil)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& _] (p/resolved :ok))
                                state/pub-event! (fn [& _] nil)
                                state/set-state! (fn [k v]
@@ -487,11 +635,11 @@
                          (is (= [[:rtc/downloading-graph-uuid "graph-1"]
                                  [:rtc/downloading-graph-uuid nil]]
                                 @state-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (reset! state/*db-worker worker-prev)
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
 
@@ -500,13 +648,11 @@
          (let [runtime-bound-repo (atom "logseq_db_d")
                invoke-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               persist-db/<fetch-init-data (fn [repo _opts]
+                               persist-db/<open-and-fetch-schema (fn [repo _opts]
                                                              (reset! runtime-bound-repo repo)
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! invoke-calls conj args)
                                                          (let [[op repo] args]
@@ -536,23 +682,48 @@
                                 (ffirst @invoke-calls)))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (first (second @invoke-calls))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-downloads-missing-assets-on-electron-test
+  (async done
+         (let [worker-calls (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn []
+                                                                       (p/resolved true))
+                               util/electron? (fn [] true)
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                             (p/resolved {:schema {}}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" false))
+               (p/then (fn [_]
+                         (is (= [:thread-api/sync-app-state
+                                 :thread-api/db-sync-download-graph-by-id
+                                 :thread-api/db-sync-download-missing-assets]
+                                (mapv first @worker-calls)))
+                         (is (= ["logseq_db_db1" "graph-1"]
+                                (rest (nth @worker-calls 2))))
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-skips-runtime-rebind-outside-electron-test
   (async done
          (let [runtime-rebind-calls (atom [])
                worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] false)
-                               persist-db/<fetch-init-data (fn [& args]
+                               persist-db/<open-and-fetch-schema (fn [& args]
                                                              (swap! runtime-rebind-calls conj args)
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -563,21 +734,19 @@
                          (is (empty? @runtime-rebind-calls))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (ffirst @worker-calls)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-syncs-auth-state-after-runtime-rebind-test
   (async done
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               persist-db/<fetch-init-data (fn [_repo _opts]
-                                                             (p/resolved {:schema {}
-                                                                          :initial-data []}))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                             (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -589,7 +758,7 @@
                                 (ffirst @worker-calls)))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (first (second @worker-calls))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))

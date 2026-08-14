@@ -19,7 +19,7 @@
 (defn alias-enabled?
   []
   (and (util/electron?)
-       (:assets/alias-enabled? @state/state)))
+       (:assets/alias-enabled? (state/get-state))))
 
 (defn clean-path-prefix
   [path]
@@ -35,7 +35,7 @@
 
 (defn get-alias-dirs
   []
-  (:assets/alias-dirs @state/state))
+  (:assets/alias-dirs (state/get-state)))
 
 (defn get-alias-by-dir
   [dir]
@@ -66,6 +66,15 @@
   (cond-> path
     (windows-drive-absolute-path? path)
     (string/replace-first #":" "/logseq__colon/")))
+
+(defn asset-protocol-url->media-url
+  [url]
+  (if (and (common-config/local-protocol-asset? url)
+           (not (util/electron?)))
+    (-> url
+        (common-config/remove-asset-protocol)
+        (string/replace-first "/logseq__colon/" ":/"))
+    url))
 
 (defn resolve-asset-real-path-url
   [repo rpath]
@@ -306,8 +315,7 @@
 
 (defn maybe-request-remote-asset-download!
   [repo asset-block file-ready?]
-  (let [progress-atom (get @state/state :rtc/asset-upload-download-progress)
-        progress (get (or (some-> progress-atom deref) {}) repo)]
+  (let [progress (get (or (state/get-state :rtc/asset-upload-download-progress) {}) repo)]
     (when (should-request-remote-asset-download? repo asset-block file-ready? progress)
       (state/<invoke-db-worker
        :thread-api/db-sync-request-asset-download

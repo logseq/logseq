@@ -3,8 +3,10 @@
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
+            [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- entities-with
   [db attr]
@@ -113,6 +115,21 @@
     (is (= graph-created-at
            (:kv/value (d/entity @conn :logseq.kv/graph-created-at)))
         "Graph created at not changed by fn")))
+
+(deftest ensure-built-in-data-live-repair-assigns-canonical-revision
+  (let [conn (d/create-conn db-schema/schema)
+        pipeline-before @ldb/*transact-pipeline-fn]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [[:db/retractEntity :logseq.property/icon]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (db-migrate/ensure-built-in-data-exists! conn)
+      (let [icon-property (d/entity @conn :logseq.property/icon)]
+        (is (some? icon-property))
+        (is (nat-int? (:block/tx-id icon-property))
+            "A recreated built-in is immediately readable through the canonical API."))
+      (finally
+        (reset! ldb/*transact-pipeline-fn pipeline-before)))))
 
 (deftest migrate-65-25-deletes-legacy-properties
   (let [conn (d/create-conn legacy-65-24-schema)
@@ -262,6 +279,24 @@
                      (:logseq.property.comments/blocks
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
+
+(deftest migrate-65-27-with-missing-comments-built-ins-does-not-crash
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 27}}
+                       {:db/ident :logseq.class/Root
+                        :block/title "Root Tag"}])
+
+    (is (nil? (d/entity @conn :logseq.class/Comments)))
+    (is (nil? (d/entity @conn :logseq.property.comments/blocks)))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 33})
+
+    (is (= {:major 65 :minor 33}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn :logseq.class/Comments)))
+    (is (some? (d/entity @conn :logseq.class/Comment)))
+    (is (some? (d/entity @conn :logseq.property.comments/blocks)))))
 
 (deftest migrate-65-30-adds-assignee-property
   (let [conn (d/create-conn db-schema/schema)]

@@ -14,6 +14,9 @@
    [:tx :string]
    [:outliner-op {:optional true} [:maybe :keyword]]])
 
+(def client-revision-entry
+  [:client-revision {:optional true} :string])
+
 (def ws-client-message-schema
   [:multi {:dispatch :type}
    ["hello"
@@ -31,6 +34,7 @@
    ["tx/batch"
     [:map
      [:type [:= "tx/batch"]]
+     client-revision-entry
      [:t-before :int]
      [:txs [:sequential tx-entry-schema]]]]
    ["ping"
@@ -52,6 +56,7 @@
    [:t {:optional true} :int]
    [:success-tx-ids {:optional true} [:sequential :uuid]]
    [:failed-tx-id {:optional true} :uuid]
+   [:missing-block-uuids {:optional true} [:sequential :uuid]]
    [:error-detail {:optional true} :string]
    [:data {:optional true} :string]])
 
@@ -185,6 +190,7 @@
 
 (def tx-batch-request-schema
   [:map
+   client-revision-entry
    [:t-before :int]
    [:txs [:sequential tx-entry-schema]]])
 

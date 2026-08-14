@@ -44,6 +44,26 @@
         (aset js/console "error" orig-console-error)
         (aset js/console "log" orig-console-log)))))
 
+(deftest handle-message-clears-worker-readiness-after-crash-test
+  (let [worker (js-obj)
+        wrapped-worker (fn [& _args] nil)
+        previous-worker @state/*db-worker
+        previous-thread @state/*db-worker-thread]
+    (try
+      (reset! state/*db-worker wrapped-worker)
+      (reset! state/*db-worker-thread worker)
+      (worker-handler/handle-message! worker wrapped-worker)
+      (is (fn? (.-onerror worker)))
+      (is (fn? (.-onmessageerror worker)))
+      (when (fn? (.-onerror worker))
+        ((.-onerror worker) #js {:message "worker crashed"}))
+      (is (nil? @state/*db-worker))
+      (is (nil? @state/*db-worker-thread))
+      (is (false? @state/db-worker-ready?))
+      (finally
+        (reset! state/*db-worker previous-worker)
+        (reset! state/*db-worker-thread previous-thread)))))
+
 (deftest db-worker-ui-request-resolve-passes-request-id-and-result-test
   (async done
     (let [calls (atom [])

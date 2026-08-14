@@ -65,6 +65,7 @@
   }
 }
 
-.ls-properties-area .empty-btn {
+.ls-properties-area .empty-btn,
+.ls-properties-area .empty-text-btn {
   @apply !text-base;
 }

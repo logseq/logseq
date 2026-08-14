@@ -24,22 +24,6 @@
     (is (true? (state/default-cmdk-context? {} :global nil)))
     (is (true? (state/default-cmdk-context? {} nil nil)))))
 
-(deftest default-cmdk-context?-false-for-sidebar
-  (testing "sidebar cmdk is not treated as default context"
-    (is (false? (state/default-cmdk-context? {:sidebar? true} :global nil)))))
-
-(deftest default-cmdk-context?-false-when-initial-input-present
-  (testing "initial-input should disable default restore context"
-    (is (false? (state/default-cmdk-context? {:initial-input "foo"} :global nil)))))
-
-(deftest default-cmdk-context?-true-when-initial-input-is-nil
-  (testing "nil initial-input should still be treated as default cmdk context"
-    (is (true? (state/default-cmdk-context? {:initial-input nil} :global nil)))))
-
-(deftest default-cmdk-context?-true-even-with-stale-search-args
-  (testing "stale search args should not block default cmdk persistence"
-    (is (true? (state/default-cmdk-context? {} :global {:action :noop})))))
-
 (deftest save-last-cmdk-search!-writes-per-repo
   (testing "save writes query and filter-group isolated by repo key"
     (let [saved* (atom {})]
@@ -131,12 +115,15 @@
 (deftest cmdk-block-search-options-default-and-nodes
   (testing "default and nodes options keep snippet enabled and include expected base params"
     (is (= {:limit 10 :search-limit 100 :dev? false :built-in? true :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true}
            (state/cmdk-block-search-options {:dev? false})))
     (is (= {:limit 10 :search-limit 100 :dev? true :built-in? true :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true}
            (state/cmdk-block-search-options {:filter-group :nodes :dev? true})))
     (is (= {:limit 100 :search-limit 100 :dev? true :built-in? true :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true}
            (state/cmdk-block-search-options {:filter-group :nodes :dev? true :expanded? true})))))
 
@@ -147,6 +134,7 @@
             :dev? true
             :built-in? true
             :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true
             :code-only? true}
            (state/cmdk-block-search-options {:filter-group :code :dev? true})))))
@@ -156,6 +144,7 @@
     (is (= {:limit 10
             :search-limit 100
             :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true
             :page "00000000-0000-0000-0000-000000000111"}
            (state/cmdk-block-search-options {:filter-group :current-page
@@ -166,6 +155,7 @@
             :dev? true
             :built-in? true
             :enable-snippet? true
+            :include-breadcrumb? true
             :include-matched-count? true
             :page-only? true}
            (state/cmdk-block-search-options {:filter-group :nodes

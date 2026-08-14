@@ -3,14 +3,15 @@
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.handler.db-based.sync :as rtc-handler]
+            [frontend.handler.events.rtc-error :as rtc-error]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -18,7 +19,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -30,6 +30,13 @@
   (when remote?
     (if graph-e2ee? "lock" "cloud")))
 
+(defn- repo-display-name
+  [repo-url]
+  (let [repo-name (text-util/get-graph-name-from-path repo-url)]
+    (if (config/db-based-graph? repo-name)
+      (config/db-graph-name repo-name)
+      repo-name)))
+
 (defn local-uploadable-graph?
   [{:keys [root remote? rtc-graph?]}]
   (and (or root
@@ -39,14 +46,28 @@
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
 
+(defn <invoke-db-worker
+  [op & args]
+  (apply state/<invoke-db-worker op args))
+
+(defn- handle-cloud-graph-error!
+  [error]
+  (log/error :db-sync/cloud-graph-failed error)
+  (when (rtc-error/e2ee-decrypt-failed? error)
+    (notification/show! (t :encryption/wrong-password) :error false)))
+
 (defn- graph-e2ee-enabled?
   [{:keys [url graph-e2ee?] :as graph}]
-  (if (contains? graph :graph-e2ee?)
-    (true? graph-e2ee?)
-    (if (= url (state/get-current-repo))
-      (let [e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))]
-        (if (nil? e2ee?) true (true? e2ee?)))
-      true)))
+  (cond
+    (contains? graph :graph-e2ee?)
+    (p/resolved (true? graph-e2ee?))
+
+    (= url (state/get-current-repo))
+    (p/let [e2ee? (<invoke-db-worker :thread-api/get-key-value url :logseq.kv/graph-rtc-e2ee?)]
+      (if (nil? e2ee?) true (true? e2ee?)))
+
+    :else
+    (p/resolved true)))
 
 (defn- <ensure-current-graph-for-upload!
   [repo]
@@ -60,7 +81,7 @@
         dialog-config {:cancel-label (t :ui/cancel)
                        :ok-label (t :ui/confirm)}]
     (-> (shui/dialog-confirm!
-         [:p.font-medium.-my-4 (t :graph/upload-local-confirm-desc graph-name)]
+         [:p.font-medium.mb-6 (t :graph/upload-local-confirm-desc graph-name)]
          dialog-config)
         (p/then
          (fn []
@@ -78,6 +99,9 @@
               (rtc-indicator/on-upload-finished-task
                hide-upload-log!)
               (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
+                  (p/catch (fn [error]
+                             (handle-cloud-graph-error! error)
+                             (p/rejected error)))
                   (p/finally hide-upload-log!)))))))))
 
 (hsx/defc normalized-graph-label
@@ -247,7 +271,7 @@
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
                                     (when (= (state/get-current-repo) repo)
-                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                      (rtc-handler/<rtc-stop!))
                                     (p/do! (rtc-handler/<rtc-delete-graph! GraphUUID GraphSchemaVersion)
                                            (state/set-state! :rtc/loading-graphs? false)
                                            (rtc-handler/<get-remote-graphs)))))))}
@@ -266,7 +290,7 @@
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
                                     (when (= (state/get-current-repo) repo)
-                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                      (rtc-handler/<rtc-stop!))
                                     (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
                                         (p/then (fn []
                                                   (notification/show! (t :graph/left) :success)
@@ -282,11 +306,11 @@
 
 (hsx/defc repos-cp
   []
-  (let [login? (boolean (state/use-sub :auth/id-token))
-        repos (state/use-sub [:me :repos])
+  (let [login? (boolean (rfx/use-sub [:auth/id-token]))
+        repos (rfx/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/use-sub :rtc/graphs)
-        remotes-loading? (state/use-sub :rtc/loading-graphs?)
+        remotes (rfx/use-sub [:rtc/graphs])
+        remotes-loading? (rfx/use-sub [:rtc/loading-graphs?])
         repos (->> (if (and login? (seq remotes))
                      (repo-handler/combine-local-&-remote-graphs repos remotes)
                      repos)
@@ -387,11 +411,8 @@
                                              (state/pub-event! [:graph/switch url])
 
                                              (and rtc-graph? remote?)
-                                             (do
-                                               (state/pub-event!
-                                                [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
-                                               (when (util/mobile?)
-                                                 false))
+                                             (state/pub-event!
+                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
 
                                              :else
                                              nil))))}})))
@@ -424,15 +445,24 @@
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
+(defn close-sidebar-after-repo-popup-action!
+  []
+  (when (util/sm-breakpoint?)
+    (js/setTimeout #(state/set-left-sidebar-open! false) 0)))
+
+(defn repo-popup-action-target?
+  [target]
+  (boolean (.closest target "a, button, [role='menuitem']")))
+
 (hsx/defc repos-dropdown-content
   [& {:keys [contentid footer?] :as opts
       :or {footer? true}}]
-  (let [current-repo (state/use-sub :git/current-repo)
-        login? (boolean (state/use-sub :auth/id-token))
-        repos (state/use-sub [:me :repos])
-        rtc-graphs (state/use-sub :rtc/graphs)
-        downloading-graph-id (state/use-sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/use-sub :rtc/loading-graphs?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        login? (boolean (rfx/use-sub [:auth/id-token]))
+        repos (rfx/use-sub [:me :repos])
+        rtc-graphs (rfx/use-sub [:rtc/graphs])
+        downloading-graph-id (rfx/use-sub [:rtc/downloading-graph-uuid])
+        remotes-loading? (rfx/use-sub [:rtc/loading-graphs?])
         repos (sort-repos-with-metadata-local repos)
         repos (->>
                (if (and (seq rtc-graphs) login?)
@@ -456,21 +486,23 @@
                             :on-click (fn []
                                         (rtc-handler/<get-remote-graphs))}
                            (ui/icon "refresh" {:size 15}))))])
-        _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-        _repo-name (when current-repo (db/get-repo-name current-repo))]
+        _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))]
 
     [:div
      {:class (when (<= (count repos) 1) "no-repos")}
      (header-fn)
      [:div.cp__repos-list-wrap
-      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+      (for [[idx {:keys [hr item hover-detail title options icon]}] (map-indexed vector (items-fn))]
         (let [on-click' (:on-click options)
               href' (:href options)
               menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
           (if hr
-            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+            (if (util/mobile?)
+              [:hr.py-2 {:key (str "separator-" idx)}]
+              (shui/dropdown-menu-separator {:key (str "separator-" idx)}))
             (menu-item
              (assoc options
+                    :key (or href' hover-detail (str "repo-" idx))
                     :title hover-detail
                     :on-click (fn [^js e]
                                 (when on-click'
@@ -511,19 +543,26 @@
 
 (hsx/defc graphs-selector
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        user-repos (state/use-sub [:me :repos])
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        user-repos (rfx/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
-        repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')
         short-repo-name (if current-repo
-                          (db/get-short-repo-name repo-name)
+                          (repo-display-name current-repo)
                           (t :graph.switch/select-prompt))
         selector-opts (cond-> {:on-click (fn [^js e]
                                            (shui/popup-show! (.closest (.-target e) "a")
-                                                             (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
+                                                             (fn [{:keys [id]}]
+                                                               (repos-dropdown-content
+                                                                {:contentid id}))
                                                              {:as-dropdown? true
-                                                              :content-props {:class "repos-list"}
+                                                              :focus-trigger? false
+                                                              :content-props
+                                                              {:class "repos-list"
+                                                               :on-click
+                                                               (fn [^js e]
+                                                                 (when (repo-popup-action-target? (.-target e))
+                                                                   (close-sidebar-after-repo-popup-action!)))}
                                                               :align :start}))}
                         (and (util/electron?) (:root current-repo'))
                         (assoc :on-context-menu
@@ -589,11 +628,11 @@
   (if (and cloud? graph-e2ee? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
     (-> (p/do!
          (state/pub-event! [:rtc/sync-app-state])
-         (state/<invoke-db-worker :thread-api/set-db-sync-config
-                                  {:enabled? true
-                                   :ws-url (config/db-sync-ws-url)
-                                   :http-base (config/db-sync-http-base)})
-         (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
+         (<invoke-db-worker :thread-api/set-db-sync-config
+                            {:enabled? true
+                             :ws-url (config/db-sync-ws-url)
+                             :http-base (config/db-sync-http-base)})
+         (p/let [rsa-key-pair (<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
            (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))))
         (p/catch (fn [e]
                    (log/error :db-sync/ensure-user-rsa-keys-failed e)
@@ -621,8 +660,7 @@
                              (->
                               (p/do
                                 (rtc-handler/<rtc-create-graph-and-start-sync! repo graph-e2ee?))
-                              (p/catch (fn [error]
-                                         (log/error :create-db-failed error)))
+                              (p/catch handle-cloud-graph-error!)
                               (p/finally (fn []
                                            (set-creating-db? false)))))
                            (shui/dialog-close!))))))

@@ -104,7 +104,7 @@
   "Deletes a page. Returns true if able to delete page. If unable to delete,
   calls error-handler fn and returns false.
   Rules:
-  1. today page can't be deleted
+  1. today page content is truncated but the page itself can't be deleted
   2. properties and tags will be hard retracted
   3. other pages will be moved to Recycle"
   [conn page-uuid & {:keys [persist-op? rename? error-handler deleted-by-uuid now-ms]
@@ -130,8 +130,14 @@
             (error-handler {:msg "Built-in page cannot be deleted"})
             false)
 
-          (or (ldb/class? page) (ldb/property? page) today-page?)
-          (let [tx-data (build-page-retract-tx @conn page {:today-page? today-page?})]
+          today-page?
+          (let [tx-data (build-page-retract-tx @conn page {:today-page? true})]
+            (when (seq tx-data)
+              (ldb/transact! conn tx-data tx-meta))
+            {:truncated? true})
+
+          (or (ldb/class? page) (ldb/property? page))
+          (let [tx-data (build-page-retract-tx @conn page {})]
             (ldb/transact! conn tx-data tx-meta)
             true)
 

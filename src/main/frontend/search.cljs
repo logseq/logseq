@@ -3,7 +3,6 @@
   search. Most of these fns depend on the search protocol"
   (:require [clojure.string :as string]
             [frontend.common.search-fuzzy :as fuzzy]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.search.agency :as search-agency]
             [frontend.search.protocol :as protocol]
@@ -50,7 +49,8 @@
    (when-let [repo (state/get-current-repo)]
      (when q
        (p/let [q (fuzzy/clean-str q)
-               templates (db-async/<get-tag-objects repo (:db/id (db/entity :logseq.class/Template)))]
+               template-class (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.class/Template)
+               templates (db-async/<get-tag-objects repo (:db/id template-class))]
          (when (seq templates)
            (let [extract-fn :block/title]
              (fuzzy/fuzzy-search templates q {:limit limit

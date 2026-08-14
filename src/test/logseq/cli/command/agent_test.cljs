@@ -1084,77 +1084,89 @@
   [[[:toggle-reaction [block-uuid "eyes" nil]]]
    [[:batch-set-property [[block-uuid] :logseq.property/status :logseq.property/status.doing {}]]]])
 
+(defn- assert-task-event-dispatches-to-master-session!
+  [done payload]
+  (let [calls* (atom [])
+        task (task-block {})
+        route-opts {:repo "logseq_db_demo"
+                    :graph "demo"
+                    :agent-name "build-host"
+                    :master-session "master-session-123"
+                    :routing-blocks* (atom #{})}]
+    (-> (p/with-redefs [transport/invoke
+                        (fn [_cfg method args]
+                          (swap! calls* conj [method args])
+                          (case method
+                            :thread-api/pull
+                            (let [[_repo _selector lookup] args]
+                              (case lookup
+                                42 (p/resolved task)
+                                900 (p/resolved {:db/id 900
+                                                 :db/ident :logseq.class/Task})
+                                901 (p/resolved {:db/id 901
+                                                 :db/ident :logseq.property/status.todo})
+                                (p/rejected (ex-info "unexpected pull"
+                                                     {:lookup lookup}))))
+
+                            :thread-api/q
+                            (if (string/includes? (pr-str args) ":logseq.property/status")
+                              (p/resolved :logseq.property/status.todo)
+                              (p/resolved nil))
+
+                            :thread-api/apply-outliner-ops
+                            (p/resolved {:ok true})
+
+                            (p/rejected (ex-info "unexpected invoke"
+                                                 {:method method
+                                                  :args args}))))
+                        show-command/execute-show
+                        (fn [_action _cfg]
+                          (p/resolved {:status :ok
+                                       :data {:message "- Ship the CLI bridge"}}))
+                        agent-command/start-codex!
+                        (fn [command _opts]
+                          (swap! calls* conj [:codex command])
+                          (p/resolved {:session "master-session-123"
+                                       :status :running}))]
+          (#'agent-command/process-sync-db-changes-event!
+           {:root-dir "/tmp/logseq"
+            :base-url "http://127.0.0.1:1234"
+            :log-fn (fn [_] nil)}
+           route-opts
+           payload))
+        (p/then (fn [_]
+                  (let [[_ command] (some #(when (= :codex (first %)) %) @calls*)]
+                    (is (= codex-resume-prefix
+                           (vec (take (count codex-resume-prefix) command))))
+                    (is (= "master-session-123"
+                           (nth command (count codex-resume-prefix))))
+                    (is (string/includes? (last command) "Request kind: task"))
+                    (is (string/includes? (last command) "- Ship the CLI bridge")))
+                  (is (= (expected-task-started-ops (:block/uuid task))
+                         (mapv (comp second second)
+                               (filter #(= :thread-api/apply-outliner-ops (first %)) @calls*))))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))))
+        (p/finally done))))
+
 (deftest test-agent-bridge-listener-dispatches-task-event-to-master-session
   (async done
-         (let [calls* (atom [])
-               task (task-block {})
-               route-opts {:repo "logseq_db_demo"
-                           :graph "demo"
-                           :agent-name "build-host"
-                           :master-session "master-session-123"
-                           :routing-blocks* (atom #{})}]
-           (-> (p/with-redefs [transport/invoke
-                               (fn [_cfg method args]
-                                 (swap! calls* conj [method args])
-                                 (case method
-                                   :thread-api/pull
-                                   (let [[_repo _selector lookup] args]
-                                     (case lookup
-                                       42 (p/resolved task)
-                                       900 (p/resolved {:db/id 900
-                                                        :db/ident :logseq.class/Task})
-                                       901 (p/resolved {:db/id 901
-                                                        :db/ident :logseq.property/status.todo})
-                                       (p/rejected (ex-info "unexpected pull"
-                                                            {:lookup lookup}))))
+         (assert-task-event-dispatches-to-master-session!
+          done
+          {:tx-data [{:e 42
+                      :a :block/tags
+                      :v 900
+                      :added true}
+                     {:e 42
+                      :a :logseq.property/status
+                      :v 901
+                      :added true}]})))
 
-                                   :thread-api/q
-                                   (if (string/includes? (pr-str args) ":logseq.property/status")
-                                     (p/resolved :logseq.property/status.todo)
-                                     (p/resolved nil))
-
-                                   :thread-api/apply-outliner-ops
-                                   (p/resolved {:ok true})
-
-                                   (p/rejected (ex-info "unexpected invoke"
-                                                        {:method method
-                                                         :args args}))))
-                               show-command/execute-show
-                               (fn [_action _cfg]
-                                 (p/resolved {:status :ok
-                                              :data {:message "- Ship the CLI bridge"}}))
-                               agent-command/start-codex!
-                               (fn [command _opts]
-                                 (swap! calls* conj [:codex command])
-                                 (p/resolved {:session "master-session-123"
-                                              :status :running}))]
-                 (#'agent-command/process-sync-db-changes-event!
-                  {:root-dir "/tmp/logseq"
-                   :base-url "http://127.0.0.1:1234"
-                   :log-fn (fn [_] nil)}
-                  route-opts
-                  {:tx-data [{:e 42
-                              :a :block/tags
-                              :v 900
-                              :added true}
-                             {:e 42
-                              :a :logseq.property/status
-                              :v 901
-                              :added true}]}))
-               (p/then (fn [_]
-                         (let [[_ command] (some #(when (= :codex (first %)) %) @calls*)]
-                           (is (= codex-resume-prefix
-                                  (vec (take (count codex-resume-prefix) command))))
-                           (is (= "master-session-123"
-                                  (nth command (count codex-resume-prefix))))
-                           (is (string/includes? (last command) "Request kind: task"))
-                           (is (string/includes? (last command) "- Ship the CLI bridge")))
-                         (is (= (expected-task-started-ops (:block/uuid task))
-                                (mapv (comp second second)
-                                      (filter #(= :thread-api/apply-outliner-ops (first %)) @calls*))))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
+(deftest test-agent-bridge-listener-dispatches-task-event-from-lightweight-summary
+  (async done
+         (assert-task-event-dispatches-to-master-session!
+          done
+          {:task-route-candidate-ids [42]})))
 
 (deftest test-agent-bridge-listener-includes-inherited-parent-session-for-child-task
   (async done

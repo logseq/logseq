@@ -323,23 +323,35 @@
 
 (defn- page-name-string->map
   [original-page-name db date-formatter
-   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
+   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
-        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
+        [original-page-name' page-name journal-day]
+        (if skip-journal?
+          [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
+          (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not journal-day)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
-                      (if (and class? db-based?)
+                      (cond
+                        journal-day
+                        (ldb/get-journal-page-by-day db journal-day)
+
+                        (and class? db-based?)
                         (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
                                  first
                                  (d/entity db))
+
+                        :else
                         (get-page db original-page-name')))
         original-page-name' (or from-page (:block/title page-entity) original-page-name')
+        page-name' (if (and journal-day page-entity)
+                     (:block/name page-entity)
+                     page-name)
         page (merge
-              {:block/name page-name
+              {:block/name page-name'
                :block/title original-page-name'}
               (when (and original-page-name
                          (not= (string/lower-case original-page-name)

@@ -7,6 +7,7 @@
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -238,8 +239,8 @@
 
 (hsx/defc mobile-bar
   []
-  (let [editing? (state/use-sub :editor/editing?)
-        code-block? (state/use-sub :editor/code-block-context)
+  (let [editing? (rfx/use-sub [:editor/editing?])
+        code-block? (rfx/use-sub [:editor/code-block-context])
         show? (and (not code-block?)
                    editing?)
         actions (toolbar-actions)]

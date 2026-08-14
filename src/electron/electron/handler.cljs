@@ -288,17 +288,15 @@
    (utils/save-proxy-settings options)))
 
 (defmethod handle :testProxyUrl [_win [_ url options]]
-  ;; FIXME: better not to set proxy while testing url
-  (let [_ (utils/<set-proxy options)
-        start-ms (.getTime (js/Date.))]
-    (-> (utils/fetch url)
+  (let [start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url {:proxy options})
         (p/timeout 10000)
         (p/then (fn [resp]
                   (let [code (.-status resp)
                         response-ms (- (.getTime (js/Date.)) start-ms)]
                     (if (<= 200 code 299)
-                      #js {:code code
-                           :response-ms response-ms}
+                      {:code code
+                       :response-ms response-ms}
                       (p/rejected (js/Error. (str "HTTP status " code)))))))
         (p/catch (fn [e]
                    (if (instance? p/TimeoutException e)

@@ -178,7 +178,6 @@
  :cmdk.action/search "Rechercher"
  :cmdk.action/trigger "Exécuter"
 
- :cmdk.create/configure-tag "Configurer le tag"
  :cmdk.create/page "Créer une page"
  :cmdk.create/tag "Créer un tag"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Récemment mis à jour"
  :cmdk.group/themes "Thèmes"
 
- :cmdk.info/configure-tag "Configurer #{1}"
  :cmdk.info/create-page "Créer la page « {1} »"
  :cmdk.info/create-tag "Créer le tag « {1} »"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "Les éléments intégrés ne peuvent pas être supprimés."
  :node/new "Nouveau nœud"
 
- :notification/clear-all "Tout effacer"
  :notification/copied "Copié"
 
  :onboarding.import/desc "S'ils sont au format EDN ou Markdown, Logseq peut les importer."
@@ -1204,6 +1201,7 @@
  :plugin.package-config/remove-installed-success "Plugin corrompu « {1} » supprimé."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "L'hôte et le port sont requis"
  :plugin.proxy/system "Système"
  :plugin.proxy/test-url "URL de test"
  :plugin.proxy/testing "Test en cours"
@@ -1245,7 +1243,6 @@
  :property/drag-to-reorder "Glisser pour réordonner"
  :property/existing-values "Valeurs existantes"
  :property/go-to-this-property "Aller à la page de propriété"
- :property/hidden-properties "Propriétés masquées"
  :property/hide-by-default "Masquer par défaut"
  :property/hide-choice-for-tag "Masquer le choix pour le tag"
  :property/hide-empty-value "Masquer les valeurs vides"
@@ -1718,7 +1715,6 @@
  :ui/image "image"
  :ui/label "Libellé"
  :ui/link "Lien"
- :ui/load-more "Charger plus"
  :ui/loading "Chargement"
  :ui/login "Connexion"
  :ui/logout "Déconnexion"

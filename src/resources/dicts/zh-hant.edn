@@ -178,7 +178,6 @@
  :cmdk.action/search "搜尋"
  :cmdk.action/trigger "觸發"
 
- :cmdk.create/configure-tag "設定標籤"
  :cmdk.create/page "建立頁面"
  :cmdk.create/tag "建立標籤"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "主題"
 
- :cmdk.info/configure-tag "設定 #{1}"
  :cmdk.info/create-page "建立名為「{1}」的頁面"
  :cmdk.info/create-tag "建立名為「{1}」的標籤"
 
@@ -994,7 +992,6 @@
  :node/built-in-cant-delete-error "無法刪除內建項。"
  :node/new "新增節點"
 
- :notification/clear-all "清除所有通知"
  :notification/copied "已複製！"
 
  :onboarding.import/desc "如果它們是 EDN 或 Markdown 格式，Logseq 可以使用它們。"
@@ -1217,6 +1214,7 @@
  :plugin.package-config/remove-installed-success "已移除損壞的外掛「{1}」。"
 
  :plugin.proxy/direct "直接連線"
+ :plugin.proxy/host-port-required "主機和連接埠不能為空"
  :plugin.proxy/system "系統"
  :plugin.proxy/test-url "測試 URL"
  :plugin.proxy/testing "測試中"
@@ -1258,7 +1256,6 @@
  :property/drag-to-reorder "拖曳以重新排序"
  :property/existing-values "現有值："
  :property/go-to-this-property "跳至此屬性"
- :property/hidden-properties "隱藏的屬性"
  :property/hide-by-default "預設隱藏"
  :property/hide-choice-for-tag "對此標籤隱藏選項"
  :property/hide-empty-value "隱藏空值"
@@ -1731,7 +1728,6 @@
  :ui/image "圖片"
  :ui/label "標籤"
  :ui/link "連結"
- :ui/load-more "載入更多"
  :ui/loading "載入中..."
  :ui/login "登入"
  :ui/logout "登出"

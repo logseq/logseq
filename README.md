@@ -73,7 +73,7 @@ The Database version (DB version) of Logseq introduces DB graphs. [See this page
 The DB version is in beta status while the new mobile app and RTC is in alpha. This means that **data loss is possible** so we recommend [automated backups](https://github.com/logseq/docs/blob/master/db-version.md#automated-backup) or [regular SQLite DB backups](https://github.com/logseq/docs/blob/master/db-version.md#graph-export). We recommend you create a dedicated test graph and choose one project that’s not crucial for you.
 
 To get started with the DB version:
-* To try the latest web version, go to https://test.logseq.com/.
+* To try the latest web version, go to https://app.logseq.com/.
 * To try the latest desktop version, go to https://github.com/logseq/logseq/releases/tag/nightly and download the artifact for your operating system.
 * To try the latest by building from the source code
     * Use `test/db` for stable releases. Fewer bugs and slower updates. Update frequency: days or weeks.

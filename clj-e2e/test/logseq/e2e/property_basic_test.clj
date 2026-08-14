@@ -1,10 +1,11 @@
 (ns logseq.e2e.property-basic-test
-  (:require [clojure.test :refer [deftest testing is use-fixtures run-test run-tests]]
+  (:require [clojure.test :refer [deftest use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
+            [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
@@ -50,3 +51,45 @@
 (deftest new-property-test
   (let [title-prefix "new-property-test"]
     (add-new-properties title-prefix)))
+
+(deftest property-value-lifecycle-and-object-view-persistence-test
+  (let [property-name "property-value-lifecycle"
+        target-title "property value target"
+        owner-page (page/get-page-name)]
+    (b/new-block target-title)
+    (util/input-command "Add property")
+    (w/click "input[placeholder]")
+    (util/input property-name)
+    (w/click (w/get-by-text "New option:"))
+    (w/click (loc/and "span" (util/get-by-text "Text" true)))
+    (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
+    (util/input "Initial value")
+    (k/esc)
+    (assert/assert-is-visible
+     (format ".property-pair:has-text('%s'):has-text('Initial value')" property-name))
+
+    (page/goto-page property-name)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body" :has-text target-title))
+    (util/refresh-until-graph-loaded)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body" :has-text target-title))
+
+    (page/goto-page owner-page)
+    (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
+    (util/input "Updated value")
+    (k/esc)
+    (assert/assert-is-visible
+     (format ".property-pair:has-text('%s'):has-text('Updated value')" property-name))
+
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (w/click (loc/filter "[role='menuitem']" :has-text "Delete property from node"))
+    (w/click "div[role='alertdialog'] button:text('Confirm')")
+    (assert/assert-have-count
+     (format ".property-pair:has-text('%s')" property-name)
+     0)
+
+    (page/goto-page property-name)
+    (assert/assert-have-count
+     (loc/filter ".ls-view-body" :has-text target-title)
+     0)))

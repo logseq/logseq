@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
@@ -16,33 +15,62 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
+(defn- standalone-display-block
+  [block]
+  (let [raw-title (:block/title block)
+        title (when (string? raw-title) (string/trim raw-title))
+        display-markup? (and title
+                             (or (re-find #"(?s)^```.*```$" title)
+                                 (re-find #"(?s)^\$\$.*\$\$$" title)))
+        ast-body (when display-markup?
+                   (or (:block.temp/ast-body block)
+                       (map first (mldoc/->edn title :markdown))))
+        [ast-node] ast-body
+        [node-type node-data] ast-node]
+    (if (= 1 (count ast-body))
+      (case node-type
+        "Src"
+        (let [{:keys [language lines]} node-data]
+          (cond-> (assoc block
+                         :block/title (string/replace (apply str lines) #"\r?\n$" "")
+                         :logseq.property.node/display-type :code)
+            (not-empty language)
+            (assoc :logseq.property.code/lang language)))
+
+        "Displayed_Math"
+        (assoc block
+               :block/title (string/trim node-data)
+               :logseq.property.node/display-type :math)
+
+        block)
+      block)))
+
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
   [blocks content format {:keys [page-name]}]
-  (let [repo (state/get-current-repo)]
-    (try
-      (let [blocks (gp-block/extract-blocks blocks content format
-                                            {:user-config (state/get-config)
-                                             :block-pattern common-config/block-pattern
-                                             :db (db/get-db repo)
-                                             :date-formatter (state/get-date-formatter)
-                                             :page-name page-name
-                                             :db-graph-mode? true})]
-        (map (fn [block]
+  (try
+    (let [blocks (gp-block/extract-blocks blocks content format
+                                          {:user-config (state/get-config)
+                                           :block-pattern common-config/block-pattern
+                                           :date-formatter (state/get-date-formatter)
+                                           :page-name page-name
+                                           :db-graph-mode? true})]
+      (map (fn [block]
+             (let [block (standalone-display-block block)]
                (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
                  (:block/properties block)
                  (merge (update-keys (:block/properties block)
                                      (fn [k]
                                        (or ({:heading :logseq.property/heading} k)
-                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {}))))))))
-             blocks))
-      (catch :default e
-        (log/error :exception e)
-        (state/pub-event! [:capture-error {:error e
-                                           :payload {:type "Extract-blocks"}}])
-        (notification/show! (t :block/extraction-error) :error)
-        []))))
+                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
+           blocks))
+    (catch :default e
+      (log/error :exception e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
+      (notification/show! (t :block/extraction-error) :error)
+      [])))
 
 (defn parse-block
   [{:block/keys [uuid title format] :as block}]
