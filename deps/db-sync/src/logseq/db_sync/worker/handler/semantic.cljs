@@ -76,7 +76,8 @@
   (when (map? icon)
     (cond-> {}
       (:type icon) (assoc :type (name (:type icon)))
-      (:id icon) (assoc :id (:id icon)))))
+      (:id icon) (assoc :id (:id icon))
+      (:color icon) (assoc :color (:color icon)))))
 
 (defn- property-choice-response [entity]
   (cond-> {:uuid (uuid-string (:block/uuid entity))

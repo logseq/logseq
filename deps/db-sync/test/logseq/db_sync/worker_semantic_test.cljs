@@ -20,7 +20,7 @@
                         :block/uuid status-id
                         :block/title "Waiting"
                         :logseq.property/value "Waiting"
-                        :logseq.property/icon {:type :tabler-icon :id "clock"}
+                        :logseq.property/icon {:type :tabler-icon :id "clock" :color "#7c3aed"}
                         :block/closed-value-property :logseq.property/status}
                        {:block/uuid block-id
                         :block/title "Work"
@@ -33,7 +33,7 @@
              (:tags response)))
       (is (= [{:uuid (str reference-id) :kind "block" :title "Referenced block"}]
              (:references response)))
-      (is (= {:type "tabler-icon" :id "clock"}
+      (is (= {:type "tabler-icon" :id "clock" :color "#7c3aed"}
              (get-in response [:status :icon])))
       (is (= "Waiting" (get-in response [:status :title]))))))
 
