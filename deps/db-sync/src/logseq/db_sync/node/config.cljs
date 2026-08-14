@@ -19,11 +19,12 @@
      :log-level (or (env-value env "DB_SYNC_LOG_LEVEL") "info")
      :cognito-issuer (env-value env "COGNITO_ISSUER")
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")
+     :logseq-chat-cognito-client-id (env-value env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
   [:port :base-url :data-dir :storage-driver :assets-driver :log-level
-   :cognito-issuer :cognito-client-id :cognito-jwks-url])
+   :cognito-issuer :cognito-client-id :logseq-chat-cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
   (let [defaults {:port 8080

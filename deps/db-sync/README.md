@@ -116,6 +116,7 @@ Run the adapter with Cognito auth:
 DB_SYNC_PORT=8787 \
 COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 \
 COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6 \
+LOGSEQ_CHAT_COGNITO_CLIENT_ID=<native-app-client-id> \
 COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json \
 node worker/dist/node-adapter.js
 ```
@@ -145,6 +146,7 @@ pnpm test:node-adapter
 | SENTRY_TRACES_SAMPLE_RATE | Traces sample rate (0.0 - 1.0) |
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
+| LOGSEQ_CHAT_COGNITO_CLIENT_ID | Public native Cognito app client allowed to use the restricted Chat transaction endpoint |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 
 ## Notes

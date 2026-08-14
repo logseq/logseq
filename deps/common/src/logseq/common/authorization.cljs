@@ -78,15 +78,25 @@
 
 (defn client-id-allowed? [env client-id]
   (let [primary-client-id (aget env "COGNITO_CLIENT_ID")
+        logseq-chat-client-id (aget env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")
         additional-client-ids (->> (string/split (or (aget env "COGNITO_CLIENT_IDS") "") #",")
                                    (map string/trim)
                                    (remove string/blank?))
         allowed-client-ids (cond-> (set additional-client-ids)
                              (and (string? primary-client-id) (not (string/blank? primary-client-id)))
-                             (conj primary-client-id))]
+                             (conj primary-client-id)
+                             (and (string? logseq-chat-client-id)
+                                  (not (string/blank? logseq-chat-client-id)))
+                             (conj logseq-chat-client-id))]
     (and (string? client-id)
          (not (string/blank? client-id))
          (contains? allowed-client-ids client-id))))
+
+(defn token-client-id [payload]
+  (case (aget payload "token_use")
+    "access" (aget payload "client_id")
+    "id" (aget payload "aud")
+    nil))
 
 (defn- import-rsa-key [jwk]
   (.importKey js/crypto.subtle
@@ -109,8 +119,7 @@
         (p/let [header (decode-jwt-part header-part)
                 payload (decode-jwt-part payload-part)
                 issuer (aget env "COGNITO_ISSUER")
-                client-id-claim (or (aget payload "aud")
-                                    (aget payload "client_id"))
+                client-id-claim (token-client-id payload)
                 _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
                 _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
                 _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))

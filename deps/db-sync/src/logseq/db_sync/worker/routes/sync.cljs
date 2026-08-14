@@ -10,6 +10,7 @@
    ["/snapshot/stream" {:methods {"GET" :sync/snapshot-stream}}]
    ["/admin/reset" {:methods {"DELETE" :sync/admin-reset}}]
    ["/tx/batch" {:methods {"POST" :sync/tx-batch}}]
+   ["/chat/tx/batch" {:methods {"POST" :sync/chat-tx-batch}}]
    ["/snapshot/upload" {:methods {"POST" :sync/snapshot-upload}}]])
 
 (def ^:private router

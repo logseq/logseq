@@ -6,10 +6,12 @@
 
 (deftest cognito-client-id-allowlist-test
   (let [env #js {"COGNITO_CLIENT_ID" "web-client"
-                 "COGNITO_CLIENT_IDS" "chatgpt-client, admin-client"}]
+                 "COGNITO_CLIENT_IDS" "chatgpt-client, admin-client"
+                 "LOGSEQ_CHAT_COGNITO_CLIENT_ID" "native-chat-client"}]
     (is (authorization/client-id-allowed? env "web-client"))
     (is (authorization/client-id-allowed? env "chatgpt-client"))
     (is (authorization/client-id-allowed? env "admin-client"))
+    (is (authorization/client-id-allowed? env "native-chat-client"))
     (is (not (authorization/client-id-allowed? env "unknown-client")))))
 
 (deftest cognito-client-id-allowlist-fails-closed-test
@@ -18,6 +20,17 @@
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" ""} "")))
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_IDS" " , "} "chatgpt-client")))
   (is (not (authorization/client-id-allowed? #js {"COGNITO_CLIENT_ID" "web-client"} nil))))
+
+(deftest cognito-token-client-id-uses-client-id-for-access-token-test
+  (is (= "native-chat-client"
+         (authorization/token-client-id
+          #js {"token_use" "access"
+               "client_id" "native-chat-client"
+               "aud" "https://api.logseq.com"})))
+  (is (= "web-client"
+         (authorization/token-client-id
+          #js {"token_use" "id" "aud" "web-client"})))
+  (is (nil? (authorization/token-client-id #js {"client_id" "untyped-token"}))))
 
 (deftest auth-claims-uses-jwt-verification-test
   (async done

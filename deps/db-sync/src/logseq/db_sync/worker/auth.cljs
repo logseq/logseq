@@ -86,6 +86,14 @@
                          (p/rejected error))))))
       (p/resolved nil))))
 
+(defn logseq-chat-access-token?
+  [claims env]
+  (let [expected-client-id (aget env "LOGSEQ_CHAT_COGNITO_CLIENT_ID")]
+    (and (string? expected-client-id)
+         (seq expected-client-id)
+         (= "access" (aget claims "token_use"))
+         (= expected-client-id (aget claims "client_id")))))
+
 (defn personal-access-token?
   [token]
   (and (string? token)

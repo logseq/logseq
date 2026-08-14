@@ -16,6 +16,10 @@
     (is (nil? (:unknown-key cfg)))
     (is (nil? (:legacy-auth-key cfg)))))
 
+(deftest normalize-config-keeps-logseq-chat-client-id-test
+  (let [cfg (config/normalize-config {:logseq-chat-cognito-client-id "native-chat-client"})]
+    (is (= "native-chat-client" (:logseq-chat-cognito-client-id cfg)))))
+
 (deftest normalize-config-storage-driver-test
   (testing "sqlite storage driver accepted"
     (let [cfg (config/normalize-config {:storage-driver "sqlite"})]

@@ -7,6 +7,7 @@
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
@@ -17,6 +18,23 @@
     (and (string? expected)
          (seq expected)
          (= expected actual))))
+
+(defn- forward-sync-request
+  [request registry deps graph-id tail url]
+  (let [ctx (graph/get-or-create-graph registry deps graph-id)
+        new-url (js/URL. (str (.-origin url) tail (.-search url)))]
+    (.set (.-searchParams new-url) "graph-id" graph-id)
+    (sync-handler/handle-http ctx (platform/request (.toString new-url) request))))
+
+(defn- handle-logseq-chat-sync-request
+  [request env registry deps graph-id tail url]
+  (p/let [claims (auth/auth-claims request env)]
+    (if-not (auth/logseq-chat-access-token? claims env)
+      (http/error-response "Logseq Chat client required" 403)
+      (p/let [access-response (index-handler/graph-access-response request env graph-id)]
+        (if (.-ok access-response)
+          (forward-sync-request request registry deps graph-id tail url)
+          access-response)))))
 
 (defn handle-node-fetch
   [{:keys [request env registry deps]}]
@@ -55,20 +73,18 @@
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
-            (if (admin-token-valid? request env)
-              (let [ctx (graph/get-or-create-graph registry deps graph-id)
-                    new-url (js/URL. (str (.-origin url) tail (.-search url)))]
-                (.set (.-searchParams new-url) "graph-id" graph-id)
-                (let [rewritten (platform/request (.toString new-url) request)]
-                  (sync-handler/handle-http ctx rewritten)))
-              (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                (if (.-ok access-resp)
-                  (let [ctx (graph/get-or-create-graph registry deps graph-id)
-                        new-url (js/URL. (str (.-origin url) tail (.-search url)))]
-                    (.set (.-searchParams new-url) "graph-id" graph-id)
-                    (let [rewritten (platform/request (.toString new-url) request)]
-                      (sync-handler/handle-http ctx rewritten)))
-                  access-resp))))
+            (cond
+              (= tail "/chat/tx/batch")
+              (handle-logseq-chat-sync-request request env registry deps graph-id tail url)
+
+              (admin-token-valid? request env)
+              (forward-sync-request request registry deps graph-id tail url)
+
+              :else
+              (p/let [access-response (index-handler/graph-access-response request env graph-id)]
+                (if (.-ok access-response)
+                  (forward-sync-request request registry deps graph-id tail url)
+                  access-response))))
           (http/bad-request "missing graph id"))
         (http/bad-request "missing graph id"))
 

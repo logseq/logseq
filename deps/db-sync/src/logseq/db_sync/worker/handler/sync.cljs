@@ -16,6 +16,7 @@
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -806,6 +807,66 @@
      :tx-data tx-data
      :tx-entry tx-entry}))
 
+(def ^:private chat-block-create-attrs
+  #{:block/uuid
+    :block/title
+    :block/parent
+    :block/page
+    :block/order
+    :block/created-at
+    :block/updated-at})
+
+(defn- chat-property-attr?
+  [attr]
+  (or (contains? #{:block/title :block/updated-at} attr)
+      (db-property/property? attr)))
+
+(defn- chat-block-create-item?
+  [item]
+  (and (map? item)
+       (tempid? (:db/id item))
+       (uuid? (:block/uuid item))
+       (some? (:block/parent item))
+       (some? (:block/page item))
+       (some? (:block/order item))
+       (not (contains? item :block/name))
+       (every? (fn [attr]
+                 (or (= :db/id attr)
+                     (contains? chat-block-create-attrs attr)
+                     (db-property/property? attr)))
+               (keys item))))
+
+(defn- existing-non-page-block?
+  [db entity-id]
+  (when-let [entity (d/entity db entity-id)]
+    (and (:block/uuid entity)
+         (nil? (:block/name entity)))))
+
+(defn- chat-property-item?
+  [db item]
+  (and (vector? item)
+       (<= 4 (count item))
+       (contains? #{:db/add :db/retract} (first item))
+       (existing-non-page-block? db (second item))
+       (chat-property-attr? (nth item 2))))
+
+(defn- chat-tx-entry-allowed?
+  [db {:keys [outliner-op tx]}]
+  (try
+    (let [tx-data (protocol/transit->tx tx)]
+      (and (seq tx-data)
+           (case outliner-op
+             :insert-blocks (every? chat-block-create-item? tx-data)
+             :save-block (every? (partial chat-property-item? db) tx-data)
+             false)))
+    (catch :default _
+      false)))
+
+(defn chat-tx-batch-allowed?
+  [db txs]
+  (and (seq txs)
+       (every? (partial chat-tx-entry-allowed? db) txs)))
+
 (defn- apply-tx-entry!
   ([conn tx-entry]
    (apply-tx-entry! nil conn tx-entry nil))
@@ -1031,7 +1092,7 @@
           (http/json-response :sync/admin-reset {:ok true}))))))
 
 (defn- handle-sync-tx-batch
-  [^js self request]
+  [^js self request chat-client?]
   (.then (common/read-json request)
          (fn [result]
            (if (nil? result)
@@ -1042,8 +1103,13 @@
                (if (nil? body)
                  (http/bad-request "invalid tx")
                  (let [{:keys [client-revision txs t-before]} body
-                       t-before (parse-int t-before)]
-                   (if (sequential? txs)
+                       t-before (parse-int t-before)
+                       allowed? (and (sequential? txs)
+                                     (or (not chat-client?)
+                                         (do
+                                           (ensure-conn! self)
+                                           (chat-tx-batch-allowed? @(.-conn self) txs))))]
+                   (if allowed?
                      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
                        (if-not ready-for-sync?
                          (http/error-response "graph not ready" 409)
@@ -1051,7 +1117,9 @@
                                              (handle-tx-batch! self nil txs t-before
                                                                {:graph-id graph-id
                                                                 :client-revision client-revision}))))
-                     (http/bad-request "invalid tx")))))))))
+                     (if chat-client?
+                       (http/error-response "mutation not allowed" 403)
+                       (http/bad-request "invalid tx"))))))))))
 
 (defn- parse-reset-param
   [value]
@@ -1141,7 +1209,10 @@
     (handle-sync-admin-reset self)
 
     :sync/tx-batch
-    (handle-sync-tx-batch self request)
+    (handle-sync-tx-batch self request false)
+
+    :sync/chat-tx-batch
+    (handle-sync-tx-batch self request true)
 
     :sync/snapshot-upload
     (handle-sync-snapshot-upload self request url)

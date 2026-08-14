@@ -84,6 +84,62 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest chat-tx-route-requires-configured-cognito-access-token-client-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/chat/tx/batch"
+                                    #js {:method "POST"
+                                         :headers #js {"authorization" "Bearer token"
+                                                       "content-type" "application/json"}
+                                         :body "{}"})
+               env #js {"LOGSEQ_CHAT_COGNITO_CLIENT_ID" "native-chat-client"
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/with-redefs [auth/auth-claims
+                               (fn [_request _env]
+                                 (p/resolved #js {"sub" "user-1"
+                                                  "token_use" "access"
+                                                  "client_id" "another-client"}))
+                               index-handler/graph-access-response
+                               (fn [_request _env _graph-id]
+                                 (p/resolved (ok-json-response)))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "Logseq Chat client required" (:error body)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest chat-tx-route-forwards-configured-cognito-access-token-client-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/chat/tx/batch"
+                                    #js {:method "POST"
+                                         :headers #js {"authorization" "Bearer token"
+                                                       "content-type" "application/json"}
+                                         :body "{}"})
+               env #js {"LOGSEQ_CHAT_COGNITO_CLIENT_ID" "native-chat-client"
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/with-redefs [auth/auth-claims
+                               (fn [_request _env]
+                                 (p/resolved #js {"sub" "user-1"
+                                                  "token_use" "access"
+                                                  "client_id" "native-chat-client"}))
+                               index-handler/graph-access-response
+                               (fn [_request _env _graph-id]
+                                 (p/resolved (ok-json-response)))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (= "/chat/tx/batch"
+                          (.-pathname (js/URL. (.-url (first @forwarded))))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (defn- json-body [response]
   (p/let [text (.text response)]
     (js->clj (js/JSON.parse text) :keywordize-keys true)))

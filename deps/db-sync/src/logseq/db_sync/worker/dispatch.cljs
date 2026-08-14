@@ -173,6 +173,19 @@
           (p/resolved nil)))
       (p/resolved nil))))
 
+(defn- handle-logseq-chat-sync-request
+  [request ^js env graph-id ^js new-url]
+  (p/let [claims (auth/auth-claims request env)]
+    (if-not (auth/logseq-chat-access-token? claims env)
+      (http/error-response "Logseq Chat client required" 403)
+      (p/let [access-response (index-handler/graph-access-response request env graph-id)]
+        (if-not (.-ok access-response)
+          access-response
+          (p/let [response (forward-sync-request request env graph-id new-url)
+                  _ (when (< (.-status response) 400)
+                      (<safe-touch-activity! request env graph-id))]
+            response))))))
+
 (defn handle-worker-fetch [request ^js env]
   (->
    (p/do
@@ -243,7 +256,9 @@
              :else
              (if (= method "OPTIONS")
                (common/options-response)
-               (if (admin-token-valid? request env)
+               (if (= tail "/chat/tx/batch")
+                 (handle-logseq-chat-sync-request request env graph-id new-url)
+                 (if (admin-token-valid? request env)
                  (forward-sync-request request env graph-id new-url)
                  (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
                    (if (.-ok access-resp)
@@ -251,7 +266,7 @@
                              _ (when (< (.-status response) 400)
                                  (<safe-touch-activity! request env graph-id))]
                        response)
-                     access-resp))))))
+                     access-resp)))))))
 
          :else
          (http/not-found))))

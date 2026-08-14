@@ -1329,6 +1329,68 @@
      :conn conn
      :self self}))
 
+(deftest chat-tx-batch-allows-block-create-and-property-modification-test
+  (let [{:keys [conn]} (make-server-self)
+        page-id (random-uuid)
+        block-id (random-uuid)
+        new-block-id (random-uuid)]
+    (d/transact! conn [{:block/uuid page-id
+                        :block/name "page"
+                        :block/title "Page"}
+                       {:block/uuid block-id
+                        :block/title "Before"
+                        :block/parent [:block/uuid page-id]
+                        :block/page [:block/uuid page-id]
+                        :block/order "a0"}])
+    (is (sync-handler/chat-tx-batch-allowed?
+         @conn
+         [{:outliner-op :insert-blocks
+           :tx (protocol/tx->transit [{:db/id -1
+                                       :block/uuid new-block-id
+                                       ;; E2EE titles are opaque strings to db-sync.
+                                       :block/title "encrypted-title"
+                                       :block/parent [:block/uuid page-id]
+                                       :block/page [:block/uuid page-id]
+                                       :block/order "a1"}])}]))
+    (is (sync-handler/chat-tx-batch-allowed?
+         @conn
+         [{:outliner-op :save-block
+           :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
+                                       :block/title "encrypted-after"]
+                                      [:db/add [:block/uuid block-id]
+                                       :user.property/priority "high"]
+                                      [:db/retract [:block/uuid block-id]
+                                       :user.property/obsolete "old"]])}]))))
+
+(deftest chat-tx-batch-rejects-delete-move-page-and-arbitrary-mutations-test
+  (let [{:keys [conn]} (make-server-self)
+        page-id (random-uuid)
+        block-id (random-uuid)
+        other-page-id (random-uuid)]
+    (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"}
+                       {:block/uuid other-page-id :block/name "other" :block/title "Other"}
+                       {:block/uuid block-id
+                        :block/title "Block"
+                        :block/parent [:block/uuid page-id]
+                        :block/page [:block/uuid page-id]
+                        :block/order "a0"}])
+    (doseq [tx-entry
+            [{:outliner-op :save-block
+              :tx (protocol/tx->transit [[:db/retractEntity [:block/uuid block-id]]])}
+             {:outliner-op :save-block
+              :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
+                                          :block/page [:block/uuid other-page-id]]])}
+             {:outliner-op :insert-blocks
+              :tx (protocol/tx->transit [{:db/id -1
+                                          :block/uuid (random-uuid)
+                                          :block/name "new-page"
+                                          :block/title "New page"}])}
+             {:outliner-op :save-block
+              :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
+                                          :file/content "arbitrary"]])}]]
+      (is (not (sync-handler/chat-tx-batch-allowed? @conn [tx-entry]))
+          (pr-str tx-entry)))))
+
 (defn- apply-entries!
   [^js self entries]
   (loop [t-before (storage/get-t (.-sql self))
