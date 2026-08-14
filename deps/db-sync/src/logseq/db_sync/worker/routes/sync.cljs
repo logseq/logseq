@@ -4,6 +4,7 @@
 (def ^:private route-data
   [["/health" {:methods {"GET" :sync/health}}]
    ["/pull" {:methods {"GET" :sync/pull}}]
+   ["/events" {:methods {"GET" :sync/events}}]
    ["/checksum/diagnostics" {:methods {"GET" :sync/checksum-diagnostics}}]
    ["/snapshot/download" {:methods {"GET" :sync/snapshot-download}}]
    ["/snapshot/stream" {:methods {"GET" :sync/snapshot-stream}}]

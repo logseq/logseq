@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.test.helper :as db-test]))
 
 (defn- new-conn []
@@ -115,6 +116,24 @@
     (testing "keeps old :block/title retract and new add during title update"
       (is (some #(= [:db/add [:block/uuid page-uuid] :block/title "Page 2"] %) tx-data))
       (is (some #(= [:db/retract [:block/uuid page-uuid] :block/title "Page"] %) tx-data)))))
+
+(deftest normalize-tx-data-keeps-file-path-identity-test
+  (let [conn (d/create-conn db-schema/schema)
+        path "logseq/config.edn"
+        _ (d/transact! conn [{:file/path path :file/content "old"}])
+        update-report (d/transact! conn [[:db/add [:file/path path] :file/content "new"]])
+        update-data (db-normalize/normalize-tx-data (:db-after update-report)
+                                                    (:db-before update-report)
+                                                    (:tx-data update-report))
+        delete-report (d/transact! conn [[:db/retractEntity [:file/path path]]])
+        delete-data (db-normalize/normalize-tx-data (:db-after delete-report)
+                                                    (:db-before delete-report)
+                                                    (:tx-data delete-report))]
+    (is (some #(= [:db/add [:file/path path] :file/content "new"]
+                  (op-e-a-v %))
+              update-data))
+    (is (= [[:db/retractEntity [:file/path path]]]
+           delete-data))))
 
 (deftest normalize-tx-data-keeps-recreated-normal-blocks-test
   (testing "retract + recreate for normal blocks should not drop recreated entity datoms"

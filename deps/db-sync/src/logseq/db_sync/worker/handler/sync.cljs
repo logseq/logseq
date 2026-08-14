@@ -16,6 +16,7 @@
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
@@ -25,6 +26,9 @@
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 (def ^:private large-tx-min-items 500)
 (def ^:private large-tx-max-chunk-items 500)
+(def ^:private sse-heartbeat-ms 15000)
+(def ^:private sse-content-type "text/event-stream")
+(def ^:private sse-text-encoder (js/TextEncoder.))
 ;; 10m
 ;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
@@ -310,6 +314,269 @@
              :t (t-now self)
              :txs txs}
       (string? checksum) (assoc :checksum checksum))))
+
+(def ^:private entity-identity-attrs
+  #{:block/uuid :db/ident :file/path})
+
+(defn- lookup-identity
+  [attr value]
+  (when (contains? entity-identity-attrs attr)
+    [attr value]))
+
+(defn- normalized-identity
+  [aliases entity-id]
+  (cond
+    (and (sequential? entity-id)
+         (contains? entity-identity-attrs (first entity-id)))
+    (vec entity-id)
+
+    (keyword? entity-id)
+    [:db/ident entity-id]
+
+    :else
+    (get aliases entity-id)))
+
+(defn- tx-entry-data
+  [{:keys [tx]}]
+  (protocol/transit->tx tx))
+
+(defn- identity-aliases
+  [tx-data]
+  (reduce
+   (fn [aliases item]
+     (if (and (= 5 (count item))
+              (= :db/add (first item)))
+       (let [[_op entity attr value] item]
+         (if-let [identity (lookup-identity attr value)]
+           (assoc aliases entity identity)
+           aliases))
+       aliases))
+   {}
+   tx-data))
+
+(defn- affected-identities
+  [tx-entries]
+  (let [tx-data (mapcat tx-entry-data tx-entries)
+        aliases (identity-aliases tx-data)]
+    (->> tx-data
+         (keep (fn [item]
+                 (case (count item)
+                   5 (normalized-identity aliases (second item))
+                   2 (when (= :db/retractEntity (first item))
+                       (normalized-identity aliases (second item)))
+                   nil)))
+         distinct
+         (sort-by pr-str)
+         vec)))
+
+(defn- entity-identity
+  [db entity-id]
+  (when-let [entity (d/entity db entity-id)]
+    (or (some->> (:block/uuid entity) (vector :block/uuid))
+        (some->> (:db/ident entity) (vector :db/ident))
+        (some->> (:file/path entity) (vector :file/path)))))
+
+(defn- ref-identity
+  [db value]
+  (or (entity-identity db value)
+      (throw (ex-info "reference has no stable identity"
+                      {:type :db-sync/unidentifiable-reference
+                       :entity-id value}))))
+
+(defn- ref-value?
+  [db attr]
+  (= :db.type/ref
+     (or (get-in (d/schema db) [attr :db/valueType])
+         (:db/valueType (d/entity db attr)))))
+
+(defn- cardinality-many?
+  [db attr]
+  (= :db.cardinality/many
+     (or (get-in (d/schema db) [attr :db/cardinality])
+         (:db/cardinality (d/entity db attr)))))
+
+(defn- complete-entity
+  [db identity]
+  (when-let [entity (d/entity db identity)]
+    (let [eid (:db/id entity)
+          attrs (reduce
+                 (fn [result datom]
+                   (let [attr (:a datom)
+                         value (cond->> (:v datom)
+                                 (ref-value? db attr) (ref-identity db))]
+                     (if (cardinality-many? db attr)
+                       (update result attr (fnil conj #{}) value)
+                       (assoc result attr value))))
+                 {}
+                 (d/datoms db :eavt eid))]
+      {:id identity
+       :attrs attrs})))
+
+(defn- contiguous-tx-log?
+  [since t-now tx-entries]
+  (= (vec (range (inc since) (inc t-now)))
+     (mapv :t tx-entries)))
+
+(defn latest-entity-changes
+  [^js self graph-id since]
+  (ensure-conn! self)
+  (let [sql (.-sql self)
+        db @(.-conn self)
+        t-now (storage/get-t sql)
+        tx-entries (storage/fetch-tx-since sql since)]
+    (if-not (contiguous-tx-log? since t-now tx-entries)
+      {:reason "cursor-expired"
+       :snapshot-required true}
+      (let [identities (affected-identities tx-entries)
+            upserts (into [] (keep #(complete-entity db %)) identities)
+            surviving (into #{} (map :id) upserts)
+            deleted (into [] (remove surviving) identities)]
+        {:format-version 1
+         :graph-id graph-id
+         :schema-version (db-schema/schema-version->string db-schema/version)
+         :t-before since
+         :t t-now
+         :upserts upserts
+         :deleted deleted}))))
+
+(defn- encode-sse-event
+  [event-name id data]
+  (str (when (some? id) (str "id: " id "\n"))
+       "event: " event-name "\n"
+       "data: " (common/write-transit data) "\n\n"))
+
+(defn- enqueue-change-result!
+  [controller result]
+  (let [text (if (:reason result)
+               (encode-sse-event "reset" nil result)
+               (encode-sse-event "graph-changes" (:t result) result))]
+    (.enqueue controller (.encode sse-text-encoder text))))
+
+(defn- sse-subscribers
+  [^js self]
+  (or (.-sse-subscribers self)
+      (let [subscribers (atom #{})]
+        (set! (.-sse-subscribers self) subscribers)
+        subscribers)))
+
+(defn- remove-sse-subscriber!
+  [^js self subscriber]
+  (when-let [timer (:heartbeat-timer subscriber)]
+    (js/clearInterval timer))
+  (swap! (sse-subscribers self) disj subscriber))
+
+(defn- notify-sse-subscriber!
+  [^js self subscriber]
+  (try
+    (let [cursor @(:cursor subscriber)
+          result (latest-entity-changes self (:graph-id subscriber) cursor)
+          next-t (:t result)]
+      (cond
+        (:reason result)
+        (do
+          (enqueue-change-result! (:controller subscriber) result)
+          (.close (:controller subscriber))
+          (remove-sse-subscriber! self subscriber))
+
+        (> next-t cursor)
+        (do
+          (enqueue-change-result! (:controller subscriber) result)
+          (reset! (:cursor subscriber) next-t))))
+    (catch :default error
+      (log/error :db-sync/sse-notify-failed {:error error})
+      (try
+        (.error (:controller subscriber) error)
+        (catch :default _))
+      (remove-sse-subscriber! self subscriber))))
+
+(defn- notify-sse-subscribers!
+  [^js self]
+  (doseq [subscriber @(sse-subscribers self)]
+    (notify-sse-subscriber! self subscriber)))
+
+(defn- ensure-sse-listener!
+  [^js self]
+  (ensure-conn! self)
+  (when-not (true? (.-sse-listener-ready self))
+    (d/listen! (.-conn self) ::sse-events
+               (fn [_tx-report]
+                 ;; The storage listener persists the server t in the same
+                 ;; transaction callback. Run after all DataScript listeners.
+                 (js/queueMicrotask #(notify-sse-subscribers! self))))
+    (set! (.-sse-listener-ready self) true)))
+
+(defn- sse-stream
+  [^js self graph-id since]
+  (ensure-sse-listener! self)
+  (let [subscriber* (atom nil)]
+    (js/ReadableStream.
+     (clj->js
+      {:start (fn [controller]
+                (let [result (latest-entity-changes self graph-id since)
+                      cursor (atom since)
+                      heartbeat-timer (js/setInterval
+                                       (fn []
+                                         (try
+                                           (.enqueue controller
+                                                     (.encode sse-text-encoder ": heartbeat\n\n"))
+                                           (catch :default _
+                                             (when-let [subscriber @subscriber*]
+                                               (remove-sse-subscriber! self subscriber)))))
+                                       sse-heartbeat-ms)
+                      subscriber {:controller controller
+                                  :cursor cursor
+                                  :graph-id graph-id
+                                  :heartbeat-timer heartbeat-timer}]
+                  (reset! subscriber* subscriber)
+                  (swap! (sse-subscribers self) conj subscriber)
+                  (if (:reason result)
+                    (do
+                      (enqueue-change-result! controller result)
+                      (.close controller)
+                      (remove-sse-subscriber! self subscriber))
+                    (if (> (:t result) since)
+                      (do
+                        (enqueue-change-result! controller result)
+                        (reset! cursor (:t result)))
+                      (.enqueue controller
+                                (.encode sse-text-encoder ": connected\n\n"))))))
+       :cancel (fn []
+                 (when-let [subscriber @subscriber*]
+                   (remove-sse-subscriber! self subscriber)))}))))
+
+(defn- strict-cursor
+  [value]
+  (when (and (string? value)
+             (re-matches #"[0-9]+" value))
+    (parse-int value)))
+
+(defn- handle-sync-events
+  [^js self request ^js url]
+  (let [last-event-id (.get (.-headers request) "last-event-id")
+        raw-since (or last-event-id (.get (.-searchParams url) "since") "0")
+        since (strict-cursor raw-since)
+        graph-id (graph-id-from-request request)
+        current-t (t-now self)]
+    (cond
+      (not (seq graph-id))
+      (http/bad-request "missing graph id")
+
+      (or (not (number? since)) (> since current-t))
+      (http/bad-request "invalid since")
+
+      :else
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (js/Response.
+           (sse-stream self graph-id since)
+           #js {:status 200
+                :headers (js/Object.assign
+                          #js {"content-type" sse-content-type
+                               "cache-control" "no-cache"
+                               "connection" "keep-alive"
+                               "x-accel-buffering" "no"}
+                          (common/cors-headers))}))))))
 
 (defn- block-uuid-lookup-ref
   [entity-id]
@@ -857,6 +1124,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/events
+    (handle-sync-events self request url)
 
     :sync/checksum-diagnostics
     (handle-sync-checksum-diagnostics self request)

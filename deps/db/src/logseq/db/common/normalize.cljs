@@ -2,6 +2,15 @@
   "Normalize && denormalize eid for sync"
   (:require [datascript.core :as d]))
 
+(def ^:private entity-identity-attrs
+  #{:block/uuid :db/ident :file/path})
+
+(defn- identity-lookup-ref
+  [attr value]
+  (if (= :db/ident attr)
+    value
+    [attr value]))
+
 (defn remove-retract-entity-ref
   [db tx-data]
   (let [retracted (-> (keep (fn [[op value]]
@@ -28,7 +37,7 @@
   (->> normalized-tx-data
        (map (fn [[op eid a v t]]
               (cond
-                (and (= op :db/retract) (= a :block/uuid))
+                (and (= op :db/retract) (contains? entity-identity-attrs a))
                 [:db/retractEntity eid]
                 (and a (some? v))
                 [op eid a v t]
@@ -41,13 +50,14 @@
   (let [retract-eids-by-entity
         (into {}
               (keep (fn [d]
-                      (when (and (= :block/uuid (:a d))
+                      (when (and (contains? entity-identity-attrs (:a d))
                                  (false? (:added d)))
-                        (let [entity (d/entity db-after [:block/uuid (:v d)])]
+                        (let [lookup-ref (identity-lookup-ref (:a d) (:v d))
+                              entity (d/entity db-after lookup-ref)]
                           (when (not= (:db/id entity) (:e d)) ; eid changed
                             [(:e d) (if entity
                                       (:e d)
-                                      [:block/uuid (:v d)])])))))
+                                      lookup-ref)])))))
               tx-data)]
     (loop [result []
            seen #{}
@@ -67,14 +77,17 @@
   (when-let [entity (d/entity db e)]
     (if-let [id (:block/uuid entity)]
       [:block/uuid id]
-      (:db/ident entity))))
+      (if-let [ident (:db/ident entity)]
+        ident
+        (when-let [path (:file/path entity)]
+          [:file/path path])))))
 
 (defn eid->tempid
   [db e]
   (when-let [entity (d/entity db e)]
-    (when-let [id (if-let [id (:block/uuid entity)]
-                    id
-                    (:db/ident entity))]
+    (when-let [id (or (:block/uuid entity)
+                      (:db/ident entity)
+                      (:file/path entity))]
       (str id))))
 
 (defn- sort-datoms

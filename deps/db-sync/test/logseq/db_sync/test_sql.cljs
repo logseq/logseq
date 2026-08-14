@@ -40,6 +40,11 @@
                                                    :outliner-op (:outliner-op row)})))]
                      (js-rows rows))
 
+                   (string/includes? sql "delete from tx_log where t")
+                   (let [t (first args)]
+                     (swap! state update :tx-log dissoc t)
+                     nil)
+
                    (string/includes? sql "insert into sync_meta")
                    (let [[k v] args]
                      (swap! state update :meta assoc k v)
