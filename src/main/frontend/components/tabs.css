@@ -7,6 +7,7 @@
   -webkit-app-region: drag;
 }
 
+
 /* Keep the container pointer-events active so on-mouse-enter fires for reveal.
    Only disable clicks on the tab items themselves. */
 .tabs-container.tabs-typing-hidden {

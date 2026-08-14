@@ -1,6 +1,7 @@
 (ns frontend.components.tabs
   "Tab bar component for page tabs"
   (:require [frontend.handler.tabs :as tabs-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.state.tabs :as tabs-state]
             [frontend.ui :as ui]
@@ -148,9 +149,9 @@
 (hsx/defc tab-bar
   []
   (let [[drag-state set-drag-state!] (hooks/use-state {})
-        tabs          (state/use-sub :tabs/tabs-list)
-        active-tab-id (state/use-sub :tabs/active-tab-id)
-        auto-hide?    (state/use-sub :ui/auto-hide-tabs-typing?)
+        tabs               (rfx/use-sub [:tabs/tabs-list])
+        active-tab-id      (rfx/use-sub [:tabs/active-tab-id])
+        auto-hide?         (rfx/use-sub [:ui/auto-hide-tabs-typing?])
         [is-typing?]  (hooks/use-atom typing?)
         hidden?       (and auto-hide? is-typing?)]
     (hooks/use-effect!

@@ -12,14 +12,14 @@
   (str (random-uuid)))
 
 (defn get-tabs []
-  (or (get-in @state/state [:tabs/tabs-list]) []))
+  (or (state/get-state :tabs/tabs-list) []))
 
 (defn get-active-tab-id []
-  (get-in @state/state [:tabs/active-tab-id]))
+  (state/get-state :tabs/active-tab-id))
 
 
 (defn set-active-tab-id! [tab-id]
-  (swap! state/state assoc-in [:tabs/active-tab-id] tab-id))
+  (state/set-state! :tabs/active-tab-id tab-id))
 
 (defn add-tab!
   "Add a new tab. Returns the tab-id."
@@ -32,7 +32,7 @@
                  :title (or title page-name (str page-uuid))
                  :created-at (js/Date.now)}
         current-tabs (get-tabs)]
-    (swap! state/state assoc-in [:tabs/tabs-list] (conj current-tabs new-tab))
+    (state/set-state! :tabs/tabs-list (conj current-tabs new-tab))
     (set-active-tab-id! tab-id)
     tab-id))
 
@@ -42,7 +42,7 @@
   (let [tabs (get-tabs)
         active-id (get-active-tab-id)
         remaining-tabs (filterv #(not= (:id %) tab-id) tabs)]
-    (swap! state/state assoc-in [:tabs/tabs-list] remaining-tabs)
+    (state/set-state! :tabs/tabs-list remaining-tabs)
     (when (= active-id tab-id)
       (if (seq remaining-tabs)
         (set-active-tab-id! (:id (last remaining-tabs)))
@@ -60,7 +60,7 @@
                                (merge tab updates)
                                tab))
                            tabs)]
-    (swap! state/state assoc-in [:tabs/tabs-list] updated-tabs)))
+    (state/set-state! :tabs/tabs-list updated-tabs)))
 
 (defn find-tab-by-page
   "Find a tab by page-uuid or page-name"
@@ -81,8 +81,8 @@
                        :page-uuid nil
                        :title "Journals"
                        :created-at (js/Date.now)}]
-      (swap! state/state assoc-in [:tabs/tabs-list] [initial-tab])
-      (swap! state/state assoc-in [:tabs/active-tab-id] tab-id))))
+      (state/set-state! :tabs/tabs-list [initial-tab])
+      (state/set-state! :tabs/active-tab-id tab-id))))
 
 (defn update-active-tab!
   "Update the active tab with new page information"
@@ -108,4 +108,4 @@
             reordered (vec (concat (subvec without-tab 0 to-index)
                                    [tab]
                                    (subvec without-tab to-index)))]
-        (swap! state/state assoc-in [:tabs/tabs-list] reordered)))))
+        (state/set-state! :tabs/tabs-list reordered)))))

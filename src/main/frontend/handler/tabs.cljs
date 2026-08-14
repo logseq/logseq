@@ -1,37 +1,35 @@
 (ns frontend.handler.tabs
   "Handler for tabs operations"
-  (:require [frontend.db :as db]
-            [frontend.handler.route :as route-handler]
+  (:require [frontend.handler.route :as route-handler]
             [frontend.handler.window :as window-handler]
             [frontend.state :as state]
             [frontend.state.tabs :as tabs-state]
             [frontend.util :as util]
-[promesa.core :as p]))
+            [promesa.core :as p]))
 
 (defn open-tab-by-page!
   "Open a page in a new tab or switch to existing tab"
   [page-uuid-or-name _opts]
   (when page-uuid-or-name
-    (p/let [page (db/get-page page-uuid-or-name)
-            page-id (:db/id page)
-            page-uuid (:block/uuid page)
-            page-name (:block/name page)
-            title (:block/title page)]
-      (when page
-        ;; Always check for existing tab first
-        (let [existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name))]
+    (p/let [route-info (state/<invoke-db-worker :thread-api/get-page-route-info
+                                                (state/get-current-repo)
+                                                page-uuid-or-name)]
+      (when route-info
+        (let [page-id (:page-id route-info)
+              page-uuid (:page-uuid route-info)
+              page-name (str page-uuid-or-name)
+              title (:page-title route-info)
+              existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name))]
           (if existing-tab
-            ;; Switch to existing tab
             (do
               (tabs-state/set-active-tab-id! (:id existing-tab))
               (route-handler/redirect-to-page! (or page-uuid page-name) {:push false :skip-auto-tab? true}))
-            ;; Create new tab only if it doesn't exist
-            (let [tab-id (tabs-state/add-tab! {:page-id page-id
-                                               :page-name page-name
-                                               :page-uuid page-uuid
-                                               :title (or title page-name (str page-uuid))})]
-              (route-handler/redirect-to-page! (or page-uuid page-name) {:push false :skip-auto-tab? true})
-              tab-id)))))))
+            (do
+              (tabs-state/add-tab! {:page-id page-id
+                                    :page-name page-name
+                                    :page-uuid page-uuid
+                                    :title (or title page-name (str page-uuid))})
+              (route-handler/redirect-to-page! (or page-uuid page-name) {:push false :skip-auto-tab? true}))))))))
 
 (defn close-tab!
   "Close a tab. If it's the last tab, navigate to Journals page"
@@ -88,11 +86,11 @@
                                       :page-name "all-journals"
                                       :page-uuid nil
                                       :title "Journals"})
-      (swap! state/state assoc-in [:tabs/tabs-list] [(assoc active-tab
-                                                              :page-id nil
-                                                              :page-name "all-journals"
-                                                              :page-uuid nil
-                                                              :title "Journals")])
+      (state/set-state! :tabs/tabs-list [(assoc active-tab
+                                                :page-id nil
+                                                :page-name "all-journals"
+                                                :page-uuid nil
+                                                :title "Journals")])
       (route-handler/redirect! {:to :all-journals}))))
 
 (defn open-all-journals-in-tab!

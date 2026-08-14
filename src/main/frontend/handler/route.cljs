@@ -134,18 +134,17 @@
              (when-let [db-id (:page-id route-info)]
                (recent-handler/add-page-to-recent! db-id click-from-recent?))
              ;; Update current active tab or switch to existing tab with this page
-             (when (and page (not skip-auto-tab?))
-               (let [page-uuid (:block/uuid page)
-                     page-name-lc (:block/name page)
-                     existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name-lc))]
+             (when (and (:page-id route-info) (not skip-auto-tab?))
+               (let [page-uuid (:page-uuid route-info)
+                     existing-tab (tabs-state/find-tab-by-page (or page-uuid (str page-name)))]
                  (if existing-tab
                    ;; Tab exists - switch to it
                    (tabs-state/set-active-tab-id! (:id existing-tab))
                    ;; No tab exists - update current active tab with new page
-                   (tabs-state/update-active-tab! {:page-id (:db/id page)
-                                                   :page-name page-name-lc
+                   (tabs-state/update-active-tab! {:page-id (:page-id route-info)
+                                                   :page-name (str page-name)
                                                    :page-uuid page-uuid
-                                                   :title (or (:block/title page) page-name-lc (str page-uuid))}))))
+                                                   :title (or (:page-title route-info) (str page-name))}))))
              (let [m (cond->
                       (merge-query-params
                        (default-page-route (str page-name) route-info)
@@ -263,18 +262,16 @@
       ;; Handle page route
       (= route-name :page)
       (when-let [page-name (get-in route [:path-params :name])]
-        (when-let [page (db/get-page page-name)]
-          (let [page-uuid (:block/uuid page)
-                page-name-lc (:block/name page)
-                existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name-lc))]
-            (if existing-tab
-              ;; Tab exists - switch to it
-              (tabs-state/set-active-tab-id! (:id existing-tab))
-              ;; No tab exists - update current active tab with new page
-              (tabs-state/update-active-tab! {:page-id (:db/id page)
-                                              :page-name page-name-lc
-                                              :page-uuid page-uuid
-                                              :title (or (:block/title page) page-name-lc (str page-uuid))})))))
+        (p/let [route-info (<page-route-info page-name)]
+          (when route-info
+            (let [page-uuid (:page-uuid route-info)
+                  existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name))]
+              (if existing-tab
+                (tabs-state/set-active-tab-id! (:id existing-tab))
+                (tabs-state/update-active-tab! {:page-id (:page-id route-info)
+                                                :page-name page-name
+                                                :page-uuid page-uuid
+                                                :title (or (:page-title route-info) page-name)}))))))
       ;; Handle home/journals route
       (or (= route-name :home) (= route-name :all-journals))
       (let [existing-tab (tabs-state/find-tab-by-page "all-journals")]

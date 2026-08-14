@@ -903,7 +903,7 @@
         enable-shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
         show-brackets? (state/show-brackets?)
         wide-mode? (rfx/use-sub [:ui/wide-mode?])
-        auto-hide-tabs-typing? (state/use-sub :ui/auto-hide-tabs-typing?)]
+        auto-hide-tabs-typing? (rfx/use-sub [:ui/auto-hide-tabs-typing?])]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)

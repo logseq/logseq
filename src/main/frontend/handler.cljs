@@ -161,9 +161,6 @@
 
       (tabs-state/init-tabs!)
 
-      (react/run-custom-queries-when-idle!)
-
-
       (events/run!)
 
       (log/info ::start-web-worker {})

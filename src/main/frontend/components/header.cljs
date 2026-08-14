@@ -482,7 +482,7 @@
   (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (when (and (false? db-restoring?)
                page-name
-               (common-util/uuid-string? page-name))
+               (util/uuid-string? page-name))
       (ready-block-breadcrumb (uuid page-name)))))
 
 (hsx/defc search-index-progress
