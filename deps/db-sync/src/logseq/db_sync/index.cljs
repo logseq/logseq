@@ -501,8 +501,10 @@
   (let [user-id (aget claims "sub")]
     (when (string? user-id)
       (let [email (aget claims "email")
+            email (when (string? email) email)
             email-verified (aget claims "email_verified")
             username (aget claims "cognito:username")
+            username (when (string? username) username)
             email-verified (cond
                              (true? email-verified) 1
                              (false? email-verified) 0
