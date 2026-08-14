@@ -302,7 +302,6 @@
     (log/error :db-worker-node-invoke-failed
                {:status status
                 :code code
-                :error error
                 :message message
                 :method method-kw})
     (send-json! res status payload)))
@@ -344,19 +343,7 @@
                              result (<invoke-binary! proxy method-str method-kw repo binary)]
                        (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
                  (p/catch (fn [error]
-                            (let [data (ex-data error)
-                                  status (invoke-error-status data)
-                                  code (invoke-error-code data)
-                                  message (invoke-error-message error data)
-                                  payload {:ok false
-                                           :error {:code code
-                                                   :message message}}]
-                              (log/error :db-worker-node-invoke-failed
-                                         {:status status
-                                          :code code
-                                          :method method-str
-                                          :error error})
-                              (send-json! res status payload))))))
+                            (log-invoke-error! res error method-kw)))))
            (send-text! res 405 "method-not-allowed"))
 
          (= request-path "/v1/invoke")
