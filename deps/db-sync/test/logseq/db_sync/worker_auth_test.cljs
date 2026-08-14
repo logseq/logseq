@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-auth-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [logseq.common.authorization :as authorization]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
@@ -41,6 +42,25 @@
                                  (js/Promise.resolve #js {"sub" (str "jwt:" token)}))]
                  (p/let [claims (auth/auth-claims request #js {})]
                    (is (= "jwt:dev-token" (aget claims "sub")))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-auth-grants-first-party-access-token-scopes-test
+  (async done
+         (let [request (js/Request. "http://localhost/api/v1/graphs")
+               claims #js {"sub" "user-1"
+                           "token_use" "access"
+                           "client_id" "native-client"
+                           "scope" "aws.cognito.signin.user.admin"}
+               env #js {"COGNITO_CLIENT_ID" "native-client"}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
+                 (p/let [semantic-claims (auth/semantic-auth-claims request env)
+                         scopes (set (string/split (aget semantic-claims "scope") #"\s+"))]
+                   (is (contains? scopes "aws.cognito.signin.user.admin"))
+                   (is (contains? scopes "logseq/read"))
+                   (is (contains? scopes "logseq/write"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
