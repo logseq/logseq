@@ -1057,13 +1057,18 @@
           (http/error-response "graph not ready" 409)
           (let [key (str "stream/" graph-id ".snapshot")
                 url (snapshot-stream-url request graph-id)
+                t (storage/get-t (.-sql self))
+                row-count (snapshot-row-count (.-sql self))
                 content-encoding (when (and (snapshot-stream-gzip-enabled? self)
                                             (exists? js/CompressionStream))
                                    snapshot-content-encoding)]
             (http/json-response :sync/snapshot-download
                                 (cond-> {:ok true
                                          :key key
-                                         :url url}
+                                         :url url
+                                         :t t
+                                         :schema-version (db-schema/schema-version->string db-schema/version)
+                                         :row-count row-count}
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 

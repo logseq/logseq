@@ -236,6 +236,9 @@
    [:ok :boolean]
    [:key :string]
    [:url :string]
+   [:t :int]
+   [:schema-version :string]
+   [:row-count :int]
    [:content-encoding {:optional true} [:maybe :string]]])
 
 (def snapshot-upload-response-schema
