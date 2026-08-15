@@ -460,7 +460,9 @@
   (let [day (today-journal-day)]
     (or (ldb/get-journal-page-by-day @conn day)
         (let [formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
-              title (date-time-util/int->journal-title day formatter)
+              title (date-time-util/int->journal-title
+                     day
+                     (or formatter date-time-util/default-journal-title-formatter))
               [_ page-id] (outliner-page/create! conn title {:journal? true :today-journal? true})]
           (d/entity @conn [:block/uuid page-id])))))
 

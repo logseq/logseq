@@ -58,6 +58,16 @@
                conn {:uuid (str block-id) :title "Offline capture"})]
     (is (= block-id (:block/uuid block)))))
 
+(deftest ensure-today-page-defaults-missing-journal-title-format-test
+  (let [conn (sqlite-export/create-conn)
+        formatter (:logseq.property.journal/title-format
+                   (d/entity @conn :logseq.class/Journal))]
+    (d/transact! conn [[:db/retract :logseq.class/Journal
+                        :logseq.property.journal/title-format formatter]])
+    (let [page (#'semantic-handler/ensure-today-page! conn)]
+      (is (string? (:block/title page)))
+      (is (seq (:block/title page))))))
+
 (deftest asset-response-stays-an-independent-journal-block-test
   (let [conn (sqlite-export/create-conn)
         journal-id (random-uuid)
