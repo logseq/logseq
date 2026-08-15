@@ -27,7 +27,8 @@
    {:method "GET" :path "/api/v1/graphs/:graph-id/blocks/:block-id/references" :internal-path "/semantic/blocks/:block-id/references"
     :handler :semantic/blocks-references :operation-id "listBlockReferences" :scope "logseq/read" :rate-class :read}
    {:method "PATCH" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
-    :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/blocks-update :operation-id "updateBlock" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id" :internal-path "/semantic/blocks/:block-id"
     :handler :semantic/blocks-delete :operation-id "deleteBlock" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-moves" :internal-path "/semantic/block-moves"
@@ -37,7 +38,8 @@
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-trees" :internal-path "/semantic/block-trees"
     :handler :semantic/blocks-insert-tree :operation-id "insertBlockTree" :scope "logseq/write" :rate-class :write}
    {:method "PUT" :path "/api/v1/graphs/:graph-id/blocks/:block-id/properties/:property-id" :internal-path "/semantic/blocks/:block-id/properties/:property-id"
-    :handler :semantic/blocks-set-property :operation-id "setBlockProperty" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/blocks-set-property :operation-id "setBlockProperty" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "DELETE" :path "/api/v1/graphs/:graph-id/blocks/:block-id/properties/:property-id" :internal-path "/semantic/blocks/:block-id/properties/:property-id"
     :handler :semantic/blocks-delete-property :operation-id "deleteBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-properties/batch-set" :internal-path "/semantic/block-properties/batch-set"
@@ -45,11 +47,13 @@
    {:method "POST" :path "/api/v1/graphs/:graph-id/block-properties/batch-delete" :internal-path "/semantic/block-properties/batch-delete"
     :handler :semantic/blocks-batch-delete-property :operation-id "batchDeleteBlockProperty" :scope "logseq/write" :rate-class :write}
    {:method "POST" :path "/api/v1/graphs/:graph-id/capture" :internal-path "/semantic/capture"
-    :handler :semantic/capture :operation-id "captureToToday" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/capture :operation-id "captureToToday" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tasks" :internal-path "/semantic/tasks"
     :handler :semantic/tasks-list :operation-id "listTasks" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/tasks" :internal-path "/semantic/tasks"
-    :handler :semantic/tasks-create :operation-id "createTask" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/tasks-create :operation-id "createTask" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "GET" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
     :handler :semantic/tags-list :operation-id "listTags" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/tags" :internal-path "/semantic/tags"
@@ -75,7 +79,8 @@
    {:method "GET" :path "/api/v1/graphs/:graph-id/assets" :internal-path "/semantic/assets"
     :handler :semantic/assets-list :operation-id "listAssets" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/assets" :internal-path "/semantic/assets"
-    :handler :semantic/assets-create :operation-id "createAsset" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/assets-create :operation-id "createAsset" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "GET" :path "/api/v1/graphs/:graph-id/assets/:asset-block-id" :internal-path "/semantic/assets/:asset-block-id"
     :handler :semantic/assets-get :operation-id "getAsset" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/search" :internal-path "/semantic/search"
@@ -173,11 +178,16 @@
     :schema {:type "string" :format "uuid"}}
    {:name "file-name" :in "query" :required true :schema {:type "string"}}
    {:name "size" :in "query" :required true
-    :description "Exact decoded file size in bytes. The trusted MCP host recalculates it for encoding=base64; direct API uploads must supply it. Uploads larger than 100MB are rejected before R2."
+    :description "Logical decoded asset size in bytes. Uploads larger than 100MB are rejected before R2."
     :schema {:type "integer" :minimum 0 :maximum 104857600}}
-   {:name "title" :in "query" :schema {:type "string"}}
+   {:name "upload-size" :in "query"
+    :description "Exact decoded request-body size. Required for E2EE assets because the encrypted payload size differs from the logical asset size."
+    :schema {:type "integer" :minimum 0 :maximum 209715200}}
+   {:name "title" :in "query"
+    :description "Asset block title. Required for E2EE graphs and already encrypted by the client."
+    :schema {:type "string"}}
    {:name "page-id" :in "query"
-    :description "Destination page UUID. Omit to append to today's journal."
+    :description "Destination page UUID. Required for E2EE graphs; otherwise omit to append to today's journal."
     :schema {:type "string"}}
    {:name "checksum" :in "query" :required true
     :description "Lowercase or uppercase SHA-256 hex digest of the file."
@@ -220,7 +230,9 @@
                                                                :properties {:block-id {:type "string"}
                                                                             :property-id {:type "string"}}}}}}
     "captureToToday" {:required ["blocks"]
-                      :properties {:blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
+                      :properties {:page-id {:type "string"
+                                             :description "Existing destination page UUID. Required for E2EE graphs."}
+                                   :blocks {:type "array" :items {:$ref "#/components/schemas/BlockTree"}}}}
     "createTask" {:required ["title"]
                   :properties {:uuid {:type "string" :format "uuid"}
                                :title {:type "string"}

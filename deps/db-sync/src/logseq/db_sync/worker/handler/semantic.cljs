@@ -429,17 +429,23 @@
     {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
      :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
 
-(defn- tree-block [conn node]
+(defn- e2ee-request? [^js url]
+  (= "true" (.get (.-searchParams url) "graph-e2ee")))
+
+(defn- tree-block [conn node e2ee?]
   (let [block-id (if-let [client-id (:uuid node)]
                    (if (common-util/uuid-string? client-id)
                      (uuid client-id)
                      (throw (ex-info "invalid block uuid" {:uuid client-id})))
                    (random-uuid))]
-    (assoc (prepare-block-title! conn (:title node)) :block/uuid block-id)))
+    (assoc (if e2ee?
+             {:block/title (:title node)}
+             (prepare-block-title! conn (:title node)))
+           :block/uuid block-id)))
 
-(defn- insert-tree! [conn target nodes position]
+(defn- insert-tree! [conn target nodes position e2ee?]
   (let [nodes (vec nodes)
-        blocks (mapv #(tree-block conn %) nodes)]
+        blocks (mapv #(tree-block conn % e2ee?) nodes)]
     (when (seq blocks)
       (outliner-core/insert-blocks! conn blocks target
                                     {:sibling? false :top? (= position "prepend")
@@ -447,7 +453,7 @@
       (mapv (fn [node block]
               (let [children (when (seq (:children node))
                                (insert-tree! conn (d/entity @conn [:block/uuid (:block/uuid block)])
-                                             (:children node) "append"))]
+                                             (:children node) "append" e2ee?))]
                 (cond-> {:uuid (str (:block/uuid block)) :title (:title node)}
                   (seq children) (assoc :children children))))
             nodes blocks))))
@@ -685,7 +691,9 @@
         (http/bad-request "invalid block-id or title")
         (do
           (outliner-core/save-block! conn
-                                     (assoc (prepare-block-title! conn (:title body))
+                                     (assoc (if (e2ee-request? url)
+                                              {:block/title (:title body)}
+                                              (prepare-block-title! conn (:title body)))
                                             :block/uuid (:block/uuid block)))
           (broadcast-change! self)
           (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
@@ -727,7 +735,7 @@
       (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
               (not (seq (:blocks body))))
         (http/bad-request "invalid target, position, or blocks")
-        (let [inserted (insert-tree! conn target (:blocks body) (:position body))]
+        (let [inserted (insert-tree! conn target (:blocks body) (:position body) false)]
           (broadcast-change! self)
           (http/json-response nil {:blocks inserted} 201))))
 
@@ -736,7 +744,7 @@
             target (find-entity db (:target-id body))]
       (if (or (nil? target) (not (seq (:blocks body))))
         (http/bad-request "invalid target or blocks")
-        (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append"))]
+        (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append") false)]
           (broadcast-change! self)
           (http/json-response nil {:blocks inserted} 201))))))
 
@@ -812,12 +820,24 @@
 
     :semantic/capture
     (p/let [body (body-clj request)]
-      (if-not (seq (:blocks body))
-        (http/bad-request "missing blocks")
-        (let [today (ensure-today-page! conn)
-              inserted (insert-tree! conn today (:blocks body) "append")]
-          (broadcast-change! self)
-          (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
+      (let [e2ee? (e2ee-request? url)
+            explicit-target (when (:page-id body)
+                              (find-entity db (:page-id body)))]
+        (cond
+          (not (seq (:blocks body)))
+          (http/bad-request "missing blocks")
+
+          (and (:page-id body) (not (page? explicit-target)))
+          (http/bad-request "invalid page-id")
+
+          (and e2ee? (nil? explicit-target))
+          (http/bad-request "encrypted capture requires page-id")
+
+          :else
+          (let [target (or explicit-target (ensure-today-page! conn))
+                inserted (insert-tree! conn target (:blocks body) "append" e2ee?)]
+            (broadcast-change! self)
+            (http/json-response nil {:page-id (str (:block/uuid target)) :blocks inserted} 201)))))
 
     :semantic/tags-list
     (paginated-response url :tags (entities-by-avet db :block/tags :logseq.class/Tag) tag-response)
@@ -890,7 +910,8 @@
 
     :semantic/tasks-create
     (p/let [body (body-clj request)]
-      (let [status (or (:status body) "todo")
+      (let [e2ee? (e2ee-request? url)
+            status (or (:status body) "todo")
             priority (:priority body)
             status-choice (resolve-property-choice db :logseq.property/status task-status-idents status)
             priority-choice (when priority
@@ -903,6 +924,7 @@
           (nil? status-choice) (http/bad-request "invalid task status")
           (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
           (and (:page-id body) (not (page? target))) (http/bad-request "invalid task page-id")
+          (and e2ee? (nil? target)) (http/bad-request "encrypted task requires page-id")
           :else
           (let [task-id (atom nil)]
             (ldb/batch-transact-with-temp-conn!
@@ -913,7 +935,8 @@
                               (ensure-today-page! temp-conn))
                      inserted (first (insert-tree! temp-conn target
                                                    [(select-keys body [:uuid :title])]
-                                                   "append"))
+                                                   "append"
+                                                   e2ee?))
                      task-uuid (uuid (:uuid inserted))
                      task (d/entity @temp-conn [:block/uuid task-uuid])]
                  (reset! task-id task-uuid)
@@ -940,26 +963,38 @@
                         asset-response)
 
     :semantic/assets-create
-    (let [file-name (.get (.-searchParams url) "file-name")
+    (let [e2ee? (e2ee-request? url)
+          file-name (.get (.-searchParams url) "file-name")
           raw-asset-id (.get (.-searchParams url) "uuid")
           asset-id (when (common-util/uuid-string? raw-asset-id) (uuid raw-asset-id))
           raw-size (.get (.-searchParams url) "size")
           size (when (and raw-size (re-matches #"\d+" raw-size))
                  (js/parseInt raw-size 10))
+          raw-upload-size (.get (.-searchParams url) "upload-size")
+          upload-size (if e2ee?
+                        (when (and raw-upload-size (re-matches #"\d+" raw-upload-size))
+                          (js/parseInt raw-upload-size 10))
+                        size)
           checksum (some-> (.get (.-searchParams url) "checksum") string/lower-case)
           encoding (.get (.-searchParams url) "encoding")
           asset-type (when (string? file-name) (db-asset/asset-path->type file-name))
           page-id (.get (.-searchParams url) "page-id")
           target (when page-id (find-entity db page-id))
+          supplied-title (.get (.-searchParams url) "title")
           ^js bucket (some-> (.-env self) (aget "LOGSEQ_SYNC_ASSETS"))]
       (cond
         (or (not (seq file-name)) (not (seq asset-type))) (http/bad-request "invalid asset file-name")
         (and raw-asset-id (nil? asset-id)) (http/bad-request "invalid asset uuid")
         (nil? size) (http/bad-request "invalid asset size")
         (> size assets-handler/max-asset-size) (http/error-response "asset too large" 413)
+        (and e2ee? (nil? upload-size)) (http/bad-request "invalid encrypted asset upload-size")
+        (and e2ee? (> upload-size assets-handler/max-encrypted-asset-size))
+        (http/error-response "encrypted asset too large" 413)
         (not (and (string? checksum) (re-matches #"[0-9a-f]{64}" checksum)))
         (http/bad-request "invalid asset checksum")
         (and encoding (not= "base64" encoding)) (http/bad-request "invalid asset encoding")
+        (and e2ee? (not (seq supplied-title))) (http/bad-request "encrypted asset requires title")
+        (and e2ee? (nil? page-id)) (http/bad-request "encrypted asset requires page-id")
         (and page-id (not (page? target))) (http/bad-request "invalid asset page-id")
         (matching-asset db asset-id checksum)
         (http/json-response nil (asset-response (matching-asset db asset-id checksum)) 200)
@@ -969,11 +1004,11 @@
         :else
         (let [asset-id (or asset-id (random-uuid))
               key (str (.get (.-searchParams url) "graph-id") "/" asset-id "." asset-type)
-              title (or (.get (.-searchParams url) "title")
+              title (or supplied-title
                         (db-asset/asset-name->title file-name))]
           (-> (p/let [upload-response (assets-handler/<put-stream!
                                        bucket key (.-body request)
-                                       {:size size
+                                       {:size upload-size
                                         :content-type (.get (.-headers request) "content-type")
                                         :checksum checksum
                                         :asset-type asset-type

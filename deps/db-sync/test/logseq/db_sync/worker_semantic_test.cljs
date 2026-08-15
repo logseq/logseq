@@ -55,8 +55,26 @@
   (let [conn (sqlite-export/create-conn)
         block-id (random-uuid)
         block (#'semantic-handler/tree-block
-               conn {:uuid (str block-id) :title "Offline capture"})]
+               conn {:uuid (str block-id) :title "Offline capture"} false)]
     (is (= block-id (:block/uuid block)))))
+
+(deftest encrypted-tree-block-stores-protected-title-verbatim-test
+  (let [conn (sqlite-export/create-conn)
+        block-id (random-uuid)
+        ciphertext "[\"~#cmap\",[[\"~#list\",[[1,2,3],[4,5,6]]]]]]"
+        block (#'semantic-handler/tree-block
+               conn {:uuid (str block-id) :title ciphertext} true)]
+    (is (= block-id (:block/uuid block)))
+    (is (= ciphertext (:block/title block)))
+    (is (not (contains? block :block/refs)))))
+
+(deftest encrypted-semantic-mode-comes-from-internal-query-test
+  (is (true? (#'semantic-handler/e2ee-request?
+              (js/URL. "http://localhost/semantic/capture?graph-e2ee=true"))))
+  (is (false? (#'semantic-handler/e2ee-request?
+               (js/URL. "http://localhost/semantic/capture?graph-e2ee=false"))))
+  (is (false? (#'semantic-handler/e2ee-request?
+               (js/URL. "http://localhost/semantic/capture")))))
 
 (deftest ensure-today-page-defaults-missing-journal-title-format-test
   (let [conn (sqlite-export/create-conn)

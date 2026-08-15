@@ -139,3 +139,17 @@
            (:handler (semantic-routes/match-public method "/api/v1/graphs/graph-1/assets"))))
     (is (= handler
            (:handler (semantic-routes/match-internal method "/semantic/assets"))))))
+
+(deftest encrypted-semantic-write-allowlist-test
+  (doseq [[method path expected]
+          [["POST" "/api/v1/graphs/graph-1/capture" true]
+           ["POST" "/api/v1/graphs/graph-1/tasks" true]
+           ["POST" "/api/v1/graphs/graph-1/assets" true]
+           ["PATCH" "/api/v1/graphs/graph-1/blocks/block-1" true]
+           ["PUT" "/api/v1/graphs/graph-1/blocks/block-1/properties/status-id" true]
+           ["GET" "/api/v1/graphs/graph-1/blocks" false]
+           ["DELETE" "/api/v1/graphs/graph-1/blocks/block-1" false]
+           ["DELETE" "/api/v1/graphs/graph-1/blocks/block-1/properties/status-id" false]]]
+    (is (= expected
+           (true? (:e2ee-safe-write? (semantic-routes/match-public method path))))
+        (str method " " path))))

@@ -43,7 +43,7 @@
   (or (aget claims "pat_id")
       (aget claims "sub")))
 
-(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url]
+(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url e2ee?]
   (let [graph-id (:graph-id path-params)
         path (reduce-kv (fn [result k value]
                           (string/replace result (str ":" (name k)) value))
@@ -51,6 +51,7 @@
                         path-params)
         target (js/URL. (str (.-origin url) path (.-search url)))]
     (.set (.-searchParams target) "graph-id" graph-id)
+    (.set (.-searchParams target) "graph-e2ee" (str (true? e2ee?)))
     (forward-sync-request request env graph-id target)))
 
 (defn- rate-limit-response []
@@ -126,7 +127,8 @@
             (p/let [e2ee? (index/<graph-e2ee? (aget env "DB") graph-id)]
               (cond
                 (nil? e2ee?) (http/not-found)
-                e2ee? (http/error-response "semantic-api-unavailable-for-e2ee" 409)
+                (and e2ee? (not (:e2ee-safe-write? operation)))
+                (http/error-response "semantic-api-unavailable-for-e2ee" 409)
                 :else
                 (let [binding-name (if (= :read (:rate-class operation))
                                      "SEMANTIC_READ_RATE_LIMITER"
@@ -138,7 +140,7 @@
                                                                (:operation-id operation) ":" graph-id)})]
                       (if (false? (aget result "success"))
                         (rate-limit-response)
-                        (forward-semantic-request request env operation url)))))))))))))
+                        (forward-semantic-request request env operation url e2ee?)))))))))))))
 
 (defn- request-user-id
   [request]

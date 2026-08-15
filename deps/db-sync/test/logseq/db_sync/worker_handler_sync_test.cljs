@@ -1049,6 +1049,51 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest encrypted-semantic-capture-persists-ciphertext-without-plaintext-journal-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   encrypted-page-title "e2ee-page-title"
+                   encrypted-page-name "e2ee-page-name"
+                   encrypted-block-title "e2ee-block-title"
+                   _ (d/transact! conn [{:db/ident :logseq.kv/graph-rtc-e2ee?
+                                         :kv/value true}
+                                        {:block/uuid page-id
+                                         :block/name encrypted-page-name
+                                         :block/title encrypted-page-title
+                                         :block/journal-day 20260814
+                                         :block/tags :logseq.class/Journal}])
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (semantic-json-request
+                            "/semantic/capture?graph-id=graph-1&graph-e2ee=true"
+                            "POST"
+                            {:page-id (str page-id)
+                             :blocks [{:uuid (str block-id)
+                                       :title encrypted-block-title}]})
+                   missing-page-request (semantic-json-request
+                                         "/semantic/capture?graph-id=graph-1&graph-e2ee=true"
+                                         "POST"
+                                         {:blocks [{:title "must-not-be-written"}]})]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                            missing-page-response (sync-handler/handle-http self missing-page-request)
+                            missing-page-body (json-body missing-page-response)]
+                     (is (= 201 (.-status response)))
+                     (let [created (d/entity @conn [:block/uuid block-id])]
+                       (is (= encrypted-block-title (:block/title created)))
+                       (is (nil? (:block/refs created)))
+                       (is (= page-id (:block/uuid (:block/page created)))))
+                     (is (= 400 (.-status missing-page-response)))
+                     (is (= "encrypted capture requires page-id" (:error missing-page-body)))
+                     (is (= 1 (count (d/datoms @conn :avet :block/journal-day)))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-asset-get-returns-valid-temporary-link-test
   (async done
          (with-memory-sql-async
@@ -1202,6 +1247,67 @@
                        (is (= 4 (aget payload 3))))
                      (is (= 400 (.-status invalid-response)))
                      (is (= 1 (count @uploaded))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest encrypted-semantic-asset-requires-ciphertext-title-and-existing-page-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (random-uuid)
+                   asset-id (random-uuid)
+                   puts (atom [])
+                   encrypted-title "e2ee-asset-title"
+                   encrypted-payload "encrypted-transit-payload"
+                   payload-size (count encrypted-payload)
+                   checksum (apply str (repeat 64 "f"))
+                   bucket #js {:put (fn [key payload options]
+                                      (swap! puts conj [key payload options])
+                                      (p/resolved #js {}))
+                              :delete (fn [_] (p/resolved nil))}
+                   _ (d/transact! conn [{:db/ident :logseq.kv/graph-rtc-e2ee?
+                                         :kv/value true}
+                                        {:block/uuid page-id
+                                         :block/name "e2ee-page-name"
+                                         :block/title "e2ee-page-title"
+                                         :block/journal-day 20260814
+                                         :block/tags :logseq.class/Journal}])
+                   self #js {:sql sql :conn conn :schema-ready true
+                             :env #js {"LOGSEQ_SYNC_ASSETS" bucket}}
+                   request (fn [query]
+                             (js/Request.
+                              (str "http://localhost/semantic/assets?graph-id=graph-1&graph-e2ee=true"
+                                   "&file-name=photo.png&uuid=" asset-id
+                                   "&size=4&upload-size=" payload-size
+                                   "&checksum=" checksum query)
+                              #js {:method "POST"
+                                   :headers #js {"content-type" "text/plain"}
+                                   :body encrypted-payload}))]
+               (-> (p/let [response (sync-handler/handle-http
+                                     self
+                                     (request (str "&page-id=" page-id
+                                                   "&title=" (js/encodeURIComponent encrypted-title))))
+                            body (json-body response)
+                            missing-page-response (sync-handler/handle-http self (request "&title=cipher"))
+                            missing-page-body (json-body missing-page-response)
+                            missing-title-response (sync-handler/handle-http
+                                                    self (request (str "&page-id=" page-id)))
+                            missing-title-body (json-body missing-title-response)]
+                     (is (= 201 (.-status response)))
+                     (is (= encrypted-title (:title body)))
+                     (let [asset (d/entity @conn [:block/uuid asset-id])]
+                       (is (= encrypted-title (:block/title asset)))
+                       (is (= 4 (:logseq.property.asset/size asset))))
+                     (is (= 400 (.-status missing-page-response)))
+                     (is (= "encrypted asset requires page-id" (:error missing-page-body)))
+                     (is (= 400 (.-status missing-title-response)))
+                     (is (= "encrypted asset requires title" (:error missing-title-body)))
+                     (is (= 1 (count @puts)))
+                     (is (= 1 (count (d/datoms @conn :avet :block/journal-day)))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))

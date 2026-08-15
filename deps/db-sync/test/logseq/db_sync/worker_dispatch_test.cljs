@@ -379,6 +379,56 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest semantic-api-forwards-e2ee-safe-write-with-trusted-mode-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/capture?graph-e2ee=false"
+                                                          "logseq/write"
+                                                          "POST")
+               forwarded (atom [])
+               limit-calls (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true limit-calls)}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         forwarded-request (first @forwarded)
+                         forwarded-url (some-> forwarded-request .-url js/URL.)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (= 1 (count @limit-calls)))
+                   (when forwarded-url
+                     (is (= "/semantic/capture" (.-pathname forwarded-url)))
+                     (is (= "graph-1" (.get (.-searchParams forwarded-url) "graph-id")))
+                     (is (= "true" (.get (.-searchParams forwarded-url) "graph-e2ee"))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-rejects-e2ee-delete-write-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/blocks/block-1"
+                                                          "logseq/write"
+                                                          "DELETE")
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 409 (.-status response)))
+                   (is (= "semantic-api-unavailable-for-e2ee" (:error body)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest semantic-api-rate-limit-rejection-does-not-call-durable-object-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")
