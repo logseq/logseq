@@ -623,11 +623,45 @@
 
     :semantic/pages-create
     (p/let [body (body-clj request)]
-      (if-not (seq (:title body))
-        (http/bad-request "missing title")
-        (let [[title page-id] (outliner-page/create! conn (:title body) {})]
-          (broadcast-change! self)
-          (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
+      (let [e2ee? (e2ee-request? url)]
+        (if-not e2ee?
+          (if-not (seq (:title body))
+            (http/bad-request "missing title")
+            (let [[title page-id] (outliner-page/create! conn (:title body) {})]
+              (broadcast-change! self)
+              (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201)))
+          (let [raw-page-id (:uuid body)
+                page-id (when (common-util/uuid-string? raw-page-id) (uuid raw-page-id))
+                title (:title body)
+                name (:name body)
+                journal-day (:journal-day body)
+                existing-day (when (pos-int? journal-day)
+                               (ldb/get-journal-page-by-day db journal-day))
+                existing-id (when page-id (d/entity db [:block/uuid page-id]))]
+            (cond
+              (nil? page-id) (http/bad-request "invalid encrypted page uuid")
+              (not (seq title)) (http/bad-request "missing encrypted page title")
+              (not (seq name)) (http/bad-request "missing encrypted page name")
+              (not (pos-int? journal-day)) (http/bad-request "invalid encrypted journal-day")
+              (and existing-day (not= page-id (:block/uuid existing-day)))
+              (http/error-response "journal day already exists" 409)
+              (and existing-id (not= journal-day (:block/journal-day existing-id)))
+              (http/error-response "page uuid already exists" 409)
+              (or existing-day existing-id)
+              (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 200)
+              :else
+              (do
+                (d/transact! conn
+                             [{:block/uuid page-id
+                               :block/title title
+                               :block/name name
+                               :block/journal-day journal-day
+                               :block/tags :logseq.class/Journal
+                               :block/created-at (js/Date.now)
+                               :block/updated-at (js/Date.now)}]
+                             {:outliner-op :create-page})
+                (broadcast-change! self)
+                (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201)))))))
 
     :semantic/pages-blocks
     (if-let [page (find-visible-entity db (:page-id path-params))]

@@ -9,7 +9,8 @@
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
     :handler :semantic/pages-list :operation-id "listPages" :scope "logseq/read" :rate-class :read}
    {:method "POST" :path "/api/v1/graphs/:graph-id/pages" :internal-path "/semantic/pages"
-    :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write}
+    :handler :semantic/pages-create :operation-id "createPage" :scope "logseq/write" :rate-class :write
+    :e2ee-safe-write? true}
    {:method "GET" :path "/api/v1/graphs/:graph-id/blocks" :internal-path "/semantic/blocks"
     :handler :semantic/blocks-list :operation-id "listBlocks" :scope "logseq/read" :rate-class :read}
    {:method "GET" :path "/api/v1/graphs/:graph-id/pages/:page-id/blocks" :internal-path "/semantic/pages/:page-id/blocks"
@@ -89,7 +90,7 @@
 (def ^:private operation-docs
   {"listGraphs" ["List available graphs" "Returns cursor-paginated non-E2EE graphs available to the authenticated user. Use the optional exact name filter to resolve a graph name to its UUID."]
    "listPages" ["List pages" "Returns a cursor-paginated list of page blocks in the graph."]
-   "createPage" ["Create a page" "Creates a page block with the supplied title."]
+   "createPage" ["Create a page" "Creates a page block with the supplied title. E2EE clients must also supply the deterministic page UUID, encrypted name, and journal day when creating a journal page."]
    "listBlocks" ["List blocks" "Returns non-empty journal blocks with separate journal metadata for grouping, optionally restricted by journal date and sorted by creation time."]
    "listPageBlocks" ["List a page's blocks" "Returns a cursor-paginated list of the page's top-level blocks, including each selected block's descendant tree."]
    "listPageReferences" ["List references to a page" "Returns a cursor-paginated flat list of blocks and pages that reference the addressed page. Results are not recursively expanded."]
@@ -198,7 +199,15 @@
 
 (defn- request-schema [operation-id]
   (case operation-id
-    "createPage" {:required ["title"] :properties {:title {:type "string"}}}
+    "createPage" {:required ["title"]
+                  :properties {:uuid {:type "string" :format "uuid"
+                                      :description "Required for E2EE journal pages."}
+                               :title {:type "string"
+                                       :description "Plaintext for regular graphs; client-encrypted for E2EE graphs."}
+                               :name {:type "string"
+                                      :description "Required and client-encrypted for E2EE journal pages."}
+                               :journal-day {:type "integer"
+                                             :description "Required for E2EE journal pages, formatted as YYYYMMDD."}}}
     "updatePage" {:required ["title"] :properties {:title {:type "string"}}}
     "updateBlock" {:required ["title"] :properties {:title {:type "string"}}}
     "moveBlocks" {:required ["block-ids" "target-id" "position"]

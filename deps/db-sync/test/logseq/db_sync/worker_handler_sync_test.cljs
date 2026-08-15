@@ -1094,6 +1094,49 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest encrypted-semantic-page-create-persists-explicit-journal-ciphertext-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [conn (sqlite-export/create-conn)
+                   page-id (uuid "00000001-2099-1231-0000-000000000000")
+                   encrypted-title "e2ee-journal-title"
+                   encrypted-name "e2ee-journal-name"
+                   self #js {:sql sql :conn conn :schema-ready true}
+                   request (fn []
+                             (semantic-json-request
+                              "/semantic/pages?graph-id=graph-1&graph-e2ee=true"
+                              "POST"
+                              {:uuid (str page-id)
+                               :title encrypted-title
+                               :name encrypted-name
+                               :journal-day 20991231}))]
+               (-> (p/let [response (sync-handler/handle-http self (request))
+                            body (json-body response)
+                            repeat-response (sync-handler/handle-http self (request))
+                            page (d/entity @conn [:block/uuid page-id])
+                            stored-title (some (fn [datom]
+                                                 (when (= :block/title (:a datom))
+                                                   (:v datom)))
+                                               (d/datoms @conn :eavt (:db/id page)))]
+                     (is (= 201 (.-status response)))
+                     (is (= 200 (.-status repeat-response)))
+                     (is (= (str page-id) (:uuid body)))
+                     ;; Journal entity reads intentionally project a formatted date title.
+                     ;; Inspect the datom to verify the exact encrypted server value.
+                     (is (= encrypted-title stored-title))
+                     (is (= encrypted-name (:block/name page)))
+                     (is (= 20991231 (:block/journal-day page)))
+                     (is (= :logseq.class/Journal (:db/ident (first (:block/tags page)))))
+                     (is (= 1 (count (d/datoms @conn :avet :block/journal-day))))
+                     (is (not (contains? (set (map :v (d/datoms @conn :eavt (:db/id page))))
+                                         "Dec 31st, 2099"))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-asset-get-returns-valid-temporary-link-test
   (async done
          (with-memory-sql-async

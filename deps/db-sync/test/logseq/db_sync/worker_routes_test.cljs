@@ -143,6 +143,7 @@
 (deftest encrypted-semantic-write-allowlist-test
   (doseq [[method path expected]
           [["POST" "/api/v1/graphs/graph-1/capture" true]
+           ["POST" "/api/v1/graphs/graph-1/pages" true]
            ["POST" "/api/v1/graphs/graph-1/tasks" true]
            ["POST" "/api/v1/graphs/graph-1/assets" true]
            ["PATCH" "/api/v1/graphs/graph-1/blocks/block-1" true]
