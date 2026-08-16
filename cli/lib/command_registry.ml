@@ -14,6 +14,8 @@ type option_meta = {
   required : bool;
   repeatable : bool;
   choices : string Rrbvec.t;
+  (* value is a comma-separated list; choices complete each list element *)
+  multi : bool;
   default : string option;
 }
 
@@ -43,24 +45,27 @@ type t = { commands : command_meta Rrbvec.t; groups : group_meta Rrbvec.t }
 let append_all values = Array.fold_left Vec.append Vec.empty values
 
 let option ?(required = false) ?(repeatable = false) ?(choices = Vec.empty)
-    ?default names arity doc =
-  { names; arity; doc; required; repeatable; choices; default }
+    ?(multi = false) ?default names arity doc =
+  { names; arity; doc; required; repeatable; choices; multi; default }
 
-let option_of_array ?required ?repeatable ?choices ?default names arity doc =
-  option ?required ?repeatable ?choices ?default (Vec.of_array names) arity doc
+let option_of_array ?required ?repeatable ?choices ?multi ?default names arity
+    doc =
+  option ?required ?repeatable ?choices ?multi ?default (Vec.of_array names)
+    arity doc
 
-let flag ?required ?repeatable ?choices ?default name doc =
-  option ?required ?repeatable ?choices ?default
+let flag ?required ?repeatable ?choices ?multi ?default name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     Flag doc
 
-let value ?required ?repeatable ?choices ?default name value_name doc =
-  option ?required ?repeatable ?choices ?default
+let value ?required ?repeatable ?choices ?multi ?default name value_name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     (Required_value value_name) doc
 
-let optional_value ?required ?repeatable ?choices ?default name value_name doc =
-  option ?required ?repeatable ?choices ?default
+let optional_value ?required ?repeatable ?choices ?multi ?default name
+    value_name doc =
+  option ?required ?repeatable ?choices ?multi ?default
     (Vec.singleton ("--" ^ name))
     (Optional_value value_name) doc
 
@@ -181,7 +186,7 @@ let common_list_options sort_choices =
   Vec.of_array
     [|
       value "fields" "fields" "Comma-separated fields to include"
-        ~choices:sort_choices;
+        ~choices:sort_choices ~multi:true;
       value "limit" "n" "Maximum result count";
       value "offset" "n" "Result offset";
       value "sort" "field" "Sort field" ~choices:sort_choices;
@@ -227,7 +232,7 @@ let options_for_command =
       Vec.of_array
         [|
           option_of_array [| "-f"; "--fix" |] Flag "Fix validation problems";
-          value "fields" "fields" "Fields to include";
+          value "fields" "fields" "Fields to include" ~multi:true;
         |]
   | Graph_backup_create -> Vec.singleton (value "name" "name" "Backup name")
   | Graph_backup_restore ->
@@ -303,8 +308,9 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_node_sort_choices)
         [|
-          value "tags" "tags" "Comma-separated tag filters";
-          value "properties" "properties" "Comma-separated property filters";
+          value "tags" "tags" "Comma-separated tag filters" ~multi:true;
+          value "properties" "properties" "Comma-separated property filters"
+            ~multi:true;
         |]
   | List_asset -> common_list_options list_asset_sort_choices
   | Remove_block -> selector_options
