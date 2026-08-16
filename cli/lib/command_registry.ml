@@ -229,11 +229,8 @@ let options_for_command =
   | Graph_create ->
       Vec.of_array [| flag "enable-sync" "Enable sync"; e2ee_password_option |]
   | Graph_validate ->
-      Vec.of_array
-        [|
-          option_of_array [| "-f"; "--fix" |] Flag "Fix validation problems";
-          value "fields" "fields" "Fields to include" ~multi:true;
-        |]
+      Vec.singleton
+        (option_of_array [| "-f"; "--fix" |] Flag "Fix validation problems")
   | Graph_backup_create -> Vec.singleton (value "name" "name" "Backup name")
   | Graph_backup_restore ->
       Vec.of_array
@@ -247,7 +244,8 @@ let options_for_command =
       Vec.of_array
         [|
           value "type" "type" "Export type" ~choices:graph_data_choices;
-          value "file" "path" "Output file";
+          option_of_array [| "-f"; "--file" |] (Required_value "path")
+            "Output file";
           option_of_array
             [| "-e"; "--edn-options" |]
             (Required_value "edn")
@@ -268,7 +266,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_page_sort_choices)
         [|
-          flag "expand" "Expand page data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand page data";
           optional_value "include-built-in" "bool" "Include built-in pages";
           optional_value "include-journal" "bool" "Include journal pages";
           flag "journal-only" "Only include journal pages";
@@ -282,7 +280,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_tag_sort_choices)
         [|
-          flag "expand" "Expand tag data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand tag data";
           optional_value "include-built-in" "bool" "Include built-in tags";
           flag "with-properties" "Include properties";
           flag "with-extends" "Include extends data";
@@ -291,7 +289,7 @@ let options_for_command =
       Vec.append_array
         (common_list_options list_property_sort_choices)
         [|
-          flag "expand" "Expand property data";
+          option_of_array [| "-e"; "--expand" |] Flag "Expand property data";
           optional_value "include-built-in" "bool" "Include built-in properties";
           flag "with-classes" "Include classes";
           flag "with-type" "Include property type";
