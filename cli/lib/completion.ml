@@ -111,6 +111,9 @@ let zsh_escape_desc doc =
 
 let zsh_option_action (option : Command_registry.option_meta) value_name =
   if Vec.mem "--graph" option.names then "{_logseq_graphs}"
+  else if option.multi && not (Vec.is_empty option.choices) then
+    "{_values -s , " ^ value_name ^ " " ^ Vec.string_concat " " option.choices
+    ^ "}"
   else if not (Vec.is_empty option.choices) then
     "(" ^ Vec.string_concat " " option.choices ^ ")"
   else if Vec.mem "--root-dir" option.names then "_files -/"
