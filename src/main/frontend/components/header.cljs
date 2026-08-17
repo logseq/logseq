@@ -156,7 +156,7 @@
                       "Plugins: " (string/join ", " (map (fn [[k v]]
                                                            (str (name k) " (" (:version v) ")"))
                                                          installed-plugins)))]
-    (str "https://github.com/logseq/logseq/issues/new?"
+    (str "https://github.com/logseq/db-test/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
          "labels=from:in-app&"
@@ -393,34 +393,34 @@
        (when thumb-ref
          (.focus ^js thumb-ref)))
      [thumb-ref])
-	    (hooks/use-effect!
-	     (fn []
-	       (let [all-nodes (d/by-class "ls-block")
-	             node-ids (->> all-nodes
-	                           (keep #(some-> (d/attr % "blockid") uuid))
-	                           vec)]
-	         (p/let [results (db-async/<get-blocks (state/get-current-repo) node-ids {:children? false})
-	                 id->block (into {} (keep (fn [{:keys [block]}]
-	                                            (when-let [id (:block/uuid block)]
-	                                              [id block]))
-	                                          results))
-	                 recent-node (fn [node]
-	                               (let [id (some-> (d/attr node "blockid") uuid)
-	                                     block (get id->block id)]
-	                                 (when block
-	                                   (t/after?
-	                                    (tc/from-long (:block/updated-at block))
-	                                    (t/ago (t/days recent-days))))))
-	                 recent-nodes (filter recent-node all-nodes)
-	                 old-nodes (remove recent-node all-nodes)]
-	           (when (seq recent-nodes)
-	             (doseq [node recent-nodes]
-	               (d/add-class! node "recent-block")))
-	           (when (seq old-nodes)
-	             (doseq [node old-nodes]
-	               (d/remove-class! node "recent-block")))))
-	       nil)
-	     [recent-days])
+            (hooks/use-effect!
+             (fn []
+               (let [all-nodes (d/by-class "ls-block")
+                     node-ids (->> all-nodes
+                                   (keep #(some-> (d/attr % "blockid") uuid))
+                                   vec)]
+                 (p/let [results (db-async/<get-blocks (state/get-current-repo) node-ids {:children? false})
+                         id->block (into {} (keep (fn [{:keys [block]}]
+                                                    (when-let [id (:block/uuid block)]
+                                                      [id block]))
+                                                  results))
+                         recent-node (fn [node]
+                                       (let [id (some-> (d/attr node "blockid") uuid)
+                                             block (get id->block id)]
+                                         (when block
+                                           (t/after?
+                                            (tc/from-long (:block/updated-at block))
+                                            (t/ago (t/days recent-days))))))
+                         recent-nodes (filter recent-node all-nodes)
+                         old-nodes (remove recent-node all-nodes)]
+                   (when (seq recent-nodes)
+                     (doseq [node recent-nodes]
+                       (d/add-class! node "recent-block")))
+                   (when (seq old-nodes)
+                     (doseq [node old-nodes]
+                       (d/remove-class! node "recent-block")))))
+               nil)
+             [recent-days])
     [:div.recent-slider.flex.flex-row.gap-1.items-center
      {:class "w-[32%]"}
      (shui/slider
