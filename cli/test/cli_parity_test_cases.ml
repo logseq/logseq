@@ -4,6 +4,11 @@ let expect_equal name expected actual =
   if expected = actual then pass
   else fail_test (Printf.sprintf "%s: expected %S, got %S" name expected actual)
 
+let expect_url_prefix name prefix url =
+  if Js.String.startsWith ~prefix url then pass
+  else
+    fail_test (Printf.sprintf "%s: expected prefix %S, got %S" name prefix url)
+
 let expect_string_vec name expected actual =
   if Vec.to_array actual = expected then pass
   else
@@ -283,6 +288,28 @@ let config ?graph ?repo ?output_format ?auth_path ?id_token ?access_token
     project_dir = None;
     raw_file_config;
     profile_session = None;
+  }
+
+let default_oauth_idp = "https://logseq-prod.auth.us-east-1.amazoncognito.com"
+
+let sync_oauth_config ?(http_base = "http://127.0.0.1:18765")
+    ?(ws_url = "ws://127.0.0.1:18765/sync/%s") ~root extra =
+  let auth_path = Node.Path.join [| root; "auth.json" |] in
+  let fields =
+    [
+      (Edn_util.keyword "open-browser", Edn_util.bool false);
+      (Edn_util.keyword "http-base", Edn_util.string http_base);
+      (Edn_util.keyword "ws-url", Edn_util.string ws_url);
+    ]
+    @ extra
+  in
+  {
+    (config ~root_dir:root ~auth_path ~raw_file_config:(Edn_util.map fields) ())
+    with
+    http_base = Some http_base;
+    ws_url = Some ws_url;
+    timeout_span = Time.span_of_ms 500L;
+    login_timeout_span = Time.span_of_ms 8000L;
   }
 
 let config_with_output config mode =
@@ -1072,6 +1099,152 @@ let () =
       with exn ->
         remove_tree root;
         fail_test (Printexc.to_string exn));
+
+  test_promise
+    "custom http-base does not change oauth authorize/token/logout urls"
+    (fun () ->
+      let root = temp_dir "logseq-cli-oauth-http-base-" in
+      let custom_sync = "http://127.0.0.1:18765" in
+      let capturing_server requests =
+        create_server (fun[@u] req res ->
+            let body = ref "" in
+            req_set_encoding req "utf8";
+            req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+            req_on_end req "end" (fun[@u] () ->
+                ignore !body;
+                requests :=
+                  Vec.push_back !requests (req_method req ^ " " ^ req_url req);
+                write_json res 404 (error_response "not found")))
+      in
+      let login_authorize_url config ~state ~code =
+        let login = effect_to_promise (Auth_state.login config) in
+        let callback_url =
+          Printf.sprintf "http://localhost:8765/auth/callback?state=%s&code=%s"
+            state code
+        in
+        let* () = fetch_with_retry 100 callback_url in
+        let* result = login in
+        let result = expect_ok "login" result in
+        Js.Promise.resolve result.authorize_url
+      in
+      let logout_url config =
+        (expect_ok "logout" (effect_result "logout" (Auth_state.logout config)))
+          .logout_url
+      in
+      try
+        let default_logout =
+          logout_url (sync_oauth_config ~root ~http_base:custom_sync [])
+        in
+        expect_url_prefix "default logout" (default_oauth_idp ^ "/logout?")
+          default_logout;
+        expect_named_not_contains "logout ignores http-base" default_logout
+          custom_sync;
+        let domain_logout =
+          logout_url
+            (sync_oauth_config ~root ~http_base:custom_sync
+               [
+                 ( Edn_util.keyword "oauth-domain",
+                   Edn_util.string "idp.example.com" );
+               ])
+        in
+        expect_url_prefix "oauth-domain logout"
+          "https://idp.example.com/logout?" domain_logout;
+        let explicit_logout =
+          logout_url
+            (sync_oauth_config ~root ~http_base:custom_sync
+               [
+                 ( Edn_util.keyword "oauth-logout-endpoint",
+                   Edn_util.string "https://idp.example.com/custom-logout" );
+               ])
+        in
+        expect_url_prefix "explicit logout endpoint"
+          "https://idp.example.com/custom-logout?" explicit_logout;
+        let sync_requests = ref Vec.empty in
+        let* () =
+          with_server (capturing_server sync_requests) (fun http_base ->
+              let* result =
+                effect_to_promise
+                  (Auth_state.refresh_auth
+                     (sync_oauth_config ~root ~http_base [])
+                     (sample_auth ~refresh_token:(Some "refresh-token-1") ()))
+              in
+              expect_error_code "refresh without oauth token endpoint"
+                "auth-refresh-failed" result;
+              expect_int "token refresh ignores http-base" 0
+                (Vec.length !sync_requests);
+              Js.Promise.resolve pass)
+        in
+        let* () =
+          with_server (oauth_server ()) (fun token_base ->
+              let extra =
+                [
+                  ( Edn_util.keyword "oauth-token-endpoint",
+                    Edn_util.string (token_base ^ "/oauth2/token") );
+                ]
+              in
+              let* refreshed =
+                effect_to_promise
+                  (Auth_state.refresh_auth
+                     (sync_oauth_config ~root ~http_base:custom_sync extra)
+                     (sample_auth ~refresh_token:(Some "refresh-token-1") ()))
+              in
+              ignore (expect_ok "explicit token endpoint" refreshed);
+              Js.Promise.resolve pass)
+        in
+        let* () =
+          with_server (oauth_server ()) (fun token_base ->
+              let state = "fixed-test-state" in
+              let config =
+                sync_oauth_config ~root ~http_base:custom_sync
+                  [
+                    ( Edn_util.keyword "oauth-token-endpoint",
+                      Edn_util.string (token_base ^ "/oauth2/token") );
+                    (Edn_util.keyword "oauth-state", Edn_util.string state);
+                    ( Edn_util.keyword "oauth-client-id",
+                      Edn_util.string "test-client" );
+                  ]
+              in
+              let* authorize_url =
+                login_authorize_url config ~state ~code:"auth-code-1"
+              in
+              expect_url_prefix "default authorize"
+                (default_oauth_idp ^ "/oauth2/authorize?") authorize_url;
+              expect_named_not_contains "authorize ignores http-base"
+                authorize_url custom_sync;
+              Js.Promise.resolve pass)
+        in
+        let* () =
+          with_server (oauth_server ()) (fun token_base ->
+              let state = "fixed-authorize-state" in
+              let authorize_endpoint =
+                "https://idp.example.com/custom-authorize"
+              in
+              let config =
+                sync_oauth_config ~root ~http_base:custom_sync
+                  [
+                    ( Edn_util.keyword "oauth-authorize-endpoint",
+                      Edn_util.string authorize_endpoint );
+                    ( Edn_util.keyword "oauth-token-endpoint",
+                      Edn_util.string (token_base ^ "/oauth2/token") );
+                    (Edn_util.keyword "oauth-state", Edn_util.string state);
+                    ( Edn_util.keyword "oauth-client-id",
+                      Edn_util.string "test-client" );
+                  ]
+              in
+              let* authorize_url =
+                login_authorize_url config ~state ~code:"auth-code-2"
+              in
+              expect_url_prefix "explicit authorize endpoint"
+                (authorize_endpoint ^ "?") authorize_url;
+              expect_named_not_contains "explicit authorize ignores http-base"
+                authorize_url custom_sync;
+              Js.Promise.resolve pass)
+        in
+        remove_tree root;
+        Js.Promise.resolve pass
+      with exn ->
+        remove_tree root;
+        fail_promise (Printexc.to_string exn));
 
   test "CLI parity config resolves argv over env over file" (fun () ->
       let root = temp_dir "logseq-cli-parity-config-" in
