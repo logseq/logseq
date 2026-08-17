@@ -2482,3 +2482,14 @@ abc
             "root's alias pointing to mid dropped: mid already owns aliases")
         (is (some #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)
             "alias-owns-aliases reason recorded")))))
+
+(deftest property-title->name-skips-nil-and-blank
+  (let [property-title->name (some-> (resolve 'logseq.graph-parser.exporter/property-title->name)
+                                     deref)]
+    (is (fn? property-title->name))
+    (when (fn? property-title->name)
+      (is (nil? (property-title->name nil)))
+      (is (nil? (property-title->name 1)))
+      (is (nil? (property-title->name "")))
+      (is (nil? (property-title->name "   ")))
+      (is (= :priority (property-title->name "Priority"))))))

@@ -135,7 +135,10 @@
                               :reason :release-skipped)))))
       (p/then (fn [client]
                 (when client
-                  (log/info :event :db-worker-runtime-recovered :repo repo))))
+                  (log/info :event :db-worker-runtime-recovered :repo repo)
+                  (when (state/get-state :graph/importing)
+                    (state/pub-event! [:graph/abort-file-to-db-import
+                                       {:reason :db-worker-runtime-recovered}])))))
       (p/catch (fn [error]
                  (log/error :event :db-worker-runtime-recovery-failed
                             :repo repo

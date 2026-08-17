@@ -319,6 +319,47 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
+(defn- error-message
+  [error]
+  (or (ex-message error)
+      (some-> error .-message)
+      (str error)))
+
+(defn- worker-unavailable-error?
+  [error]
+  (let [msg (error-message error)
+        {:keys [status code]} (ex-data error)]
+    (or (state/db-worker-uninitialized-error? error)
+        (= "db-worker has not been initialized" msg)
+        (contains? #{:server-unavailable :db-worker-unavailable :connection-refused
+                     :fetch-failed :network-error}
+                   code)
+        (= 0 status))))
+
+(defn abort-file-graph-import!
+  "Clear File-to-DB import UI and report a caught error. Idempotent if import is not running."
+  [{:keys [error reason]}]
+  (when (state/get-state :graph/importing)
+    (let [msg (some-> error error-message)
+          display (if (or (= reason :db-worker-runtime-recovered)
+                          (worker-unavailable-error? error))
+                    (t :import/file-to-db-interrupted)
+                    (t :import/file-to-db-error (or msg (str error))))]
+      (log/error :import-error {:error error :reason reason :message msg})
+      (notification/show! display :error)
+      (state/set-state! :graph/importing nil)
+      (state/set-state! :graph/importing-state nil)))
+  nil)
+
+(defn- <invoke-import-file-graph
+  [repo config-file files options]
+  (-> (state/<wait-for-db-worker)
+      (p/then (fn [_]
+                (try
+                  (state/<invoke-db-worker :thread-api/import-file-graph repo config-file files options)
+                  (catch :default e
+                    (p/rejected e)))))))
+
 (defn- <serialize-import-file
   [file]
   (let [^js file-object (:file-object file)]
@@ -367,22 +408,24 @@
    config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (-> (p/let [start-time (t/now)
+              _ (repo-handler/new-db! graph-name {:file-graph-import? true})
+              repo (state/get-current-repo)
+              serialized-files (<serialize-import-files *files)
+              serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+              options (build-file-graph-worker-options user-options config/config-default-content)
+              import-result (<invoke-import-file-graph repo serialized-config-file serialized-files options)
+              _ (doseq [notification (:notifications import-result)]
+                  (show-notification notification))
+              _ (write-staged-assets! repo (:staged-assets import-result))]
+        (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+        (state/set-state! :graph/importing nil)
+        (state/set-state! :graph/importing-state nil)
+        (validate-imported-data import-result)
+        (state/pub-event! [:graph/ready (state/get-current-repo)])
+        (finished-cb))
+      (p/catch (fn [error]
+                 (abort-file-graph-import! {:error error})))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
@@ -441,12 +484,16 @@
   [importing?]
   (hooks/use-effect!
    (fn []
-     (when (and importing? (not (shui-dialog/get-dialog :import-indicator)))
+     (cond
+       (and importing? (not (shui-dialog/get-dialog :import-indicator)))
        (shui/dialog-open! indicator-progress
                           {:id :import-indicator
                            :content-props
                            {:onPointerDownOutside #(.preventDefault %)
-                            :onOpenAutoFocus #(.preventDefault %)}})))
+                            :onOpenAutoFocus #(.preventDefault %)}})
+
+       (and (not importing?) (shui-dialog/get-dialog :import-indicator))
+       (shui/dialog-close! :import-indicator)))
    [importing?])
   [:<>])
 

@@ -1,8 +1,10 @@
 (ns frontend.components.imports-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.config :as config]
-            [frontend.components.imports]
+            [frontend.components.imports :as imports]
             [frontend.fs :as fs]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -54,6 +56,49 @@
                           (p/resolve! write :written))
                       _ (p/delay 0)]
                 (is (true? @completed?)))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest abort-file-graph-import-reports-uninitialized-worker-as-import-error
+  (let [original-state (state/get-state)
+        notifications (atom [])]
+    (try
+      (state/replace-state! (assoc original-state
+                                  :graph/importing :file-graph
+                                  :graph/importing-state {:current-page "pages/A.md"}))
+      (with-redefs [notification/show! (fn [content status]
+                                         (swap! notifications conj [content status]))]
+        (imports/abort-file-graph-import!
+         {:error (state/db-worker-uninitialized-error)})
+        (is (nil? (state/get-state :graph/importing)))
+        (is (nil? (state/get-state :graph/importing-state)))
+        (is (= 1 (count @notifications)))
+        (is (= :error (second (first @notifications))))
+        (imports/abort-file-graph-import!
+         {:error (state/db-worker-uninitialized-error)})
+        (is (= 1 (count @notifications))
+            "Abort is idempotent once importing is cleared"))
+      (finally
+        (state/replace-state! original-state)))))
+
+(deftest invoke-import-file-graph-converts-sync-uninitialized-throw-to-rejected-promise
+  (async done
+    (let [invoke-import (some-> (resolve 'frontend.components.imports/<invoke-import-file-graph)
+                                deref)]
+      (is (fn? invoke-import))
+      (-> (p/with-redefs [state/<wait-for-db-worker (fn [] (p/resolved true))
+                          state/<invoke-db-worker
+                          (fn [& _]
+                            (throw (state/db-worker-uninitialized-error)))]
+            (-> (invoke-import "repo" {:path "logseq/config.edn"} [] {})
+                (p/then (fn [_] {:status :resolved}))
+                (p/catch (fn [error]
+                           {:status :rejected
+                            :message (ex-message error)}))))
+          (p/then (fn [result]
+                    (is (= :rejected (:status result)))
+                    (is (= "db-worker has not been initialized" (:message result)))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))

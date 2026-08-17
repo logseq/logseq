@@ -8,6 +8,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.imports :as imports]
             [frontend.components.rtc.download-progress :as download-progress]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -188,7 +189,12 @@
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]
-    (state/<invoke-db-worker :thread-api/set-context context)))
+    (when (fn? @state/*db-worker)
+      (state/<invoke-db-worker :thread-api/set-context context))))
+
+(defevent! :graph/abort-file-to-db-import
+  [[_ payload]]
+  (imports/abort-file-graph-import! payload))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded

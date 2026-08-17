@@ -2379,12 +2379,12 @@
     :custom-status-tx (atom [])
     :user-options
     (merge user-options
-           {:tag-classes (set (map string/lower-case (:tag-classes user-options)))
+           {:tag-classes (lower-case-names (:tag-classes user-options))
             :property-classes (set/difference
-                               (set (map (comp keyword string/lower-case) (:property-classes user-options)))
+                               (lower-case-keywords (:property-classes user-options))
                                file-built-in-property-names)
             :property-parent-classes (set/difference
-                                      (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
+                                      (lower-case-keywords (:property-parent-classes user-options))
                                       file-built-in-property-names)})}))
 
 (defn- retract-parent-and-page-tag
@@ -2396,6 +2396,20 @@
                 [:db/retract eid :block/tags :logseq.class/Page]]))
            col)))
 
+(defn- property-title->name
+  "Property ident name from a page title. Nil titles must not call `.toLowerCase`."
+  [title]
+  (when (and (string? title) (not (string/blank? title)))
+    (keyword (string/lower-case title))))
+
+(defn- lower-case-names
+  [xs]
+  (into #{} (keep #(when (string? %) (string/lower-case %))) xs))
+
+(defn- lower-case-keywords
+  [xs]
+  (into #{} (keep #(when (string? %) (keyword (string/lower-case %)))) xs))
+
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
@@ -2405,22 +2419,22 @@
         ;; _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
-        property-pages-tx (map (fn [{block-uuid :block/uuid :block/keys [title]}]
-                                 (let [property-name (keyword (string/lower-case title))
-                                       db-ident (get-ident @(:all-idents import-state) property-name)
-                                       upstream-property (get upstream-properties property-name)]
-                                   (sqlite-util/build-new-property
-                                    db-ident
-                                    ;; Tweak new properties that have upstream changes in flight to behave like
-                                    ;; existing properties i.e. they should be defined by the upstream property
-                                    (if (and upstream-property
-                                             (#{:date :node} (:from-type upstream-property))
-                                             (= :default (get-in upstream-property [:schema :logseq.property/type])))
-                                      ;; Assumes :many for :date and :node like infer-property-schema-and-get-property-change
-                                      {:logseq.property/type (:from-type upstream-property) :db/cardinality :many}
-                                      (get-property-schema @(:property-schemas import-state) property-name))
-                                    {:title title :block-uuid block-uuid})))
-                               properties-tx)
+        property-pages-tx (keep (fn [{block-uuid :block/uuid :block/keys [title]}]
+                                  (when-let [property-name (property-title->name title)]
+                                    (let [db-ident (get-ident @(:all-idents import-state) property-name)
+                                          upstream-property (get upstream-properties property-name)]
+                                      (sqlite-util/build-new-property
+                                       db-ident
+                                       ;; Tweak new properties that have upstream changes in flight to behave like
+                                       ;; existing properties i.e. they should be defined by the upstream property
+                                       (if (and upstream-property
+                                                (#{:date :node} (:from-type upstream-property))
+                                                (= :default (get-in upstream-property [:schema :logseq.property/type])))
+                                         ;; Assumes :many for :date and :node like infer-property-schema-and-get-property-change
+                                         {:logseq.property/type (:from-type upstream-property) :db/cardinality :many}
+                                         (get-property-schema @(:property-schemas import-state) property-name))
+                                       {:title title :block-uuid block-uuid}))))
+                                properties-tx)
         converted-property-pages-tx
         (map (fn [kw-name]
                (let [existing-page-uuid (get existing-pages (name kw-name))
@@ -2700,7 +2714,10 @@
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
+                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n"
+                                         (or (ex-message error)
+                                             (some-> error .-message)
+                                             (str error)))
                                :level :error
                                :ex-data {:path path :error error}})
                  (throw error)))))

@@ -5,7 +5,7 @@
 
 (defn- worker-not-initialized?
   [e]
-  (= "db-worker has not been initialized" (ex-message e)))
+  (state/db-worker-uninitialized-error? e))
 
 (defn- normalize-empty-result
   [result]
