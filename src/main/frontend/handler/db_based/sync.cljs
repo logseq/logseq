@@ -360,11 +360,13 @@
                                      :graph-uuid graph-uuid
                                      :base base})))
              (p/catch (fn [error]
-                        (-> (if @existed-before?*
-                              (p/resolved nil)
-                              (<remove-created-download-graph! graph))
-                            (p/then (fn [_]
-                                      (throw error))))))
+                        (let [created-in-this-attempt? (false? @existed-before?*)]
+                          (reset! existed-before?* true)
+                          (-> (if created-in-this-attempt?
+                                (<remove-created-download-graph! graph)
+                                (p/resolved nil))
+                              (p/then (fn [_]
+                                        (throw error))))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))

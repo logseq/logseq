@@ -767,20 +767,21 @@
 (deftest rtc-download-graph-removes-created-local-graph-on-failure-test
   (async done
          (let [deleted (atom [])
-               closed (atom [])]
+               closed (atom [])
+               repo (str config/db-version-prefix "demo-graph")]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
                                state/get-repos (fn [] [])
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
-                               persist-db/<close-db (fn [repo]
-                                                      (swap! closed conj repo)
+                               persist-db/<close-db (fn [graph]
+                                                      (swap! closed conj graph)
                                                       (p/resolved nil))
-                               db-persist/delete-graph! (fn [repo]
-                                                          (swap! deleted conj repo)
+                               db-persist/delete-graph! (fn [graph]
+                                                          (swap! deleted conj graph)
                                                           (p/resolved nil))
-                               state/delete-repo! (fn [_repo] nil)
+                               state/delete-repo! (fn [_graph] nil)
                                state/<invoke-db-worker (fn [op & _args]
                                                          (if (= op :thread-api/db-sync-download-graph-by-id)
                                                            (p/rejected (ex-info "invalid-e2ee-password"
@@ -794,8 +795,8 @@
                          (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/invalid-e2ee-password (:code (ex-data error))))
-                          (is (= [(str config/db-version-prefix "demo-graph")] @closed))
-                          (is (= [(str config/db-version-prefix "demo-graph")] @deleted))
+                          (is (= #{repo} (set @closed)))
+                          (is (= #{repo} (set @deleted)))
                           (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-keeps-preexisting-local-graph-on-failure-test
