@@ -1174,7 +1174,7 @@ abc
 
     (testing "favorites"
       (is (= #{"Interstellar" "some page" "new page" "n1/x/y"}
-             (set (imported-favorite-titles @conn)))))))
+             (set (imported-favorite-titles @conn)))))
 
     (testing "user properties"
       (is (= 23
