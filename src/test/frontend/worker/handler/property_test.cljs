@@ -1,9 +1,10 @@
 (ns frontend.worker.handler.property-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (deftest property-node-selector-data-prepares-class-options-and-initial-choices
@@ -42,6 +43,25 @@
         (fn [error]
           (is false (str error))))
        (p/finally done)))))
+
+(deftest display-properties-hides-hide-by-default-properties-on-nodes
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}
+                            :author {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "Work"
+                                          :build/properties {:keywords "clojure"
+                                                             :author "Ada"}}}]})
+        page (db-test/find-page-by-title @conn "Work")
+        result (worker-property/display-properties @conn page {:page-title? true} false)
+        full-ids (set (map :property-id (:full-properties result)))
+        hidden-ids (set (map :property-id (:hidden-properties result)))]
+    (testing "hide-by-default still hides the property on nodes that use it"
+      (is (contains? hidden-ids :user.property/keywords))
+      (is (not (contains? full-ids :user.property/keywords))))
+    (testing "visible properties still appear on the node"
+      (is (contains? full-ids :user.property/author))
+      (is (not (contains? hidden-ids :user.property/author))))))
 
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
