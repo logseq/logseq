@@ -327,7 +327,8 @@
 
 (hsx/defc sidebar-favorites-loaded
   []
-  (let [favorite-entities (db-hooks/use-resource [:favorites])]
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        favorite-entities (db-hooks/use-resource [:favorites])]
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -358,7 +359,8 @@
 
 (hsx/defc sidebar-recent-pages-loaded
   []
-  (let [current-repo (rfx/use-sub [:git/current-repo])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        current-repo (rfx/use-sub [:git/current-repo])
         recent-page-ids (vec (rfx/use-sub [:ui/recent-pages current-repo]))
         pages (db-hooks/use-resource [:recent-pages recent-page-ids])]
        (sidebar-content-group
