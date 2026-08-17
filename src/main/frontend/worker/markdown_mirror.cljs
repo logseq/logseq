@@ -2,6 +2,7 @@
   "Markdown mirror derived-file support for DB graphs."
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
@@ -239,29 +240,6 @@
           string/upper-case
           (string/replace #"\s+" "-")))))
 
-(defn- empty-placeholder-status?
-  [status]
-  (= :logseq.property/empty-placeholder
-     (if (keyword? status) status (:db/ident status))))
-
-(defn- class-provides-status?
-  [class]
-  (some #(= :logseq.property/status (:db/ident %))
-        (:logseq.property.class/properties class)))
-
-(defn- block-classes-provide-status?
-  [block]
-  (let [tags (:block/tags block)]
-    (boolean
-     (some class-provides-status?
-           (concat tags (ldb/get-classes-parents tags))))))
-
-(defn- block-status
-  [db block]
-  (when (or (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
-            (block-classes-provide-status? block))
-    (:logseq.property/status block)))
-
 (defn- simple-tag-token?
   [title]
   (boolean
@@ -396,12 +374,11 @@
             (:block/tags block))))
 
 (defn- block-line-info
-  [db block marker]
+  [_db block marker]
   {:first-line-fragment (block-first-line-fragment block)
    :code-block? (code-block? block)
-   :status-marker (when-let [status (block-status db block)]
-                    (when-not (empty-placeholder-status? status)
-                      (status-marker status)))
+   :status-marker (when (de/entity? block)
+                    (some-> (:logseq.property/status block) status-marker))
    :tag-tokens (mirror-tag-tokens block)
    :marker marker
    :embed-target (embed-target block)})
