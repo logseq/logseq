@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-worker.log :as db-worker-log]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [promesa.core :as p]))
 
 (def ^:private valid-owner-sources
@@ -224,14 +225,14 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
+  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id extra-env]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
                         create-empty-db? (conj "--create-empty-db")
                         (seq embedding-endpoint) (conj "--embedding-endpoint" embedding-endpoint)
                         (seq embedding-model-id) (conj "--embedding-model-id" embedding-model-id)))
-        env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
+        env (network-proxy/merge-child-env extra-env)]
     (when (and (= :electron owner-source)
                (not (seq embedding-endpoint)))
       (js-delete env embedding-url-env))

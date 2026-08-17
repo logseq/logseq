@@ -21,6 +21,7 @@ const builtinModuleSet = new Set([
 const externalModuleSet = new Set([
   "@zvec/zvec",
   "keytar",
+  "undici",
   "ws",
 ]);
 
@@ -129,6 +130,11 @@ async function main() {
   if (bundleContents.includes("node_modules/.pnpm/keytar")) {
     throw new Error(
       "vite bundle contains a pnpm keytar native path; keytar must stay external"
+    );
+  }
+  if (bundleContents.includes("node_modules/.pnpm/undici")) {
+    throw new Error(
+      "vite bundle contains a pnpm undici path; undici must stay external"
     );
   }
   if (bundleContents.includes("ws does not work in the browser")) {

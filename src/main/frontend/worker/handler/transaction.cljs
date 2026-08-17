@@ -7,6 +7,7 @@
    [frontend.worker.db-listener :as db-listener]
    [frontend.worker.handler.block :as block-handler]
    [frontend.worker.plain-value :as worker-plain]
+   [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [lambdaisland.glogi :as log]
@@ -155,4 +156,6 @@
              (nil? (:git/current-repo new-state)))
     (log/error :thread-api/sync-app-state {:reason :nil-current-repo}))
   (worker-state/set-new-state! new-state)
+  (when (contains? new-state :network/proxy)
+    (platform/set-http-proxy! (:network/proxy new-state)))
   nil)

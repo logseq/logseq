@@ -313,6 +313,7 @@
           (p/then (fn [runtime-info]
                     (is (= "graph-a" (:repo @captured)))
                     (is (= :electron (get-in @captured [:config :owner-source])))
+                    (is (contains? (:config @captured) :extra-env))
                     (is (nil? (get-in @captured [:config :server-list-file])))
                     (is (= "http://127.0.0.1:9300" (:base-url runtime-info)))
                     (is (= true (:owned? runtime-info)))))

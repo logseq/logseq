@@ -185,14 +185,15 @@
     (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
+  [{:keys [repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id extra-env]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :root-dir root-dir
                          :owner-source owner-source
                          :create-empty-db? create-empty-db?
                          :embedding-endpoint embedding-endpoint
-                         :embedding-model-id embedding-model-id}))
+                         :embedding-model-id embedding-model-id
+                         :extra-env extra-env}))
 
 (defn- rewrite-lock-owner-source!
   [path lock owner-source]
@@ -295,7 +296,8 @@
                                                                   :owner-source requester-owner
                                                                   :create-empty-db? (:create-empty-db? config)
                                                                   :embedding-endpoint (:embedding-endpoint config)
-                                                                  :embedding-model-id (:embedding-model-id config)})))
+                                                                  :embedding-model-id (:embedding-model-id config)
+                                                                  :extra-env (:extra-env config)})))
                                  (-> (profile/time! profile-session
                                                     "server.wait-lock"
                                                     (fn []

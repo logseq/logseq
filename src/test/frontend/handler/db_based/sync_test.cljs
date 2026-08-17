@@ -461,6 +461,43 @@
                             (reset! state/*db-worker worker-prev)
                             (state/replace-state! state-prev)))))))
 
+(deftest rtc-start-syncs-network-proxy-when-configured-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev (state/get-state)
+               calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (state/replace-state! (assoc state-prev
+                                      :git/current-repo "demo-graph"
+                                      :auth/id-token "id-token"
+                                      :auth/access-token "access-token"
+                                      :auth/refresh-token "refresh-token"
+                                      :user/info {:sub "user-1"}
+                                      :config {:a 1}
+                                      :electron/user-cfgs {:settings/agent {:type "http"
+                                                                            :host "127.0.0.1"
+                                                                            :port "10808"}}
+                                      :rtc/uploading? false
+                                      :rtc/loading-graphs? false))
+           (-> (p/with-redefs [user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               state/get-rtc-graphs (fn [] [{:url "demo-graph"
+                                                             :graph-ready-for-use? true}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! calls conj args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "demo-graph"))
+               (p/then (fn [_]
+                         (is (= :thread-api/sync-app-state (ffirst @calls)))
+                         (is (= {:type "http" :host "127.0.0.1" :port "10808"}
+                                (:network/proxy (second (first @calls)))))
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (finish-async-test! done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
+
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
         log-events (atom [])]

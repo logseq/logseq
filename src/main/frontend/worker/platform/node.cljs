@@ -10,6 +10,7 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [logseq.common.config :as common-config]
             [logseq.db.sqlite.backup :as sqlite-backup]
             [promesa.core :as p]
@@ -748,7 +749,8 @@
                                     (<read-secret-text-by-owner kv owner-source key))
                 :delete-secret-text! (fn [key]
                                        (<delete-secret-text-by-owner! kv owner-source key))}
-       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}}
+       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}
+       :http {:set-proxy! network-proxy/apply-settings!}}
        vector-embedding-enabled?
        (assoc :embedding {:model-id embedding-model-id
                           :dimension embedding-dimension

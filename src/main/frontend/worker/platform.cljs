@@ -30,6 +30,16 @@
   (or @*platform
       (throw (ex-info "platform adapter not initialized" {}))))
 
+(defn maybe-current
+  []
+  @*platform)
+
+(defn set-http-proxy!
+  "No-op unless the platform adapter provides :http/set-proxy! (Node only)."
+  [settings]
+  (when-let [f (get-in (maybe-current) [:http :set-proxy!])]
+    (f settings)))
+
 (defn env-flag
   [platform flag]
   (get-in platform [:env flag]))
