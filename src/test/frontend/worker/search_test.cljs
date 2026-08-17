@@ -197,6 +197,33 @@
   (testing "entities on recycled pages are hidden"
     (is (true? (#'search/hidden-entity? {:block/page {:logseq.property/deleted-at 1}})))))
 
+(deftest search-indexes-hide-by-default-properties
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}
+                            :author {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "Hidden page"
+                                          :build/properties {:logseq.property/hide? true}}}]})
+        keywords (d/entity @conn :user.property/keywords)
+        author (d/entity @conn :user.property/author)
+        hidden-page (db-test/find-page-by-title @conn "Hidden page")
+        indexed-titles (->> (search/get-all-blocks @conn)
+                            (map :block/title)
+                            set)
+        combined (search/combine-results
+                  @conn
+                  [{:id (str (:block/uuid keywords))
+                    :title "keywords"
+                    :keyword-score 1.0}])]
+    (is (true? (:logseq.property/hide? keywords)))
+    (is (false? (#'search/hidden-entity? keywords)))
+    (is (false? (#'search/hidden-entity? author)))
+    (is (true? (#'search/hidden-entity? hidden-page)))
+    (is (contains? indexed-titles "keywords"))
+    (is (contains? indexed-titles "author"))
+    (is (not (contains? indexed-titles "Hidden page")))
+    (is (some #(= (str (:block/uuid keywords)) (:id %)) combined))))
+
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
     (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? limit ?"
