@@ -1209,8 +1209,7 @@
             (outliner-core/insert-blocks! conn [{:block/title "v2 extra"}] body {:sibling? true})
 
             (let [aug-20 (create-journal! 20260820)
-                  heading (d/entity @conn (:db/id heading))
-                  body (d/entity @conn (:db/id body))]
+                  heading (d/entity @conn (:db/id heading))]
               (is (= ["v1 heading" "v1 body"] (child-titles @conn aug-19))
                   "Earlier journals keep the version applied at creation")
               (is (= ["v2 heading" "v2 body" "v2 extra"] (child-titles @conn aug-20)))
