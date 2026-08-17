@@ -469,12 +469,10 @@
     (when (util/mobile?)
       (download-progress/hide!)))
    (p/catch (fn [e]
-              (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
               (when (util/mobile?)
                 (download-progress/hide!))
-              (when (rtc-error/e2ee-decrypt-failed? e)
-                (notification/show! (t :encryption/wrong-password) :error false))))))
+              (rtc-error/notify-download-failure! graph-uuid e)))))
 
 ;; db-worker -> UI
 (defevent! :db/sync-changes [[_ data]]
