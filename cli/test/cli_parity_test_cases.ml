@@ -180,7 +180,8 @@ function (lockPath, serverListPath, port, repo) {
 |}]
 
 let set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port : unit =
-  set_spawn_capture_on_spawn_raw lock_path server_list_path port "logseq_db_demo"
+  set_spawn_capture_on_spawn_raw lock_path server_list_path port
+    "logseq_db_demo"
 
 let set_env key value : unit = Js.Dict.set Node.Process.process##env key value
 
@@ -4424,8 +4425,7 @@ let () =
                             \",\"~:graph-name\",\"alpha\",\"~:graph-id\",\"~u11111111-1111-4111-8111-111111111111\",\"~:graph-e2ee?\",false]]"))
                     else write_json res 200 (json_response "true")
                   with exn ->
-                    write_json res 400
-                      (error_response (Printexc.to_string exn))
+                    write_json res 400 (error_response (Printexc.to_string exn))
                 else write_json res 404 (error_response "not found")))
       in
       try
@@ -4458,8 +4458,8 @@ let () =
                       | Some err ->
                           fail_test
                             ("remote-graphs failed: "
-                            ^ Error.code_to_string err.Error.code ^ " "
-                            ^ err.Error.message)
+                            ^ Error.code_to_string err.Error.code
+                            ^ " " ^ err.Error.message)
                       | None -> ());
                       expect_bool "remote-graphs ok" false
                         (Cli_result.is_error result);
@@ -4492,7 +4492,8 @@ let () =
                       in
                       let graphs =
                         expect_some "graphs"
-                          (Option.bind (Edn_util.get data "graphs")
+                          (Option.bind
+                             (Edn_util.get data "graphs")
                              Edn_util.as_seq)
                       in
                       expect_int "graph count" 1 (Vec.length graphs);
