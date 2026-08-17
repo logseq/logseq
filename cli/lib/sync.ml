@@ -470,7 +470,8 @@ let graphs_value graphs =
 
 let tagged_error_value value =
   match unquote_transit_value value with
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("error", value)) ->
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged (("error" | "js/Error"), value)) ->
       Some value
   | _ -> None
 
