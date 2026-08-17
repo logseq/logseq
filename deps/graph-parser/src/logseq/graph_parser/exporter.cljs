@@ -2366,6 +2366,20 @@
    ;; Populated as files are imported and used to drop conflicting alias declarations.
    :alias-owners (atom {})})
 
+(defn- property-title->name
+  "Property ident name from a page title. Nil titles must not call `.toLowerCase`."
+  [title]
+  (when (and (string? title) (not (string/blank? title)))
+    (keyword (string/lower-case title))))
+
+(defn- lower-case-names
+  [xs]
+  (into #{} (keep #(when (string? %) (string/lower-case %))) xs))
+
+(defn- lower-case-keywords
+  [xs]
+  (into #{} (keep #(when (string? %) (keyword (string/lower-case %)))) xs))
+
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
    (dissoc options :extract-options :user-options)
@@ -2395,20 +2409,6 @@
                [[:db/retract eid :block/parent]
                 [:db/retract eid :block/tags :logseq.class/Page]]))
            col)))
-
-(defn- property-title->name
-  "Property ident name from a page title. Nil titles must not call `.toLowerCase`."
-  [title]
-  (when (and (string? title) (not (string/blank? title)))
-    (keyword (string/lower-case title))))
-
-(defn- lower-case-names
-  [xs]
-  (into #{} (keep #(when (string? %) (string/lower-case %))) xs))
-
-(defn- lower-case-keywords
-  [xs]
-  (into #{} (keep #(when (string? %) (keyword (string/lower-case %)))) xs))
 
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
