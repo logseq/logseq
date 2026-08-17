@@ -1626,23 +1626,26 @@
           :map-inline map-inline
           :inline inline}))
 
+(hsx/defc macro-function-fallback-cp
+  [arguments]
+  [:span.warning
+   (util/format "{{function %s}}" (first arguments))])
+
 (hsx/defc macro-function-result-cp
-  [query-result arguments fallback]
+  [query-result arguments]
   (or (some-> query-result
               (block-macros/function-macro arguments)
               block-macros/function-result->hiccup)
-      fallback))
+      (macro-function-fallback-cp arguments)))
 
 (hsx/defc macro-function-cp
   [config arguments]
   (let [fallback* (hooks/use-memo #(atom nil) [])
         query-result* (or (:query-result config) fallback*)
-        [query-result] (hooks/use-atom query-result*)
-        fallback [:span.warning
-                  (util/format "{{function %s}}" (first arguments))]]
+        [query-result] (hooks/use-atom query-result*)]
     (ui/catch-error
-     fallback
-     (macro-function-result-cp query-result arguments fallback))))
+     (macro-function-fallback-cp arguments)
+     (macro-function-result-cp query-result arguments))))
 
 (def ^:private default-video-embed-width 560)
 (def ^:private min-video-embed-width 160)
