@@ -30,7 +30,7 @@
 
 (deftest graph-sync-context-with-nil-worker-does-not-throw
   (let [previous-worker @state/*db-worker
-        handler (get @#'events/event-definitions :graph/sync-context)]
+        handler (get @@#'events/event-definitions :graph/sync-context)]
     (is (fn? handler) ":graph/sync-context should be registered")
     (reset! state/*db-worker nil)
     (try
@@ -42,7 +42,7 @@
 (deftest graph-sync-context-invokes-worker-when-ready
   (let [previous-worker @state/*db-worker
         calls (atom [])
-        handler (get @#'events/event-definitions :graph/sync-context)]
+        handler (get @@#'events/event-definitions :graph/sync-context)]
     (reset! state/*db-worker (fn [qkw context]
                                (swap! calls conj [qkw context])
                                nil))

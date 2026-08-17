@@ -12,16 +12,21 @@
         invoke! (fn [& args]
                   (swap! calls conj (vec args))
                   (vec args))
-        repo "repo-1"]
-    (with-redefs [util/node-test? false
-                  state/<invoke-db-worker invoke!]
-      (is (= [:thread-api/undo-redo-undo repo]
-             (undo-redo/undo repo)))
-      (is (= [:thread-api/undo-redo-redo repo]
-             (undo-redo/redo repo)))
-      (is (= [[:thread-api/undo-redo-undo repo]
-              [:thread-api/undo-redo-redo repo]]
-             @calls)))))
+        repo "repo-1"
+        previous-worker @state/*db-worker]
+    (reset! state/*db-worker invoke!)
+    (try
+      (with-redefs [util/node-test? false
+                    state/<invoke-db-worker invoke!]
+        (is (= [:thread-api/undo-redo-undo repo]
+               (undo-redo/undo repo)))
+        (is (= [:thread-api/undo-redo-redo repo]
+               (undo-redo/redo repo)))
+        (is (= [[:thread-api/undo-redo-undo repo]
+                [:thread-api/undo-redo-redo repo]]
+               @calls)))
+      (finally
+        (reset! state/*db-worker previous-worker)))))
 
 (deftest clear-history-and-record-editor-info-proxy-test
   (let [calls (atom [])
@@ -32,16 +37,21 @@
         editor-info {:block-uuid (random-uuid)
                      :container-id 1
                      :start-pos 0
-                     :end-pos 3}]
-    (with-redefs [util/node-test? false
-                  state/<invoke-db-worker invoke!]
-      (is (= [:thread-api/undo-redo-clear-history repo]
-             (undo-redo/clear-history! repo)))
-      (is (= [:thread-api/undo-redo-record-editor-info repo editor-info]
-             (undo-redo/record-editor-info! repo editor-info)))
-      (is (= [[:thread-api/undo-redo-clear-history repo]
-              [:thread-api/undo-redo-record-editor-info repo editor-info]]
-             @calls)))))
+                     :end-pos 3}
+        previous-worker @state/*db-worker]
+    (reset! state/*db-worker invoke!)
+    (try
+      (with-redefs [util/node-test? false
+                    state/<invoke-db-worker invoke!]
+        (is (= [:thread-api/undo-redo-clear-history repo]
+               (undo-redo/clear-history! repo)))
+        (is (= [:thread-api/undo-redo-record-editor-info repo editor-info]
+               (undo-redo/record-editor-info! repo editor-info)))
+        (is (= [[:thread-api/undo-redo-clear-history repo]
+                [:thread-api/undo-redo-record-editor-info repo editor-info]]
+               @calls)))
+      (finally
+        (reset! state/*db-worker previous-worker)))))
 
 (deftest record-ui-state-proxy-test
   (let [calls (atom [])
@@ -49,14 +59,19 @@
                   (swap! calls conj (vec args))
                   (vec args))
         repo "repo-3"
-        ui-state-str "{:old-state {}, :new-state {:route-data {:to :page}}}"]
-    (with-redefs [util/node-test? false
-                  state/<invoke-db-worker invoke!]
-      (is (nil? (undo-redo/record-ui-state! repo nil)))
-      (is (= [:thread-api/undo-redo-record-ui-state repo ui-state-str]
-             (undo-redo/record-ui-state! repo ui-state-str)))
-      (is (= [[:thread-api/undo-redo-record-ui-state repo ui-state-str]]
-             @calls)))))
+        ui-state-str "{:old-state {}, :new-state {:route-data {:to :page}}}"
+        previous-worker @state/*db-worker]
+    (reset! state/*db-worker invoke!)
+    (try
+      (with-redefs [util/node-test? false
+                    state/<invoke-db-worker invoke!]
+        (is (nil? (undo-redo/record-ui-state! repo nil)))
+        (is (= [:thread-api/undo-redo-record-ui-state repo ui-state-str]
+               (undo-redo/record-ui-state! repo ui-state-str)))
+        (is (= [[:thread-api/undo-redo-record-ui-state repo ui-state-str]]
+               @calls)))
+      (finally
+        (reset! state/*db-worker previous-worker)))))
 
 (deftest node-test-undo-redo-does-not-call-worker-test
   (let [calls (atom [])
