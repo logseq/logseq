@@ -1304,8 +1304,10 @@
        cell-placeholder)]))
 
 (defn- eager-table-cells?
-  [view-feature-type]
-  (= :all-pages view-feature-type))
+  "Virtualized rows are already windowed, so per-cell IntersectionObservers
+  only add main-thread work. Keep lazy cells for fully mounted grouped tables."
+  [option]
+  (not (:disable-virtualized? option)))
 
 (defn- click-cell
   [node]
@@ -1402,9 +1404,9 @@
      body)))
 
 (hsx/defc table-row-inner
-  [table row props {:keys [show-add-property? scrolling? view-feature-type]}]
+  [table row props {:keys [show-add-property?] :as option}]
   (let [*ref (hooks/use-ref nil)
-        eager-cells? (eager-table-cells? view-feature-type)
+        eager-cells? (eager-table-cells? option)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -1423,16 +1425,14 @@
                                       :select? select?
                                       :add-property? add-property?
                                       :style style}]
-                       (if (and scrolling? (not (:block/title row)))
-                         (table-cell-container cell-opts nil)
-                         (when-let [render (get column :cell)]
-                           (let [cell-render (fn []
-                                               (table-cell-container
-                                                cell-opts (render table row column style)))]
-                             (if eager-cells?
-                               [:div.h-full (cell-render)]
-                               (lazy-table-cell cell-render
-                                                (table-cell-container cell-opts nil))))))))]
+                       (when-let [render (get column :cell)]
+                         (let [cell-render (fn []
+                                             (table-cell-container
+                                              cell-opts (render table row column style)))]
+                           (if eager-cells?
+                             [:div.h-full (cell-render)]
+                             (lazy-table-cell cell-render
+                                              (table-cell-container cell-opts nil)))))))]
     (shui/table-row
      (merge
       props
@@ -2035,7 +2035,17 @@
   [table-view?]
   (if table-view? 33 24))
 
+(def ^:private table-viewport-overscan
+  {:top 96 :bottom 96})
+
 (def ^:private view-prefetch-limit 50)
+
+(defn- table-scroll-parent
+  [option]
+  (get-scroll-parent
+   (cond-> (:config option)
+     (and (exists? js/document) (:viewid option))
+     (assoc :viewel (js/document.getElementById (:viewid option))))))
 
 (defn- initial-view-prefetch-count
   [viewport-height item-height]
@@ -2084,16 +2094,18 @@
           (set-initial-prefetch-ready! true)))
       [prefetch-ready?])
      [(or initial-prefetch-ready? prefetch-ready?)
-      (fn [^js rendered-items]
-        (when (pos? (alength rendered-items))
-          (let [next-range [(rendered-item-index (aget rendered-items 0))
-                            (rendered-item-index
-                             (aget rendered-items (dec (alength rendered-items))))]]
-            (set-rendered-range!
-             (fn [current-range]
-               (if (= current-range next-range)
-                 current-range
-                 next-range))))))])))
+      (hooks/use-callback
+       (fn [^js rendered-items]
+         (when (pos? (alength rendered-items))
+           (let [next-range [(rendered-item-index (aget rendered-items 0))
+                             (rendered-item-index
+                              (aget rendered-items (dec (alength rendered-items))))]]
+             (set-rendered-range!
+              (fn [current-range]
+                (if (= current-range next-range)
+                  current-range
+                  next-range))))))
+       [])])))
 
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view?]} item-render]
@@ -2105,39 +2117,78 @@
         [:div.ls-card-item {:aria-hidden true}]
         [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))))
 
+(hsx/defc table-lazy-item
+  "Table rows keep value-comparable props so HSX memo can skip already-mounted
+  items when Virtuoso asks for the same index again."
+  [data idx table option]
+  (let [row-uuid (util/nth-safe data idx)
+        item (db-hooks/use-block row-uuid)]
+    (if item
+      (table-row table item {} option)
+      [:div {:style {:min-height (lazy-item-placeholder-height true)}}])))
+
+(hsx/defc view-row-prefetcher
+  "Owns the sliding prefetch window so range updates do not re-render the list."
+  [rows initial-prefetch-count *prefetch-rows!]
+  (let [[_initial-rows-ready? prefetch-rows!]
+        (use-view-row-prefetch rows initial-prefetch-count)]
+    (reset! *prefetch-rows! prefetch-rows!)
+    nil))
+
+(hsx/defc table-virtualized-rows
+  [table option rows *scroller-ref on-items-rendered]
+  (let [scroll-parent (table-scroll-parent option)
+        row-data (:data table)
+        table-option (hooks/use-memo
+                      #(assoc option :table-view? true)
+                      [option])
+        item-content (hooks/use-callback
+                      (fn [idx]
+                        (table-lazy-item row-data idx table table-option))
+                      [row-data table table-option])
+        compute-item-key (hooks/use-callback
+                          (fn [idx]
+                            (str "table-row-" (util/nth-safe rows idx)))
+                          [rows])]
+    (virtualized-list
+     {:ref #(reset! *scroller-ref %)
+      :increase-viewport-by table-viewport-overscan
+      :custom-scroll-parent scroll-parent
+      :compute-item-key compute-item-key
+      :skipAnimationFrameInResizeObserver true
+      :total-count (count rows)
+      :item-content item-content
+      :items-rendered on-items-rendered}
+     (:disable-virtualized? option))))
+
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
-  (let [scroll-parent (get-scroll-parent
-                       (-> (:config option)
-                           (assoc :viewel (js/document.getElementById (:viewid option)))))
+  (let [scroll-parent (table-scroll-parent option)
         initial-prefetch-count (initial-view-prefetch-count
                                 (.-clientHeight scroll-parent)
                                 (lazy-item-placeholder-height true))
-        [initial-rows-ready? prefetch-rows!]
-        (use-view-row-prefetch (:data table) initial-prefetch-count)]
-    (when (seq rows)
-      (if initial-rows-ready?
-        (virtualized-list
-         {:ref #(reset! *scroller-ref %)
-          :increase-viewport-by {:top 300 :bottom 300}
-          :custom-scroll-parent scroll-parent
-          :compute-item-key (fn [idx]
-                              (str "table-row-" (util/nth-safe rows idx)))
-          :skipAnimationFrameInResizeObserver true
-          :total-count (count rows)
-          :item-content (fn [idx]
-                          (let [option (assoc option :table-view? true)]
-                            (lazy-item (:data table) idx option
-                                       (fn [row]
-                                         (table-row table row {} option)))))
-          :items-rendered (fn [props]
-                            (prefetch-rows! props)
-                            (when (seq props)
-                              (set-items-rendered! true)))}
-         (:disable-virtualized? option))
-        [:div.flex.flex-col.gap-1.py-1
-         (for [idx (range 3)]
-           (shui/skeleton {:key idx :class "h-8 w-full"}))]))))
+        row-data (:data table)
+        initial-rows (if (seq row-data)
+                       (subvec (vec row-data) 0 (min (count row-data) initial-prefetch-count))
+                       [])
+        initial-rows-ready? (db-hooks/use-block-prefetch initial-rows)
+        *prefetch-rows! (hooks/use-memo #(atom nil) [])
+        on-items-rendered (hooks/use-callback
+                           (fn [props]
+                             (when-let [prefetch! @*prefetch-rows!]
+                               (prefetch! props))
+                             (when (seq props)
+                               (set-items-rendered! true)))
+                           [set-items-rendered!])]
+    [:<>
+     (when (seq row-data)
+       (view-row-prefetcher row-data initial-prefetch-count *prefetch-rows!))
+     (when (seq rows)
+       (if initial-rows-ready?
+         (table-virtualized-rows table option rows *scroller-ref on-items-rendered)
+         [:div.flex.flex-col.gap-1.py-1
+          (for [idx (range 3)]
+            (shui/skeleton {:key idx :class "h-8 w-full"}))]))]))
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
