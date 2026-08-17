@@ -194,6 +194,23 @@
     :else
     (p/resolved nil)))
 
+(defn force-cleanup-lock!
+  "Stop a lock's process even when the pid is still alive, then remove the lock
+  once the process is gone. Used when HTTP is dead/hung after sleep/wake."
+  [path lock]
+  (cond
+    (nil? lock)
+    (p/resolved nil)
+
+    :else
+    (-> (stop-stale-process! lock)
+        (p/then (fn [_]
+                  (when (or (nil? (:pid lock))
+                            (= (:pid lock) (.-pid js/process))
+                            (process-stopped? (:pid lock)))
+                    (remove-lock! path))
+                  nil)))))
+
 (defn wait-for
   [pred-fn {:keys [timeout-ms interval-ms]
             :or {timeout-ms 8000
