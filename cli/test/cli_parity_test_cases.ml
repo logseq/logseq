@@ -160,16 +160,16 @@ let spawn_capture_calls () : string =
 JSON.stringify((globalThis.__logseqSpawnCapture && globalThis.__logseqSpawnCapture.calls) || [])
 |}]
 
-let set_spawn_capture_on_spawn_raw : string -> string -> int -> unit =
+let set_spawn_capture_on_spawn_raw : string -> string -> int -> string -> unit =
   [%mel.raw
     {|
-function (lockPath, serverListPath, port) {
+function (lockPath, serverListPath, port, repo) {
   const capture = globalThis.__logseqSpawnCapture;
   if (!capture) throw new Error("spawn capture is not active");
   capture.onSpawn = function () {
     const fs = require("fs");
     fs.writeFileSync(lockPath, JSON.stringify({
-      repo: "logseq_db_demo",
+      repo: repo,
       pid: process.pid,
       "lock-id": "test",
       "owner-source": "cli"
@@ -180,7 +180,7 @@ function (lockPath, serverListPath, port) {
 |}]
 
 let set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port : unit =
-  set_spawn_capture_on_spawn_raw lock_path server_list_path port
+  set_spawn_capture_on_spawn_raw lock_path server_list_path port "logseq_db_demo"
 
 let set_env key value : unit = Js.Dict.set Node.Process.process##env key value
 
@@ -4045,12 +4045,19 @@ let () =
              (Sync.Parsed_ensure_keys
                 { e2ee_password = Some "pw"; upload_keys = true }))
       in
-      match ensure_keys with
+      (match ensure_keys with
       | Sync.Sync_ensure_keys action ->
           expect_equal "ensure keys password" "pw"
             (expect_some "ensure keys e2ee" action.e2ee_password);
           expect_bool "ensure keys upload" true action.upload_keys
       | _ -> fail_test "expected Sync_ensure_keys action");
+      let remote_graphs =
+        expect_ok "sync remote-graphs without graph"
+          (Sync.build (config ()) (Global_opts.create ())
+             Sync.Parsed_remote_graphs)
+      in
+      expect_bool "remote graphs action" true
+        (remote_graphs = Sync.Sync_remote_graphs));
 
   test "CLI parity sync build validates config and asset download actions"
     (fun () ->
@@ -4362,6 +4369,149 @@ let () =
           "external-asset"
       in
       Js.Promise.resolve pass);
+
+  test_promise
+    "CLI parity sync remote-graphs requires auth without requiring a graph"
+    (fun () ->
+      let root = temp_dir "logseq-cli-sync-remote-graphs-auth-" in
+      let cfg = config ~root_dir:root () in
+      let* result =
+        effect_to_promise
+          (execute_with_output Sync.execute Sync.Sync_remote_graphs cfg
+             Output.Mode.Json)
+      in
+      remove_tree root;
+      expect_bool "remote-graphs auth error" true (Cli_result.is_error result);
+      (match result.Cli_result.error with
+      | Some err ->
+          expect_equal "missing auth not missing graph" "missing-auth"
+            (Error.code_to_string err.Error.code)
+      | None -> fail_test "expected missing-auth");
+      Js.Promise.resolve pass);
+
+  test_promise
+    "CLI parity sync remote-graphs lists remotes without a local graph"
+    (fun () ->
+      let root = temp_dir "logseq-cli-sync-remote-graphs-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; ".cli-sync-runtime" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let listed_remote_graphs = ref false in
+      let server =
+        create_server (fun[@u] req res ->
+            let body = ref "" in
+            req_set_encoding req "utf8";
+            req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+            req_on_end req "end" (fun[@u] () ->
+                if req_method req = "GET" && req_url req = "/healthz" then
+                  write_json res 200
+                    (Printf.sprintf
+                       "{\"repo\":\"logseq_db_.cli-sync-runtime\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                       (Cli_unix.getpid ()) root)
+                else if req_method req = "POST" && req_url req = "/v1/invoke"
+                then
+                  try
+                    if
+                      Js.String.includes
+                        ~search:"thread-api/db-sync-list-remote-graphs" !body
+                    then (
+                      listed_remote_graphs := true;
+                      write_json res 200
+                        (json_response
+                           "[[\"^ \
+                            \",\"~:graph-name\",\"alpha\",\"~:graph-id\",\"~u11111111-1111-4111-8111-111111111111\",\"~:graph-e2ee?\",false]]"))
+                    else write_json res 200 (json_response "true")
+                  with exn ->
+                    write_json res 400
+                      (error_response (Printexc.to_string exn))
+                else write_json res 404 (error_response "not found")))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                set_spawn_capture_on_spawn_raw lock_path server_list_path port
+                  "logseq_db_.cli-sync-runtime";
+                let cfg = config ~root_dir:root ~id_token:"id-token-1" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (execute_with_output Sync.execute Sync.Sync_remote_graphs cfg
+                     Output.Mode.Json)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    try
+                      (match result.Cli_result.error with
+                      | Some err ->
+                          fail_test
+                            ("remote-graphs failed: "
+                            ^ Error.code_to_string err.Error.code ^ " "
+                            ^ err.Error.message)
+                      | None -> ());
+                      expect_bool "remote-graphs ok" false
+                        (Cli_result.is_error result);
+                      expect_bool "listed remotes" true !listed_remote_graphs;
+                      expect_named_contains "spawn account runtime repo" calls
+                        ".cli-sync-runtime";
+                      expect_named_contains "spawn create-empty-db" calls
+                        "--create-empty-db";
+                      expect_int "hidden runtime not listed" 0
+                        (Vec.length (Server_runtime.list_graphs cfg));
+                      let graph_list =
+                        effect_result "graph list"
+                          (execute_with_output Graph.execute Graph.Graph_list
+                             cfg Output.Mode.Json)
+                      in
+                      let graph_list_data =
+                        expect_some "graph list data"
+                          (Cli_result.data_value graph_list)
+                      in
+                      let user_graphs =
+                        expect_some "user graphs"
+                          (Option.bind
+                             (Edn_util.get graph_list_data "graphs")
+                             Edn_util.as_seq)
+                      in
+                      expect_int "graph list empty" 0 (Vec.length user_graphs);
+                      let data =
+                        expect_some "remote graphs data"
+                          (Cli_result.data_value result)
+                      in
+                      let graphs =
+                        expect_some "graphs"
+                          (Option.bind (Edn_util.get data "graphs")
+                             Edn_util.as_seq)
+                      in
+                      expect_int "graph count" 1 (Vec.length graphs);
+                      remove_tree root;
+                      finish_ok ()
+                    with exn ->
+                      remove_tree root;
+                      finish_error (Printexc.to_string exn))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
 
   test
     "CLI parity query validation rejects db/id datom clauses and non-vector \
@@ -4899,6 +5049,8 @@ let () =
         (Command_id.is_write Command_id.Graph_list);
       expect_bool "show requires graph" true
         (Command_id.requires_graph Command_id.Show);
+      expect_bool "sync remote-graphs does not require graph" false
+        (Command_id.requires_graph Command_id.Sync_remote_graphs);
       expect_bool "login does not require auth" false
         (Command_id.requires_auth Command_id.Login));
 
@@ -7488,6 +7640,7 @@ let () =
              [|
                "alpha";
                "backup";
+               ".cli-sync-runtime";
                "foo~2G";
                "Unlinked graphs";
                "logseq_local_1";
@@ -7518,6 +7671,10 @@ let () =
         expect_bool "ignores backup" false
           (Vec.exists
              (fun item -> item.Graph_types.graph_dir = Some "backup")
+             items);
+        expect_bool "ignores cli runtime graph" false
+          (Vec.exists
+             (fun item -> item.Graph_types.graph_dir = Some ".cli-sync-runtime")
              items);
         let old_item =
           expect_some "old format item"
