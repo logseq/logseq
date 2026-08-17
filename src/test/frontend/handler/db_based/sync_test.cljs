@@ -851,4 +851,4 @@
                (p/catch (fn [error]
                           (is (= :missing-auth (:code (ex-data error))))
                           (is (= [] @deleted))
-                          (finish-async-test! done))))))))
+                          (finish-async-test! done)))))))
