@@ -1160,7 +1160,18 @@
                       (vec (concat ["~~"] (mapcat extract coll') ["~~"]))
                       "Highlight"
                       (vec (concat ["^^"] (mapcat extract coll') ["^^"]))
-                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))]
+                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))
+                extract-table
+                (fn [{:keys [header groups]}]
+                  (let [row->text (fn [row]
+                                    (str "| "
+                                         (string/join " | " (map #(apply str (mapcat extract %)) row))
+                                         " |"))
+                        header-lines (when (seq header)
+                                       [(row->text header)
+                                        (str "| " (string/join " | " (repeat (count header) "---")) " |")])
+                        body-lines (map row->text (mapcat identity groups))]
+                    [(string/join "\n" (concat header-lines body-lines))]))]
             (cond
               (and (vector? node) (#{"Inline_Html" "Plain" "Inline_Hiccup"} (first node)))
               [(second node)]
@@ -1195,6 +1206,8 @@
                "```"]
               (and (vector? node) (= (first node) "Displayed_Math"))
               ["$$" (second node) "$$"]
+              (and (vector? node) (= (first node) "Table"))
+              (extract-table (second node))
               (and (vector? node) (= (first node) "List"))
               (extract-block-list (second node))
               :else
