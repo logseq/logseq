@@ -835,26 +835,24 @@
 
 (defn- <cleanup-created-download-graph!
   [config repo]
-  (-> (p/let [stop-result (cli-server/stop-server! config repo)
-              _ (when-not (or (:ok? stop-result)
-                              (= :server-not-found (get-in stop-result [:error :code])))
-                  (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
-                                  {:code (get-in stop-result [:error :code])
-                                   :repo repo
-                                   :stage :stop-server
-                                   :stop-result stop-result})))
-              graphs-after-stop (cli-server/list-graphs config)
-              graph-exists? (some #(= (core/repo->graph repo) %) graphs-after-stop)
-              unlinked-dir (when graph-exists?
-                             (cli-common/unlink-graph! (cli-server/graphs-dir config) repo))
-              _ (when (and graph-exists? (not unlinked-dir))
-                  (throw (ex-info "unable to remove graph"
-                                  {:code :graph-not-removed
-                                   :repo repo
-                                   :stage :unlink-graph})))]
+  (-> (p/let [stop-result (-> (cli-server/stop-server! config repo)
+                              (p/catch (fn [error]
+                                         {:ok? false
+                                          :error (cleanup-error-details error)})))
+              removed-dir (cli-common/remove-graph-dir! (cli-server/graphs-dir config) repo)]
+        (when (and (not (:ok? stop-result))
+                   (not= :server-not-found (get-in stop-result [:error :code])))
+          (log/warn :cli-sync-download-cleanup-stop-failed
+                    {:repo repo
+                     :stop-result stop-result}))
+        (when-not removed-dir
+          (log/warn :cli-sync-download-cleanup-graph-missing
+                    {:repo repo
+                     :graphs-dir (cli-server/graphs-dir config)}))
         {:status :ok
          :data {:repo repo
-                :unlinked-dir unlinked-dir}})
+                :removed-dir removed-dir
+                :stop-result stop-result}})
       (p/catch (fn [error]
                  (log/warn :cli-sync-download-cleanup-failed
                            {:repo repo
