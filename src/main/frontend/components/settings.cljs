@@ -346,7 +346,8 @@
 
 (hsx/defc theme-modes-row
   [t]
-  (let [theme (rfx/use-sub [:ui/theme])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        theme (rfx/use-sub [:ui/theme])
         dark? (= "dark" theme)
         system-theme? (rfx/use-sub [:ui/system-theme?])
         switch-theme (if dark? "light" "dark")
@@ -371,7 +372,8 @@
 
 (hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (rfx/use-sub [:ui/radix-color])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        color-accent (rfx/use-sub [:ui/radix-color])
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -1445,6 +1447,7 @@
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
   (let [current-repo (rfx/use-sub [:git/current-repo])
+        _preferred-language (rfx/use-sub [:preferred-language])
         _installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])
