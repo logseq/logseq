@@ -104,6 +104,15 @@
       (is (= [[] ["en-GB"]] (:language-calls @state)))
       (is (true? (:enabled @state)))))
 
+  (testing "Linux reinit resets existing languages so cached dictionaries reload"
+    (let [{:keys [session state]} (mock-session {:languages ["en-US"]})]
+      (spell-check/apply-session-spellcheck!
+       session true
+       {:hunspell? true
+        :reinit-hunspell? true
+        :fallback-language "en-US"})
+      (is (= [[] ["en-US"]] (:language-calls @state)))))
+
   (testing "enabling on Windows fills an empty language list without resetting an existing one"
     (let [{:keys [session state]} (mock-session {:languages []})]
       (spell-check/apply-session-spellcheck!
@@ -121,6 +130,7 @@
       (is (= [] (:language-calls @state)))
       (is (= ["fr"] (:languages @state)))))
 
+  (testing "disabling only toggles the session flag and keeps hunspell languages"
     (let [{:keys [session state]} (mock-session {:enabled true :languages ["en-US"]})]
       (spell-check/apply-session-spellcheck!
        session false
