@@ -2088,8 +2088,9 @@
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
   (let [file-page? (::file-page? m)
         m (dissoc m ::file-page?)
-        ;; These attributes are not allowed to be transacted because they must not change across files
-        disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day]
+        ;; These attributes are ignored by default because they must not change across files
+        disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
+                               :block/created-at :block/updated-at]
         allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                         (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                               m))
