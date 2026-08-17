@@ -331,6 +331,7 @@ let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
   || starts_with ~prefix:"file-version-" name
   || starts_with ~prefix:"logseq_db_" name
+  || starts_with ~prefix:".cli-" name
 
 let classify_graph_dir dir_name =
   if ignored_graph_dir dir_name then None
