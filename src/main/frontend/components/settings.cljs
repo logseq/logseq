@@ -288,7 +288,8 @@
 
 (hsx/defc switch-spell-check-row
   [t]
-  (let [enabled? (rfx/use-sub [:electron/user-cfgs :spell-check])]
+  ;; Match electron.spell-check/session-spellcheck-enabled?: nil defaults to on.
+  (let [enabled? (not= false (rfx/use-sub [:electron/user-cfgs :spell-check]))]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
