@@ -13,6 +13,18 @@
               (not (and (string? query)
                         (string/includes? query "(by-page false)")))))))
 
+(defn- uses-current-page?
+  [kind query]
+  (case kind
+    :dsl
+    (and (string? (:query query))
+         (boolean (re-find #"(?i)<%\s*current\s+page\s*%>" (:query query))))
+
+    :datalog
+    (boolean (some #{:current-page ":current-page"} (:inputs query)))
+
+    false))
+
 (defn- query-spec
   [config query]
   (let [kind (if (:dsl-query? config) :dsl :datalog)
@@ -33,7 +45,8 @@
       current-block-uuid
       (assoc :current-block-uuid current-block-uuid)
 
-      (:current-page-title config)
+      (and (:current-page-title config)
+           (uses-current-page? kind query))
       (assoc :current-page-title (:current-page-title config))
 
       (:today-day config)
