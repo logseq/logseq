@@ -374,11 +374,13 @@
             (:block/tags block))))
 
 (defn- block-line-info
-  [_db block marker]
+  [db block marker]
   {:first-line-fragment (block-first-line-fragment block)
    :code-block? (code-block? block)
    :status-marker (when (de/entity? block)
-                    (some-> (:logseq.property/status block) status-marker))
+                    (when (or (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+                              (ldb/class-instance? (d/entity db :logseq.class/Task) block))
+                      (some-> (:logseq.property/status block) status-marker)))
    :tag-tokens (mirror-tag-tokens block)
    :marker marker
    :embed-target (embed-target block)})
