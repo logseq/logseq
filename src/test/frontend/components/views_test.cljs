@@ -260,8 +260,8 @@
       "Grouped tables keep lazy cells because every row stays mounted."))
 
 (deftest table-viewport-overscan-stays-near-list-overscan-test
-  (is (= {:top 96 :bottom 96} #'views/table-viewport-overscan))
-  (is (< (:top #'views/table-viewport-overscan) 300)
+  (is (= {:top 96 :bottom 96} @#'views/table-viewport-overscan))
+  (is (< (:top @#'views/table-viewport-overscan) 300)
       "Table overscan must not keep a 300px extra row band mounted."))
 
 (deftest table-lazy-item-hydrates-only-its-uuid-through-use-block-test
