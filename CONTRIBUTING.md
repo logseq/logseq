@@ -32,7 +32,7 @@ For ways to help with coding, read the next section.
 ### <a name="code-contributions"></a> Code Contributions
 
 For contributors who want to help with coding, we have a list of [good first
-issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+issues](https://github.com/logseq/db-test/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 to help you get started. These are issues that are beginner-friendly and do not
 require advanced knowledge of the codebase. We encourage new contributors to
 start with these issues and gradually work their way up to more challenging
@@ -169,5 +169,5 @@ Your contributions to open source, large or small, make great projects like this
 [feature-request]: https://discuss.logseq.com/c/feedback/feature-requests/ "Submit Feature Request"
 [forum]: https://discuss.logseq.com "Logseq Forum"
 [search-pr]: https://github.com/logseq/logseq/pulls "Search open PRs"
-[new-issue]: https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
-[issue-tracker]: https://github.com/logseq/logseq/issues "Logseq Issue Tracker"
+[new-issue]: https://github.com/logseq/db-test/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
+[issue-tracker]: https://github.com/logseq/db-test/issues "Logseq Issue Tracker"
