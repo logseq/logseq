@@ -43,12 +43,16 @@
   (let [previous-worker @state/*db-worker
         calls (atom [])
         handler (get @@#'events/event-definitions :graph/sync-context)]
-    (reset! state/*db-worker (fn [qkw context]
-                               (swap! calls conj [qkw context])
-                               nil))
+    (reset! state/*db-worker (fn [& _] nil))
     (try
-      (handler [:graph/sync-context])
-      (is (= 1 (count @calls)))
-      (is (= :thread-api/set-context (ffirst @calls)))
+      (is (true? @state/db-worker-ready?)
+          "A function worker must mark db-worker as ready.")
+      (with-redefs [state/<invoke-db-worker
+                    (fn [qkw context]
+                      (swap! calls conj [qkw context])
+                      nil)]
+        (handler [:graph/sync-context])
+        (is (= 1 (count @calls)))
+        (is (= :thread-api/set-context (ffirst @calls))))
       (finally
         (reset! state/*db-worker previous-worker)))))
