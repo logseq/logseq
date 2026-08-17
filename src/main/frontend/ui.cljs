@@ -673,7 +673,7 @@
    [:div.flex.justify-between.items-center.px-1
     [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
-     {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+     {:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} (t :bug-report.issue/report-link)]]
    (when content [:pre.m-0.text-sm (str content)])])
 
