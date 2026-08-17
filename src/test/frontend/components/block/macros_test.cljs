@@ -6,6 +6,7 @@
             [frontend.components.block :as block]
             [frontend.components.block.macros :as block-macros]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]))
 
 (defn- render-static
@@ -60,6 +61,21 @@
            (block-macros/function-result->hiccup [:div "hi"])))))
 
 (deftest function-macro-hashmap-renders-as-text
+  (testing "Pretty-printed hashmap hiccup is a valid React tree"
+    (let [markup (render-static
+                  (hsx/create-element
+                   (block-macros/function-result->hiccup {1 2})))]
+      (is (string/includes? markup "1"))
+      (is (string/includes? markup "2"))))
+
+  (testing "Result component pretty-prints hashmap values"
+    (let [markup (render-static
+                  (block/macro-function-result-cp
+                   [(random-uuid)]
+                   ["(hash-map 1 2)"]))]
+      (is (string/includes? markup "1"))
+      (is (string/includes? markup "2"))))
+
   (testing "Hashmap results are pretty-printed instead of crashing React"
     (let [markup (render-function-macro [(random-uuid)] ["(hash-map 1 2)"])]
       (is (string/includes? markup "1"))
@@ -78,10 +94,11 @@
           markup (with-redefs [hooks/use-memo (fn [f _deps] (f))
                                hooks/use-atom (fn [a] [@a #(reset! a %)])]
                    (render-static
-                    [:div
-                     (block/macro-function-cp {:query-result (atom rows)}
-                                              ["(hash-map 1 2)"])
-                     (block/macro-function-cp {:query-result (atom rows)}
-                                              ["(count result)"])]))]
+                    (hsx/create-element
+                     [:div
+                      (block/macro-function-cp {:query-result (atom rows)}
+                                               ["(hash-map 1 2)"])
+                      (block/macro-function-cp {:query-result (atom rows)}
+                                               ["(count result)"])])))]
       (is (string/includes? markup "1"))
       (is (string/includes? markup "2")))))
