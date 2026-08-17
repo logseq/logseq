@@ -1584,6 +1584,31 @@
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
+(def editor-popup-actions
+  #{:commands :page-search :page-search-hashtag :block-search :template-search :datepicker})
+
+(defn editor-popup-action?
+  [action]
+  (or (contains? editor-popup-actions action)
+      (and (keyword? action)
+           (= "editor.action" (namespace action)))))
+
+(defn dismiss-editor-popup-on-escape!
+  "Escape on an editor commands/autocomplete popup should only close that popup.
+  Returns true when the event was consumed so the editor must not exit or save."
+  [^js e]
+  (when (or (popup-exists? "editor.commands")
+            (editor-popup-action? (state/get-editor-action)))
+    (when e (util/stop e))
+    (when-let [id (->> (shui-popup/get-popups)
+                       (filter (fn [popup]
+                                 (string/includes? (str (:id popup)) "editor.commands")))
+                       last
+                       :id)]
+      (shui-popup/hide! id 0 {:skip-focus? true}))
+    (state/clear-editor-action!)
+    true))
+
 (defn dialog-exists?
   [id]
   (shui-dialog/get-dialog id))

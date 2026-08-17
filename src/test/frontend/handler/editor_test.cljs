@@ -29,6 +29,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
+            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before (fn []
@@ -2575,3 +2576,30 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(deftest dismiss-editor-popup-on-escape-consumes-new-page-popup-test
+  (testing "Escape on the New page popup closes it without exiting the editor"
+    (let [calls (atom [])
+          event (doto (js-obj)
+                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          previous-state (state/get-state)]
+      (state/set-editor-action! :page-search)
+      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/page-search}])
+                    shui-popup/hide! (fn [& args]
+                                       (swap! calls conj (into [:hide] args)))]
+        (is (true? (editor/dismiss-editor-popup-on-escape! event)))
+        (is (nil? (state/get-editor-action)))
+        (is (= [:prevent-default :stop-propagation
+                [:hide :editor.commands/page-search 0 {:skip-focus? true}]]
+               @calls)))
+      (state/replace-state! previous-state)))
+  (testing "Escape with no editor popup does not consume the event"
+    (let [event (doto (js-obj)
+                  (aset "preventDefault" (fn []))
+                  (aset "stopPropagation" (fn [])))
+          previous-state (state/get-state)]
+      (state/set-editor-action! nil)
+      (with-redefs [shui-popup/get-popups (constantly [])]
+        (is (nil? (editor/dismiss-editor-popup-on-escape! event))))
+      (state/replace-state! previous-state))))
