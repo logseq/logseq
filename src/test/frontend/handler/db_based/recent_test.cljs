@@ -101,9 +101,7 @@
               (filter ldb/page?)
               (remove ldb/hidden?)
               (remove (fn [e]
-                        (or (and (ldb/property? e)
-                                 (true? (:logseq.property/hide? e)))
-                            (string/blank? (:block/title e)))))
+                        (string/blank? (:block/title e))))
               vec)))
 
       :thread-api/get-favorite-pages
