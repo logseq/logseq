@@ -416,4 +416,4 @@
                      (is (= :server-stop-timeout (:code (ex-data e))))
                      (is (fs/existsSync graph-path)
                          "Live graph dir must not be moved if the worker could not be stopped")))
-          (p/finally (fn [] (done))))))))
+          (p/finally (fn [] (done)))))))
