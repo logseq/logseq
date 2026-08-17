@@ -1333,6 +1333,8 @@
                             (set! notification/show! original-notification-show!)
                             (reset-runtime-state!)
                             (done)))))))
+
+(deftest electron-list-db-runtime-recovery-does-not-release-fresh-same-repo-runtime
   (async done
          (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
                ipc-calls (atom [])
