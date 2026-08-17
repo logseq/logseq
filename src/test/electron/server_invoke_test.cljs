@@ -5,21 +5,17 @@
 
 (deftest await-ipc-reply-resolves-when-renderer-answers
   (async done
-    (let [handlers (atom {})
-          result (server-invoke/await-ipc-reply!
-                  {:channel "sync-1"
-                   :timeout-ms 50
-                   :handle-once! (fn [channel handler]
-                                   (swap! handlers assoc channel handler))
-                   :remove-handler! (fn [channel]
-                                      (swap! handlers dissoc channel))})]
-      ((get @handlers "sync-1") nil {:uuid "abc"})
-      (-> result
-          (p/then (fn [value]
-                    (is (= {:uuid "abc"} value))))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally done)))))
+    (-> (server-invoke/await-ipc-reply!
+         {:channel "sync-1"
+          :timeout-ms 50
+          :handle-once! (fn [_channel handler]
+                          (js/setTimeout #(handler nil {:uuid "abc"}) 0))
+          :remove-handler! (fn [_channel])})
+        (p/then (fn [value]
+                  (is (= {:uuid "abc"} value))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
 
 (deftest await-ipc-reply-times-out-when-renderer-never-answers
   (async done
