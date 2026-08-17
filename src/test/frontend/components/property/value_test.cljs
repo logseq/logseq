@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [logseq.common.util.date-time :as date-time-util]
             [promesa.core :as p]))
 
 (deftest alias-node-selection-preserves-entity-id-semantics-test
@@ -116,7 +117,86 @@
                 (constantly "Jan 2nd, 2025"))
                (p/then (fn [page]
                          (is (= created-page page))
-                         (is (= [["Jan 2nd, 2025" {:redirect? false}]] @created-calls*))
+                         (is (= [["Jan 2nd, 2025" {:redirect? false
+                                                   :journal? true}]] @created-calls*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest datetime-value-page-uses-journal-entity-uuid-test
+  (let [utc-ms (.getTime (js/Date. 2026 7 20 12 0 0))
+        journal-day (date-time-util/ms->journal-day utc-ms)
+        journal-uuid #uuid "00000001-2026-0820-0000-000000000000"
+        journal-page {:block/uuid journal-uuid
+                      :block/journal-day journal-day
+                      :block/title "Aug 20th, 2026"
+                      :block/name "aug 20th, 2026"}
+        page (#'property-value/datetime-value-page utc-ms journal-page)]
+    (is (= journal-page page))
+    (is (uuid? (:block/uuid page)))
+    (is (= journal-day (:block/journal-day page)))
+    (is (not= {:block/name "Aug 20th, 2026"} page)
+        "Date-pill navigation must not use a computed title string")
+    (is (nil? (#'property-value/datetime-value-page
+               utc-ms
+               {:block/name "Aug 20th, 2026"}))
+        "A title-only fake page is rejected")
+    (is (nil? (#'property-value/datetime-value-page
+               utc-ms
+               (assoc journal-page :block/journal-day (inc journal-day))))
+        "A journal for a different day is rejected")))
+
+(deftest resolve-datetime-journal-page-looks-up-by-journal-day-test
+  (async done
+         (let [utc-ms (.getTime (js/Date. 2026 7 20 12 0 0))
+               journal-day (date-time-util/ms->journal-day utc-ms)
+               journal-uuid #uuid "00000001-2026-0820-0000-000000000000"
+               journal-page {:block/uuid journal-uuid
+                             :block/journal-day journal-day
+                             :block/title "Aug 20th, 2026"}
+               lookup-args* (atom [])
+               created?* (atom false)]
+           (-> (#'property-value/<resolve-datetime-journal-page
+                utc-ms
+                (constantly "test-repo")
+                (fn [repo day]
+                  (swap! lookup-args* conj [repo day])
+                  (p/resolved journal-page))
+                (fn [_d]
+                  (reset! created?* true)
+                  (p/resolved {:block/uuid (random-uuid)
+                               :block/journal-day journal-day})))
+               (p/then (fn [page]
+                         (is (= [["test-repo" journal-day]] @lookup-args*))
+                         (is (= journal-page page))
+                         (is (uuid? (:block/uuid page)))
+                         (is (false? @created?*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest resolve-datetime-journal-page-creates-journal-when-missing-test
+  (async done
+         (let [utc-ms (.getTime (js/Date. 2026 7 20 12 0 0))
+               journal-day (date-time-util/ms->journal-day utc-ms)
+               created-page {:block/uuid #uuid "00000001-2026-0820-0000-000000000001"
+                             :block/journal-day journal-day}
+               created-args* (atom [])]
+           (-> (#'property-value/<resolve-datetime-journal-page
+                utc-ms
+                (constantly "test-repo")
+                (fn [_repo _day]
+                  (p/resolved nil))
+                (fn [d]
+                  (swap! created-args* conj d)
+                  (p/resolved created-page)))
+               (p/then (fn [page]
+                         (is (= 1 (count @created-args*)))
+                         (is (inst? (first @created-args*)))
+                         (is (= created-page page))
+                         (is (uuid? (:block/uuid page)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
