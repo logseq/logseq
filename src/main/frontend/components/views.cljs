@@ -579,7 +579,7 @@
              (when-let [page-cp (state/get-component :block/page-cp)]
                (page-cp {:disable-preview? true} page))))})
 
-(defn- property-ident
+(defn- property->ident
   [property]
   (cond
     (keyword? property) property
@@ -590,7 +590,7 @@
   [config properties]
   (or (= :logseq.class/Asset (:db/ident (:view-parent config)))
       (some (fn [property]
-              (= :logseq.property.asset/type (property-ident property)))
+              (= :logseq.property.asset/type (property->ident property)))
             properties)))
 
 (defn- asset-file-column
