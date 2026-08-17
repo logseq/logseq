@@ -45,3 +45,24 @@
       "[[page-name]]"
       "end-with-backslash\\"
       "\\[]{}().+*?|$^")))
+
+(deftest safe-subs
+  (testing "behaves like subs for in-range indices"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      ["hello" 1 3] "el"
+      ["hello" 2]   "llo"
+      ["hello" 0 5] "hello"))
+  (testing "clamps out-of-range indices instead of throwing"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      ["hello" 0 99]  "hello"
+      ["hello" 99 99] ""
+      ["hello" 99]    ""))
+  (testing "returns \"\" for a non-string instead of throwing"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      [nil 0 0] ""
+      [nil 0 5] ""
+      [nil 0]   ""
+      [42 0 1]  "")))
