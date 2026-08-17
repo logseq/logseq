@@ -1636,3 +1636,35 @@
            (fn []
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
+
+(deftest browser-list-db-with-nil-worker-returns-empty-without-throwing
+  (async done
+         (let [original-electron? util/electron?
+               original-show! notification/show!
+               notifications (atom [])]
+           (reset-runtime-state!)
+           (set! util/electron? (constantly false))
+           (set! notification/show! (fn [& args]
+                                      (swap! notifications conj args)
+                                      nil))
+           (let [sync-result (try
+                               (persist-db/<list-db)
+                               (catch :default e
+                                 {:threw e}))]
+             (if (and (map? sync-result) (contains? sync-result :threw))
+               (do
+                 (is false "Listing graphs must not throw when db-worker is missing.")
+                 (set! util/electron? original-electron?)
+                 (set! notification/show! original-show!)
+                 (done))
+               (-> sync-result
+                   (p/then (fn [repos]
+                             (is (= [] repos))
+                             (is (empty? @notifications)
+                                 "A missing worker is not a SQLite storage error.")))
+                   (p/catch (fn [e]
+                              (is false (str "unexpected error: " e))))
+                   (p/finally (fn []
+                                (set! util/electron? original-electron?)
+                                (set! notification/show! original-show!)
+                                (done)))))))))

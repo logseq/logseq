@@ -95,3 +95,33 @@
              (fn []
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest restore-graph-with-nil-worker-rejects-without-throwing
+  (async done
+         (let [repo "logseq_db_restore_nil_worker"
+               previous-state (state/get-state)
+               previous-worker @state/*db-worker]
+           (reset! state/*db-worker nil)
+           (p/with-redefs [persist-db/<open-and-fetch-schema
+                           (fn [_repo _opts]
+                             (p/resolved {:schema db-schema/schema}))]
+             (let [sync-result (try
+                                 (db-restore/restore-graph! repo)
+                                 (catch :default e
+                                   {:threw e}))]
+               (if (and (map? sync-result) (contains? sync-result :threw))
+                 (do
+                   (is false "Restore must not throw into the UI when db-worker is missing.")
+                   (reset! state/*db-worker previous-worker)
+                   (state/replace-state! previous-state)
+                   (done))
+                 (-> sync-result
+                     (p/then (fn []
+                               (is false "Restore should reject when db-worker is missing.")))
+                     (p/catch (fn [error]
+                                (is (state/db-worker-uninitialized-error? error))
+                                (is (false? (boolean (state/get-state :graph/loading?))))))
+                     (p/finally (fn []
+                                  (reset! state/*db-worker previous-worker)
+                                  (state/replace-state! previous-state)
+                                  (done))))))))))

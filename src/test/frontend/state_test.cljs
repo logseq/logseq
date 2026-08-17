@@ -1,11 +1,12 @@
 (ns frontend.state-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [io.factorhouse.rfx.store :as store]))
+            [io.factorhouse.rfx.store :as store]
+            [promesa.core :as p]))
 
 (defn- caret-pos-when-editor-content-changes
   [initial-content updated-content new-pos]
@@ -275,3 +276,28 @@
                 state/get-selection-block-ids (constantly nil)
                 state/get-selection-direction (constantly nil)]
     (is (nil? (state/get-editor-info)))))
+
+(deftest invoke-db-worker-with-nil-worker-rejects-without-throwing
+  (async done
+         (let [previous-worker @state/*db-worker]
+           (reset! state/*db-worker nil)
+           (let [sync-result (try
+                               (state/<invoke-db-worker :thread-api/list-db)
+                               (catch :default e
+                                 {:threw e}))]
+             (if (and (map? sync-result) (contains? sync-result :threw))
+               (do
+                 (is false "A missing worker must not throw into React render.")
+                 (reset! state/*db-worker previous-worker)
+                 (done))
+               (do
+                 (is (false? @state/db-worker-ready?))
+                 (-> sync-result
+                     (p/then (fn [value]
+                               (is false (str "expected rejection, got " value))))
+                     (p/catch (fn [error]
+                                (is (state/db-worker-uninitialized-error? error))
+                                (is (= :thread-api/list-db (:qkw (ex-data error))))))
+                     (p/finally (fn []
+                                  (reset! state/*db-worker previous-worker)
+                                  (done))))))))))

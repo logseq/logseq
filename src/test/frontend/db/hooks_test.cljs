@@ -3,6 +3,7 @@
             [cljs.test :refer [deftest is]]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.state :as state]
             [goog.object :as gobj]))
 
 (defn- with-use-sync-external-store
@@ -242,4 +243,9 @@
         (with-redefs [subs/block-snapshot (constantly {:status :error
                                                        :error error})]
           (is (thrown? js/Error
-                       (db-hooks/use-block block-uuid))))))))
+                       (db-hooks/use-block block-uuid))))
+        (with-redefs [subs/block-snapshot
+                      (constantly {:status :error
+                                   :error (ex-info state/db-worker-uninitialized-message {})})]
+          (is (nil? (db-hooks/use-block block-uuid))
+              "A missing db-worker must not throw into React ErrorBoundary."))))))

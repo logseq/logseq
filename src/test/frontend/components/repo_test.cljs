@@ -567,3 +567,32 @@
       (is (= [[:graph/open-new-window "logseq_db_demo"]]
              @events))
       (is (zero? @registry-reads)))))
+
+(deftest graph-e2ee-enabled-with-nil-worker-does-not-throw
+  (async done
+         (let [previous-worker @state/*db-worker
+               e2ee-fn (some-> (resolve 'frontend.components.repo/graph-e2ee-enabled?) deref)]
+           (is (fn? e2ee-fn) "All graphs reads e2ee state through a helper")
+           (if-not e2ee-fn
+             (finish-async-test! done)
+             (do
+               (reset! state/*db-worker nil)
+               (let [sync-result (try
+                                   (with-redefs [state/get-current-repo (fn [] "logseq_db_demo")]
+                                     (e2ee-fn {:url "logseq_db_demo"}))
+                                   (catch :default e
+                                     {:threw e}))]
+                 (if (and (map? sync-result) (contains? sync-result :threw))
+                   (do
+                     (is false "All graphs must not throw when db-worker is missing.")
+                     (reset! state/*db-worker previous-worker)
+                     (finish-async-test! done))
+                   (-> sync-result
+                       (p/then (fn [_]
+                                 (is true "resolved without a worker is acceptable")))
+                       (p/catch (fn [error]
+                                  (is (state/db-worker-uninitialized-error? error)
+                                      "Failure stays in the promise instead of crashing the page.")))
+                       (p/finally (fn []
+                                    (reset! state/*db-worker previous-worker)
+                                    (finish-async-test! done)))))))))))

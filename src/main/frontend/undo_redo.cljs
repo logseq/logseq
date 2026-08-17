@@ -5,7 +5,7 @@
 
 (defn- worker-not-initialized?
   [e]
-  (= "db-worker has not been initialized" (ex-message e)))
+  (state/db-worker-uninitialized-error? e))
 
 (defn- normalize-empty-result
   [result]
@@ -20,12 +20,14 @@
 
 (defn- invoke-db-worker
   [thread-api & args]
-  (try
-    (apply state/<invoke-db-worker thread-api args)
-    (catch :default e
-      (if (worker-not-initialized? e)
-        nil
-        (throw e)))))
+  (if-not @state/db-worker-ready?
+    nil
+    (try
+      (apply state/<invoke-db-worker thread-api args)
+      (catch :default e
+        (if (worker-not-initialized? e)
+          nil
+          (throw e))))))
 
 (defn clear-history!
   [repo]

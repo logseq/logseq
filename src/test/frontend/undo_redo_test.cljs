@@ -72,3 +72,16 @@
              (undo-redo/redo repo)))
       (is (nil? (undo-redo/clear-history! repo)))
       (is (empty? @calls)))))
+
+(deftest undo-redo-with-nil-worker-does-not-throw-test
+  (let [previous-worker @state/*db-worker]
+    (reset! state/*db-worker nil)
+    (try
+      (with-redefs [util/node-test? false]
+        (is (= :frontend.undo-redo/empty-undo-stack
+               (undo-redo/undo "logseq_db_missing-worker")))
+        (is (= :frontend.undo-redo/empty-redo-stack
+               (undo-redo/redo "logseq_db_missing-worker")))
+        (is (nil? (undo-redo/clear-history! "logseq_db_missing-worker"))))
+      (finally
+        (reset! state/*db-worker previous-worker)))))

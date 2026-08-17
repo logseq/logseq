@@ -180,15 +180,16 @@
     (page-common-handler/after-page-renamed! repo data)))
 
 (defevent! :graph/sync-context []
-  (let [context {:dev? config/dev?
-                 :node-test? util/node-test?
-                 :mobile? (util/mobile?)
-                 :validate-db-options (:dev/validate-db-options (state/get-config))
-                 :importing? (:graph/importing (state/get-state))
-                 :date-formatter (state/get-date-formatter)
-                 :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)}]
-    (state/<invoke-db-worker :thread-api/set-context context)))
+  (when @state/db-worker-ready?
+    (let [context {:dev? config/dev?
+                   :node-test? util/node-test?
+                   :mobile? (util/mobile?)
+                   :validate-db-options (:dev/validate-db-options (state/get-config))
+                   :importing? (:graph/importing (state/get-state))
+                   :date-formatter (state/get-date-formatter)
+                   :export-bullet-indentation (state/get-export-bullet-indentation)
+                   :preferred-format (state/get-preferred-format)}]
+      (state/<invoke-db-worker :thread-api/set-context context))))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded

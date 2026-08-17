@@ -321,7 +321,9 @@
       (p/let [client (<ensure-remote! repo)]
         (protocol/<list-db client))
       (p/resolved []))
-    (protocol/<list-db (get-impl))))
+    (if @state/db-worker-ready?
+      (protocol/<list-db (get-impl))
+      (p/resolved []))))
 
 (defn <unsafe-delete [repo]
   (when repo
@@ -364,7 +366,9 @@
      (if (electron-runtime?)
        (p/let [client (<ensure-remote! repo)]
          (protocol/<open-and-fetch-schema client repo opts))
-       (protocol/<open-and-fetch-schema (get-impl) repo opts)))))
+       (p/let [_ (when-not @state/db-worker-ready?
+                   (browser/start-db-worker!))]
+         (protocol/<open-and-fetch-schema (get-impl) repo opts))))))
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
