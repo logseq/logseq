@@ -47,5 +47,8 @@
 
 (defn use-query-result
   [config query]
-  (let [resource (db-hooks/use-resource [:query (query-spec config query)])]
-    (:rows resource)))
+  (let [resource (db-hooks/use-resource [:query (query-spec config query)])
+        result (:rows resource)]
+    (when-let [query-result (:query-result config)]
+      (reset! query-result result))
+    result))
