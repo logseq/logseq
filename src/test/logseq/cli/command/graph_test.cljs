@@ -500,3 +500,36 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-graph-remove-stops-cross-owner-runtime-then-unlinks
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-graph-remove-force-stop")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
+               repo "logseq_db_demo"
+               graph-path (node-path/join graphs-dir "demo")
+               stop-calls (atom [])]
+           (fs/mkdirSync graph-path #js {:recursive true})
+           (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+           (-> (p/with-redefs [cli-server/stop-server! (fn [config repo opts]
+                                                         (swap! stop-calls conj {:config config
+                                                                                 :repo repo
+                                                                                 :opts opts})
+                                                         (p/resolved {:ok? true}))]
+                 (p/let [result (graph-command/execute-graph-remove
+                                 {:type :graph-remove
+                                  :repo repo
+                                  :graph "demo"}
+                                 {:root-dir root-dir})]
+                   (is (= :ok (:status result)))
+                   (is (= [{:config {:root-dir root-dir}
+                            :repo repo
+                            :opts {:allow-cross-owner? true}}]
+                          @stop-calls))
+                   (is (not (fs/existsSync graph-path)))
+                   (is (fs/existsSync (node-path/join graphs-dir
+                                                      "Unlinked graphs"
+                                                      "demo"
+                                                      "db.sqlite")))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))

@@ -231,6 +231,8 @@
   (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
+(declare stop-server!)
+
 (def ^:private server-discovery-timeout-ms 30000)
 
 (defn discover-servers
@@ -286,6 +288,18 @@
                              _ (cleanup-stale-lock! path existing)
                              discovered (discover-servers config)
                              discovered-repo-server (repo-server config discovered repo)
+                             orphaned? (boolean (and discovered-repo-server
+                                                     (not (fs/existsSync path))))
+                             _ (when orphaned?
+                                 (p/let [stop-result (stop-server! config repo {:allow-cross-owner? true})]
+                                   (when-not (or (:ok? stop-result)
+                                                 (= :server-not-found (get-in stop-result [:error :code])))
+                                     (throw (ex-info "db-worker-node failed to stop orphaned server"
+                                                     {:code :server-start-failed
+                                                      :repo repo
+                                                      :stop-error (:error stop-result)})))))
+                             discovered-repo-server (when-not orphaned?
+                                                      discovered-repo-server)
                              _ (when (and (not discovered-repo-server) (not (fs/existsSync path)))
                                  (profile/time! profile-session
                                                 "server.spawn-daemon"
@@ -394,55 +408,89 @@
                                           :timeout-ms 1000})]
     (= 200 status)))
 
+(defn- server-pid-gone?
+  [pid]
+  (or (nil? pid)
+      (not (contains? #{:alive :no-permission} (pid-status pid)))))
+
+(defn- unpublish-server!
+  [config {:keys [pid port]}]
+  (when (and (pos-int? pid) (pos-int? port))
+    (server-list/remove-entries! (server-list-path config)
+                                 [{:pid pid :port port}])))
+
+(defn- wait-until-stopped
+  [path server]
+  (wait-for (fn []
+              (p/resolved
+               (and (not (fs/existsSync path))
+                    (server-pid-gone? (:pid server)))))
+            {:timeout-ms 5000
+             :interval-ms 200}))
+
+(defn- stop-discovered-server!
+  [config repo path server]
+  (-> (p/let [_ (shutdown! server)
+              _ (wait-until-stopped path server)]
+        (unpublish-server! config server)
+        {:ok? true
+         :data {:repo repo}})
+      (p/catch
+       (fn [_]
+         (when (and (= :alive (pid-status (:pid server)))
+                    (not= (:pid server) (.-pid js/process)))
+           (try
+             (.kill js/process (:pid server) "SIGTERM")
+             (catch :default e
+               (log/warn :cli-server-stop-sigterm-failed e))))
+         (-> (wait-until-stopped path server)
+             (p/then (fn [_]
+                       (unpublish-server! config server)
+                       {:ok? true
+                        :data {:repo repo}}))
+             (p/catch (fn [_]
+                        (when (server-pid-gone? (:pid server))
+                          (remove-lock! path)
+                          (unpublish-server! config server))
+                        (if (and (not (fs/existsSync path))
+                                 (server-pid-gone? (:pid server)))
+                          {:ok? true
+                           :data {:repo repo}}
+                          {:ok? false
+                           :error {:code :server-stop-timeout
+                                   :message "timed out stopping server"}}))))))))
+
 (defn- stop-server-target!
   [config repo {:keys [allow-cross-owner? target-server]}]
   (let [requester-owner (requester-owner-source config)
         root-dir (resolve-root-dir config)
         path (lock-path root-dir repo)
-        lock (read-lock path)]
-    (if-not lock
-      (p/resolved {:ok? false
-                   :error {:code :server-not-found
-                           :message "server is not running"}})
-      (let [lock-owner (lock-owner-source lock)]
-        (if-not (or allow-cross-owner?
-                    (owner-manageable? requester-owner lock-owner))
-          (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
-          (p/let [server (if target-server
-                           target-server
-                           (p/let [servers (discover-servers config)]
-                             (repo-server config servers repo)))]
-            (if-not server
-              {:ok? false
-               :error {:code :server-not-found
-                       :message "server is not running"}}
-              (-> (p/let [_ (shutdown! server)]
-                    (wait-for (fn []
-                                (p/resolved (not (fs/existsSync path))))
-                              {:timeout-ms 5000
-                               :interval-ms 200})
-                    {:ok? true
-                     :data {:repo repo}})
-                  (p/catch
-                   (fn [_]
-                     (when (and (= :alive (pid-status (:pid server)))
-                                (not= (:pid server) (.-pid js/process)))
-                       (try
-                         (.kill js/process (:pid server) "SIGTERM")
-                         (catch :default e
-                           (log/warn :cli-server-stop-sigterm-failed e))))
-                     (when (= :not-found (pid-status (:pid server)))
-                       (remove-lock! path))
-                     (if (fs/existsSync path)
-                       {:ok? false
-                        :error {:code :server-stop-timeout
-                                :message "timed out stopping server"}}
-                       {:ok? true
-                        :data {:repo repo}})))))))))))
+        lock (read-lock path)
+        lock-owner (when lock (lock-owner-source lock))]
+    (if (and lock
+             (not allow-cross-owner?)
+             (not (owner-manageable? requester-owner lock-owner)))
+      (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
+      (p/let [server (if target-server
+                       target-server
+                       (p/let [servers (discover-servers config)]
+                         (repo-server config servers repo)))]
+        (if-not server
+          {:ok? false
+           :error {:code :server-not-found
+                   :message "server is not running"}}
+          (let [server-owner (or lock-owner
+                                 (normalize-owner-source (:owner-source server)))]
+            (if-not (or allow-cross-owner?
+                        (owner-manageable? requester-owner server-owner))
+              (owner-mismatch-error repo requester-owner server-owner)
+              (stop-discovered-server! config repo path server))))))))
 
 (defn stop-server!
-  [config repo]
-  (stop-server-target! config repo {:allow-cross-owner? false}))
+  ([config repo]
+   (stop-server! config repo nil))
+  ([config repo opts]
+   (stop-server-target! config repo (merge {:allow-cross-owner? false} opts))))
 
 (defn- stop-version-mismatched-server!
   [config repo server]

@@ -476,7 +476,7 @@
 
 (defn execute-graph-remove
   [action config]
-  (-> (p/let [stop-result (cli-server/stop-server! config (:repo action))
+  (-> (p/let [stop-result (cli-server/stop-server! config (:repo action) {:allow-cross-owner? true})
               _ (when-not (or (:ok? stop-result)
                               (= :server-not-found (get-in stop-result [:error :code])))
                   (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
