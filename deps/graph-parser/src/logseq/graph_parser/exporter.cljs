@@ -1141,7 +1141,7 @@
                           (not in-list?))
                  ["\n\n"]))))
 
-(defn- ast->text
+(defn- ^:large-vars/cleanup-todo ast->text
   "Given an ast block, convert it to text for use as a block title. This is a
   slimmer version of handler.export.text/export-blocks-as-markdown"
   [ast-block {:keys [log-fn]
