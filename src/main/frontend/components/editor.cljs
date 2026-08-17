@@ -682,9 +682,7 @@
       (state/editor-in-composition?)
       nil
 
-      (or (contains? editor-handler/editor-popup-actions action)
-          (and (keyword? action)
-               (= (namespace action) "editor.action")))
+      (editor-handler/editor-popup-action? action)
       (when e (util/stop e))
 
       ;; editor/input component handles Escape directly, so just prevent handling it here

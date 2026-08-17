@@ -145,23 +145,28 @@
       (is (empty? page-txs))
       (is (= existing-uuid (-> block :block/refs first :block/uuid))))))
 
-(deftest save-block-does-not-duplicate-existing-page-ref
+(deftest insert-blocks-does-not-duplicate-existing-page-ref
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "host"}]}])
         [_ existing-uuid] (outliner-page/create! conn "Esc Dup" {})
         host (db-test/find-block-by-content @conn "host")
-        parsed-uuid (random-uuid)]
-    (outliner-core/save-block! conn {:db/id (:db/id host)
-                                     :block/uuid (:block/uuid host)
-                                     :block/title "[[Esc Dup]]"
-                                     :block/refs [{:block/type "page"
-                                                   :block/name "esc dup"
-                                                   :block/title "Esc Dup"
-                                                   :block/uuid parsed-uuid}]})
+        parsed-uuid (random-uuid)
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title "[[Esc Dup]]"
+                  :block/refs [{:block/name "esc dup"
+                                :block/title "Esc Dup"
+                                :block/uuid parsed-uuid
+                                :block/tags [:logseq.class/Page]}]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
     (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
     (is (= existing-uuid
-           (:block/uuid (first (:block/refs (d/entity @conn (:db/id host)))))))))
+           (:block/uuid (first (:block/refs (first (:blocks result)))))))))
 
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
