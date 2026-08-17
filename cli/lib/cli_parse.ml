@@ -32,6 +32,7 @@ let split_equals_option token =
 
 let boolean_option = function
   | "version" | "help" | "verbose" | "profile" | "enable-sync" | "expand"
+  | "fix"
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
@@ -110,7 +111,6 @@ let bool_option_value key options =
   | Some value -> Some (String.lowercase_ascii (String.trim value) = "true")
   | None -> if option_present key options then Some true else None
 
-let raw_option_present token argv = Vec.exists (( = ) token) argv
 
 let common_list_opts options =
   {
@@ -180,7 +180,7 @@ let allowed_options_for_path path =
   then Vec.empty
   else if path2 path "graph" "create" then
     option_names [| "enable-sync"; "e2ee-password" |]
-  else if path2 path "graph" "validate" then option_names [| "fix"; "fields" |]
+  else if path2 path "graph" "validate" then option_names [| "fix" |]
   else if path3 path "graph" "backup" "create" then option_names [| "name" |]
   else if path3 path "graph" "backup" "restore" then
     option_names [| "src"; "dst" |]
@@ -758,9 +758,41 @@ let parsed_list_command options = function
   | "asset" -> Some (List (Parsed_asset { common = common_list_opts options }))
   | _ -> None
 
+(* normalize_key resolves short aliases globally (-f -> fields, -e ->
+   edn-options), but a few legacy aliases mean something else under specific
+   commands. Once the command path is known, rewrite those raw tokens and
+   re-parse so the alias lands on the right option. *)
+let path_alias_overrides = function
+  | [| "graph"; "validate" |] -> [ ("-f", "--fix") ]
+  | [| "graph"; "export" |] -> [ ("-f", "--file") ]
+  | [| "list"; ("page" | "tag" | "property") |] -> [ ("-e", "--expand") ]
+  | _ -> []
+
+(* rewrite a bare alias token, or its -x=value form *)
+let apply_alias_override overrides token =
+  match List.assoc_opt token overrides with
+  | Some replacement -> replacement
+  | None -> (
+      match String.index_opt token '=' with
+      | None -> token
+      | Some index -> (
+          match List.assoc_opt (String.sub token 0 index) overrides with
+          | Some replacement ->
+              replacement
+              ^ String.sub token index (String.length token - index)
+          | None -> token))
+
 let parse ?stdin argv =
   let options, positional = parse_tokens argv in
   let positional_array = Vec.to_array positional in
+  let options =
+    match path_alias_overrides positional_array with
+    | [] -> options
+    | overrides ->
+        argv
+        |> Vec.map (apply_alias_override overrides)
+        |> parse_tokens |> fst
+  in
   let positional_tail start =
     Vec.init
       (max 0 (Array.length positional_array - start))
@@ -806,11 +838,7 @@ let parse ?stdin argv =
     | [| "graph"; "validate" |] ->
         make [| "graph"; "validate" |]
           (Graph
-             (Parsed_validate
-                {
-                  fix =
-                    option_present "fix" options || raw_option_present "-f" argv;
-                }))
+             (Parsed_validate { fix = option_present "fix" options }))
     | [| "graph"; "info" |] -> make [| "graph"; "info" |] (Graph Parsed_info)
     | [| "graph"; "backup"; "list" |] ->
         make [| "graph"; "backup"; "list" |] (Graph Parsed_backup_list)

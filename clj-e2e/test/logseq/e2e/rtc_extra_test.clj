@@ -324,7 +324,8 @@ page2:
           {:keys [_local-tx remote-tx]}
           (w/with-page @*page1
             (rtc/with-wait-tx-updated
-              (b/new-block long-block-title)))]
+              (b/new-block "")
+              (b/save-block long-block-title)))]
       (w/with-page @*page2
         (rtc/wait-tx-update-to remote-tx))
       (validate-graphs-in-2-pw-pages)
