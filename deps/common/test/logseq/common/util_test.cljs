@@ -1,5 +1,5 @@
 (ns logseq.common.util-test
-  (:require [clojure.test :refer [deftest are testing]]
+  (:require [clojure.test :refer [deftest are testing is]]
             [logseq.common.util :as common-util]))
 
 (deftest valid-edn-keyword?
