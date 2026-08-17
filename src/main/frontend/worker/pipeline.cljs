@@ -115,13 +115,13 @@
                                                   :logseq.property/used-template (:db/id template))
                                            (rest template-children))
                                      (map (fn [block]
-                                            (cond->
-                                             (assoc (into {} block) :db/id (:db/id block))
-                                              (:journal template)
-                                              (assoc :block/uuid
-                                                     (common-uuid/gen-journal-template-block
-                                                      (:block/uuid (:journal template))
-                                                      (:block/uuid block)))))))))
+                                            (let [original-uuid (:block/uuid block)]
+                                              (cond-> (dissoc (into {} block) :db/id)
+                                                (:journal template)
+                                                (assoc :block/uuid
+                                                       (common-uuid/gen-journal-template-block
+                                                        (:block/uuid (:journal template))
+                                                        original-uuid))))))))))
         tag-additions (->> (:tx-data tx-report)
                            (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
                            (group-by :e))

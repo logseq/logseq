@@ -1152,3 +1152,83 @@
               "No :logseq.property.history entries are added for an imported transaction")))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(defn- child-titles
+  [db entity]
+  (->> (ldb/sort-by-order (:block/_parent (d/entity db (:db/id entity))))
+       (remove ldb/recycled?)
+       (mapv :block/title)))
+
+(defn- clone-block-payload
+  [block]
+  (assoc (into {} block)
+         :db/id (:db/id block)
+         :block/uuid (:block/uuid block)))
+
+(deftest journal-tag-template-keep-uuid-insert-does-not-deplete-source-test
+  (testing "Incremental v1→v2 journal template plus keep-uuid paste/insert must not move live template children"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Templates"}
+                   :blocks [{:block/title "journal template"
+                             :build/children [{:block/title "v1 heading"}
+                                              {:block/title "v1 body"}]}]}]})
+          template-root (db-test/find-block-by-content @conn "journal template")
+          template-children (ldb/sort-by-order (:block/_parent template-root))
+          heading (first template-children)
+          body (second template-children)
+          journal-class (d/entity @conn :logseq.class/Journal)
+          create-journal! (fn [journal-day]
+                            (outliner-page/create!
+                             conn
+                             (date-time-util/int->journal-title
+                              journal-day
+                              date-time-util/default-journal-title-formatter)
+                             {:journal? true})
+                            (db-test/find-journal-by-journal-day @conn journal-day))]
+      (is (= ["v1 heading" "v1 body"] (mapv :block/title template-children)))
+      (ldb/transact! conn [[:db/add (:db/id template-root)
+                            :logseq.property/template-applied-to
+                            (:db/id journal-class)]])
+      (with-transact-pipeline
+        (fn []
+          (let [aug-19 (create-journal! 20260819)]
+            (is (= ["v1 heading" "v1 body"] (child-titles @conn aug-19)))
+            (is (= ["v1 heading" "v1 body"] (child-titles @conn template-root))
+                "Applying the template to a journal must leave the source children in place")
+            (is (not= (:block/uuid heading)
+                      (:block/uuid (first (ldb/sort-by-order (:block/_parent aug-19)))))
+                "Applied journal children use distinct UUIDs from the live template")
+
+            (outliner-core/save-block! conn {:db/id (:db/id heading)
+                                             :block/uuid (:block/uuid heading)
+                                             :block/title "v2 heading"})
+            (outliner-core/save-block! conn {:db/id (:db/id body)
+                                             :block/uuid (:block/uuid body)
+                                             :block/title "v2 body"})
+            (outliner-core/insert-blocks! conn [{:block/title "v2 extra"}] body {:sibling? true})
+
+            (let [aug-20 (create-journal! 20260820)
+                  heading (d/entity @conn (:db/id heading))
+                  body (d/entity @conn (:db/id body))]
+              (is (= ["v1 heading" "v1 body"] (child-titles @conn aug-19))
+                  "Earlier journals keep the version applied at creation")
+              (is (= ["v2 heading" "v2 body" "v2 extra"] (child-titles @conn aug-20)))
+              (is (= ["v2 heading" "v2 body" "v2 extra"] (child-titles @conn template-root)))
+
+              (outliner-core/insert-blocks!
+               conn
+               [(clone-block-payload heading)]
+               aug-20
+               {:sibling? false
+                :keep-uuid? true
+                :outliner-op :paste})
+
+              (let [heading-after (d/entity @conn (:db/id heading))
+                    aug-21 (create-journal! 20260821)]
+                (is (= (:db/id template-root) (:db/id (:block/parent heading-after)))
+                    "keep-uuid paste/insert must not reparent the live template child")
+                (is (= ["v2 heading" "v2 body" "v2 extra"] (child-titles @conn template-root))
+                    "The source template stays complete after keep-uuid paste")
+                (is (= ["v2 heading" "v2 body" "v2 extra"] (child-titles @conn aug-21))
+                    "Later journals still receive the full current template")))))))))
