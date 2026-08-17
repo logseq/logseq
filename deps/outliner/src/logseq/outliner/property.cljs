@@ -278,6 +278,22 @@
     (outliner-validate/validate-block-title @conn property-name property)
     (outliner-validate/validate-property-title property-name)))
 
+(defn- clear-closed-values-tx
+  "Retract leftover closed-value links when a property type no longer supports
+  them, and delete unused choice entities. The config UI hides the enum for types
+  outside closed-value-property-types, but leftover :block/closed-value-property
+  links are still enforced by validate's fix-non-closed-values!."
+  [db property]
+  (when-let [closed-values (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))]
+    (let [property-id (:db/id property)
+          retract-tx (map (fn [value]
+                            [:db/retract (:db/id value) :block/closed-value-property property-id])
+                          closed-values)
+          user-closed-values (vec (remove ldb/built-in? closed-values))]
+      (concat retract-tx
+              (when (seq user-closed-values)
+                (:tx-data (outliner-core/delete-blocks db user-closed-values {})))))))
+
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
   (validate-property-name-update conn property property-name)
@@ -292,6 +308,8 @@
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
                  :block/name (common-util/page-name-sanity-lc property-name)))
+        new-type (:logseq.property/type changed-property-attrs)
+        old-type (:logseq.property/type property)
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)
@@ -305,6 +323,10 @@
                    (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
           (concat (update-datascript-schema property schema)))
         tx-data (concat property-tx-data
+                        (when (and new-type
+                                   (contains? db-property-type/closed-value-property-types old-type)
+                                   (not (contains? db-property-type/closed-value-property-types new-type)))
+                          (clear-closed-values-tx @conn property))
                         (when (seq properties)
                           (mapcat
                            (fn [[property-id v]]

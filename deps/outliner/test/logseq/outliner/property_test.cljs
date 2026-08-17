@@ -60,6 +60,50 @@
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
 
+(deftest upsert-property-clears-closed-values-when-type-no-longer-supports-them
+  (testing "Text property with closed values -> Node retracts leftover enum"
+    (let [raster-uuid (random-uuid)
+          vector-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:fig-source {:logseq.property/type :default
+                                           :build/closed-values [{:uuid raster-uuid :value "raster"}
+                                                                 {:uuid vector-uuid :value "vector"}]}}})
+          property (d/entity @conn :user.property/fig-source)]
+      (is (= :default (:logseq.property/type property)))
+      (is (= #{"raster" "vector"}
+             (set (map db-property/closed-value-content (:block/_closed-value-property property)))))
+      (outliner-property/upsert-property! conn :user.property/fig-source {:logseq.property/type :node} {})
+      (let [property' (d/entity @conn :user.property/fig-source)]
+        (is (= :node (:logseq.property/type property')))
+        (is (empty? (:block/_closed-value-property property'))
+            "Closed-value links are retracted so validate cannot still enforce them")
+        (is (nil? (d/entity @conn [:block/uuid raster-uuid])))
+        (is (nil? (d/entity @conn [:block/uuid vector-uuid]))))))
+
+  (testing "Text property with closed values -> Date also clears the enum"
+    (let [closed-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:due-label {:logseq.property/type :default
+                                          :build/closed-values [{:uuid closed-uuid :value "today"}]}}})]
+      (outliner-property/upsert-property! conn :user.property/due-label {:logseq.property/type :date} {})
+      (let [property (d/entity @conn :user.property/due-label)]
+        (is (= :date (:logseq.property/type property)))
+        (is (empty? (:block/_closed-value-property property)))
+        (is (nil? (d/entity @conn [:block/uuid closed-uuid]))))))
+
+  (testing "Changing among closed-value types keeps the enum"
+    (let [closed-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:status {:logseq.property/type :default
+                                       :build/closed-values [{:uuid closed-uuid :value "open"}]}}})]
+      (outliner-property/upsert-property! conn :user.property/status {:logseq.property/type :number} {})
+      (let [property (d/entity @conn :user.property/status)
+            closed-value (d/entity @conn [:block/uuid closed-uuid])]
+        (is (= :number (:logseq.property/type property)))
+        (is (some? closed-value))
+        (is (= #{(:db/id property)}
+               (set (map :db/id (:block/closed-value-property closed-value)))))))))
+
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
     (let [test-uuid (random-uuid)]
