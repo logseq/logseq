@@ -323,7 +323,10 @@
 (defn- <file-timestamps
   [{:keys [fs-path last-modified-at]}]
   (p/let [stat (when (and fs-path (util/electron?) (path/absolute? fs-path))
-                  (ipc/ipc :stat fs-path))]
+                  (p/catch (ipc/ipc :stat fs-path)
+                           (fn [error]
+                             (log/warn :import-file-stat-failed {:path fs-path :error error})
+                             nil)))]
     (cond-> {}
       (:birthtime stat)
       (assoc :file-created-at (.getTime (:birthtime stat)))
