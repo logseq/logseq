@@ -607,7 +607,7 @@ let execute_remove_page mode invoke_config repo ~purge entity =
                (Error.recycled_page ~name:page_name ()))
         else
           let recycle_effect =
-            if recycled then pure Edn_util.bool true
+            if recycled then pure (Edn_util.bool true)
             else delete_page_uuid invoke_config repo uuid
           in
           bind recycle_effect (fun _ ->

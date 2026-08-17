@@ -3449,22 +3449,14 @@ let () =
   test_promise "CLI parity upsert block update rejects recycled target page"
     (fun () ->
       let apply_called = ref false in
-      let pull_count = ref 0 in
       let server =
         invoke_server (fun body ->
-            if Js.String.includes ~search:"thread-api/pull" body then (
-              incr pull_count;
-              match !pull_count with
-              | 1 ->
-                  "[\"^ \
-                   \",\"~:db/id\",207,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000207\",\"~:block/title\",\"Source\"]"
-              | 2 ->
-                  "[\"^ \
-                   \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
-              | _ ->
-                  fail_test
-                    (Printf.sprintf "unexpected pull %d: %s" !pull_count body);
-                  "")
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",207,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000207\",\"~:block/title\",\"Source\"]"
             else if
               Js.String.includes ~search:"thread-api/apply-outliner-ops" body
             then (
