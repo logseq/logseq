@@ -7,7 +7,9 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.test.helper :as test-helper]
+            [frontend.handler.editor :as editor-handler]
             [logseq.api.block :as api-block]
+            [logseq.api.db-based :as db-based-api]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before #(test-helper/start-test-db! {:build-init-data? false})
@@ -118,6 +120,28 @@
               (is (= "grandchild"
                      (get-in (js->clj result :keywordize-keys true)
                              [:children 0 :children 0 :title])))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest insert-block-returns-identity-without-renderer-get-block-test
+  (async done
+    (let [block-uuid (random-uuid)
+          get-block-calls (atom [])]
+      (-> (p/with-redefs [editor-handler/api-insert-new-block!
+                          (fn [content _opts]
+                            (p/resolved {:block/uuid block-uuid
+                                         :block/title content}))
+                          db-async/<get-block
+                          (fn [_repo id & _opts]
+                            (swap! get-block-calls conj id)
+                            (p/deferred))]
+            (p/let [result (db-based-api/insert-block nil "hello" nil nil {:edit-block? false})
+                    result' (js->clj result :keywordize-keys true)]
+              (is (empty? @get-block-calls)
+                  "insertBlock must return the worker identity without renderer <get-block>.")
+              (is (= (str block-uuid) (:uuid result')))
+              (is (= "hello" (:title result')))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
