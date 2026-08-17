@@ -12,33 +12,58 @@
 (defonce ^:private transports
   (atom {}))
 
+(declare create-mcp-api-server)
+
+(defn- send-internal-error! [^js res error]
+  (js/console.error "MCP request failed" error)
+  (let [raw (.-raw res)]
+    (when-not (.-headersSent raw)
+      (.writeHead raw 500 #js {"Content-Type" "application/json"})
+      (.end raw (js/JSON.stringify #js {:jsonrpc "2.0"
+                                        :error #js {:code -32603
+                                                    :message "Internal server error"}
+                                        :id nil})))))
+
+(defn- hijacked-handle-request
+  "Let the SDK write the Node response. Fastify must not send the handler return
+  value: it would finish the reply before initialize's SSE data is written."
+  [^js transport ^js req ^js res]
+  (.hijack res)
+  (.handleRequest transport (.-raw req) (.-raw res) (.-body req)))
+
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
 ;; for how to respond to different MCP requests
-(defn handle-post-request [mcp-server {:keys [port host]} req res]
+(defn handle-post-request [api-fn {:keys [port host]} ^js req ^js res]
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "POST /mcp request" session-id (pr-str (.-body req)))
     (cond
       (and session-id (@transports session-id))
       (let [^js transport (@transports session-id)]
-        (.handleRequest transport (.-raw req) (.-raw res) (.-body req)))
+        (hijacked-handle-request transport req res))
 
       (and (not session-id)
            (isInitializeRequest (.-body req)))
-      (let [transport (StreamableHTTPServerTransport.
+      (let [mcp-server (create-mcp-api-server api-fn)
+            transport-ref (volatile! nil)
+            transport (StreamableHTTPServerTransport.
                        #js {:sessionIdGenerator (comp str random-uuid)
                             :enableDnsRebindingProtection true
-                            :allowedHosts #js [(str host ":" port)]})]
+                            :allowedHosts #js [(str host ":" port)]
+                            :onsessioninitialized
+                            (fn [sid]
+                              (js/console.log "Initialize sessionId" sid)
+                              (swap! transports assoc sid @transport-ref))})]
+        (vreset! transport-ref transport)
         (set! (.-onclose transport)
               (fn []
                 (js/console.log "Transport closed" (.-sessionId transport))
                 (swap! transports dissoc (.-sessionId transport))))
-        (.connect mcp-server transport)
-        (.handleRequest transport (.-raw req) (.-raw res) (.-body req))
-        (js/console.log "Initialize sessionId" (.-sessionId transport))
-        (if (.-sessionId transport)
-          (swap! transports assoc (.-sessionId transport) transport)
-          (js/console.error "No sessionId to initialize!"))
-        res)
+        (.hijack res)
+        (-> (.connect mcp-server transport)
+            (p/then (fn []
+                      (.handleRequest transport (.-raw req) (.-raw res) (.-body req))))
+            (p/catch (fn [error]
+                       (send-internal-error! res error)))))
 
       :else
       (do
@@ -49,15 +74,15 @@
                         :id nil})))))
 
 (defn handle-get-request
-  [req res]
+  [^js req ^js res]
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "GET /mcp" session-id)
     (if-let [transport (and session-id (@transports session-id))]
-      (.handleRequest ^js transport (.-raw req) (.-raw res))
+      (hijacked-handle-request ^js transport req res)
       (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn handle-delete-request
-  [req res]
+  [^js req ^js res]
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "DELETE /mcp" session-id)
     (if-let [transport (and session-id (@transports session-id))]
