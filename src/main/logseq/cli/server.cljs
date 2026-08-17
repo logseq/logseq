@@ -289,6 +289,7 @@
                              discovered (discover-servers config)
                              discovered-repo-server (repo-server config discovered repo)
                              orphaned? (boolean (and discovered-repo-server
+                                                     (nil? existing)
                                                      (not (fs/existsSync path))))
                              _ (when orphaned?
                                  (p/let [stop-result (stop-server! config repo {:allow-cross-owner? true})]
@@ -413,18 +414,26 @@
   (or (nil? pid)
       (not (contains? #{:alive :no-permission} (pid-status pid)))))
 
+(defn- server-considered-stopped?
+  [path server]
+  (and (not (fs/existsSync path))
+       (let [pid (:pid server)]
+         (or (nil? pid)
+             (= pid (.-pid js/process))
+             (server-pid-gone? pid)))))
+
 (defn- unpublish-server!
   [config {:keys [pid port]}]
-  (when (and (pos-int? pid) (pos-int? port))
+  (when (and (pos-int? pid)
+             (pos-int? port)
+             (not= pid (.-pid js/process)))
     (server-list/remove-entries! (server-list-path config)
                                  [{:pid pid :port port}])))
 
 (defn- wait-until-stopped
   [path server]
   (wait-for (fn []
-              (p/resolved
-               (and (not (fs/existsSync path))
-                    (server-pid-gone? (:pid server)))))
+              (p/resolved (server-considered-stopped? path server)))
             {:timeout-ms 5000
              :interval-ms 200}))
 
@@ -452,8 +461,7 @@
                         (when (server-pid-gone? (:pid server))
                           (remove-lock! path)
                           (unpublish-server! config server))
-                        (if (and (not (fs/existsSync path))
-                                 (server-pid-gone? (:pid server)))
+                        (if (server-considered-stopped? path server)
                           {:ok? true
                            :data {:repo repo}}
                           {:ok? false
