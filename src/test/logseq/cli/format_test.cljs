@@ -101,6 +101,20 @@
                                         :data {:result {:errors nil}}}
                                        {:output-format nil})]
       (is (= "Validated graph \"foo\"" result))))
+  (testing "graph validation success with repairs prints a repair summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-validate
+                                        :context {:graph "foo"}
+                                        :data {:result {:errors nil
+                                                        :repairs [{:db/id 12
+                                                                   :block/title "legacy"
+                                                                   :retract-entity? false
+                                                                   :retracted-attrs [:block/pre-block?]
+                                                                   :added-attrs []}]}}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Validated graph \"foo\""))
+      (is (string/includes? result "Repaired 1 invalid block"))
+      (is (string/includes? result "retracted :block/pre-block?"))))
   (testing "graph validation error prints validation details without extra prefix"
     (let [result (format/format-result {:status :error
                                         :command :graph-validate

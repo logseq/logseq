@@ -422,7 +422,8 @@
     {:status :error
      :error {:code :graph-validation-failed
              :message (format-validation-errors (:errors result))}
-     :data {:errors (:errors result)}}
+     :data (cond-> {:errors (:errors result)}
+             (seq (:repairs result)) (assoc :repairs (:repairs result)))}
     {:status :ok :data {:result result}}))
 
 (defn execute-invoke

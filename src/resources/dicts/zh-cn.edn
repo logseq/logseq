@@ -814,6 +814,7 @@
  :graph.validation/config-unused-in-db-graphs-warning "在 DB 图谱中不会使用。"
  :graph.validation/invalid-blocks-detected "验证发现 {1} 个无效块。这些块可能存在问题。正在尝试修复无效块。请再次运行验证以检查它们是否已被修复。"
  :graph.validation/name-reserved-characters-warning "知识库名称不能包含以下保留字符："
+ :graph.validation/repaired-blocks "已修复 {1} 个无效块。你的图谱现在有效！{2}"
  :graph.validation/reserved-character-asterisk "星号"
  :graph.validation/reserved-character-backslash "反斜杠"
  :graph.validation/reserved-character-colon "冒号"

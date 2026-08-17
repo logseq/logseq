@@ -970,16 +970,54 @@
                 (str "  Sync upload: " (if (contains? stages :upload) "ok" "-"))
                 (str "  Sync start: " (if (contains? stages :start) "ok" "-"))]))
 
+(defn- format-repair-action
+  [{:keys [retract-entity? retracted-attrs added-attrs]}]
+  (->> [(when retract-entity? "deleted entity")
+        (when (seq retracted-attrs)
+          (str "retracted " (string/join ", " retracted-attrs)))
+        (when (seq added-attrs)
+          (str "added " (string/join ", " added-attrs)))]
+       (remove nil?)
+       (string/join "; ")))
+
+(defn- format-repair
+  [{:keys [db/id block/uuid block/title db/ident] :as repair}]
+  (let [label (or (some-> ident str)
+                  (when (seq title) (pr-str title))
+                  (some-> uuid str)
+                  (str "#" id))
+        action (format-repair-action repair)]
+    (str "  " label (when (seq action) (str " — " action)))))
+
+(defn- format-graph-validate
+  [graph data]
+  (let [repairs (get-in data [:result :repairs])
+        header (str "Validated graph " (pr-str graph))]
+    (if (seq repairs)
+      (str header "\n"
+           "Repaired "
+           (cli-humanize/format-count (count repairs))
+           " invalid "
+           (cli-humanize/pluralize-noun (count repairs) "block")
+           ":\n"
+           (string/join "\n" (map format-repair repairs)))
+      header)))
+
 (defn- format-graph-action
   [command {:keys [graph]} data]
-  (if (and (= command :graph-create)
-           (map? (:stages data)))
+  (cond
+    (and (= command :graph-create)
+         (map? (:stages data)))
     (format-graph-create-enable-sync data)
+
+    (= command :graph-validate)
+    (format-graph-validate graph data)
+
+    :else
     (let [verb (case command
                  :graph-create "Created"
                  :graph-switch "Switched to"
                  :graph-remove "Removed"
-                 :graph-validate "Validated"
                  "Updated")]
       (str verb " graph " (pr-str graph)))))
 

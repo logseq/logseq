@@ -5,6 +5,7 @@
             [datascript.impl.entity :as de]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.frontend.class :as db-class]
@@ -31,6 +32,70 @@
   (and (= dispatch-key :normal-page)
        (nil? (:block/updated-at entity))
        (int? (:block/created-at entity))))
+
+(defn- tx-op-type
+  [op]
+  (cond
+    (vector? op) (first op)
+    (map? op) :map
+    :else :other))
+
+(defn- tx-op->db-id
+  [db op]
+  (let [id (cond
+             (and (vector? op) (#{:db/retract :db/add :db/retractEntity} (first op)))
+             (second op)
+             (map? op)
+             (or (:db/id op) (:db/ident op)))]
+    (or (:db/id (when id (d/entity db id))) id)))
+
+(defn- entity-repair-identity
+  [db entity-id]
+  (let [entity (when entity-id (d/entity db entity-id))
+        eid (or (:db/id entity) entity-id)]
+    (cond-> {:db/id eid}
+      (:block/uuid entity) (assoc :block/uuid (:block/uuid entity))
+      (string? (:block/title entity)) (assoc :block/title (:block/title entity))
+      (:db/ident entity) (assoc :db/ident (:db/ident entity)))))
+
+(defn- summarize-fix-tx-data
+  [db tx-data]
+  (->> tx-data
+       (group-by (fn [op] (tx-op->db-id db op)))
+       (keep (fn [[eid ops]]
+               (when eid
+                 (let [retract-entity? (boolean (some #(= :db/retractEntity (tx-op-type %)) ops))
+                       retracted-attrs (->> ops
+                                            (filter #(= :db/retract (tx-op-type %)))
+                                            (map #(nth % 2))
+                                            distinct
+                                            vec)
+                       added-attrs (->> ops
+                                        (filter #(= :db/add (tx-op-type %)))
+                                        (map #(nth % 2))
+                                        distinct
+                                        vec)
+                       map-attrs (->> ops
+                                      (filter map?)
+                                      (mapcat keys)
+                                      (remove #{:db/id :db/ident})
+                                      distinct
+                                      vec)]
+                   (merge (entity-repair-identity db eid)
+                          {:retract-entity? retract-entity?
+                           :retracted-attrs retracted-attrs
+                           :added-attrs (into added-attrs map-attrs)})))))
+       vec))
+
+(defn- log-invalid-block-repairs!
+  [repairs]
+  (doseq [repair repairs]
+    (log/info :db-validate/repair repair))
+  (when (seq repairs)
+    (shared-service/broadcast-to-clients! :log
+                                          [:db-validate :info
+                                           {:msg "Repaired invalid blocks"
+                                            :repairs repairs}])))
 
 (defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
   [conn errors]
@@ -189,8 +254,13 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (let [tx-report (ldb/transact! conn tx-data {:fix-db? true})]
-        (seq (:tx-data tx-report))))))
+      (let [repairs (summarize-fix-tx-data db tx-data)
+            tx-report (ldb/transact! conn tx-data {:fix-db? true})]
+        (when (seq (:tx-data tx-report))
+          (let [repairs' (vec (or (seq repairs)
+                                  [{:tx-data (vec tx-data)}]))]
+            (log-invalid-block-repairs! repairs')
+            repairs'))))))
 
 (defn- fix-num-prefix-db-idents!
   "Fix invalid db/ident keywords for both classes and properties"
@@ -279,17 +349,20 @@
 (defn- log-validation-errors!
   [errors]
   (doseq [error errors]
-    (prn :debug
-         :entity (:entity error)
-         :error (dissoc error :entity))))
+    (log/debug :db-validate/error {:entity (:entity error)
+                                   :error (dissoc error :entity)})))
 
 (defn- validate-and-fix-invalid-blocks!
   [conn]
-  (loop [{:keys [errors] :as result} (validate-db-result @conn)]
+  (loop [{:keys [errors] :as result} (validate-db-result @conn)
+         repairs []]
     (log-validation-errors! errors)
-    (if (and (seq errors) (fix-invalid-blocks! conn errors))
-      (recur (validate-db-result @conn))
-      result)))
+    (let [round-repairs (when (seq errors)
+                          (fix-invalid-blocks! conn errors))]
+      (if (seq round-repairs)
+        (recur (validate-db-result @conn) (into repairs round-repairs))
+        (cond-> result
+          (seq repairs) (assoc :repairs repairs))))))
 
 (defn validate-db
   [conn & {:keys [fix] :or {fix true}}]
@@ -300,7 +373,7 @@
     (fix-non-closed-values! conn)
     (fix-num-prefix-db-idents! conn))
 
-  (let [{:keys [errors datom-count entities invalid-entity-ids]}
+  (let [{:keys [errors datom-count entities invalid-entity-ids repairs]}
         (if fix
           (validate-and-fix-invalid-blocks! conn)
           (let [{:keys [errors] :as result} (validate-db-result @conn)]
@@ -309,7 +382,8 @@
         db @conn
         counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)]
 
-    (if errors
+    (cond
+      (seq errors)
       (do
         (shared-service/broadcast-to-clients! :log [:db-invalid :error
                                                     {:msg "Validation errors"
@@ -320,12 +394,21 @@
                                                       " Attempting to fix invalid blocks. Run validation again to see if they were fixed."))
                                                :warning false]))
 
+      (seq repairs)
       (shared-service/broadcast-to-clients! :notification
-                                            [(str "Your graph is valid! " counts)
-                                             :success false]))
-    (merge {:errors errors
-            :invalid-entity-ids invalid-entity-ids}
-           counts)))
+                                            [nil :success false nil nil
+                                             {:i18n-key :graph.validation/repaired-blocks
+                                              :i18n-args [(str (count repairs)) (str counts)]}])
+
+      :else
+      (shared-service/broadcast-to-clients! :notification
+                                            [nil :success false nil nil
+                                             {:i18n-key :graph.validation/valid
+                                              :i18n-args [(str counts)]}]))
+    (cond-> (merge {:errors errors
+                    :invalid-entity-ids invalid-entity-ids}
+                   counts)
+      (seq repairs) (assoc :repairs repairs))))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]

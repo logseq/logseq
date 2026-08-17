@@ -814,6 +814,7 @@
  :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs."
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/name-reserved-characters-warning "Graph name can't contain following reserved characters:"
+ :graph.validation/repaired-blocks "Repaired {1} invalid block(s). Your graph is now valid! {2}"
  :graph.validation/reserved-character-asterisk "asterisk"
  :graph.validation/reserved-character-backslash "backslash"
  :graph.validation/reserved-character-colon "colon"

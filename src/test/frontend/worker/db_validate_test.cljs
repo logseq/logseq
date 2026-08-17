@@ -1,5 +1,6 @@
 (ns frontend.worker.db-validate-test
   (:require [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -34,6 +35,7 @@
         (is (= expected-counts (select-keys result (keys expected-counts))))
         (is (not (contains? result :counts)))
         (is (not (contains? result :datom-count)))
+        (is (not (contains? result :repairs)))
         (is (every? number? (map result (keys expected-counts))))))))
 
 (deftest validate-db-repairs-block-missing-uuid
@@ -59,8 +61,17 @@
                       "block")]
     (is (seq (:errors (db-validate/validate-db @conn))))
     (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
-      (with-transact-pipeline #(worker-db-validate/validate-db conn))
-      (let [repaired-block (d/entity @conn block-id)]
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))
+            repaired-block (d/entity @conn block-id)
+            uuid-repair (some (fn [repair]
+                                (when (and (= block-id (:db/id repair))
+                                           (some #{:block/uuid} (:added-attrs repair)))
+                                  repair))
+                              (:repairs result))]
+        (is (empty? (:errors result)))
+        (is (seq (:repairs result))
+            "A successful repair must be reported, not only empty :errors.")
+        (is (some? uuid-repair))
         (is (uuid? (:block/uuid repaired-block)))
         (is (nat-int? (:block/tx-id repaired-block))
             "A live repair must make the repaired block canonically readable.")
@@ -103,6 +114,8 @@
             property (d/entity @conn :logseq.property.class/extends)
             class (d/entity @conn class-id)]
         (is (empty? (:errors result)))
+        (is (seq (:repairs result))
+            "A successful repair must be reported, not only empty :errors.")
         (doseq [entity [journal property class]]
           (is (not= 1 (:block/tx-id entity))
               (str "Every canonical entity changed by a live repair receives a new revision: "
@@ -112,3 +125,64 @@
         (is (nil? (:logseq.property.class/extends property)))
         (is (nil? (:kv/value class)))
         (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
+
+(deftest validate-db-reports-repairs-for-legacy-block-attrs
+  (let [conn (create-db-graph-conn)
+        page-id (get (:tempids
+                      (d/transact! conn [{:db/id "page"
+                                          :block/uuid (random-uuid)
+                                          :block/created-at 1
+                                          :block/updated-at 1
+                                          :block/name "test page"
+                                          :block/title "Test Page"
+                                          :block/tags :logseq.class/Page}]))
+                     "page")
+        block-uuid (random-uuid)
+        block-id (get (:tempids
+                       (d/transact! conn [{:db/id "block"
+                                           :block/uuid block-uuid
+                                           :block/created-at 1
+                                           :block/updated-at 2
+                                           :block/page page-id
+                                           :block/parent page-id
+                                           :block/order "a0"
+                                           :block/title "legacy"
+                                           :block/pre-block? true}]))
+                      "block")
+        broadcasts (atom [])]
+    (is (seq (:errors (db-validate/validate-db @conn))))
+    (with-redefs [shared-service/broadcast-to-clients!
+                  (fn [& args] (swap! broadcasts conj (vec args)))]
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))
+            matching-repair (some (fn [repair]
+                                    (when (and (= block-id (:db/id repair))
+                                               (some #{:block/pre-block?} (:retracted-attrs repair)))
+                                      repair))
+                                  (:repairs result))
+            notifications (filter (fn [call] (= :notification (first call))) @broadcasts)
+            logs (filter (fn [call] (= :log (first call))) @broadcasts)
+            notification-extra (some (fn [[_ payload]]
+                                       (nth payload 5 nil))
+                                     notifications)]
+        (is (empty? (:errors result)))
+        (is (seq (:repairs result))
+            "A successful repair must be reported, not only empty :errors.")
+        (is (some? matching-repair))
+        (is (= block-uuid (:block/uuid matching-repair)))
+        (is (false? (:retract-entity? matching-repair)))
+        (is (nil? (:block/pre-block? (d/entity @conn block-id))))
+        (is (= :graph.validation/repaired-blocks (:i18n-key notification-extra))
+            "GUI notification must report the repair instead of only 'Your graph is valid!'.")
+        (is (not-any? (fn [[_ payload]]
+                        (let [extra (nth payload 5 nil)
+                              content (first payload)]
+                          (or (= :graph.validation/valid (:i18n-key extra))
+                              (and (string? content)
+                                   (string/includes? content "Your graph is valid!")))))
+                      notifications))
+        (is (some (fn [[_ [name level data]]]
+                    (and (= :db-validate name)
+                         (= :info level)
+                         (seq (:repairs data))))
+                  logs)
+            "Repair logs must be visible at info, not only debug error dumps.")))))
