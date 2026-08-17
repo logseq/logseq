@@ -57,3 +57,17 @@
                 :today-day 20260721
                 :current-block-uuid current-block-uuid}]]
              @resource-keys)))))
+
+(deftest use-query-result-shares-rows-with-function-macro-atom-test
+  (let [rows [(random-uuid)]
+        query-result (atom :unset)
+        current-block-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-resource (fn [_] {:rows rows})]
+      (is (= rows
+             (query-result/use-query-result
+              {:dsl-query? true
+               :query-result query-result
+               :current-block-uuid current-block-uuid}
+              {:query "(task TODO)"})))
+      (is (= rows @query-result)
+          "Child {{function}} blocks read this atom from shared block config."))))
