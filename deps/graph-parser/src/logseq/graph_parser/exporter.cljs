@@ -3018,17 +3018,49 @@
                                     :block/page page-id}))))
                    []
                    favorited-ids)]
-    (ldb/transact! repo-or-conn tx)))
+    (ldb/transact! repo-or-conn tx {::imported-data? true ::new-graph? true})))
+
+(defn- favorite-config-page-name
+  "OG :favorites may be a bare name or a [[page]] ref."
+  [page-name]
+  (if (string? page-name)
+    (page-ref/get-page-name! (string/trim page-name))
+    page-name))
+
+(defn- find-namespace-page
+  "Resolve a flattened namespace page by walking parent/child after import.
+   OG `foo/bar` is stored as page `bar` whose parent is `foo`."
+  [db page-name]
+  (let [parts (string/split page-name ns-util/namespace-char)]
+    (when (next parts)
+      (reduce (fn [parent part]
+                (when parent
+                  (some (fn [child]
+                          (when (and (page-entity? child)
+                                     (= (common-util/page-name-sanity-lc part)
+                                        (:block/name child)))
+                            child))
+                        (:block/_parent parent))))
+              (ldb/get-page db (first parts))
+              (rest parts)))))
+
+(defn- get-imported-favorite-page
+  [db page-name]
+  (let [page-name' (favorite-config-page-name page-name)]
+    (or (ldb/get-page db page-name')
+        (when (and (string? page-name')
+                   (ns-util/namespace-page? page-name'))
+          (find-namespace-page db page-name')))))
 
 (defn- export-favorites-from-config-edn
   [conn repo config {:keys [log-fn] :or {log-fn prn}}]
   (when-let [favorites (seq (:favorites config))]
     (p/do!
      (if-let [favorited-ids
-              (keep (fn [page-name]
-                      (some-> (ldb/get-page @conn page-name)
-                              :block/uuid))
-                    favorites)]
+              (seq (keep (fn [page-name]
+                           (some-> (get-imported-favorite-page @conn page-name)
+                                   :block/uuid))
+                         favorites))]
        (let [page-entity (ldb/get-page @conn common-config/favorites-page-name)]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
@@ -3118,7 +3150,7 @@
                                    (merge (select-keys options [:notify-user :set-ui-state :rpath-key])
                                           {:assets (get-in doc-options [:import-state :assets])}))
         (export-doc-files conn doc-files <read-file doc-options)
-        (export-favorites-from-config-edn conn repo-or-conn config {})
+        (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
         (export-class-properties conn repo-or-conn)
         (move-top-parent-pages-to-library conn repo-or-conn)
         {:import-state (-> (:import-state doc-options)
