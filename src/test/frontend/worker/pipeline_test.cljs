@@ -1127,6 +1127,38 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest create-journal-applies-journal-tag-template-once-test
+  (testing "creating a journal page applies #Journal templates and does not insert them twice"
+    (let [today (date-time-util/ms->journal-day (js/Date.))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Templates"}
+                   :blocks [{:block/title "journal template root"
+                             :build/children [{:block/title "Daily plan"}]}]}]})
+          journal-title (date-time-util/int->journal-title
+                         today
+                         (:logseq.property.journal/title-format
+                          (d/entity @conn :logseq.class/Journal)))
+          template-root (db-test/find-block-by-content @conn "journal template root")]
+      (ldb/transact! conn [[:db/add (:db/id template-root)
+                            :logseq.property/template-applied-to
+                            :logseq.class/Journal]])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (outliner-page/create! conn journal-title {:today-journal? true
+                                                   :redirect? false})
+        (let [journal (db-test/find-journal-by-journal-day @conn today)
+              children (->> (:block/_parent journal)
+                            (remove ldb/page?)
+                            (map :block/title)
+                            vec)]
+          (is (some? journal))
+          (is (= ["Daily plan"] children))
+          (is (nil? (worker-pipeline/insert-tag-templates-for-entity @conn journal))
+              "Already-applied journal templates are not inserted again"))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
 (deftest import-tx-skips-property-history-recording-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
