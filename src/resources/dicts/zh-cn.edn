@@ -924,6 +924,8 @@
  :import/extract-inline-code-snippets "将行内代码片段提取为子块"
  :import/file-finished "导入完成！"
  :import/file-to-db-desc "将基于文件的 Logseq 知识库文件夹导入到新的 DB 知识库"
+ :import/file-to-db-error "文件到 DB 导入失败：{1}"
+ :import/file-to-db-interrupted "导入已停止，因为数据库 worker 已重启。请重新导入。"
  :import/file-to-db-title "文件到 DB 知识库"
  :import/graph-name-conflict "已存在同名图谱，请指定其他名称！"
  :import/graph-name-placeholder "图谱名称"

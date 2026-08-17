@@ -1261,6 +1261,79 @@
                             (reset-runtime-state!)
                             (done)))))))
 
+(deftest electron-runtime-recovery-aborts-in-progress-file-graph-import
+  (async done
+         (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
+               ipc-calls (atom [])
+               start-calls (atom [])
+               stop-calls (atom [])
+               events (atom [])
+               notifications (atom [])
+               session-id "session-a"
+               wrapped-worker (fn [& _] nil)
+               old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+               new-client (->FakeRemote "logseq_db_graph_a" wrapped-worker)
+               original-state (state/get-state)
+               original-ipc ipc/ipc
+               original-start! remote/start!
+               original-stop! remote/stop!
+               original-pub-event! state/pub-event!
+               original-notification-show! notification/show!]
+           (reset-runtime-state!)
+           (state/replace-state! (assoc original-state
+                                       :git/current-repo "logseq_db_graph_a"
+                                       :graph/importing :file-graph
+                                       :graph/importing-state {:current-page "pages/A.md"}))
+           (reset! persist-db/remote-db old-client)
+           (reset! persist-db/remote-repo "logseq_db_graph_a")
+           (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                    :client old-client
+                                                    :session-id session-id
+                                                    :request-failures 1
+                                                    :recovery-triggered? true})
+           (set! ipc/ipc (fn [channel repo]
+                           (swap! ipc-calls conj [channel repo])
+                           (case channel
+                             "db-worker-runtime"
+                             (p/resolved {:base-url "http://127.0.0.1:9101"
+                                          :auth-token nil
+                                          :repo repo})
+
+                             (p/resolved nil))))
+           (set! remote/start! (fn [{:keys [repo]}]
+                                 (swap! start-calls conj repo)
+                                 new-client))
+           (set! remote/stop! (fn [client]
+                                (swap! stop-calls conj (:repo client))
+                                (p/resolved true)))
+           (set! state/pub-event! (fn [event]
+                                    (swap! events conj event)
+                                    (p/resolved true)))
+           (set! notification/show! (fn [content status]
+                                      (swap! notifications conj [content status])
+                                      nil))
+           (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client session-id)
+                       _ (p/delay 0)]
+                 (is (= [["releaseDbWorkerRuntime" "logseq_db_graph_a"]
+                         ["db-worker-runtime" "logseq_db_graph_a"]]
+                        @ipc-calls))
+                 (is (= [[:graph/abort-file-to-db-import
+                          {:reason :db-worker-runtime-recovered}]]
+                        @events))
+                 (is (= :file-graph (state/get-state :graph/importing))
+                     "Event handler owns clearing import state; recovery only publishes abort"))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (state/replace-state! original-state)
+                            (set! ipc/ipc original-ipc)
+                            (set! remote/start! original-start!)
+                            (set! remote/stop! original-stop!)
+                            (set! state/pub-event! original-pub-event!)
+                            (set! notification/show! original-notification-show!)
+                            (reset-runtime-state!)
+                            (done)))))))
+
 (deftest electron-list-db-runtime-recovery-does-not-release-fresh-same-repo-runtime
   (async done
          (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
@@ -1516,6 +1589,52 @@
                        (set! util/electron? original-electron?)
                        (set! remote/invoke! original-invoke!)
                        (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest invoke-db-worker-after-clear-remote-runtime-throws
+  (let [original-worker @state/*db-worker]
+    (try
+      (#'persist-db/clear-remote-runtime!)
+      (is (nil? @state/*db-worker))
+      (try
+        (state/<invoke-db-worker :thread-api/list-db)
+        (is false "expected uninitialized throw")
+        (catch :default e
+          (is (state/db-worker-uninitialized-error? e))))
+      (finally
+        (reset! state/*db-worker original-worker)))))
+
+(deftest wait-for-db-worker-resolves-when-worker-is-installed
+  (async done
+    (let [original-worker @state/*db-worker]
+      (reset! state/*db-worker nil)
+      (let [waiting (state/<wait-for-db-worker 200)]
+        (js/setTimeout
+         (fn []
+           (reset! state/*db-worker (fn [& _] :ready)))
+         20)
+        (-> waiting
+            (p/then (fn [result]
+                      (is (true? result))
+                      (is (fn? @state/*db-worker))))
+            (p/catch (fn [error]
+                       (is false (str error))))
+            (p/finally (fn []
+                         (reset! state/*db-worker original-worker)
+                         (done))))))))
+
+(deftest wait-for-db-worker-times-out-when-still-nil
+  (async done
+    (let [original-worker @state/*db-worker]
+      (reset! state/*db-worker nil)
+      (-> (state/<wait-for-db-worker 30)
+          (p/then (fn [_]
+                    (is false "expected timeout")))
+          (p/catch (fn [error]
+                     (is (state/db-worker-uninitialized-error? error))
+                     (is (= 30 (:timeout-ms (ex-data error))))))
+          (p/finally (fn []
+                       (reset! state/*db-worker original-worker)
                        (done)))))))
 
 (deftest start-db-worker-skips-in-node-test-runtime

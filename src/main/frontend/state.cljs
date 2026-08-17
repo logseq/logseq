@@ -63,13 +63,61 @@
                  (reset! ready? (fn? worker))))
     ready?))
 
+(def ^:private db-worker-ready-timeout-ms 20000)
+
+(defn db-worker-uninitialized-error
+  ([]
+   (db-worker-uninitialized-error {}))
+  ([data]
+   (ex-info "db-worker has not been initialized" data)))
+
+(defn db-worker-uninitialized-error?
+  [error]
+  (= "db-worker has not been initialized" (ex-message error)))
+
+(defn <wait-for-db-worker
+  "Resolve when `*db-worker` is a function. Reject with an uninitialized error
+  if the worker is still missing after `timeout-ms` (default 20s)."
+  ([]
+   (<wait-for-db-worker db-worker-ready-timeout-ms))
+  ([timeout-ms]
+   (if (fn? @*db-worker)
+     (p/resolved true)
+     (let [ready (p/deferred)
+           watch-key (keyword (str "wait-db-worker-" (random-uuid)))
+           timeout-id (atom nil)
+           finished? (atom false)
+           finish! (fn [ok? error]
+                     (when (compare-and-set! finished? false true)
+                       (when-let [id @timeout-id]
+                         (js/clearTimeout id)
+                         (reset! timeout-id nil))
+                       (remove-watch *db-worker watch-key)
+                       (if ok?
+                         (p/resolve! ready true)
+                         (p/reject! ready error))))]
+       (add-watch *db-worker watch-key
+                  (fn [_ _ _ worker]
+                    (when (fn? worker)
+                      (finish! true nil))))
+       (reset! timeout-id
+               (js/setTimeout
+                (fn []
+                  (when-not (fn? @*db-worker)
+                    (finish! false (db-worker-uninitialized-error {:timeout-ms timeout-ms}))))
+                timeout-ms))
+       ;; Worker may become ready between the initial check and add-watch.
+       (when (fn? @*db-worker)
+         (finish! true nil))
+       ready))))
+
 (defn <invoke-db-worker
   "invoke db-worker thread api"
   [qkw & args]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
-      (throw (ex-info "db-worker has not been initialized" {})))
+      (throw (db-worker-uninitialized-error)))
     (p/let [result (apply worker qkw args)]
       (if (or (instance? ExceptionInfo result)
               (instance? js/Error result))

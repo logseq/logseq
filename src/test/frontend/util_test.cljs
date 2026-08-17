@@ -71,3 +71,11 @@
       (is (= @actual-ops 4))
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
+
+(deftest page-name-sanity-lc-ignores-nil-and-non-strings
+  (testing "nil and non-strings do not throw on toLowerCase"
+    (is (nil? (util/page-name-sanity-lc nil)))
+    (is (nil? (util/page-name-sanity-lc :page)))
+    (is (nil? (util/page-name-sanity-lc 1))))
+  (testing "strings still normalize"
+    (is (= "foo bar" (util/page-name-sanity-lc "Foo Bar")))))

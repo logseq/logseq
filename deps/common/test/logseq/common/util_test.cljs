@@ -1,5 +1,5 @@
 (ns logseq.common.util-test
-  (:require [clojure.test :refer [deftest are testing]]
+  (:require [clojure.test :refer [deftest are testing is]]
             [logseq.common.util :as common-util]))
 
 (deftest valid-edn-keyword?
@@ -45,3 +45,11 @@
       "[[page-name]]"
       "end-with-backslash\\"
       "\\[]{}().+*?|$^")))
+
+(deftest page-name-sanity-lc-ignores-nil-and-non-strings
+  (testing "nil and non-strings do not call toLowerCase"
+    (is (nil? (common-util/page-name-sanity-lc nil)))
+    (is (nil? (common-util/page-name-sanity-lc :page)))
+    (is (nil? (common-util/page-name-sanity-lc 1))))
+  (testing "strings still normalize"
+    (is (= "foo bar" (common-util/page-name-sanity-lc "Foo Bar")))))
