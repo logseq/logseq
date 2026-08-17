@@ -1540,7 +1540,33 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () = Error.make Error.Page_not_found "page not found"
-let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
+let recycled_page_error ?name () = Error.recycled_page ?name ()
+
+let page_entities value =
+  match
+    (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
+  with
+  | Some values, _, _ | _, Some values, _ -> values
+  | _, _, Some _ -> Vec.singleton value
+  | _ -> Vec.empty
+
+let first_page_entity values =
+  if Vec.is_empty values then None else Some (Vec.peek_front values)
+
+let choose_page_entity ?(prefer_recycled = false) value =
+  let entities = page_entities value in
+  let recycled = Vec.filter recycled_entity entities in
+  let live =
+    Vec.filter (fun entity -> not (recycled_entity entity)) entities
+  in
+  if prefer_recycled then
+    match (first_page_entity recycled, first_page_entity live) with
+    | Some entity, _ -> Some entity
+    | None, entity -> entity
+  else
+    match (first_page_entity live, first_page_entity recycled) with
+    | Some entity, _ -> Some entity
+    | None, entity -> entity
 
 let resolve_tag_id invoke_config repo tag =
   let open Cli_effect in
@@ -2692,13 +2718,13 @@ let execute_create_page mode invoke_config repo name restore plan =
   let open Cli_effect in
   bind (pull_pages_by_name invoke_config repo name page_selector)
     (fun existing ->
-      match first_entity existing with
+      match choose_page_entity ~prefer_recycled:restore existing with
       | Some page -> (
           let recycled = recycled_entity page in
           if recycled && not restore then
             pure
               (Cli_result.error ~command:Command_id.Upsert_page mode
-                 (recycled_page_error ()))
+                 (recycled_page_error ~name ()))
           else
             match (id_of_entity page, uuid_of_entity page) with
             | Some id, Some uuid ->
@@ -2707,7 +2733,7 @@ let execute_create_page mode invoke_config repo name restore plan =
             | Some _, None when recycled ->
                 pure
                   (Cli_result.error ~command:Command_id.Upsert_page mode
-                     (recycled_page_error ()))
+                     (recycled_page_error ~name ()))
             | Some id, None -> pure (ok_page_ids mode (Vec.singleton id))
             | _ ->
                 pure
@@ -2741,7 +2767,7 @@ let execute_update_page mode invoke_config repo id restore plan =
       | Some _ when recycled_entity entity && not restore ->
           pure
             (Cli_result.error ~command:Command_id.Upsert_page mode
-               (recycled_page_error ()))
+               (recycled_page_error ?name:(name_of_entity entity) ()))
       | Some id -> (
           let recycled = recycled_entity entity in
           match uuid_of_entity entity with
@@ -2751,7 +2777,7 @@ let execute_update_page mode invoke_config repo id restore plan =
           | None when recycled ->
               pure
                 (Cli_result.error ~command:Command_id.Upsert_page mode
-                   (recycled_page_error ()))
+                   (recycled_page_error ?name:(name_of_entity entity) ()))
           | None -> pure (ok_page_ids mode (Vec.singleton id))))
 
 let update_plan_empty (plan : Property.update_plan) =

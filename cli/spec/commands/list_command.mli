@@ -49,6 +49,7 @@ type node_opts = {
 }
 
 type asset_opts = { common : common_opts }
+type recycled_opts = { common : common_opts }
 
 type parsed =
   | Parsed_page of page_opts
@@ -57,8 +58,9 @@ type parsed =
   | Parsed_task of task_opts
   | Parsed_node of node_opts
   | Parsed_asset of asset_opts
+  | Parsed_recycled of recycled_opts
 
-type kind = Page | Tag | Property | Task | Node | Asset
+type kind = Page | Tag | Property | Task | Node | Asset | Recycled
 
 type action = {
   kind : kind;

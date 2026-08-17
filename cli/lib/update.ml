@@ -321,7 +321,28 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () = Error.make Error.Page_not_found "page not found"
-let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
+let recycled_page_error ?name () = Error.recycled_page ?name ()
+
+let page_entities value =
+  match
+    (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
+  with
+  | Some values, _, _ | _, Some values, _ -> values
+  | _, _, Some _ -> Vec.singleton value
+  | _ -> Vec.empty
+
+let first_page_entity values =
+  if Vec.is_empty values then None else Some (Vec.peek_front values)
+
+let choose_page_entity value =
+  let entities = page_entities value in
+  let recycled = Vec.filter recycled_entity entities in
+  let live =
+    Vec.filter (fun entity -> not (recycled_entity entity)) entities
+  in
+  match (first_page_entity live, first_page_entity recycled) with
+  | Some entity, _ -> Some entity
+  | None, entity -> entity
 
 let pull invoke_config repo selector lookup =
   Transport.thread_api_pull invoke_config ~repo
@@ -382,6 +403,43 @@ let class_query selector class_ident =
 
 let tag_query selector = query_value (class_query selector "logseq.class/Tag")
 let property_query selector = class_query selector "logseq.class/Property"
+
+let page_query selector =
+  Cli_primitive.make_datascript_query
+    ~find:
+      (Vec.of_array
+         [|
+           vector_vec
+             (Vec.of_array
+                [|
+                  list_vec
+                    (Vec.of_array
+                       [| variable "pull"; variable "?e"; selector |]);
+                  variable "...";
+                |]);
+         |])
+    ~in_:
+      (Vec.of_array
+         [|
+           Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name";
+         |])
+    ~where:
+      (Vec.singleton
+         (Cli_primitive.V
+            (Edn_util.vector_t_vec
+               (Vec.of_array
+                  [| variable "?e"; kw "block/name"; variable "?name" |]))))
+    ()
+
+let pull_pages_by_name invoke_config repo name selector =
+  Transport.thread_api_q invoke_config ~repo
+    ~query:
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              query_value (page_query selector);
+              Edn_util.string (normalized_page_name name);
+            |]))
 
 let first_entity value =
   match
@@ -487,19 +545,16 @@ let resolve_target invoke_config repo action =
                 (ensure_non_page entity "target must be a block"
                    Error.Invalid_target))
   | None, None, Some page ->
-      bind
-        (pull invoke_config repo page_selector
-           (vector_vec
-              (Vec.of_array
-                 [|
-                   kw "block/name"; Edn_util.string (normalized_page_name page);
-                 |])))
-        (fun entity ->
-          match id_of_entity entity with
+      bind (pull_pages_by_name invoke_config repo page page_selector)
+        (fun result ->
+          match choose_page_entity result with
           | None -> pure (Error (page_not_found ()))
-          | Some _ when recycled_entity entity ->
-              pure (Error (recycled_page_error ()))
-          | Some _ -> pure (Ok entity))
+          | Some entity when recycled_entity entity ->
+              pure (Error (recycled_page_error ~name:page ()))
+          | Some entity -> (
+              match id_of_entity entity with
+              | None -> pure (Error (page_not_found ()))
+              | Some _ -> pure (Ok entity)))
   | None, None, None ->
       pure (Error (Error.make Error.Missing_target "target is required"))
 

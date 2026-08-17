@@ -23,6 +23,7 @@ type t =
   | List_task
   | List_node
   | List_asset
+  | List_recycled
   | Search_block
   | Search_page
   | Search_property
@@ -99,6 +100,7 @@ let table =
       (List_task, "list-task", path [| "list"; "task" |]);
       (List_node, "list-node", path [| "list"; "node" |]);
       (List_asset, "list-asset", path [| "list"; "asset" |]);
+      (List_recycled, "list-recycled", path [| "list"; "recycled" |]);
       (Search_block, "search-block", path [| "search"; "block" |]);
       (Search_page, "search-page", path [| "search"; "page" |]);
       (Search_property, "search-property", path [| "search"; "property" |]);

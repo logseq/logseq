@@ -167,6 +167,8 @@ val make :
   t
 
 val invalid_options : string -> t
+val recycled_page_hint : ?name:string -> unit -> string
+val recycled_page : ?name:string -> unit -> t
 val missing_graph : unit -> t
 val missing_repo : string -> t
 val missing_target : string -> t

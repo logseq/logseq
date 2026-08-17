@@ -134,6 +134,18 @@ let list_asset_sort_choices =
   Vec.of_array
     [| "id"; "title"; "asset-type"; "size"; "created-at"; "updated-at" |]
 
+let list_recycled_sort_choices =
+  Vec.of_array
+    [|
+      "id";
+      "title";
+      "name";
+      "uuid";
+      "deleted-at";
+      "created-at";
+      "updated-at";
+    |]
+
 let search_result_header_order = Vec.of_array [| "id"; "ident"; "title" |]
 
 let human_table_headers_order_for_command = function
@@ -154,6 +166,7 @@ let human_table_headers_order_for_command = function
           "created-at";
           "updated-at";
         |]
+  | List_recycled -> list_recycled_sort_choices
   | Search_block | Search_page | Search_property | Search_tag ->
       search_result_header_order
   | _ -> Vec.empty
@@ -311,10 +324,16 @@ let options_for_command =
             ~multi:true;
         |]
   | List_asset -> common_list_options list_asset_sort_choices
+  | List_recycled -> common_list_options list_recycled_sort_choices
   | Remove_block -> selector_options
   | Remove_page ->
       Vec.of_array
-        [| value "id" "id" "Page id"; value "page" "page" "Page name" |]
+        [|
+          value "id" "id" "Page id";
+          value "page" "page" "Page name";
+          flag "purge"
+            "Permanently delete a recycled page instead of moving it to Recycle";
+        |]
   | Remove_tag | Remove_property ->
       Vec.of_array
         [| value "id" "id" "Entity id"; value "name" "name" "Entity name" |]
@@ -338,7 +357,9 @@ let options_for_command =
             [|
               value "id" "id" "Page id";
               value "page" "page" "Page name";
-              flag "restore" "Restore recycled page before updating";
+              flag "restore"
+                "Restore recycled page before updating. See also `list recycled` \
+                 and `remove page --purge`";
             |];
           property_update_options;
         |]

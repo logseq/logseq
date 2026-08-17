@@ -49,6 +49,7 @@ type node_opts = {
 }
 
 type asset_opts = { common : common_opts }
+type recycled_opts = { common : common_opts }
 
 type parsed =
   | Parsed_page of page_opts
@@ -57,8 +58,9 @@ type parsed =
   | Parsed_task of task_opts
   | Parsed_node of node_opts
   | Parsed_asset of asset_opts
+  | Parsed_recycled of recycled_opts
 
-type kind = Page | Tag | Property | Task | Node | Asset
+type kind = Page | Tag | Property | Task | Node | Asset | Recycled
 
 type action = {
   kind : kind;
@@ -85,6 +87,7 @@ let kind_of_parsed = function
   | Parsed_task _ -> Task
   | Parsed_node _ -> Node
   | Parsed_asset _ -> Asset
+  | Parsed_recycled _ -> Recycled
 
 let normalize_priority value =
   match String.lowercase_ascii (String.trim value) with
@@ -194,6 +197,19 @@ let asset_field_map =
          ("created-at", "block/created-at");
        |])
 
+let recycled_field_map =
+  field_map
+    (Vec.of_array
+       [|
+         ("id", "db/id");
+         ("title", "block/title");
+         ("name", "block/name");
+         ("uuid", "block/uuid");
+         ("deleted-at", "logseq.property/deleted-at");
+         ("created-at", "block/created-at");
+         ("updated-at", "block/updated-at");
+       |])
+
 let field_map_of_kind = function
   | Page -> page_field_map
   | Tag -> tag_field_map
@@ -201,6 +217,7 @@ let field_map_of_kind = function
   | Task -> task_field_map
   | Node -> node_field_map
   | Asset -> asset_field_map
+  | Recycled -> recycled_field_map
 
 let value_rank value =
   match value with
@@ -286,6 +303,7 @@ let command_id = function
   | Parsed_task _ -> List_task
   | Parsed_node _ -> List_node
   | Parsed_asset _ -> List_asset
+  | Parsed_recycled _ -> List_recycled
 
 let value_of_string_list values =
   Edn_util.vector_vec (values |> Vec.map (fun value -> Edn_util.string value))
@@ -379,6 +397,42 @@ let property_selector =
          kw "db/cardinality";
          kw "logseq.property/public?";
        |])
+
+let recycled_selector =
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/name";
+         kw "block/title";
+         kw "logseq.property/deleted-at";
+         kw "block/created-at";
+         kw "block/updated-at";
+       |])
+
+let recycled_query =
+  Cli_primitive.make_datascript_query
+    ~find:
+      (Vec.singleton
+         (vector_vec
+            (Vec.of_array
+               [|
+                 list_vec
+                   (Vec.of_array [| sym "pull"; sym "?e"; recycled_selector |]);
+                 sym "...";
+               |])))
+    ~where:
+      (Vec.singleton
+         (Cli_primitive.V
+            (Edn_util.vector_t_vec
+               (Vec.of_array
+                  [|
+                    sym "?e";
+                    kw "logseq.property/deleted-at";
+                    sym "?deleted-at";
+                  |]))))
+    ()
 
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
@@ -770,7 +824,7 @@ let prepare_items kind options items =
   | Page -> Vec.map prepare_page_item items
   | Tag -> Vec.map (prepare_tag_item options) items
   | Property -> Vec.map (prepare_property_item options) items
-  | Task | Node | Asset -> items
+  | Task | Node | Asset | Recycled -> items
 
 let visible_title_fields = function
   | Node ->
@@ -779,7 +833,7 @@ let visible_title_fields = function
           Edn_util.keyword_t "block/title";
           Edn_util.keyword_t "block/page-title";
         |]
-  | Page | Tag | Property | Task | Asset ->
+  | Page | Tag | Property | Task | Asset | Recycled ->
       Vec.singleton (Edn_util.keyword_t "block/title")
 
 let normalize_visible_title_fields config repo kind items =
@@ -870,6 +924,13 @@ let options_of_parsed = function
             else Some (value_of_string_list opts.properties))
       |> Edn_util.map_vec
   | Parsed_asset opts -> Edn_util.map_vec (opts.common |> common_options)
+  | Parsed_recycled opts ->
+      let common =
+        match opts.common.sort with
+        | Some _ -> opts.common
+        | None -> { opts.common with sort = Some "deleted-at" }
+      in
+      Edn_util.map_vec (common_options common)
 
 let build ?registry:_ config _globals parsed =
   Error.bind (normalize_options parsed) (fun parsed ->
@@ -930,7 +991,12 @@ let execute_with_mode action config mode =
                       ~repo:action.repo ~options
                 | Node | Asset ->
                     Transport.thread_api_cli_list_nodes invoke_config
-                      ~repo:action.repo ~options)
+                      ~repo:action.repo ~options
+                | Recycled ->
+                    Transport.thread_api_q invoke_config ~repo:action.repo
+                      ~query:
+                        (Edn_util.vector_t_vec
+                           (Vec.singleton (query_value recycled_query))))
                 (fun value ->
                   let items =
                     match
@@ -1024,6 +1090,15 @@ let metadata () =
                 updated-at --order desc";
              |])
         List_asset "List assets";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list recycled --graph my-graph";
+               "logseq list recycled --graph my-graph --limit 20 --sort \
+                deleted-at --order desc";
+             |])
+        List_recycled "List recycled pages and blocks";
     |]
 
 let execute action config =

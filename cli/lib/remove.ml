@@ -1,5 +1,9 @@
 type block_opts = { id_raw : string option; uuid : Cli_primitive.uuid option }
-type page_opts = { id : Cli_primitive.db_id option; page : string option }
+type page_opts = {
+  id : Cli_primitive.db_id option;
+  page : string option;
+  purge : bool;
+}
 
 type named_entity_opts = {
   id : Cli_primitive.db_id option;
@@ -26,6 +30,7 @@ type action =
       graph : Cli_primitive.graph;
       id : Cli_primitive.db_id option;
       page : string option;
+      purge : bool;
     }
   | Remove_tag of {
       repo : Cli_primitive.repo;
@@ -122,9 +127,14 @@ let build_page repo graph (opts : page_opts) =
   match (opts.id, Option.map String.trim opts.page) with
   | None, None ->
       Error (Error.make Error.Missing_page_name "page name or id is required")
-  | Some id, None -> Ok (Remove_page { repo; graph; id = Some id; page = None })
+  | Some id, None ->
+      Ok
+        (Remove_page
+           { repo; graph; id = Some id; page = None; purge = opts.purge })
   | None, Some page when page <> "" ->
-      Ok (Remove_page { repo; graph; id = None; page = Some page })
+      Ok
+        (Remove_page
+           { repo; graph; id = None; page = Some page; purge = opts.purge })
   | None, Some _ -> Error (Error.invalid_options "page must be non-empty")
   | Some _, Some _ ->
       Error (Error.invalid_options "only one of --id or --page is allowed")
@@ -202,6 +212,26 @@ let entity_selector =
 let result_value value =
   Edn_util.map_vec (Vec.of_array [| (kw "result", value) |])
 
+let recycled_result_value ~purged ~id ~name ~uuid =
+  let fields =
+    Vec.of_array
+      [|
+        (kw "result", Edn_util.bool true);
+        (kw "id", Edn_util.int64 id);
+        (kw "name", Edn_util.string name);
+        (kw "uuid", Edn_util.string uuid);
+        (kw "recycled", Edn_util.bool (not purged));
+        (kw "purged", Edn_util.bool purged);
+      |]
+  in
+  let fields =
+    if purged then fields
+    else
+      Vec.push_back fields
+        (kw "hint", Edn_util.string (Error.recycled_page_hint ~name ()))
+  in
+  Edn_util.map_vec fields
+
 let entity_result_value result id name =
   Edn_util.map_vec
     (Vec.of_array
@@ -241,6 +271,9 @@ let id_of_entity value = Edn_util.get_int64 value "db/id"
 let has_name value = Option.is_some (Edn_util.get_string value "block/name")
 let has_id value = Option.is_some (Edn_util.get_int64 value "db/id")
 
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
 let pull config repo selector lookup =
   Transport.thread_api_pull config ~repo
     ~selector:(Edn_util.expect_vector_t "remove pull selector" selector)
@@ -264,9 +297,44 @@ let list_named_entities config repo method_ =
       Transport.thread_api_cli_list_properties config ~repo ~options
   | method_name -> invalid_arg ("unsupported list method: " ^ method_name)
 
-let list_pages config repo =
-  list_named_entities config repo
-    (Edn_util.keyword_t "thread-api/cli-list-pages")
+let sym value = Edn_util.symbol value
+let list_vec values = Edn_util.list_vec values
+
+let query_value query =
+  Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+
+let page_query =
+  Cli_primitive.make_datascript_query
+    ~find:
+      (Vec.singleton
+         (vector_vec
+            (Vec.of_array
+               [|
+                 list_vec
+                   (Vec.of_array [| sym "pull"; sym "?e"; page_selector |]);
+                 sym "...";
+               |])))
+    ~in_:
+      (Vec.of_array
+         [|
+           Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name";
+         |])
+    ~where:
+      (Vec.singleton
+         (Cli_primitive.V
+            (Edn_util.vector_t_vec
+               (Vec.of_array [| sym "?e"; kw "block/name"; sym "?name" |]))))
+    ()
+
+let pull_pages_by_name config repo name =
+  Transport.thread_api_q config ~repo
+    ~query:
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              query_value page_query;
+              Edn_util.string (String.lowercase_ascii (String.trim name));
+            |]))
 
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
@@ -310,6 +378,17 @@ let delete_page_uuid config repo uuid =
            kw "delete-page";
            Edn_util.vector_vec
              (Vec.of_array [| Edn_util.uuid uuid; Edn_util.map_vec Vec.empty |]);
+         |])
+  in
+  apply_delete_op config repo op
+
+let purge_page_uuid config repo uuid =
+  let op =
+    Edn_util.vector_vec
+      (Vec.of_array
+         [|
+           kw "recycle-delete-permanently";
+           Edn_util.vector_vec (Vec.of_array [| Edn_util.uuid uuid |]);
          |])
   in
   apply_delete_op config repo op
@@ -511,53 +590,90 @@ let execute_remove_block_ids mode invoke_config repo ids =
                     (multi_block_result ~deleted_ids ~missing_ids ~result
                        ~page_ids)))))
 
-let execute_remove_page_id mode invoke_config repo id =
+let execute_remove_page mode invoke_config repo ~purge entity =
+  let open Cli_effect in
+  let page_name = Option.value (entity_name entity) ~default:"" in
+  if not (has_id entity) then
+    pure
+      (Cli_result.error ~command:Command_id.Remove_page mode
+         (Error.make Error.Page_not_found "page not found"))
+  else
+    match (id_of_entity entity, uuid_of_entity entity) with
+    | Some id, Some uuid ->
+        let recycled = recycled_entity entity in
+        if recycled && not purge then
+          pure
+            (Cli_result.error ~command:Command_id.Remove_page mode
+               (Error.recycled_page ~name:page_name ()))
+        else
+          let recycle_effect =
+            if recycled then pure Edn_util.bool true
+            else delete_page_uuid invoke_config repo uuid
+          in
+          bind recycle_effect (fun _ ->
+              let purge_effect =
+                if purge then purge_page_uuid invoke_config repo uuid
+                else pure Edn_util.nil
+              in
+              bind purge_effect (fun _ ->
+                  pure
+                    (Cli_result.ok ~command:Command_id.Remove_page mode
+                       (Raw
+                          (recycled_result_value ~purged:purge ~id
+                             ~name:page_name ~uuid)))))
+    | _ ->
+        pure
+          (Cli_result.error ~command:Command_id.Remove_page mode
+             (Error.make Error.Page_not_found "page not found"))
+
+let select_remove_page_target ~purge name entities =
+  let live =
+    Vec.filter (fun entity -> not (recycled_entity entity)) entities
+  in
+  let recycled = Vec.filter recycled_entity entities in
+  if purge then
+    match Vec.length recycled with
+    | 1 -> Ok (Vec.nth recycled 0)
+    | n when n > 1 ->
+        Error (ambiguous_error Error.Ambiguous_page_name "page" name recycled)
+    | _ -> (
+        match Vec.length live with
+        | 1 -> Ok (Vec.nth live 0)
+        | 0 -> Error (Error.make Error.Page_not_found "page not found")
+        | _ -> Error (ambiguous_error Error.Ambiguous_page_name "page" name live)
+        )
+  else
+    match Vec.length live with
+    | 1 -> Ok (Vec.nth live 0)
+    | n when n > 1 ->
+        Error (ambiguous_error Error.Ambiguous_page_name "page" name live)
+    | _ -> (
+        match Vec.length recycled with
+        | 0 -> Error (Error.make Error.Page_not_found "page not found")
+        | _ ->
+            Error
+              (Error.recycled_page
+                 ~name:
+                   (Option.value
+                      (entity_name (Vec.nth recycled 0))
+                      ~default:name)
+                 ()))
+
+let execute_remove_page_id mode invoke_config repo ~purge id =
   let open Cli_effect in
   bind
     (pull invoke_config repo page_selector (Edn_util.int64 id))
-    (fun entity ->
-      if not (has_id entity) then
-        pure
-          (Cli_result.error ~command:Command_id.Remove_page mode
-             (Error.make Error.Page_not_found "page not found"))
-      else
-        match uuid_of_entity entity with
-        | None ->
-            pure
-              (Cli_result.error ~command:Command_id.Remove_page mode
-                 (Error.make Error.Page_not_found "page not found"))
-        | Some uuid ->
-            bind (delete_page_uuid invoke_config repo uuid) (fun result ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Remove_page mode
-                     (Raw (result_value result)))))
+    (execute_remove_page mode invoke_config repo ~purge)
 
-let execute_remove_page_name mode invoke_config repo name =
+let execute_remove_page_name mode invoke_config repo ~purge name =
   let open Cli_effect in
-  bind (list_pages invoke_config repo) (fun pages_value ->
-      let matches =
-        pages_value |> entities_of_value |> Vec.filter (name_matches name)
-      in
-      if Vec.is_empty matches then
-        pure
-          (Cli_result.error ~command:Command_id.Remove_page mode
-             (Error.make Error.Page_not_found "page not found"))
-      else if Vec.length matches > 1 then
-        pure
-          (Cli_result.error ~command:Command_id.Remove_page mode
-             (ambiguous_error Error.Ambiguous_page_name "page" name matches))
-      else
-        let page = Vec.nth matches 0 in
-        match uuid_of_entity page with
-        | None ->
-            pure
-              (Cli_result.error ~command:Command_id.Remove_page mode
-                 (Error.make Error.Page_not_found "page not found"))
-        | Some uuid ->
-            bind (delete_page_uuid invoke_config repo uuid) (fun result ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Remove_page mode
-                     (Raw (result_value result)))))
+  bind (pull_pages_by_name invoke_config repo name) (fun pages_value ->
+      match
+        select_remove_page_target ~purge name (entities_of_value pages_value)
+      with
+      | Error err ->
+          pure (Cli_result.error ~command:Command_id.Remove_page mode err)
+      | Ok page -> execute_remove_page mode invoke_config repo ~purge page)
 
 let execute_remove_entity mode invoke_config repo ~command ~list_method
     ~not_found_code ~ambiguous_code ~label ~validate ~id ~name =
@@ -646,19 +762,20 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Remove_block mode
            (Error.make Error.Missing_target "block is required"))
-  | Remove_page { repo; id = Some id; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-        (function
-        | Error err ->
-            pure (Cli_result.error ~command:Command_id.Remove_page mode err)
-        | Ok invoke_config -> execute_remove_page_id mode invoke_config repo id)
-  | Remove_page { repo; page = Some page; _ } ->
+  | Remove_page { repo; id = Some id; purge; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_page mode err)
         | Ok invoke_config ->
-            execute_remove_page_name mode invoke_config repo page)
+            execute_remove_page_id mode invoke_config repo ~purge id)
+  | Remove_page { repo; page = Some page; purge; _ } ->
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
+        | Error err ->
+            pure (Cli_result.error ~command:Command_id.Remove_page mode err)
+        | Ok invoke_config ->
+            execute_remove_page_name mode invoke_config repo ~purge page)
   | Remove_page _ ->
       pure
         (Cli_result.error ~command:Command_id.Remove_page mode
@@ -722,8 +839,9 @@ let metadata () =
              [|
                "logseq remove page --graph my-graph --page Home";
                "logseq remove page --graph my-graph --id 123";
+               "logseq remove page --graph my-graph --page Home --purge";
              |])
-        Remove_page "Remove page";
+        Remove_page "Remove page (moves it to Recycle unless --purge)";
       meta
         ~examples:
           (Vec.singleton "logseq remove tag --graph my-graph --name project")

@@ -1177,13 +1177,109 @@
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page Home"],
    :expect
    {:exit 0,
-    :stdout-json-paths {[:status] "ok", [:data :result] true}},
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :result] true,
+     [:data :recycled] true},
+    :stdout-contains ["upsert page --restore" "list recycled"]},
    :covers
    {:commands ["remove page"],
     :options
     {:global ["--config" "--graph" "--root-dir" "--output"],
      :remove ["--page"]}},
    :tags [:remove],
+   :extends :non-sync/graph-json-env}
+  {:id "remove-page-recycled-error-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecycleHint >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page RecycleHint >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecycleHint"],
+   :expect
+   {:exit 1,
+    :stdout-json-paths
+    {[:status] "error", [:error :code] "recycled-page"},
+    :stdout-contains ["upsert page --restore" "remove page --purge"]},
+   :covers
+   {:commands ["upsert page"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--page"]}},
+   :tags [:remove :upsert],
+   :extends :non-sync/graph-json-env}
+  {:id "list-recycled-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecycleList >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page RecycleList >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json list recycled --graph {{graph-arg}} --fields title,id --sort deleted-at --order desc --limit 20"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["RecycleList"]},
+   :covers
+   {:commands ["list recycled"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :list ["--fields" "--sort" "--order" "--limit"]}},
+   :tags [:list :remove],
+   :extends :non-sync/graph-json-env}
+  {:id "upsert-page-restore-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecycleRestore >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page RecycleRestore >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecycleRestore --restore >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json list page --graph {{graph-arg}} --fields title"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["RecycleRestore"]},
+   :covers
+   {:commands ["upsert page" "list page"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--page" "--restore"],
+     :list ["--fields"]}},
+   :tags [:upsert :remove],
+   :extends :non-sync/graph-json-env}
+  {:id "remove-page-purge-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RecyclePurge >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page RecyclePurge >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page RecyclePurge --purge"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json list recycled --graph {{graph-arg}} --fields title"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-not-contains ["RecyclePurge"]},
+   :covers
+   {:commands ["remove page" "list recycled"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :remove ["--page" "--purge"],
+     :list ["--fields"]}},
+   :tags [:remove :list],
+   :extends :non-sync/graph-json-env}
+  {:id "recycled-homonym-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Homonym >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name Homonym >/dev/null"
+    "page_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/name \"homonym\"] (not [?e :logseq.property/deleted-at]) (not [?e :block/tags ?t] [?t :db/ident :logseq.class/Tag])]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --id \"$page_id\" >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page HomonymHost >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page HomonymHost --content 'link: [[Homonym]]'"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"}},
+   :covers
+   {:commands ["upsert block" "upsert tag" "query" "remove page"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--target-page" "--content" "--name"],
+     :query ["--query"],
+     :remove ["--id"]}},
+   :tags [:remove :upsert],
    :extends :non-sync/graph-json-env}
   {:id "graph-remove-json",
    :setup

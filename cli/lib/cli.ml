@@ -75,7 +75,7 @@ let boolean_option = function
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" ->
+  | "upload-keys" | "restore" | "purge" ->
       true
   | _ -> false
 

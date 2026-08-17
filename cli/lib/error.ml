@@ -292,6 +292,24 @@ let make ?hint ?(candidates = Vec.empty) ?context code message =
 
 let invalid_options message = make Invalid_options message
 
+let recycled_restore_command = function
+  | Some name -> "logseq upsert page --restore --page " ^ name
+  | None -> "logseq upsert page --restore --page <name>"
+
+let recycled_purge_command = function
+  | Some name -> "logseq remove page --purge --page " ^ name
+  | None -> "logseq remove page --purge --page <name>"
+
+let recycled_page_hint ?name () =
+  "Page is in Recycle. Restore with `"
+  ^ recycled_restore_command name
+  ^ "`. List recycled pages with `logseq list recycled`. Permanently delete with `"
+  ^ recycled_purge_command name
+  ^ "`."
+
+let recycled_page ?name () =
+  make ~hint:(recycled_page_hint ?name ()) Recycled_page "page is recycled"
+
 let missing_graph () =
   make ~hint:"Use --graph <name>" Missing_graph "graph name is required"
 

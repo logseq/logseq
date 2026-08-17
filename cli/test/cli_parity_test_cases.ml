@@ -1881,6 +1881,41 @@ let () =
                (expect_some "asset order" opts.common.order))
       | _ -> fail_test "expected list asset");
 
+  test "CLI parity parse supports list recycled and remove page purge"
+    (fun () ->
+      let request =
+        expect_parse_ok "list recycled parse"
+          [|
+            "list";
+            "recycled";
+            "--limit";
+            "20";
+            "--sort";
+            "deleted-at";
+            "--order";
+            "desc";
+          |]
+      in
+      (match request.command with
+      | Cli_request.List (List_command.Parsed_recycled opts) ->
+          expect_int "recycled limit" 20
+            (expect_some "recycled limit" opts.common.limit);
+          expect_equal "recycled sort" "deleted-at"
+            (expect_some "recycled sort" opts.common.sort);
+          expect_equal "recycled order" "desc"
+            (List_command.string_of_order
+               (expect_some "recycled order" opts.common.order))
+      | _ -> fail_test "expected list recycled");
+      let purge =
+        expect_parse_ok "remove page purge"
+          [| "remove"; "page"; "--page"; "Home"; "--purge" |]
+      in
+      match purge.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_equal "purge page" "Home" (expect_some "purge page" opts.page);
+          expect_bool "purge flag" true opts.purge
+      | _ -> fail_test "expected remove page purge");
+
   test "CLI parity list rejects old name fields for tag and property" (fun () ->
       expect_parse_error_code "list tag old name field" ":invalid-options"
         [| "list"; "tag"; "--fields"; "name,properties" |];
@@ -2464,7 +2499,8 @@ let () =
         "only one of --id or --page is allowed"
         (expect_some "invalid"
            (Remove.invalid_options
-              (Remove.Parsed_page { id = Some 1L; page = Some "Home" })));
+              (Remove.Parsed_page
+                 { id = Some 1L; page = Some "Home"; purge = false })));
       expect_equal "remove tag blank" "name must be non-empty"
         (expect_some "invalid"
            (Remove.invalid_options
@@ -2506,7 +2542,8 @@ let () =
       let page =
         expect_ok "remove page by title"
           (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-             (Remove.Parsed_page { id = None; page = Some " Home " }))
+             (Remove.Parsed_page
+                { id = None; page = Some " Home "; purge = false }))
       in
       (match page with
       | Remove.Remove_page { page = Some page; id = None; _ } ->
@@ -2528,12 +2565,12 @@ let () =
            (Remove.Parsed_block { id_raw = None; uuid = None }));
       expect_error_code "remove page missing" "missing-page-name"
         (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-           (Remove.Parsed_page { id = None; page = None })));
+           (Remove.Parsed_page { id = None; page = None; purge = false })));
 
   test_promise "CLI parity remove page unwraps apply result map" (fun () ->
       let server =
         invoke_server (fun body ->
-            if Js.String.includes ~search:"thread-api/cli-list-pages" body then
+            if Js.String.includes ~search:"thread-api/q" body then
               "[[\"^ \
                \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\"]]"
             else if
@@ -2550,6 +2587,7 @@ let () =
                 graph = Cli_config.repo_to_graph repo;
                 id = None;
                 page = Some "Home";
+                purge = false;
               }
           in
           let cfg =
@@ -2567,6 +2605,100 @@ let () =
           expect_bool "remove page result" true
             (expect_some "remove page result bool"
                (Edn_util.get_bool data "result"));
+          expect_bool "remove page recycled" true
+            (expect_some "remove page recycled bool"
+               (Edn_util.get_bool data "recycled"));
+          expect_named_contains "remove page restore hint"
+            (expect_some "remove page hint" (Edn_util.get_string data "hint"))
+            "upsert page --restore";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity remove page purge permanently deletes recycled page"
+    (fun () ->
+      let apply_calls = ref Vec.empty in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_calls := Vec.push_back !apply_calls body;
+              "[\"^ \",\"~:result\",true]")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = None;
+                page = Some "Home";
+                purge = true;
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "purge ok" false (Cli_result.is_error result);
+          let data = expect_some "purge data" (Cli_result.data_value result) in
+          expect_bool "purge flag" true
+            (expect_some "purged bool" (Edn_util.get_bool data "purged"));
+          expect_bool "not recycled after purge" false
+            (expect_some "recycled after purge"
+               (Edn_util.get_bool data "recycled"));
+          expect_int "purge apply calls" 1 (Vec.length !apply_calls);
+          expect_named_contains "purge op"
+            (Vec.nth !apply_calls 0) "recycle-delete-permanently";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity list recycled returns deleted pages" (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            expect_ok "list recycled build"
+              (List_command.build cfg (Global_opts.create ())
+                 (List_command.Parsed_recycled { common = empty_common_opts }))
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output List_command.execute action cfg
+                 Output.Mode.Json)
+          in
+          expect_bool "list recycled ok" false (Cli_result.is_error result);
+          let data =
+            expect_some "recycled list data" (Cli_result.data_value result)
+          in
+          let items =
+            expect_some "recycled items"
+              (Option.bind (Edn_util.get data "items") Edn_util.as_seq)
+          in
+          expect_int "recycled count" 1 (Vec.length items);
+          expect_equal "recycled title" "Home"
+            (expect_some "recycled title"
+               (Edn_util.get_string (Vec.peek_front items) "block/title"));
           Js.Promise.resolve pass));
 
   test_promise "CLI parity remove block rejects page entities before delete"
@@ -2949,9 +3081,56 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert recycled code" "recycled-page"
-                (Error.code_to_string err.Error.code)
+                (Error.code_to_string err.Error.code);
+              expect_named_contains "upsert recycled restore hint"
+                (expect_some "upsert recycled hint" err.Error.hint)
+                "upsert page --restore"
           | None -> fail_test "expected upsert error");
           expect_bool "no ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity upsert page prefers live homonym over recycled page" (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000],[\"^ \
+               \",\"~:db/id\",51,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000051\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "live homonym ok" false (Cli_result.is_error result);
+          expect_bool "live homonym does not restore" false !apply_called;
           Js.Promise.resolve pass));
 
   test_promise "CLI parity upsert page update rejects recycled page by default"
@@ -3214,9 +3393,57 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert block create recycled code" "recycled-page"
-                (Error.code_to_string err.Error.code)
+                (Error.code_to_string err.Error.code);
+              expect_named_contains "upsert block recycled restore hint"
+                (expect_some "upsert block recycled hint" err.Error.hint)
+                "upsert page --restore"
           | None -> fail_test "expected upsert block create error");
           expect_bool "no create ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity upsert block create prefers live homonym over recycled page"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000],[\"^ \
+               \",\"~:db/id\",51,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000051\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "true"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_create
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   target = Upsert.Target_page "Home";
+                   pos = Block.Last_child;
+                   status = None;
+                   tags = Vec.empty;
+                   properties = Vec.empty;
+                   blocks = Vec.singleton (Block.make ~title:"Child" ());
+                   update_plan = Property.empty_update_plan;
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "block create live homonym ok" false
+            (Cli_result.is_error result);
           Js.Promise.resolve pass));
 
   test_promise "CLI parity upsert block update rejects recycled target page"
@@ -5941,6 +6168,7 @@ let () =
         "Usage: logseq list <subcommand> [options]";
       expect_named_contains "list page command" list_help "list page";
       expect_named_contains "list asset command" list_help "list asset";
+      expect_named_contains "list recycled command" list_help "list recycled";
       expect_named_not_contains "list command options suffix" list_help
         "list page [options]";
       let backup_help = run_cli [| "graph"; "backup" |] in

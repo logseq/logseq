@@ -479,7 +479,29 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () = Error.make Error.Page_not_found "page not found"
-let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
+
+let recycled_page_error ?name () = Error.recycled_page ?name ()
+
+let page_entities value =
+  match
+    (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
+  with
+  | Some values, _, _ | _, Some values, _ -> values
+  | _, _, Some _ -> Vec.singleton value
+  | _ -> Vec.empty
+
+let first_page_entity values =
+  if Vec.is_empty values then None else Some (Vec.peek_front values)
+
+let choose_page_entity value =
+  let entities = page_entities value in
+  let recycled = Vec.filter recycled_entity entities in
+  let live =
+    Vec.filter (fun entity -> not (recycled_entity entity)) entities
+  in
+  match (first_page_entity live, first_page_entity recycled) with
+  | Some entity, _ -> Some entity
+  | None, entity -> entity
 
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
@@ -591,9 +613,9 @@ let pull_created_page config repo name create_result =
 let ensure_page_entity config repo page_name =
   let open Cli_effect in
   bind (pull_pages_by_name config repo page_name page_selector) (fun result ->
-      match first_entity result with
+      match choose_page_entity result with
       | Some entity when recycled_entity entity ->
-          pure (Error (recycled_page_error ()))
+          pure (Error (recycled_page_error ~name:page_name ()))
       | Some entity -> pure (Ok entity)
       | None ->
           bind (create_page config repo page_name) (fun create_result ->

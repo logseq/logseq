@@ -38,7 +38,8 @@
               "list property"
               "list task"
               "list node"
-              "list asset"]
+              "list asset"
+              "list recycled"]
    :options ["--expand"
              "--fields"
              "--limit"
@@ -91,7 +92,8 @@
              "--type"
              "--cardinality"
              "--hide"
-             "--public"]}
+             "--public"
+             "--restore"]}
 
   :remove
   {:commands ["remove block"
@@ -100,7 +102,8 @@
               "remove property"]
    :options ["--id"
              "--uuid"
-             "--name"]}
+             "--name"
+             "--purge"]}
 
   :query
   {:commands ["query"

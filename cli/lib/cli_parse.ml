@@ -36,7 +36,7 @@ let boolean_option = function
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" | "pretty-print" ->
+  | "upload-keys" | "pretty-print" | "restore" | "purge" ->
       true
   | _ -> false
 
@@ -214,8 +214,10 @@ let allowed_options_for_path path =
   else if path2 path "list" "node" then
     Vec.append common_list_options (option_names [| "tags"; "properties" |])
   else if path2 path "list" "asset" then common_list_options
+  else if path2 path "list" "recycled" then common_list_options
   else if path2 path "remove" "block" then option_names [| "id"; "uuid" |]
-  else if path2 path "remove" "page" then option_names [| "id"; "page" |]
+  else if path2 path "remove" "page" then
+    option_names [| "id"; "page"; "purge" |]
   else if path2_any path "remove" (option_names [| "tag"; "property" |]) then
     option_names [| "id"; "name" |]
   else if path2 path "upsert" "block" then
@@ -430,6 +432,18 @@ let list_asset_sort_values =
   Vec.of_array
     [| "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" |]
 
+let list_recycled_sort_values =
+  Vec.of_array
+    [|
+      "id";
+      "title";
+      "name";
+      "uuid";
+      "deleted-at";
+      "created-at";
+      "updated-at";
+    |]
+
 let validate_list_common_values sort_values options =
   Error.bind (validate_integer_option "limit" options) (fun () ->
       Error.bind (validate_integer_option "offset" options) (fun () ->
@@ -516,6 +530,8 @@ let validate_option_values path options =
             validate_list_common_values list_node_sort_values options)
       else if path2 path "list" "asset" then
         validate_list_common_values list_asset_sort_values options
+      else if path2 path "list" "recycled" then
+        validate_list_common_values list_recycled_sort_values options
       else if path1 path "show" then validate_integer_option "level" options
       else if path1 path "completion" then
         validate_member_option "shell"
@@ -560,6 +576,7 @@ let parsed_remove_command options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
+                purge = option_present "purge" options;
               }))
   | "tag" ->
       Some
@@ -756,6 +773,8 @@ let parsed_list_command options = function
                     ~default:Vec.empty;
               }))
   | "asset" -> Some (List (Parsed_asset { common = common_list_opts options }))
+  | "recycled" ->
+      Some (List (Parsed_recycled { common = common_list_opts options }))
   | _ -> None
 
 (* normalize_key resolves short aliases globally (-f -> fields, -e ->

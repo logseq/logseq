@@ -290,7 +290,7 @@ let truncate_title_cell max_width value =
 
 let is_list_command = function
   | Command_id.List_page | List_tag | List_property | List_task | List_node
-  | List_asset ->
+  | List_asset | List_recycled ->
       true
   | _ -> false
 

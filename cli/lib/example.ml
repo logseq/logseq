@@ -101,6 +101,12 @@ let default_entries =
           "logseq list asset --graph my-graph --limit 20 --sort updated-at \
            --order desc";
         |];
+      entry [| "list"; "recycled" |]
+        [|
+          "logseq list recycled --graph my-graph";
+          "logseq list recycled --graph my-graph --limit 20 --sort deleted-at \
+           --order desc";
+        |];
       entry [| "upsert"; "block" |]
         [|
           "logseq upsert block --graph my-graph --target-page Home --content \
@@ -120,6 +126,7 @@ let default_entries =
            '[\"project\"]'";
           "logseq upsert page --graph my-graph --id 999 --update-properties \
            '{:logseq.property/description \"Example\"}'";
+          "logseq upsert page --graph my-graph --page Home --restore";
         |];
       entry [| "upsert"; "task" |]
         [|
@@ -163,6 +170,7 @@ let default_entries =
         [|
           "logseq remove page --graph my-graph --page Home";
           "logseq remove page --graph my-graph --id 123";
+          "logseq remove page --graph my-graph --page Home --purge";
         |];
       entry [| "remove"; "tag" |]
         [| "logseq remove tag --graph my-graph --name project" |];

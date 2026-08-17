@@ -380,7 +380,7 @@ let recycled_page value =
   Option.is_some (Edn_util.get value "block/name")
   && Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
-let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
+let recycled_page_error ?name () = Error.recycled_page ?name ()
 
 let ident_value value =
   Option.map strip_keyword_prefix

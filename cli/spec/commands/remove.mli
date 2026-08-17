@@ -1,5 +1,9 @@
 type block_opts = { id_raw : string option; uuid : Cli_primitive.uuid option }
-type page_opts = { id : Cli_primitive.db_id option; page : string option }
+type page_opts = {
+  id : Cli_primitive.db_id option;
+  page : string option;
+  purge : bool;
+}
 
 type named_entity_opts = {
   id : Cli_primitive.db_id option;
@@ -26,6 +30,7 @@ type action =
       graph : Cli_primitive.graph;
       id : Cli_primitive.db_id option;
       page : string option;
+      purge : bool;
     }
   | Remove_tag of {
       repo : Cli_primitive.repo;

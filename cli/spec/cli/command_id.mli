@@ -23,6 +23,7 @@ type t =
   | List_task
   | List_node
   | List_asset
+  | List_recycled
   | Search_block
   | Search_page
   | Search_property
