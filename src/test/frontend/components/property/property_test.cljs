@@ -36,6 +36,28 @@
            (restore [value-uuid] {value-uuid value-entity}))
         "Entity collections retain their resource-owned shape.")))
 
+(deftest display-property-value-stays-pending-until-entities-hydrate-test
+  (let [value-uuid (random-uuid)
+        value-entity {:block/uuid value-uuid
+                      :logseq.property/value 42}
+        ready? #'property-component/property-value-hydration-ready?
+        hydrate #'property-component/hydrated-display-property-value]
+    (is (true? (ready? [] nil))
+        "A scalar or empty property has nothing to hydrate.")
+    (is (false? (ready? [value-uuid] nil))
+        "use-blocks still :loading must not be treated as empty.")
+    (is (false? (ready? [value-uuid] [nil]))
+        "A settled :missing snapshot is not an empty property value.")
+    (is (true? (ready? [value-uuid] [value-entity])))
+    (is (= value-uuid (hydrate value-uuid [value-uuid] nil))
+        "Keep the resource UUID while the value entity is loading.")
+    (is (= value-uuid (hydrate value-uuid [value-uuid] [nil]))
+        "Keep the resource UUID while the value entity snapshot is missing.")
+    (is (= value-entity (hydrate value-uuid [value-uuid] [value-entity]))
+        "Hydrate only after every value entity snapshot is present.")
+    (is (false? (#'property-component/empty-panel-property-value? value-uuid))
+        "An unhydrated value UUID must not render as an empty property row.")))
+
 (deftest property-configuration-subscribes-to-current-property-data-test
   (let [property-uuid (random-uuid)
         owner-uuid (random-uuid)
