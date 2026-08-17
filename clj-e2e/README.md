@@ -18,6 +18,10 @@ To use a custom port:
     $ bb serve --port 3001
     $ bb serve -p 3001
 
+If `pnpm watch` is already running, skip `bb serve`: shadow-cljs's dev-http
+already serves the desktop app from `../static/` on port 3001, so run tests
+with `bb test -p 3001 ...`.
+
 ## Running Tests
 
 Run all tests (namespaces ending in `-basic-test`):
