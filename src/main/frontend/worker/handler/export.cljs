@@ -39,7 +39,7 @@
 (def-thread-api :thread-api/validate-db
   [repo & [opts]]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db conn opts)))
+    (worker-db-validate/validate-db conn (or opts {}))))
 
 (defn- checksum-diagnostics
   [repo]

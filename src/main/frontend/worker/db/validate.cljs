@@ -5,9 +5,12 @@
             [datascript.impl.entity :as de]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
+            [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.validate :as db-validate]))
 
 (defn- get-property-by-title
@@ -219,43 +222,68 @@
     (when (seq tx-data')
       (ldb/transact! conn tx-data'))))
 
+(defn- closed-value-type?
+  [property]
+  (contains? db-property-type/closed-value-property-types
+             (:logseq.property/type property)))
+
 (defn- fix-non-closed-values!
+  "Retract values that are not in a property's closed-value set.
+   Only runs for property types that still support closed values. Leftover closed
+   values on a Node (or other non-enum) property must not delete live values."
   [conn]
   (let [db @conn
+        now (common-util/time-ms)
         properties (->> (ldb/get-all-properties db)
-                        (filter :block/_closed-value-property))
-        tx-data (mapcat
-                 (fn [property]
-                   (let [closed-values (:block/_closed-value-property property)
-                         matches (if (every? de/entity? closed-values)
-                                   (set (map :db/id closed-values))
-                                   (set closed-values))
-                         values (d/q
-                                 '[:find ?b ?v
-                                   :in $ ?p
-                                   :where
-                                   [?b ?p ?v]]
-                                 db
-                                 (:db/ident property))]
-                     (keep
-                      (fn [[b v]]
-                        (when-not (or (matches v)
-                                      (= :logseq.property/empty-placeholder (:db/ident (d/entity db v))))
-                          [:db/retract b (:db/ident  property) v]))
-                      values)))
-                 properties)]
-    (when (seq tx-data)
-      (prn :debug :fix-non-closed-values tx-data)
-      (ldb/transact! conn tx-data {:fix-db? true}))))
+                        (filter :block/_closed-value-property)
+                        (filter closed-value-type?))
+        retract-tx (vec
+                    (mapcat
+                     (fn [property]
+                       (let [closed-values (:block/_closed-value-property property)
+                             matches (if (every? de/entity? closed-values)
+                                       (set (map :db/id closed-values))
+                                       (set closed-values))
+                             values (d/q
+                                     '[:find ?b ?v
+                                       :in $ ?p
+                                       :where
+                                       [?b ?p ?v]]
+                                     db
+                                     (:db/ident property))]
+                         (keep
+                          (fn [[b v]]
+                            (when-not (or (matches v)
+                                          (= :logseq.property/empty-placeholder (:db/ident (d/entity db v))))
+                              [:db/retract b (:db/ident property) v]))
+                          values)))
+                     properties))
+        updated-at-tx (map (fn [eid]
+                             {:db/id eid
+                              :block/updated-at now})
+                           (distinct (map second retract-tx)))
+        tx-data (concat retract-tx updated-at-tx)]
+    (when (seq retract-tx)
+      (log/info :fix-non-closed-values {:retractions retract-tx})
+      (ldb/transact! conn tx-data {:fix-db? true}))
+    retract-tx))
 
 (defn- fix-icon-wrong-type!
   [conn]
   (let [icon (d/entity @conn :logseq.property/icon)]
     (when (= :db.type/ref (:db/valueType icon))
       (let [datoms (d/datoms @conn :avet :logseq.property/icon)
-            tx-data (cons
-                     [:db/retract (:db/id icon) :db/valueType]
-                     (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))]
+            now (common-util/time-ms)
+            retract-tx (map (fn [d] [:db/retract (:e d) (:a d)]) datoms)
+            tx-data (concat
+                     [[:db/retract (:db/id icon) :db/valueType]]
+                     retract-tx
+                     (map (fn [d]
+                            {:db/id (:e d)
+                             :block/updated-at now})
+                          datoms))]
+        (when (seq datoms)
+          (log/info :fix-icon-wrong-type {:retractions retract-tx}))
         (ldb/transact! conn tx-data {:fix-db? true})))))
 
 (defn- fix-extends-cardinality!
@@ -291,16 +319,49 @@
       (recur (validate-db-result @conn))
       result)))
 
-(defn validate-db
-  [conn & {:keys [fix] :or {fix true}}]
-  (when fix
-    (fix-extends-cardinality! conn)
-    (fix-icon-wrong-type! conn)
-    (db-migrate/ensure-built-in-data-exists! conn)
-    (fix-non-closed-values! conn)
-    (fix-num-prefix-db-idents! conn))
+(defn- notify-validation-result!
+  [{:keys [errors fix retracted-property-values counts]}]
+  (cond
+    (seq errors)
+    (do
+      (shared-service/broadcast-to-clients! :log [:db-invalid :error
+                                                  {:msg "Validation errors"
+                                                   :errors errors}])
+      (shared-service/broadcast-to-clients!
+       :notification
+       [nil :warning false nil nil
+        {:i18n-key (if fix
+                     :graph.validation/invalid-blocks-detected
+                     :graph.validation/invalid-blocks-found)
+         :i18n-args [(str (count errors))]}]))
 
-  (let [{:keys [errors datom-count entities invalid-entity-ids]}
+    (pos? retracted-property-values)
+    (shared-service/broadcast-to-clients!
+     :notification
+     [nil :warning false nil nil
+      {:i18n-key :graph.validation/values-retracted
+       :i18n-args [(str retracted-property-values)]}])
+
+    :else
+    (shared-service/broadcast-to-clients!
+     :notification
+     [nil :success false nil nil
+      {:i18n-key :graph.validation/valid
+       :i18n-args [(pr-str counts)]}])))
+
+(defn validate-db
+  [conn & {:keys [fix] :or {fix false}}]
+  (let [retracted-property-values
+        (if fix
+          (do
+            (fix-extends-cardinality! conn)
+            (fix-icon-wrong-type! conn)
+            (db-migrate/ensure-built-in-data-exists! conn)
+            (let [retractions (fix-non-closed-values! conn)]
+              (fix-num-prefix-db-idents! conn)
+              (count retractions)))
+          0)
+        {:keys [errors datom-count entities invalid-entity-ids]}
         (if fix
           (validate-and-fix-invalid-blocks! conn)
           (let [{:keys [errors] :as result} (validate-db-result @conn)]
@@ -308,23 +369,14 @@
             result))
         db @conn
         counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)]
-
-    (if errors
-      (do
-        (shared-service/broadcast-to-clients! :log [:db-invalid :error
-                                                    {:msg "Validation errors"
-                                                     :errors errors}])
-        (shared-service/broadcast-to-clients! :notification
-                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy."
-                                                    (when fix
-                                                      " Attempting to fix invalid blocks. Run validation again to see if they were fixed."))
-                                               :warning false]))
-
-      (shared-service/broadcast-to-clients! :notification
-                                            [(str "Your graph is valid! " counts)
-                                             :success false]))
+    (notify-validation-result!
+     {:errors errors
+      :fix fix
+      :retracted-property-values retracted-property-values
+      :counts counts})
     (merge {:errors errors
-            :invalid-entity-ids invalid-entity-ids}
+            :invalid-entity-ids invalid-entity-ids
+            :retracted-property-values retracted-property-values}
            counts)))
 
 (defn recompute-checksum-diagnostics

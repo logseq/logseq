@@ -101,6 +101,22 @@
                                         :data {:result {:errors nil}}}
                                        {:output-format nil})]
       (is (= "Validated graph \"foo\"" result))))
+  (testing "graph validation success mentions retracted property values"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-validate
+                                        :context {:graph "foo"}
+                                        :data {:result {:errors nil
+                                                        :retracted-property-values 2}}}
+                                       {:output-format nil})]
+      (is (= "Validated graph \"foo\". Retracted 2 property values that were not in a property's closed values." result))))
+  (testing "graph validation success mentions a single retracted property value"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-validate
+                                        :context {:graph "foo"}
+                                        :data {:result {:errors nil
+                                                        :retracted-property-values 1}}}
+                                       {:output-format nil})]
+      (is (= "Validated graph \"foo\". Retracted 1 property value that was not in a property's closed values." result))))
   (testing "graph validation error prints validation details without extra prefix"
     (let [result (format/format-result {:status :error
                                         :command :graph-validate

@@ -82,7 +82,7 @@
     (notification/show! (t :page/not-found-warning) :warning)))
 
 (defn ^:export validate-db []
-  (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
+  (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo) {:fix false}))
 
 (defn- checksum-export-file-name
   [repo]

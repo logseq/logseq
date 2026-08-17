@@ -80,7 +80,8 @@
   "Run db validation before exporting EDN"
   [repo]
   (p/let [validate-result (state/<invoke-db-worker :thread-api/validate-db
-                                                   (state/get-current-repo))
+                                                   (state/get-current-repo)
+                                                   {:fix false})
           {:keys [errors]} validate-result
           _ (when (seq errors)
               (throw (ex-info "Graph validation failed" validate-result)))

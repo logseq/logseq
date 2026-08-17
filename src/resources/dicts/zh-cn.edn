@@ -813,6 +813,7 @@
  :graph.validation/config-property-pages-enabled-warning "在 DB 图谱中不会使用，因为所有属性都有页面。"
  :graph.validation/config-unused-in-db-graphs-warning "在 DB 图谱中不会使用。"
  :graph.validation/invalid-blocks-detected "验证发现 {1} 个无效块。这些块可能存在问题。正在尝试修复无效块。请再次运行验证以检查它们是否已被修复。"
+ :graph.validation/invalid-blocks-found "验证发现 {1} 个无效块。这些块可能存在问题。"
  :graph.validation/name-reserved-characters-warning "知识库名称不能包含以下保留字符："
  :graph.validation/reserved-character-asterisk "星号"
  :graph.validation/reserved-character-backslash "反斜杠"
@@ -826,6 +827,7 @@
  :graph.validation/reserved-character-plus "加号"
  :graph.validation/reserved-character-question-mark "问号"
  :graph.validation/valid "你的图谱有效！{1}"
+ :graph.validation/values-retracted "验证已移除 {1} 个不在属性可选值中的属性值。"
 
  :header/go-back "后退"
  :header/go-forward "前进"

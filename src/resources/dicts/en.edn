@@ -813,6 +813,7 @@
  :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages."
  :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs."
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/invalid-blocks-found "Validation detected {1} invalid block(s). These blocks may be buggy."
  :graph.validation/name-reserved-characters-warning "Graph name can't contain following reserved characters:"
  :graph.validation/reserved-character-asterisk "asterisk"
  :graph.validation/reserved-character-backslash "backslash"
@@ -826,6 +827,7 @@
  :graph.validation/reserved-character-plus "plus"
  :graph.validation/reserved-character-question-mark "question mark"
  :graph.validation/valid "Your graph is valid! {1}"
+ :graph.validation/values-retracted "Validation removed {1} property value(s) that were not in a property's closed values."
 
  :header/go-back "Go back"
  :header/go-forward "Go forward"

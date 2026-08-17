@@ -980,8 +980,16 @@
                  :graph-switch "Switched to"
                  :graph-remove "Removed"
                  :graph-validate "Validated"
-                 "Updated")]
-      (str verb " graph " (pr-str graph)))))
+                 "Updated")
+          base (str verb " graph " (pr-str graph))
+          retracted (get-in data [:result :retracted-property-values])]
+      (if (and (= command :graph-validate) (pos? (or retracted 0)))
+        (str base ". Retracted "
+             (cli-humanize/format-count-with-noun retracted "property value")
+             " that "
+             (if (= 1 retracted) "was" "were")
+             " not in a property's closed values.")
+        base))))
 
 (defn- quote-cli-arg
   [value]
