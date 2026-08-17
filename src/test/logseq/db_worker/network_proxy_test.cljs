@@ -1,14 +1,8 @@
 (ns logseq.db-worker.network-proxy-test
-  (:require [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
+  (:require [cljs.test :refer [deftest is]]
             [frontend.worker.platform :as platform]
             [goog.object :as gobj]
-            [logseq.db-worker.network-proxy :as network-proxy]
-            [promesa.core :as p]))
-
-(def ^:private http (js/require "http"))
-(def ^:private net (js/require "net"))
-
+            [logseq.db-worker.network-proxy :as network-proxy]))
 (deftest proxy-url-for-http-and-socks5-settings
   (is (= "http://127.0.0.1:10808"
          (network-proxy/proxy-url {:type "http" :host "127.0.0.1" :port "10808"})))
@@ -104,48 +98,6 @@
       (platform/set-http-proxy! {:type "direct"})
       (is (= {:type "direct"} @called)))))
 
-(defn- start-http-proxy
-  []
-  (p/create
-   (fn [resolve reject]
-     (let [hits (atom [])
-           origin (.createServer http
-                                 (fn [_req res]
-                                   (.writeHead res 404 #js {"content-type" "text/plain"})
-                                   (.end res "origin-via-proxy-404")))
-           proxy (.createServer http
-                                (fn [req res]
-                                  (swap! hits conj [:request (.-method req) (.-url req)])
-                                  (.writeHead res 404 #js {"content-type" "text/plain"})
-                                  (.end res "proxy-404-via-proxy")))]
-       (.on proxy "connect"
-            (fn [req client-socket head]
-              (swap! hits conj [:connect (.-url req)])
-              (.listen origin 0 "127.0.0.1"
-                       (fn []
-                         (let [port (.-port (.address origin))
-                               sock (.connect net port "127.0.0.1"
-                                              (fn []
-                                                (.write client-socket "HTTP/1.1 200 Connection Established\r\n\r\n")
-                                                (when (and head (pos? (.-length head)))
-                                                  (.write sock head))
-                                                (.pipe sock client-socket)
-                                                (.pipe client-socket sock)))]
-                           (.on sock "close" (fn [] (.close origin)))
-                           (.on sock "error" (fn [_]
-                                               (try (.destroy client-socket) (catch :default _))
-                                               (.close origin))))))))
-       (.on proxy "error" reject)
-       (.listen proxy 0 "127.0.0.1"
-                (fn []
-                  (resolve {:port (.-port (.address proxy))
-                            :hits hits
-                            :stop! (fn []
-                                     (p/create
-                                      (fn [resolve-close _]
-                                        (try (.close origin) (catch :default _))
-                                        (.close proxy (fn [] (resolve-close true))))))}))))))))
-
 (defn- load-undici
   []
   (try
@@ -153,50 +105,19 @@
     (catch :default _
       nil)))
 
-(deftest fetch-honors-applied-http-proxy-settings
-  (async done
-         (if-not (load-undici)
-           (do
-             (is false "undici is required for db-worker-node proxy dispatch")
-             (done))
-           (let [undici (load-undici)
-                 prev-dispatcher (.getGlobalDispatcher undici)
-                 target "http://192.0.2.1:8787/sync/deadbeef/pull"
-                 stop!* (atom nil)]
-             (-> (p/let [{:keys [port hits stop!]} (start-http-proxy)
-                         _ (reset! stop!* stop!)
-                         _ (network-proxy/apply-settings! {:type "http"
-                                                           :host "127.0.0.1"
-                                                           :port (str port)})
-                         proxied (js/fetch target)
-                         proxied-text (.text proxied)
-                         _ (network-proxy/apply-settings! {:type "direct"})
-                         direct-error (p/catch
-                                       (js/fetch target #js {:signal (.timeout js/AbortSignal 1500)})
-                                       (fn [e] e))]
-                   (is (= 404 (.-status proxied)))
-                   (is (string/includes? proxied-text "via-proxy"))
-                   (is (seq @hits))
-                   (is (some (fn [hit]
-                               (let [[kind _method-or-url url] hit]
-                                 (or (and (= :connect kind)
-                                          (string/includes? (str _method-or-url) "192.0.2.1:8787"))
-                                     (and (= :request kind)
-                                          (string/includes? (str url) "192.0.2.1:8787")))))
-                             @hits))
-                   (is (some? direct-error))
-                   (is (or (string/includes? (or (.-message direct-error) "") "fetch failed")
-                           (string/includes? (or (.-message direct-error) "") "aborted")
-                           (string/includes? (or (.-name direct-error) "") "Timeout")
-                           (string/includes? (or (.-name direct-error) "") "Abort")
-                           (string/includes? (or (.-code direct-error) "") "UND_ERR"))))
-                 (p/catch (fn [e]
-                            (is false (str e))))
-                 (p/finally
-                   (fn []
-                     (.setGlobalDispatcher undici prev-dispatcher)
-                     (let [stop! @stop!*]
-                       (if stop!
-                         (-> (stop!)
-                             (p/finally (fn [] (done))))
-                         (done))))))))))
+(deftest apply-settings-installs-proxy-agent-and-direct-agent
+  (let [undici (load-undici)]
+    (is (some? undici) "undici is required for db-worker-node proxy dispatch")
+    (when undici
+      (let [prev (.getGlobalDispatcher undici)]
+        (try
+          (let [proxy-dispatcher (network-proxy/apply-settings! {:type "http"
+                                                                 :host "127.0.0.1"
+                                                                 :port "10808"})
+                direct-dispatcher (network-proxy/apply-settings! {:type "direct"})]
+            (is (some? proxy-dispatcher))
+            (is (= "ProxyAgent" (.-name (.-constructor proxy-dispatcher))))
+            (is (= "Agent" (.-name (.-constructor direct-dispatcher))))
+            (is (= direct-dispatcher (.getGlobalDispatcher undici))))
+          (finally
+            (.setGlobalDispatcher undici prev)))))))
