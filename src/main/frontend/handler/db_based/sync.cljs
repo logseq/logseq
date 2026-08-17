@@ -366,7 +366,7 @@
                                 (<remove-created-download-graph! graph)
                                 (p/resolved nil))
                               (p/then (fn [_]
-                                        (throw error))))))
+                                        (throw error)))))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
