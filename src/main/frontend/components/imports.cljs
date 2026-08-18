@@ -392,10 +392,12 @@
 (defn- <cleanup-failed-file-graph!
   [repo previous-repo]
   (-> (<remove-failed-file-graph! repo)
+      (p/then (constantly true))
       (p/catch (fn [error]
                  (log/error :import-file-graph-cleanup-failed
                             {:repo repo
-                             :error error})))
+                             :error error})
+                 false))
       (p/finally (fn []
                    (restore-repo-after-import-failure! previous-repo)))))
 
@@ -470,8 +472,11 @@
                    (log/error :import-file-graph-failed
                               {:repo @created-repo
                                :error error})
-                   (p/let [_ (<cleanup-failed-file-graph! @created-repo previous-repo)]
-                     (notification/show! (t :import/file-failed) :error)
+                   (p/let [cleanup-succeeded? (<cleanup-failed-file-graph! @created-repo previous-repo)]
+                     (notification/show! (t (if cleanup-succeeded?
+                                              :import/file-failed
+                                              :import/file-failed-cleanup))
+                                         :error)
                      (throw error))))
         (p/finally (fn []
                      (state/set-state! :graph/importing nil)
