@@ -2644,6 +2644,43 @@
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (done))))))))))
 
+(deftest import-file-graph-rejects-asset-write-failure
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  config-file {:path "logseq/config.edn"
+                               :file/content "{}"}
+                  files [config-file
+                         {:path "pages/Home.md"
+                          :file/content "- imported block"}
+                         {:path "assets/image.png"
+                          :asset/payload (js/Uint8Array.from #js [1 2 3])
+                          :asset/size 3}]
+                  import-platform
+                  (assoc-in (platform/current)
+                            [:storage :asset-write-bytes!]
+                            (fn [& _]
+                              (p/rejected (js/Error. "asset write failed"))))]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 platform/current (constantly import-platform)]
+                (-> (import-file-graph! test-repo config-file files {:user-options {}})
+                    (p/then (fn [_]
+                              (is false "expected asset write failure")))
+                    (p/catch (fn [error]
+                               (is (= :import-asset-write-failed
+                                      (:code (ex-data error))))))
+                    (p/finally (fn []
+                                 (reset! ldb/*transact-pipeline-fn pipeline-before)
+                                 (done))))))))))
+
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
    (fn []

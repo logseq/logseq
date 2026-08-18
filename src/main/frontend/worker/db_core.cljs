@@ -271,7 +271,7 @@
       (p/resolved nil))))
 
 (defn- <read-and-store-import-asset
-  [current-platform repo file assets buffer-handler]
+  [current-platform repo file assets buffer-handler asset-write-error]
   (p/let [payload (<import-file-payload current-platform file)]
     (when payload
       (let [buffer (payload-array-buffer payload)
@@ -288,9 +288,15 @@
                              :checksum checksum
                              :asset-id asset-id})
                 _ (when-not pdf-annotation?
-                    (platform/asset-write-bytes! current-platform repo
-                                                 (str asset-id "." asset-type)
-                                                 payload))]
+                    (-> (p/let [_ (platform/asset-write-bytes! current-platform repo
+                                                               (str asset-id "." asset-type)
+                                                               payload)]
+                          nil)
+                        (p/catch (fn [error]
+                                   (compare-and-set! asset-write-error nil
+                                                     {:path (:path file)
+                                                      :error error})
+                                   (throw error)))))]
           (swap! assets assoc asset-name asset-data))))))
 
 (defn- finalize-import-render-revisions!
@@ -316,6 +322,7 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [current-platform (platform/current)
           notifications (atom [])
+          asset-write-error (atom nil)
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
                              :log-fn (fn [& args]
@@ -324,9 +331,15 @@
                              :<get-file-stat (fn [path]
                                                (platform/<file-stat current-platform path))
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-store-import-asset current-platform repo file assets buffer-handler)))
+                                                     (<read-and-store-import-asset current-platform repo file assets buffer-handler
+                                                                                  asset-write-error)))
                       (dissoc :set-ui-state))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+              _ (when-let [{:keys [path error]} @asset-write-error]
+                  (throw (ex-info "Failed to write imported asset"
+                                  {:code :import-asset-write-failed
+                                   :path path}
+                                  error)))
               _ (finalize-import-render-revisions! conn)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
