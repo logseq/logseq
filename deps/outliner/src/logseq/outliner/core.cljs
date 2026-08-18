@@ -190,12 +190,14 @@
 
 (defn- ref-tag-idents
   [ref]
-  (into #{} (keep (fn [tag]
-                    (cond
-                      (keyword? tag) tag
-                      (map? tag) (:db/ident tag)
-                      :else nil))
-                  (:block/tags ref))))
+  (let [raw-tags (:block/tags ref)
+        tags (if (keyword? raw-tags) [raw-tags] raw-tags)]
+    (into #{} (keep (fn [tag]
+                      (cond
+                        (keyword? tag) tag
+                        (map? tag) (:db/ident tag)
+                        :else nil))
+                    tags))))
 
 (defn- new-page-ref?
   [ref]

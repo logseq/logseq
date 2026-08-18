@@ -143,6 +143,22 @@
            {:block/title "[[Duplicate Esc Page]]"
             :block/refs [ref]})]
       (is (empty? page-txs))
+      (is (= existing-uuid (-> block :block/refs first :block/uuid)))))
+  (testing "sync-reconstructed refs with a scalar class tag reuse the existing page uuid"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          [_ existing-uuid] (outliner-page/create! conn "Duplicate Esc Page" {})
+          ref {:block/name "duplicate esc page"
+               :block/title "Duplicate Esc Page"
+               :block/uuid (random-uuid)
+               :block/tags :logseq.class/Page}
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title "[[Duplicate Esc Page]]"
+            :block/refs [ref]})]
+      (is (empty? page-txs))
       (is (= existing-uuid (-> block :block/refs first :block/uuid))))))
 
 (deftest resolve-page-refs-recognizes-db-graph-journal-tags
