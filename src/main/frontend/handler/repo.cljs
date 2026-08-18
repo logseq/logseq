@@ -185,11 +185,13 @@
                             :error error})
                 (let [data (assoc (or (ex-data error) {})
                                   :repo full-graph-name
-                                  :graph-created? @graph-created?)]
+                                  :graph-created? @graph-created?)
+                      code (or (:code data)
+                               (when (persist-db/db-worker-unavailable-error? error)
+                                 :db-worker-unavailable)
+                               :graph-create-failed)]
                   (throw (ex-info "Create graph failed"
-                                  (if (:code data)
-                                    data
-                                    (assoc data :code :graph-create-failed))
+                                  (assoc data :code code)
                                   error))))))))
 
 (defn new-db!

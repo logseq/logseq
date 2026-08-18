@@ -407,12 +407,14 @@
       (p/catch
        (fn [error]
          (let [{:keys [graph-created? repo]} (ex-data error)
-               repo (or @created-repo (when graph-created? repo))]
+               unavailable? (persist-db/db-worker-unavailable-error? error)
+               repo (or @created-repo
+                        (when (or graph-created? unavailable?) repo))]
            (when repo
              (reset! created-repo repo))
            (if (and repo
                     (< attempt file-graph-import-max-attempts)
-                    (persist-db/db-worker-unavailable-error? error))
+                    unavailable?)
              (do
                (log/warn :import-file-graph-retrying
                          {:repo repo
