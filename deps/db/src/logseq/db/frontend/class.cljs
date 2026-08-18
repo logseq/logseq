@@ -207,13 +207,11 @@
 
 (defn- hidden-class-object?
   [e]
-  (or (entity-util/hidden? e)
-      ;; Private built-in properties are internal. User properties with
-      ;; :logseq.property/hide? are hide-by-default for node display and remain
-      ;; visible in class object tables such as #Property.
-      (and (entity-util/property? e)
-           (entity-util/built-in? e)
-           (not (:logseq.property/public? e)))))
+  (if (entity-util/property? e)
+    (or (:logseq.property/deleted-at e)
+        (and (entity-util/built-in? e)
+             (not (:logseq.property/public? e))))
+    (entity-util/hidden? e)))
 
 (defn get-class-objects
   "Get class objects including children classes'"
