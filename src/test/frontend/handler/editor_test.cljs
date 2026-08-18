@@ -2478,6 +2478,34 @@
                 [:hide :editor.commands/page-search 0 {:skip-focus? true}]]
                @calls)))
       (state/replace-state! previous-state)))
+  (testing "Escape consumes every editor popup action before popup registration"
+    (let [previous-state (state/get-state)]
+      (doseq [action editor/editor-popup-actions]
+        (let [calls (atom [])
+              event (doto (js-obj)
+                      (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                      (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))]
+          (state/set-editor-action! action)
+          (with-redefs [shui-popup/get-popups (constantly [])]
+            (is (true? (editor/dismiss-editor-popup-on-escape! event)))
+            (is (nil? (state/get-editor-action)))
+            (is (= [:prevent-default :stop-propagation] @calls)))))
+      (state/replace-state! previous-state)))
+  (testing "Escape consumes an editor popup before its action is registered"
+    (let [calls (atom [])
+          event (doto (js-obj)
+                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          previous-state (state/get-state)]
+      (state/set-editor-action! nil)
+      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/code-block-mode-picker}])
+                    shui-popup/hide! (fn [& args]
+                                       (swap! calls conj (into [:hide] args)))]
+        (is (true? (editor/dismiss-editor-popup-on-escape! event)))
+        (is (= [:prevent-default :stop-propagation
+                [:hide :editor.commands/code-block-mode-picker 0 {:skip-focus? true}]]
+               @calls)))
+      (state/replace-state! previous-state)))
   (testing "Escape with no editor popup does not consume the event"
     (let [event (doto (js-obj)
                   (aset "preventDefault" (fn []))

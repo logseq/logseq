@@ -182,6 +182,29 @@
         (is (ldb/journal? journal))
         (is (= journal-day (:block/journal-day journal)))))))
 
+(deftest resolve-page-refs-reuses-existing-same-name-journal
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        title "2026-07-27"
+        existing-uuid (random-uuid)]
+    (d/transact! conn [{:block/name title
+                        :block/title title
+                        :block/uuid existing-uuid
+                        :block/journal-day 20260727
+                        :block/tags :logseq.class/Journal}])
+    (doseq [tags [[:logseq.class/Journal] :logseq.class/Journal]]
+      (let [{:keys [block page-txs]}
+            (#'outliner-core/resolve-page-refs
+             @conn
+             {:block/title (str "[[" title "]]")
+              :block/refs [{:block/name title
+                            :block/title title
+                            :block/uuid (random-uuid)
+                            :block/tags tags}]})]
+        (is (empty? page-txs))
+        (is (= existing-uuid (-> block :block/refs first :block/uuid)))))))
+
 (deftest insert-blocks-does-not-duplicate-existing-page-ref
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
