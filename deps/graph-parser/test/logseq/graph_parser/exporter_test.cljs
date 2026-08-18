@@ -838,6 +838,14 @@ abc
      "assets/paper.pdf"]
     "Read [the paper]([[UUID]])"))
 
+(deftest asset-path-in-alt-text-is-not-ignored
+  (let [ignored-assets (atom [])
+        title "![assets/foo.png](assets/foo.png)"]
+    (is (= "![assets/foo.png]([[UUID]])"
+           (@#'gp-exporter/update-asset-links-in-block-title
+            title {"assets/foo.png" "UUID"} ignored-assets)))
+    (is (empty? @ignored-assets))))
+
 (deftest-async import-asset-link-preserves-alt-text
   (p/let [graph-dir (write-temp-file-graph
                      {"logseq/config.edn" "{}"
