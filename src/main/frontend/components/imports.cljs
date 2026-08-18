@@ -414,7 +414,10 @@
         {:repo repo :result result})
       (p/catch
        (fn [error]
-         (let [repo @created-repo]
+         (let [{:keys [graph-created? repo]} (ex-data error)
+               repo (or @created-repo (when graph-created? repo))]
+           (when repo
+             (reset! created-repo repo))
            (if (and repo
                     (< attempt file-graph-import-max-attempts)
                     (persist-db/db-worker-unavailable-error? error))
