@@ -404,7 +404,7 @@
                                               serialized-config-file
                                               serialized-files
                                               options)]
-        {:repo repo :result result})
+        result)
       (p/catch
        (fn [error]
          (let [{:keys [graph-created? repo]} (ex-data error)
@@ -442,14 +442,13 @@
                 serialized-files (<serialize-import-files *files)
                 serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
                 options (build-file-graph-worker-options user-options config/config-default-content)
-                {:keys [repo result]} (<invoke-file-graph-import-with-recovery!
-                                       created-repo
-                                       graph-name
-                                       serialized-config-file
-                                       serialized-files
-                                       options
-                                       1)
-                import-result result
+                import-result (<invoke-file-graph-import-with-recovery!
+                               created-repo
+                               graph-name
+                               serialized-config-file
+                               serialized-files
+                               options
+                               1)
                 _ (doseq [notification (:notifications import-result)]
                     (show-notification notification))]
           (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
