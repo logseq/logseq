@@ -1,6 +1,5 @@
 package com.logseq.app
 
-import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.clickable
@@ -26,8 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,7 +41,6 @@ import com.getcapacitor.annotation.CapacitorPlugin
 @CapacitorPlugin(name = "NativeTopBarPlugin")
 class NativeTopBarPlugin : Plugin() {
   private var topBarView: NativeTopBarView? = null
-  private var originalWebViewPaddingTop: Int? = null
 
   @PluginMethod
   fun configure(call: PluginCall) {
@@ -64,11 +60,8 @@ class NativeTopBarPlugin : Plugin() {
         tintHex?.takeIf { it.isNotBlank() }
           ?.let { NativeUiUtils.parseColor(it, LogseqTheme.current().tint) }
 
-      val webView = bridge.webView
-
       if (hidden) {
         removeBar()
-        restorePadding(webView)
         call.resolve()
         return@runOnUiThread
       }
@@ -82,9 +75,6 @@ class NativeTopBarPlugin : Plugin() {
       }
 
       bar.bind(title, titleClickable, leftButtons, rightButtons, tintColorOverride)
-      bar.post {
-        adjustWebViewPadding(webView, bar.height)
-      }
       call.resolve()
     }
   }
@@ -107,40 +97,6 @@ class NativeTopBarPlugin : Plugin() {
       root.removeView(view)
     }
     topBarView = null
-  }
-
-  private fun statusBarInset(webView: android.webkit.WebView?): Int {
-    if (webView == null) return 0
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      webView.rootWindowInsets?.getInsets(android.view.WindowInsets.Type.statusBars())?.top ?: 0
-    } else {
-      @Suppress("DEPRECATION")
-      webView.rootWindowInsets?.stableInsetTop ?: 0
-    }
-  }
-
-  private fun adjustWebViewPadding(webView: android.webkit.WebView?, barHeight: Int) {
-    if (webView == null) return
-    if (originalWebViewPaddingTop == null) {
-      originalWebViewPaddingTop = webView.paddingTop
-    }
-    val insetTop = statusBarInset(webView)
-    val target = (barHeight - insetTop).coerceAtLeast(0)
-      .takeIf { it > 0 } ?: NativeUiUtils.dp(webView.context, 56f)
-    webView.setPadding(
-      webView.paddingLeft,
-      target,
-      webView.paddingRight,
-      webView.paddingBottom
-    )
-  }
-
-  private fun restorePadding(webView: android.webkit.WebView?) {
-    if (webView == null) return
-    val original = originalWebViewPaddingTop
-    if (original != null) {
-      webView.setPadding(webView.paddingLeft, original, webView.paddingRight, webView.paddingBottom)
-    }
   }
 
   private fun parseButtons(array: JSArray?): List<ButtonSpec> {
@@ -227,21 +183,9 @@ private fun TopBarContent(
   onTap: (String) -> Unit
 ) {
   val theme by LogseqTheme.colors.collectAsState()
-  val view = LocalView.current
-  val density = LocalDensity.current
   val background = ComposeColor(theme.background)
   val tint = tintOverride?.let { ComposeColor(it) } ?: ComposeColor(theme.tint)
   val contentTint = tint.copy(alpha = 0.8f)
-  val statusBarTopPx = remember(view) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      view.rootWindowInsets?.getInsets(android.view.WindowInsets.Type.statusBars())?.top ?: 0
-    } else {
-      @Suppress("DEPRECATION")
-      view.rootWindowInsets?.stableInsetTop ?: 0
-    }
-  }
-  val statusBarTop = with(density) { statusBarTopPx.toDp() }
-  val compactTopInset = maxOf(statusBarTop, 8.dp)
 
   Surface(
     color = background,
@@ -252,7 +196,7 @@ private fun TopBarContent(
         modifier = Modifier
           .fillMaxWidth()
           .heightIn(min = 42.dp)
-          .padding(start = 12.dp, end = 8.dp, top = compactTopInset + 8.dp, bottom = 16.dp),
+          .padding(start = 12.dp, end = 8.dp, top = 16.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Row(
