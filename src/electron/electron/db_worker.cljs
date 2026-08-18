@@ -278,10 +278,6 @@
   ([mgr repo window-id]
    (ensure-stopped! mgr repo window-id)))
 
-(defn release-repo!
-  [repo]
-  (ensure-repo-stopped! manager repo))
-
 (defn- throw-if-stop-failed!
   [stop-result]
   (when-not (or (:ok? stop-result)
@@ -291,16 +287,18 @@
   stop-result)
 
 (defn delete-repo!
-  "Detach any Desktop runtime, stop a live db-worker for repo even if another
-  owner started it, then unlink the graph directory."
+  "Stop a live db-worker for repo even if another owner started it, detach any
+  Desktop runtime, then unlink the graph directory."
   ([repo]
    (delete-repo! manager repo))
   ([mgr repo]
-   (p/let [_ (ensure-repo-stopped! mgr repo)
-           stop-result (cli-server/stop-server! {:owner-source :electron}
+   (p/let [stop-result (cli-server/stop-server! {:owner-source :electron}
                                                 repo
                                                 {:allow-cross-owner? true})]
      (throw-if-stop-failed! stop-result)
+     (swap! (:state mgr)
+            (fn [current]
+              (first (detach-repo current (repo-key repo)))))
      (cli-common/unlink-graph! repo))))
 
 (defn stop-all-managed!

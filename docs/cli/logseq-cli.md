@@ -198,7 +198,7 @@ Server ownership behavior:
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
 - Normal connection startup compares the discovered server revision with the local requester revision. Missing revision is treated as mismatch.
 - On revision mismatch, startup attempts one graceful-first restart of the exact discovered server for the same repo/root-dir, even if the stale server has a different owner source. If the replacement still reports a different revision, startup fails fast and does not return an incompatible endpoint.
-- Manual `server stop` and `server restart` keep owner protections; cross-owner stop is only used by the automatic revision-mismatch startup path after the target mismatch is proven.
+- Manual `server stop` and `server restart` keep owner protections. Automatic revision-mismatch recovery, orphan cleanup, `graph remove`, and Desktop graph deletion may stop a worker started by another owner.
 - `server list` human output includes both `OWNER` and `REVISION` columns.
 - `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
 - `server cleanup` remains a manual maintenance command. It checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
