@@ -55,24 +55,13 @@
   ;; Can't use :block/tags because this is used in some perf sensitive fns like ldb/transact!
   (some? (:logseq.property.asset/type entity)))
 
-(defn- entity-hidden-by-hide?
-  "`:logseq.property/hide?` on a property means hide-from-node-display
-  (\"Hide by default\"), not that the property page itself is hidden.
-  On pages and blocks it still hides the entity."
-  [entity]
-  (and (:logseq.property/hide? entity)
-       (not (property? entity))))
-
 (defn hidden?
-  "True when a page or block should be omitted from search, class tables, and
-  similar listings. `:logseq.property/hide?` on a property is hide-by-default
-  for node display and does not hide the property entity."
   [page]
   (letfn [(hidden-parent? [entity seen]
             (when (and entity
                        (:db/id entity)
                        (not (contains? seen (:db/id entity))))
-              (or (entity-hidden-by-hide? entity)
+              (or (:logseq.property/hide? entity)
                   (:logseq.property/deleted-at entity)
                   (hidden-parent? (:block/parent entity) (conj seen (:db/id entity))))))]
     (boolean
@@ -80,7 +69,7 @@
        (if (string? page)
          (string/starts-with? page "$$$")
          (when (or (map? page) (de/entity? page))
-           (or (entity-hidden-by-hide? page)
+           (or (:logseq.property/hide? page)
                (:logseq.property/deleted-at page)
                (hidden-parent? (:block/parent page) #{}))))))))
 

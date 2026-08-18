@@ -60,7 +60,9 @@
            (filter ldb/page?)
            (remove ldb/hidden?)
            (remove (fn [entity]
-                     (string/blank? (:block/title entity))))
+                     (or (and (ldb/property? entity)
+                              (true? (:logseq.property/hide? entity)))
+                         (string/blank? (:block/title entity)))))
            vec))))
 
 (defn- favorite-page-ops
