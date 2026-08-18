@@ -1722,9 +1722,9 @@
           _ (or block (throw (ex-info (str block-id " not exists")
                                       {:block-id block-id})))
           text (:block/title block)
-          content (if asset-block
-                    (string/replace text (ref/->page-ref (:block/uuid asset-block)) "")
-                    (string/replace text full-text ""))]
+          content (if full-text
+                    (string/replace text full-text "")
+                    (string/replace text (ref/->page-ref (:block/uuid asset-block)) ""))]
     (save-block! repo block content)
     (when (and local? delete-local?)
       (when asset-block

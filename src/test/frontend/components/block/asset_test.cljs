@@ -17,6 +17,13 @@
             {:block/title "test"}
             :pdf)))))
 
+(deftest link-title-test
+  (let [asset {:block/title "file-name"}]
+    (testing "uses an asset reference label"
+      (is (= "some alt" (block-asset/link-title asset "some alt"))))
+    (testing "falls back to the asset title without a reference label"
+      (is (= "file-name" (block-asset/link-title asset nil))))))
+
 (deftest asset-relative-path-test
   (testing "builds the graph-relative asset file path from an asset block"
     (let [asset-uuid (random-uuid)]

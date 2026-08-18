@@ -34,6 +34,13 @@
   (cond-> (str (:block/title asset-block))
     ext (str "." (name ext))))
 
+(defn link-title
+  "Uses a reference label when present, otherwise the asset's title."
+  [asset-block label]
+  (if (nil? label)
+    (:block/title asset-block)
+    label))
+
 (defn asset-file-name
   [asset-block]
   (str (:block/uuid asset-block) "." (:logseq.property.asset/type asset-block)))

@@ -261,7 +261,8 @@
         (merge
          (cond-> {:loading "lazy"
                   :referrerPolicy "no-referrer"
-                  :src src'}
+                  :src src'
+                  :alt title}
            (not gallery-view?)
            (assoc :title title))
          metadata)]
@@ -1129,7 +1130,9 @@
 
 (hsx/defc asset-cp
   [config block]
-  (let [asset-type (:logseq.property.asset/type block)
+  (let [title (block-asset/link-title block (:asset-link-title config))
+        full-text (:ref-full-text config)
+        asset-type (:logseq.property.asset/type block)
         file (block-asset/asset-file-name block)
         file-exists?* (hooks/use-memo #(atom nil) [(:block/uuid block) asset-type])
         requested?* (hooks/use-memo #(atom false) [(:block/uuid block)])
@@ -1191,10 +1194,10 @@
                   (asset-link (cond-> (assoc config :asset-block block)
                                 (not gallery-image?)
                                 (assoc :image-placeholder img-placeholder))
-                              (:block/title block)
+                              title
                               href
                               img-metadata
-                              nil)
+                              full-text)
                   (and (not gallery-image?)
                        (block-asset/show-missing-file-warning? block file-exists?))
                   (missing-asset-file
@@ -1261,7 +1264,7 @@
     (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
       (cond
         (and asset? (img-audio-video? block))
-        (asset-cp config block)
+        (asset-cp (assoc config :asset-link-title (:label config')) block)
 
         (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
         [:div.draw {:on-click (fn [e]
@@ -1559,7 +1562,7 @@
       (let [label* (if (seq (mldoc/plain->text label)) label nil)]
         (if (and (string? page) (string/blank? page))
           [:span (ref/->page-ref page)]
-          (page-reference config page label*)))
+          (page-reference (assoc config :ref-full-text full_text) page label*)))
 
       ["Embed_data" src]
       (image-link config url src nil metadata full_text)

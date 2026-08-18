@@ -1431,11 +1431,14 @@
 
 (defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
   (reduce (fn [acc [asset-name asset-uuid]]
-            (let [new-title (string/replace acc
-                                            (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
-                                                             (common-util/escape-regex-chars asset-name)
-                                                             "\\)(\\{[^}]*\\})?"))
-                                            (page-ref/->page-ref asset-uuid))]
+            (let [new-title (string/replace
+                             acc
+                             (re-pattern (str "(!?)\\[([^\\]]*?)\\]\\([^\\)]*?"
+                                              (common-util/escape-regex-chars asset-name)
+                                              "\\)(\\{[^}]*\\})?"))
+                             (fn [[_ image-prefix label]]
+                               (str image-prefix "[" label "]("
+                                    (page-ref/->page-ref asset-uuid) ")")))]
               (when (string/includes? new-title asset-name)
                 (swap! ignored-assets conj
                        {:reason "Some asset links were not updated to block references"

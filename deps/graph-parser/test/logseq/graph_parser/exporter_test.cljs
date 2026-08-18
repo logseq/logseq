@@ -821,17 +821,42 @@ abc
     ;; Standard image link with metadata
     ["![greg-popovich-thumbs-up.png](../assets/greg-popovich-thumbs-up_1704749687791_0.png){:height 288, :width 100} says pop"
      "assets/greg-popovich-thumbs-up_1704749687791_0.png"]
-    "[[UUID]] says pop"
+    "![greg-popovich-thumbs-up.png]([[UUID]]) says pop"
 
     ;; Image link with no metadata
     ["![some-title](../assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png)"
      "assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png"]
-    "[[UUID]]"
+    "![some-title]([[UUID]])"
 
     ;; 2nd link
     ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
      "assets/subdir/partydino.gif"]
-    "[[FIRST UUID]] and [[UUID]]"))
+    "[[FIRST UUID]] and ![dino!]([[UUID]])"
+
+    ;; File link
+    ["Read [the paper](../assets/paper.pdf)"
+     "assets/paper.pdf"]
+    "Read [the paper]([[UUID]])"))
+
+(deftest-async import-asset-link-preserves-alt-text
+  (p/let [graph-dir (write-temp-file-graph
+                     {"logseq/config.edn" "{}"
+                      "pages/assets.md" "- ![some alt](../assets/foo.png)\n"
+                      "assets/foo.png" "png"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          {:keys [import-state]} (import-file-graph-to-db graph-dir conn {})
+          asset (db-test/find-block-by-content @conn "foo")
+          source-block (db-test/find-block-by-content @conn #"some alt")]
+    (is (some? asset) "Asset is imported")
+    (is (= (str "![some alt]("
+                (page-ref/->page-ref (:block/uuid asset))
+                ")")
+           (:block/title source-block))
+        "Asset reference keeps its original alt text")
+    (is (empty? @(:ignored-assets import-state)) "No assets are ignored")
+    (is (empty? (:errors (db-validate/validate-local-db! @conn)))
+        "Imported graph validates")))
 
 (deftest-async import-missing-local-pdf-asset-link-is-ignored-quietly
   (let [graph-dir (write-temp-file-graph
