@@ -178,7 +178,8 @@
        (prn "New db created: " full-graph-name)
        full-graph-name)
      (p/catch (fn [error]
-                (notification/show! (t :graph/create-error) :error)
+                (when-not file-graph-import?
+                  (notification/show! (t :graph/create-error) :error))
                 (log/error :graph-create-failed
                            {:repo full-graph-name
                             :error error})

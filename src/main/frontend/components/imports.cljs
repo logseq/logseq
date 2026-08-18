@@ -469,6 +469,7 @@
                               {:repo @created-repo
                                :error error})
                    (p/let [_ (<cleanup-failed-file-graph! @created-repo previous-repo)]
+                     (notification/show! (t :import/file-failed) :error)
                      (throw error))))
         (p/finally (fn []
                      (state/set-state! :graph/importing nil)

@@ -922,6 +922,7 @@
  :import/default-db-graph-behavior "Default behavior for DB graphs"
  :import/empty-graph-name "Empty graph name."
  :import/extract-inline-code-snippets "Extract inline code snippets as child blocks"
+ :import/file-failed "Import failed. Please try again."
  :import/file-finished "Import finished!"
  :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"

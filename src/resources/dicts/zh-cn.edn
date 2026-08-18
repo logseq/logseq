@@ -922,6 +922,7 @@
  :import/default-db-graph-behavior "数据库图谱的默认行为"
  :import/empty-graph-name "图谱名称不能为空。"
  :import/extract-inline-code-snippets "将行内代码片段提取为子块"
+ :import/file-failed "导入失败，请重试。"
  :import/file-finished "导入完成！"
  :import/file-to-db-desc "将基于文件的 Logseq 知识库文件夹导入到新的 DB 知识库"
  :import/file-to-db-title "文件到 DB 知识库"
