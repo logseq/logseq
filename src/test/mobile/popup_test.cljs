@@ -82,3 +82,34 @@
         (reset! mobile-state/*popup-data nil)
         (reset! mobile-state/*popup-presenting? false)
         (reset! popup/*pending-native-sheet-data nil)))))
+
+(deftest native-sheet-content-ready-follows-popup-render
+  (testing "the native sheet waits until its WebView content has painted"
+    (let [original-raf (.-requestAnimationFrame js/window)
+          raf-callbacks (atom [])
+          content-ready-count (atom 0)
+          plugin #js {:contentReady (fn [_]
+                                      (swap! content-ready-count inc))}]
+      (set! (.-requestAnimationFrame js/window)
+            (fn [callback]
+              (swap! raf-callbacks conj callback)))
+      (reset! mobile-state/*popup-presenting? false)
+      (try
+        (with-redefs [mobile-util/native-bottom-sheet plugin]
+          (#'popup/handle-native-sheet-state! #js {:presenting true})
+
+          (is @mobile-state/*popup-presenting?)
+          (is (zero? @content-ready-count))
+          (is (= 1 (count @raf-callbacks)))
+
+          (when-let [first-frame (first @raf-callbacks)]
+            (first-frame)
+            (is (zero? @content-ready-count))
+            (is (= 2 (count @raf-callbacks))))
+
+          (when-let [second-frame (second @raf-callbacks)]
+            (second-frame)
+            (is (= 1 @content-ready-count))))
+        (finally
+          (set! (.-requestAnimationFrame js/window) original-raf)
+          (reset! mobile-state/*popup-presenting? false))))))

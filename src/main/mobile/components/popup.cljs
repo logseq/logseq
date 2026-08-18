@@ -70,11 +70,13 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [presenting? (or (.-presenting data) (.-presented data))
+  (let [presenting? (.-presenting data)
         dismissing? (.-dismissing data)]
     (cond
       presenting?
-      (mobile-state/set-popup-presenting! true)
+      (do
+       (mobile-state/set-popup-presenting! true)
+       (notify-native-sheet-content-ready!))
 
       dismissing?
       (p/do!
