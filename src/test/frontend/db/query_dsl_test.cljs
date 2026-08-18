@@ -233,6 +233,31 @@
     (test-helper/with-config {}
       (block-property-queries-test))))
 
+(deftest default-property-page-ref-text-query
+  (load-test-files
+   {:properties
+    {:mixed {:logseq.property/type :default
+             :db/cardinality :db.cardinality/many}}
+    :pages-and-blocks
+    [{:page {:block/title "Equivalent Value"}
+      :blocks [{:block/title "plain holder"
+                :build/properties {:mixed "Equivalent Value"}}
+               {:block/title "page-ref holder"
+                :build/properties {:mixed "[[Equivalent Value]]"}}]}]})
+
+  (is (= #{"plain holder" "page-ref holder"}
+         (set (map :block/title
+                   (dsl-query "(property mixed [[Equivalent Value]])"))))
+      "Page-ref text values and equivalent plain text values both match")
+  (is (= ["plain holder"]
+         (map :block/title
+              (dsl-query "(property mixed \"Equivalent Value\")")))
+      "Plain text filtering keeps exact-match behavior")
+  (is (= #{"plain holder" "page-ref holder"}
+         (set (map :block/title
+                   (dsl-query "(property mixed)"))))
+      "Unbound property values keep matching all values"))
+
 (deftest db-only-block-property-queries
   (load-test-files
    {:properties

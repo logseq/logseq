@@ -368,28 +368,42 @@
                           (or (:block/title value)
                               (:logseq.property/value value)))
                         (:logseq.property/scalar-default-value property))
-        default-value? (and (some? v') (= default-value v'))
-        rule (if private-property?
-               (cond
-                 (and ref-type? default-value?)
-                 :private-ref-property-with-default
-                 ref-type?
-                 :private-ref-property
-                 default-value?
-                 :private-scalar-property-with-default
-                 :else
-                 :private-scalar-property)
-               (cond
-                 (and ref-type? default-value?)
-                 :ref-property-with-default
-                 ref-type?
-                 :ref-property
-                 default-value?
-                 :scalar-property-with-default
-                 :else
-                 :scalar-property))]
-    {:query (list (symbol (name rule)) '?b k v')
-     :rules [rule]}))
+        get-rule (fn [value]
+                   (let [default-value? (and (some? value) (= default-value value))]
+                     (if private-property?
+                       (cond
+                         (and ref-type? default-value?)
+                         :private-ref-property-with-default
+                         ref-type?
+                         :private-ref-property
+                         default-value?
+                         :private-scalar-property-with-default
+                         :else
+                         :private-scalar-property)
+                       (cond
+                         (and ref-type? default-value?)
+                         :ref-property-with-default
+                         ref-type?
+                         :ref-property
+                         default-value?
+                         :scalar-property-with-default
+                         :else
+                         :scalar-property))))
+        rule (get-rule v')
+        raw-page-ref-value (when (and (= :default (:logseq.property/type property))
+                                      (page-ref/page-ref? (str v)))
+                             (str v))
+        raw-page-ref-rule (when raw-page-ref-value (get-rule raw-page-ref-value))
+        rule-clause (fn [rule value]
+                      (list (symbol (name rule)) '?b k value))]
+    {:query (if raw-page-ref-value
+              (list 'or
+                    (rule-clause rule v')
+                    (rule-clause raw-page-ref-rule raw-page-ref-value))
+              (rule-clause rule v'))
+     :rules (cond-> [rule]
+              (and raw-page-ref-rule (not= rule raw-page-ref-rule))
+              (conj raw-page-ref-rule))}))
 
 (defn- build-property-one-arg
   [e {:keys [private-property?]}]
