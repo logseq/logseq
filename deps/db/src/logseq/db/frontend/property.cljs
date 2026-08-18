@@ -425,7 +425,6 @@
      :logseq.property/exclude-from-graph-view {:title "Excluded from Graph view?"
                                                :schema
                                                {:type :checkbox
-                                                :hide? true
                                                 :view-context :page
                                                 :public? true}}
 

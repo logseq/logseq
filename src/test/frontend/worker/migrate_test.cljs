@@ -405,3 +405,21 @@
     (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
+
+(deftest migrate-65-34-shows-exclude-from-graph-view-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 33}}
+                       {:db/ident :logseq.property/exclude-from-graph-view
+                        :logseq.property/hide? true}])
+
+    (is (true? (:logseq.property/hide?
+                (d/entity @conn :logseq.property/exclude-from-graph-view))))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 34})
+
+    (is (= {:major 65 :minor 34}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (nil? (:logseq.property/hide?
+               (d/entity @conn :logseq.property/exclude-from-graph-view))))))

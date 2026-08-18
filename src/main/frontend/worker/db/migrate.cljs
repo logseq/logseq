@@ -120,6 +120,12 @@
              [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
       [:logseq.class/Comments :logseq.class/Comment]))))
 
+(defn- show-exclude-from-graph-view-property
+  [db]
+  (when-let [property (d/entity db :logseq.property/exclude-from-graph-view)]
+    (when (:logseq.property/hide? property)
+      [[:db/retract (:db/id property) :logseq.property/hide?]])))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -162,7 +168,8 @@
                           :logseq.property.view/gallery-display-properties
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
-                          :logseq.property.view/gallery-card-height]}]])
+                          :logseq.property.view/gallery-card-height]}]
+   ["65.34" {:fix show-exclude-from-graph-view-property}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

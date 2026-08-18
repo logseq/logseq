@@ -63,6 +63,23 @@
       (is (contains? full-ids :user.property/author))
       (is (not (contains? hidden-ids :user.property/author))))))
 
+(deftest display-properties-shows-graph-exclusion-on-tags
+  (let [conn (d/create-conn db-schema/schema)
+        tag-uuid #uuid "22222222-2222-2222-2222-222222222222"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/ident :user.class/Topic
+                        :block/title "Topic"
+                        :block/name "topic"
+                        :block/uuid tag-uuid
+                        :block/tags :logseq.class/Tag
+                        :logseq.property/exclude-from-graph-view true}])
+    (let [tag (d/entity @conn [:block/uuid tag-uuid])
+          result (worker-property/display-properties @conn tag {:page-title? true} false)
+          full-ids (set (map :property-id (:full-properties result)))
+          hidden-ids (set (map :property-id (:hidden-properties result)))]
+      (is (contains? full-ids :logseq.property/exclude-from-graph-view))
+      (is (not (contains? hidden-ids :logseq.property/exclude-from-graph-view))))))
+
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
