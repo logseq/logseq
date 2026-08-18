@@ -520,7 +520,10 @@
                        (when (= 'pull (first expr))
                          (last expr))))]
     (if (and (seq properties) (not= properties ['*]))
-      properties
+      (cond-> properties
+        (and (some entity-util/asset? entities)
+             (not (some #{:logseq.property.asset/type} properties)))
+        (conj :logseq.property.asset/type))
       (distinct (mapcat keys entities)))))
 
 (defn- linked-references-page-list-view-data
