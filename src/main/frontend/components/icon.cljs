@@ -6,7 +6,6 @@
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
@@ -24,24 +23,6 @@
             [io.factorhouse.hsx.core :as hsx]))
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
-
-(defn- debug-icon-summary
-  [icon']
-  (if (map? icon')
-    (select-keys icon' [:type :id :color])
-    icon'))
-
-(defn- debug-log!
-  [hypothesis-id location message data]
-  (ipc/ipc "appendDebugLog"
-           "/opt/cursor/logs/debug.log"
-           (str (js/JSON.stringify
-                 (clj->js {:hypothesisId hypothesis-id
-                           :location location
-                           :message message
-                           :data data
-                           :timestamp (.now js/Date)}))
-                "\n")))
 
 (defn icon
   [icon' & [opts]]
@@ -74,87 +55,32 @@
 
 (defn get-node-icon
   [node-entity {:keys [ignore-current-icon?]
-                :or {ignore-current-icon? false}
-                :as opts}]
-  ;; #region agent log
-  (debug-log! "B" "frontend.components.icon/get-node-icon:entry"
-              "get-node-icon input"
-              {:db-id (:db/id node-entity)
-               :opts (select-keys opts [:ignore-current-icon? :not-text-or-page? :link?])
-               :tag-count (count (:block/tags node-entity))
-               :entity-keys (mapv str (keys node-entity))})
-  ;; #endregion
-  (let [own-icon (when-not ignore-current-icon?
-                   (get node-entity :logseq.property/icon))
-        asset-type (:logseq.property.asset/type node-entity)
-        sorted-tags (sort-by :db/id (:block/tags node-entity))
-        first-tag-icon (some :logseq.property/icon sorted-tags)
-        class? (boolean (entity/class? node-entity))
-        property? (boolean (entity/property? node-entity))
-        page? (boolean (entity/page? node-entity))
-        result (or own-icon
-                   (cond
-                     class?
-                     "hash"
-                     property?
-                     "letter-p"
-                     page?
-                     "file"
-                     (= asset-type "pdf")
-                     "book"
-                     (some? first-tag-icon)
-                     first-tag-icon
-                     :else
-                     "point-filled"))]
-    ;; #region agent log
-    (debug-log! "A,B,D" "frontend.components.icon/get-node-icon:candidates"
-                "icon candidates before precedence"
-                {:db-id (:db/id node-entity)
-                 :own-icon (debug-icon-summary own-icon)
-                 :asset-type asset-type
-                 :class? class?
-                 :property? property?
-                 :page? page?
-                 :tags (mapv (fn [tag]
-                               {:db-id (:db/id tag)
-                                :ident (some-> (:db/ident tag) str)
-                                :icon (debug-icon-summary (:logseq.property/icon tag))})
-                             sorted-tags)
-                 :first-tag-icon (debug-icon-summary first-tag-icon)})
-    ;; #endregion
-    ;; #region agent log
-    (debug-log! "A,D" "frontend.components.icon/get-node-icon:exit"
-                "selected node icon"
-                {:db-id (:db/id node-entity)
-                 :result (debug-icon-summary result)})
-    ;; #endregion
-    result))
+                :or {ignore-current-icon? false}}]
+  (or (when-not ignore-current-icon?
+        (get node-entity :logseq.property/icon))
+      (let [asset-type (:logseq.property.asset/type node-entity)
+            first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
+        (cond
+          (entity/class? node-entity)
+          "hash"
+          (entity/property? node-entity)
+          "letter-p"
+          (= asset-type "pdf")
+          "book"
+          (some? first-tag-icon)
+          first-tag-icon
+          (entity/page? node-entity)
+          "file"
+          :else
+          "point-filled"))))
 
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
         node-icon (if (:link? opts)
                     "arrow-narrow-right"
-                    (get-node-icon node-entity opts))
-        suppressed? (or (string/blank? node-icon)
-                        (and (contains? #{"point-filled" "letter-p" "hash" "file"} node-icon)
-                             (:not-text-or-page? opts)))]
-    ;; #region agent log
-    (debug-log! "C" "frontend.components.icon/get-node-icon-cp:selection"
-                "component received selected icon"
-                {:db-id (:db/id node-entity)
-                 :node-icon (debug-icon-summary node-icon)
-                 :not-text-or-page? (:not-text-or-page? opts)
-                 :link? (:link? opts)})
-    ;; #endregion
-    ;; #region agent log
-    (debug-log! "C" "frontend.components.icon/get-node-icon-cp:branch"
-                "component suppression branch"
-                {:db-id (:db/id node-entity)
-                 :suppressed? (boolean suppressed?)
-                 :fallback-icon? (contains? #{"point-filled" "letter-p" "hash" "file"} node-icon)})
-    ;; #endregion
-    (when-not suppressed?
+                    (get-node-icon node-entity opts))]
+    (when-not (or (string/blank? node-icon) (and (contains? #{"point-filled" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))
