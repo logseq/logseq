@@ -323,20 +323,22 @@
 (defn- <serialize-import-file
   [file]
   (let [^js file-object (:file-object file)
-        file-reference (select-keys file [:path :fs-path :last-modified-at])]
+        fs-path (some-> (:fs-path file) not-empty)
+        file-reference (cond-> (select-keys file [:path :last-modified-at])
+                         fs-path (assoc :fs-path fs-path))]
     (if (string/starts-with? (:path file) "assets/")
       (if (assets-handler/exceed-limit-size? file-object)
         (let [path (pr-str (:path file))]
           (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
           (notification/show! (t :import/asset-too-large-warning path) :info false)
           (select-keys file [:path]))
-        (if (:fs-path file-reference)
+        (if fs-path
           (assoc file-reference :asset/size (.-size file-object))
           (p/let [buffer (.arrayBuffer file-object)]
             (assoc file-reference
                    :asset/payload (js/Uint8Array. buffer)
                    :asset/size (.-size file-object)))))
-      (if (:fs-path file-reference)
+      (if fs-path
         file-reference
         (p/let [content (.text file-object)]
           (assoc file-reference :file/content content))))))
@@ -489,7 +491,8 @@
                                               (map #(hash-map :file-object %
                                                                :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
                                                                :fs-path (when (util/electron?)
-                                                                          (js/window.apis.getFilePath %))
+                                                                          (some-> (js/window.apis.getFilePath %)
+                                                                                  not-empty))
                                                                :last-modified-at (some-> (.-lastModified %) js/Date.)))
                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
