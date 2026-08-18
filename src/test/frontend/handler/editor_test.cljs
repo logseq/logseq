@@ -2603,21 +2603,56 @@
       (with-redefs [shui-popup/get-popups (constantly [])]
         (is (nil? (editor/dismiss-editor-popup-on-escape! event))))
       (state/replace-state! previous-state)))
-  (testing "Escape on an editor input popup is left to its specialized cancel handler"
+  (testing "Escape on an editor input popup runs its specialized cancel handler"
     (let [calls (atom [])
           event (doto (js-obj)
                   (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
                   (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          input (js-obj "id" "editor-input")
           input-options [{:command :link}]
-          action-data {:pos 5 :options input-options}
           previous-state (state/get-state)]
       (state/set-editor-action-data! {:pos 5})
       (state/set-editor-show-input! input-options)
       (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/input}])
                     shui-popup/hide! (fn [& args]
+                                       (swap! calls conj (into [:hide] args)))
+                    state/get-editor-last-pos (constantly 5)
+                    gdom/getElement (fn [id]
+                                      (when (= "editor-input" id) input))
+                    cursor/move-cursor-to (fn [& args]
+                                            (swap! calls conj (into [:move-cursor] args)))]
+        (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+        (is (nil? (state/get-editor-action)))
+        (is (nil? (state/get-editor-action-data)))
+        (is (= [:prevent-default :stop-propagation
+                [:move-cursor input 5 true]]
+               @calls)))
+      (state/replace-state! previous-state)))
+  (testing "Escape during IME composition does not dismiss an editor popup"
+    (let [calls (atom [])
+          event (doto (js-obj)
+                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          previous-state (state/get-state)]
+      (state/set-editor-action! :page-search)
+      (with-redefs [state/editor-in-composition? (constantly true)
+                    shui-popup/get-popups (constantly [{:id :editor.commands/page-search}])
+                    shui-popup/hide! (fn [& args]
                                        (swap! calls conj (into [:hide] args)))]
         (is (nil? (editor/dismiss-editor-popup-on-escape! event)))
-        (is (= :input (state/get-editor-action)))
-        (is (= action-data (state/get-editor-action-data)))
+        (is (= :page-search (state/get-editor-action)))
+        (is (empty? @calls)))
+      (state/replace-state! previous-state)))
+  (testing "Escape ignores popup ids outside the editor commands namespace"
+    (let [calls (atom [])
+          event (doto (js-obj)
+                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          previous-state (state/get-state)]
+      (state/set-editor-action! nil)
+      (with-redefs [shui-popup/get-popups (constantly [{:id :other/editor.commands-help}])
+                    shui-popup/hide! (fn [& args]
+                                       (swap! calls conj (into [:hide] args)))]
+        (is (nil? (editor/dismiss-editor-popup-on-escape! event)))
         (is (empty? @calls)))
       (state/replace-state! previous-state))))

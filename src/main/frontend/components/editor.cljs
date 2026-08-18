@@ -725,7 +725,7 @@
         _ (hooks/use-window-keydown
            (fn [e]
              (when (= (util/ekey e) "Escape")
-               (editor-handler/dismiss-editor-popup-on-escape! e)))
+               (editor-handler/dismiss-editor-popup-on-escape! e id)))
            []
            escape-keydown-capture-opts)
         _ (hooks/use-hide-on-esc-or-outside
