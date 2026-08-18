@@ -1597,17 +1597,19 @@
   "Escape on an editor commands/autocomplete popup should only close that popup.
   Returns true when the event was consumed so the editor must not exit or save."
   [^js e]
-  (when (or (popup-exists? "editor.commands")
-            (editor-popup-action? (state/get-editor-action)))
-    (when e (util/stop e))
-    (when-let [id (->> (shui-popup/get-popups)
-                       (filter (fn [popup]
-                                 (string/includes? (str (:id popup)) "editor.commands")))
-                       last
-                       :id)]
-      (shui-popup/hide! id 0 {:skip-focus? true}))
-    (state/clear-editor-action!)
-    true))
+  (let [action (state/get-editor-action)]
+    (when (and (not= :input action)
+               (or (popup-exists? "editor.commands")
+                   (editor-popup-action? action)))
+      (when e (util/stop e))
+      (when-let [id (->> (shui-popup/get-popups)
+                         (filter (fn [popup]
+                                   (string/includes? (str (:id popup)) "editor.commands")))
+                         last
+                         :id)]
+        (shui-popup/hide! id 0 {:skip-focus? true}))
+      (state/clear-editor-action!)
+      true)))
 
 (defn dialog-exists?
   [id]
