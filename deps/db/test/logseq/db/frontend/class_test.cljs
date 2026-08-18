@@ -37,3 +37,23 @@
                     (map :block/title)
                     set)]
     (is (= #{"Visible"} titles))))
+
+(deftest get-class-objects-includes-hide-by-default-properties-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}
+                            :author {:logseq.property/type :default}
+                            :deleted-prop {:logseq.property/type :default}}})
+        deleted (d/entity @conn :user.property/deleted-prop)
+        _ (d/transact! conn [[:db/add (:db/id deleted) :logseq.property/deleted-at 1]])
+        property-class-id (:db/id (d/entity @conn :logseq.class/Property))
+        titles (->> (db-class/get-class-objects @conn property-class-id)
+                    (map :block/title)
+                    set)]
+    (testing "hide-by-default user properties still appear in the Property table"
+      (is (contains? titles "keywords"))
+      (is (contains? titles "author")))
+    (testing "deleted properties stay out of the Property table"
+      (is (not (contains? titles "deleted-prop"))))
+    (testing "private built-in properties stay out of the Property table"
+      (is (not (contains? titles "Property type"))))))

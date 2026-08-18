@@ -1,7 +1,8 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
   (:require [clojure.string :as string]
-            [frontend.db.hooks :as db-hooks]))
+            [frontend.db.hooks :as db-hooks]
+            [logseq.shui.hooks :as hooks]))
 
 (defn get-group-by-page
   [{:keys [result-transform query] :as query-config}
@@ -47,5 +48,10 @@
 
 (defn use-query-result
   [config query]
-  (let [resource (db-hooks/use-resource [:query (query-spec config query)])]
-    (:rows resource)))
+  (let [resource (db-hooks/use-resource [:query (query-spec config query)])
+        result (:rows resource)
+        query-result (:query-result config)]
+    (hooks/use-effect! #(when query-result
+                          (reset! query-result result))
+                       [query-result result])
+    result))

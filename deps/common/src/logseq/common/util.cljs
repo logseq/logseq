@@ -49,12 +49,17 @@
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
 (defn safe-subs
+  "Like `subs`, but clamps out-of-range indices and returns \"\" for a non-string
+  `s` instead of throwing. `subs` is a bare `.substring` passthrough, so a nil
+  `s` otherwise raises \"Cannot read properties of null\"."
   ([s start]
    (let [c (count s)]
      (safe-subs s start c)))
   ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
+   (if (string? s)
+     (let [c (count s)]
+       (subs s (min c start) (min c end)))
+     "")))
 
 (defn wrapped-by
   [v start end]

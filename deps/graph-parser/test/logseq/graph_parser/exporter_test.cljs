@@ -131,6 +131,13 @@
                 (false? (:added datom))))
          (:tx-data tx-report))))
 
+(defn- imported-favorite-titles
+  [db]
+  (->> (ldb/get-page-blocks db (:db/id (ldb/get-page db common-config/favorites-page-name)))
+       (keep :block/link)
+       (map #(d/entity db (:db/id %)))
+       (map ldb/get-title-with-parents)))
+
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -1166,13 +1173,8 @@ abc
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
     (testing "favorites"
-      (is (= #{"Interstellar" "some page"}
-             (->>
-              (ldb/get-page-blocks @conn
-                                   (:db/id (ldb/get-page @conn common-config/favorites-page-name))
-                                   {:pull-keys '[* {:block/link [:block/title]}]})
-              (map #(get-in % [:block/link :block/title]))
-              set))))
+      (is (= #{"Interstellar" "some page" "new page" "n1/x/y"}
+             (set (imported-favorite-titles @conn)))))
 
     (testing "user properties"
       (is (= 23
@@ -1979,6 +1981,22 @@ abc
     (is (= #{(:block/uuid missing-page)}
            (set (map :block/uuid (:block/refs source-block))))
         "Missing ordinary page ref points at the created page")))
+
+(deftest-async import-favorites-from-og-config-edn
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn"
+                (str "{:favorites [\"Projects\" \"[[Projects]]\" \"foo/bar\"]\n"
+                     " :file/name-format :triple-lowbar}\n")
+                "pages/Projects.md" "- project work\n- [[foo/bar]]\n"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {})
+          favorite-titles (imported-favorite-titles @conn)]
+    (is (= 3 (count favorite-titles))
+        "Bare names, bracketed page refs, and namespaced pages each become a favorite link")
+    (is (= #{"Projects" "foo/bar"}
+           (set favorite-titles))
+        "Imported favorites resolve to the original pages including flattened namespaces")))
 
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)

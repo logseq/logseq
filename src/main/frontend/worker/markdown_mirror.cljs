@@ -2,6 +2,7 @@
   "Markdown mirror derived-file support for DB graphs."
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
@@ -374,13 +375,15 @@
 
 (defn- block-line-info
   [db block marker]
-  {:first-line-fragment (block-first-line-fragment block)
-   :code-block? (code-block? block)
-   :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
-                    (some-> (:logseq.property/status block) status-marker))
-   :tag-tokens (mirror-tag-tokens block)
-   :marker marker
-   :embed-target (embed-target block)})
+  (let [block (if (de/entity? block) block (d/entity db (:db/id block)))]
+    {:first-line-fragment (block-first-line-fragment block)
+     :code-block? (code-block? block)
+     :status-marker (when (or (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+                              (ldb/class-instance? (d/entity db :logseq.class/Task) block))
+                      (some-> (:logseq.property/status block) status-marker))
+     :tag-tokens (mirror-tag-tokens block)
+     :marker marker
+     :embed-target (embed-target block)}))
 
 (defn- property-derived-block?
   [block]
