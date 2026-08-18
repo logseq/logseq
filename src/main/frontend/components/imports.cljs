@@ -376,6 +376,8 @@
   [attempt]
   (min 30000 (* 1000 (js/Math.pow 2 (min (dec attempt) 5)))))
 
+(def ^:private file-graph-import-max-attempts 3)
+
 (defn- <remove-failed-file-graph!
   [repo]
   (if repo
@@ -414,6 +416,7 @@
        (fn [error]
          (let [repo @created-repo]
            (if (and repo
+                    (< attempt file-graph-import-max-attempts)
                     (persist-db/db-worker-unavailable-error? error))
              (do
                (log/warn :import-file-graph-retrying
