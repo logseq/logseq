@@ -2552,10 +2552,10 @@
                   conn (d/create-conn db-schema/schema)
                   pipeline-before @ldb/*transact-pipeline-fn
                   renderer-payloads (atom [])
-                  read-paths (atom [])
-                  written-assets (atom [])
-                  config-file {:path "logseq/config.edn"
-                               :fs-path "/source/logseq/config.edn"}
+                   read-paths (atom [])
+                   written-assets (atom [])
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
                   files [config-file
                          {:path "pages/Home.md"
                           :fs-path "/source/pages/Home.md"}
@@ -2568,8 +2568,7 @@
                                 (fn [path]
                                   (swap! read-paths conj path)
                                   (p/resolved
-                                   (get {"/source/logseq/config.edn" "{}"
-                                         "/source/pages/Home.md" "- imported block"}
+                                   (get {"/source/pages/Home.md" "- imported block"}
                                         path))))
                       (assoc-in [:storage :read-file-bytes!]
                                 (fn [path]
@@ -2607,7 +2606,6 @@
                    (is (= #{"assets/image.png" "pages/Home.md" "logseq/config.edn"}
                           (set (map :path (:files result)))))
                    (is (= #{"/source/assets/image.png"
-                            "/source/logseq/config.edn"
                             "/source/pages/Home.md"}
                           (set @read-paths)))
                    (is (= 1 (count @written-assets)))

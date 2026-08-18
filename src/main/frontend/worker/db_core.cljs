@@ -224,17 +224,17 @@
 (defn- <file-content
   [current-platform file]
   (cond
-    (contains? file :file/content)
+    (string? (:file/content file))
     (p/resolved (:file/content file))
 
-    (contains? file :content)
-    (p/resolved (:content file))
-
-    (:fs-path file)
+    (not-empty (:fs-path file))
     (platform/read-text! current-platform (:fs-path file))
 
     :else
-    (p/resolved "")))
+    (p/rejected
+     (ex-info "Import file has no readable content"
+              {:code :import-file-content-missing
+               :path (:path file)}))))
 
 (defn- import-file-payload
   [payload]
