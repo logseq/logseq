@@ -126,9 +126,6 @@
                                      :i18n-key :electron/write-file-error
                                      :i18n-args [path error-message]})))))))
 
-(defmethod handle :appendDebugLog [_window [_ path payload]]
-  (fs/appendFileSync path payload))
-
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
   (fs/renameSync old-path new-path))
