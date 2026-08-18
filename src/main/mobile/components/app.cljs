@@ -346,18 +346,20 @@
   []
   (let [current-repo (rfx/use-sub [:git/current-repo])
         show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
-        [{:keys [open? content-fn opts]}] (hooks/use-atom mobile-state/*popup-data)
+        [popup-data] (hooks/use-atom mobile-state/*popup-data)
+        [popup-presenting?] (hooks/use-atom mobile-state/*popup-presenting?)
+        {:keys [open? content-fn]} popup-data
         show-popup? (and open? content-fn)
         route-match (rfx/use-sub [:route-match])]
     [:main#app-container-wrapper.ls-fold-button-on-right
-     [:div#app-container {:class (when show-popup? "invisible")}
+     [:div#app-container {:class (when (and show-popup? popup-presenting?) "invisible")}
       [:div#main-container.flex.flex-1.overflow-x-hidden
        (app current-repo route-match)]]
      (when (mobile-util/native-ios?)
        (native-graphs-bridge))
      (when show-popup?
-       [:div.ls-layer
-        (popup/popup opts content-fn)])
+       [:div.ls-layer {:class (when-not popup-presenting? "invisible")}
+        (popup/popup popup-data)])
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
        (selection-toolbar/action-bar))
