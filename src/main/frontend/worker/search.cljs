@@ -518,9 +518,17 @@ DROP TRIGGER IF EXISTS blocks_au;
           (prn :debug "Fuzzy search blocks failed: ")
           (js/console.error e))))))
 
+(defn- hidden-search-node?
+  [entity]
+  (if (ldb/property? entity)
+    (or (:logseq.property/deleted-at entity)
+        (and (ldb/built-in? entity)
+             (ldb/private-built-in-page? entity)))
+    (ldb/hidden? entity)))
+
 (defn hidden-entity?
   [entity]
-  (or (ldb/hidden? entity)
+  (or (hidden-search-node? entity)
       (let [page (:block/page entity)]
         (and (ldb/hidden? page)
              (not= (:block/title page) common-config/quick-add-page-name)))))
@@ -752,7 +760,7 @@ DROP TRIGGER IF EXISTS blocks_au;
          block-by-id (pull-search-result-blocks db unique-results)
          merged (reduce (fn [acc {:keys [id] :as result}]
                           (let [block (get block-by-id id)]
-                            (if (ldb/hidden? block)
+                            (if (hidden-entity? block)
                               acc
                               (let [page? (ldb/page? block)
                                     keyword-score (if page?

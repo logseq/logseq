@@ -74,7 +74,9 @@
                      (filter ldb/page?)
                      (remove ldb/hidden?)
                      (remove (fn [page]
-                               (string/blank? (:block/title page))))
+                               (or (and (ldb/property? page)
+                                        (true? (:logseq.property/hide? page)))
+                                   (string/blank? (:block/title page)))))
                      vec)]
       [(into #{} (map (fn [page] [:entity (:block/uuid page)])) pages)
        (mapv sidebar-page-summary pages)])))

@@ -61,18 +61,9 @@
     (map :e (d/datoms db :avet :block/alias eid)))))
 
 (defn- hidden-eid-pred
-  "Datom-level equivalent of entity-util/hidden?. `:logseq.property/hide?` on a
-  property is hide-by-default for node display and does not hide the property."
   [db]
-  (let [*cache (volatile! {})
-        property-tag-id (:db/id (d/entity db :logseq.class/Property))]
-    (letfn [(property-eid? [eid]
-              (boolean
-               (and property-tag-id
-                    (some (fn [datom]
-                            (= property-tag-id (:v datom)))
-                          (d/datoms db :eavt eid :block/tags)))))
-            (hidden? [eid seen]
+  (let [*cache (volatile! {})]
+    (letfn [(hidden? [eid seen]
               (cond
                 (nil? eid)
                 false
@@ -85,8 +76,7 @@
 
                 :else
                 (let [result (boolean
-                              (or (and (datom-v db eid :logseq.property/hide?)
-                                       (not (property-eid? eid)))
+                              (or (datom-v db eid :logseq.property/hide?)
                                   (datom-v db eid :logseq.property/deleted-at)
                                   (hidden? (datom-v db eid :block/parent) (conj seen eid))))]
                   (vswap! *cache assoc eid result)
