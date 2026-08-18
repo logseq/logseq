@@ -332,7 +332,6 @@
         {:files (:files result)
          :import-state (import-state-summary (:import-state result))
          :notifications @notifications
-         :staged-assets []
          :validation {:errors (:errors validation)
                       :invalid-entity-ids (:invalid-entity-ids validation)}}))))
 

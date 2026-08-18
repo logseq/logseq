@@ -23,7 +23,6 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
@@ -347,16 +346,6 @@
   [files]
   (p/all (mapv <serialize-import-file files)))
 
-(defn- write-staged-assets!
-  [repo staged-assets]
-  (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
-    (when (seq staged-assets)
-      (p/let [_ (fs/mkdir-if-not-exists assets-dir)]
-        (p/all
-         (mapv (fn [{:keys [asset-id asset-type payload]}]
-                 (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true}))
-               staged-assets))))))
-
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
    default-config]
@@ -462,8 +451,7 @@
                                        1)
                 import-result result
                 _ (doseq [notification (:notifications import-result)]
-                    (show-notification notification))
-                _ (write-staged-assets! repo (:staged-assets import-result))]
+                    (show-notification notification))]
           (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
           (validate-imported-data import-result)
           (state/pub-event! [:graph/ready (state/get-current-repo)])

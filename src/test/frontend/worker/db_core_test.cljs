@@ -2611,7 +2611,6 @@
                    (is (= 1 (count @written-assets)))
                    (is (string/ends-with? (ffirst @written-assets) ".png"))
                    (is (= 3 (second (first @written-assets))))
-                   (is (empty? (:staged-assets result)))
                    (is (= "Home" (:block/title page)))
                    (is (= "imported block" (:block/title block)))
                    (doseq [entity [page block]]
