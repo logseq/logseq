@@ -2486,4 +2486,22 @@
       (state/set-editor-action! nil)
       (with-redefs [shui-popup/get-popups (constantly [])]
         (is (nil? (editor/dismiss-editor-popup-on-escape! event))))
+      (state/replace-state! previous-state)))
+  (testing "Escape on an editor input popup is left to its specialized cancel handler"
+    (let [calls (atom [])
+          event (doto (js-obj)
+                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
+                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
+          input-options [{:command :link}]
+          action-data {:pos 5 :options input-options}
+          previous-state (state/get-state)]
+      (state/set-editor-action-data! {:pos 5})
+      (state/set-editor-show-input! input-options)
+      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/input}])
+                    shui-popup/hide! (fn [& args]
+                                       (swap! calls conj (into [:hide] args)))]
+        (is (nil? (editor/dismiss-editor-popup-on-escape! event)))
+        (is (= :input (state/get-editor-action)))
+        (is (= action-data (state/get-editor-action-data)))
+        (is (empty? @calls)))
       (state/replace-state! previous-state))))

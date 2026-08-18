@@ -145,6 +145,27 @@
       (is (empty? page-txs))
       (is (= existing-uuid (-> block :block/refs first :block/uuid))))))
 
+(deftest resolve-page-refs-recognizes-db-graph-journal-tags
+  (doseq [[tags title journal-day]
+          [[[:logseq.class/Journal] "2026-07-27" 20260727]
+           [[{:db/ident :logseq.class/Journal}] "2026-07-28" 20260728]]]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          parsed-uuid (random-uuid)
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str "[[" title "]]")
+            :block/refs [{:block/name title
+                          :block/title title
+                          :block/uuid parsed-uuid
+                          :block/tags tags}]})]
+      (d/transact! conn page-txs)
+      (let [journal (d/entity @conn [:block/uuid (-> block :block/refs first :block/uuid)])]
+        (is (ldb/journal? journal))
+        (is (= journal-day (:block/journal-day journal)))))))
+
 (deftest insert-blocks-does-not-duplicate-existing-page-ref
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
