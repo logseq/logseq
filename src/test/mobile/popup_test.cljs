@@ -113,3 +113,26 @@
         (finally
           (set! (.-requestAnimationFrame js/window) original-raf)
           (reset! mobile-state/*popup-presenting? false))))))
+
+(deftest opening-popup-inside-presented-native-sheet-replaces-content
+  (testing "a nested popup reuses the presented sheet instead of revealing the app layer"
+    (let [content-fn (fn [] [:div "Login"])
+          plugin #js {}]
+      (reset! mobile-state/*popup-data {:open? true
+                                        :content-fn (fn [] [:div "Settings"])
+                                        :opts {}})
+      (reset! mobile-state/*popup-presenting? true)
+      (reset! popup/*pending-native-sheet-data nil)
+      (try
+        (with-redefs [mobile-util/native-bottom-sheet plugin
+                      state/pub-event! (fn [& _])]
+          (popup/popup-show! nil content-fn {:id :login})
+
+          (is @mobile-state/*popup-presenting?)
+          (is (nil? @popup/*pending-native-sheet-data))
+          (is (= content-fn (:content-fn @mobile-state/*popup-data)))
+          (is (:replace-presented? @mobile-state/*popup-data)))
+        (finally
+          (reset! mobile-state/*popup-data nil)
+          (reset! mobile-state/*popup-presenting? false)
+          (reset! popup/*pending-native-sheet-data nil))))))
