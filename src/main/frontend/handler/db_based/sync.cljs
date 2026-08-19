@@ -149,12 +149,13 @@
                    :type :db-sync/graph-operation-in-progress
                    :requested-operation requested-operation))))
 
-(defn- local-download-graph-exists?
+(defn- <local-download-graph-exists?
   [repo]
-  (boolean (some (fn [graph]
-                   (let [graph-name (or (:url graph) (:name graph))]
-                     (= graph-name repo)))
-                 (state/get-repos))))
+  (p/let [graphs (db-persist/get-all-graphs)]
+    (boolean (some (fn [graph]
+                     (= (some-> (or (:url graph) (:name graph)) string/lower-case)
+                        (string/lower-case repo)))
+                   graphs))))
 
 (defn- <remove-created-download-graph!
   [repo]
@@ -344,13 +345,16 @@
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
              base (http-base)
              graph (str config/db-version-prefix graph-name)
-             existed-before?* (atom true)]
+             existed-before?* (atom true)
+             snapshot-imported?* (atom false)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       _ (reset! existed-before?* (local-download-graph-exists? graph))
+                       graph-existed-before? (<local-download-graph-exists? graph)
+                       _ (reset! existed-before?* graph-existed-before?)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                                  graph graph-uuid graph-e2ee?)
+                       _ (reset! snapshot-imported?* true)
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
                                                    graph graph-uuid))]
@@ -360,7 +364,8 @@
                                      :graph-uuid graph-uuid
                                      :base base})))
              (p/catch (fn [error]
-                        (let [created-in-this-attempt? (false? @existed-before?*)]
+                        (let [created-in-this-attempt? (and (false? @existed-before?*)
+                                                           (false? @snapshot-imported?*))]
                           (reset! existed-before?* true)
                           (-> (if created-in-this-attempt?
                                 (<remove-created-download-graph! graph)

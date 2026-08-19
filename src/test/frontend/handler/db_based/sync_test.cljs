@@ -601,6 +601,7 @@
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -626,6 +627,7 @@
            (reset! state/*db-worker nil)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& _] (p/resolved :ok))
                                state/pub-event! (fn [& _] nil)
                                state/set-state! (fn [k v]
@@ -651,6 +653,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [repo _opts]
                                                              (reset! runtime-bound-repo repo)
                                                              (p/resolved {:schema {}}))
@@ -695,6 +698,7 @@
                                user-handler/<ensure-id&access-token! (fn []
                                                                        (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
@@ -722,6 +726,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] false)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [& args]
                                                              (swap! runtime-rebind-calls conj args)
                                                              (p/resolved {:schema {}}))
@@ -746,6 +751,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
@@ -773,6 +779,7 @@
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
                                state/get-repos (fn [] [])
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
                                persist-db/<close-db (fn [graph]
@@ -799,6 +806,35 @@
                           (is (= #{repo} (set @deleted)))
                           (finish-async-test! done)))))))
 
+(deftest rtc-download-graph-keeps-imported-graph-when-assets-fail-test
+  (async done
+         (let [deleted (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               db-persist/delete-graph! (fn [repo]
+                                                          (swap! deleted conj repo)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker
+                               (fn [op & _args]
+                                 (if (= op :thread-api/db-sync-download-missing-assets)
+                                   (p/rejected (ex-info "asset download failed"
+                                                        {:code :db-sync/asset-download-failed}))
+                                   (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" true))
+               (p/then (fn [_]
+                         (is false "expected asset download failure")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/asset-download-failed (:code (ex-data error))))
+                          (is (= [] @deleted))
+                          (finish-async-test! done)))))))
+
 (deftest rtc-download-graph-keeps-preexisting-local-graph-on-failure-test
   (async done
          (let [deleted (atom [])
@@ -806,7 +842,8 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               state/get-repos (fn [] [{:url repo}])
+                               state/get-repos (fn [] [])
+                               db-persist/get-all-graphs (fn [] (p/resolved [{:name (string/upper-case repo)}]))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
                                persist-db/<close-db (fn [_repo] (p/resolved nil))

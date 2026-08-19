@@ -976,6 +976,57 @@
                             (remove-dir! root-dir)
                             (done)))))))
 
+(deftest test-execute-sync-download-keeps-imported-graph-when-assets-fail
+  (async done
+         (let [root-dir (temp-root-dir)
+               repo "logseq_db_leftover"
+               graph-path (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                                          (graph-dir/repo->encoded-graph-dir-name repo))
+               create-graph! (fn []
+                               (fs/mkdirSync graph-path #js {:recursive true})
+                               (fs/writeFileSync (node-path/join graph-path "db.sqlite") "imported"))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (create-graph!)
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [_config _repo]
+                                                         (p/resolved {:ok? true}))
+                               transport/invoke
+                               (fn [_ method _args]
+                                 (case method
+                                   :thread-api/db-sync-list-remote-graphs
+                                   (p/resolved [{:graph-id "remote-graph-id"
+                                                 :graph-name "leftover"
+                                                 :graph-e2ee? false}])
+
+                                   :thread-api/q
+                                   (p/resolved 0)
+
+                                   :thread-api/db-sync-download-graph-by-id
+                                   (p/resolved {:graph-id "remote-graph-id"
+                                                :remote-tx 9})
+
+                                   :thread-api/db-sync-download-missing-assets
+                                   (p/rejected (ex-info "asset download failed"
+                                                        {:code :db-sync/asset-download-failed}))
+
+                                   (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo repo
+                                                            :graph "leftover"}
+                                                           {:base-url "http://example"
+                                                            :root-dir root-dir
+                                                            :http-base "https://api.logseq.io"
+                                                            :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :db-sync/asset-download-failed (get-in result [:error :code])))
+                   (is (fs/existsSync graph-path)
+                       "post-import asset failure should keep the imported graph")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (remove-dir! root-dir)
+                            (done)))))))
+
 (deftest test-execute-sync-start-runtime-error-after-open
   (async done
          (let [status-calls (atom 0)]

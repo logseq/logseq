@@ -863,7 +863,8 @@
 (defn- execute-sync-download
   [action config]
   (let [config' (download-config config)
-        progress-enabled? (sync-download-progress-enabled? action config')]
+        progress-enabled? (sync-download-progress-enabled? action config')
+        snapshot-imported?* (atom false)]
     (p/let [local-graphs-before (cli-server/list-graphs config')
             graph-existed-before? (some #(= (:graph action) %) local-graphs-before)]
       (-> (p/let [remote-graphs (invoke-global config'
@@ -895,6 +896,7 @@
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
                                                 (close!)))))
+                      _ (reset! snapshot-imported?* true)
                       assets-result (transport/invoke cfg :thread-api/db-sync-download-missing-assets
                                                       [(:repo action) graph-id])]
                 {:status :ok
@@ -909,7 +911,8 @@
                         result)
                       result)))
           (p/catch (fn [error]
-                     (p/let [_ (when-not graph-existed-before?
+                     (p/let [_ (when (and (not graph-existed-before?)
+                                         (false? @snapshot-imported?*))
                                   (<cleanup-created-download-graph! config' (:repo action)))]
                        (if (= :e2ee-password-not-found (:code (ex-data error)))
                          (e2ee-password-not-found-error :sync-download (:repo action))
