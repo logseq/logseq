@@ -135,11 +135,16 @@
     (when content-fn
       (reset! *last-popup? true)
       (when-let [_plugin ^js mobile-util/native-bottom-sheet]
-        (let [data {:open? true
+        (let [replace-presented? @mobile-state/*popup-presenting?
+              data {:open? true
                     :content-fn content-fn
-                    :opts opts}]
-          (reset! *pending-native-sheet-data data)
-          (mobile-state/set-popup-presenting! false)
+                    :opts opts
+                    :replace-presented? replace-presented?}]
+          (if replace-presented?
+            (reset! *pending-native-sheet-data nil)
+            (do
+              (reset! *pending-native-sheet-data data)
+              (mobile-state/set-popup-presenting! false)))
           (mobile-state/set-popup! data))))))
 
 (defn popup-hide!
@@ -166,12 +171,13 @@
 (set! shui/popup-hide! popup-hide!)
 
 (hsx/defc popup
-  [{:keys [opts content-fn] :as data}]
+  [{:keys [opts content-fn replace-presented?] :as data}]
   (hooks/use-effect!
    (fn []
-     (present-native-sheet-after-render! data)
+     (when-not replace-presented?
+       (present-native-sheet-after-render! data))
      nil)
-   [data])
+   [data replace-presented?])
   (let [title (or (:title opts) (when (string? content-fn) content-fn))
         content (if (fn? content-fn)
                   (content-fn)
