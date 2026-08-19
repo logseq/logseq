@@ -222,6 +222,11 @@
        (filter #(same-root-dir? config %))
        vec))
 
+(defn- same-pid?
+  [a b]
+  (and (number? (:pid a))
+       (= (:pid a) (:pid b))))
+
 (defn- repo-server
   [config servers repo]
   (first (filter #(graph-dir/same-repo? repo (:repo %))
@@ -304,7 +309,7 @@
                              replacement-lock? (boolean (and published
                                                              (nil? lock)
                                                              current-lock
-                                                             (not (daemon/same-lock-identity? current-lock published))))
+                                                             (not (same-pid? current-lock published))))
                              orphaned? (boolean (and published
                                                      (nil? lock)
                                                      (not replacement-lock?)))
@@ -356,7 +361,7 @@
                                     lock)
                              repo-server' (if (and published
                                                    (or (nil? lock)
-                                                       (daemon/same-lock-identity? lock published)))
+                                                       (same-pid? lock published)))
                                             published
                                             (-> (profile/time! profile-session
                                                                "server.wait-publish"
@@ -443,28 +448,16 @@
   (or (nil? pid)
       (not (contains? #{:alive :no-permission} (pid-status pid)))))
 
-(defn- expected-lock-identity
-  [lock server]
-  {:pid (or (:pid lock) (:pid server))
-   :lock-id (or (:lock-id lock) (:lock-id server))})
-
 (defn- server-considered-stopped?
   [path server expected-lock]
   (let [current (read-lock path)
-        expected (expected-lock-identity expected-lock server)]
-    (cond
-      (and current (not (daemon/same-lock-identity? current expected)))
-      true
-
-      (daemon/same-lock-identity? current expected)
-      false
-
-      :else
+        target-pid (:pid server)]
+    (if current
+      (not= (:pid current) target-pid)
       (or (some? expected-lock)
-          (let [pid (:pid server)]
-            (or (nil? pid)
-                (= pid (.-pid js/process))
-                (server-pid-gone? pid)))))))
+          (nil? target-pid)
+          (= target-pid (.-pid js/process))
+          (server-pid-gone? target-pid)))))
 
 (defn- unpublish-server!
   [config {:keys [pid port]}]
@@ -485,7 +478,7 @@
   [config repo path server]
   (let [expected-lock (read-lock path)]
     (if (and expected-lock
-             (not (daemon/same-lock-identity? expected-lock server)))
+             (not (same-pid? expected-lock server)))
       (p/resolved {:ok? true
                    :data {:repo repo}})
       (-> (p/let [_ (shutdown! server)
@@ -508,7 +501,7 @@
                             :data {:repo repo}}))
                  (p/catch (fn [_]
                             (when (server-pid-gone? (:pid server))
-                              (daemon/remove-owned-lock! path (expected-lock-identity expected-lock server))
+                              (daemon/remove-owned-lock! path (or expected-lock server))
                               (unpublish-server! config server))
                             (if (server-considered-stopped? path server expected-lock)
                               {:ok? true

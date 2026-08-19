@@ -47,23 +47,16 @@
   (when (and (seq path) (fs/existsSync path))
     (fs/unlinkSync path)))
 
-(defn same-lock-identity?
-  [a b]
-  (boolean
-   (and (number? (:pid a))
-        (number? (:pid b))
-        (= (:pid a) (:pid b))
-        (let [id-a (:lock-id a)
-              id-b (:lock-id b)]
-          (or (not (seq id-a))
-              (not (seq id-b))
-              (= id-a id-b))))))
-
 (defn remove-owned-lock!
   [path expected]
   (when (and (seq path) expected (fs/existsSync path))
-    (let [current (read-lock path)]
-      (when (same-lock-identity? current expected)
+    (let [{:keys [pid lock-id]} expected
+          current (read-lock path)]
+      (when (and (number? pid)
+                 (= pid (:pid current))
+                 (if (seq lock-id)
+                   (= lock-id (:lock-id current))
+                   true))
         (fs/unlinkSync path)))))
 
 (defn http-request
