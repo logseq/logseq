@@ -23,28 +23,28 @@
         (ex-info "db-sync download failed"
                  {:error-message "snapshot download failed"})))))
 
-(deftest download-failure-detail-includes-fetch-pull-stage-test
-  (is (= "fetch-pull: fetch failed"
-         (rtc-error/download-failure-detail
-          (ex-info "db-sync download failed"
-                   {:stage :fetch-pull
-                    :error-message "fetch failed"})))))
-
-(deftest download-failure-detail-includes-pre-worker-start-error-test
-  (is (= "db-worker-node failed to start"
-         (rtc-error/download-failure-detail
-          (ex-info "db-worker-node failed to start"
-                   {:code :server-start-failed})))))
-
-(deftest download-failure-detail-includes-cause-after-fetch-message-test
-  (is (= "fetch-pull: fetch failed: self-signed certificate"
-         (rtc-error/download-failure-detail
-          (ex-info "db-sync download failed"
-                   {:stage :fetch-pull
-                    :error-message "fetch failed"
-                    :error-cause "self-signed certificate"})))))
-
 (deftest notify-download-failure-completes-progress-and-shows-error-test
+  (let [events (atom [])
+        notifications (atom [])]
+    (with-redefs [state/pub-event! (fn [event]
+                                     (swap! events conj event)
+                                     nil)
+                  notification/show! (fn [content status clear?]
+                                       (swap! notifications conj [content status clear?])
+                                       nil)]
+      (rtc-error/notify-download-failure!
+       "graph-1"
+       (ex-info "db-worker-node failed to start"
+                {:code :server-start-failed})))
+    (is (= [[:rtc/log {:type :rtc.log/download
+                       :sub-type :download-completed
+                       :graph-uuid "graph-1"
+                       :message "Graph snapshot download failed"}]]
+           @events))
+    (is (= [[(i18n/t :sync/download-error) :error false]]
+           @notifications))))
+
+(deftest notify-download-failure-does-not-duplicate-worker-completion-test
   (let [events (atom [])
         notifications (atom [])]
     (with-redefs [state/pub-event! (fn [event]
@@ -58,12 +58,40 @@
        (ex-info "db-sync download failed"
                 {:stage :fetch-pull
                  :error-message "fetch failed"})))
-    (is (= [[:rtc/log {:type :rtc.log/download
-                       :sub-type :download-completed
-                       :graph-uuid "graph-1"
-                       :message "Graph snapshot download failed"}]]
-           @events))
-    (is (= [[(i18n/t :sync/download-error "fetch-pull: fetch failed") :error false]]
+    (is (= [] @events))
+    (is (= [[(i18n/t :sync/download-error) :error false]]
+           @notifications))))
+
+(deftest notify-download-failure-ignores-active-operation-rejection-test
+  (let [events (atom [])
+        notifications (atom [])]
+    (with-redefs [state/pub-event! (fn [event]
+                                     (swap! events conj event)
+                                     nil)
+                  notification/show! (fn [content status clear?]
+                                       (swap! notifications conj [content status clear?])
+                                       nil)]
+      (rtc-error/notify-download-failure!
+       "graph-2"
+       (ex-info "graph operation already in progress"
+                {:type :db-sync/graph-operation-in-progress
+                 :active-operation :download
+                 :active-graph-uuid "graph-1"})))
+    (is (= [] @events))
+    (is (= [] @notifications))))
+
+(deftest notify-download-failure-does-not-surface-runtime-details-test
+  (let [notifications (atom [])]
+    (with-redefs [state/pub-event! (fn [_event] nil)
+                  notification/show! (fn [content status clear?]
+                                       (swap! notifications conj [content status clear?])
+                                       nil)]
+      (rtc-error/notify-download-failure!
+       "graph-1"
+       (ex-info "request to https://sync.example.com failed"
+                {:stage :fetch-pull
+                 :error-message "certificate at /Users/alice/private.pem failed"})))
+    (is (= [[(i18n/t :sync/download-error) :error false]]
            @notifications))))
 
 (deftest notify-download-failure-keeps-wrong-password-toast-test
@@ -97,5 +125,5 @@
                   {:code :server-start-failed})))
       (is (= :download-completed
              (get-in @events [0 1 :sub-type])))
-      (is (= [[(i18n/t :sync/download-error "db-worker-node failed to start") :error false]]
+      (is (= [[(i18n/t :sync/download-error) :error false]]
              @notifications)))))

@@ -1832,7 +1832,7 @@
  :sync/conflicts-description "这些服务器版本与本地编辑冲突。复制你需要的文本，然后手动编辑该块。"
  :sync/conflicts-title "同步冲突"
  :sync/creating-remote-graph "正在创建远程图谱..."
- :sync/download-error "无法下载图谱：{1}"
+ :sync/download-error "无法下载图谱。请查看日志以了解详情。"
  :sync/downloading "下载中..."
  :sync/downloading-graph "正在下载 {1}……"
  :sync/graph-count-exceed-limit "同步图谱数量超出限制"
