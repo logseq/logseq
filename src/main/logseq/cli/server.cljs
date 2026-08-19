@@ -150,10 +150,6 @@
   [path]
   (daemon/read-lock path))
 
-(defn- remove-lock!
-  [path]
-  (daemon/remove-lock! path))
-
 (defn- http-request
   [opts]
   (daemon/http-request opts))
@@ -231,6 +227,16 @@
   (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
+(defn- repo-server-matching-lock
+  [config servers repo lock]
+  (let [pid (:pid lock)
+        candidates (servers-for-config config servers)]
+    (if (number? pid)
+      (first (filter #(and (graph-dir/same-repo? repo (:repo %))
+                           (= pid (:pid %)))
+                     candidates))
+      (repo-server config servers repo))))
+
 (declare stop-server!)
 
 (def ^:private server-discovery-timeout-ms 30000)
@@ -264,16 +270,20 @@
            vec))))
 
 (defn- wait-for-discovered-server
-  [config repo]
-  (let [server* (atom nil)]
-    (-> (wait-for (fn []
-                    (p/let [servers (discover-servers config)
-                            server (repo-server config servers repo)]
-                      (reset! server* server)
-                      (some? server)))
-                  {:timeout-ms server-discovery-timeout-ms
-                   :interval-ms 50})
-        (p/then (fn [_] @server*)))))
+  ([config repo]
+   (wait-for-discovered-server config repo nil))
+  ([config repo expected-pid]
+   (let [server* (atom nil)]
+     (-> (wait-for (fn []
+                     (p/let [servers (discover-servers config)
+                             server (if (number? expected-pid)
+                                      (repo-server-matching-lock config servers repo {:pid expected-pid})
+                                      (repo-server config servers repo))]
+                       (reset! server* server)
+                       (some? server)))
+                   {:timeout-ms server-discovery-timeout-ms
+                    :interval-ms 50})
+         (p/then (fn [_] @server*))))))
 
 (defn- ensure-server-started-once!
   [config repo]
@@ -286,23 +296,41 @@
                      (ensure-repo-dir! root-dir repo)
                      (p/let [existing (read-lock path)
                              _ (cleanup-stale-lock! path existing)
+                             lock (read-lock path)
                              discovered (discover-servers config)
-                             discovered-repo-server (repo-server config discovered repo)
-                             orphaned? (boolean (and discovered-repo-server
-                                                     (nil? existing)
-                                                     (not (fs/existsSync path))))
+                             published (if lock
+                                         (repo-server-matching-lock config discovered repo lock)
+                                         (repo-server config discovered repo))
+                             current-lock (read-lock path)
+                             replacement-lock? (boolean (and published
+                                                             (nil? lock)
+                                                             current-lock
+                                                             (not (daemon/same-lock-identity? current-lock published))))
+                             orphaned? (boolean (and published
+                                                     (nil? lock)
+                                                     (not replacement-lock?)))
                              _ (when orphaned?
                                  (p/let [stop-result (stop-server! config repo
                                                                   {:allow-cross-owner? true
-                                                                   :target-server discovered-repo-server})]
+                                                                   :target-server published})]
                                    (when-not (:ok? stop-result)
                                      (throw (ex-info "db-worker-node failed to stop orphaned server"
                                                      {:code :server-start-failed
                                                       :repo repo
                                                       :stop-error (:error stop-result)})))))
-                             discovered-repo-server (when-not orphaned?
-                                                      discovered-repo-server)
-                             _ (when (and (not discovered-repo-server) (not (fs/existsSync path)))
+                             lock-after-orphan (read-lock path)
+                             published (cond
+                                         (and lock-after-orphan (or orphaned? replacement-lock?))
+                                         (p/let [discovered (discover-servers config)]
+                                           (repo-server-matching-lock config discovered repo lock-after-orphan))
+
+                                         (or orphaned? replacement-lock?)
+                                         nil
+
+                                         :else
+                                         published)
+                             lock lock-after-orphan
+                             _ (when (and (not published) (not (fs/existsSync path)))
                                  (profile/time! profile-session
                                                 "server.spawn-daemon"
                                                 (fn []
@@ -328,12 +356,14 @@
                                            (= :unknown (lock-owner-source lock)))
                                     (rewrite-lock-owner-source! path lock :cli)
                                     lock)
-                             repo-server' (if discovered-repo-server
-                                            discovered-repo-server
+                             repo-server' (if (and published
+                                                   (or (nil? lock)
+                                                       (daemon/same-lock-identity? lock published)))
+                                            published
                                             (-> (profile/time! profile-session
                                                                "server.wait-publish"
                                                                (fn []
-                                                                 (wait-for-discovered-server config repo)))
+                                                                 (wait-for-discovered-server config repo (:pid lock))))
                                                 (p/catch (fn [e]
                                                            (if (= :timeout (:code (ex-data e)))
                                                              (throw (ex-info "db-worker-node failed to publish health"
@@ -415,14 +445,28 @@
   (or (nil? pid)
       (not (contains? #{:alive :no-permission} (pid-status pid)))))
 
+(defn- expected-lock-identity
+  [lock server]
+  {:pid (or (:pid lock) (:pid server))
+   :lock-id (or (:lock-id lock) (:lock-id server))})
+
 (defn- server-considered-stopped?
-  [path server lock-existed?]
-  (and (not (fs/existsSync path))
-       (or lock-existed?
-           (let [pid (:pid server)]
-             (or (nil? pid)
-                 (= pid (.-pid js/process))
-                 (server-pid-gone? pid))))))
+  [path server expected-lock]
+  (let [current (read-lock path)
+        expected (expected-lock-identity expected-lock server)]
+    (cond
+      (and current (not (daemon/same-lock-identity? current expected)))
+      true
+
+      (daemon/same-lock-identity? current expected)
+      false
+
+      :else
+      (or (some? expected-lock)
+          (let [pid (:pid server)]
+            (or (nil? pid)
+                (= pid (.-pid js/process))
+                (server-pid-gone? pid)))))))
 
 (defn- unpublish-server!
   [config {:keys [pid port]}]
@@ -433,43 +477,47 @@
                                  [{:pid pid :port port}])))
 
 (defn- wait-until-stopped
-  [path server lock-existed?]
+  [path server expected-lock]
   (wait-for (fn []
-              (p/resolved (server-considered-stopped? path server lock-existed?)))
+              (p/resolved (server-considered-stopped? path server expected-lock)))
             {:timeout-ms 5000
              :interval-ms 200}))
 
 (defn- stop-discovered-server!
   [config repo path server]
-  (let [lock-existed? (fs/existsSync path)]
-    (-> (p/let [_ (shutdown! server)
-                _ (wait-until-stopped path server lock-existed?)]
-          (unpublish-server! config server)
-          {:ok? true
-           :data {:repo repo}})
-        (p/catch
-         (fn [_]
-           (when (and (= :alive (pid-status (:pid server)))
-                      (not= (:pid server) (.-pid js/process)))
-             (try
-               (.kill js/process (:pid server) "SIGTERM")
-               (catch :default e
-                 (log/warn :cli-server-stop-sigterm-failed e))))
-           (-> (wait-until-stopped path server lock-existed?)
-               (p/then (fn [_]
-                         (unpublish-server! config server)
-                         {:ok? true
-                          :data {:repo repo}}))
-               (p/catch (fn [_]
-                          (when (server-pid-gone? (:pid server))
-                            (remove-lock! path)
-                            (unpublish-server! config server))
-                          (if (server-considered-stopped? path server lock-existed?)
-                            {:ok? true
-                             :data {:repo repo}}
-                            {:ok? false
-                             :error {:code :server-stop-timeout
-                                     :message "timed out stopping server"}})))))))))
+  (let [expected-lock (read-lock path)]
+    (if (and expected-lock
+             (not (daemon/same-lock-identity? expected-lock server)))
+      (p/resolved {:ok? true
+                   :data {:repo repo}})
+      (-> (p/let [_ (shutdown! server)
+                  _ (wait-until-stopped path server expected-lock)]
+            (unpublish-server! config server)
+            {:ok? true
+             :data {:repo repo}})
+          (p/catch
+           (fn [_]
+             (when (and (= :alive (pid-status (:pid server)))
+                        (not= (:pid server) (.-pid js/process)))
+               (try
+                 (.kill js/process (:pid server) "SIGTERM")
+                 (catch :default e
+                   (log/warn :cli-server-stop-sigterm-failed e))))
+             (-> (wait-until-stopped path server expected-lock)
+                 (p/then (fn [_]
+                           (unpublish-server! config server)
+                           {:ok? true
+                            :data {:repo repo}}))
+                 (p/catch (fn [_]
+                            (when (server-pid-gone? (:pid server))
+                              (daemon/remove-owned-lock! path (expected-lock-identity expected-lock server))
+                              (unpublish-server! config server))
+                            (if (server-considered-stopped? path server expected-lock)
+                              {:ok? true
+                               :data {:repo repo}}
+                              {:ok? false
+                               :error {:code :server-stop-timeout
+                                       :message "timed out stopping server"}}))))))))))
 
 (defn- stop-server-target!
   [config repo {:keys [allow-cross-owner? target-server]}]
@@ -485,7 +533,9 @@
       (p/let [server (if target-server
                        target-server
                        (p/let [servers (discover-servers config)]
-                         (repo-server config servers repo)))]
+                         (or (when lock
+                               (repo-server-matching-lock config servers repo lock))
+                             (repo-server config servers repo))))]
         (if-not server
           (if (and (pos-int? (:pid lock))
                    (contains? #{:alive :no-permission} (pid-status (:pid lock))))

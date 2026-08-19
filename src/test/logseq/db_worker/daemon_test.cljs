@@ -125,6 +125,58 @@
                      (is false (str "unexpected error: " e))
                      (done)))))))
 
+(deftest cleanup-stale-lock-does-not-remove-replacement-lock
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-replacement")
+          repo (str "logseq_db_helper_replacement_" (subs (str (random-uuid)) 0 8))
+          path (node-path/join root-dir "db-worker.lock")
+          stale-lock {:repo repo
+                      :pid 999999999
+                      :lock-id "stale-lock"
+                      :owner-source :cli}
+          replacement-lock {:repo repo
+                            :pid (.-pid js/process)
+                            :lock-id "replacement-lock"
+                            :owner-source :electron}]
+      (fs/mkdirSync root-dir #js {:recursive true})
+      (fs/writeFileSync path (js/JSON.stringify (clj->js replacement-lock)))
+      (-> (p/let [_ (daemon/cleanup-stale-lock! path stale-lock)]
+            (is (fs/existsSync path))
+            (is (= "replacement-lock" (:lock-id (daemon/read-lock path))))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest remove-owned-lock-deletes-matching-identity
+  (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-owned-lock")
+        path (node-path/join root-dir "db-worker.lock")
+        lock {:repo "logseq_db_owned"
+              :pid 4242
+              :lock-id "owned-lock"
+              :owner-source :cli}]
+    (fs/mkdirSync root-dir #js {:recursive true})
+    (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+    (daemon/remove-owned-lock! path lock)
+    (is (not (fs/existsSync path)))))
+
+(deftest remove-owned-lock-keeps-mismatched-identity
+  (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-owned-mismatch")
+        path (node-path/join root-dir "db-worker.lock")
+        current {:repo "logseq_db_owned"
+                 :pid 4242
+                 :lock-id "new-lock"
+                 :owner-source :electron}
+        expected {:repo "logseq_db_owned"
+                  :pid 1111
+                  :lock-id "old-lock"
+                  :owner-source :cli}]
+    (fs/mkdirSync root-dir #js {:recursive true})
+    (fs/writeFileSync path (js/JSON.stringify (clj->js current)))
+    (daemon/remove-owned-lock! path expected)
+    (is (fs/existsSync path))
+    (is (= "new-lock" (:lock-id (daemon/read-lock path))))))
+
 (deftest terminate-process-uses-platform-appropriate-stop-command
   (async done
     (let [terminate-process! (fn [pid force?]

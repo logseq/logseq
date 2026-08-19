@@ -89,6 +89,25 @@
   (when (and (seq path) (fs/existsSync path))
     (fs/unlinkSync path)))
 
+(defn same-lock-identity?
+  [a b]
+  (boolean
+   (and (number? (:pid a))
+        (number? (:pid b))
+        (= (:pid a) (:pid b))
+        (let [id-a (:lock-id a)
+              id-b (:lock-id b)]
+          (or (not (seq id-a))
+              (not (seq id-b))
+              (= id-a id-b))))))
+
+(defn remove-owned-lock!
+  [path expected]
+  (when (and (seq path) expected (fs/existsSync path))
+    (let [current (read-lock path)]
+      (when (same-lock-identity? current expected)
+        (fs/unlinkSync path)))))
+
 (defn create-lock!
   [{:keys [root-dir repo owner-source]}]
   (p/create
@@ -100,7 +119,7 @@
          (when (and existing (contains? #{:alive :no-permission} (pid-status (:pid existing))))
            (throw (ex-info "graph already locked" {:code :repo-locked :lock existing})))
          (when (and existing (= :not-found (pid-status (:pid existing))))
-           (remove-lock! path))
+           (remove-owned-lock! path existing))
          (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
          (let [fd (fs/openSync path "wx")
                lock {:repo repo

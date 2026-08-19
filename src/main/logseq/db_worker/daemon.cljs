@@ -47,6 +47,25 @@
   (when (and (seq path) (fs/existsSync path))
     (fs/unlinkSync path)))
 
+(defn same-lock-identity?
+  [a b]
+  (boolean
+   (and (number? (:pid a))
+        (number? (:pid b))
+        (= (:pid a) (:pid b))
+        (let [id-a (:lock-id a)
+              id-b (:lock-id b)]
+          (or (not (seq id-a))
+              (not (seq id-b))
+              (= id-a id-b))))))
+
+(defn remove-owned-lock!
+  [path expected]
+  (when (and (seq path) expected (fs/existsSync path))
+    (let [current (read-lock path)]
+      (when (same-lock-identity? current expected)
+        (fs/unlinkSync path)))))
+
 (defn http-request
   [{:keys [method host port path headers body timeout-ms]}]
   (p/create
@@ -182,13 +201,13 @@
 
     (= :not-found (pid-status (:pid lock)))
     (do
-      (remove-lock! path)
+      (remove-owned-lock! path lock)
       (p/resolved nil))
 
     (not (valid-lock? lock))
     (-> (stop-stale-process! lock)
         (p/then (fn [_]
-                  (remove-lock! path)
+                  (remove-owned-lock! path lock)
                   nil)))
 
     :else
