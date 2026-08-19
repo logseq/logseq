@@ -2660,7 +2660,7 @@ let () =
                        (Edn_util.keyword "message", Edn_util.string message);
                      |])))))
   in
-  let run_sync_remote_graphs_json root_prefix response_for_body =
+  let run_sync_remote_graphs_json root_prefix response_for_body check_result =
     let root = temp_dir root_prefix in
     let config_path = Node.Path.join [| root; "cli.edn" |] in
     let server = invoke_server response_for_body in
@@ -2680,72 +2680,71 @@ let () =
             |]
         in
         remove_tree root;
-        Js.Promise.resolve result)
+        check_result result)
   in
   test_promise
     "sync remote-graphs treats js/Error transport failure as command error"
     (fun () ->
-      let* result =
-        run_sync_remote_graphs_json "logseq-cli-sync-remote-graphs-js-error-"
-          (fun body ->
-            if
-              Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
-                body
-            then js_error_transit "fetch failed"
-            else "null")
-      in
-      ignore
-        (expect_cli_exit_non_zero "sync remote-graphs js/Error" result);
-      ignore
-        (expect_named_contains "error status" result.stdout
-           "\"status\":\"error\"");
-      ignore
-        (expect_named_contains "remote graphs error code" result.stdout
-           "\"code\":\"sync-remote-graphs-failed\"");
-      ignore
-        (expect_named_contains "fetch failed message" result.stdout
-           "fetch failed");
-      ignore
-        (expect_named_not_contains "js/Error graph data" result.stdout
-           "js/Error");
-      Js.Promise.resolve pass);
+      run_sync_remote_graphs_json
+        "logseq-cli-sync-remote-graphs-js-error-"
+        (fun body ->
+          if
+            Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
+              body
+          then js_error_transit "fetch failed"
+          else "null")
+        (fun result ->
+          ignore
+            (expect_cli_exit_non_zero "sync remote-graphs js/Error" result);
+          ignore
+            (expect_named_contains "error status" result.stdout
+               "\"status\":\"error\"");
+          ignore
+            (expect_named_contains "remote graphs error code" result.stdout
+               "\"code\":\"sync-remote-graphs-failed\"");
+          ignore
+            (expect_named_contains "fetch failed message" result.stdout
+               "fetch failed");
+          ignore
+            (expect_named_not_contains "js/Error graph data" result.stdout
+               "js/Error");
+          Js.Promise.resolve pass));
 
   test_promise "sync remote-graphs empty list still returns ok" (fun () ->
-      let* result =
-        run_sync_remote_graphs_json "logseq-cli-sync-remote-graphs-empty-"
-          (fun body ->
-            if
-              Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
-                body
-            then "[]"
-            else "null")
-      in
-      ignore (expect_cli_exit_zero "sync remote-graphs empty" result);
-      ignore
-        (expect_named_contains "ok status" result.stdout "\"status\":\"ok\"");
-      ignore
-        (expect_named_contains "empty graphs" result.stdout "\"graphs\":[]");
-      Js.Promise.resolve pass);
+      run_sync_remote_graphs_json "logseq-cli-sync-remote-graphs-empty-"
+        (fun body ->
+          if
+            Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
+              body
+          then "[]"
+          else "null")
+        (fun result ->
+          ignore (expect_cli_exit_zero "sync remote-graphs empty" result);
+          ignore
+            (expect_named_contains "ok status" result.stdout "\"status\":\"ok\"");
+          ignore
+            (expect_named_contains "empty graphs" result.stdout "\"graphs\":[]");
+          Js.Promise.resolve pass));
 
   test_promise "sync remote-graphs non-empty list still returns ok" (fun () ->
-      let* result =
-        run_sync_remote_graphs_json "logseq-cli-sync-remote-graphs-ok-"
-          (fun body ->
-            if
-              Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
-                body
-            then sync_remote_graph_transit
-            else "null")
-      in
-      ignore (expect_cli_exit_zero "sync remote-graphs non-empty" result);
-      ignore
-        (expect_named_contains "ok status" result.stdout "\"status\":\"ok\"");
-      ignore
-        (expect_named_contains "graph name" result.stdout "\"graph-name\":\"alpha\"");
-      ignore
-        (expect_named_not_contains "error status" result.stdout
-           "\"status\":\"error\"");
-      Js.Promise.resolve pass);
+      run_sync_remote_graphs_json "logseq-cli-sync-remote-graphs-ok-"
+        (fun body ->
+          if
+            Js.String.includes ~search:"thread-api/db-sync-list-remote-graphs"
+              body
+          then sync_remote_graph_transit
+          else "null")
+        (fun result ->
+          ignore (expect_cli_exit_zero "sync remote-graphs non-empty" result);
+          ignore
+            (expect_named_contains "ok status" result.stdout "\"status\":\"ok\"");
+          ignore
+            (expect_named_contains "graph name" result.stdout
+               "\"graph-name\":\"alpha\"");
+          ignore
+            (expect_named_not_contains "error status" result.stdout
+               "\"status\":\"error\"");
+          Js.Promise.resolve pass));
 
   test_promise "agent bridge keeps codex alive and forwards worker env"
     (fun () ->
