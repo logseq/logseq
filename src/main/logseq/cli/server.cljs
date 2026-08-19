@@ -229,12 +229,11 @@
 
 (defn- repo-server-matching-lock
   [config servers repo lock]
-  (let [pid (:pid lock)
-        candidates (servers-for-config config servers)]
+  (let [pid (:pid lock)]
     (if (number? pid)
       (first (filter #(and (graph-dir/same-repo? repo (:repo %))
                            (= pid (:pid %)))
-                     candidates))
+                     (servers-for-config config servers)))
       (repo-server config servers repo))))
 
 (declare stop-server!)
@@ -329,7 +328,6 @@
 
                                          :else
                                          published)
-                             lock lock-after-orphan
                              _ (when (and (not published) (not (fs/existsSync path)))
                                  (profile/time! profile-session
                                                 "server.spawn-daemon"

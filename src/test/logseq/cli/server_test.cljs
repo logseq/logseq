@@ -1545,7 +1545,6 @@
          (let [root-dir (node-helper/create-tmp-dir "cli-server-orphan-replacement")
                repo (str "logseq_db_orphan_replacement_" (subs (str (random-uuid)) 0 8))
                lock-file (cli-server/lock-path root-dir repo)
-               stop-calls (atom [])
                spawn-calls (atom 0)
                discover-calls (atom 0)
                shutdown-calls (atom 0)
@@ -1576,9 +1575,8 @@
                                daemon/spawn-server! (fn [_]
                                                       (swap! spawn-calls inc)
                                                       nil)
-                               daemon/http-request (fn [opts]
+                               daemon/http-request (fn [_]
                                                      (swap! shutdown-calls inc)
-                                                     (swap! stop-calls conj opts)
                                                      (p/resolved {:status 200 :body ""}))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
