@@ -1165,10 +1165,14 @@ let () =
               let* result =
                 effect_to_promise
                   (Auth_state.refresh_auth
-                     (sync_oauth_config ~root ~http_base [])
+                     (sync_oauth_config ~root ~http_base
+                        [
+                          ( Edn_util.keyword "oauth-domain",
+                            Edn_util.string "127.0.0.1:1" );
+                        ])
                      (sample_auth ~refresh_token:(Some "refresh-token-1") ()))
               in
-              expect_error_code "refresh without oauth token endpoint"
+              expect_error_code "refresh with unreachable oauth domain"
                 "auth-refresh-failed" result;
               expect_int "token refresh ignores http-base" 0
                 (Vec.length !sync_requests);
