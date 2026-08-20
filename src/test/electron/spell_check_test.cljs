@@ -1,22 +1,20 @@
 (ns electron.spell-check-test
   (:require [cljs.test :refer [deftest is testing]]
-            [electron.spell-check]))
-
-(defn- session-spellcheck-enabled?
-  [value]
-  (when-let [f (resolve 'electron.spell-check/session-spellcheck-enabled?)]
-    (f value)))
-
-(defn- apply-window-spellcheck!
-  [win enabled?]
-  (when-let [f (resolve 'electron.spell-check/apply-window-spellcheck!)]
-    (f win enabled?)))
+            [electron.spell-check :as spell-check]))
 
 (deftest session-spellcheck-enabled?-test
   (testing "defaults to enabled unless the stored config is explicitly false"
-    (is (true? (session-spellcheck-enabled? nil)))
-    (is (true? (session-spellcheck-enabled? true)))
-    (is (false? (session-spellcheck-enabled? false)))))
+    (is (true? (spell-check/session-spellcheck-enabled? nil)))
+    (is (true? (spell-check/session-spellcheck-enabled? true)))
+    (is (false? (spell-check/session-spellcheck-enabled? false)))))
+
+(deftest startup-spellcheck-states-test
+  (testing "Linux keeps spellcheck disabled until the window is ready"
+    (is (= [false true] (spell-check/startup-spellcheck-states true true)))
+    (is (= [false false] (spell-check/startup-spellcheck-states true false))))
+  (testing "other platforms apply the configured state directly"
+    (is (= [true true] (spell-check/startup-spellcheck-states false true)))
+    (is (= [false false] (spell-check/startup-spellcheck-states false false)))))
 
 (deftest apply-window-spellcheck!-test
   (testing "updates the BrowserWindow session spell checker state"
@@ -29,7 +27,7 @@
               (swap! calls conj enabled?)
               (aset session "spellCheckerEnabled" enabled?)))
 
-      (apply-window-spellcheck! win false)
+      (spell-check/apply-window-spellcheck! win false)
 
       (is (= [false] @calls))
       (is (false? (.-spellCheckerEnabled session))))))

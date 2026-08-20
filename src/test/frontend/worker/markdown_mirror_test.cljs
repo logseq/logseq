@@ -448,6 +448,55 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-emits-todo-for-task-with-default-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Tasks"}
+                                     :blocks [{:block/title "default todo"
+                                               :build/tags [:logseq.class/Task]}
+                                              {:block/title "doing task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                                              {:block/title "done task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.done}}
+                                              {:block/title "canceled task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.canceled}}]}]})
+          page (db-test/find-page-by-title @conn "Tasks")
+          default-block (db-test/find-block-by-content @conn "default todo")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (empty? (d/datoms @conn :eavt (:db/id default-block) :logseq.property/status)))
+                    (is (= :logseq.property/status.todo
+                           (:db/ident (:logseq.property/status default-block))))
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- TODO default todo\n"
+                                "- DOING doing task\n"
+                                "- DONE done task\n"
+                                "- CANCELED canceled task")
+                           (get @files (page-path "pages/Tasks.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-skips-empty-placeholder-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Cleared"}
+                                     :blocks [{:block/title "cleared status"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/empty-placeholder}}]}]})
+          page (db-test/find-page-by-title @conn "Cleared")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- cleared status")
+                           (get @files (page-path "pages/Cleared.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-preserves-numbered-list-markers-status-and-tags-test
   (async done
     (let [{:keys [platform files]} (fake-platform)

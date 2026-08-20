@@ -205,6 +205,14 @@
   [s]
   (string/includes? s ".class"))
 
+(defn- hidden-class-object?
+  [e]
+  (if (entity-util/property? e)
+    (or (:logseq.property/deleted-at e)
+        (and (entity-util/built-in? e)
+             (not (:logseq.property/public? e))))
+    (entity-util/hidden? e)))
+
 (defn get-class-objects
   "Get class objects including children classes'"
   [db class-id]
@@ -218,7 +226,7 @@
                        [seen result]
                        (let [e (d/entity db eid)
                              seen' (conj seen eid)]
-                         (if (entity-util/hidden? e)
+                         (if (hidden-class-object? e)
                            [seen' result]
                            [seen' (conj! result e)])))))
                  [#{} (transient [])])

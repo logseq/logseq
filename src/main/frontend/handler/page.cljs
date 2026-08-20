@@ -200,10 +200,6 @@
                            [:db/id :block/title :block/name :block/uuid :block/tags]
                            [:block/name (util/page-name-sanity-lc page)]))
 
-(defn- labeled-node-ref
-  [block]
-  (str "[" (:block/title block) "](" (ref/->page-ref (:block/uuid block)) ")"))
-
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q]
   (fn [chosen-result ^js e]
@@ -274,16 +270,10 @@
                                         [chosen' chosen-result])
             datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (util/page-name-sanity-lc chosen'))
             multiple-pages-same-name? (> (count datoms) 1)
-            ref-text (cond
-                       (and (existing-chosen-result? chosen-result)
-                            (not (entity/page? chosen-result)))
-                       (labeled-node-ref chosen-result)
-
-                       (and (existing-chosen-result? chosen-result)
-                            multiple-pages-same-name?)
+            ref-text (if (and (existing-chosen-result? chosen-result)
+                              (or multiple-pages-same-name?
+                                  (not (entity/page? chosen-result))))
                        (ref/->page-ref (:block/uuid chosen-result))
-
-                       :else
                        (get-page-ref-text chosen'))
             result (when-not (existing-chosen-result? chosen-result)
                      (<create! chosen'
