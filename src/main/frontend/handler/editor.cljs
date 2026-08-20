@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.selection :as block-selection]
@@ -69,6 +70,19 @@
 
 (def clear-selection! state/clear-selection!)
 (def edit-block! block-handler/edit-block!)
+
+;; #region agent log
+(defn- agent-debug-log!
+  [hypothesis-id location message data]
+  (when (util/electron?)
+    (ipc/ipc "appendAgentDebugLog"
+             (.stringify js/JSON
+                         (clj->js {:hypothesisId hypothesis-id
+                                  :location location
+                                  :message message
+                                  :data data
+                                  :timestamp (.now js/Date)})))))
+;; #endregion
 
 (defn- event-code
   [e]
@@ -851,10 +865,28 @@
 (defn- previous-block-edit
   [block value container-id]
   (if (:block/name block)
-    {:prev-block block
-     :new-value (:block/title block)
-     :edit-block-f #(edit-block! block :max {:save-code-editor? false
-                                             :skip-load? true})}
+    (do
+      ;; #region agent log
+      (agent-debug-log! "C" "frontend/handler/editor.cljs:851"
+                        "Previous visible block is a named page"
+                        {:target-id (:db/id block)
+                         :target-uuid (some-> (:block/uuid block) str)
+                         :journal? (entity/journal? block)
+                         :value-blank? (string/blank? value)})
+      ;; #endregion
+      {:prev-block block
+       :new-value (:block/title block)
+       :edit-block-f (fn []
+                       ;; #region agent log
+                       (agent-debug-log! "C,D" "frontend/handler/editor.cljs:862"
+                                         "Executing programmatic edit of page title"
+                                         {:target-id (:db/id block)
+                                          :target-uuid (some-> (:block/uuid block) str)
+                                          :journal? (entity/journal? block)
+                                          :active-element-id (some-> js/document .-activeElement .-id)})
+                       ;; #endregion
+                       (edit-block! block :max {:save-code-editor? false
+                                               :skip-load? true}))})
     (let [original-content (if (= (:db/id block) (:db/id (state/get-edit-block)))
                              (state/get-edit-content)
                              (:block/title block))
@@ -1024,7 +1056,18 @@
                              (assoc :retract-attributes? false))))))
 
       :else
-      (delete-block-aux! block edit-block-f))))
+      (do
+        ;; #region agent log
+        (agent-debug-log! "C" "frontend/handler/editor.cljs:1048"
+                          "Deleting current block with previous edit callback"
+                          {:source-id (:db/id block)
+                           :source-uuid (some-> (:block/uuid block) str)
+                           :previous-id (:db/id prev-block)
+                           :previous-page? (entity/page? prev-block)
+                           :input-empty? input-empty?
+                           :has-edit-callback? (fn? edit-block-f)})
+        ;; #endregion
+        (delete-block-aux! block edit-block-f)))))
 
 (defn delete-block-inner!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
@@ -1055,9 +1098,32 @@
         (when (:block/parent source-block)
           (let [current-block (or current-block source-block)
                 sibling-or-parent-node (previous-block-node block-container config)]
+            ;; #region agent log
+            (agent-debug-log! "A,C" "frontend/handler/editor.cljs:1083"
+                              "Delete source and previous DOM node resolved"
+                              {:source-id (:db/id source-block)
+                               :source-uuid (some-> (:block/uuid source-block) str)
+                               :source-parent-id (block-parent-id source-block)
+                               :source-page-id (block-page-id source-block)
+                               :source-has-children? (worker-has-children? source-block)
+                               :previous-node-block-id (dom/attr sibling-or-parent-node "blockid")
+                               :previous-node-page-title? (boolean
+                                                          (some-> sibling-or-parent-node
+                                                                  (util/rec-get-node "ls-page-title")))})
+            ;; #endregion
             (p/let [{:keys [prev-block new-content edit-block-f]}
                     (or loaded-previous-edit
                         (move-to-prev-block repo sibling-or-parent-node value))]
+              ;; #region agent log
+              (agent-debug-log! "C" "frontend/handler/editor.cljs:1099"
+                                "Previous edit target resolved"
+                                {:previous-id (:db/id prev-block)
+                                 :previous-uuid (some-> (:block/uuid prev-block) str)
+                                 :previous-page? (entity/page? prev-block)
+                                 :previous-journal? (entity/journal? prev-block)
+                                 :new-content-present? (some? new-content)
+                                 :has-edit-callback? (fn? edit-block-f)})
+              ;; #endregion
               (when (boundary-merge-allowed? source-block prev-block)
                 (delete-block-with-previous!
                  {:block source-block
@@ -3138,10 +3204,37 @@
                                                         editor-config)
                                    mounted-block)
             custom-query? (:custom-query? editor-config)]
+        ;; #region agent log
+        (agent-debug-log! "A,B" "frontend/handler/editor.cljs:3180"
+                          "Backspace-at-zero captured editor state"
+                          {:cursor-pos current-pos
+                           :input-blank? (string/blank? value)
+                           :block-id (:db/id block)
+                           :block-uuid (some-> (:block/uuid block) str)
+                           :block-parent-id (block-parent-id block)
+                           :block-page-id (block-page-id block)
+                           :previous-mounted-id (:db/id previous-block)
+                           :previous-mounted-page? (entity/page? previous-block)
+                           :previous-mounted-journal? (entity/journal? previous-block)})
+        ;; #endregion
         (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+            ;; #region agent log
+            (agent-debug-log! "B" "frontend/handler/editor.cljs:3200"
+                              "Backspace deletion guards evaluated"
+                              {:left-or-parent-id (:db/id left-or-parent)
+                               :left-or-parent-page? (entity/page? left-or-parent)
+                               :left-or-parent-journal? (entity/journal? left-or-parent)
+                               :top-block? top-block?
+                               :input-blank? (string/blank? value)
+                               :preserved-empty-type?
+                               (editor-block-preserved-on-empty-title-merge? block)
+                               :root-block? root-block?
+                               :single-block? single-block?
+                               :custom-query? (boolean custom-query?)})
+            ;; #endregion
             (when (and (not (and top-block? (not (string/blank? value))))
                        (not (editor-block-preserved-on-empty-title-merge? block))
                        (not root-block?)
@@ -3151,7 +3244,16 @@
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
-                (delete-block-inner! repo editor-state)))))))))
+                (do
+                  ;; #region agent log
+                  (agent-debug-log! "B,C" "frontend/handler/editor.cljs:3224"
+                                    "Backspace dispatching block deletion"
+                                    {:block-id (:db/id block)
+                                     :top-block? top-block?
+                                     :input-blank? (string/blank? value)
+                                     :editor-block-id (:block-id editor-state)})
+                  ;; #endregion
+                  (delete-block-inner! repo editor-state))))))))))
 
 (defn keydown-backspace-handler
   [cut? e]

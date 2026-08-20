@@ -126,6 +126,11 @@
                                      :i18n-key :electron/write-file-error
                                      :i18n-args [path error-message]})))))))
 
+;; #region agent log
+(defmethod handle :appendAgentDebugLog [_window [_ line]]
+  (fs/appendFileSync "/opt/cursor/logs/debug.log" (str line "\n")))
+;; #endregion
+
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
   (fs/renameSync old-path new-path))
