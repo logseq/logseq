@@ -1236,7 +1236,7 @@
                                                    :cursor-pos 8}))))
 
 (defn- delete-block-at-zero-pos-result
-  [block]
+  [block & {:keys [left-sibling]}]
   (let [deleted? (atom false)
         stopped? (atom false)
         input #js {:value ""}
@@ -1259,7 +1259,7 @@
     (set! util/stop (fn [_] (reset! stopped? true)))
     (set! state/get-current-repo (constantly test-helper/test-db))
     (set! state/get-edit-block (constantly block))
-    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved left-sibling)))
     (set! editor/get-state (constantly {:config {}}))
     (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
     (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
@@ -1300,6 +1300,32 @@
                          :block/page {:db/id 10}})]
           (is (= {:deleted? true :stopped? true} result)))
         (p/finally done))))
+
+(deftest first-empty-journal-block-backspace-does-not-edit-the-journal-title-test
+  (async done
+    (let [journal {:db/id 10
+                   :block/uuid #uuid "00000000-0000-0000-0000-000000000010"
+                   :block/name "aug 20th, 2026"
+                   :block/title "Aug 20th, 2026"
+                   :block/tags [{:db/ident :logseq.class/Journal}]}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/title "previous"
+                    :block/parent journal
+                    :block/page journal}
+          empty-block {:db/id 2
+                       :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                       :block/title ""
+                       :block/parent journal
+                       :block/page journal}]
+      (-> (p/let [first-result (delete-block-at-zero-pos-result empty-block)
+                  later-result (delete-block-at-zero-pos-result
+                                empty-block :left-sibling previous)]
+            (is (= {:deleted? false :stopped? true} first-result)
+                "Backspace must not move editing from the first empty block to a journal title.")
+            (is (= {:deleted? true :stopped? true} later-result)
+                "Backspace must preserve normal joins when a journal block has a previous block."))
+          (p/finally done)))))
 
 (deftest delete-block-when-zero-pos-keeps-the-keydown-editor-state-test
   (async done
