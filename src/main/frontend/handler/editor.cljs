@@ -3142,7 +3142,9 @@
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
-            (when (and (not (and top-block? (not (string/blank? value))))
+            (when (and (not (and top-block?
+                                 (or (entity/journal? left-or-parent)
+                                     (not (string/blank? value)))))
                        (not (editor-block-preserved-on-empty-title-merge? block))
                        (not root-block?)
                        (not single-block?)
