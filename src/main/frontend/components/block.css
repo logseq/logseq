@@ -649,11 +649,6 @@ html.is-mobile .ls-block-content-indent {
   }
 }
 
-.block-children {
-  border-left: 1px solid;
-  border-left-color: var(--lx-gray-04-alpha, var(--ls-guideline-color, var(--rx-gray-04-alpha))) !important;
-}
-
 .hidden-block .block-children {
   border-left: 0;
 }
