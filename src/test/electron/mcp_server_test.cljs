@@ -73,6 +73,27 @@
                             true clj->js)
                  :body (js/JSON.stringify body)}))
 
+(defn- handle-request
+  [api-fn port* ^js raw-req ^js raw-res]
+  (let [body* (atom "")]
+    (.setEncoding raw-req "utf8")
+    (.on raw-req "data" #(swap! body* str %))
+    (.on raw-req "end"
+         (fn []
+           (try
+             (let [req #js {:headers (.-headers raw-req)
+                            :body (js/JSON.parse @body*)
+                            :raw raw-req}
+                   res #js {:raw raw-res}]
+               (mcp-server/handle-post-request
+                api-fn
+                {:host "127.0.0.1" :port @port*}
+                req
+                res))
+             (catch :default error
+               (set! (.-statusCode raw-res) 500)
+               (.end raw-res (.-message error))))))))
+
 (defn- start-mcp-test-server!
   []
   (p/create
@@ -80,28 +101,7 @@
      (let [http (js/require "http")
            port* (atom nil)
            api-fn (fn [_method _args] #js {:ok true})
-           server
-           (.createServer
-            http
-            (fn [^js raw-req ^js raw-res]
-              (let [body* (atom "")]
-                (.setEncoding raw-req "utf8")
-                (.on raw-req "data" #(swap! body* str %))
-                (.on raw-req "end"
-                     (fn []
-                       (try
-                         (let [req #js {:headers (.-headers raw-req)
-                                        :body (js/JSON.parse @body*)
-                                        :raw raw-req}
-                               res #js {:raw raw-res}]
-                           (mcp-server/handle-post-request
-                            api-fn
-                            {:host "127.0.0.1" :port @port*}
-                            req
-                            res))
-                         (catch :default error
-                           (set! (.-statusCode raw-res) 500)
-                           (.end raw-res (.-message error))))))))))]
+           server (.createServer http (partial handle-request api-fn port*))]
        (.on server "error" reject)
        (.listen server 0 "127.0.0.1"
                 (fn []
