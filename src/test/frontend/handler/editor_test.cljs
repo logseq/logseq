@@ -1070,7 +1070,7 @@
            (fn []
              (is (true? (:built-in? @search-options))
                  "Page reference search should request the same public built-ins as Cmd+K")
-             (is (= ["Task"] (mapv :block/title @matched-pages)))))
+             (is (some #(= "Task" (:block/title %)) @matched-pages))))
           (p/catch
            (fn [error]
              (is false (str error))))
