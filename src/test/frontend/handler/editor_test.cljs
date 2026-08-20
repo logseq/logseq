@@ -1427,6 +1427,39 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(deftest repeated-backspace-does-not-restore-erased-current-title-test
+  (let [current {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "Foo"
+                 :block/raw-title "Foo"
+                 :block/parent {:db/id 10}}
+        previous {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title ""
+                  :block/parent {:db/id 20}}
+        tx-meta (atom nil)
+        edited (atom nil)]
+    (with-redefs [db-transact/apply-outliner-ops (fn [_ _ opts]
+                                                    (reset! tx-meta opts))
+                  frontend-outliner-op/move-blocks! (fn [& _] :move)
+                  editor/delete-block-aux! (fn [& _] :delete)
+                  editor/edit-block! (fn [block pos opts]
+                                       (reset! edited [block pos opts]))]
+      (#'editor/delete-block-with-previous!
+       {:block current
+        :current-block current
+        :prev-block previous
+        :new-content ""
+        :input-empty? true
+        :delete-concat? false})
+      ((:editor/edit-block-fn @tx-meta) [])
+      (is (= [(assoc current :block/title "" :block/raw-title "")
+              0
+              {:save-code-editor? false
+               :skip-load? true}]
+             @edited)
+          "Deleting an empty predecessor must not restore the erased mounted title."))))
+
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"
