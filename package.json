@@ -19,7 +19,6 @@
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.1",
     "@jcesarmobile/ssl-skip": "^0.9.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/aspect-ratio": "0.4.2",
     "@tailwindcss/forms": "0.5.11",
