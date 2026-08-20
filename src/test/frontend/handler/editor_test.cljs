@@ -179,6 +179,32 @@
              @captured-state)
           "Enter must use the textarea that received the keydown event."))))
 
+(deftest enter-on-page-title-saves-and-exits-instead-of-splitting-test
+  (let [target #js {:value "Alpha Beta Gamma"
+                    :selectionStart 5}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block {:db/id 1
+                                                        :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                                        :block/title "Alpha Beta Gamma"}
+                                                :config {:page-title? true}
+                                                :node target
+                                                :value "Alpha Beta Gamma"
+                                                :pos 5})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a page title must save and exit without splitting the page entity."))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"

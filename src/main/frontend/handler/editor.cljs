@@ -2592,6 +2592,8 @@
   [el]
   (some? (dom/closest el ".block-editor")))
 
+(declare escape-editing)
+
 (defn keydown-new-block-handler [^js e]
   (let [target (when e (.-target e))
         state (cond-> (get-state)
@@ -2603,11 +2605,21 @@
               (inside-of-editor-block target))
       (if (pending-new-block?)
         (when e (.preventDefault e))
-        (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
-          (keydown-new-line)
-          (do
-            (when e (.preventDefault e))
-            (keydown-new-block state)))))))
+        (let [new-line? (or (state/doc-mode-enter-for-new-line?)
+                            (inside-of-single-block (:node state)))]
+          (cond
+            (get-in state [:config :page-title?])
+            (do
+              (when e (.preventDefault e))
+              (escape-editing))
+
+            new-line?
+            (keydown-new-line)
+
+            :else
+            (do
+              (when e (.preventDefault e))
+              (keydown-new-block state))))))))
 
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
