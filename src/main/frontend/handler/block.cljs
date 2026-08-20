@@ -123,14 +123,22 @@
                                          block)
                                 pos opts)))))))
 
-(defn- get-original-block-by-dom
+(defn- node-original-block
+  "Read the original (linking) block off a rendered `ls-block` node.
+  A block rendered through :block/link carries the linked block's uuid as
+  `blockid` and the linking block's own uuid as `originalblockid`."
   [node]
   (when-let [id (some-> node
-                        (.-parentNode)
-                        (util/rec-get-node "ls-block")
                         (dom/attr "originalblockid")
                         uuid)]
     {:block/uuid id}))
+
+(defn- get-original-block-by-dom
+  [node]
+  (some-> node
+          (.-parentNode)
+          (util/rec-get-node "ls-block")
+          node-original-block))
 
 (defn- get-original-block
   "Get the original block from the current editing block or selected blocks"
@@ -147,7 +155,7 @@
          (remove nil?)
          (keep #(when-let [id (dom/attr % "blockid")]
                   (when (= (uuid id) (:block/uuid linked-block))
-                    (:original-block linked-block))))
+                    (node-original-block %))))
          ;; FIXME: what if there're multiple same blocks in the selection
          first)))
 
