@@ -993,8 +993,10 @@
                      (block-handler/outliner-tx-meta prev-block))
               :editor/edit-block-fn
               (fn [_rows]
-                (edit-block! current-block 0 {:save-code-editor? false
-                                              :skip-load? true})))
+                (edit-block! (current-block-with-title current-block new-content)
+                             0
+                             {:save-code-editor? false
+                              :skip-load? true})))
        (when-not (= (block-parent-id block) (block-parent-id prev-block))
          (outliner-op/move-blocks! [block] prev-block {:sibling? true}))
        (delete-block-aux! prev-block))
