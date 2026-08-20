@@ -18,6 +18,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as frontend-outliner-op]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -1048,6 +1049,36 @@
                        (set! db-async/<get-all-classes original-<get-all-classes)
                        (state/set-state! :editor/block nil)
                        (done)))))))
+
+(deftest page-search-includes-public-built-ins
+  (async done
+    (let [matched-pages (atom nil)
+          search-options (atom nil)
+          task {:db/id 1
+                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                :block/title "Task"
+                :logseq.property/built-in? true}
+          original-<get-block db-async/<get-block
+          original-block-search search/block-search]
+      (set! db-async/<get-block (fn [& _args] (p/resolved nil)))
+      (set! search/block-search
+            (fn [_repo _query options]
+              (reset! search-options options)
+              (p/resolved [task])))
+      (-> (#'editor-component/search-pages "Ta" false #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (true? (:built-in? @search-options))
+                 "Page reference search should request the same public built-ins as Cmd+K")
+             (is (= ["Task"] (mapv :block/title @matched-pages)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-<get-block)
+             (set! search/block-search original-block-search)
+             (done)))))))
 
 (deftest tag-search-does-not-convert-class-aliases
   (async done
