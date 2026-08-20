@@ -127,9 +127,9 @@
                   second-session-id (.get (.-headers second-response) "mcp-session-id")
                   first-tools-response (post-mcp url tools-list-request first-session-id)
                   first-tools-body (read-sse-data first-tools-response)
-                  first-payload (sse-data-payload first-body)
-                  second-payload (sse-data-payload second-body)
-                  first-tools-payload (sse-data-payload first-tools-body)]
+                  ^js first-payload (sse-data-payload first-body)
+                  ^js second-payload (sse-data-payload second-body)
+                  ^js first-tools-payload (sse-data-payload first-tools-body)]
             (is (= 200 (.-status first-response)))
             (is (= 200 (.-status second-response)))
             (is (seq first-session-id))
