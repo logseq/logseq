@@ -6,8 +6,11 @@
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.db.transact :as db-transact]
+            [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -137,6 +140,40 @@
   (is (= :view/all
          (#'views/default-view-title-key :all-pages)))
   (is (nil? (#'views/default-view-title-key :query-result))))
+
+(deftest all-pages-delete-hydrates-entire-selected-id-range-test
+  (async done
+         (let [repo "test-repo"
+               selected-ids (mapv (fn [_] (random-uuid)) (range 5))
+               pages (mapv (fn [idx block-uuid]
+                             {:db/id (inc idx)
+                              :block/uuid block-uuid
+                              :block/title (str "Page " (inc idx))
+                              :block/tags [{:db/ident :logseq.class/Page}]})
+                           (range)
+                           selected-ids)
+               fetch-call (atom nil)
+               published-event (atom nil)
+               cleared-selection (atom nil)
+               table {:data-fns {:set-row-selection! #(reset! cleared-selection %)}}]
+           (finish-async!
+            done
+            (p/with-redefs [state/get-current-repo (constantly repo)
+                            db-async/<get-blocks
+                            (fn [actual-repo actual-ids opts]
+                              (reset! fetch-call [actual-repo (vec actual-ids) opts])
+                              (p/resolved (mapv (fn [page] {:block page}) pages)))
+                            state/pub-event! #(reset! published-event %)
+                            db-transact/apply-outliner-ops (fn [& _] (p/resolved nil))]
+              (p/let [_ (#'views/on-delete-rows nil :all-pages table selected-ids)
+                      [event dialog-pages clear-selection!] @published-event]
+                (is (= [repo selected-ids {:children? false}] @fetch-call))
+                (is (= :page/show-delete-dialog event))
+                (is (= pages (vec dialog-pages)))
+                (is (= ["Page 1" "Page 2" "Page 3" "Page 4" "Page 5"]
+                       (mapv :block/title dialog-pages)))
+                (clear-selection!)
+                (is (= {} @cleared-selection))))))))
 
 (deftest built-in-many-properties-use-datascript-cardinality
   (is (= :db.cardinality/many
