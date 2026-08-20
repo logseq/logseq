@@ -211,6 +211,7 @@
                                 :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))
                              (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                    :built-in? true
                                                                     :page-only? false}))]
       (set-exact-page! block)
       (set-matched-pages! result))))
