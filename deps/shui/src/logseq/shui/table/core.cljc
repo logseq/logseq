@@ -80,13 +80,10 @@
 (defn- column-set-sorting!
   [column set-sorting! sorting asc?]
   (let [id (:id column)
-        existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
-        value (->> (if existing-column
-                     (if (nil? asc?)
-                       (remove (fn [item] (= (:id item) id)) sorting)
-                       (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
-                     (when-not (nil? asc?)
-                       (into [{:id id :asc? asc?}] sorting)))
+        without-column (remove (fn [item] (= (:id item) id)) sorting)
+        value (->> (if (nil? asc?)
+                     without-column
+                     (into [{:id id :asc? asc?}] without-column))
                    (remove nil?)
                    vec)]
     (set-sorting! value)
