@@ -1981,10 +1981,10 @@
         (search/fuzzy-search classes q {:extract-fn :block/title})))))
 
 (defn <get-matched-blocks
-  "Return matched blocks that are not built-in"
-  [q & [{:keys [nlp-pages? page-only?]}]]
+  "Return matched blocks, optionally including public built-ins"
+  [q & [{:keys [nlp-pages? page-only? built-in?]}]]
   (p/let [block (state/get-edit-block)
-          result (search/block-search (state/get-current-repo) q {:built-in? false
+          result (search/block-search (state/get-current-repo) q {:built-in? (boolean built-in?)
                                                                   :limit 20
                                                                   :search-limit 100
                                                                   :enable-snippet? false
