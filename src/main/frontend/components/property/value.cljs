@@ -1152,6 +1152,7 @@
         [class-data set-class-data!] (hooks/use-state nil)
         all-classes (:all-classes class-data)
         page-class (class-by-ident all-classes :logseq.class/Page)
+        class-scoped? (not (empty? (:logseq.property/classes property)))
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -1181,7 +1182,8 @@
                                    ;; TODO rank initial choices higher
                                   (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                  :include-breadcrumb? true
-                                                                                                 :built-in? false})]
+                                                                                                 :built-in? false
+                                                                                                 :resolve-title-refs? class-scoped?})]
                                     (set-result!
                                      (cond-> result
                                        (and page-class
