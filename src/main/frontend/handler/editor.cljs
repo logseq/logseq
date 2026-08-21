@@ -3599,8 +3599,8 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (when-not (:active? (state/get-state :ui/find-in-page))
-    (cut-selection-blocks copy?)
-    (clear-selection!)))
+    (p/do! (cut-selection-blocks copy?)
+           (clear-selection!))))
 
 (defn shortcut-copy-selection
   [e]
