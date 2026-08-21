@@ -141,8 +141,9 @@
 (hsx/defc property-select
   [*mode *property *private-property?]
   (let [[properties set-properties!] (hooks/use-state nil)
+        [private-property?] (hooks/use-atom *private-property?)
         properties (cond->> properties
-                     (not @*private-property?)
+                     (not private-property?)
                      (remove ldb/built-in?))]
     (hooks/use-effect!
      (fn []
@@ -157,8 +158,8 @@
        (t :query.builder/show-built-in-properties)]
       (shui/checkbox
        {:id "built-in"
-        :value @*private-property?
-        :on-checked-change #(reset! *private-property? (not @*private-property?))})]
+        :value private-property?
+        :on-checked-change #(reset! *private-property? (not private-property?))})]
      (select (map #(hash-map :db/ident (:db/ident %)
                              :value (:block/title %))
                   properties)
