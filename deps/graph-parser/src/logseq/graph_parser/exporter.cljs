@@ -2829,11 +2829,6 @@
                                      :ex-data {:path path :error error}})
                        (throw error))))))))
 
-(defn- placeholder-block-ref?
-  [entity]
-  (and (:block/uuid entity)
-       (nil? (:block/title entity))))
-
 (defn- preserve-missing-block-ref-text
   [title block-uuids]
   (when (string? title)
@@ -2849,22 +2844,27 @@
 
 (defn- cleanup-missing-block-refs-plan
   [db]
-  (let [missing-ref-datoms
+  (let [titled-ids (into #{} (map :e) (d/datoms db :aevt :block/title))
+        placeholder-id->uuid
+        (into {}
+              (comp
+               (remove #(contains? titled-ids (:e %)))
+               (map (juxt :e :v)))
+              (d/datoms db :aevt :block/uuid))
+        missing-ref-datoms
         (->> (d/datoms db :aevt :block/refs)
              (keep (fn [datom]
-                     (let [ref-entity (d/entity db (:v datom))]
-                       (when (placeholder-block-ref? ref-entity)
-                         {:source-id (:e datom)
-                          :ref-id (:v datom)
-                          :ref-uuid (:block/uuid ref-entity)})))))
+                     (when-let [ref-uuid (get placeholder-id->uuid (:v datom))]
+                       {:source-id (:e datom)
+                        :ref-id (:v datom)
+                        :ref-uuid ref-uuid}))))
         missing-link-datoms
         (->> (d/datoms db :aevt :block/link)
              (keep (fn [datom]
-                     (let [ref-entity (d/entity db (:v datom))]
-                       (when (placeholder-block-ref? ref-entity)
-                         {:source-id (:e datom)
-                          :ref-id (:v datom)
-                          :ref-uuid (:block/uuid ref-entity)})))))
+                     (when-let [ref-uuid (get placeholder-id->uuid (:v datom))]
+                       {:source-id (:e datom)
+                        :ref-id (:v datom)
+                        :ref-uuid ref-uuid}))))
         refs-by-source-id (group-by :source-id missing-ref-datoms)
         links-by-source-id (group-by :source-id missing-link-datoms)
         source-ids (sort (set (concat (keys refs-by-source-id)
