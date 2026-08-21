@@ -2570,11 +2570,31 @@
                   conn (d/create-conn db-schema/schema)
                   pipeline-before @ldb/*transact-pipeline-fn
                   renderer-payloads (atom [])
-                  config-file {:path "logseq/config.edn"
-                               :file/content "{}"}
+                   read-paths (atom [])
+                   written-assets (atom [])
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
                   files [config-file
                          {:path "pages/Home.md"
-                          :file/content "- imported block"}]]
+                          :fs-path "/source/pages/Home.md"}
+                         {:path "assets/image.png"
+                          :fs-path "/source/assets/image.png"
+                          :asset/size 3}]
+                  import-platform
+                  (-> (platform/current)
+                      (assoc-in [:storage :read-text!]
+                                (fn [path]
+                                  (swap! read-paths conj path)
+                                  (p/resolved
+                                   (get {"/source/pages/Home.md" "- imported block"}
+                                        path))))
+                      (assoc-in [:storage :read-file-bytes!]
+                                (fn [path]
+                                  (swap! read-paths conj path)
+                                  (p/resolved (js/Uint8Array.from #js [1 2 3]))))
+                      (assoc-in [:storage :asset-write-bytes!]
+                                (fn [_repo file-name payload]
+                                  (swap! written-assets conj [file-name (.-byteLength payload)]))))]
               (is (fn? import-file-graph!))
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (reset! worker-state/*datascript-conns {test-repo conn})
@@ -2582,6 +2602,7 @@
               (p/with-redefs
                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
                  db-sync/handle-local-tx! (fn [& _] nil)
+                 platform/current (constantly import-platform)
                  shared-service/broadcast-to-clients!
                  (fn [event payload]
                    (when (= :sync-db-changes event)
@@ -2600,8 +2621,14 @@
                          (into #{}
                                (mapcat #(keys (get-in % [:delta :blocks])))
                                @renderer-payloads)]
-                   (is (= #{"pages/Home.md" "logseq/config.edn"}
+                   (is (= #{"assets/image.png" "pages/Home.md" "logseq/config.edn"}
                           (set (map :path (:files result)))))
+                   (is (= #{"/source/assets/image.png"
+                            "/source/pages/Home.md"}
+                          (set @read-paths)))
+                   (is (= 1 (count @written-assets)))
+                   (is (string/ends-with? (ffirst @written-assets) ".png"))
+                   (is (= 3 (second (first @written-assets))))
                    (is (= "Home" (:block/title page)))
                    (is (= "imported block" (:block/title block)))
                    (doseq [entity [page block]]
@@ -2616,6 +2643,43 @@
                  (p/finally (fn []
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (done))))))))))
+
+(deftest import-file-graph-rejects-asset-write-failure
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  config-file {:path "logseq/config.edn"
+                               :file/content "{}"}
+                  files [config-file
+                         {:path "pages/Home.md"
+                          :file/content "- imported block"}
+                         {:path "assets/image.png"
+                          :asset/payload (js/Uint8Array.from #js [1 2 3])
+                          :asset/size 3}]
+                  import-platform
+                  (assoc-in (platform/current)
+                            [:storage :asset-write-bytes!]
+                            (fn [& _]
+                              (p/rejected (js/Error. "asset write failed"))))]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 platform/current (constantly import-platform)]
+                (-> (import-file-graph! test-repo config-file files {:user-options {}})
+                    (p/then (fn [_]
+                              (is false "expected asset write failure")))
+                    (p/catch (fn [error]
+                               (is (= :import-asset-write-failed
+                                      (:code (ex-data error))))))
+                    (p/finally (fn []
+                                 (reset! ldb/*transact-pipeline-fn pipeline-before)
+                                 (done))))))))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
