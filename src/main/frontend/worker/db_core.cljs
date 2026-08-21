@@ -510,21 +510,31 @@
   #{:logseq.class/Comments
     :logseq.class/Comment})
 
-;; Fixed so duplicate repair txs from multiple clients converge on the same datoms.
-(def ^:private built-in-sync-repair-timestamp 0)
+(defn- built-in-sync-repair-timestamp
+  "Stable non-zero timestamp so multi-client repair txs converge without
+  resetting Created At / Updated At to 0."
+  [db]
+  (let [created-at (:kv/value (d/entity db :logseq.kv/graph-created-at))]
+    (when-not (pos-int? created-at)
+      (throw (ex-info "Built-in sync repair requires a positive :logseq.kv/graph-created-at"
+                      {:graph-created-at created-at})))
+    created-at))
 
 (defn- stable-built-in-sync-repair-item
-  [order item]
+  [order timestamp item]
   (if (and (map? item) (:block/uuid item))
     (cond-> (assoc item
-                   :block/created-at built-in-sync-repair-timestamp
-                   :block/updated-at built-in-sync-repair-timestamp)
+                   :block/created-at timestamp
+                   :block/updated-at timestamp)
       (not (contains? built-in-sync-repair-unordered-classes (:db/ident item)))
       (assoc :block/order order))
     item))
 
 (defn- built-in-sync-repair-tx-data
-  []
+  [timestamp]
+  (when-not (pos-int? timestamp)
+    (throw (ex-info "Built-in sync repair timestamp must be a positive integer"
+                    {:timestamp timestamp})))
   (let [properties built-in-sync-repair-properties
         new-properties (->> (select-keys db-property/built-in-properties properties)
                             sqlite-create-graph/build-properties
@@ -546,11 +556,12 @@
                (let [order (first @*orders)]
                  (swap! *orders rest)
                  order))
+             timestamp
              item))
           tx-data)))
 
 (defn- enqueue-built-in-sync-repair!
-  [repo]
+  [repo db]
   (when-not (client-op/get-local-tx-entry repo built-in-sync-repair-tx-id)
     (let [{:keys [should-inc-pending?]}
           (client-op/upsert-local-tx-entry!
@@ -564,17 +575,17 @@
             :forward-outliner-ops []
             :inverse-outliner-ops []
             :inferred-outliner-ops? false
-            :normalized-tx-data (built-in-sync-repair-tx-data)
+            :normalized-tx-data (built-in-sync-repair-tx-data (built-in-sync-repair-timestamp db))
             :reversed-tx-data []})]
       (when should-inc-pending?
         (client-op/adjust-pending-local-tx-count! repo 1)))))
 
 (defn- maybe-enqueue-built-in-sync-repair!
-  [repo conn migrate-result initial-data-exists?]
+  [repo db migrate-result initial-data-exists?]
   (when (and (nil? migrate-result)
              initial-data-exists?
-             (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
-    (enqueue-built-in-sync-repair! repo)))
+             (true? (:kv/value (d/entity db :logseq.kv/graph-remote?))))
+    (enqueue-built-in-sync-repair! repo db)))
 
 (defn- debug-transit-raw->datoms
   [raw]
@@ -672,7 +683,7 @@
               (let [migrate-result (db-migrate/migrate conn)]
                 (if migrate-result
                   (handle-migrate-result-local-txs! repo migrate-result)
-                  (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
+                  (maybe-enqueue-built-in-sync-repair! repo @conn migrate-result initial-data-exists?)))
               (transaction-handler/maybe-run-recycle-gc! conn))
 
             (ensure-canonical-revisions! conn)
