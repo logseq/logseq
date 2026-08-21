@@ -714,7 +714,9 @@
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
 
-            (db-listener/listen-db-changes! repo conn)
+            (if (file-graph-import/staging-repo? repo)
+              (db-listener/listen-db-changes! repo conn :handler-keys [:db-sync :search])
+              (db-listener/listen-db-changes! repo conn))
 
             nil))))))
 
