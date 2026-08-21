@@ -12,6 +12,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -233,14 +234,21 @@
      (= type "system")
      (p/let [_ (<set-electron-proxy {:type "system"})
              proxy (<get-system-proxy)]
+       (network-proxy/remember-child-env!
+        (when proxy
+          {:type (or (:protocol proxy) (:type proxy))
+           :host (:host proxy)
+           :port (:port proxy)}))
        (set-fetch-agent-proxy proxy))
 
      (= type "direct")
      (p/let [_ (<set-electron-proxy {:type "direct"})]
+       (network-proxy/remember-child-env! {:type "direct"})
        (set-fetch-agent-proxy nil))
 
      (or (= type "socks5") (= type "http"))
      (p/let [_ (<set-electron-proxy {:type type :host host :port port})]
+       (network-proxy/remember-child-env! {:type type :host host :port port})
        (set-fetch-agent-proxy {:protocol type :host host :port port}))
 
      :else

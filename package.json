@@ -195,6 +195,7 @@
     "send-intent": "^7.0.0",
     "string-width": "8.2.0",
     "tiny-pinyin": "1.3.2",
+    "undici": "6.24.1",
     "uniqolor": "1.1.1",
     "url": "^0.11.4",
     "util": "^0.12.5",

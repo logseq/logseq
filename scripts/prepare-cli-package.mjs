@@ -76,6 +76,7 @@ const dependencyNames = [
   "mldoc",
   "picocolors",
   "string-width",
+  "undici",
   "ws",
 ];
 

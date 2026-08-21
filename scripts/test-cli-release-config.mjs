@@ -410,6 +410,7 @@ assert.equal(packageJson.dependencies?.["@modelcontextprotocol/sdk"], undefined)
 assert.equal(packageJson.dependencies?.zod, undefined);
 assert.ok(packageJson.dependencies?.["@js-joda/core"], "publish package should include @js-joda/core for release artifacts");
 assert.ok(packageJson.dependencies?.keytar, "publish package should include keytar for db-worker-node");
+assert.ok(packageJson.dependencies?.undici, "publish package should include undici for db-worker-node proxy fetch");
 assert.ok(packageJson.dependencies?.["string-width"], "publish package should include string-width for CLI rendering");
 for (const dependencyName of zvecOptionalRuntimeDependencies) {
   assert.equal(

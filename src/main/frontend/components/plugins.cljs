@@ -557,6 +557,9 @@
                               (let [normalized-opts (normalize-opts opts)]
                                 (when-not (validate!)
                                   (state/set-state! [:electron/user-cfgs :settings/agent] normalized-opts)
+                                  (when @state/*db-worker
+                                    (state/<invoke-db-worker :thread-api/sync-app-state
+                                                             {:network/proxy normalized-opts}))
                                   (shui/dialog-close!)
                                   (-> (ipc/ipc :setProxy normalized-opts)
                                       (p/catch (fn [e]

@@ -209,7 +209,8 @@
   (let [payload (select-keys (state/get-state) [:git/current-repo :config
                                                  :auth/id-token :auth/access-token :auth/refresh-token
                                                  :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
-                                                 :user/info])]
+                                                 :user/info])
+        network-proxy (get-in (state/get-state) [:electron/user-cfgs :settings/agent])]
     (cond-> (if (nil? (:git/current-repo payload))
               (dissoc payload :git/current-repo)
               payload)
@@ -217,7 +218,10 @@
       (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
       (seq config/COGNITO-CLIENT-ID)
-      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
+      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)
+
+      (some? network-proxy)
+      (assoc :network/proxy network-proxy))))
 
 (defn- <sync-auth-state-to-db-worker!
   []

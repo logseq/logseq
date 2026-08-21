@@ -3,6 +3,7 @@
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.test-helper :as test-helper]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]
@@ -104,6 +105,26 @@
       (is (every? (fn [args]
                     (not-any? #{"--create-empty-db"} args))
                   @captured))
+      (finally
+        (set! (.-spawn child-process) original-spawn)))))
+
+(deftest spawn-server-merges-network-proxy-extra-env
+  (let [captured (atom nil)
+        original-spawn (.-spawn child-process)]
+    (set! (.-spawn child-process)
+          (fn [_cmd _args opts]
+            (reset! captured (js->clj opts :keywordize-keys true))
+            (js-obj "unref" (fn [] nil))))
+    (try
+      (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
+                             :repo "logseq_db_spawn_helper_test"
+                             :root-dir "/tmp/logseq-root"
+                             :extra-env (network-proxy/child-env {:type "http"
+                                                                  :host "127.0.0.1"
+                                                                  :port "10808"})})
+      (is (= "http://127.0.0.1:10808" (get-in @captured [:env :HTTP_PROXY])))
+      (is (= "http://127.0.0.1:10808" (get-in @captured [:env :LOGSEQ_NETWORK_PROXY])))
+      (is (= "1" (get-in @captured [:env :NODE_USE_ENV_PROXY])))
       (finally
         (set! (.-spawn child-process) original-spawn)))))
 

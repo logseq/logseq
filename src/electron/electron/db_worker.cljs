@@ -2,6 +2,7 @@
   (:require [logseq.cli.server :as cli-server]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [promesa.core :as p]))
 
 (defn- initial-state
@@ -237,7 +238,8 @@
 
 (defn- start-managed-daemon!
   [repo]
-  (let [config (merge {:owner-source :electron}
+  (let [config (merge {:owner-source :electron
+                       :extra-env (network-proxy/current-child-env)}
                       @*runtime-opts)]
     (p/let [_ (when (seq (:embedding-endpoint config))
                 (-> (cli-server/stop-server! config repo)

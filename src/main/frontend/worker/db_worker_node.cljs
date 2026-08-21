@@ -13,6 +13,7 @@
             [logseq.cli.style :as style]
             [logseq.db :as ldb]
             [logseq.db-worker.log :as db-worker-log]
+            [logseq.db-worker.network-proxy :as network-proxy]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
@@ -553,6 +554,7 @@
                                    :log-level (keyword (or log-level "info"))})
           (log/info :db-worker-node-version {:build-time (build-version/build-time)
                                              :revision (build-version/revision)})
+          (network-proxy/apply-from-process-env!)
           (reset! *ready? false)
           (reset! *lock-info nil)
           (reset! *server-list-file server-list-file)
