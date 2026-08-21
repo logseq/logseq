@@ -220,6 +220,13 @@
                    (when (seq data) {:context data})
                    extra)}))
 
+(defn- js-error-value
+  [value]
+  (cond
+    (instance? js/Error value) value
+    (sequential? value) (some #(when (instance? js/Error %) %) value)
+    :else nil))
+
 (defn- missing-e2ee-password-diagnostic?
   [error]
   (let [data (or (ex-data error) {})
@@ -996,8 +1003,10 @@
   [action config]
   (-> (p/let [config' (resolve-runtime-config! action config)
               graphs (invoke-global config' :thread-api/db-sync-list-remote-graphs [])]
-        {:status :ok
-         :data {:graphs (or graphs [])}})
+        (if-let [error (js-error-value graphs)]
+          (exception->error error {:code :sync-remote-graphs-failed})
+          {:status :ok
+           :data {:graphs (or graphs [])}}))
       (p/catch (fn [error]
                  (exception->error error nil)))))
 
