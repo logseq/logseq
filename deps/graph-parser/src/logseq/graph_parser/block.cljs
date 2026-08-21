@@ -165,12 +165,14 @@
     []))
 
 (defn- extract-refs-from-property-value
-  [value format]
+  [value mldoc-ast format]
   (cond
     (coll? value)
     (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
     (and (string? value) (= \" (first value) (last value)))
     nil
+    (and (string? value) (some? mldoc-ast))
+    (text/extract-refs-from-mldoc-ast mldoc-ast)
     (string? value)
     (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
       (text/extract-refs-from-mldoc-ast ast))
@@ -179,19 +181,18 @@
 
 (defn- get-page-ref-names-from-properties
   [properties user-config]
-  (let [page-refs (->>
+  (let [excluded-property-names
+        (set/union (apply disj
+                          (gp-property/editable-built-in-properties)
+                          gp-property/editable-linkable-built-in-properties)
+                   (gp-property/hidden-built-in-properties))
+        page-refs (->>
                    properties
                    (remove (fn [[k _]]
-                             (contains?
-                              (set/union (apply disj
-                                                (gp-property/editable-built-in-properties)
-                                                gp-property/editable-linkable-built-in-properties)
-                                         (gp-property/hidden-built-in-properties))
-                              (keyword k))))
-                   ;; get links ast
-                   (map last)
-                   (mapcat (fn [value]
-                             (extract-refs-from-property-value value (get user-config :format :markdown))))
+                             (contains? excluded-property-names (keyword k))))
+                   (mapcat (fn [[_ _ mldoc-ast original-value]]
+                             (extract-refs-from-property-value
+                              original-value mldoc-ast (get user-config :format :markdown))))
                    ;; comma separated collections
                    (concat (->> (map second properties)
                                 (filter coll?)
