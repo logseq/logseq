@@ -326,7 +326,10 @@
                     validation-result (worker-db-validate/validate-db conn :fix false)
                     validation {:status (if (seq (:errors validation-result)) :failed :passed)
                                 :errors (:errors validation-result)
-                                :invalid-entity-ids (:invalid-entity-ids validation-result)}]
+                                :invalid-entity-ids (:invalid-entity-ids validation-result)}
+                    _ (when (= :passed (:status validation))
+                        (reset! phase :search-index)
+                        (search-handler/<rebuild-blocks-index! repo))]
               (if (= :failed (:status validation))
                 (assoc (file-graph-import/failed-result run-id :validate :import/validation-failed)
                        :validation validation)
@@ -715,7 +718,7 @@
               (db-sync/handle-local-tx! repo initial-tx-report))
 
             (if (file-graph-import/staging-repo? repo)
-              (db-listener/listen-db-changes! repo conn :handler-keys [:db-sync :search])
+              (db-listener/listen-db-changes! repo conn :handler-keys [:db-sync])
               (db-listener/listen-db-changes! repo conn))
 
             nil))))))

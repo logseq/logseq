@@ -415,6 +415,28 @@
                                                             :total total}))]
              nil)))))))
 
+(defn <rebuild-blocks-index!
+  [repo]
+  (p/let [search-db (get-search-db repo)
+          conn (worker-state/get-datascript-conn repo)]
+    (when (and search-db conn)
+      (let [build-id (start-search-index-build! repo)]
+        (-> (report-search-index-progress! repo {:build-id build-id
+                                                 :status :running
+                                                 :stage :search-index
+                                                 :progress 0
+                                                 :processed 0
+                                                 :total 0})
+            (p/then (fn [_]
+                      (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
+            (p/then (fn [_]
+                      (<build-blocks-index! repo search-db conn build-id)))
+            (p/finally (fn []
+                         (when (= build-id (get @*search-index-build-ids repo))
+                           (report-search-index-progress! repo {:build-id build-id
+                                                                :status :idle}))
+                         (clear-search-index-build! repo build-id))))))))
+
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
   (p/let [search-db (get-search-db repo)]
