@@ -573,6 +573,7 @@ let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
   || starts_with ~prefix:"file-version-" name
   || starts_with ~prefix:"logseq_db_" name
+  || starts_with ~prefix:".cli-" name
 
 let contains_substring ~needle text =
   let needle_len = String.length needle in
