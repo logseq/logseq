@@ -353,9 +353,10 @@
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
   (let [db @conn
+        hidden-node? (search/make-hidden-entity-predicate)
         blocks (->> (d/datoms db :avet :block/uuid)
                     (keep #(d/entity db (:e %)))
-                    (remove search/hidden-entity?)
+                    (remove hidden-node?)
                     vec)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)

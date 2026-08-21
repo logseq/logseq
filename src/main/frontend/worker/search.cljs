@@ -519,19 +519,44 @@ DROP TRIGGER IF EXISTS blocks_au;
           (js/console.error e))))))
 
 (defn- hidden-search-node?
-  [entity]
+  [entity hidden-hierarchy?]
   (if (ldb/property? entity)
     (or (:logseq.property/deleted-at entity)
         (and (ldb/built-in? entity)
              (ldb/private-built-in-page? entity)))
-    (ldb/hidden? entity)))
+    (hidden-hierarchy? entity)))
 
 (defn hidden-entity?
-  [entity]
-  (or (hidden-search-node? entity)
-      (let [page (:block/page entity)]
-        (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
+  ([entity]
+   (hidden-entity? entity ldb/hidden?))
+  ([entity hidden-hierarchy?]
+   (or (hidden-search-node? entity hidden-hierarchy?)
+       (let [page (:block/page entity)]
+         (and (hidden-hierarchy? page)
+              (not= (:block/title page) common-config/quick-add-page-name))))))
+
+(defn- cached-hidden-hierarchy?
+  [cache entity seen]
+  (if-let [entity-id (:db/id entity)]
+    (if-let [entry (find @cache entity-id)]
+      (val entry)
+      (let [hidden? (boolean
+                     (when-not (contains? seen entity-id)
+                       (or (:logseq.property/hide? entity)
+                           (:logseq.property/deleted-at entity)
+                           (cached-hidden-hierarchy? cache
+                                                     (:block/parent entity)
+                                                     (conj seen entity-id)))))]
+        (vswap! cache assoc entity-id hidden?)
+        hidden?))
+    (ldb/hidden? entity)))
+
+(defn make-hidden-entity-predicate
+  "Creates a cached `hidden-entity?` predicate for one immutable DB snapshot."
+  []
+  (let [cache (volatile! {})
+        hidden-hierarchy? #(cached-hidden-hierarchy? cache % #{})]
+    #(hidden-entity? % hidden-hierarchy?)))
 
 (defn- page-or-object?
   [entity]
