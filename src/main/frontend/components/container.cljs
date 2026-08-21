@@ -337,7 +337,13 @@
            (fn [^js e]
              (let [target (gobj/get e "target")
                    block-el (.closest target ".bullet-container[blockid]")
-                   block-id (some-> block-el (.getAttribute "blockid"))
+                   ;; A row rendered through :block/link carries the linked block's
+                   ;; uuid as `blockid` and the linking block's own uuid as
+                   ;; `originalblockid`. Block-level context menu actions must act on
+                   ;; the linking block, otherwise they operate on the embed target.
+                   ls-block-el (some-> target (.closest ".ls-block"))
+                   block-id (or (some-> ls-block-el (.getAttribute "originalblockid"))
+                                (some-> block-el (.getAttribute "blockid")))
                    {:keys [block block-ref]} (state/get-state :block-ref/context)
                    {:keys [page page-entity]} (state/get-state :page-title/context)
                    show!
