@@ -280,7 +280,7 @@
  ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
-   :favorites ["Interstellar" "some page"]
+   :favorites ["Interstellar" "some page" "[[new page]]" "n1/x/y"]
 
  ;; Set flashcards interval.
  ;; Expected value:

@@ -115,7 +115,7 @@
                 (interpolate-sentence
                  (t :page/open-issue-desc)
                  :links
-                 [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
+                 [{:href "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
      (shui-toaster/install-toaster)]))
 
 (hsx/defc not-found
