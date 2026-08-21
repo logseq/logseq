@@ -34,15 +34,19 @@
                       {:key key :snapshot result})))
     result))
 
+(defn- snapshot-value
+  [{:keys [status value error] :as result}]
+  (case status
+    :ready value
+    (:loading :missing) nil
+    :error (if (state/db-worker-uninitialized-error? error)
+             nil
+             (throw error))
+    (throw (ex-info "Invalid renderer subscription snapshot" result))))
+
 (defn- use-external-store
   [subscribe! snapshot key]
-  (let [{:keys [status value error] :as result}
-        (use-external-store-snapshot subscribe! snapshot key)]
-    (case status
-      :ready value
-      (:loading :missing) nil
-      :error (throw error)
-      (throw (ex-info "Invalid renderer subscription snapshot" result)))))
+  (snapshot-value (use-external-store-snapshot subscribe! snapshot key)))
 
 (defn- use-external-store-projection
   [subscribe! snapshot key project]
@@ -67,14 +71,8 @@
                                     {:source source :snapshot projected})
                               projected))))
                       #js [snapshot key project])
-        {:keys [status value error] :as result}
-        (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
-    (case status
-      :ready value
-      (:loading :missing) nil
-      :error (throw error)
-      (throw (ex-info "Invalid renderer subscription snapshot"
-                      {:key key :snapshot result})))))
+        result (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
+    (snapshot-value result)))
 
 (defn use-block
   [block-uuid]
@@ -103,13 +101,7 @@
   [block-uuids]
   (when (use-block-prefetch block-uuids)
     (mapv (fn [block-uuid]
-            (let [{:keys [status value error] :as snapshot}
-                  (subs/block-snapshot block-uuid)]
-              (case status
-                :ready value
-                :missing nil
-                :error (throw error)
-                (throw (ex-info "Invalid settled block snapshot" snapshot)))))
+            (snapshot-value (subs/block-snapshot block-uuid)))
           block-uuids)))
 
 (defn use-block-projection

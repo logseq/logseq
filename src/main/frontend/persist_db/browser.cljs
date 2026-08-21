@@ -273,8 +273,13 @@
       result))
 
   (<list-db [_this]
-    (-> (state/<invoke-db-worker :thread-api/list-db)
-        (p/catch sqlite-error-handler)))
+    (if-not @state/db-worker-ready?
+      (p/resolved [])
+      (-> (state/<invoke-db-worker :thread-api/list-db)
+          (p/catch (fn [error]
+                     (if (state/db-worker-uninitialized-error? error)
+                       []
+                       (sqlite-error-handler error)))))))
 
   (<unsafe-delete [_this repo]
     (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo))
@@ -286,7 +291,10 @@
     (-> (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
                 _ (<sync-markdown-mirror-setting! repo)]
           result)
-        (p/catch sqlite-error-handler)))
+        (p/catch (fn [error]
+                   (if (state/db-worker-uninitialized-error? error)
+                     (p/rejected error)
+                     (sqlite-error-handler error))))))
 
   (<export-db [_this repo opts]
     (-> (if (util/electron?)
