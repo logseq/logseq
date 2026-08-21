@@ -1,8 +1,11 @@
 (ns frontend.components.imports-test
   (:require [cljs.test :refer [async deftest is]]
-            [frontend.config :as config]
             [frontend.components.imports]
+            [frontend.config :as config]
             [frontend.fs :as fs]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.state :as state]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -56,4 +59,35 @@
                 (is (true? @completed?)))))
           (p/catch (fn [error]
                      (is false (str error))))
+          (p/finally done)))))
+
+(deftest file-graph-import-failure-reaches-terminal-state-test
+  (async done
+    (let [import-file-graph (some-> (resolve 'frontend.components.imports/<import-file-graph)
+                                    deref)
+          state-changes (atom [])
+          state-values (atom {})
+          expected-error (ex-info "worker unavailable" {:code :worker-unavailable})]
+      (is (fn? import-file-graph))
+      (-> (p/with-redefs [repo-handler/new-db! (fn [& _]
+                                                 (p/resolved "logseq_db_target"))
+                          state/<invoke-db-worker (fn [& _]
+                                                    (p/rejected expected-error))
+                          state/get-state (fn [path]
+                                            (get-in @state-values (if (coll? path) path [path])))
+                          state/set-state! (fn [path value & _]
+                                             (let [state-path (if (coll? path) path [path])]
+                                               (swap! state-values assoc-in state-path value)
+                                               (swap! state-changes conj [path value])))
+                          notification/show! (fn [& _] nil)]
+            (import-file-graph [] {:graph-name "target"} nil))
+          (p/then
+           (fn [result]
+             (is (= :failed (:status result)))
+             (is (= [[:graph/importing nil]
+                     [:graph/importing-state nil]]
+                    (take-last 2 @state-changes)))))
+          (p/catch
+           (fn [error]
+             (is false (str "Import failure must be normalized: " error))))
           (p/finally done)))))

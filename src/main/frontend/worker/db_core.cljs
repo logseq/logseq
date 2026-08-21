@@ -6,6 +6,7 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [datascript.storage :refer [IStorage] :as storage]
+   [frontend.common.file-graph-import :as file-graph-import]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
@@ -283,29 +284,54 @@
                              entity-ids)
                        {::gp-exporter/imported-data? true})))))
 
+(defn- completed-import-terminal-result
+  [run-id result validation staged-assets notifications]
+  (file-graph-import/completed-result
+   run-id
+   {:validation validation
+    :files (:files result)
+    :import-state (import-state-summary (:import-state result))
+    :notifications notifications
+    :staged-assets staged-assets}))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [notifications (atom [])
-          staged-assets (atom [])
-          options (-> opts
-                      (assoc :notify-user #(swap! notifications conj %)
-                             :log-fn (fn [& args]
-                                       (log/info :import-file-graph {:args args}))
-                             :<read-file (fn [file] (p/resolved (file-content file)))
-                             :<get-file-stat (constantly nil)
-                             :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-                      (dissoc :set-ui-state))]
-      (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-              _ (finalize-import-render-revisions! conn)
-              validation (worker-db-validate/validate-db conn :fix false)]
-        {:files (:files result)
-         :import-state (import-state-summary (:import-state result))
-         :notifications @notifications
-         :staged-assets @staged-assets
-         :validation {:errors (:errors validation)
-                      :invalid-entity-ids (:invalid-entity-ids validation)}}))))
+  (let [run-id (or (:run-id opts) (str (random-uuid)))
+        phase (atom :open-graph)]
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [notifications (atom [])
+            staged-assets (atom [])
+            options (-> opts
+                        (assoc :notify-user #(swap! notifications conj %)
+                               :log-fn (fn [& args]
+                                         (log/info :import-file-graph {:args args}))
+                               :<read-file (fn [file] (p/resolved (file-content file)))
+                               :<get-file-stat (constantly nil)
+                               :<read-and-copy-asset (fn [file assets buffer-handler]
+                                                       (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
+                        (dissoc :set-ui-state))]
+        (-> (p/let [_ (reset! phase :import-files)
+                    result (gp-exporter/export-file-graph conn conn config-file files options)
+                    _ (reset! phase :render-revisions)
+                    _ (finalize-import-render-revisions! conn)
+                    _ (reset! phase :validate)
+                    validation-result (worker-db-validate/validate-db conn :fix false)
+                    validation {:status (if (seq (:errors validation-result)) :failed :passed)
+                                :errors (:errors validation-result)
+                                :invalid-entity-ids (:invalid-entity-ids validation-result)}]
+              (if (= :failed (:status validation))
+                (assoc (file-graph-import/failed-result run-id :validate :import/validation-failed)
+                       :validation validation)
+                (completed-import-terminal-result run-id result validation @staged-assets @notifications)))
+            (p/catch
+             (fn [error]
+               (let [code (or (:code (ex-data error)) :import/worker-failed)]
+                 (log/error :import-file-graph-failed true
+                            :run-id run-id
+                            :phase @phase
+                            :code code)
+                 (file-graph-import/failed-result run-id @phase code))))))
+      (p/resolved (file-graph-import/failed-result run-id :open-graph :graph-not-opened)))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"

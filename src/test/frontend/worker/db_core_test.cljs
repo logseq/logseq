@@ -2562,7 +2562,7 @@
          (is (= [:user.property/a :user.property/b :logseq.property/icon :logseq.property/private]
                 (map :db/ident with-built-ins))))))))
 
-(deftest import-file-graph-imports-documents-into-worker-conn
+(deftest import-file-graph-returns-terminal-results
   (async done
          (restoring-worker-state
           (fn []
@@ -2589,7 +2589,10 @@
                 (db-listener/listen-db-changes! test-repo conn
                                                 :handler-keys [:sync-db-to-main-thread])
                 (->
-                 (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                 (p/let [result (import-file-graph! test-repo config-file files {:run-id "import-run"
+                                                                                :user-options {}})
+                         failed-result (import-file-graph! "missing-repo" config-file files {:run-id "missing-run"
+                                                                                             :user-options {}})
                          page (some->> (d/q '[:find [?e ...]
                                                :where [?e :block/name "home"]]
                                              @conn)
@@ -2602,6 +2605,15 @@
                                @renderer-payloads)]
                    (is (= #{"pages/Home.md" "logseq/config.edn"}
                           (set (map :path (:files result)))))
+                   (is (= {:contract-version 1
+                           :run-id "import-run"
+                           :status :completed}
+                          (select-keys result [:contract-version :run-id :status])))
+                   (is (= {:contract-version 1
+                           :run-id "missing-run"
+                           :status :failed
+                           :phase :open-graph}
+                          (select-keys failed-result [:contract-version :run-id :status :phase])))
                    (is (= "Home" (:block/title page)))
                    (is (= "imported block" (:block/title block)))
                    (doseq [entity [page block]]

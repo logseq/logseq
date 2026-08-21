@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
+            [frontend.common.file-graph-import :as file-graph-import]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -361,28 +362,82 @@
      :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
    :default-config default-config})
 
-(defn- import-file-graph
+(defn- import-error-code
+  [error]
+  (or (:code (ex-data error)) :import/unexpected-error))
+
+(defn- completed-import-terminal-result
+  [run-id import-result]
+  (if (:contract-version import-result)
+    import-result
+    (file-graph-import/completed-result run-id import-result)))
+
+(defn- current-file-graph-import?
+  [run-id]
+  (= run-id (state/get-state [:graph/importing-state :run-id])))
+
+(defn- clear-file-graph-import!
+  [run-id]
+  (when (current-file-graph-import? run-id)
+    (state/set-state! :graph/importing nil)
+    (state/set-state! :graph/importing-state nil)
+    (shui/dialog-close! :import-indicator)))
+
+(defn- show-import-terminal-failure!
+  [terminal-result]
+  (let [code (or (some-> terminal-result :issues first :code)
+                 :import/unexpected-error)]
+    (notification/show! (t :import/unexpected-error (name code)) :error)))
+
+(defn- <import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
    config-file]
-  (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (let [run-id (str (random-uuid))
+        phase (atom :create-graph)
+        start-time (t/now)]
+    (state/set-state! :graph/importing :file-graph)
+    (state/set-state! :graph/importing-state {:run-id run-id
+                                               :current-page "Config files"})
+    (-> (p/let [repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                _ (reset! phase :serialize-files)
+                serialized-files (<serialize-import-files *files)
+                serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+                options (assoc (build-file-graph-worker-options user-options config/config-default-content)
+                               :run-id run-id)
+                _ (reset! phase :worker-import)
+                import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+                terminal-result (completed-import-terminal-result run-id import-result)]
+          (if (= :failed (:status terminal-result))
+            (do
+              (show-import-terminal-failure! terminal-result)
+              terminal-result)
+            (p/let [_ (doseq [notification (:notifications terminal-result)]
+                        (show-notification notification))
+                    _ (reset! phase :write-assets)
+                    _ (write-staged-assets! repo (:staged-assets terminal-result))
+                    published-result (assoc terminal-result :publication {:status :published
+                                                                          :repo repo})]
+              (reset! phase :terminal)
+              (log/info :import-file-graph-finished true
+                        :run-id run-id
+                        :elapsed-ms (t/in-millis (t/interval start-time (t/now))))
+              (validate-imported-data published-result)
+              (state/pub-event! [:graph/ready repo])
+              (finished-cb)
+              published-result)))
+        (p/catch
+         (fn [error]
+           (let [code (import-error-code error)
+                 result (file-graph-import/failed-result run-id @phase code)]
+             (log/error :import-file-graph-failed true
+                        :run-id run-id
+                        :phase @phase
+                        :code code)
+             (when-not (= :create-graph @phase)
+               (notification/show! (t :import/unexpected-error (name code)) :error))
+             result)))
+        (p/finally #(clear-file-graph-import! run-id)))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
@@ -403,7 +458,7 @@
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                              (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                                 (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
-                                  (import-file-graph files user-inputs config-file)
+                                  (<import-file-graph files user-inputs config-file)
                                   (notification/show! (t :import/logseq-config-missing)
                                                       :error)))))]
     (shui/dialog-open!
