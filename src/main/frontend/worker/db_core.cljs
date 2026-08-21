@@ -57,6 +57,7 @@
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.graph-parser.exporter :as gp-exporter]
+   [logseq.outliner.pipeline :as outliner-pipeline]
    [promesa.core :as p]
    [shadow.resource :as rc]))
 
@@ -277,13 +278,33 @@
                           [(missing? $ ?e :block/tx-id)]]
                         db)]
     (when (seq entity-ids)
-      (let [tx-id (inc (:max-tx db))]
-        (ldb/transact! conn
-                       (mapv (fn [entity-id]
+      (let [page-or-object? (memoize outliner-pipeline/page-or-object?-helper)
+            refs-tx
+            (mapcat
+             (fn [entity-id]
+               (let [block (d/entity db entity-id)
+                     refs (->> (outliner-pipeline/db-rebuild-block-refs
+                                db block :page-or-object?-memoized page-or-object?)
+                               set)
+                     old-refs (->> (:block/refs block) (map :db/id) set)]
+                 (when (not= refs old-refs)
+                   (concat
+                    (map (fn [ref-id]
+                           [:db/retract entity-id :block/refs ref-id])
+                         (clojure.set/difference old-refs refs))
+                    (map (fn [ref-id]
+                           [:db/add entity-id :block/refs ref-id])
+                         (clojure.set/difference refs old-refs))))))
+             entity-ids)
+            tx-id (inc (:max-tx db))
+            revision-tx (map (fn [entity-id]
                                {:db/id entity-id
                                 :block/tx-id tx-id})
-                             entity-ids)
-                       {::gp-exporter/imported-data? true})))))
+                             entity-ids)]
+        (ldb/transact! conn
+                       (into (vec refs-tx) revision-tx)
+                       {::gp-exporter/imported-data? true
+                        ::gp-exporter/new-graph? true})))))
 
 (defn- completed-import-terminal-result
   [run-id result validation staged-assets notifications issues]
