@@ -150,19 +150,22 @@
                                            (into db-property/schema-properties)
                                            (conj :block/tags))
         page-class-id (:db/id (d/entity db :logseq.class/Page))
-        all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
+        all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))
+        property-ident->map (memoize (fn [property-ident]
+                                       (some-> (d/entity db property-ident)
+                                               property-entity->map)))]
     (mapv
      (fn [ent]
        (reduce (fn [m [k v]]
-                 (if-let [property (and (db-property/property? k)
-                                        (not (contains? exceptions-to-block-properties k))
-                                        (d/entity db k))]
+                 (if-let [property-map (and (db-property/property? k)
+                                            (not (contains? exceptions-to-block-properties k))
+                                            (property-ident->map k))]
                    (update m :block/properties (fnil conj [])
-                           [(property-entity->map property) v])
+                           [property-map v])
                    (if (= :block/tags k)
                      ;; Provides additional options map to validation for data about current entity being tagged
-                     (let [property (d/entity db :block/tags)]
-                       (assoc m k [(property-entity->map property)
+                     (let [property-map (property-ident->map :block/tags)]
+                       (assoc m k [property-map
                                    v
                                    (merge (select-keys ent [:logseq.property/built-in?])
                                           {:page-class-id page-class-id
