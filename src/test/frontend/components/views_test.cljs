@@ -8,6 +8,7 @@
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -213,6 +214,92 @@
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
     (is (= block
            (views/gallery-card-asset-block block :block/uuid)))))
+
+(deftest gallery-card-asset-block-should-use-queried-asset-row
+  "Query / table / gallery have no type=:asset property on uploaded assets.
+   When the row itself is an Asset, treat it as the gallery media."
+  (let [asset {:db/id 193
+               :block/title "uploaded.png"
+               :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+               :logseq.property.asset/type "png"
+               :logseq.property.asset/size 1024}
+        page {:db/id 10
+              :block/title "A page"
+              :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}
+        cover {:db/id 20
+               :block/title "cover.png"
+               :logseq.property.asset/type "png"}]
+    (is (= asset
+           (views/gallery-card-asset-block asset nil))
+        "A queried Asset row with no asset property still resolves to itself.")
+    (is (nil? (views/gallery-card-asset-block page nil))
+        "Non-asset query rows do not become gallery media.")
+    (is (= cover
+           (views/gallery-card-asset-block (assoc page :user.property/cover cover)
+                                           :user.property/cover))
+        "An explicit type=:asset property still wins over the row.")))
+
+(deftest gallery-asset-property-ident-still-uses-uuid-for-asset-tag-page
+  (is (= :block/uuid
+         (#'views/gallery-asset-property-ident
+          {:logseq.property/view-for {:db/ident :logseq.class/Asset}
+           :logseq.property.view/feature-type :class-objects}
+          [])))
+  (is (nil? (#'views/gallery-asset-property-ident
+             {:logseq.property.view/feature-type :query-result}
+             [{:id :logseq.property.asset/type :logseq.property/type :default}]))
+      "Query views without a type=:asset column keep the row-as-asset gallery fallback."))
+
+(deftest asset-file-column-renders-only-asset-rows
+  (let [calls (atom [])
+        columns (views/build-columns {} [:logseq.property.asset/type] {:add-tags-column? false})
+        file-column (some #(when (= :file (:id %)) %) columns)
+        asset {:logseq.property.asset/type "png" :block/title "uploaded.png"}
+        page {:block/title "A page"}]
+    (with-redefs [state/get-component
+                  (fn [k]
+                    (when (= k :block/asset-cp)
+                      (fn [config row]
+                        (swap! calls conj [config row])
+                        [:div "asset"])))]
+      ((:cell file-column) nil asset nil)
+      ((:cell file-column) nil page nil)
+      (is (= [asset] (map second @calls))
+          "The File column renders the row itself only when it is an Asset."))))
+
+(deftest build-columns-should-expose-file-column-for-assets
+  (let [asset-type-property {:db/ident :logseq.property.asset/type
+                             :block/title "Type"
+                             :logseq.property/type :default}
+        asset-size-property {:db/ident :logseq.property.asset/size
+                             :block/title "Size"
+                             :logseq.property/type :number}
+        query-columns (views/build-columns {}
+                                           [:logseq.property.asset/type
+                                            :logseq.property.asset/size
+                                            :logseq.property.asset/checksum]
+                                           {:add-tags-column? false})
+        class-columns (views/build-columns {:view-parent {:db/ident :logseq.class/Asset}}
+                                           [asset-type-property asset-size-property]
+                                           {:add-tags-column? true
+                                            :add-page-column? true})
+        other-columns (views/build-columns {}
+                                           [{:db/ident :logseq.property/status
+                                             :block/title "Status"
+                                             :logseq.property/type :default}]
+                                           {:add-tags-column? false})]
+    (is (some #(= :file (:id %)) query-columns)
+        "Query columns include File when results have Asset type/size.")
+    (is (some #(= :file (:id %)) class-columns)
+        "The #Asset tag page still exposes a File column.")
+    (is (not (some #(= :file (:id %)) other-columns))
+        "Unrelated tables do not gain a File column.")
+    (is (= :file
+           (->> class-columns
+                (drop-while #(not (contains? #{:file :logseq.property.asset/type} (:id %))))
+                first
+                :id))
+        "File is inserted before Asset class properties.")))
 
 (deftest view-row-ids-flatten-only-typed-uuid-payloads-test
   (let [row-a (random-uuid)
