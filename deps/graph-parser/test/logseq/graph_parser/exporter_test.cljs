@@ -101,16 +101,6 @@
   (frequencies (map db-property/closed-value-content
                     (db-property/get-closed-property-values db :logseq.property/status))))
 
-(defn- blocks-by-title
-  [db title]
-  (->> (d/q '[:find [?b ...]
-              :in $ ?title
-              :where
-              [?b :block/page]
-              [?b :block/title ?title]]
-            db title)
-       (map #(d/entity db %))))
-
 (defn- task-blocks-by-title
   [db title]
   (->> (d/q '[:find [?b ...]
@@ -121,15 +111,6 @@
               [?b :block/tags :logseq.class/Task]]
             db title)
        (map #(d/entity db %))))
-
-(defn- report-retracts-block-uuid?
-  [tx-report block-uuid]
-  (boolean
-   (some (fn [datom]
-           (and (= :block/uuid (:a datom))
-                (= block-uuid (:v datom))
-                (false? (:added datom))))
-         (:tx-data tx-report))))
 
 (defn- imported-favorite-titles
   [db]
@@ -687,18 +668,18 @@ abc
             missing-block (db-test/find-block-by-content @conn #"Missing ref")
             existing-block (db-test/find-block-by-content @conn #"Existing ref")
             target-block (db-test/find-block-by-content @conn "Target block")
-            empty-title-blocks (blocks-by-title @conn "")
-            empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
-            empty-title-parent-block (some #(when (some (fn [child]
-                                                          (= "Child survives" (:block/title child)))
-                                                        (ordered-children %))
-                                             %)
-                                           empty-title-blocks)]
+            preserved-property-block (db-test/find-block-by-content
+                                      @conn
+                                      (str "`((" empty-title-property-uuid "))`"))
+            preserved-parent-block (db-test/find-block-by-content
+                                    @conn
+                                    (str "`((" empty-title-parent-uuid "))`"))]
       (is (empty? (filter #(= :block/pre-block? (:a %))
                           (d/datoms @conn :eavt)))
           "Legacy pre-block markers are never transacted")
-      (is (= "Missing ref" (:block/title missing-block))
-          "Missing OG block refs are removed from imported content")
+      (is (= (str "Missing ref `((" missing-uuid "))`")
+             (:block/title missing-block))
+          "Missing OG block ref text remains visible after structural cleanup")
       (is (empty? (:block/refs missing-block))
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
@@ -714,15 +695,13 @@ abc
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 3 (count empty-title-blocks))
-          "Blocks whose titles become empty after cleanup are preserved")
-      (is (true? (:logseq.property/heading empty-title-property-block))
-          "Empty-title blocks keep imported heading properties")
+      (is (true? (:logseq.property/heading preserved-property-block))
+          "Blocks with preserved missing refs keep imported heading properties")
       (is (= "yellow"
-             (:logseq.property/background-color (db-test/readable-properties empty-title-property-block)))
-          "Empty-title blocks keep imported background colors")
-      (is (= ["Child survives"] (mapv :block/title (ordered-children empty-title-parent-block)))
-          "Empty-title parent blocks keep their children")
+             (:logseq.property/background-color (db-test/readable-properties preserved-property-block)))
+          "Blocks with preserved missing refs keep imported background colors")
+      (is (= ["Child survives"] (mapv :block/title (ordered-children preserved-parent-block)))
+          "Blocks with preserved missing refs keep their children")
       (is (= [(:db/id target-block)] (mapv :db/id (:block/refs existing-block)))
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
@@ -734,63 +713,105 @@ abc
 (deftest-async ^:integration import-generated-markdown-file-graph-fuzz
   (assert-generated-md-file-graphs-import (range 1 101)))
 
-(deftest-async export-doc-files-propagates-missing-block-ref-cleanup-report
-  (let [missing-uuid #uuid "55555555-5555-5555-5555-555555555555"
-        tx-reports (atom [])]
-    (p/let [file (write-temp-graph-file
-                  "pages/A.md"
-                  (str "- Missing ref ((" missing-uuid "))\n"))
+(deftest-async export-doc-files-isolates-missing-entity-cleanup
+  (let [missing-uuids [#uuid "55555555-5555-5555-5555-555555555555"
+                       #uuid "66666666-6666-6666-6666-666666666666"]
+        cleanup-attempts (atom 0)
+        original-transact! ldb/transact!]
+    (p/let [files (mapv (fn [index missing-uuid]
+                          (write-temp-graph-file
+                           (str "pages/" index ".md")
+                           (str "- Missing ref ((" missing-uuid "))\n")))
+                        (range)
+                        missing-uuids)
             conn (db-test/create-conn)
             _ (db-pipeline/add-listener conn)
             doc-options (gp-exporter/build-doc-options
                          {:macros {} :file/name-format :triple-lowbar}
                          (merge default-export-options
                                 {:user-options {:convert-all-tags? false}
-                                 :on-tx-report #(swap! tx-reports conj %)}))
-            _ (gp-exporter/export-doc-files conn [{:path file}] <read-file doc-options)]
-      (is (some #(report-retracts-block-uuid? % missing-uuid) @tx-reports)
-          "Missing block ref cleanup tx-report is propagated to import callers")
-      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
-          "Missing OG block ref placeholder is removed"))))
+                                 :notify-user (constantly nil)}))
+            result (p/with-redefs
+                     [ldb/transact!
+                      (fn [& args]
+                        (let [[_conn tx-data tx-meta] args
+                              cleanup? (and (nil? (:logseq.graph-parser.exporter/path tx-meta))
+                                            (some #(and (vector? %)
+                                                        (= :db/retract (first %))
+                                                        (= :block/refs (nth % 2 nil)))
+                                                  tx-data))]
+                          (if (and cleanup? (<= (swap! cleanup-attempts inc) 2))
+                            (throw (ex-info "missing cleanup entity"
+                                            {:error :entity-id/missing
+                                             :entity-id 42}))
+                            (apply original-transact! args))))]
+                     (gp-exporter/export-doc-files
+                      conn
+                      (mapv #(hash-map :path %) files)
+                      <read-file
+                      doc-options))]
+      (is (= [:import/missing-reference-cleanup-skipped]
+             (mapv :code (:issues result))))
+      (is (= 1 (count (keep #(d/entity @conn [:block/uuid %]) missing-uuids)))
+          "Other missing-reference cleanup units continue after an isolated failure"))))
 
-(deftest export-doc-files-aborts-on-export-file-failure
-  (cljs.test/async
-   done
-   (let [attempted-paths (atom [])
-         failed-error (ex-info "worker transact failed" {:code :worker-transact-failed})
-         graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
-                                           ["pages/B.md" "- second\n"]])
-         first-file (node-path/join graph-dir "pages/A.md")
-         second-file (node-path/join graph-dir "pages/B.md")
-         conn (db-test/create-conn)
-         doc-options (gp-exporter/build-doc-options
-                      {:macros {} :file/name-format :triple-lowbar}
-                      (merge default-export-options
-                             {:notify-user (constantly nil)
-                              :user-options {:convert-all-tags? false}
-                              :<export-file (fn [_conn {:file/keys [path]} _opts]
-                                              (swap! attempted-paths conj path)
-                                              (p/rejected failed-error))}))
-         assert-failure (fn [result]
-                          (is (= :worker-transact-failed
-                                 (or (:code (ex-data result))
-                                     (:code (ex-data (.-cause result)))))
-                              "Export file failure is propagated to the caller")
-                          (is (= [first-file] @attempted-paths)
-                              "Import stops after the first export file failure")
-                          (done))]
-     (try
-       (-> (gp-exporter/export-doc-files
-            conn
-            [{:path first-file} {:path second-file}]
-            <read-file
-            doc-options)
-           (.then (fn [_]
-                    (is false "Export file failure should reject")
-                    (done)))
-           (.catch assert-failure))
-       (catch :default e
-         (assert-failure e))))))
+(deftest-async export-doc-files-classifies-file-failures
+  (let [graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
+                                          ["pages/B.md" "- second\n"]])
+        first-file (node-path/join graph-dir "pages/A.md")
+        second-file (node-path/join graph-dir "pages/B.md")
+        files [{:path first-file} {:path second-file}]
+        recoverable-attempts (atom [])
+        recoverable-conn (db-test/create-conn)
+        recoverable-options
+        (gp-exporter/build-doc-options
+         {:macros {} :file/name-format :triple-lowbar}
+         (merge default-export-options
+                {:notify-user (constantly nil)
+                 :user-options {:convert-all-tags? false}
+                 :recoverable-error? #(= :import/file-parse-failed %)
+                 :<export-file
+                 (fn [conn {:file/keys [path]} _opts]
+                   (swap! recoverable-attempts conj path)
+                   (if (= path first-file)
+                     (do
+                       (ldb/transact! conn [{:db/ident :test/failed-file
+                                             :kv/value "partial"}])
+                       (p/rejected (ex-info "invalid file"
+                                            {:code :import/file-parse-failed})))
+                     (do
+                       (ldb/transact! conn [{:db/ident :test/imported-file
+                                             :kv/value "complete"}])
+                       (p/resolved nil))))}))
+        fatal-attempts (atom [])
+        fatal-error (ex-info "worker transact failed" {:code :worker-transact-failed})
+        fatal-options
+        (gp-exporter/build-doc-options
+         {:macros {} :file/name-format :triple-lowbar}
+         (merge default-export-options
+                {:notify-user (constantly nil)
+                 :user-options {:convert-all-tags? false}
+                 :recoverable-error? #(= :import/file-parse-failed %)
+                 :<export-file (fn [_conn {:file/keys [path]} _opts]
+                                 (swap! fatal-attempts conj path)
+                                 (p/rejected fatal-error))}))]
+    (p/let [recoverable-result (gp-exporter/export-doc-files
+                                recoverable-conn files <read-file recoverable-options)
+            fatal-result (-> (gp-exporter/export-doc-files
+                             (db-test/create-conn) files <read-file fatal-options)
+                             (p/then (constantly :unexpected-success))
+                             (p/catch #(hash-map :error %)))]
+      (is (= [first-file second-file] @recoverable-attempts))
+      (is (nil? (d/entity @recoverable-conn :test/failed-file))
+          "A recoverable file leaves no partial DB state")
+      (is (= "complete" (:kv/value (d/entity @recoverable-conn :test/imported-file))))
+      (is (= [:import/file-parse-failed] (mapv :code (:issues recoverable-result))))
+      (is (= :worker-transact-failed
+             (let [error (:error fatal-result)]
+               (or (:code (ex-data error))
+                   (:code (ex-data (.-cause error)))))))
+      (is (= [first-file] @fatal-attempts)
+          "A fatal file error stops the import immediately"))))
 
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")

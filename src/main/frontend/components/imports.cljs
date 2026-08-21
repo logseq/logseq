@@ -61,10 +61,12 @@
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
 (defn- finished-cb
-  [& {:keys [reload?]
-      :or {reload? true}}]
+  [& {:keys [reload? issue-count]
+      :or {reload? true issue-count 0}}]
   (state/pub-event! [:graph/sync-context])
-  (notification/show! (t :import/file-finished) :success)
+  (if (pos? issue-count)
+    (notification/show! (t :import/completed-with-errors issue-count) :warning false)
+    (notification/show! (t :import/file-finished) :success))
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
   (if util/web-platform?
@@ -269,7 +271,7 @@
                           (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
 (defn- validate-imported-data
-  [{:keys [import-state files validation]}]
+  [{:keys [import-state files validation issues]}]
   (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
     (log/info :org-files (mapv :path org-files))
     (notification/show! (t :import/org-files-imported (count org-files))
@@ -311,7 +313,11 @@
       (pprint/pprint errors)
       (notification/show! (t :import/invalid-blocks-detected (count errors))
                           :warning false))
-    (log/info :import-valid {:msg "Valid import!"})))
+    (log/info :import-valid {:msg "Valid import!"}))
+  (when (seq issues)
+    (log/warn :import-completed-with-errors true
+              :issue-count (count issues)
+              :issues issues)))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
@@ -448,7 +454,7 @@
                         :elapsed-ms (t/in-millis (t/interval start-time (t/now))))
               (validate-imported-data published-result)
               (state/pub-event! [:graph/ready repo])
-              (finished-cb)
+              (finished-cb {:issue-count (count (:issues published-result))})
               published-result)))
         (p/catch
          (fn [error]

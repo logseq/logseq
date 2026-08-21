@@ -915,6 +915,7 @@
  :import/assets-skipped "已跳过 {1} 个资源。详情请查看控制台。"
  :import/block-icons-cannot-be-imported "块图标无法导入，请在块 {1} 中手动导入。"
  :import/cannot-import-block-into-non-block-entity "无法将块导入到非块实体中。请在其他位置导入。"
+ :import/completed-with-errors "导入已完成，但有 {1} 个可恢复问题。详情请查看开发者控制台。"
  :import/db-edn-desc "将 DB 知识库的 EDN 导出导入到新的 DB 知识库"
  :import/db-edn-title "EDN 到 DB 知识库"
  :import/debug-transit-desc "将调试 transit 文件导入到新的 DB 知识库"

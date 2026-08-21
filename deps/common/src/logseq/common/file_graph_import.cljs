@@ -34,11 +34,12 @@
 
 (defn completed-result
   [run-id result]
-  (assoc result
-         :contract-version terminal-contract-version
-         :run-id run-id
-         :status :completed
-         :phase :completed
-         :summary {:issue-count 0}
-         :issues []
-         :publication (or (:publication result) {:status :pending})))
+  (let [issues (vec (:issues result))]
+    (assoc result
+           :contract-version terminal-contract-version
+           :run-id run-id
+           :status (if (seq issues) :completed-with-errors :completed)
+           :phase :completed
+           :summary {:issue-count (count issues)}
+           :issues issues
+           :publication (or (:publication result) {:status :pending}))))

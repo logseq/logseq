@@ -8,6 +8,17 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]))
 
+(deftest file-graph-import-completed-result-reports-issues
+  (let [issue {:code :import/file-parse-failed
+               :severity :error
+               :recoverable? true
+               :phase :import-file
+               :parameters {:path "pages/example.md"}}
+        result (file-graph-import/completed-result "run" {:issues [issue]})]
+    (is (= :completed-with-errors (:status result)))
+    (is (= {:issue-count 1} (:summary result)))
+    (is (= [issue] (:issues result)))))
+
 (deftest publish-file-graph-import-preserves-the-target-boundary
   (let [graphs-dir (node-helper/create-tmp-dir "publish-file-graph-import")
         staging-repo (file-graph-import/staging-repo "run")

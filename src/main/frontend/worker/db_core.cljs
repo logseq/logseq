@@ -285,14 +285,19 @@
                        {::gp-exporter/imported-data? true})))))
 
 (defn- completed-import-terminal-result
-  [run-id result validation staged-assets notifications]
+  [run-id result validation staged-assets notifications issues]
   (file-graph-import/completed-result
    run-id
    {:validation validation
     :files (:files result)
     :import-state (import-state-summary (:import-state result))
     :notifications notifications
+    :issues issues
     :staged-assets staged-assets}))
+
+(def ^:private recoverable-file-import-error-codes
+  #{:import/file-read-failed
+    :import/file-parse-failed})
 
 (defn- <import-file-graph!
   [repo config-file files opts]
@@ -300,9 +305,12 @@
         phase (atom :open-graph)]
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [notifications (atom [])
+            issues (atom [])
             staged-assets (atom [])
             options (-> opts
                         (assoc :notify-user #(swap! notifications conj %)
+                               :record-issue #(swap! issues conj %)
+                               :recoverable-error? recoverable-file-import-error-codes
                                :log-fn (fn [& args]
                                          (log/info :import-file-graph {:args args}))
                                :<read-file (fn [file] (p/resolved (file-content file)))
@@ -322,7 +330,7 @@
               (if (= :failed (:status validation))
                 (assoc (file-graph-import/failed-result run-id :validate :import/validation-failed)
                        :validation validation)
-                (completed-import-terminal-result run-id result validation @staged-assets @notifications)))
+                (completed-import-terminal-result run-id result validation @staged-assets @notifications @issues)))
             (p/catch
              (fn [error]
                (let [code (or (:code (ex-data error)) :import/worker-failed)]

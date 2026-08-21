@@ -2677,17 +2677,97 @@
 ;; Higher level export fns
 ;; =======================
 
+(defn- fork-import-state
+  [import-state]
+  (into {}
+        (map (fn [[state-key state-atom]]
+               [state-key (atom @state-atom)]))
+        import-state))
+
+(defn- commit-import-state!
+  [import-state forked-import-state]
+  (doseq [[state-key state-atom] import-state]
+    (reset! state-atom @(get forked-import-state state-key))))
+
+(defn- error-code
+  [error]
+  (or (:code (ex-data error))
+      (some-> error .-cause ex-data :code)))
+
+(defn- ensure-error-code
+  [error code path]
+  (if (error-code error)
+    error
+    (ex-info (or (.-message error) (str error))
+             {:code code
+              :path path}
+             error)))
+
+(defn- <atomic-export-file
+  [conn {:file/keys [path] :as file-map} export-options <export-file]
+  (let [temp-conn (ldb/temp-conn-from-db @conn)
+        tx-batches (atom [])
+        notifications (atom [])
+        issues (atom [])
+        import-state (:import-state export-options)
+        forked-import-state (fork-import-state import-state)
+        on-tx-report (or (:on-tx-report export-options) (constantly nil))
+        notify-user (or (:notify-user export-options) (constantly nil))
+        record-issue (or (:record-issue export-options) (constantly nil))
+        temp-options (assoc export-options
+                            :import-state forked-import-state
+                            :notify-user #(swap! notifications conj %)
+                            :record-issue #(swap! issues conj %)
+                            :on-tx-report (constantly nil))]
+    (d/listen! temp-conn ::atomic-file-export
+               (fn [tx-report]
+                 (swap! tx-batches conj (:tx-data tx-report))))
+    (-> (p/let [_ (-> (<export-file temp-conn file-map temp-options)
+                       (p/catch #(throw (ensure-error-code % :import/file-parse-failed path))))
+                tx-reports (try
+                             (mapv #(ldb/transact! conn %
+                                                   {::imported-data? true
+                                                    ::path path
+                                                    ::new-graph? true})
+                                   @tx-batches)
+                             (catch :default error
+                               (throw (ensure-error-code error :import/file-commit-failed path))))]
+          (commit-import-state! import-state forked-import-state)
+          (doseq [notification @notifications]
+            (notify-user notification))
+          (doseq [issue @issues]
+            (record-issue issue))
+          (doseq [tx-report tx-reports]
+            (when tx-report
+              (on-tx-report tx-report)))
+          (last tx-reports))
+        (p/finally (fn []
+                     (d/unlisten! temp-conn ::atomic-file-export)
+                     (reset! temp-conn nil))))))
+
+(defn- file-import-issue
+  [path error]
+  {:code (error-code error)
+   :severity :error
+   :recoverable? true
+   :phase :import-file
+   :parameters {:path path}
+   :diagnostics {:message (or (.-message error) (str error))}})
+
 (defn- export-doc-file
   [{:keys [path idx] :as file} conn <read-file
-   {:keys [notify-user set-ui-state <export-file <get-file-stat]
+   {:keys [notify-user set-ui-state <export-file <get-file-stat recoverable-error? record-issue]
     :or {set-ui-state (constantly nil)
+         recoverable-error? (constantly false)
+         record-issue (constantly nil)
          <export-file (fn <export-file [conn m opts]
                         (<add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
     :as options}]
   ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
-              content (<read-file file)
+              content (-> (<read-file file)
+                          (p/catch #(throw (ensure-error-code % :import/file-read-failed path))))
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
               created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
@@ -2696,30 +2776,40 @@
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
                                created-at (assoc :file-created-at (.getTime created-at))
                                modified-at (assoc :file-updated-at (.getTime modified-at)))
-              _ (<export-file conn m export-options)]
+              _ (<atomic-export-file conn m export-options <export-file)]
         ;; returning val results in smoother ui updates
-        m)
+        {:file m :issues []})
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
-                               :level :error
-                               :ex-data {:path path :error error}})
-                 (throw error)))))
-
-(defn- remove-block-ref-from-title
-  [title block-uuid]
-  (when (string? title)
-    (-> title
-        (string/replace (block-ref/->block-ref block-uuid) "")
-        (string/replace (page-ref/->page-ref block-uuid) "")
-        (string/replace #" {2,}" " ")
-        string/trim)))
+                 (let [code (error-code error)]
+                   (if (recoverable-error? code)
+                     (let [issue (file-import-issue path error)]
+                       (record-issue issue)
+                       {:file nil :issues [issue]})
+                     (do
+                       (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
+                                     :level :error
+                                     :ex-data {:path path :error error}})
+                       (throw error))))))))
 
 (defn- placeholder-block-ref?
   [entity]
   (and (:block/uuid entity)
        (nil? (:block/title entity))))
 
-(defn- cleanup-missing-block-refs-tx
+(defn- preserve-missing-block-ref-text
+  [title block-uuids]
+  (when (string? title)
+    (reduce (fn [text block-uuid]
+              (let [preserved-ref (str "`" (block-ref/->block-ref block-uuid) "`")]
+                (-> text
+                    (string/replace (block-ref/->block-ref block-uuid) preserved-ref)
+                    (string/replace (page-ref/->page-ref block-uuid) preserved-ref))))
+            title
+            block-uuids)))
+
+(def ^:private cleanup-transaction-batch-size 128)
+
+(defn- cleanup-missing-block-refs-plan
   [db]
   (let [missing-ref-datoms
         (->> (d/datoms db :aevt :block/refs)
@@ -2738,37 +2828,106 @@
                           :ref-id (:v datom)
                           :ref-uuid (:block/uuid ref-entity)})))))
         refs-by-source-id (group-by :source-id missing-ref-datoms)
-        retract-ref-tx
-        (mapcat (fn [[source-id refs]]
-                  (map (fn [{:keys [ref-id]}]
-                         [:db/retract source-id :block/refs ref-id])
-                       refs))
-                refs-by-source-id)
-        retract-link-tx
-        (map (fn [{:keys [source-id ref-id]}]
-               [:db/retract source-id :block/link ref-id])
-             missing-link-datoms)
-        update-title-tx
-        (keep (fn [[source-id refs]]
-                (let [source (d/entity db source-id)
+        links-by-source-id (group-by :source-id missing-link-datoms)
+        source-ids (sort (set (concat (keys refs-by-source-id)
+                                      (keys links-by-source-id))))
+        source-units
+        (mapv (fn [source-id]
+                (let [refs (get refs-by-source-id source-id)
+                      links (get links-by-source-id source-id)
+                      source (d/entity db source-id)
                       title (:block/title source)
-                      title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
-                  (when (and (string? title') (not= title title'))
-                    [:db/add source-id :block/title title'])))
-              refs-by-source-id)
-        retract-placeholder-tx
-        (->> (concat missing-ref-datoms missing-link-datoms)
-             (map (juxt :ref-id :ref-uuid))
-             distinct
-             (map (fn [[ref-id ref-uuid]]
-                    [:db/retract ref-id :block/uuid ref-uuid])))]
-    (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx)))
+                      title' (preserve-missing-block-ref-text title (map :ref-uuid refs))]
+                  {:parameters {:entity-id source-id}
+                   :tx (vec
+                        (concat
+                         (map (fn [{:keys [ref-id]}]
+                                [:db/retract source-id :block/refs ref-id])
+                              refs)
+                         (map (fn [{:keys [ref-id]}]
+                                [:db/retract source-id :block/link ref-id])
+                              links)
+                         (when (and (string? title') (not= title title'))
+                           [[:db/add source-id :block/title title']])))}))
+              source-ids)
+        placeholders (->> (concat missing-ref-datoms missing-link-datoms)
+                          (map #(select-keys % [:ref-id :ref-uuid]))
+                          distinct
+                          (sort-by :ref-id)
+                          vec)]
+    {:source-units source-units
+     :placeholders placeholders}))
+
+(defn- missing-entity-error?
+  [error]
+  (or (= :entity-id/missing (:error (ex-data error)))
+      (= :entity-id/missing (some-> error .-cause ex-data :error))))
+
+(defn- cleanup-issue
+  [error parameters]
+  {:code :import/missing-reference-cleanup-skipped
+   :severity :warning
+   :recoverable? true
+   :phase :finalize-cleanup
+   :parameters parameters
+   :diagnostics {:error "entity-id/missing"
+                 :entity-id (some-> (or (:entity-id (ex-data error))
+                                        (some-> error .-cause ex-data :entity-id))
+                                    str)}})
+
+(defn- transact-cleanup-units!
+  [conn units {:keys [on-tx-report record-issue]}]
+  (let [transact-unit!
+        (fn [{:keys [tx parameters]}]
+          (when (seq tx)
+            (try
+              (let [report (ldb/transact! conn tx {::imported-data? true})]
+                (when report (on-tx-report report))
+                report)
+              (catch :default error
+                (if (missing-entity-error? error)
+                  (record-issue (cleanup-issue error parameters))
+                  (throw error))))))]
+    (doseq [batch (partition-all cleanup-transaction-batch-size units)]
+      (let [tx (into [] (mapcat :tx) batch)]
+        (when (seq tx)
+          (try
+            (let [report (ldb/transact! conn tx {::imported-data? true})]
+              (when report (on-tx-report report)))
+            (catch :default error
+              (if (missing-entity-error? error)
+                (doseq [unit batch]
+                  (transact-unit! unit))
+                (throw error)))))))))
+
+(defn- placeholder-referenced?
+  [db ref-id]
+  (or (seq (d/datoms db :avet :block/refs ref-id))
+      (seq (d/datoms db :avet :block/link ref-id))))
 
 (defn- cleanup-missing-block-refs!
-  [conn]
-  (let [tx (cleanup-missing-block-refs-tx @conn)]
-    (when (seq tx)
-      (ldb/transact! conn tx {::imported-data? true}))))
+  [conn {:keys [on-tx-report record-issue]
+         :or {on-tx-report (constantly nil)
+              record-issue (constantly nil)}}]
+  (let [{:keys [source-units placeholders]} (cleanup-missing-block-refs-plan @conn)
+        issues (atom [])
+        on-tx-report (or on-tx-report (constantly nil))
+        record-issue (or record-issue (constantly nil))
+        record-issue' (fn [issue]
+                        (swap! issues conj issue)
+                        (record-issue issue))]
+    (transact-cleanup-units! conn source-units {:on-tx-report on-tx-report
+                                                :record-issue record-issue'})
+    (let [placeholder-units
+          (keep (fn [{:keys [ref-id ref-uuid]}]
+                  (when (and (d/entity @conn ref-id)
+                             (not (placeholder-referenced? @conn ref-id)))
+                    {:parameters {:entity-id ref-id}
+                     :tx [[:db/retract ref-id :block/uuid ref-uuid]]}))
+                placeholders)]
+      (transact-cleanup-units! conn placeholder-units {:on-tx-report on-tx-report
+                                                       :record-issue record-issue'}))
+    {:issues @issues}))
 
 (defn- journal-uuid-normalizations
   [db]
@@ -2848,17 +3007,20 @@
                                  *doc-files)
                         (range 0 (count *doc-files)))]
     (index-journal-page-name-uuids! doc-files (:import-state options))
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
-                 i 0]
-          (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
-                     (inc i))))
-        (p/then (fn [_]
+    (-> (p/loop [remaining-files doc-files
+                 issues []]
+          (if-let [file (first remaining-files)]
+            (p/let [result (export-doc-file file conn <read-file options)]
+              (p/recur (rest remaining-files) (into issues (:issues result))))
+            {:issues issues}))
+        (p/then (fn [file-result]
                   (p/let [normalize-tx-report (normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
-                          cleanup-tx-report (cleanup-missing-block-refs! conn)
-                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
-                    cleanup-tx-report)))
+                          cleanup-result (cleanup-missing-block-refs!
+                                          conn
+                                          {:on-tx-report on-tx-report
+                                           :record-issue (:record-issue options)})]
+                    {:issues (into (:issues file-result) (:issues cleanup-result))})))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
@@ -3077,7 +3239,8 @@
        :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
-      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report]))))
+      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
+                                   :record-issue :recoverable-error?]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
@@ -3107,6 +3270,7 @@
    * :set-ui-state - fn which updates ui to indicate progress of import
    * :notify-user - fn which notifies user of important messages with a map
      containing keys :msg, :level and optionally :ex-data when there is an error
+   * `:record-issue` - fn which records a structured recoverable import issue
    * :log-fn - fn which logs developer messages
    * :rpath-key - keyword used to get relative path in file map. Default to :path
    * :<read-file - fn which reads a file across multiple steps
