@@ -2706,9 +2706,7 @@
 
 (defn- <atomic-export-file
   [conn {:file/keys [path] :as file-map} export-options <export-file]
-  (let [temp-conn (ldb/temp-conn-from-db @conn)
-        tx-batches (atom [])
-        notifications (atom [])
+  (let [notifications (atom [])
         issues (atom [])
         import-state (:import-state export-options)
         forked-import-state (fork-import-state import-state)
@@ -2720,31 +2718,25 @@
                             :notify-user #(swap! notifications conj %)
                             :record-issue #(swap! issues conj %)
                             :on-tx-report (constantly nil))]
-    (d/listen! temp-conn ::atomic-file-export
-               (fn [tx-report]
-                 (swap! tx-batches conj (:tx-data tx-report))))
-    (-> (p/let [_ (-> (<export-file temp-conn file-map temp-options)
-                       (p/catch #(throw (ensure-error-code % :import/file-parse-failed path))))
-                tx-reports (try
-                             (mapv #(ldb/transact! conn %
-                                                   {::imported-data? true
-                                                    ::path path
-                                                    ::new-graph? true})
-                                   @tx-batches)
-                             (catch :default error
-                               (throw (ensure-error-code error :import/file-commit-failed path))))]
+    (p/let [tx-report (-> (ldb/<batch-transact-with-temp-conn!
+                            conn
+                            {::imported-data? true
+                             ::path path
+                             ::new-graph? true}
+                            (fn [temp-conn _tx-data]
+                              (-> (<export-file temp-conn file-map temp-options)
+                                  (p/catch #(throw (ensure-error-code
+                                                   % :import/file-parse-failed path))))))
+                           (p/catch #(throw (ensure-error-code
+                                            % :import/file-commit-failed path))))]
           (commit-import-state! import-state forked-import-state)
           (doseq [notification @notifications]
             (notify-user notification))
           (doseq [issue @issues]
             (record-issue issue))
-          (doseq [tx-report tx-reports]
-            (when tx-report
-              (on-tx-report tx-report)))
-          (last tx-reports))
-        (p/finally (fn []
-                     (d/unlisten! temp-conn ::atomic-file-export)
-                     (reset! temp-conn nil))))))
+          (when tx-report
+            (on-tx-report tx-report))
+          tx-report)))
 
 (defn- file-import-issue
   [path error]

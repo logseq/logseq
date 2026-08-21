@@ -20,7 +20,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.log :as log])
+            [logseq.common.log :as log]
+            [promesa.core :as p])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -229,7 +230,9 @@
        ;; (js/console.trace)
 
        (let [tx-meta (cond-> tx-meta
-                       *batch-tx-report?*
+                       (or *batch-tx-report?*
+                           (and (not (string? repo-or-conn))
+                                (:batch-tx? @repo-or-conn)))
                        (assoc :batch-tx-report? true))]
          (if-let [transact-fn @*transact-fn]
            (transact-fn repo-or-conn tx-data tx-meta)
@@ -303,6 +306,71 @@
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
         (vreset! *batch-tx-data nil)))))
+
+(defn <batch-transact-with-temp-conn!
+  "Runs asynchronous transaction work on an isolated connection and atomically
+  publishes the resulting database to `conn`.
+
+  `batch-tx-fn` receives the temporary connection and an atom containing all
+  emitted datoms. The returned promise resolves to one final transaction report.
+  If the live database changes before publication, the promise rejects instead
+  of overwriting the concurrent change.
+
+  Options:
+
+  | key              | description |
+  | ---------------- | ----------- |
+  | `:listen-db`     | Receives each transaction report from the isolated connection. |
+  | `:before-commit` | Runs after `batch-tx-fn` resolves and before publication. |"
+  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit]}]
+  (let [db-before @conn
+        conn-state-before @(:atom conn)
+        temp-conn (temp-conn-from-db db-before)
+        *batch-tx-data (atom [])
+        *published-db (atom nil)]
+    (-> (p/resolved nil)
+        (p/then (fn [_]
+                  (swap! temp-conn assoc :batch-tx? true)
+                  (d/listen! temp-conn ::async-temp-conn-batch-tx
+                             (fn [{:keys [tx-data] :as tx-report}]
+                               (swap! *batch-tx-data into tx-data)
+                               (when (fn? listen-db)
+                                 (listen-db tx-report))))
+                  (batch-tx-fn temp-conn *batch-tx-data)))
+        (p/then (fn [_]
+                  (when (fn? before-commit)
+                    (before-commit))))
+        (p/then (fn [_]
+                  (swap! temp-conn dissoc :skip-store? :skip-validate-db? :batch-tx?)
+                  (let [db-after @temp-conn]
+                    (when-not (compare-and-set! conn db-before db-after)
+                      (throw (ex-info "Live database changed during asynchronous batch"
+                                      {:tx-meta tx-meta})))
+                    (reset! *published-db db-after)
+                    (let [tx-report {:db-before db-before
+                                     :db-after @conn
+                                     :tx-meta (assoc tx-meta :batch-final-tx-report? true)
+                                     :tx-data @*batch-tx-data}]
+                      (dc/store-after-transact! conn tx-report)
+                      (reset! *published-db nil)
+                      (dc/run-callbacks conn tx-report)
+                      tx-report))))
+        (p/catch (fn [error]
+                   (when-let [published-db @*published-db]
+                     (when-not (compare-and-set! conn published-db db-before)
+                       (throw (ex-info "Failed to roll back asynchronous batch"
+                                       {:tx-meta tx-meta}
+                                       error)))
+                     (when (storage/storage db-before)
+                       (swap! (:atom conn) assoc
+                              :tx-tail (:tx-tail conn-state-before)
+                              :db-last-stored (:db-last-stored conn-state-before))))
+                   (throw error)))
+        (p/finally (fn []
+                     (d/unlisten! temp-conn ::async-temp-conn-batch-tx)
+                     (reset! temp-conn nil)
+                     (reset! *batch-tx-data nil)
+                     (reset! *published-db nil))))))
 
 (defn- batch-transact-listen!
   [conn *tx-data listen-db]
