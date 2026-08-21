@@ -545,13 +545,15 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- block-search-title
   "Build display title from block entity with original casing."
-  [block]
+  [block page-node? page-or-object-node?]
   (let [title (db-content/recur-replace-uuid-in-block-title
-               (assoc block :block/title (ldb/get-title-with-parents block)))
+               (assoc block :block/title (if page-node?
+                                           (ldb/get-title-with-parents block)
+                                           (:block/title block))))
         title (cond-> title
                 (ldb/journal? block)
                 (str " " (:block/journal-day block)))]
-    (if (page-or-object? block)
+    (if page-or-object-node?
       (->> (concat [title] (keep :block/title (:block/alias block)))
            (remove string/blank?)
            distinct
@@ -578,18 +580,23 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Convert a block to the index for searching."
   ([block]
    (block->index block {:include-vector-title? false}))
-  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title?]
-                                               :or {include-vector-title? false}}]
+  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title? known-visible?]
+                                               :or {include-vector-title? false
+                                                    known-visible? false}}]
   (when-not (or
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
     (try
-      (let [title (block-search-title block)]
+      (let [page-node? (ldb/page? block)
+            page-or-object-node? (and (or page-node? (ldb/object? block))
+                                      (or known-visible?
+                                          (not (hidden-entity? block))))
+            title (block-search-title block page-node? page-or-object-node?)]
         (when uuid
           (cond-> {:id (str uuid)
                    :page (str (or (:block/uuid page) uuid))
-                   :title (if (page-or-object? block) title (sanitize title))}
+                   :title (if page-or-object-node? title (sanitize title))}
             include-vector-title?
             (assoc :vector-title title))))
       (catch :default e

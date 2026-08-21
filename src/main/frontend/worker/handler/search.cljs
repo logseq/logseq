@@ -359,7 +359,8 @@
                     vec)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
-        index-opts {:include-vector-title? (some? vector-index)}
+        index-opts {:include-vector-title? (some? vector-index)
+                    :known-visible? true}
         progress-for-fts (fn [processed]
                            (if (zero? total)
                              100
