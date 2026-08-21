@@ -1,5 +1,6 @@
 (ns electron.db-worker
-  (:require [logseq.cli.server :as cli-server]
+  (:require [logseq.cli.common :as cli-common]
+            [logseq.cli.server :as cli-server]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
@@ -277,9 +278,28 @@
   ([mgr repo window-id]
    (ensure-stopped! mgr repo window-id)))
 
-(defn release-repo!
-  [repo]
-  (ensure-repo-stopped! manager repo))
+(defn- throw-if-stop-failed!
+  [stop-result]
+  (when-not (or (:ok? stop-result)
+                (= :server-not-found (get-in stop-result [:error :code])))
+    (throw (ex-info (get-in stop-result [:error :message] "failed to stop db-worker-node")
+                    {:code (or (get-in stop-result [:error :code]) :server-stop-failed)})))
+  stop-result)
+
+(defn delete-repo!
+  "Stop a live db-worker for repo even if another owner started it, detach any
+  Desktop runtime, then unlink the graph directory."
+  ([repo]
+   (delete-repo! manager repo))
+  ([mgr repo]
+   (p/let [stop-result (cli-server/stop-server! {:owner-source :electron}
+                                                repo
+                                                {:allow-cross-owner? true})]
+     (throw-if-stop-failed! stop-result)
+     (swap! (:state mgr)
+            (fn [current]
+              (first (detach-repo current (repo-key repo)))))
+     (cli-common/unlink-graph! repo))))
 
 (defn stop-all-managed!
   []

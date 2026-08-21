@@ -114,3 +114,36 @@
           (p/finally (fn []
                        (db-lock/remove-lock! path)
                        (done)))))))
+
+(deftest remove-owned-lock-deletes-matching-identity
+  (let [root-dir (node-helper/create-tmp-dir "db-worker-node-lock-owned")
+        repo (str "logseq_db_lock_owned_" (subs (str (random-uuid)) 0 8))
+        path (db-lock/lock-path root-dir repo)
+        lock {:repo repo
+              :pid 4242
+              :lock-id "owned-lock"
+              :owner-source :cli}]
+    (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
+    (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+    (db-lock/remove-owned-lock! path lock)
+    (is (not (fs/existsSync path)))))
+
+(deftest remove-owned-lock-keeps-mismatched-pid-or-lock-id
+  (let [root-dir (node-helper/create-tmp-dir "db-worker-node-lock-owned-mismatch")
+        repo (str "logseq_db_lock_owned_mismatch_" (subs (str (random-uuid)) 0 8))
+        path (db-lock/lock-path root-dir repo)
+        current {:repo repo
+                 :pid 4242
+                 :lock-id "new-lock"
+                 :owner-source :electron}]
+    (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
+    (fs/writeFileSync path (js/JSON.stringify (clj->js current)))
+    (db-lock/remove-owned-lock! path {:repo repo
+                                      :pid 1111
+                                      :lock-id "old-lock"})
+    (is (fs/existsSync path))
+    (db-lock/remove-owned-lock! path {:repo repo
+                                      :pid 4242
+                                      :lock-id "old-lock"})
+    (is (fs/existsSync path))
+    (is (= "new-lock" (:lock-id (db-lock/read-lock path))))))

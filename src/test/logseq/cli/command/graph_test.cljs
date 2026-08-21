@@ -500,3 +500,61 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-graph-remove-stops-cross-owner-runtime-then-unlinks
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-graph-remove-force-stop")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
+               repo "logseq_db_demo"
+               graph-path (node-path/join graphs-dir "demo")
+               stop-calls (atom [])]
+           (fs/mkdirSync graph-path #js {:recursive true})
+           (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+           (-> (p/with-redefs [cli-server/stop-server! (fn [config repo opts]
+                                                         (swap! stop-calls conj {:config config
+                                                                                 :repo repo
+                                                                                 :opts opts})
+                                                         (p/resolved {:ok? true}))]
+                 (p/let [result (graph-command/execute-graph-remove
+                                 {:type :graph-remove
+                                  :repo repo
+                                  :graph "demo"}
+                                 {:root-dir root-dir})]
+                   (is (= :ok (:status result)))
+                   (is (= [{:config {:root-dir root-dir}
+                            :repo repo
+                            :opts {:allow-cross-owner? true}}]
+                          @stop-calls))
+                   (is (not (fs/existsSync graph-path)))
+                   (is (fs/existsSync (node-path/join graphs-dir
+                                                      "Unlinked graphs"
+                                                      "demo"
+                                                      "db.sqlite")))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-graph-remove-does-not-unlink-when-worker-is-live
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-graph-remove-live-worker")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
+               repo "logseq_db_demo"
+               graph-path (node-path/join graphs-dir "demo")]
+           (fs/mkdirSync graph-path #js {:recursive true})
+           (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+           (-> (p/with-redefs [cli-server/stop-server!
+                               (fn [_config _repo _opts]
+                                 (p/resolved {:ok? false
+                                              :error {:code :server-stop-timeout
+                                                      :message "server process is alive but not reachable"}}))]
+                 (graph-command/execute-graph-remove
+                  {:type :graph-remove
+                   :repo repo
+                   :graph "demo"}
+                  {:root-dir root-dir}))
+               (p/then (fn [_]
+                         (is false "graph remove should fail while the worker is alive")))
+               (p/catch (fn [error]
+                          (is (= :server-stop-timeout (:code (ex-data error))))
+                          (is (fs/existsSync graph-path))))
+               (p/finally done)))))

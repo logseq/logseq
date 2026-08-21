@@ -207,6 +207,7 @@
     :ambiguous-property-name "Retry with --id <property-id>"
     :root-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_ROOT_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
+    :server-stop-timeout "Stop the lingering db-worker-node process manually, then retry"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
     :server-revision-mismatch "Logseq will restart revision-mismatched db-worker-node servers automatically; retry after stopping any lingering server manually"
     :server-revision-mismatch-restart-failed "Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry"

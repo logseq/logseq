@@ -190,12 +190,12 @@ When the cap is reached, release the current Desktop remote runtime before switc
 Current available paths:
 
 - `persist-db/<close-db` closes the current remote db and calls `<stop-remote-if-current!`.
-- Electron `:deleteGraph` uses `db-worker/release-repo!`, but this also unlinks the graph and must not be reused directly.
+- Electron `:deleteGraph` uses `db-worker/delete-repo!`, which also unlinks the graph and must not be reused directly.
 - Electron `release-window!` is currently called from window close and graph-runtime lifecycle paths.
 
 Implementation options:
 
-- Add a focused IPC such as `"releaseDbWorkerRuntime"` or `"releaseDbWorkerRepo"` that calls `electron.db-worker/release-repo!` without deleting the graph.
+- Add a focused IPC such as `"releaseDbWorkerRuntime"` or `"releaseDbWorkerRepo"` that calls `electron.db-worker/ensure-repo-stopped!` with `electron.db-worker/manager` without deleting the graph.
 - Or add an internal renderer helper that uses existing close-db/stop paths if they fully release the runtime for the failed active repo.
 
 Prefer one explicit IPC if current close paths leave Electron manager state pointing at the failed repo.
@@ -285,7 +285,7 @@ If error classification is uncertain, treat it as app-level and do not increment
 1. Verify whether `remote/stop!` plus renderer state clearing is enough to make the next graph start correctly.
 2. If Electron manager state still keeps the failed graph/window association, add a dedicated IPC handler:
    - Renderer channel: `"releaseDbWorkerRuntime"` or equivalent.
-   - Main handler: calls `electron.db-worker/release-repo!` or a narrower release function.
+   - Main handler: calls `electron.db-worker/ensure-repo-stopped!` with `electron.db-worker/manager`, or a narrower release function.
    - Must not call `cli-common/unlink-graph!`.
 3. Add tests in `src/test/electron/db_worker_manager_test.cljs` or handler-level tests to prove the release path detaches the failed repo without deleting graph data.
 

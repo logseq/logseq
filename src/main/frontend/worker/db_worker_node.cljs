@@ -458,8 +458,8 @@
       (.end res)
       (catch :default _)))
   (reset! *sse-clients #{})
-  (when-let [lock-path (:path @*lock-info)]
-    (db-lock/remove-lock! lock-path)))
+  (when-let [{:keys [path lock]} @*lock-info]
+    (db-lock/remove-owned-lock! path lock)))
 
 (defn- make-stop!
   [{:keys [proxy repo actual-port server stopped? on-stopped!]}]
@@ -528,8 +528,8 @@
                                               :on-stopped! on-stopped!}
                                              resolve)))
        (.on server "error" (fn [error]
-                              (when-let [lock-path (:path @*lock-info)]
-                                (db-lock/remove-lock! lock-path))
+                              (when-let [{:keys [path lock]} @*lock-info]
+                                (db-lock/remove-owned-lock! path lock))
                               (reject error)))))))
 
 (defn start-daemon!
@@ -581,8 +581,8 @@
                                      :root-dir root-dir
                                      :on-stopped! on-stopped!}))
               (p/catch (fn [e]
-                         (when-let [lock-path (:path @*lock-info)]
-                           (db-lock/remove-lock! lock-path))
+                         (when-let [{:keys [path lock]} @*lock-info]
+                           (db-lock/remove-owned-lock! path lock))
                          (throw e)))))
         (catch :default e
           (p/rejected e))))))

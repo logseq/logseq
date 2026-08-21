@@ -647,12 +647,9 @@
                      :host "127.0.0.1"
                      :port 9301
                      :owner-source :cli}
-               read-lock-calls (atom 0)
                discover-calls (atom 0)]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
-                                                  (if (= 1 (swap! read-lock-calls inc))
-                                                    nil
-                                                    lock))
+                                                  (when @captured lock))
                                daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
                                daemon/spawn-server! (fn [opts]
                                                       (reset! captured opts)
@@ -688,7 +685,7 @@
          (let [root-dir (node-helper/create-tmp-dir "cli-server-profile")
                repo (str "logseq_db_profile_" (subs (str (random-uuid)) 0 8))
                session (profile/create-session true)
-               read-lock-calls (atom 0)
+               spawned? (atom false)
                discover-calls (atom 0)
                lock {:repo repo
                      :pid (.-pid js/process)
@@ -696,11 +693,11 @@
                      :port 9310
                      :owner-source :cli}]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
-                                                  (if (= 1 (swap! read-lock-calls inc))
-                                                    nil
-                                                    lock))
+                                                  (when @spawned? lock))
                                daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                               daemon/spawn-server! (fn [_] nil)
+                               daemon/spawn-server! (fn [_]
+                                                      (reset! spawned? true)
+                                                      nil)
                                daemon/wait-for-lock (fn [_] (p/resolved true))
                                cli-server/discover-servers (fn [_]
                                                             (p/resolved (if (= 1 (swap! discover-calls inc))
@@ -953,7 +950,7 @@
                lock-file (cli-server/lock-path root-dir-b repo)
                request* (atom nil)
                lock {:repo repo
-                     :pid (.-pid js/process)
+                     :pid 4002
                      :lock-id "stop-lock"
                      :owner-source :cli}]
            (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
@@ -1204,3 +1201,438 @@
         (is (= "yy y" (:legacy-graph-name legacy-item)))
         (is (= "yy y" (:target-graph-dir legacy-item)))
         (is (= true (:conflict? legacy-item)))))))
+
+(deftest stop-server-allows-cross-owner-when-requested
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-force-stop")
+               repo (str "logseq_db_force_stop_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               request* (atom nil)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :host "127.0.0.1"
+                     :port 9103
+                     :owner-source :cli}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_]
+                                                            (p/resolved [{:repo repo
+                                                                          :host "127.0.0.1"
+                                                                          :port 9103
+                                                                          :pid (.-pid js/process)
+                                                                          :owner-source :cli
+                                                                          :revision nil
+                                                                          :status :ready
+                                                                          :root-dir root-dir}]))
+                               daemon/http-request (fn [opts]
+                                                     (reset! request* opts)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/wait-for (fn [_ _] (p/resolved true))
+                               daemon/pid-status (fn [_] :not-found)]
+                 (cli-server/stop-server! {:root-dir root-dir
+                                           :owner-source :electron}
+                                          repo
+                                          {:allow-cross-owner? true}))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= "/v1/shutdown" (:path @request*)))
+                         (is (= 9103 (:port @request*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-accepts-removed-lock-while-process-exits
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-graceful-stop")
+               repo (str "logseq_db_graceful_stop_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               server {:repo repo
+                       :host "127.0.0.1"
+                       :port 9104
+                       :pid 424242
+                       :owner-source :cli
+                       :status :ready
+                       :root-dir root-dir}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file
+                             (js/JSON.stringify
+                              (clj->js (select-keys server [:repo :host :port :pid :owner-source]))))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved [server]))
+                               daemon/http-request (fn [_]
+                                                     (fs/unlinkSync lock-file)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/pid-status (fn [_] :no-permission)
+                               daemon/wait-for (fn [pred-fn _]
+                                                 (p/let [stopped? (pred-fn)]
+                                                   (if stopped?
+                                                     true
+                                                     (p/rejected (js/Error. "not stopped")))))]
+                 (cli-server/stop-server! {:root-dir root-dir} repo))
+               (p/then (fn [result]
+                         (is (true? (:ok? result)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-stops-discovered-server-when-canonical-lock-missing
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-missing-lock-stop")
+               repo (str "logseq_db_missing_lock_stop_" (subs (str (random-uuid)) 0 8))
+               request* (atom nil)
+               server-list-file (cli-config/server-list-path root-dir)]
+           (fs/writeFileSync server-list-file "424242 9104\n")
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_]
+                                                            (p/resolved [{:repo repo
+                                                                          :host "127.0.0.1"
+                                                                          :port 9104
+                                                                          :pid 424242
+                                                                          :owner-source :cli
+                                                                          :revision nil
+                                                                          :status :ready
+                                                                          :root-dir root-dir}]))
+                               daemon/http-request (fn [opts]
+                                                     (reset! request* opts)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/wait-for (fn [_ _] (p/resolved true))
+                               daemon/pid-status (fn [_] :not-found)]
+                 (cli-server/stop-server! {:root-dir root-dir
+                                           :owner-source :electron}
+                                          repo
+                                          {:allow-cross-owner? true}))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= "/v1/shutdown" (:path @request*)))
+                         (is (= 9104 (:port @request*)))
+                         (is (not (string/includes?
+                                   (or (when (fs/existsSync server-list-file)
+                                         (.toString (fs/readFileSync server-list-file) "utf8"))
+                                       "")
+                                   "424242 9104")))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-denies-cross-owner-with-missing-lock
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-missing-lock-owner")
+               repo (str "logseq_db_missing_lock_owner_" (subs (str (random-uuid)) 0 8))
+               server {:repo repo
+                       :host "127.0.0.1"
+                       :port 9105
+                       :pid 424242
+                       :owner-source :cli
+                       :status :ready
+                       :root-dir root-dir}]
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved [server]))]
+                 (cli-server/stop-server! {:root-dir root-dir
+                                           :owner-source :electron}
+                                          repo))
+               (p/then (fn [result]
+                         (is (false? (:ok? result)))
+                         (is (= :server-owned-by-other
+                                (get-in result [:error :code])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-times-out-when-shutdown-and-sigterm-do-not-stop-worker
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-stop-timeout")
+               repo (str "logseq_db_stop_timeout_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               server {:repo repo
+                       :host "127.0.0.1"
+                       :port 9106
+                       :pid (.-pid js/process)
+                       :owner-source :cli
+                       :status :ready
+                       :root-dir root-dir}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file
+                             (js/JSON.stringify
+                              (clj->js (select-keys server [:repo :host :port :pid :owner-source]))))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved [server]))
+                               daemon/http-request (fn [_]
+                                                     (p/rejected (js/Error. "shutdown failed")))
+                               daemon/wait-for (fn [_ _]
+                                                 (p/rejected (js/Error. "not stopped")))]
+                 (cli-server/stop-server! {:root-dir root-dir} repo))
+               (p/then (fn [result]
+                         (is (false? (:ok? result)))
+                         (is (= :server-stop-timeout
+                                (get-in result [:error :code])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-fails-closed-for-live-undiscoverable-lock
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-undiscoverable")
+               repo (str "logseq_db_undiscoverable_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               lock {:repo repo
+                     :host "127.0.0.1"
+                     :port 9105
+                     :pid 424242
+                     :owner-source :cli}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved []))
+                               daemon/pid-status (fn [_] :alive)]
+                 (cli-server/stop-server! {:root-dir root-dir} repo))
+               (p/then (fn [result]
+                         (is (false? (:ok? result)))
+                         (is (= :server-stop-timeout
+                                (get-in result [:error :code])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-stops-orphaned-published-server-then-spawns
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-orphan-lock")
+               repo (str "logseq_db_orphan_lock_" (subs (str (random-uuid)) 0 8))
+               stop-calls (atom [])
+               spawn-calls (atom 0)
+               discover-calls (atom 0)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :lock-id "new-lock"
+                     :owner-source :electron}
+               orphan {:repo repo
+                       :host "127.0.0.1"
+                       :port 9410
+                       :pid 94101
+                       :owner-source :cli
+                       :revision (version/revision)
+                       :status :ready}
+               started {:repo repo
+                        :host "127.0.0.1"
+                        :port 9411
+                        :pid (.-pid js/process)
+                        :owner-source :electron
+                        :revision (version/revision)
+                        :status :ready}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_]
+                                                  (when (pos? @spawn-calls)
+                                                    lock))
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               cli-server/stop-server! (fn [config repo opts]
+                                                         (swap! stop-calls conj {:config config
+                                                                                 :repo repo
+                                                                                 :opts opts})
+                                                         (p/resolved {:ok? true}))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved
+                                                             (if (= 1 (swap! discover-calls inc))
+                                                               [orphan]
+                                                               [started])))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= 1 (count @stop-calls)))
+                         (is (= repo (:repo (first @stop-calls))))
+                         (is (true? (get-in (first @stop-calls) [:opts :allow-cross-owner?])))
+                         (is (= orphan (get-in (first @stop-calls) [:opts :target-server])))
+                         (is (= 1 @spawn-calls))
+                         (is (= "http://127.0.0.1:9411" (:base-url config)))
+                         (is (true? (:owned? config)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-does-not-spawn-when-orphan-stop-fails
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-orphan-stop-failed")
+               repo (str "logseq_db_orphan_stop_failed_" (subs (str (random-uuid)) 0 8))
+               spawn-calls (atom 0)
+               orphan {:repo repo
+                       :host "127.0.0.1"
+                       :port 9412
+                       :pid 94121
+                       :owner-source :cli
+                       :revision (version/revision)
+                       :status :ready}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_] nil)
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               cli-server/discover-servers (fn [_] (p/resolved [orphan]))
+                               cli-server/stop-server! (fn [_config _repo _opts]
+                                                         (p/resolved {:ok? false
+                                                                      :error {:code :server-stop-timeout
+                                                                              :message "timed out stopping server"}}))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron}
+                                            repo))
+               (p/then (fn [_]
+                         (is false "ensure-server! should reject when orphan stop fails")))
+               (p/catch (fn [error]
+                          (is (= :server-start-failed (:code (ex-data error))))
+                          (is (zero? @spawn-calls))))
+               (p/finally done)))))
+
+(deftest ensure-server-recovers-orphan-after-cleanup-deletes-lock
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-cleanup-orphan")
+               repo (str "logseq_db_cleanup_orphan_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               stop-calls (atom [])
+               spawn-calls (atom 0)
+               discover-calls (atom 0)
+               started-lock {:repo repo
+                             :pid (.-pid js/process)
+                             :lock-id "started-lock"
+                             :owner-source :electron}
+               orphan {:repo repo
+                       :host "127.0.0.1"
+                       :port 9413
+                       :pid 94131
+                       :owner-source :cli
+                       :revision (version/revision)
+                       :status :ready}
+               started {:repo repo
+                        :host "127.0.0.1"
+                        :port 9414
+                        :pid (.-pid js/process)
+                        :owner-source :electron
+                        :revision (version/revision)
+                        :status :ready}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file
+                             (js/JSON.stringify
+                              (clj->js {:repo repo
+                                        :pid (.-pid js/process)
+                                        :owner-source :cli})))
+           (-> (p/with-redefs [cli-server/stop-server! (fn [config repo opts]
+                                                         (swap! stop-calls conj {:config config
+                                                                                 :repo repo
+                                                                                 :opts opts})
+                                                         (p/resolved {:ok? true}))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (fs/writeFileSync lock-file (js/JSON.stringify (clj->js started-lock)))
+                                                      nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved
+                                                             (if (= 1 (swap! discover-calls inc))
+                                                               [orphan]
+                                                               [started])))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= 1 (count @stop-calls)))
+                         (is (= orphan (get-in (first @stop-calls) [:opts :target-server])))
+                         (is (= 1 @spawn-calls))
+                         (is (= "http://127.0.0.1:9414" (:base-url config)))
+                         (is (true? (:owned? config)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-rediscovers-when-replacement-lock-appears-before-orphan-stop
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-orphan-replacement")
+               repo (str "logseq_db_orphan_replacement_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               spawn-calls (atom 0)
+               discover-calls (atom 0)
+               shutdown-calls (atom 0)
+               replacement-lock {:repo repo
+                                 :pid (.-pid js/process)
+                                 :lock-id "replacement-lock"
+                                 :owner-source :electron}
+               orphan {:repo repo
+                       :host "127.0.0.1"
+                       :port 9415
+                       :pid 94151
+                       :owner-source :cli
+                       :revision (version/revision)
+                       :status :ready}
+               started {:repo repo
+                        :host "127.0.0.1"
+                        :port 9416
+                        :pid (.-pid js/process)
+                        :owner-source :electron
+                        :revision (version/revision)
+                        :status :ready}]
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_]
+                                                            (let [n (swap! discover-calls inc)]
+                                                              (when (= 1 n)
+                                                                (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+                                                                (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replacement-lock))))
+                                                              (p/resolved (if (= 1 n) [orphan] [started]))))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)
+                               daemon/http-request (fn [_]
+                                                     (swap! shutdown-calls inc)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron}
+                                            repo))
+               (p/then (fn [config]
+                         (is (zero? @spawn-calls))
+                         (is (zero? @shutdown-calls))
+                         (is (fs/existsSync lock-file))
+                         (is (= "replacement-lock"
+                                (:lock-id (daemon/read-lock lock-file))))
+                         (is (= "http://127.0.0.1:9416" (:base-url config)))
+                         (is (true? (:owned? config)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-does-not-delete-replacement-lock-created-during-shutdown
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-stop-replacement")
+               repo (str "logseq_db_stop_replacement_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               replacement-lock {:repo repo
+                                 :pid (.-pid js/process)
+                                 :lock-id "replacement-during-stop"
+                                 :owner-source :electron}
+               orphan {:repo repo
+                       :host "127.0.0.1"
+                       :port 9417
+                       :pid 94171
+                       :owner-source :cli
+                       :status :ready
+                       :root-dir root-dir}]
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved [orphan]))
+                               daemon/http-request (fn [_]
+                                                     (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+                                                     (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replacement-lock)))
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/pid-status (fn [pid]
+                                                   (if (= pid (:pid orphan))
+                                                     :not-found
+                                                     :alive))
+                               daemon/wait-for (fn [pred-fn _]
+                                                 (p/let [stopped? (pred-fn)]
+                                                   (if stopped?
+                                                     true
+                                                     (p/rejected (js/Error. "not stopped")))))]
+                 (cli-server/stop-server! {:root-dir root-dir
+                                           :owner-source :electron}
+                                          repo
+                                          {:allow-cross-owner? true}))
+               (p/then (fn [result]
+                         (is (true? (:ok? result)))
+                         (is (fs/existsSync lock-file))
+                         (is (= "replacement-during-stop"
+                                (:lock-id (daemon/read-lock lock-file))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))

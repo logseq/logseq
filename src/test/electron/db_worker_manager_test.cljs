@@ -1,7 +1,12 @@
 (ns electron.db-worker-manager-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs-extra" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [electron.db-worker :as db-worker]
+            [frontend.test.node-helper :as node-helper]
             [logseq.cli.server :as cli-server]
+            [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (defn- runtime
@@ -318,4 +323,129 @@
                     (is (= true (:owned? runtime-info)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest delete-repo-stops-unowned-runtime-then-unlinks
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "delete-repo-unowned")
+          repo "logseq_db_demo"
+          graph-path (node-path/join graphs-dir "demo")
+          unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir "demo")
+          daemon-stop-calls (atom [])
+          server-stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (p/resolved (assoc (runtime repo) :owned? false)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! daemon-stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (fs/mkdirSync graph-path #js {:recursive true})
+      (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+      (fs/writeFileSync (node-path/join graph-path "db-worker.lock") "{\"pid\":4242}")
+      (-> (p/with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)
+                          cli-server/stop-server! (fn [config repo opts]
+                                                    (swap! server-stop-calls conj {:config config
+                                                                                   :repo repo
+                                                                                   :opts opts})
+                                                    (p/resolved {:ok? true}))]
+            (p/let [_ (db-worker/ensure-started! manager repo :window-1)
+                    unlinked (db-worker/delete-repo! manager repo)
+                    state @(:state manager)]
+              (is (empty? @daemon-stop-calls)
+                  "Window-scoped skip of CLI-owned runtimes should still apply")
+              (is (= 1 (count @server-stop-calls)))
+              (is (= repo (:repo (first @server-stop-calls))))
+              (is (= :electron (get-in (first @server-stop-calls) [:config :owner-source])))
+              (is (true? (get-in (first @server-stop-calls) [:opts :allow-cross-owner?])))
+              (is (= unlinked-path unlinked))
+              (is (not (fs/existsSync graph-path)))
+              (is (fs/existsSync (node-path/join unlinked-path "db.sqlite")))
+              (is (nil? (get-in state [:repos repo])))
+              (is (nil? (get-in state [:window->repo :window-1])))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest delete-repo-stops-published-server-even-when-desktop-never-attached
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "delete-repo-unattached")
+          repo "logseq_db_demo"
+          graph-path (node-path/join graphs-dir "demo")
+          server-stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [_] (p/resolved true))})]
+      (fs/mkdirSync graph-path #js {:recursive true})
+      (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+      (-> (p/with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)
+                          cli-server/stop-server! (fn [_config repo opts]
+                                                    (swap! server-stop-calls conj {:repo repo
+                                                                                   :opts opts})
+                                                    (p/resolved {:ok? true}))]
+            (p/let [_ (db-worker/delete-repo! manager repo)]
+              (is (= [{:repo repo :opts {:allow-cross-owner? true}}]
+                     @server-stop-calls))
+              (is (not (fs/existsSync graph-path)))
+              (is (fs/existsSync (node-path/join graphs-dir
+                                                 common-config/unlinked-graphs-dir
+                                                 "demo"
+                                                 "db.sqlite")))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest delete-repo-unlinks-when-worker-is-already-stopped
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "delete-repo-stopped")
+          repo "logseq_db_demo"
+          graph-path (node-path/join graphs-dir "demo")
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [_] (p/resolved true))})]
+      (fs/mkdirSync graph-path #js {:recursive true})
+      (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+      (-> (p/with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)
+                          cli-server/stop-server! (fn [_config _repo _opts]
+                                                    (p/resolved {:ok? false
+                                                                 :error {:code :server-not-found
+                                                                         :message "server is not running"}}))]
+            (db-worker/delete-repo! manager repo))
+          (p/then (fn [_]
+                    (is (not (fs/existsSync graph-path)))
+                    (is (fs/existsSync (node-path/join graphs-dir
+                                                       common-config/unlinked-graphs-dir
+                                                       "demo"
+                                                       "db.sqlite")))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest delete-repo-does-not-unlink-when-force-stop-fails
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "delete-repo-stop-failed")
+          repo "logseq_db_demo"
+          graph-path (node-path/join graphs-dir "demo")
+          state-before-delete (atom nil)
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (p/resolved (assoc (runtime repo) :owned? false)))
+                    :stop-daemon! (fn [_] (p/resolved true))})]
+      (fs/mkdirSync graph-path #js {:recursive true})
+      (fs/writeFileSync (node-path/join graph-path "db.sqlite") "data")
+      (-> (p/with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)
+                          cli-server/stop-server! (fn [_config _repo _opts]
+                                                    (p/resolved {:ok? false
+                                                                 :error {:code :server-stop-timeout
+                                                                         :message "timed out stopping server"}}))]
+            (p/let [_ (db-worker/ensure-started! manager repo :window-1)
+                    _ (reset! state-before-delete @(:state manager))]
+              (db-worker/delete-repo! manager repo)))
+          (p/then (fn [_]
+                    (is false "delete-repo! should fail closed when stop fails")))
+          (p/catch (fn [e]
+                     (is (= :server-stop-timeout (:code (ex-data e))))
+                     (is (fs/existsSync graph-path)
+                         "Live graph dir must not be moved if the worker could not be stopped")
+                     (is (= @state-before-delete @(:state manager))
+                         "Desktop must keep tracking the runtime when deletion aborts")))
           (p/finally (fn [] (done)))))))
