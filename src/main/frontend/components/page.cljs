@@ -233,7 +233,9 @@
       (when (seq queries)
         [:div#today-queries
          (for [query queries]
-           (let [query' (assoc query :collapsed? true)]
+           (let [query' (if (contains? query :collapsed?)
+                          query
+                          (assoc query :collapsed? true))]
              (with-meta
                [:<>
                 (ui/catch-error
