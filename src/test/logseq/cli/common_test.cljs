@@ -59,3 +59,18 @@
           "Unencoded Unicode graph directory should be moved to Unlinked graphs")
       (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
           "Graph contents should be preserved after move"))))
+
+(deftest remove-graph-dir-deletes-canonical-dir-and-lock
+  (let [graphs-dir (node-helper/create-tmp-dir "remove-graph")
+        graph-name "foo/bar"
+        repo (str common-config/db-version-prefix graph-name)
+        encoded-graph-dir "foo~2Fbar"
+        graph-path (node-path/join graphs-dir encoded-graph-dir)]
+    (fs/mkdirSync graph-path #js {:recursive true})
+    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
+    (fs/writeFileSync (node-path/join graph-path "db-worker.lock") "lock")
+    (is (= graph-path (cli-common/remove-graph-dir! graphs-dir repo)))
+    (is (not (fs/existsSync graph-path))
+        "Graph directory should be deleted")
+    (is (not (fs/existsSync (node-path/join graphs-dir common-config/unlinked-graphs-dir encoded-graph-dir)))
+        "Failed-download leftovers should not be moved to Unlinked graphs")))

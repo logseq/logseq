@@ -835,26 +835,24 @@
 
 (defn- <cleanup-created-download-graph!
   [config repo]
-  (-> (p/let [stop-result (cli-server/stop-server! config repo)
-              _ (when-not (or (:ok? stop-result)
-                              (= :server-not-found (get-in stop-result [:error :code])))
-                  (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
-                                  {:code (get-in stop-result [:error :code])
-                                   :repo repo
-                                   :stage :stop-server
-                                   :stop-result stop-result})))
-              graphs-after-stop (cli-server/list-graphs config)
-              graph-exists? (some #(= (core/repo->graph repo) %) graphs-after-stop)
-              unlinked-dir (when graph-exists?
-                             (cli-common/unlink-graph! (cli-server/graphs-dir config) repo))
-              _ (when (and graph-exists? (not unlinked-dir))
-                  (throw (ex-info "unable to remove graph"
-                                  {:code :graph-not-removed
-                                   :repo repo
-                                   :stage :unlink-graph})))]
+  (-> (p/let [stop-result (-> (cli-server/stop-server! config repo)
+                              (p/catch (fn [error]
+                                         {:ok? false
+                                          :error (cleanup-error-details error)})))
+              removed-dir (cli-common/remove-graph-dir! (cli-server/graphs-dir config) repo)]
+        (when (and (not (:ok? stop-result))
+                   (not= :server-not-found (get-in stop-result [:error :code])))
+          (log/warn :cli-sync-download-cleanup-stop-failed
+                    {:repo repo
+                     :stop-result stop-result}))
+        (when-not removed-dir
+          (log/warn :cli-sync-download-cleanup-graph-missing
+                    {:repo repo
+                     :graphs-dir (cli-server/graphs-dir config)}))
         {:status :ok
          :data {:repo repo
-                :unlinked-dir unlinked-dir}})
+                :removed-dir removed-dir
+                :stop-result stop-result}})
       (p/catch (fn [error]
                  (log/warn :cli-sync-download-cleanup-failed
                            {:repo repo
@@ -865,7 +863,8 @@
 (defn- execute-sync-download
   [action config]
   (let [config' (download-config config)
-        progress-enabled? (sync-download-progress-enabled? action config')]
+        progress-enabled? (sync-download-progress-enabled? action config')
+        snapshot-imported?* (atom false)]
     (p/let [local-graphs-before (cli-server/list-graphs config')
             graph-existed-before? (some #(= (:graph action) %) local-graphs-before)]
       (-> (p/let [remote-graphs (invoke-global config'
@@ -897,6 +896,7 @@
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
                                                 (close!)))))
+                      _ (reset! snapshot-imported?* true)
                       assets-result (transport/invoke cfg :thread-api/db-sync-download-missing-assets
                                                       [(:repo action) graph-id])]
                 {:status :ok
@@ -911,7 +911,8 @@
                         result)
                       result)))
           (p/catch (fn [error]
-                     (p/let [_ (when-not graph-existed-before?
+                     (p/let [_ (when (and (not graph-existed-before?)
+                                         (false? @snapshot-imported?*))
                                   (<cleanup-created-download-graph! config' (:repo action)))]
                        (if (= :e2ee-password-not-found (:code (ex-data error)))
                          (e2ee-password-not-found-error :sync-download (:repo action))

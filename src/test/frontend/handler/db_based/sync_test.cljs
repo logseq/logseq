@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db.persist :as db-persist]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
@@ -600,6 +601,7 @@
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -625,6 +627,7 @@
            (reset! state/*db-worker nil)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& _] (p/resolved :ok))
                                state/pub-event! (fn [& _] nil)
                                state/set-state! (fn [k v]
@@ -650,6 +653,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [repo _opts]
                                                              (reset! runtime-bound-repo repo)
                                                              (p/resolved {:schema {}}))
@@ -694,6 +698,7 @@
                                user-handler/<ensure-id&access-token! (fn []
                                                                        (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
@@ -721,6 +726,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] false)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [& args]
                                                              (swap! runtime-rebind-calls conj args)
                                                              (p/resolved {:schema {}}))
@@ -745,6 +751,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
@@ -761,4 +768,125 @@
                          (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-removes-created-local-graph-on-failure-test
+  (async done
+         (let [deleted (atom [])
+               closed (atom [])
+               repo (str config/db-version-prefix "demo-graph")]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               state/get-repos (fn [] [])
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               persist-db/<close-db (fn [graph]
+                                                      (swap! closed conj graph)
+                                                      (p/resolved nil))
+                               db-persist/delete-graph! (fn [graph]
+                                                          (swap! deleted conj graph)
+                                                          (p/resolved nil))
+                               state/delete-repo! (fn [_graph] nil)
+                               state/<invoke-db-worker (fn [op & _args]
+                                                         (if (= op :thread-api/db-sync-download-graph-by-id)
+                                                           (p/rejected (ex-info "invalid-e2ee-password"
+                                                                                {:code :db-sync/invalid-e2ee-password}))
+                                                           (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" true))
+               (p/then (fn [_]
+                         (is false "expected download failure")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/invalid-e2ee-password (:code (ex-data error))))
+                          (is (= #{repo} (set @closed)))
+                          (is (= #{repo} (set @deleted)))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-keeps-imported-graph-when-assets-fail-test
+  (async done
+         (let [deleted (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               db-persist/delete-graph! (fn [repo]
+                                                          (swap! deleted conj repo)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker
+                               (fn [op & _args]
+                                 (if (= op :thread-api/db-sync-download-missing-assets)
+                                   (p/rejected (ex-info "asset download failed"
+                                                        {:code :db-sync/asset-download-failed}))
+                                   (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" true))
+               (p/then (fn [_]
+                         (is false "expected asset download failure")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/asset-download-failed (:code (ex-data error))))
+                          (is (= [] @deleted))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-keeps-preexisting-local-graph-on-failure-test
+  (async done
+         (let [deleted (atom [])
+               repo (str config/db-version-prefix "demo-graph")]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               state/get-repos (fn [] [])
+                               db-persist/get-all-graphs (fn [] (p/resolved [{:name (string/upper-case repo)}]))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               persist-db/<close-db (fn [_repo] (p/resolved nil))
+                               db-persist/delete-graph! (fn [graph]
+                                                          (swap! deleted conj graph)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker (fn [op & _args]
+                                                         (if (= op :thread-api/db-sync-download-graph-by-id)
+                                                           (p/rejected (ex-info "invalid-e2ee-password"
+                                                                                {:code :db-sync/invalid-e2ee-password}))
+                                                           (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" true))
+               (p/then (fn [_]
+                         (is false "expected download failure")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/invalid-e2ee-password (:code (ex-data error))))
+                          (is (= [] @deleted))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-skips-cleanup-when-auth-fails-before-create-test
+  (async done
+         (let [deleted (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn []
+                                                                       (p/rejected (ex-info "missing auth"
+                                                                                            {:code :missing-auth})))
+                               state/get-repos (fn [] [])
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               db-persist/delete-graph! (fn [repo]
+                                                          (swap! deleted conj repo)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker (fn [& _] (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" true))
+               (p/then (fn [_]
+                         (is false "expected auth failure")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (= :missing-auth (:code (ex-data error))))
+                          (is (= [] @deleted))
                           (finish-async-test! done)))))))

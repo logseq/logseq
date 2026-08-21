@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.persist :as db-persist]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -147,6 +148,31 @@
             (assoc active-operation
                    :type :db-sync/graph-operation-in-progress
                    :requested-operation requested-operation))))
+
+(defn- <local-download-graph-exists?
+  [repo]
+  (p/let [graphs (db-persist/get-all-graphs)]
+    (boolean (some (fn [graph]
+                     (= (some-> (or (:url graph) (:name graph)) string/lower-case)
+                        (string/lower-case repo)))
+                   graphs))))
+
+(defn- <remove-created-download-graph!
+  [repo]
+  (-> (p/let [_ (-> (persist-db/<close-db repo)
+                    (p/catch (fn [error]
+                               (log/warn :db-sync/download-close-failed
+                                         {:repo repo
+                                          :error error})
+                               nil)))
+              _ (db-persist/delete-graph! repo)]
+        (state/delete-repo! {:url repo})
+        nil)
+      (p/catch (fn [error]
+                 (log/warn :db-sync/download-cleanup-failed
+                           {:repo repo
+                            :error error})
+                 nil))))
 
 (defn- <ensure-download-runtime-bound!
   [repo]
@@ -317,13 +343,18 @@
                    :graph-uuid graph-uuid
                    :message "Preparing graph snapshot download"}])
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-             base (http-base)]
+             base (http-base)
+             graph (str config/db-version-prefix graph-name)
+             existed-before?* (atom true)
+             snapshot-imported?* (atom false)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       graph (str config/db-version-prefix graph-name)
+                       graph-existed-before? (<local-download-graph-exists? graph)
+                       _ (reset! existed-before?* graph-existed-before?)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                                  graph graph-uuid graph-e2ee?)
+                       _ (reset! snapshot-imported?* true)
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
                                                    graph graph-uuid))]
@@ -333,7 +364,14 @@
                                      :graph-uuid graph-uuid
                                      :base base})))
              (p/catch (fn [error]
-                        (throw error)))
+                        (let [created-in-this-attempt? (and (false? @existed-before?*)
+                                                           (false? @snapshot-imported?*))]
+                          (reset! existed-before?* true)
+                          (-> (if created-in-this-attempt?
+                                (<remove-created-download-graph! graph)
+                                (p/resolved nil))
+                              (p/then (fn [_]
+                                        (throw error)))))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
