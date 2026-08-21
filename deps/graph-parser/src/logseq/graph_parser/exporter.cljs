@@ -3152,7 +3152,7 @@
                  (edn/read-string default-config)))))
 
 (defn- export-class-properties
-  [conn repo-or-conn]
+  [conn repo-or-conn & [tx-meta]]
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
                                  :where [?b :block/tags :logseq.class/Tag]] @conn)
                           (map first)
@@ -3175,7 +3175,7 @@
                    {:db/id class-id
                     :logseq.property.class/properties (vec prop-ids)})
                  class-to-prop-uuids)]
-    (ldb/transact! repo-or-conn tx)))
+    (ldb/transact! repo-or-conn tx tx-meta)))
 
 (defn- <safe-async-loop
   "Calls async-fn with each element in args-to-loop. Catches an unexpected error in loop and notifies user"
@@ -3303,7 +3303,7 @@
                                    :record-issue :recoverable-error?]))))
 
 (defn- move-top-parent-pages-to-library
-  [conn repo-or-conn]
+  [conn repo-or-conn & [tx-meta]]
   (let [db @conn
         library-page (ldb/get-built-in-page db common-config/library-page-name)
         library-id (:block/uuid library-page)
@@ -3323,7 +3323,7 @@
                     :block/parent [:block/uuid library-id]
                     :block/order (db-order/gen-key)})
                  top-parent-pages)]
-    (ldb/transact! repo-or-conn tx-data)))
+    (ldb/transact! repo-or-conn tx-data tx-meta)))
 
 (defn export-file-graph
   "Main fn which exports a file graph given its files and imports them
@@ -3366,7 +3366,9 @@
                           (remove #(or (logseq-file? %) (asset-file? %)))
                           (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
            asset-files (filter asset-file? files)
-           doc-options (build-doc-options config options)]
+           doc-options (build-doc-options config options)
+           finalizer-tx-meta (when (:single-persistent-document-batch? options)
+                               {::imported-data? true ::new-graph? true})]
        (log-fn "Importing" (count doc-files) "files ...")
        ;; These export* fns are all the major export/import steps
        (p/do!
@@ -3383,8 +3385,8 @@
            export-doc-files)
          conn doc-files <read-file doc-options)
         (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
-        (export-class-properties conn repo-or-conn)
-        (move-top-parent-pages-to-library conn repo-or-conn)
+        (export-class-properties conn repo-or-conn finalizer-tx-meta)
+        (move-top-parent-pages-to-library conn repo-or-conn finalizer-tx-meta)
         {:import-state (-> (:import-state doc-options)
                            ;; don't leak full asset content (which could be large) out of this ns
                            (dissoc :assets))
