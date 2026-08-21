@@ -81,12 +81,11 @@
 
 (defn insert-block
   [this content properties schema opts]
-  (p/let [new-block (editor-handler/api-insert-new-block! content opts)]
-    (when (seq properties)
-      (api-block/db-based-save-block-properties! new-block properties {:plugin this
-                                                                       :schema schema}))
-    (p/let [block (<get-block (:block/uuid new-block))]
-      (sdk-utils/result->js block))))
+  (p/let [new-block (editor-handler/api-insert-new-block! content opts)
+          _ (when (seq properties)
+              (api-block/db-based-save-block-properties! new-block properties {:plugin this
+                                                                               :schema schema}))]
+    (sdk-utils/result->js new-block)))
 
 
 (defn update-block
