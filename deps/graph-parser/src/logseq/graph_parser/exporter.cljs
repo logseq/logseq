@@ -3250,10 +3250,10 @@
   (let [db @conn
         library-page (ldb/get-built-in-page db common-config/library-page-name)
         library-id (:block/uuid library-page)
-        top-parent-pages (->> (d/datoms db :avet :block/parent)
-                              (keep (fn [d]
-                                      (let [child (d/entity db (:e d))
-                                            parent (d/entity db (:v d))]
+        top-parent-pages (->> (d/datoms db :avet :block/name)
+                              (keep (fn [datom]
+                                      (let [child (d/entity db (:e datom))
+                                            parent (:block/parent child)]
                                         (when (and (nil? (:block/parent parent))
                                                    (page-entity? child)
                                                    (page-entity? parent)
