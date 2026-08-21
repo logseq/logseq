@@ -34,6 +34,7 @@
             [io.factorhouse.hsx.core :as hsx]))
 
 (defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])
+(defonce ^:private escape-keydown-capture-opts #js {:capture true})
 
 (defn- use-current-edit-content
   []
@@ -674,18 +675,14 @@
   (let [action (state/get-editor-action)
         config (:config state)]
     (cond
-      (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
+      (and (= type :esc)
+           (editor-handler/dismiss-editor-popup-on-escape! e))
       nil
 
       (state/editor-in-composition?)
       nil
 
-      (or (contains?
-           #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :datepicker}
-           action)
-          (and (keyword? action)
-               (= (namespace action) "editor.action")))
+      (editor-handler/editor-popup-action? action)
       (when e (util/stop e))
 
       ;; editor/input component handles Escape directly, so just prevent handling it here
@@ -724,6 +721,12 @@
            (fn []
              #(state/set-state! :editor/raw-mode-block nil))
            [])
+        _ (hooks/use-window-keydown
+           (fn [e]
+             (when (= (util/ekey e) "Escape")
+               (editor-handler/dismiss-editor-popup-on-escape! e id)))
+           []
+           escape-keydown-capture-opts)
         _ (hooks/use-hide-on-esc-or-outside
            {:active? true
             :root-ref #(or @*ref (gdom/getElement id))
@@ -751,9 +754,9 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (when-not (editor-handler/editor-commands-popup-exists?)
-                                          (.stopPropagation e))
-                                        (editor-on-hide component-state :esc e false))))
+                                        (when-not (editor-handler/dismiss-editor-popup-on-escape! e)
+                                          (.stopPropagation e)
+                                          (editor-on-hide component-state :esc e false)))))
                :auto-focus true
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")
