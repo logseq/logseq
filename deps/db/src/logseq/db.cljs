@@ -230,9 +230,7 @@
        ;; (js/console.trace)
 
        (let [tx-meta (cond-> tx-meta
-                       (or *batch-tx-report?*
-                           (and (not (string? repo-or-conn))
-                                (:batch-tx? @repo-or-conn)))
+                       *batch-tx-report?*
                        (assoc :batch-tx-report? true))]
          (if-let [transact-fn @*transact-fn]
            (transact-fn repo-or-conn tx-data tx-meta)

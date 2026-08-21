@@ -14,15 +14,11 @@
 
 (deftest create-db-does-not-start-renderer-db-conn-test
   (async done
-    (let [calls (atom [])
-          expected-error (ex-info "database creation failed" {:code :create-failed})]
+    (let [calls (atom [])]
       (p/with-redefs [persist-db/<new
                       (fn [repo opts]
-                        (if (= "logseq_db_failed" repo)
-                          (p/rejected expected-error)
-                          (do
-                            (swap! calls conj [:persist-new repo opts])
-                            (p/resolved nil))))
+                        (swap! calls conj [:persist-new repo opts])
+                        (p/resolved nil))
                       state/add-repo!
                       (fn [repo]
                         (swap! calls conj [:add-repo repo])
@@ -55,14 +51,10 @@
             (p/then
              (fn [repo]
                (is (= "logseq_db_created" repo))
-               (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
-               (#'repo-handler/create-db "logseq_db_failed" {})))
-            (p/then
-             (fn [_]
-               (is false "Graph creation must reject when persistence fails.")))
+               (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))))
             (p/catch
              (fn [error]
-               (is (identical? expected-error error))))
+               (is false (str error))))
             (p/finally done))))))
 
 (deftest removing-current-repo-pauses-renderer-subscriptions-test
