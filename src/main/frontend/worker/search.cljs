@@ -570,11 +570,13 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- block-search-title
   "Build display title from block entity with original casing."
-  [block page-node? page-or-object-node?]
+  [block page-node? page-or-object-node? ref-title-cache]
   (let [title (db-content/recur-replace-uuid-in-block-title
                (assoc block :block/title (if page-node?
                                            (ldb/get-title-with-parents block)
-                                           (:block/title block))))
+                                           (:block/title block)))
+               10
+               {:ref-title-cache ref-title-cache})
         title (cond-> title
                 (ldb/journal? block)
                 (str " " (:block/journal-day block)))]
@@ -605,7 +607,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Convert a block to the index for searching."
   ([block]
    (block->index block {:include-vector-title? false}))
-  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title? known-visible?]
+  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title? known-visible? ref-title-cache]
                                                :or {include-vector-title? false
                                                     known-visible? false}}]
   (when-not (or
@@ -617,7 +619,7 @@ DROP TRIGGER IF EXISTS blocks_au;
             page-or-object-node? (and (or page-node? (ldb/object? block))
                                       (or known-visible?
                                           (not (hidden-entity? block))))
-            title (block-search-title block page-node? page-or-object-node?)]
+            title (block-search-title block page-node? page-or-object-node? ref-title-cache)]
         (when uuid
           (cond-> {:id (str uuid)
                    :page (str (or (:block/uuid page) uuid))
