@@ -2704,6 +2704,26 @@
               :path path}
              error)))
 
+(defn- commit-file-import-side-effects!
+  [import-state forked-import-state notifications issues notify-user record-issue]
+  (commit-import-state! import-state forked-import-state)
+  (doseq [notification @notifications]
+    (notify-user notification))
+  (doseq [issue @issues]
+    (record-issue issue)))
+
+(defn- <export-file-in-document-batch
+  [conn {:file/keys [path] :as file-map} temp-options <export-file *batch-tx-data]
+  (let [conn-state-before @(:atom conn)
+        tx-data-count-before (count @*batch-tx-data)]
+    (-> (p/resolved nil)
+        (p/then (fn [_]
+                  (<export-file conn file-map temp-options)))
+        (p/catch (fn [error]
+                   (reset! (:atom conn) conn-state-before)
+                   (swap! *batch-tx-data #(subvec (vec %) 0 tx-data-count-before))
+                   (throw (ensure-error-code error :import/file-parse-failed path)))))))
+
 (defn- <atomic-export-file
   [conn {:file/keys [path] :as file-map} export-options <export-file]
   (let [notifications (atom [])
@@ -2718,25 +2738,28 @@
                             :notify-user #(swap! notifications conj %)
                             :record-issue #(swap! issues conj %)
                             :on-tx-report (constantly nil))]
-    (p/let [tx-report (-> (ldb/<batch-transact-with-temp-conn!
-                            conn
-                            {::imported-data? true
-                             ::path path
-                             ::new-graph? true}
-                            (fn [temp-conn _tx-data]
-                              (-> (<export-file temp-conn file-map temp-options)
-                                  (p/catch #(throw (ensure-error-code
-                                                   % :import/file-parse-failed path))))))
-                           (p/catch #(throw (ensure-error-code
-                                            % :import/file-commit-failed path))))]
-          (commit-import-state! import-state forked-import-state)
-          (doseq [notification @notifications]
-            (notify-user notification))
-          (doseq [issue @issues]
-            (record-issue issue))
-          (when tx-report
-            (on-tx-report tx-report))
-          tx-report)))
+    (if-let [*batch-tx-data (::file-import-batch-tx-data export-options)]
+      (p/let [result (<export-file-in-document-batch
+                      conn file-map temp-options <export-file *batch-tx-data)]
+        (commit-file-import-side-effects!
+         import-state forked-import-state notifications issues notify-user record-issue)
+        result)
+      (p/let [tx-report (-> (ldb/<batch-transact-with-temp-conn!
+                              conn
+                              {::imported-data? true
+                               ::path path
+                               ::new-graph? true}
+                              (fn [temp-conn _tx-data]
+                                (-> (<export-file temp-conn file-map temp-options)
+                                    (p/catch #(throw (ensure-error-code
+                                                     % :import/file-parse-failed path))))))
+                             (p/catch #(throw (ensure-error-code
+                                              % :import/file-commit-failed path))))]
+        (commit-file-import-side-effects!
+         import-state forked-import-state notifications issues notify-user record-issue)
+        (when tx-report
+          (on-tx-report tx-report))
+        tx-report))))
 
 (defn- file-import-issue
   [path error]
@@ -3030,6 +3053,30 @@
                                  :ex-data {:error e}})
                    (throw e))))))
 
+(defn <export-doc-files-atomically
+  "Exports document files on one isolated connection and publishes the completed
+  batch once. A recoverable file error restores that file's database savepoint
+  before the remaining files continue."
+  [conn doc-files <read-file options]
+  (let [result (atom nil)
+        on-tx-report (or (:on-tx-report options) (constantly nil))]
+    (p/let [tx-report
+            (ldb/<batch-transact-with-temp-conn!
+             conn
+             {::imported-data? true
+              ::new-graph? true}
+             (fn [temp-conn *batch-tx-data]
+               (p/let [export-result
+                       (export-doc-files
+                        temp-conn doc-files <read-file
+                        (assoc options
+                               ::file-import-batch-tx-data *batch-tx-data
+                               :on-tx-report (constantly nil)))]
+                 (reset! result export-result))))]
+      (when tx-report
+        (on-tx-report tx-report))
+      @result)))
+
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
                         :file/content content
@@ -3284,6 +3331,8 @@
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<read-and-copy-asset - fn which reads and copies asset file
+   * :single-persistent-document-batch? - publish all document files once; intended
+     for isolated staging imports
 
    Note: See export-doc-files for additional options that are only for it"
   [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn]
@@ -3317,7 +3366,10 @@
                                    <read-and-copy-asset
                                    (merge (select-keys options [:notify-user :set-ui-state :rpath-key])
                                           {:assets (get-in doc-options [:import-state :assets])}))
-        (export-doc-files conn doc-files <read-file doc-options)
+        ((if (:single-persistent-document-batch? options)
+           <export-doc-files-atomically
+           export-doc-files)
+         conn doc-files <read-file doc-options)
         (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
         (export-class-properties conn repo-or-conn)
         (move-top-parent-pages-to-library conn repo-or-conn)

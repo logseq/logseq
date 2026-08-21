@@ -795,7 +795,7 @@ abc
                  :<export-file (fn [_conn {:file/keys [path]} _opts]
                                  (swap! fatal-attempts conj path)
                                  (p/rejected fatal-error))}))]
-    (p/let [recoverable-result (gp-exporter/export-doc-files
+    (p/let [recoverable-result (gp-exporter/<export-doc-files-atomically
                                 recoverable-conn files <read-file recoverable-options)
             fatal-result (-> (gp-exporter/export-doc-files
                              (db-test/create-conn) files <read-file fatal-options)
