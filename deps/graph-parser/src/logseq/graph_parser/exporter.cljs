@@ -2613,8 +2613,9 @@
                       :or {notify-user #(println "[WARNING]" (:msg %))
                            log-fn prn}
                       :as *options}]
-  (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
-          {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+  (p/let [import-file (or (:file-import-path *options) file)
+          options (assoc *options :notify-user notify-user :log-fn log-fn :file import-file)
+          {:keys [pages blocks]} (extract-pages-and-blocks @conn import-file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
@@ -2629,7 +2630,7 @@
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
           ;; Necessary to transact new property entities first so that block+page properties can be transacted next
           ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
-          tx-meta {::imported-data? true ::path file ::new-graph? true}
+          tx-meta {::imported-data? true ::path import-file ::new-graph? true}
           main-props-tx-report (ldb/transact! conn property-pages-tx tx-meta)
           _ (save-from-tx property-pages-tx options)
 
@@ -2754,9 +2755,18 @@
    :parameters {:path path}
    :diagnostics {:message (or (.-message error) (str error))}})
 
+(defn- document-import-path
+  [{:keys [path] :as file} rpath-key]
+  (or (some-> (get file rpath-key) path/path-normalize)
+      (let [parent-name (node-path/basename (node-path/dirname path))
+            file-name (node-path/basename path)]
+        (if (contains? #{"journals" "pages" "whiteboards"} parent-name)
+          (path/path-join parent-name file-name)
+          file-name))))
+
 (defn- export-doc-file
   [{:keys [path idx] :as file} conn <read-file
-   {:keys [notify-user set-ui-state <export-file <get-file-stat recoverable-error? record-issue]
+   {:keys [notify-user set-ui-state <export-file <get-file-stat recoverable-error? record-issue rpath-key]
     :or {set-ui-state (constantly nil)
          recoverable-error? (constantly false)
          record-issue (constantly nil)
@@ -2773,7 +2783,8 @@
               created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
               modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
               m {:file/path path :file/content content}
-              export-options (cond-> (dissoc options :set-ui-state :<export-file)
+              export-options (cond-> (assoc (dissoc options :set-ui-state :<export-file)
+                                             :file-import-path (document-import-path file rpath-key))
                                created-at (assoc :file-created-at (.getTime created-at))
                                modified-at (assoc :file-updated-at (.getTime modified-at)))
               _ (<atomic-export-file conn m export-options <export-file)]
