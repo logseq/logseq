@@ -3099,17 +3099,15 @@
                           (map first)
                           (remove #(db-class/built-in-classes (:db/ident %))))
         class-to-prop-uuids
-        (->> (d/q '[:find ?t ?prop #_?class
-                    :in $ ?user-classes
+        (->> (d/q '[:find ?t ?prop
+                    :in $ [?t ...]
                     :where
                     [?b :block/tags ?t]
-                    [?t :db/ident ?class]
-                    [(contains? ?user-classes ?class)]
                     [?b ?prop _]
                     [?prop-e :db/ident ?prop]
                     [?prop-e :block/tags :logseq.class/Property]]
                   @conn
-                  (set (map :db/ident user-classes)))
+                  (mapv :db/id user-classes))
              (remove #(ldb/built-in? (d/entity @conn (second %))))
              (reduce (fn [acc [class-id prop-ident]]
                        (update acc class-id (fnil conj #{}) prop-ident))
