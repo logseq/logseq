@@ -3254,7 +3254,10 @@
                               (keep (fn [d]
                                       (let [child (d/entity db (:e d))
                                             parent (d/entity db (:v d))]
-                                        (when (and (nil? (:block/parent parent)) (page-entity? child) (page-entity? parent))
+                                        (when (and (nil? (:block/parent parent))
+                                                   (page-entity? child)
+                                                   (page-entity? parent)
+                                                   (not (ldb/class? parent)))
                                           parent))))
                               (common-util/distinct-by :block/uuid))
         tx-data (map

@@ -1932,6 +1932,21 @@ abc
     (is (nil? (db-test/find-page-by-title @conn "05"))
         "Journal reference is not split into a child namespace page")))
 
+(deftest-async import-tag-class-used-as-namespace-parent
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:preferred-format :markdown}\n"
+                "pages/source.md" "- tagged #reading\n- [[reading/note]]\n"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          tag-class (db-test/find-page-by-title @conn "reading")]
+    (is (= [:logseq.class/Tag] (mapv :db/ident (:block/tags tag-class)))
+        "Imported tag remains a class")
+    (is (nil? (:block/parent tag-class))
+        "Namespace parent class is not moved under Library")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-legacy-journal-file-name-refs-as-journals
   (p/let [source-file (write-temp-graph-file
                        "journals/2026_04_01.md"
