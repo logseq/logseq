@@ -266,7 +266,7 @@
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
-  [db tag-block {:keys [page-names-to-uuids classes-tx]} user-options all-idents]
+  [db tag-block {:keys [page-names-to-uuids classes-tx class-name-uuids]} user-options all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
@@ -274,9 +274,16 @@
                            (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m) {:temp-new-class? true})})]
       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
+      (when class-name-uuids
+        (swap! class-name-uuids assoc (common-util/page-name-sanity-lc new-class) (:block/uuid class-m')))
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
-      (let [existing-tag-uuid (find-existing-class db tag-block)
+      (let [class-name (:block/name tag-block)
+            existing-tag-uuid (or (some-> class-name-uuids deref (get class-name))
+                                  (when-let [class-uuid (find-existing-class db tag-block)]
+                                    (when class-name-uuids
+                                      (swap! class-name-uuids assoc class-name class-uuid))
+                                    class-uuid))
             internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
         (cond
           ;; Don't overwrite internal tags
@@ -299,6 +306,8 @@
                              (replace-namespace-with-parent page-names-to-uuids :logseq.property.class/extends))]
             (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
             (assert (:block/uuid class-m') "Class must have a :block/uuid")
+            (when class-name-uuids
+              (swap! class-name-uuids assoc class-name (:block/uuid class-m')))
             [:block/uuid (:block/uuid class-m')]))))))
 
 (defn- logseq-class-ident?
@@ -2242,7 +2251,8 @@
         ;; Stateful because new page uuids can occur via tags
         page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
-                        :classes-tx (:classes-tx options)}
+                        :classes-tx (:classes-tx options)
+                        :class-name-uuids (:class-name-uuids import-state)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
@@ -2353,6 +2363,8 @@
    :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
    :all-idents (atom {})
+   ;; Map of imported class names to their resolved block UUIDs
+   :class-name-uuids (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
    :classes-from-property-parents (atom #{})
    ;; Map of imported legacy task markers to their Status closed value lookup refs.
