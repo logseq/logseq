@@ -18,6 +18,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.search :as search]
@@ -325,6 +326,19 @@
                  (recur e-cut new-result)
                  new-result)))]))
 
+(defn- safe-breadcrumb-block
+  "Strip non-UUID :block/uuid values from block and its breadcrumb ancestors
+   so breadcrumb-segment-row never receives a numeric db/id."
+  [block]
+  (when block
+    (let [raw-uuid (:block/uuid block)
+          safe-uuid (when (uuid? raw-uuid) raw-uuid)]
+      (when safe-uuid
+        (if (contains? block :block.temp/breadcrumb)
+          (assoc block :block.temp/breadcrumb
+                 (filterv #(uuid? (:block/uuid %)) (:block.temp/breadcrumb block)))
+          block)))))
+
 (defn page-item
   [repo page current-page-uuid input]
   (let [entity page
@@ -346,12 +360,13 @@
                      (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
                        (highlight-content-query title input)
                        title)]
-              :header (when (:block/parent entity)
-                        (block/breadcrumb {:disable-preview? true
-                                           :search? true} repo (:block/uuid page)
-                                          {:disabled? true
-                                           :variant :search-result
-                                           :block page}))
+              :header (let [safe-block (safe-breadcrumb-block page)]
+                        (when (and (:block/parent entity) safe-block)
+                          (block/breadcrumb {:disable-preview? true
+                                             :search? true} repo (:block/uuid safe-block)
+                                            {:disabled? true
+                                             :variant :search-result
+                                             :block safe-block})))
               :result-type :page
               :current-page? current-page?
               :alias (:alias page)
@@ -359,17 +374,19 @@
 
 (defn block-item
   [repo block current-page-uuid input]
-  (let [id (:block/uuid block)
+  (let [safe-block (safe-breadcrumb-block block)
+        id (some-> safe-block :block/uuid)
         text (:block.temp/unique-title block)
         icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
-     :header (block/breadcrumb {:disable-preview? true
-                                :search? true} repo id
-                               {:disabled? true
-                                :variant :search-result
-                                :block block})
+     :header (when id
+               (block/breadcrumb {:disable-preview? true
+                                  :search? true} repo id
+                                 {:disabled? true
+                                  :variant :search-result
+                                  :block safe-block}))
      :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id current-page-uuid))
@@ -503,20 +520,20 @@
               search-result (search/block-search repo @!input opts)
               {:keys [blocks matched-count]} (block-search-result->items search-result)
               blocks (remove nil? blocks)
-              items (map (fn [block]
-                           (let [id (if (uuid? (:block/uuid block))
-                                      (:block/uuid block)
-                                      (uuid (:block/uuid block)))]
-                             {:icon "node"
-                              :icon-theme :gray
-                              :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id
-                                                        {:disabled? true
-                                                         :variant :search-result
-                                                         :block block})
-                              :result-type (if (:page? block) :page :block)
-                              :current-page? true
-                              :source-block block})) blocks)]
+              items (keep (fn [block]
+                           (let [safe-block (safe-breadcrumb-block block)
+                                 id (some-> safe-block :block/uuid)]
+                             (when id
+                               {:icon "node"
+                                :icon-theme :gray
+                                :text (highlight-content-query (:block/title block) @!input)
+                                :header (block/breadcrumb {:search? true} repo id
+                                                          {:disabled? true
+                                                           :variant :search-result
+                                                           :block safe-block})
+                                :result-type (if (:page? block) :page :block)
+                                :current-page? true
+                                :source-block block}))) blocks)]
         (swap! !results update :current-page merge {:status :success
                                                     :items items
                                                     :matched-count matched-count
@@ -594,10 +611,8 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
-    (p/let [page-uuid (<page-uuid (state/get-current-repo) page-name)]
-      (when page-uuid
-        (route-handler/redirect-to-page! page-uuid))
-      (shui/dialog-close! :ls-dialog-cmdk))))
+    (tabs-handler/open-tab-by-page! page-name {})
+    (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -698,7 +713,6 @@
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
         !input (::input state)
-        input @!input
         create-class? (string/starts-with? @!input "#")
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
@@ -708,13 +722,13 @@
                        create-class?
                        (db-page-handler/<create-class! class
                                                        {:redirect? false})
-                       create-page? (page-handler/<create! input {:redirect? true
-                                                                  :edit? false}))]
+                       create-page? (page-handler/<create! @!input {:redirect? false}))]
         (shui/dialog-close! :ls-dialog-cmdk)
-        (when create-page?
-          (page-handler/edit-page-when-present! (or (:block/uuid result) input)))
-        (when (and create-class? result)
-          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
+        (cond
+          (and create-class? result)
+          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])
+          (and create-page? result)
+          (tabs-handler/open-tab-by-page! (:block/uuid result) {:new-tab? true}))))))
 
 (defn- get-filter-user-input
   [input]

@@ -18,6 +18,7 @@
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.tabs :as tabs]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -36,7 +37,6 @@
             [frontend.util.entity :as entity]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.common.version :as build-version]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -53,7 +53,7 @@
                                            (state/set-left-sidebar-open! false))
                                          (route-handler/redirect-to-home!))})
    (t :nav/home)
-   {:trigger-props {:as-child true}}))
+   :trigger-props {:as-child true}))
 
 (defn current-local-uploadable-graph
   [db-rtc-uuid]
@@ -293,7 +293,7 @@
                                             :content-props {:class "w-64"
                                                             :align-offset -32}}))})
      (t :header/more)
-     {:trigger-props {:as-child true}})))
+     :trigger-props {:as-child true})))
 
 (hsx/defc toolbar-dots-menu-page
   [opts page-uuid recycle-page?]
@@ -482,7 +482,7 @@
   (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (when (and (false? db-restoring?)
                page-name
-               (common-util/uuid-string? page-name))
+               (util/uuid-string? page-name))
       (ready-block-breadcrumb (uuid page-name)))))
 
 (hsx/defc search-index-progress
@@ -550,9 +550,13 @@
             (t :nav/search)
             {:trigger-props {:id "search-button"}})))]
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
-      [:div.flex.flex-1
-       (block-breadcrumb (state/get-current-page))]
+     ;; Tab bar between left menu and right controls (desktop/web only);
+     ;; on mobile, render a drag-region spacer to keep .r pushed right.
+     (if (mobile-util/native-platform?)
+       [:div.flex-1.drag-region]
+       (tabs/tab-bar))
+
+     [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
        (when (rtc-indicator-visible?
               {:current-repo current-repo
