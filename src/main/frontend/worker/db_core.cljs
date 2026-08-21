@@ -6,7 +6,6 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [datascript.storage :refer [IStorage] :as storage]
-   [frontend.common.file-graph-import :as file-graph-import]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
@@ -43,6 +42,7 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
+   [logseq.common.file-graph-import :as file-graph-import]
    [logseq.common.graph-dir :as graph-dir]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
@@ -715,10 +715,11 @@
   []
   (p/let [storage (platform/storage (platform/current))
           graph-names ((:list-graphs storage))]
-    (p/all (map (fn [graph-name]
-                  (p/let [repo (str sqlite-util/db-version-prefix graph-name)]
-                    {:name repo}))
-                graph-names))))
+    (p/all (->> graph-names
+                (remove file-graph-import/staging-repo?)
+                (map (fn [graph-name]
+                       (p/let [repo (str sqlite-util/db-version-prefix graph-name)]
+                         {:name repo})))))))
 
 (def-thread-api :thread-api/list-db
   []
@@ -803,6 +804,19 @@
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
+
+(def-thread-api :thread-api/cleanup-file-graph-import-staging
+  []
+  (p/let [storage (platform/storage (platform/current))
+          graph-names ((:list-graphs storage))]
+    (p/all
+     (map (fn [graph-name]
+            (let [repo (str sqlite-util/db-version-prefix graph-name)]
+              (p/let [pool (<get-opfs-pool repo)
+                      _ (close-db! repo)
+                      _ (remove-vfs! pool)]
+                nil)))
+          (filter file-graph-import/staging-repo? graph-names)))))
 
 (def-thread-api :thread-api/close-db
   [repo]

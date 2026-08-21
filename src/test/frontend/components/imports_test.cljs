@@ -5,6 +5,7 @@
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -67,10 +68,19 @@
                                     deref)
           state-changes (atom [])
           state-values (atom {})
+          lifecycle-ops (atom [])
           expected-error (ex-info "worker unavailable" {:code :worker-unavailable})]
       (is (fn? import-file-graph))
-      (-> (p/with-redefs [repo-handler/new-db! (fn [& _]
+      (-> (p/with-redefs [repo-handler/<new-file-graph-import-staging-db!
+                          (fn [_run-id]
+                            (p/resolved "logseq_db_.logseq-file-graph-import-run"))
+                          repo-handler/new-db! (fn [& _]
+                                                 (swap! lifecycle-ops conj :register-target)
                                                  (p/resolved "logseq_db_target"))
+                          persist-db/<discard-file-graph-import!
+                          (fn [repo]
+                            (swap! lifecycle-ops conj [:discard repo])
+                            (p/resolved nil))
                           state/<invoke-db-worker (fn [& _]
                                                     (p/rejected expected-error))
                           state/get-state (fn [path]
@@ -84,6 +94,8 @@
           (p/then
            (fn [result]
              (is (= :failed (:status result)))
+             (is (= [[:discard "logseq_db_.logseq-file-graph-import-run"]]
+                    @lifecycle-ops))
              (is (= [[:graph/importing nil]
                      [:graph/importing-state nil]]
                     (take-last 2 @state-changes)))))

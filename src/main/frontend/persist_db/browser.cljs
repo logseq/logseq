@@ -222,6 +222,8 @@
        (worker-handler/handle-message! worker wrapped-worker)
        (reset! state/*db-worker wrapped-worker)
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init)
+                   _ (when-not (util/electron?)
+                       (state/<invoke-db-worker :thread-api/cleanup-file-graph-import-staging))
                    _ (state/<invoke-db-worker :thread-api/set-db-sync-config
                                               {:enabled? true
                                                :ws-url (config/db-sync-ws-url)

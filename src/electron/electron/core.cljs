@@ -24,6 +24,7 @@
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
+            [logseq.cli.common :as cli-common]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]))
 
@@ -401,6 +402,11 @@
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)
+           (try
+             (cli-common/cleanup-file-graph-imports!)
+             (catch :default error
+               (logger/warn ::file-graph-import-staging-cleanup-failed
+                            {:error error})))
            (install-cli-launcher!)
 
            ;; Windows/Linux: handle deeplink URL passed on first launch via argv

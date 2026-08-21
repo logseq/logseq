@@ -4,7 +4,6 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
-            [frontend.common.file-graph-import :as file-graph-import]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -17,6 +16,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -24,6 +24,7 @@
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
@@ -389,33 +390,56 @@
                  :import/unexpected-error)]
     (notification/show! (t :import/unexpected-error (name code)) :error)))
 
+(defn- <discard-file-graph-import!
+  [run-id repo]
+  (-> (persist-db/<discard-file-graph-import! repo)
+      (p/catch
+       (fn [error]
+         (log/warn :import-staging-cleanup-failed true
+                   :run-id run-id
+                   :code (import-error-code error))
+         nil))))
+
 (defn- <import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
    config-file]
   (let [run-id (str (random-uuid))
-        phase (atom :create-graph)
+        phase (atom :create-staging)
+        staging-repo* (atom nil)
+        published? (atom false)
         start-time (t/now)]
     (state/set-state! :graph/importing :file-graph)
     (state/set-state! :graph/importing-state {:run-id run-id
                                                :current-page "Config files"})
-    (-> (p/let [repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+    (-> (p/let [staging-repo (repo-handler/<new-file-graph-import-staging-db! run-id)
+                _ (reset! staging-repo* staging-repo)
                 _ (reset! phase :serialize-files)
                 serialized-files (<serialize-import-files *files)
                 serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
                 options (assoc (build-file-graph-worker-options user-options config/config-default-content)
                                :run-id run-id)
                 _ (reset! phase :worker-import)
-                import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+                import-result (state/<invoke-db-worker :thread-api/import-file-graph staging-repo serialized-config-file serialized-files options)
                 terminal-result (completed-import-terminal-result run-id import-result)]
           (if (= :failed (:status terminal-result))
-            (do
+            (p/let [_ (<discard-file-graph-import! run-id staging-repo)]
               (show-import-terminal-failure! terminal-result)
               terminal-result)
             (p/let [_ (doseq [notification (:notifications terminal-result)]
                         (show-notification notification))
-                    _ (reset! phase :write-assets)
-                    _ (write-staged-assets! repo (:staged-assets terminal-result))
+                    target-repo (common-config/canonicalize-db-version-repo graph-name)
+                    _ (when (util/electron?)
+                        (reset! phase :stage-assets)
+                        (write-staged-assets! staging-repo (:staged-assets terminal-result)))
+                    _ (reset! phase :publish)
+                    _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
+                    _ (reset! published? true)
+                    _ (reset! phase :register-graph)
+                    repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                    _ (when-not (util/electron?)
+                        (reset! phase :write-assets)
+                        (write-staged-assets! repo (:staged-assets terminal-result)))
                     published-result (assoc terminal-result :publication {:status :published
                                                                           :repo repo})]
               (reset! phase :terminal)
@@ -428,14 +452,15 @@
               published-result)))
         (p/catch
          (fn [error]
-           (let [code (import-error-code error)
-                 result (file-graph-import/failed-result run-id @phase code)]
+           (p/let [_ (when (and @staging-repo* (not @published?))
+                       (<discard-file-graph-import! run-id @staging-repo*))
+                   code (import-error-code error)
+                   result (file-graph-import/failed-result run-id @phase code)]
              (log/error :import-file-graph-failed true
                         :run-id run-id
                         :phase @phase
                         :code code)
-             (when-not (= :create-graph @phase)
-               (notification/show! (t :import/unexpected-error (name code)) :error))
+             (notification/show! (t :import/unexpected-error (name code)) :error)
              result)))
         (p/finally #(clear-file-graph-import! run-id)))))
 

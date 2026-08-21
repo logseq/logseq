@@ -14,6 +14,7 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -342,6 +343,61 @@
           (p/resolved nil))
         (p/resolved nil))
       (state/<invoke-db-worker :thread-api/close-db repo))))
+
+(defn <discard-file-graph-import!
+  [repo]
+  (if-not (file-graph-import/staging-repo? repo)
+    (p/rejected (ex-info "cannot discard a non-staging graph"
+                         {:code :invalid-import-staging-graph
+                          :repo repo}))
+    (if (electron-runtime?)
+      (p/do!
+       (<close-db repo)
+       (ipc/ipc "deleteGraph" repo))
+      (p/do!
+       (<close-db repo)
+       (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo)))))
+
+(defn <publish-file-graph-import!
+  [staging-repo target-repo]
+  (cond
+    (not (file-graph-import/staging-repo? staging-repo))
+    (p/rejected (ex-info "source is not a file graph import staging graph"
+                         {:code :invalid-import-staging-graph
+                          :repo staging-repo}))
+
+    (file-graph-import/staging-repo? target-repo)
+    (p/rejected (ex-info "target cannot be a file graph import staging graph"
+                         {:code :invalid-import-target-graph
+                          :repo target-repo}))
+
+    (electron-runtime?)
+    (p/do!
+     (<close-db staging-repo)
+     (ipc/ipc "publishFileGraphImport" staging-repo target-repo)
+     target-repo)
+
+    :else
+    (let [target-owned? (atom false)]
+      (-> (p/let [target-exists? (state/<invoke-db-worker :thread-api/db-exists target-repo)
+                  _ (when target-exists?
+                      (throw (ex-info "target graph already exists"
+                                      {:code :graph-already-exists
+                                       :repo target-repo})))
+                  data (state/<invoke-db-worker :thread-api/export-db-binary staging-repo)
+                  _ (<close-db staging-repo)
+                  _ (reset! target-owned? true)
+                  _ (state/<invoke-db-worker :thread-api/import-db-binary target-repo data)
+                  _ (state/<invoke-db-worker :thread-api/unsafe-unlink-db staging-repo)]
+            target-repo)
+          (p/catch
+           (fn [error]
+             (if @target-owned?
+               (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db target-repo)
+                   (p/catch (constantly nil))
+                   (p/then (fn [_]
+                             (throw error))))
+               (throw error))))))))
 
 (defn <export-db
   [repo opts]

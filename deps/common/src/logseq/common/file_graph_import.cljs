@@ -1,6 +1,21 @@
-(ns frontend.common.file-graph-import)
+(ns logseq.common.file-graph-import
+  (:require [clojure.string :as string]
+            [logseq.common.config :as common-config]))
 
 (def terminal-contract-version 1)
+
+(def ^:private staging-graph-prefix ".logseq-file-graph-import-")
+
+(defn staging-repo
+  [run-id]
+  {:pre [(seq run-id)]}
+  (str common-config/db-version-prefix staging-graph-prefix run-id))
+
+(defn staging-repo?
+  [repo]
+  (some-> repo
+          common-config/strip-leading-db-version-prefix
+          (string/starts-with? staging-graph-prefix)))
 
 (defn failed-result
   [run-id phase code]

@@ -4,8 +4,26 @@
             [cljs.test :refer [deftest is]]
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.common :as cli-common]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]))
+
+(deftest publish-file-graph-import-preserves-the-target-boundary
+  (let [graphs-dir (node-helper/create-tmp-dir "publish-file-graph-import")
+        staging-repo (file-graph-import/staging-repo "run")
+        target-repo (str common-config/db-version-prefix "target")
+        staging-path (node-path/join graphs-dir ".logseq-file-graph-import-run")
+        target-path (node-path/join graphs-dir "target")]
+    (fs/mkdirSync staging-path #js {:recursive true})
+    (fs/writeFileSync (node-path/join staging-path "db.sqlite") "imported-data")
+    (cli-common/publish-file-graph-import! graphs-dir staging-repo target-repo)
+    (is (not (fs/existsSync staging-path)))
+    (is (= "imported-data"
+           (fs/readFileSync (node-path/join target-path "db.sqlite") "utf8")))
+    (fs/mkdirSync staging-path #js {:recursive true})
+    (is (thrown-with-msg? js/Error #"target graph already exists"
+                          (cli-common/publish-file-graph-import!
+                           graphs-dir staging-repo target-repo)))))
 
 (deftest unlink-graph-moves-to-unlinked-dir
   (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph")

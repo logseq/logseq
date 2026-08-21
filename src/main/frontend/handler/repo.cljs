@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.version :as build-version]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
@@ -152,6 +153,14 @@
   [graph-name]
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
+
+(defn <new-file-graph-import-staging-db!
+  [run-id]
+  (let [repo (file-graph-import/staging-repo run-id)]
+    (p/let [_ (persist-db/<new repo {:config config/config-default-content
+                                     :graph-git-sha (build-version/revision)
+                                     :import-type :file-graph})]
+      repo)))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
   (->

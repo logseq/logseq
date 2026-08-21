@@ -33,6 +33,7 @@
             [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-registry :as graph-registry]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -196,7 +197,9 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (common-graph/get-db-based-graphs)))
+  (->> (common-graph/get-db-based-graphs)
+       (remove file-graph-import/staging-repo?)
+       (distinct)))
 
 (defn- canonical-repo
   [graph]
@@ -229,6 +232,17 @@
   (when-let [repo (canonical-repo graph)]
     (p/let [_ (db-worker/release-repo! repo)]
       (cli-common/unlink-graph! repo))))
+
+(defmethod handle :publishFileGraphImport [_window [_ staging-graph target-graph]]
+  (let [staging-repo (canonical-repo staging-graph)
+        target-repo (canonical-repo target-graph)]
+    (p/let [_ (db-worker/release-repo! staging-repo)
+            _ (db-worker/release-repo! target-repo)]
+      (cli-common/publish-file-graph-import!
+       (common-graph/get-db-graphs-dir)
+       staging-repo
+       target-repo)
+      target-repo)))
 
 ;; DB related IPCs start
 
