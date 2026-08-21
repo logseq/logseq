@@ -53,6 +53,7 @@
    [logseq.db.frontend.class :as db-class]
    [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
+   [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.graph-parser.exporter :as gp-exporter]
@@ -327,6 +328,11 @@
                     validation {:status (if (seq (:errors validation-result)) :failed :passed)
                                 :errors (:errors validation-result)
                                 :invalid-entity-ids (:invalid-entity-ids validation-result)}
+                    _ (when (= :passed (:status validation))
+                        (reset! phase :sync-checksum)
+                        (client-op/update-local-checksum
+                         repo
+                         (sync-checksum/recompute-checksum @conn)))
                     _ (when (= :passed (:status validation))
                         (reset! phase :search-index)
                         (search-handler/<rebuild-blocks-index! repo))]
@@ -714,11 +720,11 @@
 
             (ensure-canonical-revisions! conn)
 
-            (when initial-tx-report
+            (when (and initial-tx-report
+                       (not (file-graph-import/staging-repo? repo)))
               (db-sync/handle-local-tx! repo initial-tx-report))
 
-            (if (file-graph-import/staging-repo? repo)
-              (db-listener/listen-db-changes! repo conn :handler-keys [:db-sync])
+            (when-not (file-graph-import/staging-repo? repo)
               (db-listener/listen-db-changes! repo conn))
 
             nil))))))
