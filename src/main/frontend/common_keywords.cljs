@@ -7,5 +7,6 @@
   :block/name      {:doc "block name, lowercase, only page-blocks have this attr"}
   :block/raw-title {:doc "like `:block/title`,
                           but when eval `(:block/raw-title block-entity)`, return raw title of this block"}
+  :query/eager-load-results? {:doc "When true, eagerly load canonical block query results."}
   :kv/value        {:doc "Used to store key-value, the value could be anything,
                           e.g. {:db/ident :logseq.kv/xxx :kv/value value}"})

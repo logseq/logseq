@@ -40,6 +40,9 @@
       (:today-day config)
       (assoc :today-day (:today-day config))
 
+      (contains? query :query/eager-load-results?)
+      (assoc :query/eager-load-results? (:query/eager-load-results? query))
+
       (contains? query :remove-block-children?)
       (assoc :remove-block-children? (boolean (:remove-block-children? query)))
 

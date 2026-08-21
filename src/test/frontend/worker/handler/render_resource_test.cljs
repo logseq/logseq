@@ -4,6 +4,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.db.subs-loader :as subs-loader]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.render-resource.common :as render-common]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -1901,6 +1902,61 @@
                                     {:rows [view-row]}
                                     response))))))
 
+(deftest query-resource-eagerly-loads-block-results-only-when-requested-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn task-block]} (render-resource-fixture)
+          status-property (d/entity @conn :logseq.property/status)
+          status-property-uuid (:block/uuid status-property)
+          _ (d/transact! conn [[:db/add (:db/id status-property)
+                                :block/tx-id 20]])
+          query-result [[(query-block-row @conn task-block)]]
+          query-spec {:kind :dsl :query "(task DONE)"}
+          eager-resource-key [:query (assoc query-spec
+                                            :query/eager-load-results? true)]]
+      (with-redefs [query-dsl/execute-query
+                    (fn [& _args] query-result)]
+        (doseq [resource-key [[:query query-spec]
+                              [:query (assoc query-spec
+                                             :query/eager-load-results? false)]]]
+          (is (empty? (:slots (call-resource api conn resource-key)))
+              "Queries remain lazy unless eager loading is enabled."))
+        (let [response (call-resource api conn eager-resource-key)
+              task (get-in response [:slots [:block task-block] :value])]
+          (is (= {:rows [task-block]} (:value response)))
+          (is (= task-block (:block/uuid task)))
+          (is (some #{status-property-uuid}
+                    (get-in task
+                            [:block.temp/positioned-properties :block-left])))
+          (is (contains? (:slots response)
+                         [:block status-property-uuid])
+              "Positioned property metadata is ready with the result block."))))))
+
+(deftest query-resource-bounds-eager-block-loading-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          limit render-common/max-blocks-per-snapshot
+          block-uuids (vec (repeatedly (inc limit) random-uuid))
+          query-result (mapv (fn [block-uuid]
+                               [{:block/uuid block-uuid}])
+                             block-uuids)
+          loaded-block-uuids (atom nil)
+          resource-key [:query {:kind :dsl
+                                :query "(task TODO)"
+                                :query/eager-load-results? true}]]
+      (with-redefs [query-dsl/execute-query
+                    (fn [& _args] query-result)
+                    block-handler/canonical-blocks
+                    (fn [_db requested-block-uuids]
+                      (when (seq requested-block-uuids)
+                        (reset! loaded-block-uuids requested-block-uuids))
+                      {:blocks {}})]
+        (let [response (call-resource api conn resource-key)]
+          (is (= block-uuids (get-in response [:value :rows]))
+              "Every query row remains available for lazy rendering.")
+          (is (= (subvec block-uuids 0 limit)
+                 @loaded-block-uuids)
+              "Eager loading shares the renderer snapshot block limit."))))))
+
 (deftest blank-dsl-query-resource-renders-an-empty-result-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
@@ -1986,6 +2042,7 @@
     (let [{:keys [conn]} (render-resource-fixture)
           resource-key
           [:query {:kind :datalog
+                   :query/eager-load-results? true
                    :query '[:find ?title ?day
                             :in $ ?day
                             :where
@@ -1997,7 +2054,9 @@
                                 resource-key
                                 (datalog-query-watch-keys resource-key)
                                 {:rows [["Jan 1st, 2020" 20200101]]}
-                                response))))
+                                response)
+      (is (empty? (:slots response))
+          "Eager loading applies only to block-only query results."))))
 
 (deftest query-resource-applies-serialized-transform-and-top-level-filter-test
   (when-let [api (render-resource-api)]
@@ -2106,6 +2165,9 @@
       (testing "query specs contain no closures, entities, or untyped options"
         (doseq [resource-key
                 [[:query {:kind :dsl :query "(task TODO)" :cards? "false"}]
+                 [:query {:kind :dsl
+                          :query "(task TODO)"
+                          :query/eager-load-results? "true"}]
                  [:query {:kind :dsl
                           :query "(task TODO)"
                           :query-fn identity}]
