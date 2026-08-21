@@ -570,11 +570,11 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- block-search-title
   "Build display title from block entity with original casing."
-  [block page-node? page-or-object-node? ref-title-cache]
+  [block raw-title page-node? page-or-object-node? ref-title-cache]
   (let [title (db-content/recur-replace-uuid-in-block-title
                (assoc block :block/title (if page-node?
                                            (ldb/get-title-with-parents block)
-                                           (:block/title block)))
+                                           raw-title))
                10
                {:ref-title-cache ref-title-cache})
         title (cond-> title
@@ -607,28 +607,29 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Convert a block to the index for searching."
   ([block]
    (block->index block {:include-vector-title? false}))
-  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title? known-visible? ref-title-cache]
-                                               :or {include-vector-title? false
-                                                    known-visible? false}}]
-  (when-not (or
-             (ldb/closed-value? block)
-             (and (string? title) (> (count title) 10000))
-             (string/blank? title))        ; empty page or block
-    (try
-      (let [page-node? (ldb/page? block)
-            page-or-object-node? (and (or page-node? (ldb/object? block))
-                                      (or known-visible?
-                                          (not (hidden-entity? block))))
-            title (block-search-title block page-node? page-or-object-node? ref-title-cache)]
-        (when uuid
-          (cond-> {:id (str uuid)
-                   :page (str (or (:block/uuid page) uuid))
-                   :title (if page-or-object-node? title (sanitize title))}
-            include-vector-title?
-            (assoc :vector-title title))))
-      (catch :default e
-        (prn "Error: failed to run block->index on block " (:db/id block))
-        (js/console.error e))))))
+  ([{:block/keys [uuid page] :as block} {:keys [include-vector-title? known-visible? ref-title-cache]
+                                         :or {include-vector-title? false
+                                              known-visible? false}}]
+   (let [raw-title (or (:block/raw-title block) (:block/title block))]
+     (when-not (or
+                (ldb/closed-value? block)
+                (and (string? raw-title) (> (count raw-title) 10000))
+                (string/blank? raw-title))        ; empty page or block
+       (try
+         (let [page-node? (ldb/page? block)
+               page-or-object-node? (and (or page-node? (ldb/object? block))
+                                         (or known-visible?
+                                             (not (hidden-entity? block))))
+               title (block-search-title block raw-title page-node? page-or-object-node? ref-title-cache)]
+           (when uuid
+             (cond-> {:id (str uuid)
+                      :page (str (or (:block/uuid page) uuid))
+                      :title (if page-or-object-node? title (sanitize title))}
+               include-vector-title?
+               (assoc :vector-title title))))
+         (catch :default e
+           (prn "Error: failed to run block->index on block " (:db/id block))
+           (js/console.error e)))))))
 
 (def ^:private search-result-block-key ::block)
 
