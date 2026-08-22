@@ -72,6 +72,7 @@
 
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (defonce ^:private *wal-checkpoint-timers (atom {}))
+(defonce ^:private *import-performance-recorders (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 (def ^:private wal-checkpoint-idle-ms 2000)
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
@@ -326,56 +327,118 @@
   #{:import/file-read-failed
     :import/file-parse-failed})
 
+(defn- recoverable-notification-issue
+  [phase {:keys [msg ex-data]}]
+  {:code (or (:code ex-data) :import/recoverable-step-failed)
+   :severity :error
+   :recoverable? true
+   :phase phase
+   :parameters (select-keys ex-data [:path])
+   :diagnostics {:message msg}})
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (let [run-id (or (:run-id opts) (str (random-uuid)))
-        phase (atom :open-graph)]
+        phase (atom :open-graph)
+        performance-events (when (:performance-diagnostics? opts) (atom []))
+        record-performance (when performance-events
+                             #(swap! performance-events conj (assoc % :worker-phase @phase)))]
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [notifications (atom [])
             issues (atom [])
             staged-assets (atom [])
+            notify-user (fn [notification]
+                          (swap! notifications conj notification)
+                          (when (= :error (:level notification))
+                            (swap! issues conj
+                                   (recoverable-notification-issue @phase notification))))
+            _ (when record-performance
+                (swap! *import-performance-recorders assoc repo record-performance))
             options (-> opts
-                        (assoc :notify-user #(swap! notifications conj %)
+                        (assoc :notify-user notify-user
                                :record-issue #(swap! issues conj %)
                                :recoverable-error? recoverable-file-import-error-codes
                                :single-persistent-document-batch? true
                                :simple-page-property-batch? true
                                :log-fn (fn [& args]
                                          (log/info :import-file-graph {:args args}))
-                               :<read-file (fn [file] (p/resolved (file-content file)))
+                               :record-performance record-performance
+                               :<read-file (fn [file]
+                                             (let [started (.now js/performance)
+                                                   content (file-content file)]
+                                               (when record-performance
+                                                 (record-performance
+                                                  {:phase :worker-file-access
+                                                   :elapsed-ms (- (.now js/performance) started)
+                                                   :path (:path file)
+                                                   :bytes (count content)}))
+                                               (p/resolved content)))
                                :<get-file-stat (constantly nil)
                                :<read-and-copy-asset (fn [file assets buffer-handler]
                                                        (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
                         (dissoc :set-ui-state))]
-        (-> (p/let [_ (reset! phase :import-files)
+        (-> (p/let [import-started (.now js/performance)
+                    _ (reset! phase :import-files)
                     result (gp-exporter/export-file-graph conn conn config-file files options)
+                    _ (when record-performance
+                        (record-performance {:phase :import-files-total
+                                             :elapsed-ms (- (.now js/performance) import-started)
+                                             :files (count files)}))
+                    render-started (.now js/performance)
                     _ (reset! phase :render-revisions)
                     _ (finalize-import-render-revisions! conn)
+                    _ (when record-performance
+                        (record-performance {:phase :render-revisions
+                                             :elapsed-ms (- (.now js/performance) render-started)}))
+                    validation-started (.now js/performance)
                     _ (reset! phase :validate)
-                    validation-result (worker-db-validate/validate-db conn :fix false)
+                    validation-result (worker-db-validate/validate-db
+                                       conn :fix false :include-entities? true)
+                    _ (when record-performance
+                        (record-performance {:phase :validation
+                                             :elapsed-ms (- (.now js/performance) validation-started)
+                                             :entities (count (:entities validation-result))}))
                     validation {:status (if (seq (:errors validation-result)) :failed :passed)
                                 :errors (:errors validation-result)
                                 :invalid-entity-ids (:invalid-entity-ids validation-result)}
+                    checksum-started (.now js/performance)
                     _ (when (= :passed (:status validation))
                         (reset! phase :sync-checksum)
                         (client-op/update-local-checksum
                          repo
-                         (sync-checksum/recompute-checksum @conn)))
+                         (sync-checksum/recompute-checksum-from-entities
+                          @conn (:entities validation-result))))
+                    _ (when (and record-performance (= :passed (:status validation)))
+                        (record-performance {:phase :sync-checksum
+                                             :elapsed-ms (- (.now js/performance) checksum-started)}))
+                    search-started (.now js/performance)
                     _ (when (= :passed (:status validation))
                         (reset! phase :search-index)
-                        (search-handler/<rebuild-blocks-index! repo))]
+                        (search-handler/<rebuild-blocks-index!
+                         repo {:entities (:entities validation-result)
+                               :record-performance record-performance}))
+                    _ (when (and record-performance (= :passed (:status validation)))
+                        (record-performance {:phase :search-total
+                                             :elapsed-ms (- (.now js/performance) search-started)}))]
               (if (= :failed (:status validation))
                 (assoc (file-graph-import/failed-result run-id :validate :import/validation-failed)
                        :validation validation)
-                (completed-import-terminal-result run-id result validation @staged-assets @notifications @issues)))
+                (cond-> (completed-import-terminal-result
+                         run-id result validation @staged-assets @notifications @issues)
+                  performance-events (assoc :performance-events @performance-events))))
             (p/catch
              (fn [error]
                (let [code (or (:code (ex-data error)) :import/worker-failed)]
                  (log/error :import-file-graph-failed true
                             :run-id run-id
                             :phase @phase
-                            :code code)
-                 (file-graph-import/failed-result run-id @phase code))))))
+                            :code code
+                            :error error)
+                 (file-graph-import/failed-result run-id @phase code))))
+            (p/finally
+             (fn []
+               (when record-performance
+                 (swap! *import-performance-recorders dissoc repo))))))
       (p/resolved (file-graph-import/failed-result run-id :open-graph :graph-not-opened)))))
 
 (defn upsert-addr-content!
@@ -410,7 +473,10 @@
   [repo ^Object db]
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
-      (let [data (map
+      (let [record-performance (get @*import-performance-recorders repo)
+            started (when record-performance (.now js/performance))
+            item-count (when record-performance (count addr+data-seq))
+            data (map
                   (fn [[addr data]]
                     (let [data' (if (map? data) (dissoc data :addresses) data)
                           addresses (when (map? data)
@@ -421,6 +487,10 @@
                            :$addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! db data)
+        (when record-performance
+          (record-performance {:phase :main-sqlite-persist
+                               :elapsed-ms (- (.now js/performance) started)
+                               :storage-items item-count}))
         (schedule-wal-checkpoint! repo db)
         nil))
 

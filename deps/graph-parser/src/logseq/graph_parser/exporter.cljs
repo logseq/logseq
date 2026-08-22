@@ -2503,7 +2503,7 @@
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
-  [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
+  [db file content {:keys [extract-options import-state file-created-at file-updated-at record-performance]}]
   (let [format (common-util/get-format file)
         journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
@@ -2518,6 +2518,7 @@
                                  :filename-format :legacy}
                                 extract-options
                                 {:db db
+                                 :record-performance record-performance
                                  ;; File graph journals have a fixed path and filename independent of their display format.
                                  :skip-journal? (not journal-file?)})
         extracted
@@ -3123,8 +3124,19 @@
            :pairs pairs
            :properties properties})))))
 
+(defn- performance-now-ms []
+  (.now js/performance))
+
+(defn- record-performance!
+  [options phase started data]
+  (when-let [record-performance (:record-performance options)]
+    (record-performance
+     (merge {:phase phase
+             :elapsed-ms (- (performance-now-ms) started)}
+            data))))
+
 (defn- <partition-simple-page-property-files
-  [doc-files <read-file rpath-key]
+  [doc-files <read-file rpath-key options]
   #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
   (p/loop [remaining-files doc-files
            simple-files []
@@ -3132,13 +3144,19 @@
     (if-let [file (first remaining-files)]
       (-> (<read-file file)
           (p/then (fn [content]
-                    (if-let [simple-file (simple-page-property-file file content rpath-key)]
-                      (p/recur (rest remaining-files)
-                               (conj simple-files simple-file)
-                               fallback-files)
-                      (p/recur (rest remaining-files)
-                               simple-files
-                               (conj fallback-files file)))))
+                    (let [started (performance-now-ms)
+                          simple-file (simple-page-property-file file content rpath-key)
+                          _ (record-performance! options :parse started
+                                                 {:path (:path file)
+                                                  :bytes (count content)
+                                                  :parser :simple-page-properties})]
+                      (if simple-file
+                        (p/recur (rest remaining-files)
+                                 (conj simple-files simple-file)
+                                 fallback-files)
+                        (p/recur (rest remaining-files)
+                                 simple-files
+                                 (conj fallback-files file))))))
           (p/catch (fn [_error]
                      (p/recur (rest remaining-files)
                               simple-files
@@ -3299,41 +3317,71 @@
   [base-db entity-ref]
   (some-> (d/entity base-db entity-ref) :db/id))
 
+(defn- direct-import-base-page-id
+  [base-db page-name]
+  (some-> (d/datoms base-db :avet :block/name page-name) first :e))
+
+(defn- direct-import-identity-lookups
+  [entity]
+  (cond-> []
+    (:db/ident entity)
+    (conj [:db/ident (:db/ident entity)])
+
+    (:block/uuid entity)
+    (conj [:block/uuid (:block/uuid entity)])
+
+    (and (nil? (:db/ident entity)) (:block/name entity))
+    (conj [:block/name (:block/name entity)])))
+
+(defn- direct-import-base-lookup-id
+  [base-db [attribute value :as lookup]]
+  (if (= :block/name attribute)
+    (direct-import-base-page-id base-db value)
+    (direct-import-base-entity-id base-db lookup)))
+
+(defn- direct-import-identity-id
+  [base-db lookups entity]
+  (some (fn [lookup]
+          (or (lookups lookup)
+              (direct-import-base-lookup-id base-db lookup)))
+        (direct-import-identity-lookups entity)))
+
 (defn- allocate-direct-import-entities
   [base-db init-tx]
   (reduce
    (fn [{:keys [next-id tempids lookups] :as state} entity]
      (let [old-id (:db/id entity)
-           ident-lookup (when-let [ident (:db/ident entity)] [:db/ident ident])
-           uuid-lookup (when-let [block-uuid (:block/uuid entity)] [:block/uuid block-uuid])
-           existing-id (or (when ident-lookup (lookups ident-lookup))
-                           (when uuid-lookup (lookups uuid-lookup))
-                           (when ident-lookup
-                             (direct-import-base-entity-id base-db ident-lookup))
-                           (when uuid-lookup
-                             (direct-import-base-entity-id base-db uuid-lookup)))
+           identity-lookups (direct-import-identity-lookups entity)
+           name-lookup (some #(when (= :block/name (first %)) %) identity-lookups)
+           existing-id (direct-import-identity-id base-db lookups entity)
+           existing-uuid (when (and existing-id name-lookup)
+                           (:block/uuid (d/entity base-db existing-id)))
+           entity' (cond-> entity
+                     existing-uuid (assoc :block/uuid existing-uuid))
            entity-id (or existing-id
                          (when (number? old-id)
                            (if (neg? old-id) (tempids old-id) old-id))
                          (when (and (some? old-id) (not (sequential? old-id)))
                            (tempids old-id))
                          next-id)
+           tempid? (or (and (number? old-id) (neg? old-id))
+                       (and (some? old-id)
+                            (not (number? old-id))
+                            (not (sequential? old-id))))
            allocated? (and (nil? existing-id)
                            (or (nil? old-id)
-                               (and (number? old-id) (neg? old-id))
-                               (and (some? old-id) (not (number? old-id)))))
+                               tempid?))
            next-id' (if (and allocated? (= entity-id next-id)) (inc next-id) next-id)
-           tempids' (if (and allocated? (some? old-id))
+           tempids' (if tempid?
                       (assoc tempids old-id entity-id)
                       tempids)
-           lookups' (cond-> lookups
-                      ident-lookup (assoc ident-lookup entity-id)
-                      uuid-lookup (assoc uuid-lookup entity-id))]
+           lookups' (cond-> (reduce #(assoc %1 %2 entity-id) lookups identity-lookups)
+                      existing-uuid (assoc [:block/uuid existing-uuid] entity-id))]
        (-> state
            (assoc :next-id next-id'
                   :tempids tempids'
                   :lookups lookups')
-           (update :entities conj [entity entity-id]))))
+           (update :entities conj [entity' entity-id]))))
    {:next-id (inc (:max-eid base-db))
     :tempids {}
     :lookups {}
@@ -3346,17 +3394,12 @@
         (cond
           (number? value) (if (neg? value) (tempids value) value)
           (keyword? value)
-          (or (lookups [:db/ident value])
-              (direct-import-base-entity-id base-db value))
-          (and (map? value) (:db/ident value))
-          (or (lookups [:db/ident (:db/ident value)])
-              (direct-import-base-entity-id base-db [:db/ident (:db/ident value)]))
-          (and (map? value) (:block/uuid value))
-          (or (lookups [:block/uuid (:block/uuid value)])
-              (direct-import-base-entity-id base-db [:block/uuid (:block/uuid value)]))
+          (direct-import-identity-id base-db lookups {:db/ident value})
+          (map? value)
+          (direct-import-identity-id base-db lookups value)
           (and (sequential? value) (= 2 (count value)))
           (or (lookups (vec value))
-              (direct-import-base-entity-id base-db (vec value)))
+              (direct-import-base-lookup-id base-db (vec value)))
           :else nil)]
     (or resolved
         (throw (ex-info "Direct import datom has an unresolved entity reference"
@@ -3370,33 +3413,33 @@
           (number? old-id) old-id
           (sequential? old-id) (resolve-direct-import-lookup base-db allocation old-id)
           :else ((:tempids allocation) old-id)))
-      (when-let [block-uuid (:block/uuid entity)]
-        (or ((:lookups allocation) [:block/uuid block-uuid])
-            (direct-import-base-entity-id base-db [:block/uuid block-uuid])))
-      (when-let [ident (:db/ident entity)]
-        (or ((:lookups allocation) [:db/ident ident])
-            (direct-import-base-entity-id base-db [:db/ident ident])))
+      (direct-import-identity-id base-db (:lookups allocation) entity)
       (throw (ex-info "Direct import datom has an unresolved entity id"
                       {:entity entity}))))
 
 (defn- direct-import-entity-datoms
   [base-db schema allocation entity entity-id tx-id]
-  (into []
-        (mapcat
-         (fn [[attribute value]]
-           (when (and (not= :db/id attribute) (some? value))
-             (let [many? (= :db.cardinality/many
-                            (get-in schema [attribute :db/cardinality]))
-                   ref? (= :db.type/ref (get-in schema [attribute :db/valueType]))
-                   values (if (and many? (coll? value) (not (map? value))) value [value])]
-               (map (fn [item]
-                      (d/datom entity-id attribute
-                               (if ref?
-                                 (resolve-direct-import-lookup base-db allocation item)
-                                 item)
-                               tx-id true))
-                    (distinct (seq values)))))))
-        entity))
+  (let [base-entity (d/entity base-db entity-id)
+        entity (cond-> entity
+                 (:db/ident base-entity) (assoc :db/ident (:db/ident base-entity))
+                 (:block/uuid base-entity) (assoc :block/uuid (:block/uuid base-entity))
+                 (:block/name base-entity) (assoc :block/name (:block/name base-entity)))]
+    (into []
+          (mapcat
+           (fn [[attribute value]]
+             (when (and (not= :db/id attribute) (some? value))
+               (let [many? (= :db.cardinality/many
+                              (get-in schema [attribute :db/cardinality]))
+                     ref? (= :db.type/ref (get-in schema [attribute :db/valueType]))
+                     values (if (and many? (coll? value) (not (map? value))) value [value])]
+                 (map (fn [item]
+                        (d/datom entity-id attribute
+                                 (if ref?
+                                   (resolve-direct-import-lookup base-db allocation item)
+                                   item)
+                                 tx-id true))
+                      (distinct (seq values)))))))
+          entity)))
 
 (defn- build-direct-import-schema
   [base-schema init-tx allocation]
@@ -3415,21 +3458,51 @@
   [datom]
   [(:e datom) (:a datom) (:v datom)])
 
-(defn- remove-existing-direct-import-eavs
-  [base-db candidate-datoms]
-  (second
-   (reduce
-    (fn [[seen result] datom]
-      (let [eav (direct-import-datom-eav datom)]
-        (if (contains? seen eav)
-          [seen result]
-          [(conj seen eav) (conj result datom)])))
-    [(into #{} (map direct-import-datom-eav) (d/datoms base-db :eavt)) []]
-    candidate-datoms)))
+(defn- merge-direct-import-datoms
+  [base-db schema candidate-datoms]
+  (let [base-datoms (vec (d/datoms base-db :eavt))
+        base-eavs (into #{} (map direct-import-datom-eav) base-datoms)
+        {:keys [one-order one-by-ea many]}
+        (reduce
+         (fn [{:keys [one-by-ea many-eavs] :as state} datom]
+           (let [many? (= :db.cardinality/many
+                          (get-in schema [(:a datom) :db/cardinality]))
+                 eav (direct-import-datom-eav datom)]
+             (if many?
+               (if (contains? many-eavs eav)
+                 state
+                 (-> state
+                     (update :many conj datom)
+                     (update :many-eavs conj eav)))
+               (let [ea [(:e datom) (:a datom)]]
+                 (cond-> (assoc-in state [:one-by-ea ea] datom)
+                   (not (contains? one-by-ea ea))
+                   (update :one-order conj ea))))))
+         {:one-order [] :one-by-ea {} :many [] :many-eavs #{}}
+         candidate-datoms)
+        one-datoms (mapv one-by-ea one-order)
+        [kept-base retractions]
+        (reduce
+         (fn [[kept retracted] datom]
+           (if-let [replacement (one-by-ea [(:e datom) (:a datom)])]
+             (if (= (:v datom) (:v replacement))
+               [(conj kept datom) retracted]
+               [kept (conj retracted
+                           (d/datom (:e datom) (:a datom) (:v datom)
+                                    (:tx replacement) false))])
+             [(conj kept datom) retracted]))
+         [[] []]
+         base-datoms)
+        additions (into []
+                        (remove #(contains? base-eavs (direct-import-datom-eav %)))
+                        (concat one-datoms many))]
+    {:all-datoms (into kept-base additions)
+     :tx-datoms (into retractions additions)}))
 
 (defn- build-direct-import-db
-  [base-db init-tx block-props-tx init-tx-id properties-tx-id]
-  (let [allocation (allocate-direct-import-entities base-db init-tx)
+  [base-db init-tx block-props-tx init-tx-id properties-tx-id options]
+  (let [construct-started (performance-now-ms)
+        allocation (allocate-direct-import-entities base-db init-tx)
         schema (build-direct-import-schema (:schema base-db) init-tx allocation)
         init-datoms
         (into []
@@ -3444,14 +3517,20 @@
                          (direct-import-entity-id base-db allocation entity)
                          properties-tx-id)))
               block-props-tx)
-        new-datoms (remove-existing-direct-import-eavs
-                    base-db (into init-datoms property-datoms))
-        all-datoms (into (vec (d/datoms base-db :eavt)) new-datoms)
+        {:keys [all-datoms tx-datoms]}
+        (merge-direct-import-datoms base-db schema (into init-datoms property-datoms))
         storage (ds-storage/storage base-db)
+        _ (record-performance! options :graph-tx-construct construct-started
+                                {:entities (count (:entities allocation))
+                                :new-datoms (count tx-datoms)
+                                :all-datoms (count all-datoms)})
+        index-started (performance-now-ms)
         db (d/init-db all-datoms schema (cond-> {}
-                                          storage (assoc :storage storage)))]
+                                          storage (assoc :storage storage)))
+        _ (record-performance! options :datascript-index-build index-started
+                               {:datoms (count all-datoms)})]
     {:db db
-     :new-datoms new-datoms}))
+     :new-datoms tx-datoms}))
 
 (defn- seed-simple-page-property-import-state!
   [import-state property-schemas tx-data]
@@ -3489,10 +3568,15 @@
   (if-not (simple-page-property-import-supported? options)
     (export-doc-files conn doc-files <read-file options)
     (p/let [{:keys [simple-files fallback-files]}
-            (<partition-simple-page-property-files doc-files <read-file rpath-key)
+            (<partition-simple-page-property-files doc-files <read-file rpath-key options)
             _ (when (seq simple-files)
-                (let [{:keys [build-options property-schemas]}
+                (let [extract-started (performance-now-ms)
+                      {:keys [build-options property-schemas]}
                       (build-simple-page-property-options simple-files)
+                      _ (record-performance! options :extract-normalize extract-started
+                                             {:files (count simple-files)
+                                              :parser :simple-page-properties})
+                      construct-started (performance-now-ms)
                       {:keys [init-tx block-props-tx]}
                       (sqlite-build/build-blocks-tx build-options)
                       base-db @conn
@@ -3502,9 +3586,13 @@
                                init-tx block-props-tx init-tx-id)
                       block-props-tx' (prepare-simple-page-properties-tx
                                        init-tx block-props-tx property-schemas properties-tx-id)
+                      _ (record-performance! options :graph-tx-construct construct-started
+                                             {:files (count simple-files)
+                                              :init-entities (count init-tx)
+                                              :property-entities (count block-props-tx')})
                       {:keys [db new-datoms]}
                       (build-direct-import-db
-                       base-db init-tx block-props-tx' init-tx-id properties-tx-id)]
+                       base-db init-tx block-props-tx' init-tx-id properties-tx-id options)]
                   (reset! conn db)
                   (swap! (::file-import-batch-tx-data options) into new-datoms)
                   (seed-simple-page-property-import-state!
@@ -3562,7 +3650,8 @@
         (p/catch (fn [error]
                    (notify-user {:msg (str "Import unexpectedly failed while reading logseq files:\n" (.-message error))
                                  :level :error
-                                 :ex-data {:error error}}))))))
+                                 :ex-data {:code :import/logseq-file-failed
+                                           :error error}}))))))
 
 (defn- resolve-zotero-config-path
   [config config-file]
@@ -3600,7 +3689,8 @@
       (p/catch (fn [err]
                  (notify-user {:msg "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
                                :level :error
-                               :ex-data {:error err}})
+                               :ex-data {:code :import/invalid-config
+                                         :error err}})
                  (edn/read-string default-config)))))
 
 (defn- export-class-properties
@@ -3673,7 +3763,9 @@
                                    (fn [error]
                                      (notify-user {:msg (str "Import failed to read and copy " (pr-str path) " with error:\n" (.-message error))
                                                    :level :error
-                                                   :ex-data {:path path :error error}})))))]
+                                                   :ex-data {:code :import/asset-read-failed
+                                                             :path path
+                                                             :error error}})))))]
     (when (seq asset-files)
       (set-ui-state [:graph/importing-state :current-page] "Read and copy asset files")
       (<safe-async-loop read-and-copy-asset asset-files notify-user))))
@@ -3752,7 +3844,8 @@
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
-                                   :record-issue :recoverable-error? :simple-page-property-batch?]))))
+                                   :record-issue :recoverable-error? :simple-page-property-batch?
+                                   :record-performance]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn & [tx-meta]]

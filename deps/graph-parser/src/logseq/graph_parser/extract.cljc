@@ -18,6 +18,18 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]))
 
+(defn- performance-now-ms []
+  #?(:cljs (.now js/performance)
+     :clj (/ (System/nanoTime) 1000000.0)))
+
+(defn- record-performance!
+  [options phase started data]
+  (when-let [record-performance (:record-performance options)]
+    (record-performance
+     (merge {:phase phase
+             :elapsed-ms (- (performance-now-ms) started)}
+            data))))
+
 (defn- mldoc-support?
   [format']
   (contains? #{:org :markdown :md} (keyword format')))
@@ -281,11 +293,16 @@
     {}
     (let [format (common-util/get-format file-path)
           _ (when verbose (println "Parsing start: " file-path))
+          parse-started (performance-now-ms)
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                                               ))]
+                                                               ))
+          _ (record-performance! options :parse parse-started
+                                 {:path file-path
+                                  :bytes (count content)})]
       (when verbose (println "Parsing finished: " file-path))
-      (let [first-block (ffirst ast)
+      (let [extract-started (performance-now-ms)
+            first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y mldoc-ast]]
@@ -301,10 +318,15 @@
                                      (fn [v]
                                        (string/replace (or v "") "\\" "")))
                              properties)))
-            [pages blocks] (extract-pages-and-blocks format ast properties file-path content options)]
-        {:pages pages
-         :blocks blocks
-         :ast ast}))))
+            [pages blocks] (extract-pages-and-blocks format ast properties file-path content options)
+            result {:pages pages
+                    :blocks blocks
+                    :ast ast}
+            _ (record-performance! options :extract-normalize extract-started
+                                   {:path file-path
+                                    :pages (count pages)
+                                    :blocks (count blocks)})]
+        result))))
 
 (defn- with-block-uuid
   [pages]

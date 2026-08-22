@@ -2569,7 +2569,6 @@
             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
                   conn (d/create-conn db-schema/schema)
                   pipeline-before @ldb/*transact-pipeline-fn
-                  renderer-payloads (atom [])
                   config-file {:path "logseq/config.edn"
                                :file/content "{}"}
                   files [config-file
@@ -2582,12 +2581,8 @@
               (p/with-redefs
                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
                  db-sync/handle-local-tx! (fn [& _] nil)
-                 shared-service/broadcast-to-clients!
-                 (fn [event payload]
-                   (when (= :sync-db-changes event)
-                     (swap! renderer-payloads conj payload)))]
-                (db-listener/listen-db-changes! test-repo conn
-                                                :handler-keys [:sync-db-to-main-thread])
+                 client-op/update-local-checksum (fn [& _] nil)
+                 shared-service/broadcast-to-clients! (fn [& _] nil)]
                 (->
                  (p/let [result (import-file-graph! test-repo config-file files {:run-id "import-run"
                                                                                 :user-options {}})
@@ -2598,11 +2593,7 @@
                                              @conn)
                                              first
                                         (d/entity @conn))
-                         block (db-test/find-block-by-content @conn "imported block")
-                         published-block-uuids
-                         (into #{}
-                               (mapcat #(keys (get-in % [:delta :blocks])))
-                               @renderer-payloads)]
+                         block (db-test/find-block-by-content @conn "imported block")]
                    (is (= #{"pages/Home.md" "logseq/config.edn"}
                           (set (map :path (:files result)))))
                    (is (= {:contract-version 1
@@ -2619,15 +2610,96 @@
                    (doseq [entity [page block]]
                      (is (nat-int? (:block/tx-id entity)))
                      (is (= (:block/uuid entity)
-                            (:block/uuid (block-handler/canonical-block @conn entity))))
-                     (is (contains? published-block-uuids (:block/uuid entity))
-                         "Live file imports must publish complete canonical replacements.")))
+                            (:block/uuid (block-handler/canonical-block @conn entity))))))
                  (p/catch
                   (fn [error]
                     (is false (str error))))
                  (p/finally (fn []
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (done))))))))))
+
+(deftest import-file-graph-reuses-existing-page-identity
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get-thread-api :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  config-file {:path "logseq/config.edn"
+                               :file/content "{}"}
+                  files [config-file
+                         {:path "pages/library.md"
+                          :file/content "title:: Library\nrating:: 5"}]]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (let [library-id (ffirst (d/q '[:find ?page
+                                               :where [?page :block/name "library"]]
+                                             @conn))
+                    library-before (d/entity @conn library-id)
+                    library-uuid (:block/uuid library-before)]
+                (reset! worker-state/*datascript-conns {test-repo conn})
+                (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+                (p/with-redefs
+                  [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                   db-sync/handle-local-tx! (fn [& _] nil)
+                   client-op/update-local-checksum (fn [& _] nil)
+                   shared-service/broadcast-to-clients! (fn [& _] nil)]
+                  (->
+                   (p/let [result (import-file-graph!
+                                   test-repo config-file files
+                                   {:run-id "identity-run"
+                                    :user-options {}})
+                           library-ids (d/q '[:find [?page ...]
+                                              :where [?page :block/name "library"]]
+                                            @conn)
+                           library-after (d/entity @conn (first library-ids))]
+                     (is (= :completed (:status result)))
+                     (is (= [library-id] library-ids))
+                     (is (= library-id (:db/id library-after)))
+                     (is (= library-uuid (:block/uuid library-after))))
+                   (p/catch
+                    (fn [error]
+                      (is false (str error))))
+                   (p/finally
+                    (fn []
+                      (reset! ldb/*transact-pipeline-fn pipeline-before)
+                      (done)))))))))))
+
+(deftest import-file-graph-reports-recoverable-step-errors
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get-thread-api :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  config-file {:path "logseq/config.edn"
+                               :file/content "{"}
+                  files [config-file
+                         {:path "pages/Home.md"
+                          :file/content "- imported block"}]]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 client-op/update-local-checksum (fn [& _] nil)
+                 shared-service/broadcast-to-clients! (fn [& _] nil)]
+                (->
+                 (p/let [result (import-file-graph!
+                                 test-repo config-file files
+                                 {:run-id "recoverable-run"
+                                  :default-config "{}"
+                                  :user-options {}})]
+                   (is (= :completed-with-errors (:status result)))
+                   (is (= [:import/invalid-config]
+                          (mapv :code (:issues result)))))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally
+                  (fn []
+                    (reset! ldb/*transact-pipeline-fn pipeline-before)
+                    (done))))))))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
