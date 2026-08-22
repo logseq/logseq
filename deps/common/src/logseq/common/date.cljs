@@ -40,12 +40,6 @@
 (defonce slash-journal-title-formatters
   (filter #(string/includes? % "/") built-in-journal-title-formatters))
 
-(defonce ^:private slash-journal-title-parser-by-shape
-  {[false false] (tf/formatter "MM/dd/yyyy")
-   [false true] (tf/formatter "yyyy/MM/dd")
-   [true false] (tf/formatter "E, MM/dd/yyyy")
-   [true true] (tf/formatter "E, yyyy/MM/dd")})
-
 (defn journal-title-formatters
   [date-formatter]
   (->
@@ -55,7 +49,8 @@
    (distinct)))
 
 (defn normalize-date
-  "Parses raw date string `s` using the configured and built-in journal formats."
+  "Given raw date string, return a normalized date string at best effort.
+   Warning: this is a function with heavy cost (likely 50ms). Use with caution"
   [s date-formatter]
   (some
    (fn [formatter]
@@ -83,16 +78,4 @@
 
 (defn ^:api valid-journal-title-with-slash?
   [title]
-  (when title
-    (let [title (common-util/capitalize-all title)
-          weekday-prefix? (string/includes? title ", ")
-          date-title (if weekday-prefix?
-                       (subs title (+ 2 (string/index-of title ", ")))
-                       title)
-          year-first? (= 4 (string/index-of date-title "/"))
-          formatter (get slash-journal-title-parser-by-shape
-                         [weekday-prefix? year-first?])]
-      (try
-        (boolean (tf/parse formatter title))
-        (catch :default _e
-          false)))))
+  (some #(valid-journal-title? title %) slash-journal-title-formatters))
