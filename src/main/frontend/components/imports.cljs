@@ -348,15 +348,32 @@
   [files]
   (p/all (mapv <serialize-import-file files)))
 
+(defn- asset-write-issue
+  [asset error]
+  {:code :import/asset-write-failed
+   :severity :error
+   :recoverable? true
+   :phase :write-assets
+   :parameters (select-keys asset [:path :asset-id :asset-type])
+   :diagnostics {:message (or (.-message error) (str error))}})
+
 (defn- write-staged-assets!
   [repo staged-assets]
-  (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
-    (when (seq staged-assets)
-      (p/let [_ (fs/mkdir-if-not-exists assets-dir)]
-        (p/all
-         (mapv (fn [{:keys [asset-id asset-type payload]}]
-                 (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true}))
-               staged-assets))))))
+  (if (seq staged-assets)
+    (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
+      (-> (p/let [_ (fs/mkdir-if-not-exists assets-dir)
+                  results
+                  (p/all
+                   (mapv (fn [{:keys [asset-id asset-type payload] :as asset}]
+                           (-> (fs/write-plain-text-file!
+                                repo assets-dir (str asset-id "." asset-type) payload
+                                {:skip-transact? true})
+                               (p/then (constantly nil))
+                               (p/catch #(asset-write-issue asset %))))
+                         staged-assets))]
+            (into [] (remove nil?) results))
+          (p/catch #(vector (asset-write-issue nil %)))))
+    (p/resolved [])))
 
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
@@ -375,9 +392,7 @@
 
 (defn- completed-import-terminal-result
   [run-id import-result]
-  (if (:contract-version import-result)
-    import-result
-    (file-graph-import/completed-result run-id import-result)))
+  (file-graph-import/normalize-terminal-result run-id import-result))
 
 (defn- current-file-graph-import?
   [run-id]
@@ -411,6 +426,7 @@
    {:keys [graph-name] :as user-options}
    config-file]
   (let [run-id (str (random-uuid))
+        target-repo (common-config/canonicalize-db-version-repo graph-name)
         phase (atom :create-staging)
         staging-repo* (atom nil)
         published? (atom false)
@@ -434,20 +450,31 @@
               terminal-result)
             (p/let [_ (doseq [notification (:notifications terminal-result)]
                         (show-notification notification))
-                    target-repo (common-config/canonicalize-db-version-repo graph-name)
-                    _ (when (util/electron?)
-                        (reset! phase :stage-assets)
-                        (write-staged-assets! staging-repo (:staged-assets terminal-result)))
+                    staged-asset-issues (if (util/electron?)
+                                          (do
+                                            (reset! phase :stage-assets)
+                                            (write-staged-assets! staging-repo (:staged-assets terminal-result)))
+                                          [])
                     _ (reset! phase :publish)
                     _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
                     _ (reset! published? true)
                     _ (reset! phase :register-graph)
                     repo (repo-handler/new-db! graph-name {:file-graph-import? true})
-                    _ (when-not (util/electron?)
-                        (reset! phase :write-assets)
-                        (write-staged-assets! repo (:staged-assets terminal-result)))
-                    published-result (assoc terminal-result :publication {:status :published
-                                                                          :repo repo})]
+                    _ (when-not (= target-repo repo)
+                        (throw (ex-info "imported graph registration failed"
+                                        {:code :import/graph-registration-failed
+                                         :repo target-repo})))
+                    written-asset-issues (if-not (util/electron?)
+                                           (do
+                                             (reset! phase :write-assets)
+                                             (write-staged-assets! repo (:staged-assets terminal-result)))
+                                           [])
+                    terminal-result' (file-graph-import/completed-result
+                                      run-id
+                                      (update terminal-result :issues into
+                                              (concat staged-asset-issues written-asset-issues)))
+                    published-result (assoc terminal-result' :publication {:status :published
+                                                                           :repo repo})]
               (reset! phase :terminal)
               (log/info :import-file-graph-finished true
                         :run-id run-id
@@ -461,7 +488,9 @@
            (p/let [_ (when (and @staging-repo* (not @published?))
                        (<discard-file-graph-import! run-id @staging-repo*))
                    code (import-error-code error)
-                   result (file-graph-import/failed-result run-id @phase code)]
+                   result (cond-> (file-graph-import/failed-result run-id @phase code)
+                            @published? (assoc :publication {:status :published
+                                                            :repo target-repo}))]
              (log/error :import-file-graph-failed true
                         :run-id run-id
                         :phase @phase

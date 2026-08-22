@@ -1,21 +1,28 @@
 (ns logseq.common.file-graph-import
   (:require [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]))
 
 (def terminal-contract-version 1)
+
+(def ^:private terminal-statuses
+  #{:completed :completed-with-errors :failed})
 
 (def ^:private staging-graph-prefix ".logseq-file-graph-import-")
 
 (defn staging-repo
   [run-id]
-  {:pre [(seq run-id)]}
+  {:pre [(common-util/uuid-string? run-id)]}
   (str common-config/db-version-prefix staging-graph-prefix run-id))
 
 (defn staging-repo?
   [repo]
-  (some-> repo
-          common-config/strip-leading-db-version-prefix
-          (string/starts-with? staging-graph-prefix)))
+  (let [graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+    (boolean
+     (when (and (string? graph-name)
+                (string/starts-with? graph-name staging-graph-prefix))
+       (common-util/uuid-string?
+        (subs graph-name (count staging-graph-prefix)))))))
 
 (defn failed-result
   [run-id phase code]
@@ -43,3 +50,17 @@
            :summary {:issue-count (count issues)}
            :issues issues
            :publication (or (:publication result) {:status :pending}))))
+
+(defn normalize-terminal-result
+  [run-id result]
+  (cond
+    (and (map? result) (not (contains? result :contract-version)))
+    (completed-result run-id result)
+
+    (and (= terminal-contract-version (:contract-version result))
+         (= run-id (:run-id result))
+         (contains? terminal-statuses (:status result)))
+    result
+
+    :else
+    (failed-result run-id :worker-import :import/invalid-terminal-result)))

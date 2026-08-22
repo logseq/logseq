@@ -19,11 +19,35 @@
     (is (= {:issue-count 1} (:summary result)))
     (is (= [issue] (:issues result)))))
 
+(deftest file-graph-import-terminal-result-validates-the-contract
+  (doseq [result [{:contract-version 2
+                   :run-id "run"
+                   :status :completed}
+                  {:contract-version 1
+                   :run-id "another-run"
+                   :status :completed}
+                  {:contract-version 1
+                   :run-id "run"
+                   :status :unknown}]]
+    (is (= {:status :failed
+            :phase :worker-import
+            :code :import/invalid-terminal-result}
+           (let [normalized (file-graph-import/normalize-terminal-result "run" result)]
+             {:status (:status normalized)
+              :phase (:phase normalized)
+              :code (some-> normalized :issues first :code)})))))
+
+(deftest file-graph-import-staging-repo-requires-an-internal-run-id
+  (is (false? (file-graph-import/staging-repo?
+               (str common-config/db-version-prefix
+                    ".logseq-file-graph-import-user-notes")))))
+
 (deftest publish-file-graph-import-preserves-the-target-boundary
-  (let [graphs-dir (node-helper/create-tmp-dir "publish-file-graph-import")
-        staging-repo (file-graph-import/staging-repo "run")
+  (let [run-id "00000000-0000-4000-8000-000000000001"
+        graphs-dir (node-helper/create-tmp-dir "publish-file-graph-import")
+        staging-repo (file-graph-import/staging-repo run-id)
         target-repo (str common-config/db-version-prefix "target")
-        staging-path (node-path/join graphs-dir ".logseq-file-graph-import-run")
+        staging-path (node-path/join graphs-dir (str ".logseq-file-graph-import-" run-id))
         target-path (node-path/join graphs-dir "target")]
     (fs/mkdirSync staging-path #js {:recursive true})
     (fs/writeFileSync (node-path/join staging-path "db.sqlite") "imported-data")
