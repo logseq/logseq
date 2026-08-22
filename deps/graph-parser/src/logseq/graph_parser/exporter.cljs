@@ -3164,7 +3164,6 @@
         (when (and (= (count property-names) (count (distinct property-names)))
                    (string? (:title properties))
                    (not (string/blank? (:title properties)))
-                   (nil? (:tags properties))
                    (empty? unsupported-built-ins)
                    (every? #(gp-property/valid-property-name? (str %)) user-property-names)
                    (not-any? (fn [[property-name value]]
@@ -3241,6 +3240,20 @@
     :number (js/Number value)
     value))
 
+(defn- bulk-tag-values
+  [tags]
+  (when (string? tags)
+    (->> (or (bulk-page-ref-values tags)
+             (string/split tags #","))
+         (map string/trim)
+         (remove string/blank?)
+         distinct
+         vec)))
+
+(defn- bulk-tag-names
+  [tags]
+  (mapv common-util/page-name-sanity-lc (bulk-tag-values tags)))
+
 (defn- build-simple-page-property-options
   [simple-files]
   (let [property-pairs (mapcat (fn [{:keys [pairs]}]
@@ -3271,6 +3284,14 @@
         (into {} (map (fn [[property-name schema]]
                         [property-name (assoc schema :block/title (property-titles property-name))]))
               property-schemas)
+        tag-titles (reduce (fn [result tag-title]
+                             (let [tag-name (common-util/page-name-sanity-lc tag-title)]
+                               (if (contains? result tag-name)
+                                 result
+                                 (assoc result tag-name tag-title))))
+                           {}
+                           (mapcat #(bulk-tag-values (get-in % [:properties :tags]))
+                                   simple-files))
         pages-and-blocks
         (mapv (fn [{:keys [properties]}]
                 (let [user-properties
@@ -3278,17 +3299,22 @@
                             (map (fn [[property-name value]]
                                    [property-name
                                     (bulk-property-value (property-types property-name) value)]))
-                            (dissoc properties :title :tags))]
-                  {:page {:block/title (:title properties)
-                          :build/properties user-properties}}))
+                            (dissoc properties :title :tags))
+                      page-tags (mapv keyword (bulk-tag-names (:tags properties)))]
+                  {:page (cond-> {:block/title (:title properties)
+                                  :build/properties user-properties}
+                           (seq page-tags) (assoc :build/tags page-tags))}))
               simple-files)]
     {:build-options {:pages-and-blocks pages-and-blocks
                      :properties properties
-                     :classes {}
+                     :classes (into {} (map (fn [[tag-name tag-title]]
+                                             [(keyword tag-name) {:block/title tag-title}]))
+                                    tag-titles)
                      :auto-create-ontology? false
                      :extract-content-refs? false
                      :translate-property-values? true}
-     :property-schemas property-schemas}))
+     :property-schemas property-schemas
+     :tag-names (set (keys tag-titles))}))
 
 (defn- generated-property-idents
   [tx-data]
@@ -3298,6 +3324,17 @@
                            (db-property/user-property-namespace? (namespace ident)))
                   [(normalize-bulk-property-name block-name) ident])))
         tx-data))
+
+(defn- ordinary-tags-page
+  []
+  (let [now (common-util/time-ms)]
+    (with-meta {:block/uuid (random-uuid)
+                :block/title "Tags"
+                :block/name "tags"
+                :block/tags [:logseq.class/Page]
+                :block/created-at now
+                :block/updated-at now}
+      {::force-new-page? true})))
 
 (defn- prepare-simple-page-init-tx
   [init-tx block-props-tx tx-id]
@@ -3375,7 +3412,9 @@
     (:block/uuid entity)
     (conj [:block/uuid (:block/uuid entity)])
 
-    (and (nil? (:db/ident entity)) (:block/name entity))
+    (and (nil? (:db/ident entity))
+         (:block/name entity)
+         (not (::force-new-page? (meta entity))))
     (conj [:block/name (:block/name entity)])))
 
 (defn- direct-import-base-lookup-id
@@ -3618,7 +3657,7 @@
              (ordered-doc-files doc-files) <read-file rpath-key options)
             _ (when (seq simple-files)
                 (let [extract-started (performance-now-ms)
-                      {:keys [build-options property-schemas]}
+                      {:keys [build-options property-schemas tag-names]}
                       (build-simple-page-property-options simple-files)
                       _ (record-performance! options :extract-normalize extract-started
                                              {:files (count simple-files)
@@ -3626,6 +3665,8 @@
                       construct-started (performance-now-ms)
                       {:keys [init-tx block-props-tx]}
                       (sqlite-build/build-blocks-tx build-options)
+                      init-tx (cond-> init-tx
+                                (seq tag-names) (conj (ordinary-tags-page)))
                       base-db @conn
                       init-tx-id (inc (:max-tx base-db))
                       properties-tx-id (inc init-tx-id)
