@@ -18,6 +18,7 @@
   3)
 
 (def ^:private search-index-build-batch-size 200)
+(def ^:private import-search-index-build-batch-size 2000)
 (def ^:private vector-embedding-batch-size 32)
 (def ^:private vector-embedding-parallelism 2)
 (def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
@@ -481,7 +482,8 @@
                       (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
             (p/then (fn [_]
                     (<build-blocks-index! repo search-db conn build-id
-                                            {:entities entities
+                                            {:batch-size import-search-index-build-batch-size
+                                             :entities entities
                                              :import-rebuild? true
                                              :record-performance record-performance})))
             (p/finally (fn []
