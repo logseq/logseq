@@ -626,7 +626,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([{:block/keys [uuid page] :as block} {:keys [include-vector-title? known-visible? ref-title-cache]
                                          :or {include-vector-title? false
                                               known-visible? false}}]
-   (let [raw-title (or (:block/raw-title block) (:block/title block))]
+   (let [raw-title (:block/title block)]
      (when (search-indexable? block raw-title)
        (try
          (let [page-node? (ldb/page? block)
@@ -684,7 +684,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                              (:logseq.property/built-in? parent)
                              (= common-config/library-page-name (:block/title parent))
                              (nil? (:block/parent parent)))
-        raw-title (or (:block/raw-title entity) (:block/title entity))
+        raw-title (:block/title entity)
         property? (contains? tag-ident-set :logseq.class/Property)
         private-property? (and property?
                                (:logseq.property/built-in? entity)
@@ -722,7 +722,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       :fallback (block->index (d/entity db (:db/id entity))
                               (assoc opts :known-visible? false))
       :simple
-      (let [raw-title (or (:block/raw-title entity) (:block/title entity))]
+      (let [raw-title (:block/title entity)]
         (when (search-indexable? entity raw-title)
           (let [page-or-object-node? (or page-node? (seq tag-ident-set))
                 title (cond-> raw-title

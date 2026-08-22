@@ -1,10 +1,12 @@
 (ns frontend.worker.search-test
   (:require [cljs.test :refer [deftest is testing]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]))
 
 (defn- process-cpu-time-ms
@@ -214,11 +216,53 @@
     (is (= (mapv #'search/hidden-entity? entities)
            (mapv cached-hidden? entities)))))
 
+(deftest import-index-rows-match-canonical-index-rows
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:topic {}}
+               :pages-and-blocks
+               [{:page {:block/title "Target"}}
+                {:page {:block/title "Visible"
+                        :build/tags [:topic]}
+                 :blocks [{:block/title "links to [[Target]]"}]}
+                {:page {:block/title "Aug 22nd, 2026"
+                        :block/journal-day 20260822}}
+                {:page {:block/title "Hidden"
+                        :build/properties {:logseq.property/hide? true}}
+                 :blocks [{:block/title "hidden child"}]}]})
+        db @conn
+        entities (:entities (db-validate/validate-db db))
+        context (search/import-index-context entities)
+        opts {:include-vector-title? false}
+        canonical-by-id (into {}
+                              (map (juxt :id identity))
+                              (search/build-blocks-indice db opts))
+        import-by-id (into {}
+                           (keep (fn [entity]
+                                   (when-let [row (search/import-entity->index
+                                                   db context entity opts)]
+                                     [(:id row) row])))
+                           entities)
+        missing-ids (set/difference (set (keys canonical-by-id))
+                                    (set (keys import-by-id)))
+        extra-ids (set/difference (set (keys import-by-id))
+                                  (set (keys canonical-by-id)))
+        changed-ids (into #{}
+                          (filter #(not= (canonical-by-id %) (import-by-id %)))
+                          (set/intersection (set (keys canonical-by-id))
+                                            (set (keys import-by-id))))]
+    (is (and (empty? missing-ids) (empty? extra-ids) (empty? changed-ids))
+        (pr-str {:missing (mapv canonical-by-id (take 10 missing-ids))
+                 :extra (mapv import-by-id (take 10 extra-ids))
+                 :changed (mapv (juxt canonical-by-id import-by-id)
+                                (take 10 changed-ids))}))))
+
 (deftest search-indexes-hide-by-default-properties
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:keywords {:logseq.property/type :default
-                                       :logseq.property/hide? true}
-                            :author {:logseq.property/type :default}}
+              {:properties {:user.property/keywords {:block/title "keywords"
+                                                     :logseq.property/type :default
+                                                     :logseq.property/hide? true}
+                            :user.property/author {:block/title "author"
+                                                   :logseq.property/type :default}}
                :pages-and-blocks [{:page {:block/title "Hidden page"
                                           :build/properties {:logseq.property/hide? true}}}]})
         keywords (d/entity @conn :user.property/keywords)

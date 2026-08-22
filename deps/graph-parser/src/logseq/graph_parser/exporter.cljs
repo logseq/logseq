@@ -3033,6 +3033,15 @@
     (when (seq tx)
       (ldb/transact! conn tx {::imported-data? true}))))
 
+(defn- ordered-doc-files
+  [doc-files]
+  (mapv #(assoc %1 :idx %2)
+        ;; PDF annotation pages sort first because other pages depend on them.
+        (sort-by (fn [{:keys [path]}]
+                   [(not (string/starts-with? (node-path/basename path) "hls__")) path])
+                 doc-files)
+        (range)))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
@@ -3041,13 +3050,7 @@
                                     on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
-  (let [doc-files (mapv #(assoc %1 :idx %2)
-                        ;; Sort files to ensure reproducible import behavior
-                        ;; pdf annotation pages sort first because other pages depend on them
-                        (sort-by (fn [{:keys [path]}]
-                                   [(not (string/starts-with? (node-path/basename path) "hls__")) path])
-                                 *doc-files)
-                        (range 0 (count *doc-files)))]
+  (let [doc-files (ordered-doc-files *doc-files)]
     (index-journal-page-name-uuids! doc-files (:import-state options))
     (-> (p/loop [remaining-files doc-files
                  issues []]
@@ -3089,8 +3092,53 @@
     (when (and (seq refs) (string/blank? residue))
       refs)))
 
+(defn- config-key-names
+  [values]
+  (into #{} (map name) values))
+
+(defn- bulk-property-context
+  [user-config]
+  {:separated-property-names (config-key-names
+                              (:property/separated-by-commas user-config))
+   :ignored-ref-property-names (config-key-names
+                                (:ignored-page-references-keywords user-config))
+   :journal-title-formatters (date-time-util/safe-journal-title-formatters
+                              (get-date-formatter user-config))
+   :journal-title-cache (atom {})})
+
+(defn- journal-page-ref-value?
+  [value journal-title-formatters journal-title-cache]
+  (some (fn [page-name]
+          ;; Journal formats contain a numeric day or year. Most graph refs do not,
+          ;; so avoid constructing date formatters for ordinary page names.
+          (when (re-find #"\d" page-name)
+            (if-let [cached (find @journal-title-cache page-name)]
+              (val cached)
+              (let [journal? (boolean
+                              (date-time-util/journal-title->int
+                               page-name journal-title-formatters))]
+                (swap! journal-title-cache assoc page-name journal?)
+                journal?))))
+        (bulk-page-ref-values value)))
+
+(defn- unsupported-bulk-property-value?
+  [property-name value {:keys [separated-property-names
+                               ignored-ref-property-names
+                               journal-title-formatters
+                               journal-title-cache]}]
+  (let [property-name' (name property-name)]
+    (or (string/blank? value)
+        (contains? #{"true" "false"} value)
+        (contains? separated-property-names property-name')
+        (and (contains? ignored-ref-property-names property-name')
+             (some? (bulk-page-ref-values value)))
+        (journal-page-ref-value? value journal-title-formatters journal-title-cache)
+        (and (re-find #"(?i)^[a-z][a-z0-9+.-]*://" value)
+             (db-property-type/url? value)
+             (not (re-matches #"https?://\S+" value))))))
+
 (defn- simple-page-property-file
-  [file content rpath-key]
+  [file content rpath-key property-context]
   (let [import-path (document-import-path file rpath-key)
         lines (when (string? content)
                 (vec (remove string/blank? (string/split-lines content))))
@@ -3108,12 +3156,23 @@
             user-property-names (remove #{:title :tags} property-names)
             unsupported-built-ins (set/intersection (set user-property-names)
                                                     file-built-in-property-names)
+            user-property-pairs (remove (fn [[property-name _value]]
+                                          (contains? #{:title :tags}
+                                                     (normalize-bulk-property-name property-name)))
+                                        pairs)
             values (map second pairs)]
         (when (and (= (count property-names) (count (distinct property-names)))
                    (string? (:title properties))
                    (not (string/blank? (:title properties)))
+                   (nil? (:tags properties))
                    (empty? unsupported-built-ins)
                    (every? #(gp-property/valid-property-name? (str %)) user-property-names)
+                   (not-any? (fn [[property-name value]]
+                               (unsupported-bulk-property-value?
+                                (normalize-bulk-property-name property-name)
+                                value
+                                property-context))
+                             user-property-pairs)
                    (not-any? #(or (string/includes? % "{{")
                                   (string/includes? % "((")
                                   (string/includes? % "#")
@@ -3137,40 +3196,41 @@
 
 (defn- <partition-simple-page-property-files
   [doc-files <read-file rpath-key options]
-  #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
-  (p/loop [remaining-files doc-files
-           simple-files []
-           fallback-files []]
-    (if-let [file (first remaining-files)]
-      (-> (<read-file file)
-          (p/then (fn [content]
-                    (let [started (performance-now-ms)
-                          simple-file (simple-page-property-file file content rpath-key)
-                          _ (record-performance! options :parse started
-                                                 {:path (:path file)
-                                                  :bytes (count content)
-                                                  :parser :simple-page-properties})]
-                      (if simple-file
-                        (p/recur (rest remaining-files)
-                                 (conj simple-files simple-file)
-                                 fallback-files)
-                        (p/recur (rest remaining-files)
-                                 simple-files
-                                 (conj fallback-files file))))))
-          (p/catch (fn [_error]
-                     (p/recur (rest remaining-files)
-                              simple-files
-                              (conj fallback-files file)))))
-      {:simple-files simple-files
-       :fallback-files fallback-files})))
+  (let [property-context (bulk-property-context (:user-config options))]
+    #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
+    (p/loop [remaining-files doc-files
+             simple-files []
+             fallback-files []]
+      (if-let [file (first remaining-files)]
+        (-> (<read-file file)
+            (p/then (fn [content]
+                      (let [started (performance-now-ms)
+                            simple-file (simple-page-property-file
+                                         file content rpath-key property-context)
+                            _ (record-performance! options :parse started
+                                                   {:path (:path file)
+                                                    :bytes (count content)
+                                                    :parser :simple-page-properties})]
+                        (if simple-file
+                          (p/recur (rest remaining-files)
+                                   (conj simple-files simple-file)
+                                   fallback-files)
+                          (p/recur (rest remaining-files)
+                                   simple-files
+                                   (conj fallback-files file))))))
+            (p/catch (fn [_error]
+                       (p/recur (rest remaining-files)
+                                simple-files
+                                (conj fallback-files file)))))
+        {:simple-files simple-files
+         :fallback-files fallback-files}))))
 
 (defn- bulk-property-type
   [values]
   (cond
     (every? bulk-page-ref-values values) :node
     (every? #(re-matches #"https?://\S+" %) values) :url
-    (every? #(and (not (string/blank? %))
-                  (not (js/isNaN (js/Number %)))) values) :number
+    (every? #(re-matches #"\d+" %) values) :number
     :else :default))
 
 (defn- bulk-property-value
@@ -3180,16 +3240,6 @@
                     (bulk-page-ref-values value)))
     :number (js/Number value)
     value))
-
-(defn- bulk-tag-names
-  [tags]
-  (when (string? tags)
-    (->> (string/split tags #",")
-         (map string/trim)
-         (remove string/blank?)
-         (map common-util/page-name-sanity-lc)
-         distinct
-         vec)))
 
 (defn- build-simple-page-property-options
   [simple-files]
@@ -3221,11 +3271,6 @@
         (into {} (map (fn [[property-name schema]]
                         [property-name (assoc schema :block/title (property-titles property-name))]))
               property-schemas)
-        tag-names (->> simple-files
-                       (mapcat #(bulk-tag-names (get-in % [:properties :tags])))
-                       distinct
-                       vec)
-        tag-keys (mapv keyword tag-names)
         pages-and-blocks
         (mapv (fn [{:keys [properties]}]
                 (let [user-properties
@@ -3233,15 +3278,13 @@
                             (map (fn [[property-name value]]
                                    [property-name
                                     (bulk-property-value (property-types property-name) value)]))
-                            (dissoc properties :title :tags))
-                      page-tags (mapv keyword (bulk-tag-names (:tags properties)))]
-                  {:page (cond-> {:block/title (:title properties)
-                                  :build/properties user-properties}
-                           (seq page-tags) (assoc :build/tags page-tags))}))
+                            (dissoc properties :title :tags))]
+                  {:page {:block/title (:title properties)
+                          :build/properties user-properties}}))
               simple-files)]
     {:build-options {:pages-and-blocks pages-and-blocks
                      :properties properties
-                     :classes (zipmap tag-keys (repeat {}))
+                     :classes {}
                      :auto-create-ontology? false
                      :extract-content-refs? false
                      :translate-property-values? true}
@@ -3304,9 +3347,11 @@
                           [:block/tags]
                           property-key-refs
                           property-value-refs)]
-         (assoc entity
-                :block/refs (vec (distinct refs))
-                :block/tx-id tx-id)))
+         (cond-> (assoc entity
+                        :block/refs (vec (distinct refs))
+                        :block/tx-id tx-id)
+           (:logseq.property/created-from-property entity)
+           (dissoc :block/parent))))
      block-props-tx)))
 
 (def ^:private direct-import-schema-attributes
@@ -3554,9 +3599,10 @@
     (save-from-tx tx-data {:import-state import-state})))
 
 (defn- simple-page-property-import-supported?
-  [{:keys [user-options <export-file] :as options}]
+  [doc-files {:keys [user-options <export-file] :as options}]
   (and (nil? <export-file)
        (some? (::file-import-batch-tx-data options))
+       (not-any? #(string/starts-with? (node-path/basename (:path %)) "hls__") doc-files)
        (true? (:convert-all-tags? user-options))
        (true? (:remove-inline-tags? user-options))
        (empty? (:tag-classes user-options))
@@ -3565,10 +3611,11 @@
 
 (defn- <export-doc-files-with-simple-page-property-batch
   [conn doc-files <read-file {:keys [rpath-key import-state] :as options}]
-  (if-not (simple-page-property-import-supported? options)
+  (if-not (simple-page-property-import-supported? doc-files options)
     (export-doc-files conn doc-files <read-file options)
     (p/let [{:keys [simple-files fallback-files]}
-            (<partition-simple-page-property-files doc-files <read-file rpath-key options)
+            (<partition-simple-page-property-files
+             (ordered-doc-files doc-files) <read-file rpath-key options)
             _ (when (seq simple-files)
                 (let [extract-started (performance-now-ms)
                       {:keys [build-options property-schemas]}
