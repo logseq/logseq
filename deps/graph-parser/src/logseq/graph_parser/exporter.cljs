@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.storage :as ds-storage]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -32,10 +33,12 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
@@ -3065,6 +3068,452 @@
                                  :ex-data {:error e}})
                    (throw e))))))
 
+(def ^:private bulk-page-property-line-re #"^([^\s:][^:]*)::\s*(.*)$")
+
+(defn- normalize-bulk-property-name
+  [property-name]
+  (-> property-name
+      string/lower-case
+      (string/replace "/" "-")
+      (string/replace " " "-")
+      (string/replace "_" "-")
+      keyword))
+
+(defn- bulk-page-ref-values
+  [value]
+  (let [refs (mapv second (re-seq page-ref/page-ref-re value))
+        residue (-> value
+                    (string/replace page-ref/page-ref-re "")
+                    (string/replace #"[\s,]+" ""))]
+    (when (and (seq refs) (string/blank? residue))
+      refs)))
+
+(defn- simple-page-property-file
+  [file content rpath-key]
+  (let [import-path (document-import-path file rpath-key)
+        lines (when (string? content)
+                (vec (remove string/blank? (string/split-lines content))))
+        pairs (mapv #(when-let [[_ property-name value]
+                                (re-matches bulk-page-property-line-re %)]
+                       [property-name value])
+                    lines)]
+    (when (and (= "md" (path/file-ext (:path file)))
+               (string/starts-with? import-path "pages/")
+               (seq lines)
+               (every? some? pairs))
+      (let [property-names (mapv (comp normalize-bulk-property-name first) pairs)
+            properties (into {} (map (fn [[property-name value]]
+                                       [(normalize-bulk-property-name property-name) value])) pairs)
+            user-property-names (remove #{:title :tags} property-names)
+            unsupported-built-ins (set/intersection (set user-property-names)
+                                                    file-built-in-property-names)
+            values (map second pairs)]
+        (when (and (= (count property-names) (count (distinct property-names)))
+                   (string? (:title properties))
+                   (not (string/blank? (:title properties)))
+                   (empty? unsupported-built-ins)
+                   (every? #(gp-property/valid-property-name? (str %)) user-property-names)
+                   (not-any? #(or (string/includes? % "{{")
+                                  (string/includes? % "((")
+                                  (string/includes? % "#")
+                                  (and (string/includes? % "[[")
+                                       (nil? (bulk-page-ref-values %))))
+                             values))
+          {:file file
+           :pairs pairs
+           :properties properties})))))
+
+(defn- <partition-simple-page-property-files
+  [doc-files <read-file rpath-key]
+  #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
+  (p/loop [remaining-files doc-files
+           simple-files []
+           fallback-files []]
+    (if-let [file (first remaining-files)]
+      (-> (<read-file file)
+          (p/then (fn [content]
+                    (if-let [simple-file (simple-page-property-file file content rpath-key)]
+                      (p/recur (rest remaining-files)
+                               (conj simple-files simple-file)
+                               fallback-files)
+                      (p/recur (rest remaining-files)
+                               simple-files
+                               (conj fallback-files file)))))
+          (p/catch (fn [_error]
+                     (p/recur (rest remaining-files)
+                              simple-files
+                              (conj fallback-files file)))))
+      {:simple-files simple-files
+       :fallback-files fallback-files})))
+
+(defn- bulk-property-type
+  [values]
+  (cond
+    (every? bulk-page-ref-values values) :node
+    (every? #(re-matches #"https?://\S+" %) values) :url
+    (every? #(and (not (string/blank? %))
+                  (not (js/isNaN (js/Number %)))) values) :number
+    :else :default))
+
+(defn- bulk-property-value
+  [property-type value]
+  (case property-type
+    :node (set (map #(vector :build/page {:block/title %})
+                    (bulk-page-ref-values value)))
+    :number (js/Number value)
+    value))
+
+(defn- bulk-tag-names
+  [tags]
+  (when (string? tags)
+    (->> (string/split tags #",")
+         (map string/trim)
+         (remove string/blank?)
+         (map common-util/page-name-sanity-lc)
+         distinct
+         vec)))
+
+(defn- build-simple-page-property-options
+  [simple-files]
+  (let [property-pairs (mapcat (fn [{:keys [pairs]}]
+                                 (remove (fn [[property-name _value]]
+                                           (contains? #{:title :tags}
+                                                      (normalize-bulk-property-name property-name)))
+                                         pairs))
+                               simple-files)
+        values-by-property
+        (reduce (fn [result [property-name value]]
+                  (update result (normalize-bulk-property-name property-name) (fnil conj []) value))
+                {}
+                property-pairs)
+        property-titles
+        (reduce (fn [result [property-name _value]]
+                  (let [property-key (normalize-bulk-property-name property-name)]
+                    (if (contains? result property-key)
+                      result
+                      (assoc result property-key property-name))))
+                {}
+                property-pairs)
+        property-types (update-vals values-by-property bulk-property-type)
+        property-schemas
+        (update-vals property-types
+                     #(cond-> {:logseq.property/type %}
+                        (= :node %) (assoc :db/cardinality :many)))
+        properties
+        (into {} (map (fn [[property-name schema]]
+                        [property-name (assoc schema :block/title (property-titles property-name))]))
+              property-schemas)
+        tag-names (->> simple-files
+                       (mapcat #(bulk-tag-names (get-in % [:properties :tags])))
+                       distinct
+                       vec)
+        tag-keys (mapv keyword tag-names)
+        pages-and-blocks
+        (mapv (fn [{:keys [properties]}]
+                (let [user-properties
+                      (into {}
+                            (map (fn [[property-name value]]
+                                   [property-name
+                                    (bulk-property-value (property-types property-name) value)]))
+                            (dissoc properties :title :tags))
+                      page-tags (mapv keyword (bulk-tag-names (:tags properties)))]
+                  {:page (cond-> {:block/title (:title properties)
+                                  :build/properties user-properties}
+                           (seq page-tags) (assoc :build/tags page-tags))}))
+              simple-files)]
+    {:build-options {:pages-and-blocks pages-and-blocks
+                     :properties properties
+                     :classes (zipmap tag-keys (repeat {}))
+                     :auto-create-ontology? false
+                     :extract-content-refs? false
+                     :translate-property-values? true}
+     :property-schemas property-schemas}))
+
+(defn- generated-property-idents
+  [tx-data]
+  (into {}
+        (keep (fn [{ident :db/ident block-name :block/name}]
+                (when (and ident block-name
+                           (db-property/user-property-namespace? (namespace ident)))
+                  [(normalize-bulk-property-name block-name) ident])))
+        tx-data))
+
+(defn- prepare-simple-page-init-tx
+  [init-tx block-props-tx tx-id]
+  (let [source-page-uuids (into #{} (keep :block/uuid) block-props-tx)]
+    (mapv
+     (fn [{:keys [db/ident block/tags] block-uuid :block/uuid :as entity}]
+       (cond
+         (:logseq.property/created-from-property entity)
+         (assoc entity :block/tx-id tx-id)
+
+         (and block-uuid tags (nil? ident) (not (contains? source-page-uuids block-uuid)))
+         (assoc entity
+                :block/refs (vec (distinct (conj (vec tags) :block/tags)))
+                :block/tx-id tx-id)
+
+         :else
+         entity))
+     init-tx)))
+
+(defn- prepare-simple-page-properties-tx
+  [init-tx block-props-tx property-schemas tx-id]
+  (let [property-idents (generated-property-idents init-tx)
+        node-property-idents
+        (into #{}
+              (keep (fn [[property-name schema]]
+                      (when (= :node (:logseq.property/type schema))
+                        (property-idents property-name))))
+              property-schemas)
+        page-tags-by-uuid
+        (into {} (keep (fn [{:keys [block/tags] block-uuid :block/uuid}]
+                         (when (and block-uuid tags) [block-uuid tags])))
+              init-tx)]
+    (mapv
+     (fn [{block-uuid :block/uuid :as entity}]
+       (let [property-pairs (filter (fn [[property-ident _value]]
+                                      (and (qualified-keyword? property-ident)
+                                           (db-property/user-property-namespace?
+                                            (namespace property-ident))))
+                                    entity)
+             property-key-refs (map first property-pairs)
+             property-value-refs
+             (mapcat (fn [[property-ident value]]
+                       (when (contains? node-property-idents property-ident)
+                         (if (set? value) value [value])))
+                     property-pairs)
+             refs (concat (page-tags-by-uuid block-uuid)
+                          [:block/tags]
+                          property-key-refs
+                          property-value-refs)]
+         (assoc entity
+                :block/refs (vec (distinct refs))
+                :block/tx-id tx-id)))
+     block-props-tx)))
+
+(def ^:private direct-import-schema-attributes
+  #{:db/ident :db/isComponent :db/noHistory :db/valueType :db/cardinality
+    :db/unique :db/index :db/tupleType :db/tupleTypes :db/tupleAttrs})
+
+(defn- direct-import-base-entity-id
+  [base-db entity-ref]
+  (some-> (d/entity base-db entity-ref) :db/id))
+
+(defn- allocate-direct-import-entities
+  [base-db init-tx]
+  (reduce
+   (fn [{:keys [next-id tempids lookups] :as state} entity]
+     (let [old-id (:db/id entity)
+           ident-lookup (when-let [ident (:db/ident entity)] [:db/ident ident])
+           uuid-lookup (when-let [block-uuid (:block/uuid entity)] [:block/uuid block-uuid])
+           existing-id (or (when ident-lookup (lookups ident-lookup))
+                           (when uuid-lookup (lookups uuid-lookup))
+                           (when ident-lookup
+                             (direct-import-base-entity-id base-db ident-lookup))
+                           (when uuid-lookup
+                             (direct-import-base-entity-id base-db uuid-lookup)))
+           entity-id (or existing-id
+                         (when (number? old-id)
+                           (if (neg? old-id) (tempids old-id) old-id))
+                         (when (and (some? old-id) (not (sequential? old-id)))
+                           (tempids old-id))
+                         next-id)
+           allocated? (and (nil? existing-id)
+                           (or (nil? old-id)
+                               (and (number? old-id) (neg? old-id))
+                               (and (some? old-id) (not (number? old-id)))))
+           next-id' (if (and allocated? (= entity-id next-id)) (inc next-id) next-id)
+           tempids' (if (and allocated? (some? old-id))
+                      (assoc tempids old-id entity-id)
+                      tempids)
+           lookups' (cond-> lookups
+                      ident-lookup (assoc ident-lookup entity-id)
+                      uuid-lookup (assoc uuid-lookup entity-id))]
+       (-> state
+           (assoc :next-id next-id'
+                  :tempids tempids'
+                  :lookups lookups')
+           (update :entities conj [entity entity-id]))))
+   {:next-id (inc (:max-eid base-db))
+    :tempids {}
+    :lookups {}
+    :entities []}
+   init-tx))
+
+(defn- resolve-direct-import-lookup
+  [base-db {:keys [tempids lookups]} value]
+  (let [resolved
+        (cond
+          (number? value) (if (neg? value) (tempids value) value)
+          (keyword? value)
+          (or (lookups [:db/ident value])
+              (direct-import-base-entity-id base-db value))
+          (and (map? value) (:db/ident value))
+          (or (lookups [:db/ident (:db/ident value)])
+              (direct-import-base-entity-id base-db [:db/ident (:db/ident value)]))
+          (and (map? value) (:block/uuid value))
+          (or (lookups [:block/uuid (:block/uuid value)])
+              (direct-import-base-entity-id base-db [:block/uuid (:block/uuid value)]))
+          (and (sequential? value) (= 2 (count value)))
+          (or (lookups (vec value))
+              (direct-import-base-entity-id base-db (vec value)))
+          :else nil)]
+    (or resolved
+        (throw (ex-info "Direct import datom has an unresolved entity reference"
+                        {:value value})))))
+
+(defn- direct-import-entity-id
+  [base-db allocation entity]
+  (or (when-let [old-id (:db/id entity)]
+        (cond
+          (and (number? old-id) (neg? old-id)) ((:tempids allocation) old-id)
+          (number? old-id) old-id
+          (sequential? old-id) (resolve-direct-import-lookup base-db allocation old-id)
+          :else ((:tempids allocation) old-id)))
+      (when-let [block-uuid (:block/uuid entity)]
+        (or ((:lookups allocation) [:block/uuid block-uuid])
+            (direct-import-base-entity-id base-db [:block/uuid block-uuid])))
+      (when-let [ident (:db/ident entity)]
+        (or ((:lookups allocation) [:db/ident ident])
+            (direct-import-base-entity-id base-db [:db/ident ident])))
+      (throw (ex-info "Direct import datom has an unresolved entity id"
+                      {:entity entity}))))
+
+(defn- direct-import-entity-datoms
+  [base-db schema allocation entity entity-id tx-id]
+  (into []
+        (mapcat
+         (fn [[attribute value]]
+           (when (and (not= :db/id attribute) (some? value))
+             (let [many? (= :db.cardinality/many
+                            (get-in schema [attribute :db/cardinality]))
+                   ref? (= :db.type/ref (get-in schema [attribute :db/valueType]))
+                   values (if (and many? (coll? value) (not (map? value))) value [value])]
+               (map (fn [item]
+                      (d/datom entity-id attribute
+                               (if ref?
+                                 (resolve-direct-import-lookup base-db allocation item)
+                                 item)
+                               tx-id true))
+                    (distinct (seq values)))))))
+        entity))
+
+(defn- build-direct-import-schema
+  [base-schema init-tx allocation]
+  (let [entity-ids (into {} (:entities allocation))]
+    (reduce
+     (fn [schema entity]
+       (if (:db/ident entity)
+         (cond-> (assoc schema (:db/ident entity)
+                        (select-keys entity direct-import-schema-attributes))
+           (entity-ids entity) (assoc (entity-ids entity) (:db/ident entity)))
+         schema))
+     base-schema
+     init-tx)))
+
+(defn- direct-import-datom-eav
+  [datom]
+  [(:e datom) (:a datom) (:v datom)])
+
+(defn- remove-existing-direct-import-eavs
+  [base-db candidate-datoms]
+  (second
+   (reduce
+    (fn [[seen result] datom]
+      (let [eav (direct-import-datom-eav datom)]
+        (if (contains? seen eav)
+          [seen result]
+          [(conj seen eav) (conj result datom)])))
+    [(into #{} (map direct-import-datom-eav) (d/datoms base-db :eavt)) []]
+    candidate-datoms)))
+
+(defn- build-direct-import-db
+  [base-db init-tx block-props-tx init-tx-id properties-tx-id]
+  (let [allocation (allocate-direct-import-entities base-db init-tx)
+        schema (build-direct-import-schema (:schema base-db) init-tx allocation)
+        init-datoms
+        (into []
+              (mapcat (fn [[entity entity-id]]
+                        (direct-import-entity-datoms base-db schema allocation entity entity-id init-tx-id)))
+              (:entities allocation))
+        property-datoms
+        (into []
+              (mapcat (fn [entity]
+                        (direct-import-entity-datoms
+                         base-db schema allocation entity
+                         (direct-import-entity-id base-db allocation entity)
+                         properties-tx-id)))
+              block-props-tx)
+        new-datoms (remove-existing-direct-import-eavs
+                    base-db (into init-datoms property-datoms))
+        all-datoms (into (vec (d/datoms base-db :eavt)) new-datoms)
+        storage (ds-storage/storage base-db)
+        db (d/init-db all-datoms schema (cond-> {}
+                                          storage (assoc :storage storage)))]
+    {:db db
+     :new-datoms new-datoms}))
+
+(defn- seed-simple-page-property-import-state!
+  [import-state property-schemas tx-data]
+  (let [property-idents (generated-property-idents tx-data)
+        class-idents
+        (into {} (keep (fn [{ident :db/ident block-name :block/name}]
+                         (when (and ident block-name
+                                    (db-class/user-class-namespace? (namespace ident)))
+                           [(keyword block-name) ident])))
+              tx-data)
+        class-name-uuids
+        (into {} (keep (fn [{ident :db/ident block-name :block/name block-uuid :block/uuid}]
+                         (when (and ident
+                                    (db-class/user-class-namespace? (namespace ident))
+                                    block-name block-uuid)
+                           [block-name block-uuid])))
+              tx-data)]
+    (swap! (:property-schemas import-state) merge property-schemas)
+    (swap! (:all-idents import-state) merge property-idents class-idents)
+    (swap! (:class-name-uuids import-state) merge class-name-uuids)
+    (save-from-tx tx-data {:import-state import-state})))
+
+(defn- simple-page-property-import-supported?
+  [{:keys [user-options <export-file] :as options}]
+  (and (nil? <export-file)
+       (some? (::file-import-batch-tx-data options))
+       (true? (:convert-all-tags? user-options))
+       (true? (:remove-inline-tags? user-options))
+       (empty? (:tag-classes user-options))
+       (empty? (:property-classes user-options))
+       (empty? (:property-parent-classes user-options))))
+
+(defn- <export-doc-files-with-simple-page-property-batch
+  [conn doc-files <read-file {:keys [rpath-key import-state] :as options}]
+  (if-not (simple-page-property-import-supported? options)
+    (export-doc-files conn doc-files <read-file options)
+    (p/let [{:keys [simple-files fallback-files]}
+            (<partition-simple-page-property-files doc-files <read-file rpath-key)
+            _ (when (seq simple-files)
+                (let [{:keys [build-options property-schemas]}
+                      (build-simple-page-property-options simple-files)
+                      {:keys [init-tx block-props-tx]}
+                      (sqlite-build/build-blocks-tx build-options)
+                      base-db @conn
+                      init-tx-id (inc (:max-tx base-db))
+                      properties-tx-id (inc init-tx-id)
+                      init-tx (prepare-simple-page-init-tx
+                               init-tx block-props-tx init-tx-id)
+                      block-props-tx' (prepare-simple-page-properties-tx
+                                       init-tx block-props-tx property-schemas properties-tx-id)
+                      {:keys [db new-datoms]}
+                      (build-direct-import-db
+                       base-db init-tx block-props-tx' init-tx-id properties-tx-id)]
+                  (reset! conn db)
+                  (swap! (::file-import-batch-tx-data options) into new-datoms)
+                  (seed-simple-page-property-import-state!
+                   import-state property-schemas (into init-tx block-props-tx))))
+            fallback-result (if (seq fallback-files)
+                              (export-doc-files conn fallback-files <read-file options)
+                              {:issues []})]
+      fallback-result)))
+
 (defn <export-doc-files-atomically
   "Exports document files on one isolated connection and publishes the completed
   batch once. A recoverable file error restores that file's database savepoint
@@ -3078,12 +3527,15 @@
              {::imported-data? true
               ::new-graph? true}
              (fn [temp-conn *batch-tx-data]
-               (p/let [export-result
-                       (export-doc-files
-                        temp-conn doc-files <read-file
-                        (assoc options
-                               ::file-import-batch-tx-data *batch-tx-data
-                               :on-tx-report (constantly nil)))]
+               (p/let [export-options
+                       (assoc options
+                              ::file-import-batch-tx-data *batch-tx-data
+                              :on-tx-report (constantly nil))
+                       export-result
+                       ((if (:simple-page-property-batch? options)
+                          <export-doc-files-with-simple-page-property-batch
+                          export-doc-files)
+                        temp-conn doc-files <read-file export-options)]
                  (reset! result export-result))))]
       (when tx-report
         (on-tx-report tx-report))
@@ -3300,7 +3752,7 @@
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
-                                   :record-issue :recoverable-error?]))))
+                                   :record-issue :recoverable-error? :simple-page-property-batch?]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn & [tx-meta]]

@@ -339,6 +339,7 @@
                                :record-issue #(swap! issues conj %)
                                :recoverable-error? recoverable-file-import-error-codes
                                :single-persistent-document-batch? true
+                               :simple-page-property-batch? true
                                :log-fn (fn [& args]
                                          (log/info :import-file-graph {:args args}))
                                :<read-file (fn [file] (p/resolved (file-content file)))
