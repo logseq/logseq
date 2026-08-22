@@ -2618,7 +2618,7 @@
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (done))))))))))
 
-(deftest import-file-graph-reuses-existing-page-identity
+(deftest import-file-graph-preserves-bulk-property-semantics
   (async done
          (restoring-worker-state
           (fn []
@@ -2629,7 +2629,13 @@
                                :file/content "{}"}
                   files [config-file
                          {:path "pages/library.md"
-                          :file/content "title:: Library\nrating:: 5"}]]
+                          :file/content (str "title:: Library\n"
+                                             "rating:: 5\n"
+                                             "cast:: [[Ada]], [[Grace]]")}
+                         {:path "pages/film.md"
+                          :file/content (str "title:: Film\n"
+                                             "rating:: unrated\n"
+                                             "cast:: [[Ada]]")}]]
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (let [library-id (ffirst (d/q '[:find ?page
                                                :where [?page :block/name "library"]]
@@ -2651,11 +2657,30 @@
                            library-ids (d/q '[:find [?page ...]
                                               :where [?page :block/name "library"]]
                                             @conn)
-                           library-after (d/entity @conn (first library-ids))]
+                           library-after (d/entity @conn (first library-ids))
+                           rating-property (ldb/get-page @conn "rating")
+                           cast-property (ldb/get-page @conn "cast")
+                           cast-values (get library-after (:db/ident cast-property))
+                           library-ref-ids (into #{} (map :db/id) (:block/refs library-after))
+                           ada-ids (d/q '[:find [?page ...]
+                                          :where [?page :block/name "ada"]]
+                                        @conn)]
                      (is (= :completed (:status result)))
                      (is (= [library-id] library-ids))
                      (is (= library-id (:db/id library-after)))
-                     (is (= library-uuid (:block/uuid library-after))))
+                     (is (= library-uuid (:block/uuid library-after)))
+                     (is (= :default (:logseq.property/type rating-property)))
+                     (is (= {:logseq.property/type :node
+                             :db/cardinality :db.cardinality/many}
+                            (select-keys cast-property
+                                         [:logseq.property/type :db/cardinality])))
+                     (is (= #{"ada" "grace"}
+                            (into #{} (map :block/name) cast-values)))
+                     (is (= 1 (count ada-ids)))
+                     (is (every? library-ref-ids
+                                 (concat [(:db/id rating-property)
+                                          (:db/id cast-property)]
+                                         (map :db/id cast-values)))))
                    (p/catch
                     (fn [error]
                       (is false (str error))))
