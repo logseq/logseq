@@ -150,6 +150,12 @@
           (stmt-run stmt bind')
           nil)))))
 
+(defn- exec-many
+  [^js db sql binds]
+  (let [^js stmt (.prepare db sql)]
+    (doseq [bind binds]
+      (stmt-run stmt (normalize-bind bind)))))
+
 (defn- with-transaction
   [^js db tx-depth savepoint-seq tx-body]
   (let [outermost? (zero? @tx-depth)
@@ -195,6 +201,7 @@
         tx-depth (atom 0)
         savepoint-seq (atom 0)]
     (set! (.-exec wrapper) (fn [opts-or-sql] (exec-sql db opts-or-sql)))
+    (set! (.-execMany wrapper) (fn [sql binds] (exec-many db sql binds)))
     (set! (.-transaction wrapper)
           (fn [f]
             (with-transaction db tx-depth savepoint-seq

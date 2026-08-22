@@ -443,14 +443,16 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
-  [db data]
+  [db data & {:keys [prepared?]}]
   (assert (some? db) "sqlite db not exists")
   (.transaction
    db
    (fn [tx]
-     (doseq [item data]
-       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                      :bind item})))))
+     (let [sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"]
+       (if (and prepared? (fn? (.-execMany tx)))
+         (.execMany tx sql data)
+         (doseq [item data]
+           (.exec tx #js {:sql sql :bind item})))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -486,7 +488,8 @@
                            :$content (sqlite-util/write-transit-str data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data)
+        (upsert-addr-content! db data
+                              :prepared? (file-graph-import/staging-repo? repo))
         (when record-performance
           (record-performance {:phase :main-sqlite-persist
                                :elapsed-ms (- (.now js/performance) started)
