@@ -37,6 +37,17 @@
       (string/split #"\s+")
       set))
 
+(defn- first-party-access-token? [claims ^js env]
+  (let [primary-client-id (aget env "COGNITO_CLIENT_ID")]
+    (and (string? primary-client-id)
+         (not (string/blank? primary-client-id))
+         (= "access" (aget claims "token_use"))
+         (= primary-client-id (aget claims "client_id")))))
+
+(defn- operation-scope-allowed? [claims ^js env required-scope]
+  (or (contains? (scopes claims) required-scope)
+      (first-party-access-token? claims env)))
+
 (defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url]
   (let [graph-id (:graph-id path-params)
         path (reduce-kv (fn [result k value]
@@ -86,7 +97,8 @@
   (p/let [claims (auth/auth-claims request env)]
     (cond
       (nil? claims) (http/unauthorized)
-      (not (contains? (scopes claims) (:scope operation))) (http/error-response "insufficient scope" 403)
+      (not (operation-scope-allowed? claims env (:scope operation)))
+      (http/error-response "insufficient scope" 403)
       (= :semantic/graphs-list (:handler operation))
       (handle-semantic-graphs-list env url claims operation)
       :else

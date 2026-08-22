@@ -41,6 +41,28 @@
       (is (empty? (set/intersection migration-deleted-attrs sanitized-attrs)))
       (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
 
+(deftest sanitize-tx-drops-canonical-rtc-ignored-attrs-test
+  (testing "remote txs should follow Logseq built-in property RTC filtering metadata"
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          conn (db-test/create-conn)
+          ignored-attrs #{:logseq.property.view/gallery-card-size
+                          :logseq.property.view/gallery-card-width
+                          :logseq.property.view/gallery-card-height
+                          :logseq.property.view/sort-groups-by-property
+                          :logseq.property.view/sort-groups-desc?
+                          :logseq.property.table/sorting
+                          :logseq.property.asset/last-visit-page}
+          tx-data (into [{:db/id -1
+                          :block/uuid block-uuid
+                          :block/title "remote title"
+                          :logseq.property.asset/last-visit-page 12}]
+                        (map (fn [attr] [:db/add -1 attr "local-only"]))
+                        ignored-attrs)
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)
+          sanitized-attrs (set (mapcat tx-item-attrs sanitized))]
+      (is (empty? (set/intersection ignored-attrs sanitized-attrs)))
+      (is (= "remote title" (:block/title (first sanitized)))))))
+
 (deftest sanitize-tx-drops-ignored-kv-entity-ops-test
   (testing "remote txs should not apply KV entities that are excluded from sync"
     (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"

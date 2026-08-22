@@ -30,7 +30,7 @@
     (storage/init-schema! (.-sql self))
     (set! (.-schema-ready self) true))
   (when-not (.-conn self)
-    (set! (.-conn self) (storage/open-conn (.-sql self))))
+    (set! (.-conn self) (storage/open-conn (.-sql self) {:initialize? true})))
   (.-conn self))
 
 (defn- uuid-string [value]
@@ -102,6 +102,9 @@
          (d/datoms db :avet attribute))
        (map #(d/entity db (:e %)))
        (remove entity-util/hidden?)))
+
+(defn- attribute-value-exists? [db attribute value]
+  (some #(= value (:v %)) (d/datoms db :aevt attribute)))
 
 (defn- parse-limit [url]
   (let [raw (.get (.-searchParams url) "limit")
@@ -337,7 +340,11 @@
      :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
 
 (defn- tree-block [conn node]
-  (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
+  (let [requested-uuid (or (:uuid node) (:block/uuid node))
+        block-uuid (if (common-util/uuid-string? (str requested-uuid))
+                     (uuid (str requested-uuid))
+                     (random-uuid))]
+    (assoc (prepare-block-title! conn (:title node)) :block/uuid block-uuid)))
 
 (defn- insert-tree! [conn target nodes position]
   (let [nodes (vec nodes)
@@ -846,7 +853,7 @@
         (and encoding (not= "base64" encoding)) (http/bad-request "invalid asset encoding")
         (and page-id (not (page? target))) (http/bad-request "invalid asset page-id")
         (nil? bucket) (http/error-response "missing assets bucket" 500)
-        (seq (d/datoms db :avet :logseq.property.asset/checksum checksum))
+        (attribute-value-exists? db :logseq.property.asset/checksum checksum)
         (http/error-response "asset checksum already exists" 409)
         :else
         (let [asset-id (random-uuid)

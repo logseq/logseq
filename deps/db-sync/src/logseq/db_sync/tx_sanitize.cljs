@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.frontend.kv-entity :as kv-entity]))
+            [logseq.db.frontend.kv-entity :as kv-entity]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private retract-entity-ops
   #{:db/retractEntity :db.fn/retractEntity})
@@ -103,13 +104,27 @@
     :logseq.property.embedding/hnsw-label
     :logseq.property.embedding/hnsw-label-updated-at})
 
-(defn- strip-migration-deleted-attrs
+(def ^:private ignored-attrs
+  (into migration-deleted-attrs
+        (keep (fn [[attribute config]]
+                (when (get-in config [:rtc :rtc/ignore-attr-when-syncing])
+                  attribute)))
+        db-property/built-in-properties))
+
+(defn- strip-ignored-attrs
   [tx-data]
   (keep (fn [item]
-          (when-not (and (vector? item)
-                         (<= 4 (count item))
-                         (entity-op? item)
-                         (contains? migration-deleted-attrs (nth item 2)))
+          (cond
+            (map? item)
+            (apply dissoc item ignored-attrs)
+
+            (and (vector? item)
+                 (<= 4 (count item))
+                 (entity-op? item)
+                 (contains? ignored-attrs (nth item 2)))
+            nil
+
+            :else
             item))
         tx-data))
 
@@ -173,7 +188,7 @@
                 :or {drop-missing-retract-ops? false
                      drop-ops-targeting-retracted-entities? false
                      retract-touched-descendants? false}}]
-   (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
+   (let [tx-data* (cond->> (strip-ignored-attrs tx-data)
                     (seq ignored-kv-entities)
                     (strip-ignored-kv-entity-ops db)
                     drop-missing-retract-ops?

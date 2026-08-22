@@ -139,6 +139,8 @@
                    block-id (random-uuid)
                    reference-id (random-uuid)
                    created-reference-id (random-uuid)
+                   requested-block-id (str (random-uuid))
+                   requested-child-id (str (random-uuid))
                    _ (d/transact! (.-conn self) [{:db/ident :logseq.class/Page}
                                                   {:block/uuid page-id :block/name "page" :block/title "Page"
                                                    :block/tags :logseq.class/Page}
@@ -151,9 +153,11 @@
                    calls (atom [])
                    requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
                                                     {:position "append"
-                                                     :blocks [{:title (str "New block links to [[Reference]], [[New Reference]], and [["
+                                                     :blocks [{:uuid requested-block-id
+                                                               :title (str "New block links to [[Reference]], [[New Reference]], and [["
                                                                            block-id "]]")
-                                                               :children [{:title "Nested block links to [[Reference]]"}]}]})
+                                                               :children [{:uuid requested-child-id
+                                                                           :title "Nested block links to [[Reference]]"}]}]})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
                                                     {:title "Edited block links to [[Reference]]"})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
@@ -176,7 +180,8 @@
                      (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
                               insert-body (json-body (first responses))]
                        (is (= [201 200 204] (mapv #(.-status %) responses)))
-                       (is (uuid? (some-> (get-in insert-body [:blocks 0 :children 0 :uuid]) uuid)))
+                       (is (= (str requested-block-id) (get-in insert-body [:blocks 0 :uuid])))
+                       (is (= (str requested-child-id) (get-in insert-body [:blocks 0 :children 0 :uuid])))
                        (let [[[_ inserted-blocks _ _] [_ nested-blocks _ _]] (filter #(= :insert (first %)) @calls)
                              [_ saved-block _] (first (filter #(= :save (first %)) @calls))
                              expected-refs #{reference-id created-reference-id block-id}]
@@ -1067,6 +1072,70 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-asset-upload-deduplicates-checksum-without-avet-index-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [checksum (apply str (repeat 64 "a"))
+                   conn (d/create-conn {:logseq.property.asset/checksum
+                                        {:db/cardinality :db.cardinality/one}})
+                   _ (d/transact! conn [{:db/id -1
+                                         :logseq.property.asset/checksum checksum}])
+                   puts (atom 0)
+                   bucket #js {:put (fn [& _]
+                                      (swap! puts inc)
+                                      (p/resolved #js {}))}
+                   self #js {:sql sql
+                             :conn conn
+                             :schema-ready true
+                             :env #js {"LOGSEQ_SYNC_ASSETS" bucket}}
+                   request (js/Request.
+                            (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                 "&file-name=duplicate.png&size=4&checksum=" checksum)
+                            #js {:method "POST"
+                                 :headers #js {"content-type" "application/octet-stream"}
+                                 :body (js/Blob. #js [(js/Uint8Array. #js [1 2 3 4])])})]
+               (-> (p/let [response (sync-handler/handle-http self request)
+                           body (json-body response)]
+                     (is (= 409 (.-status response)))
+                     (is (= "asset checksum already exists" (:error body)))
+                     (is (zero? @puts)))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-asset-upload-initializes-built-ins-for-empty-worker-graph-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [checksum (apply str (repeat 64 "b"))
+                   puts (atom 0)
+                   bucket #js {:put (fn [& _]
+                                      (swap! puts inc)
+                                      (p/resolved #js {}))
+                              :delete (fn [& _] (p/resolved nil))}
+                   self #js {:sql sql
+                             :schema-ready true
+                             :env #js {"LOGSEQ_SYNC_ASSETS" bucket}}
+                   request (js/Request.
+                            (str "http://localhost/semantic/assets?graph-id=graph-1"
+                                 "&file-name=photo.png&size=4&checksum=" checksum)
+                            #js {:method "POST"
+                                 :headers #js {"content-type" "application/octet-stream"}
+                                 :body (js/Blob. #js [(js/Uint8Array. #js [1 2 3 4])])})]
+               (-> (p/let [response (sync-handler/handle-http self request)]
+                     (is (= 201 (.-status response)))
+                     (is (some? (d/entity @(.-conn self) :logseq.class/Root)))
+                     (is (some? (d/entity @(.-conn self) :logseq.class/Asset)))
+                     (is (= 1 @puts)))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
 (deftest semantic-base64-asset-upload-decodes-before-r2-test
   (async done
          (with-memory-sql-async
@@ -1641,6 +1710,26 @@
                    (is (contains? probe-set "select 1 from sync_meta limit 1"))))
                (p/then (fn []
                          (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest sync-events-requests-snapshot-when-cursor-is-behind-test
+  (async done
+         (let [self #js {:sql (empty-sql)}
+               {:keys [request url]} (request-url "/sync/graph-1/events?graph-id=graph-1&since=6")]
+           (-> (p/with-redefs [sync-handler/<ready-for-sync? (fn [& _] (p/resolved true))
+                               storage/get-t (fn [_] 7)]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/events}})
+                         body (.text resp)]
+                   (is (= 200 (.-status resp)))
+                   (is (= "text/event-stream" (.get (.-headers resp) "content-type")))
+                   (is (string/includes? body "event: reset"))
+                   (is (string/includes? body "snapshot-required"))))
+               (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))

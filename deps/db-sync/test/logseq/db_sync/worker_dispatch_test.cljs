@@ -302,6 +302,67 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest first-party-mobile-access-token-can-create-assets-without-custom-oauth-scope-test
+  (async done
+         (let [{:keys [request]} (semantic-request "/api/v1/graphs/graph-1/assets" "" "POST")
+               claims #js {"sub" "user-1"
+                           "client_id" "mobile-client"
+                           "token_use" "access"
+                           "scope" "aws.cognito.signin.user.admin"}
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "COGNITO_CLIENT_ID" "mobile-client"
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row false)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (= "/semantic/assets"
+                          (.-pathname (js/URL. (.-url (first @forwarded))))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest additional-client-access-token-still-requires-custom-oauth-scope-test
+  (async done
+         (let [{:keys [request]} (semantic-request "/api/v1/graphs/graph-1/assets" "" "POST")
+               claims #js {"sub" "user-1"
+                           "client_id" "external-client"
+                           "token_use" "access"
+                           "scope" "aws.cognito.signin.user.admin"}
+               env #js {"COGNITO_CLIENT_ID" "mobile-client"
+                        "COGNITO_CLIENT_IDS" "external-client"}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest first-party-id-token-still-requires-custom-oauth-scope-test
+  (async done
+         (let [{:keys [request]} (semantic-request "/api/v1/graphs/graph-1/assets" "" "POST")
+               claims #js {"sub" "user-1"
+                           "aud" "mobile-client"
+                           "token_use" "id"}
+               env #js {"COGNITO_CLIENT_ID" "mobile-client"}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest semantic-api-rejects-e2ee-graphs-before-durable-object-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")

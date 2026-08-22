@@ -53,7 +53,7 @@
   (ensure-schema! self)
   (when-not (.-conn self)
     (set! (.-conn self)
-          (storage/open-conn (.-sql self)))))
+          (storage/open-conn (.-sql self) {:initialize? true}))))
 
 (defn t-now [^js self]
   (ensure-schema! self)
@@ -669,6 +669,18 @@
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
 
+(defn- handle-sync-events
+  [^js self ^js url]
+  (let [raw-since (.get (.-searchParams url) "since")
+        since (if (some? raw-since) (parse-int raw-since) 0)
+        graph-id (.get (.-searchParams url) "graph-id")]
+    (if (or (not (number? since)) (neg? since))
+      (http/bad-request "invalid since")
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (ws/events-response self since (t-now self)))))))
+
 (defn- normalize-diagnostic-block
   [{:keys [block/uuid block/parent block/page block/order] :as block}]
   (cond-> block
@@ -862,6 +874,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/events
+    (handle-sync-events self url)
 
     :sync/checksum-diagnostics
     (handle-sync-checksum-diagnostics self request)
