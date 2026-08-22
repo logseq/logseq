@@ -1141,7 +1141,7 @@
                           (not in-list?))
                  ["\n\n"]))))
 
-(defn- ast->text
+(defn- ^:large-vars/cleanup-todo ast->text
   "Given an ast block, convert it to text for use as a block title. This is a
   slimmer version of handler.export.text/export-blocks-as-markdown"
   [ast-block {:keys [log-fn]
@@ -1160,7 +1160,18 @@
                       (vec (concat ["~~"] (mapcat extract coll') ["~~"]))
                       "Highlight"
                       (vec (concat ["^^"] (mapcat extract coll') ["^^"]))
-                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))]
+                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))
+                extract-table
+                (fn [{:keys [header groups]}]
+                  (let [row->text (fn [row]
+                                    (str "| "
+                                         (string/join " | " (map #(apply str (mapcat extract %)) row))
+                                         " |"))
+                        header-lines (when (seq header)
+                                       [(row->text header)
+                                        (str "| " (string/join " | " (repeat (count header) "---")) " |")])
+                        body-lines (map row->text (mapcat identity groups))]
+                    [(string/join "\n" (concat header-lines body-lines))]))]
             (cond
               (and (vector? node) (#{"Inline_Html" "Plain" "Inline_Hiccup"} (first node)))
               [(second node)]
@@ -1195,6 +1206,8 @@
                "```"]
               (and (vector? node) (= (first node) "Displayed_Math"))
               ["$$" (second node) "$$"]
+              (and (vector? node) (= (first node) "Table"))
+              (extract-table (second node))
               (and (vector? node) (= (first node) "List"))
               (extract-block-list (second node))
               :else
@@ -1820,10 +1833,12 @@
 
 (defn- handle-math
   "If a block's entire content is a single displayed math formula, convert to #Math node.
-  Detects blocks whose title is entirely delimited by $$ markers."
+  Detects blocks whose title is entirely delimited by $$ markers. Quote-blocks retain their
+  quote type and math delimiters."
   [block]
   (let [title (string/trim (:block/title block))]
-    (if (and (string/starts-with? title "$$")
+    (if (and (not= :quote (:logseq.property.node/display-type block))
+             (string/starts-with? title "$$")
              (string/ends-with? title "$$")
              (> (count title) 4)
              ;; ensure there's no nested $$ pair (i.e. not two separate inline formulas)
@@ -1932,8 +1947,9 @@
 (defn- handle-code-blocks
   "Returns a vector of block and optional block children tx. If a block
   contains code fence(s) i.e. ```, converts block to a #Code node.  If user
-  enables :extract-code-snippets? option, multiple code fences are extracted out
-  of text and put into children blocks in the order they appear"
+  enables the `:extract-code-snippets?` option, multiple code fences are extracted out
+  of text and put into children blocks in the order they appear. Quote-blocks containing
+  only one code fence retain their quote type and code fence."
   [block' options]
   (let [title (:block/title block')
         has-fence? (and (string? title) (at-least-two? title "```"))
@@ -1948,13 +1964,15 @@
                                         (some #(not (string/blank? %)) text-parts))]
             (cond
               pure-single-code?
-              (let [{:keys [text lang]} (first code-segs)]
-                [(cond-> (assoc block'
-                                :block/title text
-                                :block/tags [:logseq.class/Code-block]
-                                :logseq.property.node/display-type :code)
-                   lang (assoc :logseq.property.code/lang lang))
-                 []])
+              (if (= :quote (:logseq.property.node/display-type block'))
+                [block' []]
+                (let [{:keys [text lang]} (first code-segs)]
+                  [(cond-> (assoc block'
+                                  :block/title text
+                                  :block/tags [:logseq.class/Code-block]
+                                  :logseq.property.node/display-type :code)
+                     lang (assoc :logseq.property.code/lang lang))
+                   []]))
               has-mixed-content?
               (let [remaining-title (-> (string/join "\n" text-parts)
                                         (string/replace #"\n{2,}" "\n")
