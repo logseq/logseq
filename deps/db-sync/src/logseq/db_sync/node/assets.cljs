@@ -1,6 +1,8 @@
 (ns logseq.db-sync.node.assets
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            ["stream" :as stream]
+            ["stream/promises" :as stream-promises]
             [promesa.core :as p]))
 
 (defn- ensure-dir! [dir]
@@ -22,6 +24,13 @@
     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
     :else (js/Uint8Array. data)))
 
+(defn- <write-body! [path body]
+  (if (fn? (some-> body .-getReader))
+    (.pipeline stream-promises
+               (.fromWeb (.-Readable stream) body)
+               (.createWriteStream fs path))
+    (.writeFile (.-promises fs) path (normalize-bytes body))))
+
 (defn make-bucket [base-dir]
   (ensure-dir! base-dir)
   #js {:get (fn [key]
@@ -40,11 +49,10 @@
               (let [file-path (node-path/join base-dir key)
                     meta-file (meta-path file-path)
                     dir (node-path/dirname file-path)
-                    data (normalize-bytes body)
                     metadata (or (aget opts "httpMetadata") #js {})
                     custom (or (aget opts "customMetadata") #js {})]
                 (ensure-dir! dir)
-                (p/let [_ (.writeFile (.-promises fs) file-path data)
+                (p/let [_ (<write-body! file-path body)
                         _ (write-meta! meta-file #js {:contentType (aget metadata "contentType")
                                                       :contentEncoding (aget metadata "contentEncoding")
                                                       :cacheControl (aget metadata "cacheControl")

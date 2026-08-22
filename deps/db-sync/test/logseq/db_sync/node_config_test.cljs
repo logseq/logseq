@@ -29,3 +29,13 @@
       (is (= "filesystem" (:assets-driver cfg)))))
   (testing "unsupported assets driver throws"
     (is (throws? #(config/normalize-config {:assets-driver "s3"})))))
+
+(deftest normalize-config-asset-link-secret-test
+  (testing "generates a process-local signing secret by default"
+    (let [cfg (config/normalize-config {})]
+      (is (string? (:asset-link-secret cfg)))
+      (is (seq (:asset-link-secret cfg)))))
+  (testing "preserves an explicitly configured signing secret"
+    (is (= "configured-secret"
+           (:asset-link-secret
+            (config/normalize-config {:asset-link-secret "configured-secret"}))))))

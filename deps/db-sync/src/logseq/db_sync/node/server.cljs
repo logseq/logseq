@@ -28,6 +28,7 @@
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              (aset "ASSET_LINK_SECRET" (:asset-link-secret cfg))
               ;; Node adapter serves snapshot transit stream without gzip to avoid
               ;; browser/adapter content-encoding mismatches during graph download.
               (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")

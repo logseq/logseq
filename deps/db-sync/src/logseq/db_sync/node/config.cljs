@@ -16,6 +16,7 @@
      :data-dir (or (env-value env "DB_SYNC_DATA_DIR") "data/db-sync")
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
      :assets-driver (or (env-value env "DB_SYNC_ASSETS_DRIVER") "filesystem")
+     :asset-link-secret (env-value env "ASSET_LINK_SECRET")
      :log-level (or (env-value env "DB_SYNC_LOG_LEVEL") "info")
      :cognito-issuer (env-value env "COGNITO_ISSUER")
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")
@@ -23,7 +24,7 @@
 
 (def ^:private allowed-config-keys
   [:port :base-url :data-dir :storage-driver :assets-driver :log-level
-   :cognito-issuer :cognito-client-id :cognito-jwks-url])
+   :asset-link-secret :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
   (let [defaults {:port 8080
@@ -32,6 +33,7 @@
                   :assets-driver "filesystem"
                   :log-level "info"}
         merged (merge defaults (config-from-env) overrides)
+        merged (update merged :asset-link-secret #(or % (str (random-uuid))))
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
     (when-not (#{"sqlite"} storage-driver)

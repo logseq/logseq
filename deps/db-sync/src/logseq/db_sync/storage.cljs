@@ -8,6 +8,7 @@
    [logseq.db-sync.common :as common]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.common.sqlite :as common-sqlite]
+   [logseq.db.sqlite.create-graph :as sqlite-create-graph]
    [logseq.db.frontend.schema :as db-schema]))
 
 (def ^:private tx-log-outliner-op-migration-sql
@@ -209,10 +210,13 @@
                (append-tx-for-tx-report sql tx-report))))
 
 (defn open-conn
-  [sql]
-  (init-schema! sql)
-  (let [storage (new-sqlite-storage sql)
-        schema db-schema/schema
-        conn (common-sqlite/get-storage-conn storage schema)]
-    (listen-db-updates! sql conn)
-    conn))
+  ([sql] (open-conn sql {}))
+  ([sql {:keys [initialize?]}]
+   (init-schema! sql)
+   (let [storage (new-sqlite-storage sql)
+         schema db-schema/schema
+         conn (common-sqlite/get-storage-conn storage schema)]
+     (when (and initialize? (not (d/entity @conn :logseq.class/Root)))
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}")))
+     (listen-db-updates! sql conn)
+     conn)))

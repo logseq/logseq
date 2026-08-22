@@ -1,5 +1,6 @@
 (ns logseq.db-sync.node.graph
-  (:require [logseq.db-sync.node.storage :as storage]))
+  (:require [logseq.db-sync.node.storage :as storage]
+            [logseq.db-sync.storage :as sync-storage]))
 
 (defn- make-state []
   (let [sockets (atom #{})]
@@ -12,6 +13,7 @@
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              (aset "ASSET_LINK_SECRET" (:asset-link-secret cfg))
               ;; Keep node-adapter snapshot stream uncompressed.
               (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
               (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
@@ -24,13 +26,14 @@
 (defn graph-context
   [{:keys [config index-db assets-bucket]} graph-id]
   (let [{:keys [sql]} (storage/open-graph-db (:data-dir config) graph-id)
+        conn (sync-storage/open-conn sql {:initialize? true})
         state (make-state)
         env (env-object config index-db assets-bucket)]
     #js {:state state
          :env env
          :sql sql
-         :conn nil
-         :schema-ready false}))
+         :conn conn
+         :schema-ready true}))
 
 (defn get-or-create-graph
   [registry deps graph-id]
