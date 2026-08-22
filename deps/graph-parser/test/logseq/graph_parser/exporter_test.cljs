@@ -2024,6 +2024,39 @@ abc
       (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
           "Structured block page reference still points to the same journal entity"))))
 
+(deftest-async import-does-not-corrupt-built-in-property-when-tag-name-collides
+  ;; logseq/db-test#1009: #scheduled with convert-all-tags reused the built-in
+  ;; :logseq.property/scheduled entity and produced an invalid hybrid.
+  (p/let [file (write-temp-graph-file
+                "pages/home.md"
+                "- DONE figure out how to schedule things for [[February 22nd, 2021]] #scheduled\n")
+          conn (db-test/create-conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})
+          scheduled-property (d/entity @conn :logseq.property/scheduled)
+          scheduled-pages (d/q '[:find [?e ...]
+                                 :where
+                                 [?e :block/name "scheduled"]]
+                               @conn)
+          block (db-test/find-block-by-content @conn #"figure out how to schedule")]
+    (is (empty? (:errors (db-validate/validate-local-db! @conn)))
+        "Graph validates after importing a tag named like a built-in property")
+    (is (= :logseq.property/scheduled (:db/ident scheduled-property))
+        "Built-in scheduled property keeps its ident")
+    (is (= :datetime (:logseq.property/type scheduled-property))
+        "Built-in scheduled property keeps its type")
+    (is (true? (:logseq.property/built-in? scheduled-property))
+        "Built-in scheduled property stays built-in")
+    (is (some? block)
+        "Block with #scheduled imports")
+    (is (nil? (some #(= :user.class/scheduled (:db/ident (d/entity @conn %))) scheduled-pages))
+        "Does not create invalid :user.class/scheduled hybrid entity")
+    (is (some #(let [e (d/entity @conn %)]
+                 (and (= "scheduled" (:block/name e))
+                      (not= :logseq.property/scheduled (:db/ident e))
+                      (not (ldb/class? e))))
+              scheduled-pages)
+        "User #scheduled remains a page reference rather than a class")))
+
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
