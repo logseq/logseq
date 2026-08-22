@@ -48,16 +48,11 @@
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta)
             (imported-data? tx-meta))
-    (let [rebuild-refs (if (imported-data? tx-meta)
-                         (let [page-or-object? (memoize outliner-pipeline/page-or-object?-helper)]
-                           #(outliner-pipeline/db-rebuild-block-refs
-                             db-after % :page-or-object?-memoized page-or-object?))
-                         #(outliner-core/rebuild-block-refs db-after %))]
-      (mapcat (fn [block]
-                (when (and (d/entity db-after (:db/id block))
-                           ;; don't compute refs for reactions
-                           (not (:logseq.property.reaction/target (d/entity db-after (:db/id block)))))
-                  (let [refs (->> (rebuild-refs block) set)
+    (mapcat (fn [block]
+              (when (and (d/entity db-after (:db/id block))
+                         ;; don't compute refs for reactions
+                         (not (:logseq.property.reaction/target (d/entity db-after (:db/id block)))))
+                (let [refs (->> (outliner-core/rebuild-block-refs db-after block) set)
                       old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
                                     (map :db/id)
                                     set)
@@ -65,14 +60,14 @@
                                    (set/difference refs old-refs))
                       retracted-refs (when (and (seq old-refs) (not= refs old-refs))
                                        (set/difference old-refs refs))]
-                    (concat
-                     (map (fn [id]
-                            [:db/retract (:db/id block) :block/refs id])
-                          retracted-refs)
-                     (map (fn [id]
-                            [:db/add (:db/id block) :block/refs id])
-                          added-refs)))))
-              blocks))))
+                  (concat
+                   (map (fn [id]
+                          [:db/retract (:db/id block) :block/refs id])
+                        retracted-refs)
+                   (map (fn [id]
+                          [:db/add (:db/id block) :block/refs id])
+                        added-refs)))))
+            blocks)))
 
 (defn- journal-title
   [db journal-day]
