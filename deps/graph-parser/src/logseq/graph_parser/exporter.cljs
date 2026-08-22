@@ -3129,7 +3129,8 @@
   (let [property-name' (name property-name)]
     (or (string/blank? value)
         (contains? #{"true" "false"} value)
-        (contains? separated-property-names property-name')
+        (and (contains? separated-property-names property-name')
+             (nil? (bulk-page-ref-values value)))
         (and (contains? ignored-ref-property-names property-name')
              (some? (bulk-page-ref-values value)))
         (journal-page-ref-value? value journal-title-formatters journal-title-cache)
