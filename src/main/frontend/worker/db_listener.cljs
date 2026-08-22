@@ -12,6 +12,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defmulti listen-db-changes
@@ -90,10 +91,59 @@
                      [(:block/uuid block) block])))))
         tx-data))
 
+(def ^:private hierarchy-attrs
+  "Attributes that change the path a page's descendants display."
+  #{:block/title :block/parent})
+
+(defn- descendant-pages
+  "Every page below `pages`. A page's blocks are also its `:block/_parent`, so the
+  page filter is what keeps this to the hierarchy rather than the whole outline."
+  [pages]
+  (loop [queue (seq pages)
+         seen #{}
+         acc []]
+    (if-let [page (first queue)]
+      (if (contains? seen (:db/id page))
+        (recur (next queue) seen acc)
+        (let [children (filter ldb/internal-page? (:block/_parent page))]
+          (recur (concat (next queue) children)
+                 (conj seen (:db/id page))
+                 (into acc children))))
+      acc)))
+
+(defn- hierarchy-descendant-replacements
+  "A page's title is part of the path its descendants display, but renaming or
+  moving a page does not touch those descendants, so datascript never bumps their
+  `:block/tx-id` and `canonical-replacements` never sees them. Re-emit the
+  subtree here, or every path containing the renamed page stays stale until
+  reload."
+  [db-after tx-data existing-uuids]
+  (let [changed (into #{}
+                      (comp
+                       (filter (fn [datom]
+                                 (and (:added datom)
+                                      (contains? hierarchy-attrs (:a datom)))))
+                       (keep (fn [datom] (d/entity db-after (:e datom))))
+                       (filter ldb/internal-page?))
+                      tx-data)]
+    (when (seq changed)
+      (into {}
+            (comp
+             (remove (fn [page] (contains? existing-uuids (:block/uuid page))))
+             (keep (fn [page]
+                     (let [block (block-handler/canonical-block db-after page)]
+                       ;; Only pages that display a path can go stale.
+                       (when (:block.temp/hierarchy-title block)
+                         [(:block/uuid block) block])))))
+            (descendant-pages changed)))))
+
 (defn- build-render-delta
-  [repo {:keys [db-after tx-meta] :as tx-report}
+  [repo {:keys [db-after tx-data tx-meta] :as tx-report}
    {:keys [affected-keys deleted-block-uuids]}]
   (let [blocks (canonical-replacements tx-report)
+        blocks (merge blocks
+                      (hierarchy-descendant-replacements
+                       db-after tx-data (set (keys blocks))))
         deleted-block-uuids (reduce disj deleted-block-uuids (keys blocks))]
     (render-delta/build
      {:graph-id repo

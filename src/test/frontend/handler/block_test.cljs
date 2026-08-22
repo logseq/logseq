@@ -64,6 +64,29 @@
                          :block/tags [(d/entid @conn :logseq.class/Tag)]}]
     (is (= "Project/Milestone" (block-handler/block-unique-title plain-class-map :db @conn)))))
 
+(deftest block-unique-title-hierarchy-follows-show-hierarchy-setting
+  (let [block {:block/title "Docs"
+               :block/tags [{:db/ident :logseq.class/Page}]
+               :block.temp/hierarchy-title "Superhuman/Docs"}
+        title #(block-handler/block-unique-title block :with-tags? false)]
+    (testing "off by default"
+      (with-redefs [state/show-hierarchy? (constantly false)]
+        (is (= "Docs" (title)))))
+    (testing "on when enabled"
+      (with-redefs [state/show-hierarchy? (constantly true)]
+        (is (= "Superhuman/Docs" (title)))))))
+
+(deftest block-unique-title-hierarchy-keeps-caller-supplied-title
+  (testing "a prepared display title, e.g. a search snippet, wins over the hierarchy"
+    (let [block {:block/title "Docs"
+                 :block/tags [{:db/ident :logseq.class/Page}]
+                 :block.temp/hierarchy-title "Superhuman/Docs"}]
+      (with-redefs [state/show-hierarchy? (constantly true)]
+        (is (= "highlighted"
+               (block-handler/block-unique-title block
+                                                 :title "highlighted"
+                                                 :with-tags? false)))))))
+
 (deftest get-top-level-blocks-uses-original-block-without-renderer-rehydration-test
   (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
         block {:db/id 1
