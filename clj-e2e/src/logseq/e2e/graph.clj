@@ -84,6 +84,7 @@
       (w/click rtc-graph-e2ee-toggle)))
 
   (w/click new-graph-submit)
+  (w/wait-for-not-visible new-graph-dialog)
 
   (when enable-sync?
     (maybe-input-e2ee-password)

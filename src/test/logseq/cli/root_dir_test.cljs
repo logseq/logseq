@@ -3,8 +3,10 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
-            [logseq.cli.root-dir :as root-dir]))
+            [logseq.cli.root-dir :as root-dir]
+            [logseq.common.path :as path]))
 
 (deftest ensure-root-dir-creates-missing-dir
   (testing "creates missing directories and returns normalized path"
@@ -14,7 +16,7 @@
       (let [resolved (root-dir/ensure-root-dir! target)]
         (is (fs/existsSync target))
         (is (.isDirectory (fs/statSync target)))
-        (is (= (node-path/resolve target) resolved))))))
+        (is (= (string/replace (node-path/resolve target) #"\\" "/") resolved))))))
 
 (deftest ensure-root-dir-rejects-file-path
   (testing "rejects paths that are files"
@@ -27,7 +29,7 @@
         (catch :default e
           (let [data (ex-data e)]
             (is (= :root-dir-permission (:code data)))
-            (is (= (node-path/resolve target) (:path data)))))))))
+            (is (= (string/replace (node-path/resolve target) #"\\" "/") (:path data)))))))))
 
 (deftest ensure-root-dir-rejects-read-only-dir
   (testing "rejects directories without write permission"
@@ -44,12 +46,12 @@
 
 (deftest normalize-root-dir-default
   (testing "defaults to ~/logseq"
-    (let [expected (node-path/resolve (node-path/join (.homedir os) "logseq"))
+    (let [expected (path/path-join (.homedir os) "logseq")
           resolved (root-dir/normalize-root-dir nil)]
       (is (= expected resolved)))))
 
 (deftest graphs-dir-derived-from-root-dir
   (testing "graphs dir is derived as <root-dir>/graphs"
     (let [root-dir-path (node-path/join (.homedir os) "custom-logseq")]
-      (is (= (node-path/resolve root-dir-path "graphs")
+      (is (= (string/replace (node-path/resolve root-dir-path "graphs") #"\\" "/")
              (root-dir/graphs-dir root-dir-path))))))

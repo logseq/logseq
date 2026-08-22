@@ -1,7 +1,6 @@
 (ns logseq.cli.command.graph
   "Graph-related CLI commands."
   (:require ["fs" :as fs]
-            ["path" :as node-path]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
@@ -13,6 +12,7 @@
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.path :as path]
             [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]))
 
@@ -325,14 +325,14 @@
 (defn- export-root-path
   [config repo]
   (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
-    (node-path/join (cli-server/graphs-dir config)
+    (path/path-join (cli-server/graphs-dir config)
                     graph-dir-name
                     export-root-dir-name)))
 
 (defn- default-sqlite-export-path
   [config repo]
   (when-let [export-root (export-root-path config repo)]
-    (node-path/join export-root
+    (path/path-join export-root
                     (str (graph-dir/graph-dir-key->encoded-dir-name
                           (graph-dir/repo->graph-dir-key repo))
                          "_"

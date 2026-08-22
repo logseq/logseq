@@ -1,6 +1,6 @@
 (ns logseq.e2e.rtc-basic-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures]]
+   [clojure.test :refer [deftest is testing use-fixtures]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
@@ -11,8 +11,7 @@
    [logseq.e2e.page :as page]
    [logseq.e2e.rtc :as rtc]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-2-pages)
 
@@ -89,10 +88,8 @@
         (w/with-page @*page2
           (rtc/wait-tx-update-to remote-tx)
           (util/search-and-click test-page)
-          (w/wait-for ".references .ls-block")
-          ;; ensure ref exists
-          (let [refs (w/all-text-contents ".references .ls-block .block-title-wrap")]
-            (is (= refs [block-title]))))))
+          ;; ensure ref exists (wait-linked-reference-text throws if not found within timeout)
+          (rtc/wait-linked-reference-text block-title))))
 
     (testing "cleanup"
       (w/with-page @*page2
