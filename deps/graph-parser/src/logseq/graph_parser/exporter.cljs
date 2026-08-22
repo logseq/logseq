@@ -3229,7 +3229,7 @@
   (cond
     (every? bulk-page-ref-values values) :node
     (every? #(re-matches #"https?://\S+" %) values) :url
-    (every? #(re-matches #"\d+" %) values) :number
+    (every? #(re-matches #"\d+(?:\.\d+)?" %) values) :number
     :else :default))
 
 (defn- bulk-property-value

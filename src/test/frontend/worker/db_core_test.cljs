@@ -60,7 +60,9 @@
       (:block/name entity) [:page (:block/name entity)]
       (contains? entity :logseq.property/value)
       [:value (:logseq.property/value entity)
-       (some-> (:logseq.property/created-from-property entity) :db/ident)]
+       (some->> (:logseq.property/created-from-property entity)
+                :db/id
+                (semantic-import-entity-key db))]
       (:block/title entity)
       [:title (:block/title entity)
        (some-> (:block/page entity) :block/name)
@@ -2700,11 +2702,13 @@
    {:path "pages/library.md"
     :file/content (str "title:: Library\n"
                        "rating:: 5\n"
+                       "score:: 5.9\n"
                        "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
+                       "score:: 6.8\n"
                        "tagline:: A story\n"
                        "cast:: [[Ada]]")}
    {:path "pages/genres.md"
