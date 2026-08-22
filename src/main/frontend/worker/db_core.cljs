@@ -336,6 +336,40 @@
    :parameters (select-keys ex-data [:path])
    :diagnostics {:message msg}})
 
+(defn- prepare-file-graph-import-options!
+  [repo opts phase record-performance notifications issues staged-assets]
+  (let [notify-user (fn [notification]
+                      (swap! notifications conj notification)
+                      (when (= :error (:level notification))
+                        (swap! issues conj
+                               (recoverable-notification-issue @phase notification))))]
+    (when record-performance
+      (swap! *import-performance-recorders assoc repo record-performance))
+    (-> opts
+        (assoc :notify-user notify-user
+               :record-issue #(swap! issues conj %)
+               :recoverable-error? recoverable-file-import-error-codes
+               :single-persistent-document-batch? true
+               :simple-page-property-batch? true
+               :log-fn (fn [& args]
+                         (log/info :import-file-graph {:args args}))
+               :record-performance record-performance
+               :<read-file (fn [file]
+                             (let [started (.now js/performance)
+                                   content (file-content file)]
+                               (when record-performance
+                                 (record-performance
+                                  {:phase :worker-file-access
+                                   :elapsed-ms (- (.now js/performance) started)
+                                   :path (:path file)
+                                   :bytes (count content)}))
+                               (p/resolved content)))
+               :<get-file-stat (constantly nil)
+               :<read-and-copy-asset
+               (fn [file assets buffer-handler]
+                 (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
+        (dissoc :set-ui-state))))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (let [run-id (or (:run-id opts) (str (random-uuid)))
@@ -347,36 +381,8 @@
       (let [notifications (atom [])
             issues (atom [])
             staged-assets (atom [])
-            notify-user (fn [notification]
-                          (swap! notifications conj notification)
-                          (when (= :error (:level notification))
-                            (swap! issues conj
-                                   (recoverable-notification-issue @phase notification))))
-            _ (when record-performance
-                (swap! *import-performance-recorders assoc repo record-performance))
-            options (-> opts
-                        (assoc :notify-user notify-user
-                               :record-issue #(swap! issues conj %)
-                               :recoverable-error? recoverable-file-import-error-codes
-                               :single-persistent-document-batch? true
-                               :simple-page-property-batch? true
-                               :log-fn (fn [& args]
-                                         (log/info :import-file-graph {:args args}))
-                               :record-performance record-performance
-                               :<read-file (fn [file]
-                                             (let [started (.now js/performance)
-                                                   content (file-content file)]
-                                               (when record-performance
-                                                 (record-performance
-                                                  {:phase :worker-file-access
-                                                   :elapsed-ms (- (.now js/performance) started)
-                                                   :path (:path file)
-                                                   :bytes (count content)}))
-                                               (p/resolved content)))
-                               :<get-file-stat (constantly nil)
-                               :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                       (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-                        (dissoc :set-ui-state))]
+            options (prepare-file-graph-import-options!
+                     repo opts phase record-performance notifications issues staged-assets)]
         (-> (p/let [import-started (.now js/performance)
                     _ (reset! phase :import-files)
                     result (gp-exporter/export-file-graph conn conn config-file files options)

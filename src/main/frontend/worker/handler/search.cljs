@@ -353,6 +353,25 @@
       (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
         (p/recur)))))
 
+(defn- prepare-block-index-input
+  [db entities record-performance]
+  (let [started (.now js/performance)
+        import-index-context (when entities (search/import-index-context entities))
+        blocks (if import-index-context
+                 (into [] (filter :block/uuid) entities)
+                 (let [hidden-node? (search/make-hidden-entity-predicate)]
+                   (->> (d/datoms db :avet :block/uuid)
+                        (keep #(d/entity db (:e %)))
+                        (remove hidden-node?)
+                        vec)))]
+    (when record-performance
+      (record-performance {:phase :search-entity-read
+                           :elapsed-ms (- (.now js/performance) started)
+                           :entities (count entities)
+                           :blocks (count blocks)}))
+    {:blocks blocks
+     :import-index-context import-index-context}))
+
 (defn- <build-blocks-index!
   "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   ([repo search-db conn build-id]
@@ -361,22 +380,10 @@
                                   :or {batch-size search-index-build-batch-size
                                        time-budget-ms search-index-build-time-budget-ms}}]
    (ensure-active-search-index-build! repo build-id)
-   (let [input-started (.now js/performance)
-         db @conn
-         import-index-context (when entities (search/import-index-context entities))
-         blocks (if import-index-context
-                  (into [] (filter :block/uuid) entities)
-                  (let [hidden-node? (search/make-hidden-entity-predicate)]
-                    (->> (d/datoms db :avet :block/uuid)
-                         (keep #(d/entity db (:e %)))
-                         (remove hidden-node?)
-                         vec)))
+   (let [db @conn
+         {:keys [blocks import-index-context]}
+         (prepare-block-index-input db entities record-performance)
          total (count blocks)
-         _ (when record-performance
-             (record-performance {:phase :search-entity-read
-                                  :elapsed-ms (- (.now js/performance) input-started)
-                                  :entities (count entities)
-                                  :blocks total}))
          vector-index (worker-state/get-vector-index repo)
          index-opts {:include-vector-title? (some? vector-index)
                      :known-visible? true
