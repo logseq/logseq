@@ -5,11 +5,13 @@
             [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
+            [frontend.components.select :as select]
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "view-resource-test")
@@ -286,6 +288,72 @@
            (render-static
             (views/filter-value-select {} table property #{value-uuid} :is 0 {}))
            "Referenced value")))))
+
+(deftest add-filter-picker-preserves-pre-existing-property-clauses-test
+  (let [property-ident :user.property/tags
+        value-a (random-uuid)
+        value-b (random-uuid)
+        value-c (random-uuid)
+        initial-filters {:or? false
+                         :filters [[property-ident :is #{value-a}]]}
+        filters* (atom initial-filters)
+        property-state* (atom {:db/ident property-ident
+                               :block/title "Tags"
+                               :logseq.property/type :default})
+        filter-data-state* (atom {:values []})
+        state-atoms [property-state* filter-data-state*]
+        render-picker-option
+        (fn []
+          (let [state-call* (atom -1)
+                option* (atom nil)]
+            (with-redefs [hooks/use-state
+                          (fn [_initial]
+                            (let [state* (nth state-atoms (swap! state-call* inc))]
+                              [@state* #(reset! state* %)]))
+                          hooks/use-effect! (fn [& _args])
+                          select/select (fn [option]
+                                          (reset! option* option)
+                                          [:span])]
+              (render-static
+               (views/filter-property
+                nil
+                []
+                {:data-fns {:set-filters! #(reset! filters* %)}
+                 ;; Popup content keeps the table props captured when it opens.
+                 :state {:filters initial-filters}}
+                {}))
+              @option*)))]
+    ((:on-chosen (render-picker-option))
+     nil true [{:block/uuid value-b}])
+    (is (= [[property-ident :is #{value-a}]
+            [property-ident :is #{value-b}]]
+           (:filters @filters*))
+        "A new picker session appends its own clause without replacing an earlier clause.")
+
+    ((:on-chosen (render-picker-option))
+     nil true [{:block/uuid value-b} {:block/uuid value-c}])
+    (is (= [[property-ident :is #{value-a}]
+            [property-ident :is #{value-b value-c}]]
+           (:filters @filters*))
+        "Further choices update only the clause created by this picker session.")
+
+    (let [error (try
+                  ((:on-chosen (render-picker-option)) nil false [])
+                  nil
+                  (catch :default e
+                    e))]
+      (is (nil? error) "Clearing the picker does not throw."))
+    (is (= [[property-ident :is #{value-a}]]
+           (:filters @filters*))
+        "Clearing this picker removes only its own clause.")))
+
+(deftest remove-filter-at-removes-only-one-equal-clause-test
+  (let [same-filter [:user.property/tags :is #{(random-uuid)}]
+        other-filter [:user.property/status :is #{(random-uuid)}]]
+    (is (= [same-filter other-filter]
+           (#'views/remove-filter-at [same-filter same-filter other-filter] 0)))
+    (is (= [same-filter other-filter]
+           (#'views/remove-filter-at [same-filter same-filter other-filter] 1)))))
 
 (deftest view-prefetch-window-holds-row-subscriptions-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 100))
