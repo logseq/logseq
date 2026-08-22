@@ -178,6 +178,36 @@
                  (when (checksum-eligible-entity? db e)
                    (entity-checksum-tuples db e e2ee?))))))
 
+(defn- checksum-eligible-entity-map?
+  [page-class-ids entity]
+  (and (uuid? (:block/uuid entity))
+       (not (:logseq.property/built-in? entity))
+       (or (some page-class-ids (:block/tags entity))
+           (some? (:block/page entity))
+           (some? (:block/name entity)))))
+
+(defn- entity-map-checksum-tuples
+  [uuid-by-eid entity e2ee?]
+  (let [entity-uuid (:block/uuid entity)]
+    (into #{}
+          (keep (fn [attr]
+                  (when (contains? entity attr)
+                    [entity-uuid
+                     attr
+                     (case attr
+                       :block/parent (uuid-by-eid (:block/parent entity))
+                       :block/page (uuid-by-eid (:block/page entity))
+                       (get entity attr))])))
+          (relevant-attrs e2ee?))))
+
+(defn- checksum-from-tuples
+  [tuples]
+  (->> tuples
+       (reduce (fn [checksum-state tuple]
+                 (add-digest checksum-state (tuple-digest tuple)))
+               [0 0])
+       state->checksum))
+
 (defn- tx-item-eids
   [db-before db-after tx-item]
   (if-let [eid (:e tx-item)]
@@ -367,11 +397,29 @@
   [db]
   (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
         tuples (db-checksum-tuples db e2ee?)]
-    (->> tuples
-         (reduce (fn [checksum-state tuple]
-                   (add-digest checksum-state (tuple-digest tuple)))
-                 [0 0])
-         state->checksum)))
+    (checksum-from-tuples tuples)))
+
+(defn recompute-checksum-from-entities
+  "Recomputes the RTC checksum from a complete entity snapshot of `db`.
+
+  `entities` must contain every entity materialized from `db`; passing a changed
+  subset does not produce an incremental checksum."
+  [db entities]
+  (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
+        page-class-ids
+        (into #{}
+              (keep #(some-> (d/entity db %) :db/id))
+              [:logseq.class/Page :logseq.class/Journal
+               :logseq.class/Tag :logseq.class/Property])
+        uuid-by-eid (into {}
+                          (keep (fn [{:keys [db/id block/uuid]}]
+                                  (when uuid [id uuid])))
+                          entities)
+        tuples (mapcat (fn [entity]
+                         (when (checksum-eligible-entity-map? page-class-ids entity)
+                           (entity-map-checksum-tuples uuid-by-eid entity e2ee?)))
+                       entities)]
+    (checksum-from-tuples tuples)))
 
 (defn recompute-checksum-diagnostics
   [db]

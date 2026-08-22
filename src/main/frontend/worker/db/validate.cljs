@@ -292,7 +292,7 @@
       result)))
 
 (defn validate-db
-  [conn & {:keys [fix] :or {fix true}}]
+  [conn & {:keys [fix include-entities?] :or {fix true}}]
   (when fix
     (fix-extends-cardinality! conn)
     (fix-icon-wrong-type! conn)
@@ -323,9 +323,10 @@
       (shared-service/broadcast-to-clients! :notification
                                             [(str "Your graph is valid! " counts)
                                              :success false]))
-    (merge {:errors errors
-            :invalid-entity-ids invalid-entity-ids}
-           counts)))
+    (cond-> (merge {:errors errors
+                    :invalid-entity-ids invalid-entity-ids}
+                   counts)
+      include-entities? (assoc :entities entities))))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]
