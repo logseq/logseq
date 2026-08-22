@@ -1,5 +1,3 @@
-import { LSPluginUser } from '../LSPlugin.user'
-
 export interface IAsyncStorage {
   getItem(key: string): Promise<string | undefined>
 
@@ -14,6 +12,15 @@ export interface IAsyncStorage {
   clear(): Promise<void>
 }
 
+type LSPluginFileStorageContext = {
+  baseInfo: {
+    id: string
+  }
+  caller: {
+    callAsync(type: any, payload?: any): Promise<any>
+  }
+}
+
 /**
  * A storage based on local files under specific context
  */
@@ -23,7 +30,7 @@ class LSPluginFileStorage implements IAsyncStorage {
    * @param opts
    */
   constructor(
-    private ctx: LSPluginUser,
+    private ctx: LSPluginFileStorageContext,
     private opts?: {
       assets: boolean
     }

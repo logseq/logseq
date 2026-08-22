@@ -1,6 +1,16 @@
-import { IPluginSearchServiceHooks } from '../LSPlugin'
-import { LSPluginUser } from '../LSPlugin.user'
+import type { IPluginSearchServiceHooks } from '../LSPlugin.types'
 import { isArray, isFunction, mapKeys } from 'lodash-es'
+
+type LSPluginSearchServiceContext = {
+  baseInfo: {
+    id: string
+  }
+  caller: {
+    on(type: string, listener: (payload: any) => void): any
+    call(type: string, payload?: any): any
+  }
+  _execCallableAPI(method: any, ...args: Array<any>): void
+}
 
 export class LSPluginSearchService {
   /**
@@ -8,7 +18,7 @@ export class LSPluginSearchService {
    * @param serviceHooks
    */
   constructor(
-    private ctx: LSPluginUser,
+    private ctx: LSPluginSearchServiceContext,
     private serviceHooks: IPluginSearchServiceHooks
   ) {
     ctx._execCallableAPI(

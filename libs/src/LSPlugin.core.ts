@@ -38,7 +38,7 @@ import {
   LSPMSG_BEFORE_UNLOAD,
   AWAIT_LSPMSGFn,
 } from './LSPlugin.caller'
-import {
+import type {
   ILSPluginThemeManager,
   LegacyTheme,
   LSPluginPkgConfig,
@@ -49,7 +49,7 @@ import {
   ThemeMode,
   UIContainerAttrs,
   UIOptions,
-} from './LSPlugin'
+} from './LSPlugin.types'
 
 const debug = Debug('LSPlugin:core')
 const DIR_PLUGINS = 'plugins'
