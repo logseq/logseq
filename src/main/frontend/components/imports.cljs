@@ -390,10 +390,6 @@
   [error]
   (or (:code (ex-data error)) :import/unexpected-error))
 
-(defn- completed-import-terminal-result
-  [run-id import-result]
-  (file-graph-import/normalize-terminal-result run-id import-result))
-
 (defn- current-file-graph-import?
   [run-id]
   (= run-id (state/get-state [:graph/importing-state :run-id])))
@@ -443,7 +439,7 @@
                                :run-id run-id)
                 _ (reset! phase :worker-import)
                 import-result (state/<invoke-db-worker :thread-api/import-file-graph staging-repo serialized-config-file serialized-files options)
-                terminal-result (completed-import-terminal-result run-id import-result)]
+                terminal-result (file-graph-import/normalize-terminal-result run-id import-result)]
           (if (= :failed (:status terminal-result))
             (p/let [_ (<discard-file-graph-import! run-id staging-repo)]
               (show-import-terminal-failure! terminal-result)

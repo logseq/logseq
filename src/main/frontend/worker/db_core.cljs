@@ -447,7 +447,7 @@
   (assert (some? db) "sqlite db not exists")
   (.transaction
    db
-   (fn [tx]
+   (fn [^js tx]
      (let [sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"]
        (if (and prepared? (fn? (.-execMany tx)))
          (.execMany tx sql data)
