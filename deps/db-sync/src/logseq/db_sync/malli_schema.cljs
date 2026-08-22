@@ -236,6 +236,7 @@
    [:ok :boolean]
    [:key :string]
    [:url :string]
+   [:schema-version :string]
    [:content-encoding {:optional true} [:maybe :string]]])
 
 (def snapshot-upload-response-schema

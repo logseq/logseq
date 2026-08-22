@@ -44,12 +44,18 @@
   [sql sql-str & args]
   (.apply (.-exec sql) sql (to-array (cons sql-str args))))
 
+(defn- d1-bind
+  [^js stmt args]
+  (if (seq args)
+    (.apply (.-bind stmt)
+            stmt
+            (to-array (map #(if (nil? %) nil %) args)))
+    stmt))
+
 (defn <d1-run
   [^js db sql-str & args]
   (p/let [^js stmt (.prepare db sql-str)
-          ^js stmt (if (seq args)
-                     (.apply (.-bind stmt) stmt (to-array args))
-                     stmt)]
+          ^js stmt (d1-bind stmt args)]
     (.run stmt)))
 
 (defn- with-session-db [^js db session-mode]
@@ -67,9 +73,7 @@
                               [nil sql-or-opts more])
         session (with-session-db db (:session opts))]
     (p/let [^js stmt (.prepare session sql-str)
-            ^js stmt (if (seq args)
-                       (.apply (.-bind stmt) stmt (to-array args))
-                       stmt)]
+            ^js stmt (d1-bind stmt args)]
       (.all stmt))))
 
 (defn read-json [request]

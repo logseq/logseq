@@ -1464,7 +1464,7 @@
   (async done
          (let [sql (empty-sql)
                conn (d/create-conn db-schema/schema)
-               self #js {:env #js {}
+               self #js {:env #js {"DB" :db}
                          :conn conn
                          :schema-ready true
                          :sql sql}
@@ -1475,17 +1475,23 @@
            (aset js/globalThis
                  "CompressionStream"
                  (passthrough-compression-stream-constructor))
-           (-> (p/let [resp (sync-handler/handle {:self self
-                                                  :request request
-                                                  :url url
-                                                  :route {:handler :sync/snapshot-download}})
-                       text (.text resp)
-                       body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+           (-> (p/with-redefs [common/<d1-all (fn [& _]
+                                                (p/resolved
+                                                 #js {:results
+                                                      #js [#js {"graph_ready_for_use" 1
+                                                                "schema_version" "65.33"}]}))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/snapshot-download}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
-                 (is (= "gzip" (:content-encoding body))))
+                 (is (= "gzip" (:content-encoding body)))
+                 (is (= "65.33" (:schema-version body)))))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -1498,21 +1504,28 @@
   (async done
          (let [sql (empty-sql)
                conn (d/create-conn db-schema/schema)
-               self #js {:env #js {"DB_SYNC_SNAPSHOT_STREAM_GZIP" "false"}
+               self #js {:env #js {"DB" :db
+                                   "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false"}
                          :conn conn
                          :schema-ready true
                          :sql sql}
                {:keys [request url]} (request-url)]
-           (-> (p/let [resp (sync-handler/handle {:self self
-                                                  :request request
-                                                  :url url
-                                                  :route {:handler :sync/snapshot-download}})
-                       text (.text resp)
-                       body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+           (-> (p/with-redefs [common/<d1-all (fn [& _]
+                                                (p/resolved
+                                                 #js {:results
+                                                      #js [#js {"graph_ready_for_use" 1
+                                                                "schema_version" "65.33"}]}))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/snapshot-download}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
                  (is (not (contains? body :content-encoding)))
-                 (done))
+                 (is (= "65.33" (:schema-version body)))
+                 (done)))
                (p/then (fn []
                          nil))
                (p/catch (fn [error]

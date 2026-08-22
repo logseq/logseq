@@ -727,17 +727,22 @@
       (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
-          (let [key (str "stream/" graph-id ".snapshot")
-                url (snapshot-stream-url request graph-id)
-                content-encoding (when (and (snapshot-stream-gzip-enabled? self)
-                                            (exists? js/CompressionStream))
-                                   snapshot-content-encoding)]
-            (http/json-response :sync/snapshot-download
-                                (cond-> {:ok true
-                                         :key key
-                                         :url url}
-                                  content-encoding
-                                  (assoc :content-encoding content-encoding)))))))))
+          (p/let [db (some-> self .-env (aget "DB"))
+                  schema-version (when db (index/<graph-schema-version db graph-id))]
+            (if-not (and (string? schema-version) (seq schema-version))
+              (http/error-response "graph schema version is missing" 409)
+              (let [key (str "stream/" graph-id ".snapshot")
+                    url (snapshot-stream-url request graph-id)
+                    content-encoding (when (and (snapshot-stream-gzip-enabled? self)
+                                                (exists? js/CompressionStream))
+                                       snapshot-content-encoding)]
+                (http/json-response :sync/snapshot-download
+                                    (cond-> {:ok true
+                                             :key key
+                                             :url url
+                                             :schema-version schema-version}
+                                      content-encoding
+                                      (assoc :content-encoding content-encoding)))))))))))
 
 (defn- handle-sync-admin-reset
   [^js self]

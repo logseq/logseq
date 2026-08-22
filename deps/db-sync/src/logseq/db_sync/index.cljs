@@ -360,6 +360,15 @@
             row (first rows)]
       (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
 
+(defn <graph-schema-version
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select schema_version from graphs where graph_id = ?"
+                                   graph-id)
+            row (first (common/get-sql-rows result))]
+      (some-> row (aget "schema_version")))))
+
 (defn <graph-e2ee?
   [db graph-id]
   (when (string? graph-id)

@@ -15,7 +15,48 @@
           (fn []
             (swap! calls update :all-count (fnil inc 0))
             result))
+    (aset stmt
+          "run"
+          (fn []
+            (swap! calls update :run-count (fnil inc 0))
+            result))
     stmt))
+
+(deftest d1-run-normalizes-undefined-bind-values-test
+  (async done
+         (let [calls (atom {})
+               result #js {:success true}
+               stmt (make-stmt calls result)
+               db #js {:prepare (fn [_] stmt)}]
+           (-> (p/let [query-result (common/<d1-run db
+                                                    "insert into users (id, email) values (?, ?)"
+                                                    "u1"
+                                                    js/undefined)]
+                 (is (= result query-result))
+                 (is (= "u1" (first (:bind-args @calls))))
+                 (is (identical? nil (second (:bind-args @calls))))
+                 (is (= 1 (:run-count @calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest d1-all-normalizes-undefined-bind-values-test
+  (async done
+         (let [calls (atom {})
+               result #js {:results #js []}
+               stmt (make-stmt calls result)
+               db #js {:prepare (fn [_] stmt)}]
+           (-> (p/let [query-result (common/<d1-all db
+                                                    "select id from users where email is ?"
+                                                    js/undefined)]
+                 (is (= result query-result))
+                 (is (identical? nil (first (:bind-args @calls))))
+                 (is (= 1 (:all-count @calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (deftest d1-all-falls-back-when-with-session-missing-test
   (async done

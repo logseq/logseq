@@ -13,12 +13,12 @@ It includes the Cloudflare Worker implementation and a Node.js adapter for self-
 
 ```bash
 cd deps/db-sync
-pnpm watch
-
-# open another terminal
-cd deps/db-sync/worker
-wrangler dev
+pnpm dev
 ```
+
+This builds the Worker, applies local D1 migrations, and starts Wrangler on
+`0.0.0.0:8787`.
+Override the bind address or port with `DB_SYNC_IP` and `DB_SYNC_PORT`.
 
 ### D1 Schema (Worker)
 

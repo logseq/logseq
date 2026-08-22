@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "private": true,
   "scripts": {
-    "dev": "cd ./worker && pnpm exec wrangler dev",
+    "dev": "./start.sh",
     "watch": "clojure -M:cljs watch db-sync db-sync-node",
     "release": "clojure -M:cljs release db-sync",
     "delete-graphs-for-user": "node worker/scripts/delete_graphs_for_user.js",
@@ -21,6 +21,7 @@
     "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
     "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
+    "test:start": "node --test worker/start_script_test.mjs",
     "test:chatgpt-app": "node --test worker/entry_test.mjs worker/asset_image_test.mjs",
     "build:api-docs": "export COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 && clojure -M:cljs release db-sync-api-docs && node worker/dist/api-docs-spec.js && redocly build-docs worker/dist/openapi.json --output=worker/dist/api-docs.html --title=\"Logseq Server API\" --disableGoogleFont && node worker/scripts/embed_api_docs.mjs",
     "test:api-docs": "pnpm build:api-docs && node --test worker/api_docs_test.mjs worker/api_docs_build_test.mjs",
