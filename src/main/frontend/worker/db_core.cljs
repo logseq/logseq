@@ -220,9 +220,14 @@
 (defn- import-state-summary
   [import-state]
   (into {}
-        (map (fn [[k v]]
-               [k (if (satisfies? IDeref v) @v v)]))
-        import-state))
+        (map (fn [k]
+               (let [v (get import-state k)]
+                 [k (if (satisfies? IDeref v) @v v)])))
+        [:ignored-files :ignored-assets :ignored-properties]))
+
+(defn- imported-file-summaries
+  [files]
+  (mapv #(select-keys % [:path]) files))
 
 (defn- file-content
   [file]
@@ -311,7 +316,7 @@
   (file-graph-import/completed-result
    run-id
    {:validation validation
-    :files (:files result)
+    :files (imported-file-summaries (:files result))
     :import-state (import-state-summary (:import-state result))
     :notifications notifications
     :issues issues
