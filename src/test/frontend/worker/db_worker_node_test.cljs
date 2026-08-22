@@ -1683,6 +1683,40 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-query-input-error-does-not-log-db
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-query-input-error")
+               repo (str "logseq_db_query_input_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       {:keys [status body]}
+                       (invoke-raw host port "thread-api/q"
+                                   [repo
+                                    ['[:find ?e
+                                       :in $ ?property
+                                       :where
+                                       [?e :block/title ?property]]]])
+                       _ (p/delay 50)
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (= 500 status))
+                 (is (false? (:ok parsed)))
+                 (is (string/includes? contents
+                                       "Too few inputs passed, expected: [$ ?property], got: 1"))
+                 (is (not (string/includes? contents "#datascript/DB")))
+                 (is (not (string/includes? contents ":schema")))
+                 (is (< (count contents) 20000)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
 (deftest db-worker-node-opening-graph-does-not-run-maintenance
   (async done
          (let [daemon (atom nil)
