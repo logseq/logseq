@@ -2700,10 +2700,12 @@
    {:path "pages/library.md"
     :file/content (str "title:: Library\n"
                        "rating:: 5\n"
+                       "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
+                       "tagline:: A story\n"
                        "cast:: [[Ada]]")}
    {:path "pages/genres.md"
     :file/content (str "title:: Genres\n"

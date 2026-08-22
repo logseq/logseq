@@ -3127,8 +3127,7 @@
                                journal-title-formatters
                                journal-title-cache]}]
   (let [property-name' (name property-name)]
-    (or (string/blank? value)
-        (contains? #{"true" "false"} value)
+    (or (contains? #{"true" "false"} value)
         (and (contains? separated-property-names property-name')
              (nil? (bulk-page-ref-values value)))
         (and (contains? ignored-ref-property-names property-name')
@@ -3257,25 +3256,33 @@
 
 (defn- build-simple-page-property-options
   [simple-files]
-  (let [property-pairs (mapcat (fn [{:keys [pairs]}]
-                                 (remove (fn [[property-name _value]]
-                                           (contains? #{:title :tags}
-                                                      (normalize-bulk-property-name property-name)))
-                                         pairs))
-                               simple-files)
+  (let [all-property-pairs
+        (mapcat (fn [{:keys [pairs]}]
+                  (remove (fn [[property-name _value]]
+                            (contains? #{:title :tags}
+                                       (normalize-bulk-property-name property-name)))
+                          pairs))
+                simple-files)
+        property-pairs (remove (fn [[_property-name value]] (string/blank? value))
+                               all-property-pairs)
         values-by-property
         (reduce (fn [result [property-name value]]
                   (update result (normalize-bulk-property-name property-name) (fnil conj []) value))
                 {}
                 property-pairs)
-        property-titles
+        all-property-titles
         (reduce (fn [result [property-name _value]]
                   (let [property-key (normalize-bulk-property-name property-name)]
                     (if (contains? result property-key)
                       result
                       (assoc result property-key property-name))))
                 {}
-                property-pairs)
+                all-property-pairs)
+        empty-property-titles
+        (keep (fn [[property-name property-title]]
+                (when-not (contains? values-by-property property-name)
+                  property-title))
+              all-property-titles)
         property-types (update-vals values-by-property bulk-property-type)
         property-schemas
         (update-vals property-types
@@ -3283,7 +3290,7 @@
                         (= :node %) (assoc :db/cardinality :many)))
         properties
         (into {} (map (fn [[property-name schema]]
-                        [property-name (assoc schema :block/title (property-titles property-name))]))
+                        [property-name (assoc schema :block/title (all-property-titles property-name))]))
               property-schemas)
         tag-titles (reduce (fn [result tag-title]
                              (let [tag-name (common-util/page-name-sanity-lc tag-title)]
@@ -3297,9 +3304,10 @@
         (mapv (fn [{:keys [properties]}]
                 (let [user-properties
                       (into {}
-                            (map (fn [[property-name value]]
-                                   [property-name
-                                    (bulk-property-value (property-types property-name) value)]))
+                            (keep (fn [[property-name value]]
+                                    (when-not (string/blank? value)
+                                      [property-name
+                                       (bulk-property-value (property-types property-name) value)])))
                             (dissoc properties :title :tags))
                       page-tags (mapv keyword (bulk-tag-names (:tags properties)))]
                   {:page (cond-> {:block/title (:title properties)
@@ -3315,7 +3323,8 @@
                      :extract-content-refs? false
                      :translate-property-values? true}
      :property-schemas property-schemas
-     :tag-names (set (keys tag-titles))}))
+     :ordinary-page-titles (cond-> (vec empty-property-titles)
+                             (seq tag-titles) (conj "Tags"))}))
 
 (defn- generated-property-idents
   [tx-data]
@@ -3326,12 +3335,12 @@
                   [(normalize-bulk-property-name block-name) ident])))
         tx-data))
 
-(defn- ordinary-tags-page
-  []
+(defn- ordinary-page
+  [title]
   (let [now (common-util/time-ms)]
     (with-meta {:block/uuid (random-uuid)
-                :block/title "Tags"
-                :block/name "tags"
+                :block/title title
+                :block/name (common-util/page-name-sanity-lc title)
                 :block/tags [:logseq.class/Page]
                 :block/created-at now
                 :block/updated-at now}
@@ -3658,7 +3667,7 @@
              (ordered-doc-files doc-files) <read-file rpath-key options)
             _ (when (seq simple-files)
                 (let [extract-started (performance-now-ms)
-                      {:keys [build-options property-schemas tag-names]}
+                      {:keys [build-options property-schemas ordinary-page-titles]}
                       (build-simple-page-property-options simple-files)
                       _ (record-performance! options :extract-normalize extract-started
                                              {:files (count simple-files)
@@ -3666,8 +3675,7 @@
                       construct-started (performance-now-ms)
                       {:keys [init-tx block-props-tx]}
                       (sqlite-build/build-blocks-tx build-options)
-                      init-tx (cond-> init-tx
-                                (seq tag-names) (conj (ordinary-tags-page)))
+                      init-tx (into init-tx (map ordinary-page) ordinary-page-titles)
                       base-db @conn
                       init-tx-id (inc (:max-tx base-db))
                       properties-tx-id (inc init-tx-id)
