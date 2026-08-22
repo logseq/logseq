@@ -1636,3 +1636,83 @@
            (fn []
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
+
+(def ^:private publication-staging-repo
+  (str "logseq_db_.logseq-file-graph-import-"
+       "00000000-0000-4000-8000-000000000001"))
+
+(def ^:private publication-target-repo "logseq_db_graph_a")
+(def ^:private publication-payload (.from js/Buffer "sqlite-bytes"))
+
+(defn- <run-browser-file-graph-publication
+  [{:keys [failure-method staging-cleanup-fails?]}]
+  (let [calls (atom [])]
+    (-> (p/with-redefs
+          [state/<invoke-db-worker
+           (fn [method & args]
+             (swap! calls conj [method args])
+             (cond
+               (= method failure-method)
+               (p/rejected (ex-info "publication failed" {:method method}))
+
+               (= method :thread-api/db-exists) (p/resolved false)
+               (= method :thread-api/export-db-binary) (p/resolved publication-payload)
+               (= method :thread-api/close-db) (p/resolved nil)
+               (= method :thread-api/import-db-binary) (p/resolved nil)
+               (= method :thread-api/search-build-blocks-indice-in-worker) (p/resolved nil)
+               (= method :thread-api/unsafe-unlink-db)
+               (if (and staging-cleanup-fails?
+                        (= publication-staging-repo (first args)))
+                 (p/rejected (ex-info "cleanup failed" {:repo publication-staging-repo}))
+                 (p/resolved nil))
+               :else
+               (p/rejected (ex-info "unexpected worker call" {:method method}))))]
+          (<capture-result
+           (persist-db/<publish-file-graph-import!
+            publication-staging-repo publication-target-repo)))
+        (p/then (fn [result]
+                  {:result result :calls @calls})))))
+
+(deftest browser-file-graph-publication-waits-for-search-index
+  (async done
+    (-> (<run-browser-file-graph-publication {})
+        (p/then
+         (fn [{:keys [result calls]}]
+           (is (= {:status :resolved :value publication-target-repo} result))
+           (is (= [[:thread-api/db-exists [publication-target-repo]]
+                   [:thread-api/export-db-binary [publication-staging-repo]]
+                   [:thread-api/close-db [publication-staging-repo]]
+                   [:thread-api/import-db-binary [publication-target-repo publication-payload]]
+                   [:thread-api/search-build-blocks-indice-in-worker
+                    [publication-target-repo true true]]
+                   [:thread-api/unsafe-unlink-db [publication-staging-repo]]]
+                  calls))))
+        (p/catch #(is false (str "unexpected error: " %)))
+        (p/finally done))))
+
+(deftest browser-file-graph-publication-keeps-target-when-staging-cleanup-fails
+  (async done
+    (-> (<run-browser-file-graph-publication {:staging-cleanup-fails? true})
+        (p/then
+         (fn [{:keys [result calls]}]
+           (is (= {:status :resolved :value publication-target-repo} result))
+           (is (not-any? #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
+                         calls))))
+        (p/catch #(is false (str "unexpected error: " %)))
+        (p/finally done))))
+
+(deftest browser-file-graph-publication-rolls-back-incomplete-target
+  (async done
+    (-> (p/let [import-failure (<run-browser-file-graph-publication
+                                {:failure-method :thread-api/import-db-binary})
+                search-failure (<run-browser-file-graph-publication
+                                {:failure-method
+                                 :thread-api/search-build-blocks-indice-in-worker})]
+            (doseq [{:keys [result calls]} [import-failure search-failure]]
+              (is (= :rejected (:status result)))
+              (is (some #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
+                        calls))
+              (is (not-any? #(= [:thread-api/unsafe-unlink-db [publication-staging-repo]] %)
+                            calls))))
+        (p/catch #(is false (str "unexpected error: " %)))
+        (p/finally done))))

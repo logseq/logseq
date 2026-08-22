@@ -20,11 +20,17 @@
     (is (= [issue] (:issues result)))))
 
 (deftest file-graph-import-terminal-result-validates-the-contract
-  (doseq [result [{:contract-version 2
+  (doseq [result [{}
+                  {:status :failed
+                   :phase :validate}
+                  {:contract-version 2
                    :run-id "run"
                    :status :completed}
                   {:contract-version 1
                    :run-id "another-run"
+                   :status :completed}
+                  {:contract-version 1
+                   :run-id "run"
                    :status :completed}
                   {:contract-version 1
                    :run-id "run"

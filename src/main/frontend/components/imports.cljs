@@ -357,7 +357,7 @@
    :parameters (select-keys asset [:path :asset-id :asset-type])
    :diagnostics {:message (or (.-message error) (str error))}})
 
-(defn- write-staged-assets!
+(defn- <write-staged-assets!
   [repo staged-assets]
   (if (seq staged-assets)
     (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
@@ -449,7 +449,7 @@
                     staged-asset-issues (if (util/electron?)
                                           (do
                                             (reset! phase :stage-assets)
-                                            (write-staged-assets! staging-repo (:staged-assets terminal-result)))
+                                            (<write-staged-assets! staging-repo (:staged-assets terminal-result)))
                                           [])
                     _ (reset! phase :publish)
                     _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
@@ -463,7 +463,7 @@
                     written-asset-issues (if-not (util/electron?)
                                            (do
                                              (reset! phase :write-assets)
-                                             (write-staged-assets! repo (:staged-assets terminal-result)))
+                                             (<write-staged-assets! repo (:staged-assets terminal-result)))
                                            [])
                     terminal-result' (file-graph-import/completed-result
                                       run-id
@@ -490,7 +490,8 @@
              (log/error :import-file-graph-failed true
                         :run-id run-id
                         :phase @phase
-                        :code code)
+                        :code code
+                        :error error)
              (notification/show! (t :import/unexpected-error (name code)) :error)
              result)))
         (p/finally #(clear-file-graph-import! run-id)))))

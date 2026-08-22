@@ -51,16 +51,34 @@
            :issues issues
            :publication (or (:publication result) {:status :pending}))))
 
-(defn normalize-terminal-result
+(defn- valid-terminal-result?
   [run-id result]
-  (cond
-    (and (map? result) (not (contains? result :contract-version)))
-    (completed-result run-id result)
-
+  (let [status (:status result)
+        issues (:issues result)]
     (and (= terminal-contract-version (:contract-version result))
          (= run-id (:run-id result))
-         (contains? terminal-statuses (:status result)))
-    result
+         (contains? terminal-statuses status)
+         (vector? issues)
+         (= (count issues) (get-in result [:summary :issue-count]))
+         (map? (:validation result))
+         (map? (:publication result))
+         (case status
+           :completed
+           (and (= :completed (:phase result))
+                (= :passed (get-in result [:validation :status]))
+                (empty? issues))
 
-    :else
+           :completed-with-errors
+           (and (= :completed (:phase result))
+                (= :passed (get-in result [:validation :status]))
+                (seq issues))
+
+           :failed
+           (and (keyword? (:phase result))
+                (seq issues))))))
+
+(defn normalize-terminal-result
+  [run-id result]
+  (if (valid-terminal-result? run-id result)
+    result
     (failed-result run-id :worker-import :import/invalid-terminal-result)))

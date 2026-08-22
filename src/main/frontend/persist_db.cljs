@@ -388,7 +388,14 @@
                   _ (<close-db staging-repo)
                   _ (reset! target-owned? true)
                   _ (state/<invoke-db-worker :thread-api/import-db-binary target-repo data)
-                  _ (state/<invoke-db-worker :thread-api/unsafe-unlink-db staging-repo)]
+                  _ (state/<invoke-db-worker
+                     :thread-api/search-build-blocks-indice-in-worker
+                     target-repo true true)
+                  _ (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db staging-repo)
+                        (p/catch (fn [error]
+                                   (log/warn :event :file-graph-import-staging-cleanup-failed
+                                             :repo staging-repo
+                                             :error error))))]
             target-repo)
           (p/catch
            (fn [error]

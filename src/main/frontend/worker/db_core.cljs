@@ -147,13 +147,17 @@
   ([^Object db]
    (checkpoint-db! nil db))
   ([repo ^Object db]
+   (checkpoint-db! repo db false))
+  ([repo ^Object db strict?]
    (when (and db (fn? (.-exec db)))
      (try
        (.exec db wal-checkpoint-sql)
        (catch :default e
          (log/warn :db-worker/wal-checkpoint-failed
                    (cond-> {:error e}
-                     repo (assoc :repo repo))))))))
+                     repo (assoc :repo repo)))
+         (when strict?
+           (throw e)))))))
 
 (defn- schedule-wal-checkpoint!
   [repo db]
@@ -997,9 +1001,9 @@
 
 (def-thread-api :thread-api/export-db-binary
   [repo]
-  (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-    (checkpoint-db! repo db))
-  (p/let [data (<export-db-file repo)]
+  (p/let [_ (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
+              (checkpoint-db! repo db true))
+          data (<export-db-file repo)]
     (->uint8array data)))
 
 (def-thread-api :thread-api/export-client-ops-db-binary
