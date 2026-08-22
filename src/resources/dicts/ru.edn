@@ -818,7 +818,6 @@
  :import/assets-imported "{1} ресурсов импортировано."
  :import/assets-skipped "{1} ресурсов пропущено. Подробности в консоли."
  :import/block-icons-cannot-be-imported "Значки блоков не могут быть импортированы. Импортируйте вручную в блоке {1}."
- :import/cannot-import-block-into-non-block-entity "Невозможно импортировать блок в не-блочную сущность."
  :import/db-edn-desc "Импорт EDN-экспорта графа БД в новый граф БД"
  :import/db-edn-title "EDN в граф БД"
  :import/debug-transit-desc "Импорт отладочного transit-файла в новый граф БД"

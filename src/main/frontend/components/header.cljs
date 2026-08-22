@@ -502,6 +502,7 @@
 (hsx/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
+        *search-args (hooks/use-ref nil)
         rtc-graphs (rfx/use-sub [:rtc/graphs])
         rtc-state (rfx/use-sub [:rtc/state])
         db-rtc-uuid (use-db-rtc-uuid current-repo)
@@ -543,10 +544,18 @@
             (shui/button-ghost-icon
              :search {:id "search-button"
                       :data-keep-selection true
-                      :on-click #(do (when (or (mobile-util/native-android?)
-                                               (mobile-util/native-iphone?))
-                                       (state/set-left-sidebar-open! false))
-                                     (state/pub-event! [:go/search]))})
+                      :on-pointer-down #(hooks/set-ref!
+                                         *search-args
+                                         (route-handler/current-editing-block-search-args))
+                      :on-pointer-cancel #(hooks/set-ref! *search-args nil)
+                      :on-key-down #(hooks/set-ref! *search-args nil)
+                      :on-click #(let [search-args (or (route-handler/current-editing-block-search-args)
+                                                       (hooks/deref *search-args))]
+                                   (hooks/set-ref! *search-args nil)
+                                   (when (or (mobile-util/native-android?)
+                                             (mobile-util/native-iphone?))
+                                     (state/set-left-sidebar-open! false))
+                                   (route-handler/go-to-search! :global search-args))})
             (t :nav/search)
             {:trigger-props {:id "search-button"}})))]
 
