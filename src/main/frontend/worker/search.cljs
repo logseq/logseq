@@ -536,7 +536,7 @@ DROP TRIGGER IF EXISTS blocks_au;
               (not= (:block/title page) common-config/quick-add-page-name))))))
 
 (defn- cached-hidden-hierarchy?
-  [cache entity seen]
+  [cache parent-entity entity seen]
   (if-let [entity-id (:db/id entity)]
     (if-let [entry (find @cache entity-id)]
       (val entry)
@@ -545,7 +545,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (or (:logseq.property/hide? entity)
                            (:logseq.property/deleted-at entity)
                            (cached-hidden-hierarchy? cache
-                                                     (:block/parent entity)
+                                                     parent-entity
+                                                     (parent-entity entity)
                                                      (conj seen entity-id)))))]
         (vswap! cache assoc entity-id hidden?)
         hidden?))
@@ -555,7 +556,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Creates a cached `hidden-entity?` predicate for one immutable DB snapshot."
   []
   (let [cache (volatile! {})
-        hidden-hierarchy? #(cached-hidden-hierarchy? cache % #{})]
+        hidden-hierarchy? #(cached-hidden-hierarchy? cache :block/parent % #{})]
     #(hidden-entity? % hidden-hierarchy?)))
 
 (defn- page-or-object?
@@ -587,6 +588,21 @@ DROP TRIGGER IF EXISTS blocks_au;
            (string/join " "))
       title)))
 
+(defn- search-indexable?
+  [entity title]
+  (not (or (ldb/closed-value? entity)
+           (and (string? title) (> (count title) 10000))
+           (string/blank? title))))
+
+(defn- search-index-row
+  [uuid page-uuid title page-or-object-node? include-vector-title?]
+  (when uuid
+    (cond-> {:id (str uuid)
+             :page (str (or page-uuid uuid))
+             :title (if page-or-object-node? title (sanitize title))}
+      include-vector-title?
+      (assoc :vector-title title))))
+
 (defn- block-result-title
   [block]
   (db-content/recur-replace-uuid-in-block-title block))
@@ -611,25 +627,109 @@ DROP TRIGGER IF EXISTS blocks_au;
                                          :or {include-vector-title? false
                                               known-visible? false}}]
    (let [raw-title (or (:block/raw-title block) (:block/title block))]
-     (when-not (or
-                (ldb/closed-value? block)
-                (and (string? raw-title) (> (count raw-title) 10000))
-                (string/blank? raw-title))        ; empty page or block
+     (when (search-indexable? block raw-title)
        (try
          (let [page-node? (ldb/page? block)
                page-or-object-node? (and (or page-node? (ldb/object? block))
                                          (or known-visible?
                                              (not (hidden-entity? block))))
                title (block-search-title block raw-title page-node? page-or-object-node? ref-title-cache)]
-           (when uuid
-             (cond-> {:id (str uuid)
-                      :page (str (or (:block/uuid page) uuid))
-                      :title (if page-or-object-node? title (sanitize title))}
-               include-vector-title?
-               (assoc :vector-title title))))
+           (search-index-row uuid (:block/uuid page) title page-or-object-node?
+                             include-vector-title?))
          (catch :default e
            (prn "Error: failed to run block->index on block " (:db/id block))
            (js/console.error e)))))))
+
+(def ^:private import-page-tag-idents
+  #{:logseq.class/Page :logseq.class/Journal
+    :logseq.class/Tag :logseq.class/Property})
+
+(defn import-index-context
+  [entities]
+  (let [entity-by-id (into {} (map (juxt :db/id identity)) entities)
+        hidden-id-cache (volatile! {})
+        parent-entity #(entity-by-id (:block/parent %))]
+    {:entity-by-id entity-by-id
+     :hidden-hierarchy? #(cached-hidden-hierarchy?
+                          hidden-id-cache parent-entity % #{})
+     :tag-ident-by-id (into {}
+                            (keep (fn [{:keys [db/id db/ident]}]
+                                    (when ident [id ident])))
+                            entities)}))
+
+(defn- import-entity-tag-idents
+  [{:keys [tag-ident-by-id]} entity]
+  (let [tag-ids (:block/tags entity)
+        tag-idents (mapv (fn [tag-id]
+                           (if (keyword? tag-id)
+                             tag-id
+                             (tag-ident-by-id tag-id)))
+                         tag-ids)]
+    (when (every? some? tag-idents)
+      tag-idents)))
+
+(defn- import-index-entity-data
+  [{:keys [entity-by-id hidden-hierarchy?] :as context} entity]
+  (let [tag-ids (:block/tags entity)
+        tag-idents (import-entity-tag-idents context entity)
+        tags-resolved? (or (empty? tag-ids) (some? tag-idents))
+        tag-ident-set (set tag-idents)
+        page-node? (boolean (some import-page-tag-idents tag-ident-set))
+        page-id (:block/page entity)
+        page (when page-id (entity-by-id page-id))
+        page-resolved? (or (nil? page-id) (some? page))
+        parent-id (:block/parent entity)
+        parent (when parent-id (entity-by-id parent-id))
+        library-parent? (and parent
+                             (:logseq.property/built-in? parent)
+                             (= common-config/library-page-name (:block/title parent))
+                             (nil? (:block/parent parent)))
+        raw-title (or (:block/raw-title entity) (:block/title entity))
+        property? (contains? tag-ident-set :logseq.class/Property)
+        private-property? (and property?
+                               (:logseq.property/built-in? entity)
+                               (not (:logseq.property/public? entity)))
+        entity-hidden? (if property?
+                         (or (:logseq.property/deleted-at entity)
+                             private-property?)
+                         (hidden-hierarchy? entity))
+        page-hidden? (and page
+                          (hidden-hierarchy? page)
+                          (not= (:block/title page) common-config/quick-add-page-name))
+        simple-parent-hierarchy? (or (not page-node?)
+                                     (and (or (nil? parent-id) library-parent?)
+                                          (nil? (:block/parent page))))
+        simple? (and tags-resolved?
+                     page-resolved?
+                     simple-parent-hierarchy?
+                     (empty? (:block/alias entity))
+                     (empty? (:logseq.property.class/extends entity))
+                     (not (and (string? raw-title)
+                               (re-find db-content/id-ref-pattern raw-title))))]
+    (cond
+      (or entity-hidden? page-hidden?) {:mode :hidden}
+      simple? {:mode :simple
+               :page page
+               :page-node? page-node?
+               :tag-ident-set tag-ident-set}
+      :else {:mode :fallback})))
+
+(defn import-entity->index
+  [db context {:block/keys [uuid] :as entity} opts]
+  (let [{:keys [mode page page-node? tag-ident-set]} (import-index-entity-data context entity)]
+    (case mode
+      :hidden nil
+      :fallback (block->index (d/entity db (:db/id entity))
+                              (assoc opts :known-visible? false))
+      :simple
+      (let [raw-title (or (:block/raw-title entity) (:block/title entity))]
+        (when (search-indexable? entity raw-title)
+          (let [page-or-object-node? (or page-node? (seq tag-ident-set))
+                title (cond-> raw-title
+                        (contains? tag-ident-set :logseq.class/Journal)
+                        (str " " (:block/journal-day entity)))]
+            (search-index-row uuid (:block/uuid page) title page-or-object-node?
+                              (:include-vector-title? opts))))))))
 
 (def ^:private search-result-block-key ::block)
 
@@ -1089,6 +1189,21 @@ DROP TRIGGER IF EXISTS blocks_au;
   (drop-tables-and-triggers! db)
   (create-tables-and-triggers! db)
   (.exec db "PRAGMA user_version = 0"))
+
+(defn prepare-import-index-rebuild!
+  [db]
+  (drop-tables-and-triggers! db)
+  (create-blocks-table! db)
+  (create-blocks-fts-table! db)
+  (create-blocks-title-index! db)
+  (.exec db "PRAGMA user_version = 0"))
+
+(defn finalize-import-index-rebuild!
+  [db]
+  (.transaction db
+                (fn [tx]
+                  (.exec tx "INSERT INTO blocks_fts (id, title, page) SELECT id, title, page FROM blocks")
+                  (add-blocks-fts-triggers! tx))))
 
 (defn get-all-blocks
   [db]
