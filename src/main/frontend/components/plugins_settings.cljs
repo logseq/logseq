@@ -103,6 +103,26 @@
    [:h2 title]
    (html-content description)])
 
+(defn invoke-button-action!
+  [pid action key]
+  (plugin-handler/call-plugin-user-model!
+   pid action [{:type "click"
+                :dataset {:key key}}]))
+
+(hsx/defc render-item-button
+  [pid {:keys [key title text action description]}]
+
+  [:div.desc-item.as-button
+   {:data-key key}
+   [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
+
+   [:div.form-control
+    (when description (html-content description))
+    (shui/button {:type "button"
+                  :size :sm
+                  :on-click #(invoke-button-action! pid action key)}
+                 text)]])
+
 (hsx/defc render-item-not-handled
   [s]
   [:p.text-red-500 (t :plugin/setting-not-handled s)])
@@ -186,6 +206,9 @@
 
               #{:heading}
               ^{:key key} [render-item-heading desc]
+
+              #{:button}
+              ^{:key key} [render-item-button pid desc]
 
               ^{:key key} [render-item-not-handled key])))]]
 

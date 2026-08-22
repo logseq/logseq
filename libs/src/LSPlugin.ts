@@ -292,7 +292,7 @@ export type SimpleCommandKeybinding = {
   mac?: string // special for Mac OS
 }
 
-export type SettingSchemaDesc = {
+type SettingSchemaValueDesc = {
   key: string
   type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'heading'
   default: string | number | boolean | Array<any> | object | null
@@ -302,6 +302,20 @@ export type SettingSchemaDesc = {
   enumChoices?: Array<string>
   enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
 }
+
+/** A non-persisted settings action backed by a method registered with `provideModel`. */
+export type SettingSchemaButtonDesc = {
+  key: string
+  type: 'button'
+  title: string
+  text: string
+  /** The name of a method registered by this plugin with `provideModel`. */
+  action: string
+  /** Optional Markdown description. */
+  description?: string
+}
+
+export type SettingSchemaDesc = SettingSchemaValueDesc | SettingSchemaButtonDesc
 
 export type ExternalCommandType =
   | 'logseq.command/run'
