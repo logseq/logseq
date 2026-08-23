@@ -39,7 +39,7 @@
                 date-time-util/default-journal-title-formatter)
             " HH:mm")))))
 
-(declare property-value->string block-properties-content)
+(declare property-value->string block-properties-content block->content)
 
 (defn- property-value-sort-key
   [db property item context]
@@ -116,14 +116,31 @@
        {:replace-block-refs? (not (:preserve-block-refs? context))})
       (property-value->string db property v context))))
 
+(defn- property-value-children-content
+  [db value-entity spaces-tabs context]
+  (when-let [children (seq (ldb/sort-by-order (:block/_parent value-entity)))]
+    (let [indent (or (:export-bullet-indentation context) "  ")
+          child-level (+ 2 (quot (count spaces-tabs) (max 1 (count indent))))]
+      (->> children
+           (map (fn [child]
+                  (block->content db (:block/uuid child) {:init-level child-level} context)))
+           (string/join "\n")
+           not-empty))))
+
 (defn- default-property-value-block-content
   [db property v spaces-tabs context]
   (let [line (str spaces-tabs "- " (property-value-block-title db property v context))
-        properties-content (when-let [id (:db/id v)]
-                             (block-properties-content db (d/entity db id) (str spaces-tabs "  ") context))]
+        value-entity (when-let [id (:db/id v)]
+                       (d/entity db id))
+        properties-content (when value-entity
+                             (block-properties-content db value-entity (str spaces-tabs "  ") context))
+        children-content (when value-entity
+                           (property-value-children-content db value-entity spaces-tabs context))]
     (cond-> line
       properties-content
-      (str "\n" properties-content))))
+      (str "\n" properties-content)
+      children-content
+      (str "\n" children-content))))
 
 (defn- property-value-blocks-content
   [db property v spaces-tabs context]
