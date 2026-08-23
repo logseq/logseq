@@ -778,6 +778,18 @@
                    (:block/uuid block') (assoc (:block/uuid block') level))
                  (rest blocks)))))))
 
+(defn- url-property-value?
+  "URL-type property values are not containers; they must not have child blocks."
+  [block]
+  (= :url (:logseq.property/type (:logseq.property/created-from-property block))))
+
+(defn- url-property-value-child-target?
+  "True when insert/move would make a URL-type property value the parent."
+  [target-block sibling?]
+  (url-property-value? (if sibling?
+                         (:block/parent target-block)
+                         target-block)))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -955,18 +967,6 @@
   (and (not (comment-block? target-block))
        (or sibling?
            (not (comments-area? target-block)))))
-
-(defn- url-property-value?
-  "URL-type property values are not containers; they must not have child blocks."
-  [block]
-  (= :url (:logseq.property/type (:logseq.property/created-from-property block))))
-
-(defn- url-property-value-child-target?
-  "True when insert/move would make a URL-type property value the parent."
-  [target-block sibling?]
-  (url-property-value? (if sibling?
-                         (:block/parent target-block)
-                         target-block)))
 
 (defn- block-subtree-ids
   [db block]
