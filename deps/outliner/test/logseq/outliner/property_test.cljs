@@ -298,6 +298,38 @@
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid project]))))
         "Doesn't add Task to block when its class provides status")))
 
+(deftest task-child-class-does-not-add-parent-task-tag
+  (let [tag-idents (fn [conn block-uuid]
+                     (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid block-uuid])))))]
+    (doseq [[property-id value]
+            [[:logseq.property/status :logseq.property/status.doing]
+             [:logseq.property/scheduled 1783612800000]
+             [:logseq.property/deadline 1783699200000]]]
+      (testing (str property-id)
+        (let [conn (db-test/create-conn-with-blocks
+                    {:classes {:Work {:build/class-extends [:logseq.class/Task]}}
+                     :pages-and-blocks
+                     [{:page {:block/title "plain page"}}
+                      {:page {:block/title "work page" :build/tags [:Work]}
+                       :blocks [{:block/title "work block" :build/tags [:Work]}]}]})
+              plain-page (:block/uuid (db-test/find-page-by-title @conn "plain page"))
+              work-page (:block/uuid (db-test/find-page-by-title @conn "work page"))
+              work-block (:block/uuid (db-test/find-block-by-content @conn "work block"))]
+          (outliner-property/batch-set-property! conn [plain-page] property-id value)
+          (is (= #{:logseq.class/Task :logseq.class/Page}
+                 (tag-idents conn plain-page))
+              "Adds Task to a plain page with no Task-related class")
+
+          (outliner-property/batch-set-property! conn [work-page] property-id value)
+          (is (= #{:user.class/Work :logseq.class/Page}
+                 (tag-idents conn work-page))
+              "Does not add parent Task to a page tagged with a Task child class")
+
+          (outliner-property/batch-set-property! conn [work-block] property-id value)
+          (is (= #{:user.class/Work}
+                 (tag-idents conn work-block))
+              "Does not add parent Task to a block tagged with a Task child class"))))))
+
 (deftest batch-set-property-rejects-private-built-in-entity
   (let [conn (db-test/create-conn)
         placeholder (d/entity @conn :logseq.property/empty-placeholder)
