@@ -210,30 +210,18 @@
   (string/replace content id-or-tag-ref-pattern
                   #(apply title-ref-replacement id->title %)))
 
-(defn- ref-title
-  [ref ref-title-cache]
-  (if (nil? ref-title-cache)
-    (:block/title ref)
-    (if-let [block-uuid (:block/uuid ref)]
-      (if-let [entry (find @ref-title-cache block-uuid)]
-        (val entry)
-        (let [title (:block/title ref)]
-          (vswap! ref-title-cache assoc block-uuid title)
-          title))
-      (:block/title ref))))
-
 (defn- ref->title-entry
-  [replace-block-refs? ref ref-title-cache]
-  (let [block-uuid (:block/uuid ref)
-        title (ref-title ref ref-title-cache)]
-    (when (and block-uuid
-               (string? title)
-               (or replace-block-refs?
-                   (entity-util/page? ref)))
-      [(str block-uuid) title])))
+  [replace-block-refs? {:block/keys [title]
+                        block-uuid :block/uuid
+                        :as ref}]
+  (when (and block-uuid
+             (string? title)
+             (or replace-block-refs?
+                 (entity-util/page? ref)))
+    [(str block-uuid) title]))
 
 (defn- block-ref-id->title
-  [ent max-depth replace-block-refs? ref-title-cache]
+  [ent max-depth replace-block-refs?]
   (loop [frontier (set (:block/refs ent))
          seen-ids #{}
          id->title {}
@@ -247,7 +235,7 @@
                              refs)
             seen-ids' (into seen-ids (keep :block/uuid) new-refs)
             id->title' (into id->title
-                             (keep #(ref->title-entry replace-block-refs? % ref-title-cache))
+                             (keep #(ref->title-entry replace-block-refs? %))
                              new-refs)
             next-frontier (->> new-refs
                                (mapcat :block/refs)
@@ -256,18 +244,16 @@
         (recur next-frontier seen-ids' id->title' (inc depth))))))
 
 (defn recur-replace-uuid-in-block-title
-  "Converts ID refs recursively back to page-name refs and returns the replaced title.
-
-  `:ref-title-cache` can be a volatile map scoped to one immutable DB snapshot."
+  "Convert id ref (recursively) backs to page name refs, returns replaced title"
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
    (recur-replace-uuid-in-block-title ent max-depth {}))
-  ([ent max-depth {:keys [replace-block-refs? ref-title-cache]
+  ([ent max-depth {:keys [replace-block-refs?]
                    :or {replace-block-refs? true}}]
    (let [title (:block/title ent)]
      (if (some->> title (re-find id-ref-pattern))
-       (let [id->title (block-ref-id->title ent max-depth replace-block-refs? ref-title-cache)]
+       (let [id->title (block-ref-id->title ent max-depth replace-block-refs?)]
          (loop [result title depth 0]
            (if (or (>= depth max-depth)
                    (not (re-find id-ref-pattern result)))
