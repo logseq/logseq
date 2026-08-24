@@ -470,31 +470,36 @@
                                                             :total total}))]
              nil))))))))
 
+(defn- <run-blocks-index-build!
+  [repo search-db conn build-options]
+  (let [build-id (start-search-index-build! repo)]
+    (-> (report-search-index-progress! repo {:build-id build-id
+                                             :status :running
+                                             :stage :search-index
+                                             :progress 0
+                                             :processed 0
+                                             :total 0})
+        (p/then (fn [_]
+                  (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
+        (p/then (fn [_]
+                  (<build-blocks-index! repo search-db conn build-id build-options)))
+        (p/finally (fn []
+                     (when (= build-id (get @*search-index-build-ids repo))
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :idle}))
+                     (clear-search-index-build! repo build-id))))))
+
 (defn <rebuild-blocks-index!
   [repo & [{:keys [entities record-performance]}]]
   (p/let [search-db (get-search-db repo)
           conn (worker-state/get-datascript-conn repo)]
     (when (and search-db conn)
-      (let [build-id (start-search-index-build! repo)]
-        (-> (report-search-index-progress! repo {:build-id build-id
-                                                 :status :running
-                                                 :stage :search-index
-                                                 :progress 0
-                                                 :processed 0
-                                                 :total 0})
-            (p/then (fn [_]
-                      (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
-            (p/then (fn [_]
-                    (<build-blocks-index! repo search-db conn build-id
-                                            {:batch-size import-search-index-build-batch-size
-                                             :entities entities
-                                             :import-rebuild? true
-                                             :record-performance record-performance})))
-            (p/finally (fn []
-                         (when (= build-id (get @*search-index-build-ids repo))
-                           (report-search-index-progress! repo {:build-id build-id
-                                                                :status :idle}))
-                         (clear-search-index-build! repo build-id))))))))
+      (<run-blocks-index-build!
+       repo search-db conn
+       {:batch-size import-search-index-build-batch-size
+        :entities entities
+        :import-rebuild? true
+        :record-performance record-performance}))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force? await-completion?]]
@@ -507,27 +512,12 @@
           (if await-completion?
             (<rebuild-blocks-index! repo)
             (when-let [conn (worker-state/get-datascript-conn repo)]
-              (let [build-id (start-search-index-build! repo)]
-                (-> (report-search-index-progress! repo {:build-id build-id
-                                                         :status :running
-                                                         :stage :search-index
-                                                         :progress 0
-                                                         :processed 0
-                                                         :total 0})
-                    (p/then (fn [_]
-                              (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
-                    (p/then (fn [_]
-                              (<build-blocks-index! repo search-db conn build-id)))
-                    (p/catch (fn [error]
-                               (when-not (= :search/stale-index-build (:type (ex-data error)))
-                                 (log/error :search/index-build-failed {:repo repo
-                                                                        :error error}))))
-                    (p/finally (fn []
-                                 (when (= build-id (get @*search-index-build-ids repo))
-                                   (report-search-index-progress! repo {:build-id build-id
-                                                                        :status :idle}))
-                                 (clear-search-index-build! repo build-id))))
-                :started))))))))
+              (-> (<run-blocks-index-build! repo search-db conn nil)
+                  (p/catch (fn [error]
+                             (when-not (= :search/stale-index-build (:type (ex-data error)))
+                               (log/error :search/index-build-failed {:repo repo
+                                                                      :error error})))))
+              :started)))))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]
