@@ -148,5 +148,4 @@ pnpm test:node-adapter
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 
 ## Notes
-- Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.
-- DB sync implementation guide is in `docs/agent-guide/db-sync/db-sync-guide.md`.
+- Runtime and db-sync engineering guidance is consolidated in `../../docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md`; current protocol and route definitions live under `src/logseq/db_sync/worker/`.
