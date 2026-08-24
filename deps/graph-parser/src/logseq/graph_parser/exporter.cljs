@@ -3272,25 +3272,28 @@
                (string/starts-with? import-path "pages/")
                (seq lines)
                (every? some? pairs))
-      (let [property-names (mapv (comp normalize-bulk-property-name first) pairs)
-            properties (into {} (map (fn [[property-name value]]
-                                       [(normalize-bulk-property-name property-name) value])) pairs)
-            user-property-names (remove #{:title :tags} property-names)
+      (let [property-pairs (mapv (fn [[property-title value]]
+                                   [(normalize-bulk-property-name property-title)
+                                    property-title
+                                    value])
+                                 pairs)
+            property-names (mapv first property-pairs)
+            properties (into {} (map (fn [[property-name _property-title value]]
+                                       [property-name value])) property-pairs)
+            user-property-pairs (remove #(contains? #{:title :tags} (first %))
+                                        property-pairs)
+            user-property-names (map first user-property-pairs)
             unsupported-built-ins (set/intersection (set user-property-names)
                                                     file-built-in-property-names)
-            user-property-pairs (remove (fn [[property-name _value]]
-                                          (contains? #{:title :tags}
-                                                     (normalize-bulk-property-name property-name)))
-                                        pairs)
             values (map second pairs)]
         (when (and (= (count property-names) (count (distinct property-names)))
                    (string? (:title properties))
                    (not (string/blank? (:title properties)))
                    (empty? unsupported-built-ins)
                    (every? #(gp-property/valid-property-name? (str %)) user-property-names)
-                   (not-any? (fn [[property-name value]]
+                   (not-any? (fn [[property-name _property-title value]]
                                (unsupported-bulk-property-value?
-                                (normalize-bulk-property-name property-name)
+                                property-name
                                 value
                                 property-context))
                              user-property-pairs)
@@ -3301,7 +3304,7 @@
                                        (nil? (bulk-page-ref-values %))))
                              values))
           {:file file
-           :pairs pairs
+           :property-pairs property-pairs
            :properties properties})))))
 
 (defn- <partition-simple-page-property-files
@@ -3368,25 +3371,22 @@
 (defn- build-simple-page-property-options
   [simple-files]
   (let [all-property-pairs
-        (mapcat (fn [{:keys [pairs]}]
-                  (remove (fn [[property-name _value]]
-                            (contains? #{:title :tags}
-                                       (normalize-bulk-property-name property-name)))
-                          pairs))
+        (mapcat (fn [{:keys [property-pairs]}]
+                  (remove #(contains? #{:title :tags} (first %)) property-pairs))
                 simple-files)
-        property-pairs (remove (fn [[_property-name value]] (string/blank? value))
+        property-pairs (remove (fn [[_property-name _property-title value]]
+                                 (string/blank? value))
                                all-property-pairs)
         values-by-property
-        (reduce (fn [result [property-name value]]
-                  (update result (normalize-bulk-property-name property-name) (fnil conj []) value))
+        (reduce (fn [result [property-name _property-title value]]
+                  (update result property-name (fnil conj []) value))
                 {}
                 property-pairs)
         all-property-titles
-        (reduce (fn [result [property-name _value]]
-                  (let [property-key (normalize-bulk-property-name property-name)]
-                    (if (contains? result property-key)
+        (reduce (fn [result [property-name property-title _value]]
+                  (if (contains? result property-name)
                       result
-                      (assoc result property-key property-name))))
+                    (assoc result property-name property-title)))
                 {}
                 all-property-pairs)
         empty-property-titles
