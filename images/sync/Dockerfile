@@ -54,6 +54,9 @@ ENV DB_SYNC_DATA_DIR=/app/data
 ENV DB_SYNC_STORAGE_DRIVER=sqlite
 ENV DB_SYNC_ASSETS_DRIVER=filesystem
 ENV DB_SYNC_LOG_LEVEL=info
+ENV COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
+ENV COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6
+ENV COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json
 
 USER nonroot:nonroot
 EXPOSE 8787
