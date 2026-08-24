@@ -242,38 +242,35 @@
        (not (contains? #{"tags"} tag-name))))
 
 (defn- find-existing-class
-  "Returns an existing class's `:block/uuid` by unique name and parents.
-  Uses the import indexes first and searches `db` when the indexes do not identify the class."
-  [db {full-name :block/name title :block/title block-ns :block/namespace}
-   page-names-to-uuids all-idents]
-  (or (when (some-> (get @all-idents (keyword title)) db-malli-schema/class?)
-        (get @page-names-to-uuids full-name))
-      (if block-ns
-        (->> (d/q '[:find [?b ...]
-                    :in $ ?name
-                    :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
-                  db
-                  (ns-util/get-last-part full-name))
-             (map #(d/entity db %))
-             (some #(let [parent (->> (ldb/get-class-extends %)
-                                      (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                                      first)
-                          parent-ancestors (when parent (ldb/get-page-parents parent))
-                          parents (cond-> (or parent-ancestors [])
-                                    parent (conj parent))]
-                      (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
-                        (:block/uuid %)))))
-        (first
-         (d/q '[:find [?uuid ...]
+  "Finds a class entity by unique name and parents and returns its :block/uuid if found.
+  db is searched because there is no in-memory index only for created classes by unique name"
+  [db {full-name :block/name block-ns :block/namespace}]
+  (if block-ns
+    (->> (d/q '[:find [?b ...]
                 :in $ ?name
                 :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
               db
-              full-name)))))
+              (ns-util/get-last-part full-name))
+         (map #(d/entity db %))
+         (some #(let [parent (->> (ldb/get-class-extends %)
+                                  (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                                  first)
+                      parent-ancestors (when parent (ldb/get-page-parents parent))
+                      parents (cond-> (or parent-ancestors [])
+                                parent (conj parent))]
+                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
+                    (:block/uuid %)))))
+    (first
+     (d/q '[:find [?uuid ...]
+            :in $ ?name
+            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
+          db
+          full-name))))
 
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
-  because it has been moved"
-  [db tag-block {:keys [page-names-to-uuids classes-tx] :as per-file-state} user-options all-idents]
+   because it has been moved"
+  [db tag-block {:keys [page-names-to-uuids classes-tx]} user-options all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
@@ -283,7 +280,7 @@
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
-      (let [existing-tag-uuid (find-existing-class db tag-block (:page-names-to-uuids per-file-state) all-idents)
+      (let [existing-tag-uuid (find-existing-class db tag-block)
             internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
         (cond
           ;; Don't overwrite internal tags
@@ -2047,39 +2044,26 @@
                  (conj parents' current-parent))
           (vec (reverse parents')))))))
 
-(defn- existing-page-name-uuid
-  [classes-from-property-parents all-existing-page-uuids p]
-  [(if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
-                             (contains? (:block/tags p) :logseq.class/Page))
-                         ;; These classes have parents now but don't in file graphs (and in extract)
-                             (not (contains? classes-from-property-parents (:block/title p)))
-                             (get-page-parents p all-existing-page-uuids))]
-     ;; Build a :block/name for namespace pages that matches data from extract/extract
-     (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
-     (:block/name p))
-   (or (:block/uuid p)
-       (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
-                       (select-keys p [:block/name :block/tags]))))])
-
-(defn- build-all-existing-page-uuids
+(defn- get-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
    their full hierarchy in the name"
   [classes-from-property-parents all-existing-page-uuids]
   (->> all-existing-page-uuids
        (map (fn [[_ p]]
-              (existing-page-name-uuid classes-from-property-parents all-existing-page-uuids p)))
+              (vector
+               (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
+                                         (contains? (:block/tags p) :logseq.class/Page))
+                                    ;; These classes have parents now but don't in file graphs (and in extract)
+                                     (not (contains? classes-from-property-parents (:block/title p)))
+                                     (get-page-parents p all-existing-page-uuids))]
+                ;; Build a :block/name for namespace pages that matches data from extract/extract
+                 (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
+                 (:block/name p))
+               (or (:block/uuid p)
+                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
+                                   (select-keys p [:block/name :block/tags])))))))
        (into {})))
-
-(defn- get-all-existing-page-uuids
-  [{:keys [classes-from-property-parents all-existing-page-uuids
-           all-existing-page-name-uuids indexed-classes-from-property-parents]}]
-  (let [classes @classes-from-property-parents]
-    (when (not= classes @indexed-classes-from-property-parents)
-      (reset! all-existing-page-name-uuids
-              (build-all-existing-page-uuids classes @all-existing-page-uuids))
-      (reset! indexed-classes-from-property-parents classes))
-    @all-existing-page-name-uuids))
 
 (defn- journal-file-title
   [path]
@@ -2106,29 +2090,22 @@
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
-  (let [file-page? (::file-page? m)
-        m (dissoc m ::file-page?)
-        ;; These attributes are not allowed to be transacted because they must not change across files
+  (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        ordinary-page-ref? (and (not file-page?)
-                                (= #{:logseq.class/Page} (set (:block/tags m)))
-                                (empty? (apply dissoc m (into disallowed-attributes [:block/tags :block/parent]))))]
-    ;; Reference-only Page entities do not redefine an existing page.
-    (when-not ordinary-page-ref?
-      (let [allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                     (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                           m))
-            block-changes (select-keys m allowed-attributes)]
-        (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-          (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
-                                  ignored-attrs)}))
-        (when (seq block-changes)
-          (cond-> (merge block-changes {:block/uuid page-uuid})
-            (seq (:block/alias m))
-            (update-page-alias page-names-to-uuids)
-            (:block/tags m)
-            (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))))
+        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
+                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                       m))
+        block-changes (select-keys m allowed-attributes)]
+    (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+      (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
+                              ignored-attrs)}))
+    (when (seq block-changes)
+      (cond-> (merge block-changes {:block/uuid page-uuid})
+        (seq (:block/alias m))
+        (update-page-alias page-names-to-uuids)
+        (:block/tags m)
+        (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))
 
 (defn- modify-page-tx
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
@@ -2239,16 +2216,13 @@
          page))
      pages)))
 
-(declare record-performance!)
-
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [page-index-started (.now js/performance)
-        journal-page-name-uuids @(:journal-page-name-uuids import-state)
+  (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
                                           (contains? journal-page-name-uuids (:block/name %))))
@@ -2257,14 +2231,13 @@
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
                             ;; remove file path relative
-                            (map (fn [page]
-                                   (cond-> (dissoc page :block/file)
-                                     (:block/file page) (assoc ::file-page? true)))))
+                            (map #(dissoc % :block/file)))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
-        all-existing-page-uuids (get-all-existing-page-uuids import-state)
+        all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
+                                                             @(:all-existing-page-uuids import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         all-new-page-uuids (->> all-pages
                                 (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
@@ -2272,50 +2245,32 @@
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
         page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
-        _ (record-performance! options :graph-tx-construct page-index-started
-                               {:stage :page-index
-                                :items (count all-pages)})
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
-        page-properties-started (.now js/performance)
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
-        _ (record-performance! options :graph-tx-construct page-properties-started
-                               {:stage :page-properties
-                                :items (count all-pages-m)})
-        page-entities-started (.now js/performance)
-        pages-tx (into []
-                       (keep (fn [{m :block _properties-tx :properties-tx}]
-                               (let [page-uuid (if (::original-name m)
-                                                 (all-existing-page-uuids (::original-name m))
-                                                 (all-existing-page-uuids (:block/name m)))
-                                     page (if page-uuid
-                                            (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
-                                            (when (or (ldb/class? m)
-                                                      ;; Don't build a new page if it overwrites an existing class
-                                                      (not (some-> (get @(:all-idents import-state)
-                                                                        (some-> (or (::original-title m) (:block/title m))
-                                                                                build-class-ident-name
-                                                                                keyword))
-                                                                   db-malli-schema/class?))
-                                                      ;; TODO: Enable this when it's valid for all test graphs because
-                                                      ;; pages with properties must be built or else properties-tx is invalid
-                                                      #_(seq properties-tx))
-                                              (build-new-page-or-class (dissoc m ::original-name ::original-title ::file-page?)
-                                                                       @conn per-file-state (:all-idents import-state) options)))]
-                                 ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
-                                 page)))
-                       all-pages-m)
-        _ (record-performance! options :graph-tx-construct page-entities-started
-                               {:stage :page-entities
-                                :items (count pages-tx)})
-        page-property-values-started (.now js/performance)
-        page-properties-tx (into [] (mapcat :properties-tx) all-pages-m)
-        _ (record-performance! options :graph-tx-construct page-property-values-started
-                               {:stage :page-property-values
-                                :items (count page-properties-tx)})]
+        pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
+                         (let [page (if-let [page-uuid (if (::original-name m)
+                                                         (all-existing-page-uuids (::original-name m))
+                                                         (all-existing-page-uuids (:block/name m)))]
+                                      (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
+                                      (when (or (ldb/class? m)
+                                                ;; Don't build a new page if it overwrites an existing class
+                                                (not (some-> (get @(:all-idents import-state)
+                                                                  (some-> (or (::original-title m) (:block/title m))
+                                                                          build-class-ident-name
+                                                                          keyword))
+                                                             db-malli-schema/class?))
+                                                ;; TODO: Enable this when it's valid for all test graphs because
+                                                ;; pages with properties must be built or else properties-tx is invalid
+                                                #_(seq properties-tx))
+                                        (build-new-page-or-class (dissoc m ::original-name ::original-title)
+                                                                 @conn per-file-state (:all-idents import-state) options)))]
+                           ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
+                           page))
+                       all-pages-m)]
     {:pages-tx pages-tx
-     :page-properties-tx page-properties-tx
+     :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
      :per-file-state per-file-state}))
 
@@ -2398,10 +2353,6 @@
    :property-schemas (atom {})
    ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
    :all-existing-page-uuids (atom {})
-   ;; Incremental page name to uuid index used by subsequent imported files
-   :all-existing-page-name-uuids (atom {})
-   ;; Class naming rules used to build the incremental page name index
-   :indexed-classes-from-property-parents (atom #{})
    ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
    :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
@@ -2539,14 +2490,6 @@
   (let [format' (keyword format)]
     (if (= format' :org) "*" "-")))
 
-(defn- record-performance!
-  [options phase started data]
-  (when-let [record-performance (:record-performance options)]
-    (record-performance
-     (merge {:phase phase
-             :elapsed-ms (- (.now js/performance) started)}
-            data))))
-
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at record-performance]}]
@@ -2637,17 +2580,7 @@
   [txs {:keys [import-state] :as _opts}]
   ;; (when (string/includes? (:file _opts) "some-file.md") (cljs.pprint/pprint txs))
   (when-let [nodes (seq (filter :block/name txs))]
-    (let [nodes-by-uuid (into {} (map (juxt :block/uuid identity)) nodes)
-          all-existing-page-uuids (swap! (:all-existing-page-uuids import-state) merge nodes-by-uuid)
-          classes @(:classes-from-property-parents import-state)]
-      ;; A naming-rule change leaves the cache stale until the next file rebuilds it.
-      (when (= classes @(:indexed-classes-from-property-parents import-state))
-        (swap! (:all-existing-page-name-uuids import-state)
-               merge
-               (into {}
-                     (map (fn [[_ p]]
-                            (existing-page-name-uuid classes all-existing-page-uuids p)))
-                     nodes-by-uuid))))))
+    (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options]
@@ -2688,43 +2621,24 @@
   (p/let [import-file (or (:file-import-path *options) file)
           options (assoc *options :notify-user notify-user :log-fn log-fn :file import-file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn import-file content options)
-          prepare-started (.now js/performance)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
-          _ (record-performance! options :graph-tx-construct prepare-started
-                                 {:stage :prepare
-                                  :items (+ (count pages) (count blocks))})
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-          blocks-started (.now js/performance)
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
-          _ (record-performance! options :graph-tx-construct blocks-started
-                                 {:stage :blocks
-                                  :items (count blocks-tx)})
-          split-properties-started (.now js/performance)
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
-          _ (record-performance! options :graph-tx-construct split-properties-started
-                                 {:stage :split-properties
-                                  :items (+ (count property-pages-tx)
-                                            (count property-page-properties-tx)
-                                            (count pages-tx'))})
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
           ;; Necessary to transact new property entities first so that block+page properties can be transacted next
           ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
           tx-meta {::imported-data? true ::path import-file ::new-graph? true}
-          property-transact-started (.now js/performance)
           main-props-tx-report (ldb/transact! conn property-pages-tx tx-meta)
-          _ (record-performance! options :datascript-transact property-transact-started
-                                 {:stage :property-pages
-                                  :items (count property-pages-tx)})
           _ (save-from-tx property-pages-tx options)
 
-          main-construct-started (.now js/performance)
           classes-tx @(:classes-tx tx-options)
           {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
@@ -2749,34 +2663,18 @@
           tx' (into [] (comp cat (remove nil?))
                     [pages-index page-properties-tx property-page-properties-tx pages-tx''
                      classes-tx' custom-status-tx blocks-index blocks-tx])
-          _ (record-performance! options :graph-tx-construct main-construct-started
-                                 {:stage :main
-                                  :items (count tx')})
           ;; _ (prn :tx-counts (map #(vector %1 (count %2))
           ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
           ;;                        [pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
           ;; _ (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'})
-          main-transact-started (.now js/performance)
           main-tx-report (ldb/transact! conn tx' tx-meta)
-          _ (record-performance! options :datascript-transact main-transact-started
-                                 {:stage :main
-                                  :items (count tx')})
           _ (save-from-tx tx' options)
 
-          upstream-construct-started (.now js/performance)
           upstream-properties-tx
           (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-          _ (record-performance! options :graph-tx-construct upstream-construct-started
-                                 {:stage :upstream-properties
-                                  :items (count upstream-properties-tx)})
           ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
-          upstream-transact-started (.now js/performance)
           upstream-tx-report (when (seq upstream-properties-tx)
                                (ldb/transact! conn upstream-properties-tx tx-meta))
-          _ (when (seq upstream-properties-tx)
-              (record-performance! options :datascript-transact upstream-transact-started
-                                   {:stage :upstream-properties
-                                    :items (count upstream-properties-tx)}))
           _ (save-from-tx upstream-properties-tx options)]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
@@ -3317,13 +3215,14 @@
       (if-let [file (first remaining-files)]
         (-> (<read-file file)
             (p/then (fn [content]
-                      (let [started (.now js/performance)
+                      (let [started (extract/performance-now-ms)
                             simple-file (simple-page-property-file
                                          file content rpath-key property-context)
-                            _ (record-performance! options :parse started
-                                                   {:path (:path file)
-                                                    :bytes (count content)
-                                                    :parser :simple-page-properties})]
+                            _ (extract/record-performance!
+                               options :parse started
+                               {:path (:path file)
+                                :bytes (count content)
+                                :parser :simple-page-properties})]
                         (if simple-file
                           (p/recur (rest remaining-files)
                                    (conj simple-files simple-file)
@@ -3706,7 +3605,7 @@
 
 (defn- build-direct-import-db
   [base-db init-tx block-props-tx init-tx-id properties-tx-id options]
-  (let [construct-started (.now js/performance)
+  (let [construct-started (extract/performance-now-ms)
         allocation (allocate-direct-import-entities base-db init-tx)
         schema (build-direct-import-schema (:schema base-db) init-tx allocation)
         init-datoms
@@ -3725,15 +3624,15 @@
         {:keys [all-datoms tx-datoms]}
         (merge-direct-import-datoms base-db schema (into init-datoms property-datoms))
         storage (ds-storage/storage base-db)
-        _ (record-performance! options :graph-tx-construct construct-started
-                                {:entities (count (:entities allocation))
-                                :new-datoms (count tx-datoms)
-                                :all-datoms (count all-datoms)})
-        index-started (.now js/performance)
+        _ (extract/record-performance! options :graph-tx-construct construct-started
+                                       {:entities (count (:entities allocation))
+                                        :new-datoms (count tx-datoms)
+                                        :all-datoms (count all-datoms)})
+        index-started (extract/performance-now-ms)
         db (d/init-db all-datoms schema (cond-> {}
                                           storage (assoc :storage storage)))
-        _ (record-performance! options :datascript-index-build index-started
-                               {:datoms (count all-datoms)})]
+        _ (extract/record-performance! options :datascript-index-build index-started
+                                       {:datoms (count all-datoms)})]
     {:db db
      :new-datoms tx-datoms}))
 
@@ -3769,13 +3668,14 @@
             (<partition-simple-page-property-files
              (ordered-doc-files doc-files) <read-file rpath-key options)
             _ (when (seq simple-files)
-                (let [extract-started (.now js/performance)
+                (let [extract-started (extract/performance-now-ms)
                       {:keys [build-options property-schemas ordinary-page-titles]}
                       (build-simple-page-property-options simple-files)
-                      _ (record-performance! options :extract-normalize extract-started
-                                             {:files (count simple-files)
-                                              :parser :simple-page-properties})
-                      construct-started (.now js/performance)
+                      _ (extract/record-performance!
+                         options :extract-normalize extract-started
+                         {:files (count simple-files)
+                          :parser :simple-page-properties})
+                      construct-started (extract/performance-now-ms)
                       {:keys [init-tx block-props-tx]}
                       (sqlite-build/build-blocks-tx build-options)
                       init-tx (into init-tx (map ordinary-page) ordinary-page-titles)
@@ -3786,10 +3686,11 @@
                                init-tx block-props-tx init-tx-id)
                       block-props-tx' (prepare-simple-page-properties-tx
                                        init-tx block-props-tx property-schemas properties-tx-id)
-                      _ (record-performance! options :graph-tx-construct construct-started
-                                             {:files (count simple-files)
-                                              :init-entities (count init-tx)
-                                              :property-entities (count block-props-tx')})
+                      _ (extract/record-performance!
+                         options :graph-tx-construct construct-started
+                         {:files (count simple-files)
+                          :init-entities (count init-tx)
+                          :property-entities (count block-props-tx')})
                       {:keys [db new-datoms]}
                       (build-direct-import-db
                        base-db init-tx block-props-tx' init-tx-id properties-tx-id options)]
