@@ -930,19 +930,6 @@
           _result (remove-vfs! pool)]
     nil))
 
-(def-thread-api :thread-api/cleanup-file-graph-import-staging
-  []
-  (p/let [storage (platform/storage (platform/current))
-          graph-names ((:list-graphs storage))]
-    (p/all
-     (map (fn [graph-name]
-            (let [repo (str sqlite-util/db-version-prefix graph-name)]
-              (p/let [pool (<get-opfs-pool repo)
-                      _ (close-db! repo)
-                      _ (remove-vfs! pool)]
-                nil)))
-          (filter file-graph-import/staging-repo? graph-names)))))
-
 (def-thread-api :thread-api/close-db
   [repo]
   (sync-crypt/cancel-ui-requests! {:reason :close-db
