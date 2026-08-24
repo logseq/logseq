@@ -2276,7 +2276,7 @@
         _ (record-performance! options :graph-tx-construct page-properties-started
                                {:stage :page-properties
                                 :items (count all-pages-m)})
-        page-transactions-started (.now js/performance)
+        page-entities-started (.now js/performance)
         pages-tx (into []
                        (keep (fn [{m :block _properties-tx :properties-tx}]
                                (let [page (if-let [page-uuid (if (::original-name m)
@@ -2298,10 +2298,14 @@
                                  ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                                  page)))
                        all-pages-m)
+        _ (record-performance! options :graph-tx-construct page-entities-started
+                               {:stage :page-entities
+                                :items (count pages-tx)})
+        page-property-values-started (.now js/performance)
         page-properties-tx (into [] (mapcat :properties-tx) all-pages-m)
-        _ (record-performance! options :graph-tx-construct page-transactions-started
-                               {:stage :page-transactions
-                                :items (+ (count pages-tx) (count page-properties-tx))})]
+        _ (record-performance! options :graph-tx-construct page-property-values-started
+                               {:stage :page-property-values
+                                :items (count page-properties-tx)})]
     {:pages-tx pages-tx
      :page-properties-tx page-properties-tx
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
