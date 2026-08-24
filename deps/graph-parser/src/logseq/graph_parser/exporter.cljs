@@ -2280,18 +2280,12 @@
                                {:stage :page-properties
                                 :items (count all-pages-m)})
         page-entities-started (.now js/performance)
-        page-entity-stats (volatile! {:existing-page-inputs 0
-                                      :existing-page-elapsed-ms 0
-                                      :new-page-inputs 0
-                                      :new-page-elapsed-ms 0})
         pages-tx (into []
                        (keep (fn [{m :block _properties-tx :properties-tx}]
-                               (let [started (.now js/performance)
-                                     page-uuid (if (::original-name m)
+                               (let [page-uuid (if (::original-name m)
                                                  (all-existing-page-uuids (::original-name m))
                                                  (all-existing-page-uuids (:block/name m)))
-                                     existing-page? (some? page-uuid)
-                                     page (if existing-page?
+                                     page (if page-uuid
                                             (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
                                             (when (or (ldb/class? m)
                                                       ;; Don't build a new page if it overwrites an existing class
@@ -2304,22 +2298,13 @@
                                                       ;; pages with properties must be built or else properties-tx is invalid
                                                       #_(seq properties-tx))
                                               (build-new-page-or-class (dissoc m ::original-name ::original-title ::file-page?)
-                                                                       @conn per-file-state (:all-idents import-state) options)))
-                                     elapsed-ms (- (.now js/performance) started)
-                                     input-key (if existing-page? :existing-page-inputs :new-page-inputs)
-                                     elapsed-key (if existing-page? :existing-page-elapsed-ms :new-page-elapsed-ms)]
-                                 (vswap! page-entity-stats
-                                         (fn [stats]
-                                           (-> stats
-                                               (update input-key inc)
-                                               (update elapsed-key + elapsed-ms))))
+                                                                       @conn per-file-state (:all-idents import-state) options)))]
                                  ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                                  page)))
                        all-pages-m)
         _ (record-performance! options :graph-tx-construct page-entities-started
-                               (merge {:stage :page-entities
-                                       :items (count pages-tx)}
-                                      @page-entity-stats))
+                               {:stage :page-entities
+                                :items (count pages-tx)})
         page-property-values-started (.now js/performance)
         page-properties-tx (into [] (mapcat :properties-tx) all-pages-m)
         _ (record-performance! options :graph-tx-construct page-property-values-started
