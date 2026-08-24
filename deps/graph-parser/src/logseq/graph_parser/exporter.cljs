@@ -2486,6 +2486,14 @@
   (let [format' (keyword format)]
     (if (= format' :org) "*" "-")))
 
+(defn- record-performance!
+  [options phase started data]
+  (when-let [record-performance (:record-performance options)]
+    (record-performance
+     (merge {:phase phase
+             :elapsed-ms (- (.now js/performance) started)}
+            data))))
+
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at record-performance]}]
@@ -2617,6 +2625,7 @@
   (p/let [import-file (or (:file-import-path *options) file)
           options (assoc *options :notify-user notify-user :log-fn log-fn :file import-file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn import-file content options)
+          construct-started (.now js/performance)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
@@ -2628,13 +2637,25 @@
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
+          _ (record-performance! options :graph-tx-construct construct-started
+                                 {:stage :pages-and-blocks
+                                  :items (+ (count property-pages-tx)
+                                            (count page-properties-tx)
+                                            (count property-page-properties-tx)
+                                            (count pages-tx')
+                                            (count blocks-tx))})
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
           ;; Necessary to transact new property entities first so that block+page properties can be transacted next
           ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
           tx-meta {::imported-data? true ::path import-file ::new-graph? true}
+          property-transact-started (.now js/performance)
           main-props-tx-report (ldb/transact! conn property-pages-tx tx-meta)
+          _ (record-performance! options :datascript-transact property-transact-started
+                                 {:stage :property-pages
+                                  :items (count property-pages-tx)})
           _ (save-from-tx property-pages-tx options)
 
+          main-construct-started (.now js/performance)
           classes-tx @(:classes-tx tx-options)
           {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
@@ -2659,18 +2680,34 @@
           tx' (into [] (comp cat (remove nil?))
                     [pages-index page-properties-tx property-page-properties-tx pages-tx''
                      classes-tx' custom-status-tx blocks-index blocks-tx])
+          _ (record-performance! options :graph-tx-construct main-construct-started
+                                 {:stage :main
+                                  :items (count tx')})
           ;; _ (prn :tx-counts (map #(vector %1 (count %2))
           ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
           ;;                        [pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
           ;; _ (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'})
+          main-transact-started (.now js/performance)
           main-tx-report (ldb/transact! conn tx' tx-meta)
+          _ (record-performance! options :datascript-transact main-transact-started
+                                 {:stage :main
+                                  :items (count tx')})
           _ (save-from-tx tx' options)
 
+          upstream-construct-started (.now js/performance)
           upstream-properties-tx
           (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
+          _ (record-performance! options :graph-tx-construct upstream-construct-started
+                                 {:stage :upstream-properties
+                                  :items (count upstream-properties-tx)})
           ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
+          upstream-transact-started (.now js/performance)
           upstream-tx-report (when (seq upstream-properties-tx)
                                (ldb/transact! conn upstream-properties-tx tx-meta))
+          _ (when (seq upstream-properties-tx)
+              (record-performance! options :datascript-transact upstream-transact-started
+                                   {:stage :upstream-properties
+                                    :items (count upstream-properties-tx)}))
           _ (save-from-tx upstream-properties-tx options)]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
