@@ -1144,7 +1144,7 @@ let comments_area_selector =
 let reaction_query target_uuid emoji_id =
   query_call
     (Cli_primitive.make_datascript_query
-       ~find:(Vec.singleton (list_vec (Vec.of_array [| sym "?r"; sym "." |])))
+       ~find:(Vec.of_array [| sym "?r"; sym "." |])
        ~in_:
          (Vec.of_array
             [|
@@ -1189,9 +1189,7 @@ let reaction_query target_uuid emoji_id =
 let task_status_query block_uuid =
   query_call
     (Cli_primitive.make_datascript_query
-       ~find:
-         (Vec.singleton
-            (list_vec (Vec.of_array [| sym "?status-ident"; sym "." |])))
+       ~find:(Vec.of_array [| sym "?status-ident"; sym "." |])
        ~in_:
          (Vec.of_array
             [|
