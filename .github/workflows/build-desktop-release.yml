@@ -98,7 +98,7 @@ jobs:
             ${{ runner.os }}-pnpm-
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
