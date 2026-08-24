@@ -42,6 +42,7 @@ FROM gcr.io/distroless/nodejs24-debian12:nonroot
 
 WORKDIR /app
 LABEL org.opencontainers.image.description="Self-hosted Logseq Sync Server image (db-sync node adapter)"
+LABEL org.opencontainers.image.source="https://github.com/SSamDav/logseq"
 
 COPY --chown=nonroot:nonroot --from=build /src/deps/db-sync/package.json /app/package.json
 COPY --chown=nonroot:nonroot --from=build /src/deps/db-sync/node_modules /app/node_modules
