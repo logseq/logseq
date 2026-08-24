@@ -2877,40 +2877,25 @@
 
 (defn- <atomic-export-file
   [conn {:file/keys [path] :as file-map} export-options <export-file]
-  (let [notifications (atom [])
-        issues (atom [])
-        import-state (:import-state export-options)
-        forked-import-state (fork-import-state import-state)
-        on-tx-report (or (:on-tx-report export-options) (constantly nil))
-        notify-user (or (:notify-user export-options) (constantly nil))
-        record-issue (or (:record-issue export-options) (constantly nil))
-        temp-options (assoc export-options
-                            :import-state forked-import-state
-                            :notify-user #(swap! notifications conj %)
-                            :record-issue #(swap! issues conj %)
-                            :on-tx-report (constantly nil))]
-    (if-let [*batch-tx-data (::file-import-batch-tx-data export-options)]
+  (if-let [*batch-tx-data (::file-import-batch-tx-data export-options)]
+    (let [notifications (atom [])
+          issues (atom [])
+          import-state (:import-state export-options)
+          forked-import-state (fork-import-state import-state)
+          notify-user (or (:notify-user export-options) (constantly nil))
+          record-issue (or (:record-issue export-options) (constantly nil))
+          temp-options (assoc export-options
+                              :import-state forked-import-state
+                              :notify-user #(swap! notifications conj %)
+                              :record-issue #(swap! issues conj %)
+                              :on-tx-report (constantly nil))]
       (p/let [result (<export-file-in-document-batch
                       conn file-map temp-options <export-file *batch-tx-data)]
         (commit-file-import-side-effects!
          import-state forked-import-state notifications issues notify-user record-issue)
-        result)
-      (p/let [tx-report (-> (ldb/<batch-transact-with-temp-conn!
-                              conn
-                              {::imported-data? true
-                               ::path path
-                               ::new-graph? true}
-                              (fn [temp-conn _tx-data]
-                                (-> (<export-file temp-conn file-map temp-options)
-                                    (p/catch #(throw (ensure-error-code
-                                                     % :import/file-parse-failed path))))))
-                             (p/catch #(throw (ensure-error-code
-                                              % :import/file-commit-failed path))))]
-        (commit-file-import-side-effects!
-         import-state forked-import-state notifications issues notify-user record-issue)
-        (when tx-report
-          (on-tx-report tx-report))
-        tx-report))))
+        result))
+    (-> (<export-file conn file-map export-options)
+        (p/catch #(throw (ensure-error-code % :import/file-parse-failed path))))))
 
 (defn- file-import-issue
   [path error]
