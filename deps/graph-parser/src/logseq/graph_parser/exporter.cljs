@@ -2040,26 +2040,39 @@
                  (conj parents' current-parent))
           (vec (reverse parents')))))))
 
-(defn- get-all-existing-page-uuids
+(defn- existing-page-name-uuid
+  [classes-from-property-parents all-existing-page-uuids p]
+  [(if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
+                             (contains? (:block/tags p) :logseq.class/Page))
+                         ;; These classes have parents now but don't in file graphs (and in extract)
+                             (not (contains? classes-from-property-parents (:block/title p)))
+                             (get-page-parents p all-existing-page-uuids))]
+     ;; Build a :block/name for namespace pages that matches data from extract/extract
+     (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
+     (:block/name p))
+   (or (:block/uuid p)
+       (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
+                       (select-keys p [:block/name :block/tags]))))])
+
+(defn- build-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
    their full hierarchy in the name"
   [classes-from-property-parents all-existing-page-uuids]
   (->> all-existing-page-uuids
        (map (fn [[_ p]]
-              (vector
-               (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
-                                         (contains? (:block/tags p) :logseq.class/Page))
-                                    ;; These classes have parents now but don't in file graphs (and in extract)
-                                     (not (contains? classes-from-property-parents (:block/title p)))
-                                     (get-page-parents p all-existing-page-uuids))]
-                ;; Build a :block/name for namespace pages that matches data from extract/extract
-                 (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
-                 (:block/name p))
-               (or (:block/uuid p)
-                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
-                                   (select-keys p [:block/name :block/tags])))))))
+              (existing-page-name-uuid classes-from-property-parents all-existing-page-uuids p)))
        (into {})))
+
+(defn- get-all-existing-page-uuids
+  [{:keys [classes-from-property-parents all-existing-page-uuids
+           all-existing-page-name-uuids indexed-classes-from-property-parents]}]
+  (let [classes @classes-from-property-parents]
+    (when (not= classes @indexed-classes-from-property-parents)
+      (reset! all-existing-page-name-uuids
+              (build-all-existing-page-uuids classes @all-existing-page-uuids))
+      (reset! indexed-classes-from-property-parents classes))
+    @all-existing-page-name-uuids))
 
 (defn- journal-file-title
   [path]
@@ -2232,8 +2245,7 @@
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
-        all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
-                                                             @(:all-existing-page-uuids import-state))
+        all-existing-page-uuids (get-all-existing-page-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         all-new-page-uuids (->> all-pages
                                 (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
@@ -2349,6 +2361,10 @@
    :property-schemas (atom {})
    ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
    :all-existing-page-uuids (atom {})
+   ;; Incremental page name to uuid index used by subsequent imported files
+   :all-existing-page-name-uuids (atom {})
+   ;; Class naming rules used to build the incremental page name index
+   :indexed-classes-from-property-parents (atom #{})
    ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
    :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
@@ -2584,7 +2600,17 @@
   [txs {:keys [import-state] :as _opts}]
   ;; (when (string/includes? (:file _opts) "some-file.md") (cljs.pprint/pprint txs))
   (when-let [nodes (seq (filter :block/name txs))]
-    (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
+    (let [nodes-by-uuid (into {} (map (juxt :block/uuid identity)) nodes)
+          all-existing-page-uuids (swap! (:all-existing-page-uuids import-state) merge nodes-by-uuid)
+          classes @(:classes-from-property-parents import-state)]
+      ;; A naming-rule change leaves the cache stale until the next file rebuilds it.
+      (when (= classes @(:indexed-classes-from-property-parents import-state))
+        (swap! (:all-existing-page-name-uuids import-state)
+               merge
+               (into {}
+                     (map (fn [[_ p]]
+                            (existing-page-name-uuid classes all-existing-page-uuids p)))
+                     nodes-by-uuid))))))
 
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options]
