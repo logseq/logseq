@@ -3756,17 +3756,9 @@
                          (when (and ident block-name
                                     (db-class/user-class-namespace? (namespace ident)))
                            [(keyword block-name) ident])))
-              tx-data)
-        class-name-uuids
-        (into {} (keep (fn [{ident :db/ident block-name :block/name block-uuid :block/uuid}]
-                         (when (and ident
-                                    (db-class/user-class-namespace? (namespace ident))
-                                    block-name block-uuid)
-                           [block-name block-uuid])))
               tx-data)]
     (swap! (:property-schemas import-state) merge property-schemas)
     (swap! (:all-idents import-state) merge property-idents class-idents)
-    (swap! (:class-name-uuids import-state) merge class-name-uuids)
     (save-from-tx tx-data {:import-state import-state})))
 
 (defn- simple-page-property-import-supported?
