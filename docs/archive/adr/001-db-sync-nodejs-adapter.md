@@ -4,7 +4,7 @@ Goal: Build a Node.js server adapter for DB sync so users can self-host without 
 Architecture: Reuse the existing db-sync core logic and route handlers while introducing a platform abstraction layer that swaps Cloudflare APIs for Node.js equivalents.
 Architecture: Provide a new Node.js entrypoint that wires HTTP and WebSocket handling to the shared handlers and pluggable storage and auth backends.
 Tech Stack: ClojureScript, shadow-cljs, Node.js LTS, standard Node HTTP and WebSocket libraries, existing db-sync ClojureScript modules.
-Related: Builds on docs/agent-guide/db-sync/db-sync-guide.md and docs/agent-guide/db-sync/protocol.md and docs/adr/0001-nodejs-db-sync-server-adapter.md.
+Related: Builds on the engineering context consolidated in docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md and docs/adr/0001-nodejs-db-sync-server-adapter.md.
 
 ## Problem statement
 The current DB sync server implementation assumes a Cloudflare Worker runtime and related APIs.
@@ -19,7 +19,7 @@ I will add a unit test that validates storage and auth adapter selection from co
 NOTE: I will write all tests before I add any implementation behavior.
 
 ## Scope
-The Node.js adapter will implement the existing HTTP and WebSocket endpoints as described in docs/agent-guide/db-sync/protocol.md.
+The Node.js adapter will implement the existing HTTP and WebSocket endpoints summarized in docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md; current route and protocol source remains authoritative.
 The adapter will run the same handler logic currently used by the Cloudflare worker.
 The adapter will support pluggable storage and auth providers to match the existing worker behavior.
 
@@ -40,7 +40,7 @@ The Node entrypoint will be responsible only for server lifecycle and wiring ada
                                         +------------------------+
 
 ## Implementation Plan
-1. Read docs/agent-guide/db-sync/db-sync-guide.md and docs/agent-guide/db-sync/protocol.md and list the Cloudflare-specific APIs used by the worker in deps/db-sync/src/logseq/db_sync/worker/.
+1. Read docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md and list the Cloudflare-specific APIs used by the worker in deps/db-sync/src/logseq/db_sync/worker/.
 2. Create a platform abstraction namespace in deps/db-sync/src/logseq/db_sync/platform/core.cljs that defines the minimal request, response, and WebSocket operations used by handlers.
 3. Add a Cloudflare platform adapter in deps/db-sync/src/logseq/db_sync/platform/cloudflare.cljs that wraps the current Worker Request, Response, and WebSocket types.
 4. Add a Node platform adapter in deps/db-sync/src/logseq/db_sync/platform/node.cljs that wraps Node HTTP requests, responses, and WebSocket connections.
@@ -51,7 +51,7 @@ The Node entrypoint will be responsible only for server lifecycle and wiring ada
 9. Add Node adapter implementations for storage and assets in deps/db-sync/src/logseq/db_sync/node/storage.cljs and deps/db-sync/src/logseq/db_sync/node/assets.cljs that map to the existing storage interfaces.
 10. Add a new shadow-cljs build target in deps/db-sync/shadow-cljs.edn for the Node adapter output.
 11. Add build and run scripts to deps/db-sync/package.json for the Node adapter, including a dev watch command.
-12. Update docs/agent-guide/db-sync/db-sync-guide.md with the new local dev and test commands for the Node adapter.
+12. Update the active db-sync documentation with the new local dev and test commands for the Node adapter.
 13. Add a new self-hosting section to docs/develop-logseq.md with minimal steps to run the Node adapter.
 14. Add integration tests under deps/db-sync/test/logseq/db_sync/node_adapter_test.cljs that launch the Node adapter and exercise HTTP and WS paths.
 15. Add unit tests under deps/db-sync/test/logseq/db_sync/platform_test.cljs that cover request normalization and error propagation.
