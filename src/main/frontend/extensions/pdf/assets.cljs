@@ -66,6 +66,33 @@
        :hls-file      (str "assets/" key ".edn")
        :original-path original-path})))
 
+(defonce ^:private *pending-area-image-asset-ids-by-repo (atom {}))
+
+(defn- asset-identities
+  [asset]
+  (if (map? asset)
+    (set (keep asset [:db/id :block/uuid]))
+    #{asset}))
+
+(defn pending-area-image-asset?
+  [repo asset-id]
+  (contains? (get @*pending-area-image-asset-ids-by-repo repo) asset-id))
+
+(defn- mark-pending-area-image-asset!
+  [repo asset]
+  (swap! *pending-area-image-asset-ids-by-repo update repo
+         (fnil into #{}) (asset-identities asset)))
+
+(defn- clear-pending-area-image-asset!
+  [repo asset]
+  (swap! *pending-area-image-asset-ids-by-repo
+         (fn [repo->asset-ids]
+           (let [asset-ids (apply disj (get repo->asset-ids repo #{})
+                                  (asset-identities asset))]
+             (if (seq asset-ids)
+               (assoc repo->asset-ids repo asset-ids)
+               (dissoc repo->asset-ids repo))))))
+
 (defn <highlight-color-id
   [repo color]
   (when color
@@ -116,7 +143,8 @@
       ;; try to move the asset block to the ref block
     (p/do!
      (when asset-block
-       (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false}))
+       (p/let [_ (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})]
+         (clear-pending-area-image-asset! (state/get-current-repo) asset-block)))
      ref-block)))
 
 (defn db-based-load-hls-data$
@@ -143,8 +171,11 @@
 
 (defn- persist-hl-area-image
   [repo-url _repo-dir _current _new-hl _old-hl png]
-  (p/let [result (db-based-persist-hl-area-image repo-url png)]
-    (first result)))
+  (p/let [result (db-based-persist-hl-area-image repo-url png)
+          asset (first result)]
+    (when asset
+      (mark-pending-area-image-asset! repo-url asset))
+    asset))
 
 (defn persist-hl-area-image$
   "Save pdf highlight area image"

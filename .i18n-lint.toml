@@ -164,6 +164,7 @@ allow_strings = [
   "SQLite",
   "HTTP",
   "SOCKS5",
+  "UUID",
   # Config directory path shown literally.
   "~/.logseq",
 ]

@@ -7,7 +7,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.graph-actions :as graph-actions]
             [frontend.components.library :as library]
-            [frontend.components.objects :as objects]
+            [frontend.components.table.objects :as table-objects]
             [frontend.components.plugins :as plugins]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
@@ -343,6 +343,14 @@
   (when-let [path-page-name (get-path-page-name route-match page-name route-block-uuid)]
     (util/page-name-sanity-lc path-page-name)))
 
+(hsx/defc on-mounted
+  [child on-mounted-fn]
+  (hooks/use-effect!
+   (fn []
+     (when on-mounted-fn
+       (on-mounted-fn))))
+  child)
+
 (hsx/defc lsp-pagebar-slot
   []
   (when (not config/publishing?)
@@ -387,11 +395,13 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (objects/class-objects page opts)))
+         (on-mounted (table-objects/class-objects page opts)
+                     (:on-tagged-nodes-rendered opts))))
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (objects/property-related-objects page opts))))]))
+         (on-mounted (table-objects/property-related-objects page opts)
+                     (:on-tagged-nodes-rendered opts)))))]))
 
 (hsx/defc sidebar-page-properties
   [config page]

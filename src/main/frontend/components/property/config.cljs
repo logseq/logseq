@@ -607,6 +607,8 @@
     {:close-on-click false
      :on-click
      (fn [^js e]
+       ;; The edit popup is anchored to this item, so parent property menus stay open.
+       (util/stop-propagation e)
        (p/let [values (db-async/<get-property-values (:db/ident property) {})
                existing-values (seq (:property/closed-values property))
                values' (if (seq existing-values)
