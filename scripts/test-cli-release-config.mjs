@@ -108,7 +108,7 @@ assertNotContains(buildWorkflow, "pnpm db-worker-node:compile:bundle", "db graph
 const desktopReleaseWorkflow = readText(".github/workflows/build-desktop-release.yml");
 assert.match(
   desktopReleaseWorkflow,
-  /OCAML_VERSION: '5\.4\.0'/,
+  /OCAML_VERSION: '5\.1\.1'/,
   "desktop release workflow should define the OCaml version used by cli/",
 );
 assert.match(
