@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -188,6 +189,7 @@ private fun TopBarContent(
   val contentTint = tint.copy(alpha = 0.8f)
 
   Surface(
+    modifier = Modifier.statusBarsPadding(),
     color = background,
     shadowElevation = 4.dp
   ) {
