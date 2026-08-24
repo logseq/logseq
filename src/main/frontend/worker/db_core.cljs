@@ -999,9 +999,9 @@
   (<db-exists? repo))
 
 (def-thread-api :thread-api/export-db-binary
-  [repo]
+  [repo & [strict-checkpoint?]]
   (p/let [_ (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-              (checkpoint-db! repo db true))
+              (checkpoint-db! repo db strict-checkpoint?))
           data (<export-db-file repo)]
     (->uint8array data)))
 

@@ -384,7 +384,7 @@
                       (throw (ex-info "target graph already exists"
                                       {:code :graph-already-exists
                                        :repo target-repo})))
-                  data (state/<invoke-db-worker :thread-api/export-db-binary staging-repo)
+                  data (state/<invoke-db-worker :thread-api/export-db-binary staging-repo true)
                   _ (<close-db staging-repo)
                   _ (reset! target-owned? true)
                   _ (state/<invoke-db-worker :thread-api/import-db-binary target-repo data)

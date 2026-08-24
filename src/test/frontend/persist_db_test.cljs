@@ -1680,7 +1680,7 @@
          (fn [{:keys [result calls]}]
            (is (= {:status :resolved :value publication-target-repo} result))
            (is (= [[:thread-api/db-exists [publication-target-repo]]
-                   [:thread-api/export-db-binary [publication-staging-repo]]
+                 [:thread-api/export-db-binary [publication-staging-repo true]]
                    [:thread-api/close-db [publication-staging-repo]]
                    [:thread-api/import-db-binary [publication-target-repo publication-payload]]
                    [:thread-api/search-build-blocks-indice-in-worker
