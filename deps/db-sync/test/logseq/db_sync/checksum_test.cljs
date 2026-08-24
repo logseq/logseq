@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as checksum]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]))
 
 (defn- sample-db
@@ -354,14 +353,6 @@
              (set attrs)))
       (is (every? #(not (contains? % :block/title)) blocks))
       (is (every? #(not (contains? % :block/name)) blocks)))))
-
-(deftest recompute-checksum-from-entities-matches-db-scan-test
-  (doseq [db [(sample-db)
-              (d/db-with (sample-db) [{:db/ident :logseq.kv/graph-rtc-e2ee?
-                                       :kv/value true}])]]
-    (let [entities (db-malli-schema/datoms->entities (d/datoms db :eavt))]
-      (is (= (checksum/recompute-checksum db)
-             (checksum/recompute-checksum-from-entities db entities))))))
 
 (deftest incremental-checksum-is-invariant-across-tx-partitioning-test
   (testing "incremental checksum converges to the same value regardless of tx partitioning"

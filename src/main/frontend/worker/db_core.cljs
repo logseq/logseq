@@ -416,8 +416,7 @@
                         (reset! phase :sync-checksum)
                         (client-op/update-local-checksum
                          repo
-                         (sync-checksum/recompute-checksum-from-entities
-                          @conn (:entities validation-result))))
+                         (sync-checksum/recompute-checksum @conn)))
                     _ (when (and record-performance (= :passed (:status validation)))
                         (record-performance {:phase :sync-checksum
                                              :elapsed-ms (- (.now js/performance) checksum-started)}))
