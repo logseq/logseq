@@ -422,9 +422,7 @@
                     search-started (.now js/performance)
                     _ (when (= :passed (:status validation))
                         (reset! phase :search-index)
-                        (search-handler/<rebuild-blocks-index!
-                         repo {:entities (:entities validation-result)
-                               :record-performance record-performance}))
+                        (search-handler/<build-blocks-indice-in-worker! repo true true))
                     _ (when (and record-performance (= :passed (:status validation)))
                         (record-performance {:phase :search-total
                                              :elapsed-ms (- (.now js/performance) search-started)}))]
