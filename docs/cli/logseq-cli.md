@@ -127,13 +127,13 @@ Graph commands:
   - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
   - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected
-- `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
+- `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite; SQLite import requires a new graph, while EDN import may target an existing graph
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
-- `graph backup restore --src <backup-name> --dst <graph-name>` - restore one backup snapshot into a new graph
+- `graph backup restore --src <backup-name> --dst <graph-name>` - restore one backup snapshot into a graph; the current command does not reject an existing destination graph
 - `graph backup remove --src <backup-name>` - delete one backup snapshot
 
-For any command that requires `--graph`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` and `graph backup restore` fail if the target graph already exists.
+For any command that requires `--graph`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). SQLite `graph import` fails if the target graph already exists; EDN import and `graph backup restore` do not currently share that top-level preflight.
 
 Backup scope note:
 - `graph backup create` copies only `db.sqlite`.
@@ -270,8 +270,8 @@ Sync config persistence:
 - Cloud auth is persisted separately in `~/logseq/auth.json`.
 
 E2EE password persistence locations:
-- Browser runtime stores refresh-token-encrypted password payload in IndexedDB secret storage.
-- Node runtime stores refresh-token-encrypted password payload at `~/logseq/e2ee-password`.
+- Browser runtime stores the refresh-token-encrypted password payload in its platform secret storage.
+- Node runtime prefers the OS keychain under the `Logseq E2EE` service. If keychain access fails, it falls back to `<root-dir>/kv-store.json`. CLI E2E mode uses the KV store directly.
 
 Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages (defaults to `--sort updated-at --order desc`)
