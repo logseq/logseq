@@ -238,35 +238,38 @@
        (not (contains? #{"tags"} tag-name))))
 
 (defn- find-existing-class
-  "Finds a class entity by unique name and parents and returns its :block/uuid if found.
-  db is searched because there is no in-memory index only for created classes by unique name"
-  [db {full-name :block/name block-ns :block/namespace}]
-  (if block-ns
-    (->> (d/q '[:find [?b ...]
+  "Returns an existing class's `:block/uuid` by unique name and parents.
+  Uses the import indexes first and searches `db` when the indexes do not identify the class."
+  [db {full-name :block/name title :block/title block-ns :block/namespace}
+   page-names-to-uuids all-idents]
+  (or (when (some-> (get @all-idents (keyword title)) db-malli-schema/class?)
+        (get @page-names-to-uuids full-name))
+      (if block-ns
+        (->> (d/q '[:find [?b ...]
+                    :in $ ?name
+                    :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
+                  db
+                  (ns-util/get-last-part full-name))
+             (map #(d/entity db %))
+             (some #(let [parent (->> (ldb/get-class-extends %)
+                                      (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                                      first)
+                          parent-ancestors (when parent (ldb/get-page-parents parent))
+                          parents (cond-> (or parent-ancestors [])
+                                    parent (conj parent))]
+                      (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
+                        (:block/uuid %)))))
+        (first
+         (d/q '[:find [?uuid ...]
                 :in $ ?name
                 :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
               db
-              (ns-util/get-last-part full-name))
-         (map #(d/entity db %))
-         (some #(let [parent (->> (ldb/get-class-extends %)
-                                  (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                                  first)
-                      parent-ancestors (when parent (ldb/get-page-parents parent))
-                      parents (cond-> (or parent-ancestors [])
-                                parent (conj parent))]
-                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
-                    (:block/uuid %)))))
-    (first
-     (d/q '[:find [?uuid ...]
-            :in $ ?name
-            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
-          db
-          full-name))))
+              full-name)))))
 
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
-   because it has been moved"
-  [db tag-block {:keys [page-names-to-uuids classes-tx]} user-options all-idents]
+  because it has been moved"
+  [db tag-block {:keys [page-names-to-uuids classes-tx] :as per-file-state} user-options all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
@@ -276,7 +279,7 @@
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
-      (let [existing-tag-uuid (find-existing-class db tag-block)
+      (let [existing-tag-uuid (find-existing-class db tag-block (:page-names-to-uuids per-file-state) all-idents)
             internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
         (cond
           ;; Don't overwrite internal tags
