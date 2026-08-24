@@ -10,7 +10,9 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [datascript.conn :as dc]
             [datascript.core :as d]
+            [datascript.storage :as ds-storage]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -2781,6 +2783,52 @@
 ;; Higher level export fns
 ;; =======================
 
+(defn- <batch-transact-with-temp-conn!
+  [conn tx-meta batch-tx-fn]
+  (let [db-before @conn
+        conn-state-before @(:atom conn)
+        temp-conn (ldb/temp-conn-from-db db-before)
+        *batch-tx-data (atom [])
+        *published-db (atom nil)]
+    (-> (p/resolved nil)
+        (p/then (fn [_]
+                  (swap! temp-conn assoc :batch-tx? true)
+                  (d/listen! temp-conn ::async-temp-conn-batch-tx
+                             (fn [{:keys [tx-data]}]
+                               (swap! *batch-tx-data into tx-data)))
+                  (batch-tx-fn temp-conn *batch-tx-data)))
+        (p/then (fn [_]
+                  (swap! temp-conn dissoc :skip-store? :skip-validate-db? :batch-tx?)
+                  (let [db-after @temp-conn]
+                    (when-not (compare-and-set! conn db-before db-after)
+                      (throw (ex-info "Live database changed during asynchronous batch"
+                                      {:tx-meta tx-meta})))
+                    (reset! *published-db db-after)
+                    (let [tx-report {:db-before db-before
+                                     :db-after @conn
+                                     :tx-meta (assoc tx-meta :batch-final-tx-report? true)
+                                     :tx-data @*batch-tx-data}]
+                      (dc/store-after-transact! conn tx-report)
+                      (reset! *published-db nil)
+                      (dc/run-callbacks conn tx-report)
+                      tx-report))))
+        (p/catch (fn [error]
+                   (when-let [published-db @*published-db]
+                     (when-not (compare-and-set! conn published-db db-before)
+                       (throw (ex-info "Failed to roll back asynchronous batch"
+                                       {:tx-meta tx-meta}
+                                       error)))
+                     (when (ds-storage/storage db-before)
+                       (swap! (:atom conn) assoc
+                              :tx-tail (:tx-tail conn-state-before)
+                              :db-last-stored (:db-last-stored conn-state-before))))
+                   (throw error)))
+        (p/finally (fn []
+                     (d/unlisten! temp-conn ::async-temp-conn-batch-tx)
+                     (reset! temp-conn nil)
+                     (reset! *batch-tx-data nil)
+                     (reset! *published-db nil))))))
+
 (defn- fork-import-state
   [import-state]
   (into {}
@@ -3167,7 +3215,7 @@
   (let [result (atom nil)
         on-tx-report (or (:on-tx-report options) (constantly nil))]
     (p/let [tx-report
-            (ldb/<batch-transact-with-temp-conn!
+            (<batch-transact-with-temp-conn!
              conn
              {::imported-data? true
               ::new-graph? true}
