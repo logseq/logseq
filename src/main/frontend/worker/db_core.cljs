@@ -402,10 +402,12 @@
                                              :elapsed-ms (- (.now js/performance) render-started)}))
                     validation-started (.now js/performance)
                     _ (reset! phase :validate)
-                    validation-result (worker-db-validate/validate-db conn :fix false)
+                    validation-result (worker-db-validate/validate-db
+                                       conn :fix false :include-entities? true)
                     _ (when record-performance
                         (record-performance {:phase :validation
-                                             :elapsed-ms (- (.now js/performance) validation-started)}))
+                                             :elapsed-ms (- (.now js/performance) validation-started)
+                                             :entities (count (:entities validation-result))}))
                     validation {:status (if (seq (:errors validation-result)) :failed :passed)
                                 :errors (:errors validation-result)
                                 :invalid-entity-ids (:invalid-entity-ids validation-result)}

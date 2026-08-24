@@ -150,19 +150,22 @@
                                            (into db-property/schema-properties)
                                            (conj :block/tags))
         page-class-id (:db/id (d/entity db :logseq.class/Page))
-        all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
+        all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))
+        property-ident->map (memoize (fn [property-ident]
+                                       (some-> (d/entity db property-ident)
+                                               property-entity->map)))]
     (mapv
      (fn [ent]
        (reduce (fn [m [k v]]
-                 (if-let [property (and (db-property/property? k)
-                                        (not (contains? exceptions-to-block-properties k))
-                                        (d/entity db k))]
+                 (if-let [property-map (and (db-property/property? k)
+                                            (not (contains? exceptions-to-block-properties k))
+                                            (property-ident->map k))]
                    (update m :block/properties (fnil conj [])
-                           [(property-entity->map property) v])
+                           [property-map v])
                    (if (= :block/tags k)
                      ;; Provides additional options map to validation for data about current entity being tagged
-                     (let [property (d/entity db :block/tags)]
-                       (assoc m k [(property-entity->map property)
+                     (let [property-map (property-ident->map :block/tags)]
+                       (assoc m k [property-map
                                    v
                                    (merge (select-keys ent [:logseq.property/built-in?])
                                           {:page-class-id page-class-id
@@ -554,41 +557,47 @@
                 (keyword-identical? t :logseq.class/Whiteboard)))
           (:block/tags entity))))
 
+(defn entity-map-dispatch-key
+  [entity]
+  ;; Order matters as some block types are a subset of others e.g. :whiteboard.
+  (cond
+    (:logseq.property.reaction/target entity)
+    :reaction-entity
+    (entity-util/property? entity)
+    :property
+    (entity-util/class? entity)
+    :class
+    (and (entity-util/page? entity)
+         (true? (:logseq.property/hide? entity)))
+    :hidden
+    ;; TODO: Remove deprecated
+    (whiteboard? entity)
+    :normal-page
+    (entity-util/page? entity)
+    :normal-page
+    (entity-util/asset? entity)
+    :asset-block
+    (:file/path entity)
+    :file-block
+    (:logseq.property.history/block entity)
+    :property-history-block
+    (:block/closed-value-property entity)
+    :closed-value-block
+    (and (:logseq.property/created-from-property entity) (:logseq.property/value entity))
+    :property-value-block
+    (= (:db/ident entity) :logseq.property/empty-placeholder)
+    :property-value-placeholder
+    (:block/uuid entity)
+    :block
+    (:db/ident entity)
+    :db-ident-key-value))
+
 (defn entity-dispatch-key [db ent]
-  (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
-        ;; order matters as some block types are a subset of others e.g. :whiteboard
-        dispatch-key (cond
-                       (:logseq.property.reaction/target d)
-                       :reaction-entity
-                       (entity-util/property? d)
-                       :property
-                       (entity-util/class? d)
-                       :class
-                       (and (entity-util/page? d)
-                            (true? (:logseq.property/hide? d)))
-                       :hidden
-                       ;; TODO: Remove deprecated
-                       (whiteboard? d)
-                       :normal-page
-                       (entity-util/page? d)
-                       :normal-page
-                       (entity-util/asset? d)
-                       :asset-block
-                       (:file/path d)
-                       :file-block
-                       (:logseq.property.history/block d)
-                       :property-history-block
-                       (:block/closed-value-property d)
-                       :closed-value-block
-                       (and (:logseq.property/created-from-property d) (:logseq.property/value d))
-                       :property-value-block
-                       (= (:db/ident d) :logseq.property/empty-placeholder)
-                       :property-value-placeholder
-                       (:block/uuid d)
-                       :block
-                       (:db/ident d)
-                       :db-ident-key-value)]
-    dispatch-key))
+  (or (-> ent meta ::entity-dispatch-key)
+      (entity-map-dispatch-key
+       (if (:block/uuid ent)
+         (d/entity db [:block/uuid (:block/uuid ent)])
+         ent))))
 
 (def Data
   (into

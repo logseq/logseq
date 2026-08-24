@@ -87,6 +87,23 @@
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
                  :errors errors'})))))
 
+(defn- validation-entity-dispatch-keys
+  [db entities]
+  (let [tag-ids (into #{} (mapcat :block/tags) entities)
+        tag-ident-by-id
+        (into {}
+              (map (fn [tag-id]
+                     [tag-id (:db/ident (d/entity db tag-id))]))
+              tag-ids)]
+    (into {}
+          (map (fn [entity]
+                 (let [entity' (cond-> entity
+                                 (:block/tags entity)
+                                 (update :block/tags #(mapv tag-ident-by-id %)))]
+                   [(:db/id entity)
+                    (db-malli-schema/entity-map-dispatch-key entity')])))
+          entities)))
+
 (defn validate-db
   "Validates all the entities of the given db using :eavt datoms. Returns a map
   with info about db being validated. If there are errors, they are placed on
@@ -94,14 +111,20 @@
   [db]
   (let [datoms (d/datoms db :eavt)
         ent-maps* (db-malli-schema/datoms->entities datoms)
+        entity-dispatch-keys (validation-entity-dispatch-keys db ent-maps*)
         ent-maps (mapv
                   ;; Remove some UI interactions adding this e.g. import
                   #(dissoc % :block.temp/load-status :block.temp/has-children?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
+        validation-data
+        (mapv (fn [entity]
+                (vary-meta (dissoc entity :db/id) assoc
+                           ::db-malli-schema/entity-dispatch-key
+                           (entity-dispatch-keys (:db/id entity))))
+              ent-maps)
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
-                 (-> (map (fn [e]
-                            (dissoc e :db/id))
-                          ent-maps) closed-db-schema-explainer :errors))]
+                 (when-not (closed-db-schema-validator validation-data)
+                   (:errors (closed-db-schema-explainer validation-data))))]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps*}
       (some? errors)
