@@ -2099,17 +2099,23 @@
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
-  (let [;; These attributes are not allowed to be transacted because they must not change across files
+  (let [file-page? (::file-page? m)
+        m (dissoc m ::file-page?)
+        ;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
         allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                  (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                        m))
-        block-changes (select-keys m allowed-attributes)]
+        block-changes (select-keys m allowed-attributes)
+        ordinary-page-ref? (and (not file-page?)
+                                (set/subset? (set (keys block-changes)) #{:block/tags :block/parent})
+                                (= #{:logseq.class/Page} (set (:block/tags block-changes))))]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
       (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
                               ignored-attrs)}))
-    (when (seq block-changes)
+    ;; Reference-only Page entities do not redefine an existing page.
+    (when (and (seq block-changes) (not ordinary-page-ref?))
       (cond-> (merge block-changes {:block/uuid page-uuid})
         (seq (:block/alias m))
         (update-page-alias page-names-to-uuids)
@@ -2243,7 +2249,9 @@
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
                             ;; remove file path relative
-                            (map #(dissoc % :block/file)))
+                            (map (fn [page]
+                                   (cond-> (dissoc page :block/file)
+                                     (:block/file page) (assoc ::file-page? true)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
@@ -2273,7 +2281,7 @@
                                (let [page (if-let [page-uuid (if (::original-name m)
                                                                (all-existing-page-uuids (::original-name m))
                                                                (all-existing-page-uuids (:block/name m)))]
-                                            (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
+                                      (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
                                             (when (or (ldb/class? m)
                                                       ;; Don't build a new page if it overwrites an existing class
                                                       (not (some-> (get @(:all-idents import-state)
@@ -2284,8 +2292,8 @@
                                                       ;; TODO: Enable this when it's valid for all test graphs because
                                                       ;; pages with properties must be built or else properties-tx is invalid
                                                       #_(seq properties-tx))
-                                              (build-new-page-or-class (dissoc m ::original-name ::original-title)
-                                                                       @conn per-file-state (:all-idents import-state) options)))]
+                                        (build-new-page-or-class (dissoc m ::original-name ::original-title ::file-page?)
+                                                                 @conn per-file-state (:all-idents import-state) options)))]
                                  ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                                  page)))
                        all-pages-m)
