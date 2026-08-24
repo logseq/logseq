@@ -2225,13 +2225,16 @@
          page))
      pages)))
 
+(declare record-performance!)
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
+  (let [page-index-started (.now js/performance)
+        journal-page-name-uuids @(:journal-page-name-uuids import-state)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
                                           (contains? journal-page-name-uuids (:block/name %))))
@@ -2253,32 +2256,45 @@
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
         page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
+        _ (record-performance! options :graph-tx-construct page-index-started
+                               {:stage :page-index
+                                :items (count all-pages)})
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
+        page-properties-started (.now js/performance)
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
-        pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
-                         (let [page (if-let [page-uuid (if (::original-name m)
-                                                         (all-existing-page-uuids (::original-name m))
-                                                         (all-existing-page-uuids (:block/name m)))]
-                                      (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
-                                      (when (or (ldb/class? m)
-                                                ;; Don't build a new page if it overwrites an existing class
-                                                (not (some-> (get @(:all-idents import-state)
-                                                                  (some-> (or (::original-title m) (:block/title m))
-                                                                          build-class-ident-name
-                                                                          keyword))
-                                                             db-malli-schema/class?))
-                                                ;; TODO: Enable this when it's valid for all test graphs because
-                                                ;; pages with properties must be built or else properties-tx is invalid
-                                                #_(seq properties-tx))
-                                        (build-new-page-or-class (dissoc m ::original-name ::original-title)
-                                                                 @conn per-file-state (:all-idents import-state) options)))]
-                           ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
-                           page))
-                       all-pages-m)]
+        _ (record-performance! options :graph-tx-construct page-properties-started
+                               {:stage :page-properties
+                                :items (count all-pages-m)})
+        page-transactions-started (.now js/performance)
+        pages-tx (into []
+                       (keep (fn [{m :block _properties-tx :properties-tx}]
+                               (let [page (if-let [page-uuid (if (::original-name m)
+                                                               (all-existing-page-uuids (::original-name m))
+                                                               (all-existing-page-uuids (:block/name m)))]
+                                            (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
+                                            (when (or (ldb/class? m)
+                                                      ;; Don't build a new page if it overwrites an existing class
+                                                      (not (some-> (get @(:all-idents import-state)
+                                                                        (some-> (or (::original-title m) (:block/title m))
+                                                                                build-class-ident-name
+                                                                                keyword))
+                                                                   db-malli-schema/class?))
+                                                      ;; TODO: Enable this when it's valid for all test graphs because
+                                                      ;; pages with properties must be built or else properties-tx is invalid
+                                                      #_(seq properties-tx))
+                                              (build-new-page-or-class (dissoc m ::original-name ::original-title)
+                                                                       @conn per-file-state (:all-idents import-state) options)))]
+                                 ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
+                                 page)))
+                       all-pages-m)
+        page-properties-tx (into [] (mapcat :properties-tx) all-pages-m)
+        _ (record-performance! options :graph-tx-construct page-transactions-started
+                               {:stage :page-transactions
+                                :items (+ (count pages-tx) (count page-properties-tx))})]
     {:pages-tx pages-tx
-     :page-properties-tx (mapcat :properties-tx all-pages-m)
+     :page-properties-tx page-properties-tx
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
      :per-file-state per-file-state}))
 
@@ -2661,11 +2677,7 @@
                                  {:stage :prepare
                                   :items (+ (count pages) (count blocks))})
           ;; Build page and block txs
-          pages-started (.now js/performance)
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
-          _ (record-performance! options :graph-tx-construct pages-started
-                                 {:stage :pages
-                                  :items (+ (count pages-tx) (count page-properties-tx))})
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
           blocks-started (.now js/performance)
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
