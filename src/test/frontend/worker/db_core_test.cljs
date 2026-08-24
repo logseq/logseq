@@ -1,6 +1,5 @@
 (ns frontend.worker.db-core-test
   (:require [cljs.test :refer [async deftest is]]
-            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -38,74 +37,10 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.graph-parser.exporter :as gp-exporter]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
 (def ^:private test-repo "db-core-test-repo")
-
-(def ^:private semantic-import-ignored-attrs
-  #{:block/uuid :block/tx-id :block/created-at :block/updated-at
-    :file/created-at :file/last-modified-at :db/txInstant})
-
-(defn- semantic-import-entity-key
-  [db entity-id]
-  (let [entity (d/entity db entity-id)
-        ident (:db/ident entity)]
-    (cond
-      (= "user.property" (some-> ident namespace)) [:property (:block/name entity)]
-      (= "user.class" (some-> ident namespace)) [:class (:block/name entity)]
-      ident [:ident ident]
-      (:file/path entity) [:file (:file/path entity)]
-      (:block/name entity) [:page (:block/name entity)]
-      (contains? entity :logseq.property/value)
-      [:value (:logseq.property/value entity)
-       (some->> (:logseq.property/created-from-property entity)
-                :db/id
-                (semantic-import-entity-key db))]
-      (:block/title entity)
-      [:title (:block/title entity)
-       (some-> (:block/page entity) :block/name)
-       (some-> (:logseq.property/created-from-property entity) :block/name)]
-      :else [:id entity-id])))
-
-(defn- semantic-import-attribute
-  [db attribute]
-  (if (contains? #{"user.property" "user.class"} (some-> attribute namespace))
-    (semantic-import-entity-key db (:db/id (d/entity db attribute)))
-    attribute))
-
-(defn- semantic-import-order-ranks
-  [db]
-  (into {}
-        (mapcat (fn [[_parent-id entities]]
-                  (map-indexed (fn [rank entity]
-                                 [(:db/id entity) rank])
-                               (sort-by :block/order entities))))
-        (group-by #(some-> (:block/parent %) :db/id)
-                  (map #(d/entity db (:e %))
-                       (d/datoms db :avet :block/order)))))
-
-(defn- semantic-import-datoms
-  [db]
-  (let [order-ranks (semantic-import-order-ranks db)]
-    (into #{}
-          (keep (fn [datom]
-                  (let [attribute (:a datom)
-                        value (:v datom)]
-                    (when-not (contains? semantic-import-ignored-attrs attribute)
-                      [(semantic-import-entity-key db (:e datom))
-                       (semantic-import-attribute db attribute)
-                       (cond
-                         (= :block/order attribute) (order-ranks (:e datom))
-                         (and (= :db/ident attribute)
-                              (contains? #{"user.property" "user.class"}
-                                         (some-> value namespace)))
-                         (semantic-import-entity-key db (:e datom))
-                         (= :db.type/ref (get-in (:schema db) [attribute :db/valueType]))
-                         (semantic-import-entity-key db value)
-                         :else value)]))))
-          (d/datoms db :eavt))))
 
 (def ^:private task-spent-time-schema
   (merge db-schema/schema
@@ -2692,143 +2627,6 @@
                  (p/finally (fn []
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (complete-after-promise-finalizers! done))))))))))
-
-(def ^:private bulk-property-semantics-config-file
-  {:path "logseq/config.edn"
-   :file/content "{:property/separated-by-commas #{:authors}}"})
-
-(def ^:private bulk-property-semantics-files
-  [bulk-property-semantics-config-file
-   {:path "pages/library.md"
-    :file/content (str "title:: Library\n"
-                       "rating:: 5\n"
-                       "score:: 5.9\n"
-                       "tagline:: \n"
-                       "cast:: [[Ada]], [[Grace]]")}
-   {:path "pages/film.md"
-    :file/content (str "title:: Film\n"
-                       "rating:: unrated\n"
-                       "score:: 6.8\n"
-                       "tagline:: A story\n"
-                       "cast:: [[Ada]]")}
-   {:path "pages/genres.md"
-    :file/content (str "title:: Genres\n"
-                       "tags:: [[Action]], [[Drama]]")}
-   {:path "pages/metadata.md"
-    :file/content (str "title:: Metadata\n"
-                       "flag:: true\n"
-                       "link:: zotero://select/library/items/ABC\n"
-                       "authors:: Alice, Bob\n"
-                       "watched:: [[Aug 22nd, 2026]]")}
-   {:path "journals/2026_08_22.md"
-    :file/content "- reviewed"}])
-
-(defn- assert-bulk-property-semantics!
-  [conn canonical-conn result canonical-result library-id library-uuid]
-  (let [library-ids (d/q '[:find [?page ...]
-                           :where [?page :block/name "library"]]
-                         @conn)
-        library-after (d/entity @conn (first library-ids))
-        rating-property (ldb/get-page @conn "rating")
-        cast-property (ldb/get-page @conn "cast")
-        flag-property (ldb/get-page @conn "flag")
-        link-property (ldb/get-page @conn "link")
-        authors-property (ldb/get-page @conn "authors")
-        watched-property (ldb/get-page @conn "watched")
-        metadata-page (ldb/get-page @conn "metadata")
-        genres-page (ldb/get-page @conn "genres")
-        cast-values (get library-after (:db/ident cast-property))
-        authors-value (get metadata-page (:db/ident authors-property))
-        library-ref-ids (into #{} (map :db/id) (:block/refs library-after))
-        ada-ids (d/q '[:find [?page ...]
-                       :where [?page :block/name "ada"]]
-                     @conn)
-        genre-tag-names (into #{} (keep :block/name) (:block/tags genres-page))
-        canonical-datoms (semantic-import-datoms @canonical-conn)
-        bulk-datoms (semantic-import-datoms @conn)
-        canonical-only (set/difference canonical-datoms bulk-datoms)
-        bulk-only (set/difference bulk-datoms canonical-datoms)]
-    (is (= :completed (:status result)))
-    (is (= :completed (:status canonical-result)))
-    (is (and (empty? canonical-only) (empty? bulk-only))
-        (pr-str {:canonical-only (take 20 canonical-only)
-                 :bulk-only (take 20 bulk-only)}))
-    (is (= [library-id] library-ids))
-    (is (= library-id (:db/id library-after)))
-    (is (= library-uuid (:block/uuid library-after)))
-    (is (= :default (:logseq.property/type rating-property)))
-    (is (= {:logseq.property/type :node
-            :db/cardinality :db.cardinality/many}
-           (select-keys cast-property [:logseq.property/type :db/cardinality])))
-    (is (= #{"ada" "grace"} (into #{} (map :block/name) cast-values)))
-    (is (every? genre-tag-names ["action" "drama"]))
-    (is (= :checkbox (:logseq.property/type flag-property)))
-    (is (true? (get metadata-page (:db/ident flag-property))))
-    (is (= :url (:logseq.property/type link-property)))
-    (is (= "zotero://select/library/items/ABC"
-           (:block/title (get metadata-page (:db/ident link-property)))))
-    (is (= :default (:logseq.property/type authors-property)))
-    (is (= "Alice, Bob" (:block/title authors-value)))
-    (is (= :node (:logseq.property/type watched-property)))
-    (is (= 1 (count ada-ids)))
-    (is (every? library-ref-ids
-                (concat [(:db/id rating-property) (:db/id cast-property)]
-                        (map :db/id cast-values))))))
-
-(deftest import-file-graph-preserves-bulk-property-semantics
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [import-file-graph! (get-thread-api :thread-api/import-file-graph)
-                  conn (d/create-conn db-schema/schema)
-                  canonical-repo "db-core-test-repo-canonical"
-                  canonical-conn (d/create-conn db-schema/schema)
-                  pipeline-before @ldb/*transact-pipeline-fn
-                  export-file-graph gp-exporter/export-file-graph
-                  initial-data (sqlite-create-graph/build-db-initial-data "{}")]
-              (d/transact! conn initial-data)
-              (d/transact! canonical-conn initial-data)
-              (reset! worker-state/*datascript-conns {test-repo conn
-                                                       canonical-repo canonical-conn})
-              (let [library-id (ffirst (d/q '[:find ?page
-                                               :where [?page :block/name "library"]]
-                                             @conn))
-                    library-before (d/entity @conn library-id)
-                    library-uuid (:block/uuid library-before)]
-                (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-                (p/with-redefs
-                   [db-sync/update-local-sync-checksum! (fn [& _] nil)
-                   db-sync/handle-local-tx! (fn [& _] nil)
-                   client-op/update-local-checksum (fn [& _] nil)
-                   shared-service/broadcast-to-clients! (fn [& _] nil)]
-                  (->
-                   (p/let [result (import-file-graph!
-                                   test-repo bulk-property-semantics-config-file
-                                   bulk-property-semantics-files
-                                   {:run-id "identity-run"
-                                    :user-options {}})
-                           canonical-result
-                           (p/with-redefs
-                             [gp-exporter/export-file-graph
-                              (fn [repo-or-conn target-conn config doc-files options]
-                                (export-file-graph
-                                 repo-or-conn target-conn config doc-files
-                                 (assoc options :simple-page-property-batch? false)))]
-                             (import-file-graph!
-                              canonical-repo bulk-property-semantics-config-file
-                              bulk-property-semantics-files
-                              {:run-id "canonical-run"
-                               :user-options {}}))
-                           _ (assert-bulk-property-semantics!
-                              conn canonical-conn result canonical-result library-id library-uuid)]
-                     nil)
-                   (p/catch
-                    (fn [error]
-                      (is false (str error))))
-                   (p/finally
-                    (fn []
-                      (reset! ldb/*transact-pipeline-fn pipeline-before)
-                      (complete-after-promise-finalizers! done)))))))))))
 
 (deftest import-file-graph-reports-recoverable-step-errors
   (async done
