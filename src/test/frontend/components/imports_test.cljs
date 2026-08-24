@@ -115,7 +115,9 @@
              (fn [path value & _]
                (swap! state-values assoc-in (if (coll? path) path [path]) value))
              state/pub-event! (fn [event]
-                                (swap! lifecycle-ops conj [:event event]))
+                                (if (= [:graph/ready target-repo] event)
+                                  (throw (js/Error. "event callback failed"))
+                                  (swap! lifecycle-ops conj [:event event])))
              notification/show! (fn [& args]
                                   (swap! notifications conj args))
              route-handler/redirect-to-home! (fn [] nil)

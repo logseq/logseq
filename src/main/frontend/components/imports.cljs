@@ -407,6 +407,16 @@
                  :import/unexpected-error)]
     (notification/show! (t :import/unexpected-error (name code)) :error)))
 
+(defn- run-file-graph-terminal-effect!
+  [run-id effect f]
+  (try
+    (f)
+    (catch :default error
+      (log/warn :import-terminal-effect-failed true
+                :run-id run-id
+                :effect effect
+                :error error))))
+
 (defn- <discard-file-graph-import!
   [run-id repo]
   (-> (persist-db/<discard-file-graph-import! repo)
@@ -444,9 +454,7 @@
             (p/let [_ (<discard-file-graph-import! run-id staging-repo)]
               (show-import-terminal-failure! terminal-result)
               terminal-result)
-            (p/let [_ (doseq [notification (:notifications terminal-result)]
-                        (show-notification notification))
-                    staged-asset-issues (if (util/electron?)
+            (p/let [staged-asset-issues (if (util/electron?)
                                           (do
                                             (reset! phase :stage-assets)
                                             (<write-staged-assets! staging-repo (:staged-assets terminal-result)))
@@ -475,9 +483,16 @@
               (log/info :import-file-graph-finished true
                         :run-id run-id
                         :elapsed-ms (t/in-millis (t/interval start-time (t/now))))
-              (validate-imported-data published-result)
-              (state/pub-event! [:graph/ready repo])
-              (finished-cb {:issue-count (count (:issues published-result))})
+              (doseq [notification (:notifications terminal-result)]
+                (run-file-graph-terminal-effect!
+                 run-id :show-notification #(show-notification notification)))
+              (run-file-graph-terminal-effect!
+               run-id :validate-imported-data #(validate-imported-data published-result))
+              (run-file-graph-terminal-effect!
+               run-id :graph-ready #(state/pub-event! [:graph/ready repo]))
+              (run-file-graph-terminal-effect!
+               run-id :finished-callback
+               #(finished-cb {:issue-count (count (:issues published-result))}))
               published-result)))
         (p/catch
          (fn [error]
@@ -492,7 +507,9 @@
                         :phase @phase
                         :code code
                         :error error)
-             (notification/show! (t :import/unexpected-error (name code)) :error)
+             (run-file-graph-terminal-effect!
+              run-id :show-failure
+              #(notification/show! (t :import/unexpected-error (name code)) :error))
              result)))
         (p/finally #(clear-file-graph-import! run-id)))))
 
