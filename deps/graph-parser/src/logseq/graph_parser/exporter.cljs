@@ -3304,17 +3304,6 @@
            :pairs pairs
            :properties properties})))))
 
-(defn- performance-now-ms []
-  (.now js/performance))
-
-(defn- record-performance!
-  [options phase started data]
-  (when-let [record-performance (:record-performance options)]
-    (record-performance
-     (merge {:phase phase
-             :elapsed-ms (- (performance-now-ms) started)}
-            data))))
-
 (defn- <partition-simple-page-property-files
   [doc-files <read-file rpath-key options]
   (let [property-context (bulk-property-context (:user-config options))]
@@ -3325,7 +3314,7 @@
       (if-let [file (first remaining-files)]
         (-> (<read-file file)
             (p/then (fn [content]
-                      (let [started (performance-now-ms)
+                      (let [started (.now js/performance)
                             simple-file (simple-page-property-file
                                          file content rpath-key property-context)
                             _ (record-performance! options :parse started
@@ -3717,7 +3706,7 @@
 
 (defn- build-direct-import-db
   [base-db init-tx block-props-tx init-tx-id properties-tx-id options]
-  (let [construct-started (performance-now-ms)
+  (let [construct-started (.now js/performance)
         allocation (allocate-direct-import-entities base-db init-tx)
         schema (build-direct-import-schema (:schema base-db) init-tx allocation)
         init-datoms
@@ -3740,7 +3729,7 @@
                                 {:entities (count (:entities allocation))
                                 :new-datoms (count tx-datoms)
                                 :all-datoms (count all-datoms)})
-        index-started (performance-now-ms)
+        index-started (.now js/performance)
         db (d/init-db all-datoms schema (cond-> {}
                                           storage (assoc :storage storage)))
         _ (record-performance! options :datascript-index-build index-started
@@ -3780,13 +3769,13 @@
             (<partition-simple-page-property-files
              (ordered-doc-files doc-files) <read-file rpath-key options)
             _ (when (seq simple-files)
-                (let [extract-started (performance-now-ms)
+                (let [extract-started (.now js/performance)
                       {:keys [build-options property-schemas ordinary-page-titles]}
                       (build-simple-page-property-options simple-files)
                       _ (record-performance! options :extract-normalize extract-started
                                              {:files (count simple-files)
                                               :parser :simple-page-properties})
-                      construct-started (performance-now-ms)
+                      construct-started (.now js/performance)
                       {:keys [init-tx block-props-tx]}
                       (sqlite-build/build-blocks-tx build-options)
                       init-tx (into init-tx (map ordinary-page) ordinary-page-titles)
