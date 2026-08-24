@@ -22,7 +22,7 @@
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends
-  ocaml
+  (ocaml (>= 5.1.1))
   melange
   melange-fetch
   melange-transit-melange
