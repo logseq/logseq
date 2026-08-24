@@ -359,11 +359,10 @@
         import-index-context (when entities (search/import-index-context entities))
         blocks (if import-index-context
                  (into [] (filter :block/uuid) entities)
-                 (let [hidden-node? (search/make-hidden-entity-predicate)]
-                   (->> (d/datoms db :avet :block/uuid)
-                        (keep #(d/entity db (:e %)))
-                        (remove hidden-node?)
-                        vec)))]
+                 (->> (d/datoms db :avet :block/uuid)
+                      (keep #(d/entity db (:e %)))
+                      (remove search/hidden-entity?)
+                      vec))]
     (when record-performance
       (record-performance {:phase :search-entity-read
                            :elapsed-ms (- (.now js/performance) started)
@@ -385,8 +384,7 @@
          (prepare-block-index-input db entities record-performance)
          total (count blocks)
          vector-index (worker-state/get-vector-index repo)
-         index-opts {:include-vector-title? (some? vector-index)
-                     :known-visible? true}
+         index-opts {:include-vector-title? (some? vector-index)}
          progress-for-fts (fn [processed]
                             (if (zero? total)
                               100

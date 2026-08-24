@@ -199,23 +199,6 @@
   (testing "entities on recycled pages are hidden"
     (is (true? (#'search/hidden-entity? {:block/page {:logseq.property/deleted-at 1}})))))
 
-(deftest cached-hidden-entity-predicate-preserves-hidden-semantics
-  (let [visible-parent {:db/id 1}
-        hidden-parent {:db/id 2 :logseq.property/hide? true}
-        recycled-parent {:db/id 3 :logseq.property/deleted-at 1}
-        user-property {:db/id 4
-                       :block/tags [{:db/ident :logseq.class/Property}]
-                       :logseq.property/hide? true}
-        entities [visible-parent
-                  hidden-parent
-                  {:db/id 5 :block/parent hidden-parent}
-                  {:db/id 6 :block/parent recycled-parent}
-                  {:db/id 7 :block/page hidden-parent}
-                  user-property]
-        cached-hidden? (search/make-hidden-entity-predicate)]
-    (is (= (mapv #'search/hidden-entity? entities)
-           (mapv cached-hidden? entities)))))
-
 (deftest import-index-rows-match-canonical-index-rows
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:topic {}}

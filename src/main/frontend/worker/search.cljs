@@ -519,21 +519,19 @@ DROP TRIGGER IF EXISTS blocks_au;
           (js/console.error e))))))
 
 (defn- hidden-search-node?
-  [entity hidden-hierarchy?]
+  [entity]
   (if (ldb/property? entity)
     (or (:logseq.property/deleted-at entity)
         (and (ldb/built-in? entity)
              (ldb/private-built-in-page? entity)))
-    (hidden-hierarchy? entity)))
+    (ldb/hidden? entity)))
 
 (defn hidden-entity?
-  ([entity]
-   (hidden-entity? entity ldb/hidden?))
-  ([entity hidden-hierarchy?]
-   (or (hidden-search-node? entity hidden-hierarchy?)
-       (let [page (:block/page entity)]
-         (and (hidden-hierarchy? page)
-              (not= (:block/title page) common-config/quick-add-page-name))))))
+  [entity]
+  (or (hidden-search-node? entity)
+      (let [page (:block/page entity)]
+        (and (ldb/hidden? page)
+             (not= (:block/title page) common-config/quick-add-page-name)))))
 
 (defn- cached-hidden-hierarchy?
   [cache parent-entity entity seen]
@@ -551,13 +549,6 @@ DROP TRIGGER IF EXISTS blocks_au;
         (vswap! cache assoc entity-id hidden?)
         hidden?))
     (ldb/hidden? entity)))
-
-(defn make-hidden-entity-predicate
-  "Creates a cached `hidden-entity?` predicate for one immutable DB snapshot."
-  []
-  (let [cache (volatile! {})
-        hidden-hierarchy? #(cached-hidden-hierarchy? cache :block/parent % #{})]
-    #(hidden-entity? % hidden-hierarchy?)))
 
 (defn- page-or-object?
   [entity]
@@ -621,16 +612,14 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Convert a block to the index for searching."
   ([block]
    (block->index block {:include-vector-title? false}))
-  ([{:block/keys [uuid page] :as block} {:keys [include-vector-title? known-visible?]
-                                         :or {include-vector-title? false
-                                              known-visible? false}}]
+  ([{:block/keys [uuid page] :as block} {:keys [include-vector-title?]
+                                         :or {include-vector-title? false}}]
    (let [raw-title (:block/title block)]
      (when (search-indexable? block raw-title)
        (try
          (let [page-node? (ldb/page? block)
                page-or-object-node? (and (or page-node? (ldb/object? block))
-                                         (or known-visible?
-                                             (not (hidden-entity? block))))
+                                         (not (hidden-entity? block)))
                title (block-search-title block raw-title page-node? page-or-object-node?)]
            (search-index-row uuid (:block/uuid page) title page-or-object-node?
                              include-vector-title?))
@@ -717,8 +706,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [{:keys [mode page page-node? tag-ident-set]} (import-index-entity-data context entity)]
     (case mode
       :hidden nil
-      :fallback (block->index (d/entity db (:db/id entity))
-                              (assoc opts :known-visible? false))
+      :fallback (block->index (d/entity db (:db/id entity)) opts)
       :simple
       (let [raw-title (:block/title entity)]
         (when (search-indexable? entity raw-title)
