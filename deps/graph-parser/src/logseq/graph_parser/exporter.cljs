@@ -2651,25 +2651,35 @@
   (p/let [import-file (or (:file-import-path *options) file)
           options (assoc *options :notify-user notify-user :log-fn log-fn :file import-file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn import-file content options)
-          construct-started (.now js/performance)
+          prepare-started (.now js/performance)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
+          _ (record-performance! options :graph-tx-construct prepare-started
+                                 {:stage :prepare
+                                  :items (+ (count pages) (count blocks))})
           ;; Build page and block txs
+          pages-started (.now js/performance)
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
+          _ (record-performance! options :graph-tx-construct pages-started
+                                 {:stage :pages
+                                  :items (+ (count pages-tx) (count page-properties-tx))})
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
+          blocks-started (.now js/performance)
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
+          _ (record-performance! options :graph-tx-construct blocks-started
+                                 {:stage :blocks
+                                  :items (count blocks-tx)})
+          split-properties-started (.now js/performance)
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
-          _ (record-performance! options :graph-tx-construct construct-started
-                                 {:stage :pages-and-blocks
+          _ (record-performance! options :graph-tx-construct split-properties-started
+                                 {:stage :split-properties
                                   :items (+ (count property-pages-tx)
-                                            (count page-properties-tx)
                                             (count property-page-properties-tx)
-                                            (count pages-tx')
-                                            (count blocks-tx))})
+                                            (count pages-tx'))})
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
           ;; Necessary to transact new property entities first so that block+page properties can be transacted next
           ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
