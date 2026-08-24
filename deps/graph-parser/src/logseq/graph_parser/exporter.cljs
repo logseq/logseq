@@ -2104,23 +2104,24 @@
         ;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                       m))
-        block-changes (select-keys m allowed-attributes)
         ordinary-page-ref? (and (not file-page?)
-                                (set/subset? (set (keys block-changes)) #{:block/tags :block/parent})
-                                (= #{:logseq.class/Page} (set (:block/tags block-changes))))]
-    (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-      (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
-                              ignored-attrs)}))
+                                (= #{:logseq.class/Page} (set (:block/tags m)))
+                                (empty? (apply dissoc m (into disallowed-attributes [:block/tags :block/parent]))))]
     ;; Reference-only Page entities do not redefine an existing page.
-    (when (and (seq block-changes) (not ordinary-page-ref?))
-      (cond-> (merge block-changes {:block/uuid page-uuid})
-        (seq (:block/alias m))
-        (update-page-alias page-names-to-uuids)
-        (:block/tags m)
-        (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))
+    (when-not ordinary-page-ref?
+      (let [allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
+                                     (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                           m))
+            block-changes (select-keys m allowed-attributes)]
+        (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+          (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
+                                  ignored-attrs)}))
+        (when (seq block-changes)
+          (cond-> (merge block-changes {:block/uuid page-uuid})
+            (seq (:block/alias m))
+            (update-page-alias page-names-to-uuids)
+            (:block/tags m)
+            (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))))
 
 (defn- modify-page-tx
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
