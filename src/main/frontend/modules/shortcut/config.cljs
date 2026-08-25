@@ -36,8 +36,8 @@
 
 (defn- publish-open-dialog-default-binding
   "macOS Command+M minimizes the window; do not steal it for publish."
-  [mac?]
-  (if mac? [] "mod+m"))
+  [macos?]
+  (if macos? [] "mod+m"))
 
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but

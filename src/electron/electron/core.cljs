@@ -212,10 +212,10 @@
 (defn- window-menu-os-items
   "OS window roles. Minimize is always present so macOS Command+M is
    handled by Electron's minimize role instead of being omitted."
-  [mac?]
+  [macos?]
   (concat
    [{:role "minimize"}]
-   (when-not mac?
+   (when-not macos?
      [{:role "zoom"}
       ;; Disable Control+W shortcut
       {:role "close"
