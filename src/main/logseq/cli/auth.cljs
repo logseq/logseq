@@ -448,29 +448,82 @@
                             :hint "Run `logseq login` first."
                             :auth-path (auth-path opts)})))))
 
+(defn- cognito-initiate-auth!
+  [{:keys [user pass]}]
+  (let [payload (js/JSON.stringify
+                 (clj->js {"AuthFlow"       "USER_PASSWORD_AUTH"
+                            "ClientId"       (oauth-client-id)
+                            "AuthParameters" {"USERNAME" user
+                                              "PASSWORD" pass}}))]
+    (-> (transport/request {:method  "POST"
+                             :url     cognito-config/COGNITO-IDP-ENDPOINT
+                             :headers {"X-Amz-Target" "AWSCognitoIdentityProviderService.InitiateAuth"
+                                       "Content-Type" "application/x-amz-json-1.1"
+                                       "Accept"       "application/json"}
+                             :body    payload
+                             :timeout-ms 10000})
+        (p/then (fn [{:keys [body]}]
+                  (let [result (:AuthenticationResult (parse-json body))]
+                    (when-not result
+                      (throw (ex-info "missing AuthenticationResult in response"
+                                      {:code :password-login-failed})))
+                    {:id_token      (:IdToken result)
+                     :access_token  (:AccessToken result)
+                     :refresh_token (:RefreshToken result)}))))))
+
+(defn login-with-password!
+  [opts]
+  (let [{:keys [user pass]} opts]
+    (-> (cognito-initiate-auth! {:user user :pass pass})
+        (p/then (fn [token-body]
+                  (token-body->auth-data token-body nil)))
+        (p/then (fn [auth-data]
+                  (write-auth-file! opts auth-data)
+                  {:auth-path  (auth-path opts)
+                   :email      (:email auth-data)
+                   :sub        (:sub auth-data)
+                   :updated-at (:updated-at auth-data)}))
+        (p/catch (fn [error]
+                   (let [data (ex-data error)
+                         body-parsed (try
+                                       (some-> (:body data) parse-json)
+                                       (catch :default _
+                                         nil))
+                         message (or (:message body-parsed)
+                                     (:Message body-parsed)
+                                     (ex-message error)
+                                     "password login failed")]
+                     (p/rejected
+                      (ex-info message
+                               (merge {:code :password-login-failed}
+                                      (when data {:context data}))
+                               error))))))))
+
 (defn login!
   [opts]
-  (let [state (or (:state opts) (random-base64url 24))
-        code-verifier (or (:code-verifier opts) (random-base64url 48))
-        authorize-payload {:state state
-                           :pkce-challenge (code-challenge code-verifier)}]
-    (p/let [callback-server (start-login-callback-server! (merge opts {:state state}))
-            redirect-uri (:redirect-uri callback-server)
-            authorize-url (build-authorize-url (assoc authorize-payload :redirect-uri redirect-uri))]
-      (-> (p/let [open-result (open-browser! authorize-url)
-                  callback-result ((:wait! callback-server))
-                  auth-data (exchange-code-for-auth! opts {:code (:code callback-result)
-                                                           :redirect-uri redirect-uri
-                                                           :code-verifier code-verifier})
-                  _ (write-auth-file! opts auth-data)]
-            {:auth-path (auth-path opts)
-             :authorize-url authorize-url
-             :opened? (:opened? open-result)
-             :email (:email auth-data)
-             :sub (:sub auth-data)
-             :updated-at (:updated-at auth-data)})
-          (p/finally (fn []
-                       ((:stop! callback-server))))))))
+  (if (and (seq (:user opts)) (seq (:pass opts)))
+    (login-with-password! opts)
+    (let [state (or (:state opts) (random-base64url 24))
+          code-verifier (or (:code-verifier opts) (random-base64url 48))
+          authorize-payload {:state state
+                             :pkce-challenge (code-challenge code-verifier)}]
+      (p/let [callback-server (start-login-callback-server! (merge opts {:state state}))
+              redirect-uri (:redirect-uri callback-server)
+              authorize-url (build-authorize-url (assoc authorize-payload :redirect-uri redirect-uri))]
+        (-> (p/let [open-result (open-browser! authorize-url)
+                    callback-result ((:wait! callback-server))
+                    auth-data (exchange-code-for-auth! opts {:code (:code callback-result)
+                                                             :redirect-uri redirect-uri
+                                                             :code-verifier code-verifier})
+                    _ (write-auth-file! opts auth-data)]
+              {:auth-path (auth-path opts)
+               :authorize-url authorize-url
+               :opened? (:opened? open-result)
+               :email (:email auth-data)
+               :sub (:sub auth-data)
+               :updated-at (:updated-at auth-data)})
+            (p/finally (fn []
+                         ((:stop! callback-server)))))))))
 
 (defn resolve-auth!
   [opts]
