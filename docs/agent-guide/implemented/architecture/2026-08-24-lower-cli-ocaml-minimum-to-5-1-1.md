@@ -1,16 +1,20 @@
 # Lower CLI OCaml Minimum to 5.1.1
 
+Status: implemented
+
+Implemented by `bc4573139d` and completed by `5d87063f7f` on 2026-08-24.
+
 ## Problem
 
-The CLI does not declare an OCaml version constraint. `cli/dune-project`
-depends on `ocaml` without a lower bound, so the generated
-`cli/logseq-cli.opam` file does the same. At the same time, every GitHub Actions
-workflow that builds the CLI selects OCaml 5.4.0. The repository therefore
-neither advertises the intended minimum nor verifies it.
+The CLI previously did not declare an OCaml version constraint.
+`cli/dune-project` depended on `ocaml` without a lower bound, so the generated
+`cli/logseq-cli.opam` file did the same. At the same time, every GitHub Actions
+workflow that built the CLI selected OCaml 5.4.0. The repository therefore
+neither advertised the intended minimum nor verified it.
 
 The local `default` opam switch uses OCaml 5.1.1 and Dune 3.23.1. Those tool
 versions are sufficient for the project metadata and the pinned CLI
-dependencies, but a clean CLI test build currently stops while parsing
+dependencies, but before this decision a clean CLI test build stopped while parsing
 `cli/spec/core/cli_primitive.mli`:
 
 ```text
@@ -38,19 +42,19 @@ The pinned `melange-edn` and `melange-transit` packages declare OCaml
 compiler-specific 5.1 package variant. No dependency inspected requires OCaml
 5.2 or newer.
 
-The goal is therefore to make OCaml 5.1.1 the explicit, continuously verified
-CLI minimum so the existing `default` switch can be used after installing the
-project dependencies. It is not to make a switch with missing dependencies
-build the CLI without bootstrapping them.
+The decision makes OCaml 5.1.1 the explicit, continuously verified CLI minimum
+so the existing `default` switch can be used after installing the project
+dependencies. It does not make a switch with missing dependencies build the CLI
+without bootstrapping them.
 
-## Proposal
+## Decision
 
-Declare OCaml `>= 5.1.1` in the `logseq-cli` package dependencies in
-`cli/dune-project`, then regenerate and commit `cli/logseq-cli.opam` so both
-files expose the same constraint.
+The `logseq-cli` package dependencies in `cli/dune-project` declare OCaml
+`>= 5.1.1`. The generated `cli/logseq-cli.opam` file exposes the equivalent
+constraint.
 
-Replace the single OCaml 5.2-only type-level local open in
-`cli/spec/core/cli_primitive.mli` with the fully qualified OCaml 5.1-compatible
+The single OCaml 5.2-only type-level local open in
+`cli/spec/core/cli_primitive.mli` uses the fully qualified OCaml 5.1-compatible
 type expression:
 
 ```ocaml
@@ -62,8 +66,7 @@ public type, runtime representation, or CLI behavior. Do not add a conditional
 compatibility layer or maintain separate source paths for different compiler
 versions.
 
-Change `OCAML_VERSION` from 5.4.0 to 5.1.1 in all four workflows that build the
-CLI:
+All four workflows that build the CLI select OCaml 5.1.1:
 
 - `.github/workflows/build.yml`;
 - `.github/workflows/build-desktop-release.yml`;
@@ -75,7 +78,7 @@ E2E, dependency-update, stress, Desktop release, and npm release builds. The
 released JavaScript artifacts will therefore also be produced with the 5.1.1
 compiler-specific Melange variant.
 
-Keep the normal local bootstrap command as:
+The normal local bootstrap command remains:
 
 ```sh
 cd cli
@@ -83,11 +86,10 @@ opam install . --deps-only --with-test --yes
 opam exec -- dune runtest
 ```
 
-The implementation must verify the dependency installation in a clean 5.1.1
-switch rather than relying on packages already pinned in a developer switch.
-If the existing `pin-depends` metadata does not bootstrap the private packages
-in that clean environment, fix that single bootstrap path as part of this
-decision; do not introduce a fallback dependency-install path.
+GitHub Actions verifies dependency installation in a clean 5.1.1 switch rather
+than relying on packages already pinned in a developer switch. The existing
+`pin-depends` metadata bootstraps the private packages without a fallback
+dependency-install path.
 
 ## Alternatives considered
 
@@ -116,31 +118,28 @@ Rejected because the fully qualified type is accepted by both compiler lines
 and preserves the same public type. A compatibility branch or preprocessor
 would add complexity without retaining a distinct capability.
 
-## Acceptance criteria
+## Consequences
 
-- `cli/dune-project` declares `ocaml (>= 5.1.1)`, and the generated
-  `cli/logseq-cli.opam` file contains the equivalent constraint.
-- `cli/spec/core/cli_primitive.mli` contains no type-level local open and
-  exposes the same `keyword` alias through fully qualified type constructors.
-- In a clean opam switch whose compiler is exactly OCaml 5.1.1,
-  `opam install . --deps-only --with-test --yes` succeeds from `cli/` without
-  manually installing a newer compiler.
-- A clean, non-cached `opam exec -- dune runtest` succeeds with OCaml 5.1.1.
-- `opam exec -- pnpm cli:release` succeeds with OCaml 5.1.1, and
-  `node dist/logseq.js --help` succeeds against the staged artifact.
-- `bb -f cli-e2e/bb.edn test --skip-build` passes against artifacts freshly
-  built with OCaml 5.1.1.
+### Verification
+
+- `cli/dune-project` and the generated `cli/logseq-cli.opam` file expose the
+  OCaml `>= 5.1.1` constraint.
+- `cli/spec/core/cli_primitive.mli` exposes the same `keyword` alias through
+  fully qualified type constructors and contains no type-level local open.
+- The `logseq/cli CI` workflow successfully installs dependencies in an OCaml
+  5.1.1 switch, runs `dune runtest`, builds the staged CLI release, validates
+  its publish configuration, and runs `node dist/logseq.js --help`.
+- The main CI workflow successfully builds fresh OCaml 5.1.1 CLI artifacts and
+  passes the CLI E2E suite.
+- The CLI sync stress workflow successfully builds its runtime with OCaml 5.1.1
+  and passes the sync and offline stress suite.
 - `.github/workflows/build.yml`, `.github/workflows/build-desktop-release.yml`,
   `.github/workflows/deps-cli.yml`, and
   `.github/workflows/cli-sync-stress.yml` all select OCaml 5.1.1.
-- The required GitHub Actions paths collectively exercise dependency
-  bootstrap, CLI unit and E2E tests, release builds, smoke tests, and stress
-  tests with OCaml 5.1.1 so a future use of OCaml 5.2-only syntax cannot merge
-  or ship unnoticed.
-- The existing OCaml 5.4 build remains supported because the package contract
-  has no upper bound.
+- OCaml 5.4 remains supported because the package contract has no upper bound
+  and the fully qualified type expression is accepted by both compiler lines.
 
-## Risks
+### Operational risks
 
 - Building release artifacts with OCaml 5.1.1 selects a different
   compiler-specific Melange package variant than OCaml 5.4.0. Unit, smoke, and
