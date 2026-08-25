@@ -439,6 +439,9 @@
         start-time (t/now)]
     (state/set-state! :graph/importing :file-graph)
     (state/set-state! :graph/importing-state {:run-id run-id
+                                               :total (count *files)
+                                               :current-idx 0
+                                               :percent 0
                                                :current-page "Config files"})
     (-> (p/let [staging-repo (repo-handler/<new-file-graph-import-staging-db! run-id)
                 _ (reset! staging-repo* staging-repo)
@@ -550,7 +553,7 @@
 
 (hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (rfx/use-sub [:graph/importing-state])
+  (let [{:keys [total current-idx current-page label percent]} (rfx/use-sub [:graph/importing-state])
         label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]
@@ -560,8 +563,12 @@
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
                         current-page]]])
-        width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
-        process (when (and total current-idx)
+        width (if (number? percent)
+                percent
+                (if (and (number? total) (pos? total) (number? current-idx))
+                  (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
+                  0))
+        process (when (and total current-idx (< current-idx total))
                   (str current-idx "/" total))]
     [:div.p-5
      (ui/progress-bar-with-label width left-label process)]))

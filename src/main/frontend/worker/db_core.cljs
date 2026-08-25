@@ -77,6 +77,7 @@
 (def ^:private wal-checkpoint-idle-ms 2000)
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
+(def ^:private import-progress-file-batch-size 100)
 
 (defn- resolve-initial-config
   [config]
@@ -375,6 +376,28 @@
   #{:import/file-read-failed
     :import/file-parse-failed})
 
+(defn- file-graph-import-progress-reporter
+  [run-id]
+  (let [progress* (atom {:total 0 :current-idx 0 :percent 0})]
+    (fn [path value]
+      (let [state-key (last path)
+            progress (swap! progress* assoc state-key value)
+            current-idx (:current-idx progress)
+            total (:total progress)
+            progress (if (and (= :current-page state-key) (pos? total))
+                       (swap! progress* assoc :percent
+                              (min 60 (js/Math.round (* 60 (/ current-idx total)))))
+                       progress)]
+        (when (or (= :total state-key)
+                  (and (= :current-page state-key)
+                       (or (= current-idx 1)
+                           (= current-idx total)
+                           (zero? (mod current-idx import-progress-file-batch-size)))))
+          (shared-service/broadcast-to-clients!
+           :file-graph-import-progress
+           {:run-id run-id :progress progress})
+          (p/delay 0))))))
+
 (defn- recoverable-notification-issue
   [phase {:keys [msg ex-data]}]
   {:code (or (:code ex-data) :import/recoverable-step-failed)
@@ -386,7 +409,8 @@
 
 (defn- prepare-file-graph-import-options!
   [repo opts phase record-performance notifications issues staged-assets]
-  (let [notify-user (fn [notification]
+  (let [run-id (:run-id opts)
+        notify-user (fn [notification]
                       (swap! notifications conj notification)
                       (when (= :error (:level notification))
                         (swap! issues conj
@@ -399,6 +423,7 @@
                :recoverable-error? recoverable-file-import-error-codes
                :single-persistent-document-batch? true
                :simple-page-property-batch? true
+               :set-ui-state (file-graph-import-progress-reporter run-id)
                :log-fn (fn [& args]
                          (log/info :import-file-graph {:args args}))
                :record-performance record-performance
@@ -415,8 +440,7 @@
                :<get-file-stat (constantly nil)
                :<read-and-copy-asset
                (fn [file assets buffer-handler]
-                 (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-        (dissoc :set-ui-state))))
+                 (<read-and-stage-import-asset file assets buffer-handler staged-assets))))))
 
 (defn- <import-file-graph!
   [repo config-file files opts]

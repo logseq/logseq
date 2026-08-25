@@ -61,6 +61,10 @@
   (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
     (apply f args)))
 
+(defmethod handle :file-graph-import-progress [_ _worker {:keys [run-id progress]}]
+  (when (= run-id (state/get-state [:graph/importing-state :run-id]))
+    (state/update-state! :graph/importing-state #(merge % progress))))
+
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
 

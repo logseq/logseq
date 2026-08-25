@@ -3207,29 +3207,33 @@
 
 (defn- <partition-simple-page-property-files
   [doc-files <read-file rpath-key options]
-  (let [property-context (bulk-property-context (:user-config options))]
+  (let [property-context (bulk-property-context (:user-config options))
+        set-ui-state (or (:set-ui-state options) (constantly nil))
+        _ (set-ui-state [:graph/importing-state :total] (count doc-files))]
     #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
     (p/loop [remaining-files doc-files
              simple-files []
              fallback-files []]
       (if-let [file (first remaining-files)]
-        (-> (<read-file file)
-            (p/then (fn [content]
-                      (let [started (extract/performance-now-ms)
-                            simple-file (simple-page-property-file
-                                         file content rpath-key property-context)
-                            _ (extract/record-performance!
-                               options :parse started
-                               {:path (:path file)
-                                :bytes (count content)
-                                :parser :simple-page-properties})]
-                        (if simple-file
-                          (p/recur (rest remaining-files)
-                                   (conj simple-files simple-file)
-                                   fallback-files)
-                          (p/recur (rest remaining-files)
-                                   simple-files
-                                   (conj fallback-files file))))))
+        (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx]
+                                    (inc (:idx file)))
+                    _ (set-ui-state [:graph/importing-state :current-page] (:path file))
+                    content (<read-file file)]
+              (let [started (extract/performance-now-ms)
+                    simple-file (simple-page-property-file
+                                 file content rpath-key property-context)
+                    _ (extract/record-performance!
+                       options :parse started
+                       {:path (:path file)
+                        :bytes (count content)
+                        :parser :simple-page-properties})]
+                (if simple-file
+                  (p/recur (rest remaining-files)
+                           (conj simple-files simple-file)
+                           fallback-files)
+                  (p/recur (rest remaining-files)
+                           simple-files
+                           (conj fallback-files file)))))
             (p/catch (fn [_error]
                        (p/recur (rest remaining-files)
                                 simple-files
@@ -3699,7 +3703,8 @@
                   (seed-simple-page-property-import-state!
                    import-state property-schemas (into init-tx block-props-tx))))
             fallback-result (if (seq fallback-files)
-                              (export-doc-files conn fallback-files <read-file options)
+                              (export-doc-files conn fallback-files <read-file
+                                                (assoc options :set-ui-state (constantly nil)))
                               {:issues []})]
       fallback-result)))
 
