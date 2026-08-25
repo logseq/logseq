@@ -62,9 +62,12 @@
                             (nil? v))
                      (rewrite/dissoc result (first ks))
                      (rewrite/assoc-in result ks v))
-        new-str-content (str new-result)]
-    (fs/write-file! (global-config-path) new-str-content)
-    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
+        new-str-content (str new-result)
+        write-p (p/do!
+                 (fs/mkdir-if-not-exists (global-config-dir))
+                 (fs/write-file! (global-config-path) new-str-content))]
+    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)
+    write-p))
 
 (defn start
   "This component has three responsibilities on start:
@@ -75,8 +78,10 @@
   (-> (p/do!
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
          (reset! root-dir root-dir'))
-       (restore-global-config!)
-       (create-global-config-file-if-not-exists repo))
+       ;; Create first: restore reads the file and fails (aborting start)
+       ;; on a fresh install when config/config.edn does not exist yet.
+       (create-global-config-file-if-not-exists repo)
+       (restore-global-config!))
       (p/timeout 6000)
       (p/catch (fn [e]
                  (js/console.error "cannot start global-config" e)))))
