@@ -570,7 +570,11 @@ let graph_validate_result mode _config result =
   else
     let count = Vec.length errors in
     Cli_result.error ~command:Command_id.Graph_validate mode
-      (Error.make Error.Graph_validation_failed
+      (Error.make
+         ~context:
+           (Edn_util.map_vec
+              (Vec.of_array [| (kw "errors", Edn_util.vector_vec errors) |]))
+         Error.Graph_validation_failed
          ("Graph invalid. Found "
          ^ format_count count "entity"
          ^ " with errors:\n"
