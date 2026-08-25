@@ -29,6 +29,7 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -2866,6 +2867,26 @@
                   (fn []
                     (reset! ldb/*transact-pipeline-fn pipeline-before)
                     (complete-after-promise-finalizers! done))))))))))
+
+(deftest import-terminal-result-recovers-from-unserializable-diagnostics
+  (let [run-id "serialization-run"
+        result (file-graph-import/completed-result
+                run-id
+                {:validation {:status :passed}
+                 :issues []
+                 :import-state {:diagnostic (fn [])}})
+        recovered (#'db-core/ensure-serializable-import-terminal-result run-id result)]
+    (is (= {:status :completed-with-errors
+            :phase :completed
+            :validation {:status :passed}
+            :issue-codes [:import/recoverable-step-failed]}
+           {:status (:status recovered)
+            :phase (:phase recovered)
+            :validation (:validation recovered)
+            :issue-codes (mapv :code (:issues recovered))}))
+    (is (= recovered
+           (file-graph-import/normalize-terminal-result run-id recovered)))
+    (is (string? (ldb/write-transit-str recovered)))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state

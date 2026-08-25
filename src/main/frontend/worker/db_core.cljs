@@ -327,6 +327,50 @@
     :issues issues
     :staged-assets staged-assets}))
 
+(defn- ensure-serializable-import-terminal-result
+  [run-id result]
+  (try
+    (sqlite-util/write-transit-str result)
+    result
+    (catch :default error
+      (let [message (or (ex-message error) "Unable to serialize import diagnostics")
+            fallback-values {:validation {:status :passed}
+                             :files []
+                             :import-state {}
+                             :notifications []
+                             :issues []
+                             :staged-assets []
+                             :performance-events []}
+            recovered-data
+            (reduce-kv
+             (fn [data k fallback]
+               (assoc data k
+                      (try
+                        (let [value (get result k)]
+                          (sqlite-util/write-transit-str value)
+                          value)
+                        (catch :default field-error
+                          (log/error :import-terminal-field-serialization-failed k
+                                     :error-message (ex-message field-error))
+                          fallback))))
+             {}
+             fallback-values)
+            recovered-result
+            (file-graph-import/completed-result
+             run-id
+             (update recovered-data :issues conj
+                     {:code :import/recoverable-step-failed
+                      :severity :error
+                      :recoverable? true
+                      :phase :terminal
+                      :parameters {}
+                      :diagnostics {:message message}}))]
+        (log/error :import-terminal-result-serialization-failed true
+                   :run-id run-id
+                   :error-message message)
+        (sqlite-util/write-transit-str recovered-result)
+        recovered-result))))
+
 (def ^:private recoverable-file-import-error-codes
   #{:import/file-read-failed
     :import/file-parse-failed})
@@ -433,9 +477,11 @@
               (if (= :failed (:status validation))
                 (assoc (file-graph-import/failed-result run-id :validate :import/validation-failed)
                        :validation validation)
-                (cond-> (completed-import-terminal-result
-                         run-id result validation @staged-assets @notifications @issues)
-                  performance-events (assoc :performance-events @performance-events))))
+                (let [terminal-result
+                      (cond-> (completed-import-terminal-result
+                               run-id result validation @staged-assets @notifications @issues)
+                        performance-events (assoc :performance-events @performance-events))]
+                  (ensure-serializable-import-terminal-result run-id terminal-result))))
             (p/catch
              (fn [error]
                (let [code (or (:code (ex-data error)) :import/worker-failed)]
