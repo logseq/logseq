@@ -961,6 +961,15 @@
  :import/zip-import-error "压缩包导入失败：{1}"
  :import/zip-missing-db-sqlite "压缩包缺少 db.sqlite。请检查归档结构。"
 
+ :import.progress/building-graph "正在构建知识库"
+ :import.progress/building-search-index "正在构建搜索索引"
+ :import.progress/finalizing-data "正在完成知识库数据处理"
+ :import.progress/finishing "正在完成导入"
+ :import.progress/preparing "正在准备导入"
+ :import.progress/publishing "正在发布知识库"
+ :import.progress/reading-files "正在读取文件"
+ :import.progress/validating "正在验证知识库"
+
  :journal/add-blocks-to-today-success "块已添加到今天！"
  :journal/page-cant-convert-warning "此页面不是日记页面。"
  :journal/parse-date-to-name-error "无法将日期解析为日志页名称。"

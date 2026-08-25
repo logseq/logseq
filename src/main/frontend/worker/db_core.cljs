@@ -77,7 +77,7 @@
 (def ^:private wal-checkpoint-idle-ms 2000)
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
-(def ^:private import-progress-file-batch-size 100)
+(def ^:private import-progress-file-steps 40)
 
 (defn- resolve-initial-config
   [config]
@@ -378,25 +378,34 @@
 
 (defn- file-graph-import-progress-reporter
   [run-id]
-  (let [progress* (atom {:total 0 :current-idx 0 :percent 0})]
-    (fn [path value]
-      (let [state-key (last path)
-            progress (swap! progress* assoc state-key value)
-            current-idx (:current-idx progress)
-            total (:total progress)
-            progress (if (and (= :current-page state-key) (pos? total))
-                       (swap! progress* assoc :percent
-                              (min 60 (js/Math.round (* 60 (/ current-idx total)))))
-                       progress)]
-        (when (or (= :total state-key)
-                  (and (= :current-page state-key)
-                       (or (= current-idx 1)
-                           (= current-idx total)
-                           (zero? (mod current-idx import-progress-file-batch-size)))))
-          (shared-service/broadcast-to-clients!
-           :file-graph-import-progress
-           {:run-id run-id :progress progress})
-          (p/delay 0))))))
+  (let [progress* (atom {:total 0
+                         :current-idx 0
+                         :phase :importing-files
+                         :percent 5})
+        emit! (fn [progress]
+                (shared-service/broadcast-to-clients!
+                 :file-graph-import-progress
+                 {:run-id run-id :progress progress})
+                (p/delay 0))]
+    (fn
+      ([updates]
+       (emit! (swap! progress* merge updates)))
+      ([path value]
+       (let [state-key (last path)
+             progress (swap! progress* assoc state-key value)
+             current-idx (:current-idx progress)
+             total (:total progress)
+             batch-size (max 1 (js/Math.ceil (/ total import-progress-file-steps)))
+             progress (if (and (= :current-page state-key) (pos? total))
+                        (swap! progress* assoc :percent
+                               (min 50 (+ 5 (js/Math.round (* 45 (/ current-idx total))))))
+                        progress)]
+         (when (or (contains? #{:phase :percent :total} state-key)
+                   (and (= :current-page state-key)
+                        (or (= current-idx 1)
+                            (= current-idx total)
+                            (zero? (mod current-idx batch-size)))))
+           (emit! progress)))))))
 
 (defn- recoverable-notification-issue
   [phase {:keys [msg ex-data]}]
@@ -408,9 +417,8 @@
    :diagnostics {:message msg}})
 
 (defn- prepare-file-graph-import-options!
-  [repo opts phase record-performance notifications issues staged-assets]
-  (let [run-id (:run-id opts)
-        notify-user (fn [notification]
+  [repo opts phase record-performance notifications issues staged-assets progress-reporter]
+  (let [notify-user (fn [notification]
                       (swap! notifications conj notification)
                       (when (= :error (:level notification))
                         (swap! issues conj
@@ -423,7 +431,7 @@
                :recoverable-error? recoverable-file-import-error-codes
                :single-persistent-document-batch? true
                :simple-page-property-batch? true
-               :set-ui-state (file-graph-import-progress-reporter run-id)
+               :set-ui-state progress-reporter
                :log-fn (fn [& args]
                          (log/info :import-file-graph {:args args}))
                :record-performance record-performance
@@ -453,10 +461,13 @@
       (let [notifications (atom [])
             issues (atom [])
             staged-assets (atom [])
+            progress-reporter (file-graph-import-progress-reporter run-id)
             options (prepare-file-graph-import-options!
-                     repo opts phase record-performance notifications issues staged-assets)]
+                     repo opts phase record-performance notifications issues staged-assets
+                     progress-reporter)]
         (-> (p/let [import-started (.now js/performance)
                     _ (reset! phase :import-files)
+                    _ (progress-reporter {:phase :importing-files :percent 5})
                     result (gp-exporter/export-file-graph conn conn config-file files options)
                     _ (when record-performance
                         (record-performance {:phase :import-files-total
@@ -464,12 +475,14 @@
                                              :files (count files)}))
                     render-started (.now js/performance)
                     _ (reset! phase :render-revisions)
+                    _ (progress-reporter {:phase :finalizing-data :percent 65})
                     _ (finalize-import-render-revisions! conn)
                     _ (when record-performance
                         (record-performance {:phase :render-revisions
                                              :elapsed-ms (- (.now js/performance) render-started)}))
                     validation-started (.now js/performance)
                     _ (reset! phase :validate)
+                    _ (progress-reporter {:phase :validating :percent 70})
                     validation-result (worker-db-validate/validate-db
                                        conn :fix false :include-entities? true)
                     _ (when record-performance
@@ -482,6 +495,7 @@
                     checksum-started (.now js/performance)
                     _ (when (= :passed (:status validation))
                         (reset! phase :sync-checksum)
+                        (progress-reporter {:phase :finalizing-data :percent 75})
                         (client-op/update-local-checksum
                          repo
                          (sync-checksum/recompute-checksum-from-entities

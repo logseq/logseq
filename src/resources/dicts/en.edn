@@ -961,6 +961,15 @@
  :import/zip-import-error "Zip import failed: {1}"
  :import/zip-missing-db-sqlite "Zip missing db.sqlite. Please check the archive structure."
 
+ :import.progress/building-graph "Building graph"
+ :import.progress/building-search-index "Building search index"
+ :import.progress/finalizing-data "Finalizing graph data"
+ :import.progress/finishing "Finishing import"
+ :import.progress/preparing "Preparing import"
+ :import.progress/publishing "Publishing graph"
+ :import.progress/reading-files "Reading files"
+ :import.progress/validating "Validating graph"
+
  :journal/add-blocks-to-today-success "Blocks added to today!"
  :journal/page-cant-convert-warning "This page can't be changed to a journal page."
  :journal/parse-date-to-name-error "Failed to parse date to journal name."

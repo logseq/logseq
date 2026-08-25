@@ -57,9 +57,16 @@
      :assets/asset-file-write-finish
      (fn [m] (assoc-in m [repo asset-id] (or ts (.now js/Date)))))))
 
-(defmethod handle :thread-api/search-index-build-progress [_ _worker args]
+(defmethod handle :thread-api/search-index-build-progress [_ _worker [repo {:keys [status progress]} :as args]]
   (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
-    (apply f args)))
+    (apply f args))
+  (when (and (= repo (state/get-state [:graph/importing-state :repo]))
+             (= status :running)
+             (number? progress))
+    (state/update-state!
+     :graph/importing-state
+     #(merge % {:phase :building-search-index
+                :percent (+ 80 (js/Math.round (* 14 (/ progress 100))))}))))
 
 (defmethod handle :file-graph-import-progress [_ _worker {:keys [run-id progress]}]
   (when (= run-id (state/get-state [:graph/importing-state :run-id]))

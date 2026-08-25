@@ -3665,12 +3665,18 @@
        (empty? (:property-parent-classes user-options))))
 
 (defn- <export-doc-files-with-simple-page-property-batch
-  [conn doc-files <read-file {:keys [rpath-key import-state] :as options}]
+  [conn doc-files <read-file {:keys [rpath-key import-state set-ui-state]
+                              :or {set-ui-state (constantly nil)}
+                              :as options}]
   (if-not (simple-page-property-import-supported? doc-files options)
     (export-doc-files conn doc-files <read-file options)
     (p/let [{:keys [simple-files fallback-files]}
             (<partition-simple-page-property-files
              (ordered-doc-files doc-files) <read-file rpath-key options)
+            _ (when (seq simple-files)
+                (p/do!
+                 (set-ui-state [:graph/importing-state :percent] 55)
+                 (set-ui-state [:graph/importing-state :phase] :building-graph)))
             _ (when (seq simple-files)
                 (let [extract-started (extract/performance-now-ms)
                       {:keys [build-options property-schemas ordinary-page-titles]}

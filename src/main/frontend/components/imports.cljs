@@ -394,6 +394,11 @@
   [run-id]
   (= run-id (state/get-state [:graph/importing-state :run-id])))
 
+(defn- update-file-graph-import-progress!
+  [run-id progress]
+  (when (current-file-graph-import? run-id)
+    (state/update-state! :graph/importing-state #(merge % progress))))
+
 (defn- clear-file-graph-import!
   [run-id]
   (when (current-file-graph-import? run-id)
@@ -442,15 +447,20 @@
                                                :total (count *files)
                                                :current-idx 0
                                                :percent 0
-                                               :current-page "Config files"})
+                                               :phase :preparing})
     (-> (p/let [staging-repo (repo-handler/<new-file-graph-import-staging-db! run-id)
                 _ (reset! staging-repo* staging-repo)
                 _ (reset! phase :serialize-files)
+                _ (update-file-graph-import-progress! run-id {:repo staging-repo
+                                                              :phase :reading-files
+                                                              :percent 2})
                 serialized-files (<serialize-import-files *files)
                 serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
                 options (assoc (build-file-graph-worker-options user-options config/config-default-content)
                                :run-id run-id)
                 _ (reset! phase :worker-import)
+                _ (update-file-graph-import-progress! run-id {:phase :importing-files
+                                                              :percent 5})
                 import-result (state/<invoke-db-worker :thread-api/import-file-graph staging-repo serialized-config-file serialized-files options)
                 terminal-result (file-graph-import/normalize-terminal-result run-id import-result)]
           (if (= :failed (:status terminal-result))
@@ -460,12 +470,18 @@
             (p/let [staged-asset-issues (if (util/electron?)
                                           (do
                                             (reset! phase :stage-assets)
+                                            (update-file-graph-import-progress!
+                                             run-id {:phase :publishing :percent 95})
                                             (<write-staged-assets! staging-repo (:staged-assets terminal-result)))
                                           [])
                     _ (reset! phase :publish)
+                    _ (update-file-graph-import-progress! run-id {:phase :publishing
+                                                                 :percent 96})
                     _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
                     _ (reset! published? true)
                     _ (reset! phase :register-graph)
+                    _ (update-file-graph-import-progress! run-id {:phase :finishing
+                                                                 :percent 98})
                     repo (repo-handler/new-db! graph-name {:file-graph-import? true})
                     _ (when-not (= target-repo repo)
                         (throw (ex-info "imported graph registration failed"
@@ -483,6 +499,7 @@
                     published-result (assoc terminal-result' :publication {:status :published
                                                                            :repo repo})]
               (reset! phase :terminal)
+              (update-file-graph-import-progress! run-id {:phase :finishing :percent 100})
               (log/info :import-file-graph-finished true
                         :run-id run-id
                         :elapsed-ms (t/in-millis (t/interval start-time (t/now))))
@@ -553,22 +570,33 @@
 
 (hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label percent]} (rfx/use-sub [:graph/importing-state])
+  (let [{:keys [total current-idx current-page label percent phase]} (rfx/use-sub [:graph/importing-state])
         label (or label (t :import/loading))
-        left-label (if (and current-idx total (= current-idx total))
-                     [:div.flex.flex-row.font-bold (t :ui/loading)]
-                     [:div.flex.flex-row.font-bold
-                      label
+        phase-label (case phase
+                      :preparing (t :import.progress/preparing)
+                      :reading-files (t :import.progress/reading-files)
+                      :importing-files current-page
+                      :building-graph (t :import.progress/building-graph)
+                      :finalizing-data (t :import.progress/finalizing-data)
+                      :validating (t :import.progress/validating)
+                      :building-search-index (t :import.progress/building-search-index)
+                      :publishing (t :import.progress/publishing)
+                      :finishing (t :import.progress/finishing)
+                      current-page)
+        left-label [:div.flex.flex-row.font-bold
+                    label
+                    (when phase-label
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                        current-page]]])
+                        phase-label]])]
         width (if (number? percent)
                 percent
                 (if (and (number? total) (pos? total) (number? current-idx))
                   (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
                   0))
-        process (when (and total current-idx (< current-idx total))
+        process (when (and (= :importing-files phase)
+                           total current-idx (< current-idx total))
                   (str current-idx "/" total))]
     [:div.p-5
      (ui/progress-bar-with-label width left-label process)]))
