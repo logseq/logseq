@@ -13,7 +13,10 @@ commit `905e131770` (`fix: no need to fix parent cycle for blocks`) on
 orders but has no cycle-repair call. Repository-wide searches find no other
 production, script, documentation-contract, reflection, registry, or generated
 source reference. The `@logseq/db-sync` package is private and does not export
-the namespace as an external API.
+the namespace as an external API. The remaining `deps/db-sync/.carve/ignore`
+entry labels `fix-cycle!` as an API, but it is now a stale internal linter
+exemption rather than an active package or runtime contract and must be removed
+with the implementation.
 
 The unused utility therefore preserves a behavior model, transaction metadata,
 and tests that are not part of runtime behavior. The implemented runtime guide
@@ -25,6 +28,9 @@ Delete:
 
 - `deps/db-sync/src/logseq/db_sync/cycle.cljs`; and
 - `deps/db-sync/test/logseq/db_sync/cycle_test.cljs`.
+
+Remove the obsolete `logseq.db-sync.cycle/fix-cycle!` API exemption and its
+comment from `deps/db-sync/.carve/ignore`.
 
 Remove the `Cycle repair utility` subsection from
 `docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md`.
@@ -63,13 +69,16 @@ would relocate unused complexity instead of deleting it.
   removed.
 - Repository-wide search finds no `logseq.db-sync.cycle`, `cycle/fix-cycle!`, or
   equivalent build/test registration reference in tracked source.
+- `deps/db-sync/.carve/ignore` no longer identifies the deleted `fix-cycle!`
+  var as an API.
 - `frontend.worker.sync.apply-txs` retains its current remote apply and
   duplicate-order repair behavior unchanged.
 - The implemented runtime guide no longer documents the removed test-only
   utility or suggests that active client sync repairs reference cycles.
 - `pnpm --dir deps/db-sync test` passes and regenerates its test bundle without
   the deleted namespace.
-- `bb lint:carve` passes.
+- `cd deps/db-sync && bb lint:carve` passes against the db-sync Carve
+  configuration.
 - `bb dev:lint-and-test` passes.
 
 ## Risks

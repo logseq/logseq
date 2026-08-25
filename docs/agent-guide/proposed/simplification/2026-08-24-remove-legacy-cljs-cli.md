@@ -53,6 +53,16 @@ Delete their implementation-specific CLJS tests:
 - `src/test/logseq/cli/output_mode_test.cljs`; and
 - `src/test/logseq/cli/uuid_refs_test.cljs`.
 
+Remove the obsolete root `.carve/ignore` entry that still describes
+`logseq.cli.main/main` as a Shadow `:node-script` entry point.
+
+Update the retained `src/test/logseq/cli/server_test.cljs` and
+`src/test/frontend/worker/db_worker_node_test.cljs` namespaces to require
+`logseq.db-worker.server-list` directly and replace their
+`logseq.cli.config/server-list-path` calls with `server-list/path`. These tests
+exercise the active db-worker-node runtime and must not retain a dependency on
+the deleted CLI configuration namespace.
+
 Retain the active CLJS runtime boundary and its tests:
 
 - `logseq.cli.common` and `logseq.cli.common.db-worker`, used by Electron and
@@ -100,9 +110,15 @@ obsolete implementation is gone.
 
 - The 31 unreachable CLJS source files and 26 implementation-specific test
   files listed by the proposal are removed.
+- `src/test/logseq/cli/server_test.cljs` and
+  `src/test/frontend/worker/db_worker_node_test.cljs` use
+  `logseq.db-worker.server-list/path` directly and no longer require
+  `logseq.cli.config`.
 - The eight active CLJS production namespaces and their focused tests remain,
   and repository-wide namespace search still accounts for every Electron,
   db-worker-node, worker, and test-helper consumer.
+- Root Carve configuration no longer identifies `logseq.cli.main/main` as a
+  Shadow CLI entry point.
 - `shadow-cljs.edn`, root build scripts, CLI E2E preflight, npm package
   preparation, and Desktop staging continue to identify
   `cli/_build/default/dist/logseq-cli.js` as the sole CLI producer.
@@ -110,8 +126,8 @@ obsolete implementation is gone.
   namespace.
 - `node scripts/test-cli-release-config.mjs` passes.
 - `pnpm --dir cli test` passes.
-- `bb -f cli-e2e/bb.edn test --skip-build` passes against freshly staged CLI
-  and db-worker-node artifacts.
+- `bb -f cli-e2e/bb.edn test` builds, stages, and tests fresh CLI,
+  db-worker-node, and db-sync node-adapter artifacts.
 - Focused CLJS tests for `logseq.cli.common`, `logseq.cli.common.db-worker`,
   `logseq.cli.log`, `logseq.cli.profile`, `logseq.cli.root-dir`,
   `logseq.cli.server`, `logseq.cli.style`, and `logseq.cli.transport` pass.
