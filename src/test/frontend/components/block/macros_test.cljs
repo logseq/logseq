@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.block.macros :as block-macros]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]))
@@ -102,3 +103,22 @@
                                                ["(count result)"])])))]
       (is (string/includes? markup "1"))
       (is (string/includes? markup "2")))))
+
+(defn- render-user-macro
+  [macro-name arguments]
+  (#'block/macro-cp {} {:name macro-name :arguments arguments}))
+
+(deftest user-macro-substitutes-block-arguments
+  (let [poem "Rose is $1, violet's $2. Life's ordered: Org assists you."]
+    (with-redefs [state/get-macros (constantly {"poem" poem})]
+      (testing "{{poem $1 $2}} style macros substitute arguments in block render"
+        (let [markup (pr-str (render-user-macro "poem" ["red" "blue"]))]
+          (is (string/includes? markup "Rose is red, violet's blue. Life's ordered: Org assists you."))
+          (is (not (string/includes? markup "$1")))
+          (is (not (string/includes? markup "$2")))))
+
+      (testing "a macro with no args is unchanged"
+        (let [markup (pr-str (render-user-macro "poem" []))]
+          (is (string/includes? markup poem))
+          (is (string/includes? markup "$1"))
+          (is (string/includes? markup "$2")))))))

@@ -79,6 +79,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -1850,6 +1851,9 @@
   (let [macro-content (or
                        (get (state/get-macros) name)
                        (get (state/get-macros) (keyword name)))
+        macro-content (if (and (seq arguments) macro-content)
+                        (macro-util/macro-subs macro-content arguments)
+                        macro-content)
         format (get-in config [:block :block/format] :markdown)]
     (render-macro config name arguments macro-content format)))
 
