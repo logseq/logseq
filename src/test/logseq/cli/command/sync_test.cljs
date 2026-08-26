@@ -652,9 +652,9 @@
                                cli-server/stop-server! (fn [config repo]
                                                          (swap! stop-calls conj [config repo])
                                                          (p/resolved {:ok? true}))
-                               cli-common/unlink-graph! (fn [& args]
+                               cli-common/remove-graph-dir! (fn [& args]
                                                           (swap! unlink-calls conj args)
-                                                          "/tmp/unlinked-demo")
+                                                          "/tmp/removed-demo")
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   (case method
@@ -707,9 +707,9 @@
                                                          (swap! stop-calls conj [config repo])
                                                          (p/rejected (ex-info "stop failed"
                                                                               {:code :stop-failed})))
-                               cli-common/unlink-graph! (fn [& args]
+                               cli-common/remove-graph-dir! (fn [& args]
                                                           (swap! unlink-calls conj args)
-                                                          "/tmp/unlinked-demo")
+                                                          "/tmp/removed-demo")
                                transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
@@ -736,7 +736,7 @@
                    (is (= :error (:status result)))
                    (is (= :e2ee-password-not-found (get-in result [:error :code])))
                    (is (= ["logseq_db_demo"] (mapv second @stop-calls)))
-                   (is (= [] @unlink-calls))))
+                   (is (= ["logseq_db_demo"] (mapv last @unlink-calls)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -796,9 +796,9 @@
                                cli-server/stop-server! (fn [config repo]
                                                          (swap! stop-calls conj [config repo])
                                                          (p/resolved {:ok? true}))
-                               cli-common/unlink-graph! (fn [& args]
+                               cli-common/remove-graph-dir! (fn [& args]
                                                           (swap! unlink-calls conj args)
-                                                          "/tmp/unlinked-demo")
+                                                          "/tmp/removed-demo")
                                transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
@@ -826,6 +826,206 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-sync-download-removes-leftover-graph-dir-when-stop-fails
+  (async done
+         (let [root-dir (temp-root-dir)
+               repo "logseq_db_leftover"
+               graph-path (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                                          (graph-dir/repo->encoded-graph-dir-name repo))
+               create-leftover! (fn []
+                                  (fs/mkdirSync graph-path #js {:recursive true})
+                                  (fs/writeFileSync (node-path/join graph-path "db.sqlite") "")
+                                  (fs/writeFileSync (node-path/join graph-path "db-worker.lock") "lock"))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (create-leftover!)
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [_config _repo]
+                                                         (p/resolved {:ok? false
+                                                                      :error {:code :server-stop-timeout
+                                                                              :message "timed out stopping server"}}))
+                               transport/invoke (fn [_ method _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "leftover"
+                                                                  :graph-e2ee? true}])
+
+                                                    :thread-api/verify-and-save-e2ee-password
+                                                    (p/rejected (ex-info "invalid-e2ee-password"
+                                                                         {:code :db-sync/invalid-e2ee-password}))
+
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo repo
+                                                            :graph "leftover"
+                                                            :e2ee-password "wrong-password"}
+                                                           {:base-url "http://example"
+                                                            :root-dir root-dir
+                                                            :http-base "https://api.logseq.io"
+                                                            :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :db-sync/invalid-e2ee-password (get-in result [:error :code])))
+                   (is (not (fs/existsSync graph-path))
+                       "failed download should delete the leftover canonical graph dir")
+                   (is (= [] (cli-server/list-graphs {:root-dir root-dir})))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (remove-dir! root-dir)
+                            (done)))))))
+
+(deftest test-execute-sync-download-removes-leftover-graph-on-worker-failure
+  (async done
+         (let [root-dir (temp-root-dir)
+               repo "logseq_db_leftover"
+               graph-path (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                                          (graph-dir/repo->encoded-graph-dir-name repo))
+               create-leftover! (fn []
+                                  (fs/mkdirSync graph-path #js {:recursive true})
+                                  (fs/writeFileSync (node-path/join graph-path "db.sqlite") "")
+                                  (fs/writeFileSync (node-path/join graph-path "db-worker.lock") "lock"))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (create-leftover!)
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [_config _repo]
+                                                         (p/resolved {:ok? true}))
+                               transport/invoke (fn [_ method _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "leftover"
+                                                                  :graph-e2ee? false}])
+
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/rejected (ex-info "db-sync download failed"
+                                                                         {:code :db-sync/snapshot-download-failed
+                                                                          :stage :fetch-pull}))
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo repo
+                                                            :graph "leftover"}
+                                                           {:base-url "http://example"
+                                                            :root-dir root-dir
+                                                            :http-base "https://api.logseq.io"
+                                                            :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :db-sync/snapshot-download-failed (get-in result [:error :code])))
+                   (is (not (fs/existsSync graph-path))
+                       "pre-import worker failure should delete the leftover graph dir")
+                   (is (= [] (cli-server/list-graphs {:root-dir root-dir})))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (remove-dir! root-dir)
+                            (done)))))))
+
+(deftest test-execute-sync-download-keeps-graph-dir-on-success
+  (async done
+         (let [root-dir (temp-root-dir)
+               repo "logseq_db_leftover"
+               graph-path (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                                          (graph-dir/repo->encoded-graph-dir-name repo))
+               create-graph! (fn []
+                               (fs/mkdirSync graph-path #js {:recursive true})
+                               (fs/writeFileSync (node-path/join graph-path "db.sqlite") "imported"))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (create-graph!)
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [_config _repo]
+                                                         (p/resolved {:ok? true}))
+                               transport/invoke (fn [_ method _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "leftover"
+                                                                  :graph-e2ee? false}])
+
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:graph-id "remote-graph-id"
+                                                                 :remote-tx 9})
+
+                                                    :thread-api/db-sync-download-missing-assets
+                                                    (p/resolved {:ok true})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo repo
+                                                            :graph "leftover"}
+                                                           {:base-url "http://example"
+                                                            :root-dir root-dir
+                                                            :http-base "https://api.logseq.io"
+                                                            :refresh-token "refresh-token"})]
+                   (is (= :ok (:status result)))
+                   (is (fs/existsSync graph-path)
+                       "successful download should keep the local graph dir")
+                   (is (= ["leftover"] (cli-server/list-graphs {:root-dir root-dir})))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (remove-dir! root-dir)
+                            (done)))))))
+
+(deftest test-execute-sync-download-keeps-imported-graph-when-assets-fail
+  (async done
+         (let [root-dir (temp-root-dir)
+               repo "logseq_db_leftover"
+               graph-path (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                                          (graph-dir/repo->encoded-graph-dir-name repo))
+               create-graph! (fn []
+                               (fs/mkdirSync graph-path #js {:recursive true})
+                               (fs/writeFileSync (node-path/join graph-path "db.sqlite") "imported"))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (create-graph!)
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [_config _repo]
+                                                         (p/resolved {:ok? true}))
+                               transport/invoke
+                               (fn [_ method _args]
+                                 (case method
+                                   :thread-api/db-sync-list-remote-graphs
+                                   (p/resolved [{:graph-id "remote-graph-id"
+                                                 :graph-name "leftover"
+                                                 :graph-e2ee? false}])
+
+                                   :thread-api/q
+                                   (p/resolved 0)
+
+                                   :thread-api/db-sync-download-graph-by-id
+                                   (p/resolved {:graph-id "remote-graph-id"
+                                                :remote-tx 9})
+
+                                   :thread-api/db-sync-download-missing-assets
+                                   (p/rejected (ex-info "asset download failed"
+                                                        {:code :db-sync/asset-download-failed}))
+
+                                   (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo repo
+                                                            :graph "leftover"}
+                                                           {:base-url "http://example"
+                                                            :root-dir root-dir
+                                                            :http-base "https://api.logseq.io"
+                                                            :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :db-sync/asset-download-failed (get-in result [:error :code])))
+                   (is (fs/existsSync graph-path)
+                       "post-import asset failure should keep the imported graph")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (remove-dir! root-dir)
+                            (done)))))))
 
 (deftest test-execute-sync-start-runtime-error-after-open
   (async done

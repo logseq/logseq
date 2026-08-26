@@ -37,3 +37,15 @@
          (fs/ensureDirSync unlinked)
          (fs/moveSync path new-path')
          new-path')))))
+
+(defn remove-graph-dir!
+  "Deletes the graph directory from disk, including worker lock files.
+   Returns the removed path if a directory was deleted, otherwise nil."
+  ([repo]
+   (remove-graph-dir! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
+  ([graphs-dir repo]
+   (let [graphs-dir (common-graph/expand-home graphs-dir)]
+     (when-let [graph-dir-name (existing-graph-dir-name graphs-dir repo)]
+       (let [path (node-path/join graphs-dir graph-dir-name)]
+         (fs/removeSync path)
+         path)))))
