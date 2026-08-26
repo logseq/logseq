@@ -274,12 +274,12 @@
    :editor/add-property-status              {:binding "p s"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Status"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/status}]))}
 
    :editor/add-property-priority            {:binding "p p"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/priority}]))}
 
    :editor/add-property-icon                {:binding "p i"
                                              :selection? true
