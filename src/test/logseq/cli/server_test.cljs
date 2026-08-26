@@ -8,7 +8,6 @@
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [lambdaisland.glogi :as log]
-            [logseq.cli.config :as cli-config]
             [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
             [logseq.cli.test-helper :as test-helper]
@@ -473,7 +472,7 @@
                repo (str "logseq_db_reuse_" (subs (str (random-uuid)) 0 8))
                lock-file (cli-server/lock-path root-dir repo)
                config-path (node-path/join root-dir "cli.edn")
-               server-list-file (cli-config/server-list-path root-dir)
+               server-list-file (server-list/path root-dir)
                host "127.0.0.1"
                port* (atom nil)
                spawn-calls (atom 0)
@@ -771,7 +770,7 @@
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-transient-healthz")
                config-path (node-path/join root-dir "cli.edn")
-               server-list-file (cli-config/server-list-path root-dir)
+               server-list-file (server-list/path root-dir)
                repo (str "logseq_db_transient_healthz_" (subs (str (random-uuid)) 0 8))
                pid 424242
                port 9312
@@ -995,7 +994,7 @@
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-list-revision")
                config-path (node-path/join root-dir "cli.edn")
-               server-list-file (cli-config/server-list-path root-dir)
+               server-list-file (server-list/path root-dir)
                repo (str "logseq_db_list_revision_" (subs (str (random-uuid)) 0 8))
                host "127.0.0.1"
                port* (atom nil)
@@ -1036,7 +1035,7 @@
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-list-cleanup")
                config-path (node-path/join root-dir "cli.edn")
-               server-list-file (cli-config/server-list-path root-dir)]
+               server-list-file (server-list/path root-dir)]
            (fs/writeFileSync server-list-file "999999 65535\n")
            (-> (cli-server/list-servers {:root-dir root-dir
                                          :config-path config-path})
@@ -1054,7 +1053,7 @@
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-list-race")
                config-path (node-path/join root-dir "cli.edn")
-               server-list-file (cli-config/server-list-path root-dir)
+               server-list-file (server-list/path root-dir)
                stale-entry {:pid 999999 :port 65535}
                live-entry {:pid (.-pid js/process) :port 65432}
                appended? (atom false)]
