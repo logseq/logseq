@@ -10,7 +10,6 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
-            [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
@@ -18,6 +17,7 @@
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.db-worker.log :as db-worker-log]
+            [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (defn- http-request
@@ -733,7 +733,7 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
                repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
                lock-file-path (lock-path data-dir repo)
-               server-list-file (cli-config/server-list-path data-dir)]
+               server-list-file (server-list/path data-dir)]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [_method _args-transit]
@@ -899,7 +899,7 @@
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-daemon")
                repo (str "logseq_db_smoke_" (subs (str (random-uuid)) 0 8))
-               server-list-file (cli-config/server-list-path data-dir)
+               server-list-file (server-list/path data-dir)
                now (js/Date.now)
                page-uuid (random-uuid)
                block-uuid (random-uuid)]
@@ -1560,7 +1560,7 @@
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-desktop-cli")
                config-path (node-path/join data-dir "cli.edn")
-               server-list-file (cli-config/server-list-path data-dir)
+               server-list-file (server-list/path data-dir)
                repo (str "logseq_db_desktop_cli_" (subs (str (random-uuid)) 0 8))
                now (js/Date.now)
                page-uuid (random-uuid)]

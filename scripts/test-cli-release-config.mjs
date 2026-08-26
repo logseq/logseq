@@ -145,6 +145,56 @@ assertNotContains(
 const shadowCljs = readText("shadow-cljs.edn");
 assertNotContains(shadowCljs, ":logseq-cli", "shadow-cljs.edn");
 
+const legacyCljsCliPaths = [
+  "src/main/logseq/cli/command",
+  "src/main/logseq/cli/auth.cljs",
+  "src/main/logseq/cli/commands.cljs",
+  "src/main/logseq/cli/completion_generator.cljs",
+  "src/main/logseq/cli/config.cljs",
+  "src/main/logseq/cli/format.cljs",
+  "src/main/logseq/cli/humanize.cljs",
+  "src/main/logseq/cli/main.cljs",
+  "src/main/logseq/cli/output_mode.cljs",
+  "src/main/logseq/cli/tree_text.cljs",
+  "src/main/logseq/cli/uuid_refs.cljs",
+  "src/test/logseq/cli/command",
+  "src/test/logseq/cli/auth_test.cljs",
+  "src/test/logseq/cli/commands_test.cljs",
+  "src/test/logseq/cli/completion_generator_test.cljs",
+  "src/test/logseq/cli/config_test.cljs",
+  "src/test/logseq/cli/format_test.cljs",
+  "src/test/logseq/cli/main_test.cljs",
+  "src/test/logseq/cli/output_mode_test.cljs",
+  "src/test/logseq/cli/uuid_refs_test.cljs",
+];
+assert.deepEqual(
+  legacyCljsCliPaths.filter((relativePath) =>
+    fs.existsSync(path.join(repoRoot, relativePath)),
+  ),
+  [],
+  "legacy CLJS CLI sources and tests should be removed",
+);
+
+const carveIgnore = readText(".carve/ignore");
+assertNotContains(carveIgnore, "logseq.cli.main/main", ".carve/ignore");
+
+assertFilesDoNotMatch(
+  [
+    "src/test/logseq/cli/server_test.cljs",
+    "src/test/frontend/worker/db_worker_node_test.cljs",
+  ],
+  /logseq\.cli\.config|cli-config\/server-list-path/,
+  "retained db-worker-node runtime tests",
+);
+
+const cliDocs = readText("docs/cli/logseq-cli.md");
+assertNotContains(cliDocs, "logseq.cli.command.query", "CLI docs");
+assert.match(
+  cliDocs,
+  /cli\/lib\/query\.ml/,
+  "CLI docs should point to the shipped query implementation",
+);
+
 assertCliReleaseCommand(rootPackage.scripts?.["cli:release"], "cli:release");
 for (const [scriptName, command] of Object.entries(rootPackage.scripts ?? {})) {
   assertRootScriptDoesNotBuildShadowCli(scriptName, command);
