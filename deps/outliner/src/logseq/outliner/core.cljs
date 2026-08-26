@@ -188,25 +188,17 @@
                                  tags'))))))))
       m)))
 
-(defn- ref-tag-idents
-  [ref]
-  (let [raw-tags (:block/tags ref)
-        tags (if (keyword? raw-tags) [raw-tags] raw-tags)]
-    (into #{} (keep (fn [tag]
-                      (cond
-                        (keyword? tag) tag
-                        (map? tag) (:db/ident tag)
-                        :else nil))
-                    tags))))
+(defn- ref-tagged-with?
+  [ref tag]
+  (boolean (some #{tag} (:block/tags ref))))
 
 (defn- new-page-ref?
   [ref]
-  (and (map? ref)
-       (nil? (:db/id ref))
+  (and (nil? (:db/id ref))
        (nil? (:db/ident ref))
        (or (contains? #{"page" "journal"} (:block/type ref))
-           (seq (set/intersection (ref-tag-idents ref)
-                                  #{:logseq.class/Page :logseq.class/Journal})))))
+           (ref-tagged-with? ref :logseq.class/Page)
+           (ref-tagged-with? ref :logseq.class/Journal))))
 
 (defn- resolve-page-ref
   [db ref tag-names]
@@ -217,11 +209,10 @@
                 (select-keys ref [:block.temp/original-page-name]))
          nil]
         (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
-                                                                 {:uuid (:block/uuid ref)
-                                                                  :class? class?
-                                                                  :journal? (or (= "journal" (:block/type ref))
-                                                                                (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
+                                                                  {:uuid (:block/uuid ref)
+                                                                   :class? class?
+                                                                   :journal? (or (= "journal" (:block/type ref))
+                                                                                 (ref-tagged-with? ref :logseq.class/Journal))})]
           [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
                           :block/uuid page-uuid)
              class? (assoc :db/ident (or (some :db/ident tx-data)

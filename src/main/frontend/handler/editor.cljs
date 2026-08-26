@@ -1584,49 +1584,9 @@
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
-(def editor-popup-actions
-  #{:commands :page-search :page-search-hashtag :block-search :template-search :datepicker})
-
-(defn editor-popup-action?
-  [action]
-  (or (contains? editor-popup-actions action)
-      (and (keyword? action)
-           (= "editor.action" (namespace action)))))
-
-(defn- editor-commands-popup-id?
-  [id]
-  (and (keyword? id)
-       (= "editor.commands" (namespace id))))
-
-(declare handle-command-input-close)
-
-(defn dismiss-editor-popup-on-escape!
-  "Escape on an editor commands/autocomplete popup should only close that popup.
-  Returns true when the event was consumed so the editor must not exit or save."
-  ([^js e]
-   (dismiss-editor-popup-on-escape! e (some-> (state/get-input) .-id)))
-  ([^js e input-id]
-   (when-not (state/editor-in-composition?)
-     (let [action (state/get-editor-action)
-           popup-id (->> (shui-popup/get-popups)
-                         (keep (fn [popup]
-                                 (when (editor-commands-popup-id? (:id popup))
-                                   (:id popup))))
-                         last)]
-       (cond
-         (= :input action)
-         (do
-           (when e (util/stop e))
-           (handle-command-input-close input-id)
-           true)
-
-         (or popup-id (editor-popup-action? action))
-         (do
-           (when e (util/stop e))
-           (when popup-id
-             (shui-popup/hide! popup-id 0 {:skip-focus? true}))
-           (state/clear-editor-action!)
-           true))))))
+(defn editor-commands-popup-exists?
+  []
+  (popup-exists? "editor.commands"))
 
 (defn dialog-exists?
   [id]
@@ -2194,6 +2154,18 @@
   (when-let [saved-cursor (state/get-editor-last-pos)]
     (when-let [input (gdom/getElement id)]
       (cursor/move-cursor-to input saved-cursor true))))
+
+(defn dismiss-editor-popup-on-escape!
+  "Dismiss an editor popup without exiting or saving the editor."
+  [^js e input-id]
+  (if (state/editor-in-composition?)
+    false
+    (do
+      (util/stop e)
+      (if (= :input (state/get-editor-action))
+        (handle-command-input-close input-id)
+        (state/clear-editor-action!))
+      true)))
 
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.

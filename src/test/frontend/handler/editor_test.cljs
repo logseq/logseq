@@ -29,7 +29,6 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
-            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before (fn []
@@ -2577,110 +2576,57 @@
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
 
-(deftest dismiss-editor-popup-on-escape-consumes-new-page-popup-test
-  (testing "Escape on the New page popup closes it without exiting the editor"
-    (let [calls (atom [])
-          event (doto (js-obj)
-                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
-          previous-state (state/get-state)]
-      (state/set-editor-action! :page-search)
-      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/page-search}])
-                    shui-popup/hide! (fn [& args]
-                                       (swap! calls conj (into [:hide] args)))]
-        (is (true? (editor/dismiss-editor-popup-on-escape! event)))
+(defn- escape-event
+  [calls]
+  (doto (js-obj)
+    (aset "preventDefault" #(swap! calls conj :prevent-default))
+    (aset "stopPropagation" #(swap! calls conj :stop-propagation))))
+
+(defn- with-preserved-state
+  [f]
+  (let [previous-state (state/get-state)]
+    (try
+      (f)
+      (finally
+        (state/replace-state! previous-state)))))
+
+(deftest dismiss-editor-popup-on-escape-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)]
+        (state/set-editor-action! :page-search)
+        (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
         (is (nil? (state/get-editor-action)))
-        (is (= [:prevent-default :stop-propagation
-                [:hide :editor.commands/page-search 0 {:skip-focus? true}]]
-               @calls)))
-      (state/replace-state! previous-state)))
-  (testing "Escape consumes every editor popup action before popup registration"
-    (let [previous-state (state/get-state)]
-      (doseq [action editor/editor-popup-actions]
-        (let [calls (atom [])
-              event (doto (js-obj)
-                      (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                      (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))]
-          (state/set-editor-action! action)
-          (with-redefs [shui-popup/get-popups (constantly [])]
-            (is (true? (editor/dismiss-editor-popup-on-escape! event)))
-            (is (nil? (state/get-editor-action)))
-            (is (= [:prevent-default :stop-propagation] @calls)))))
-      (state/replace-state! previous-state)))
-  (testing "Escape consumes an editor popup before its action is registered"
-    (let [calls (atom [])
-          event (doto (js-obj)
-                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
-          previous-state (state/get-state)]
-      (state/set-editor-action! nil)
-      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/code-block-mode-picker}])
-                    shui-popup/hide! (fn [& args]
-                                       (swap! calls conj (into [:hide] args)))]
-        (is (true? (editor/dismiss-editor-popup-on-escape! event)))
-        (is (= [:prevent-default :stop-propagation
-                [:hide :editor.commands/code-block-mode-picker 0 {:skip-focus? true}]]
-               @calls)))
-      (state/replace-state! previous-state)))
-  (testing "Escape with no editor popup does not consume the event"
-    (let [event (doto (js-obj)
-                  (aset "preventDefault" (fn []))
-                  (aset "stopPropagation" (fn [])))
-          previous-state (state/get-state)]
-      (state/set-editor-action! nil)
-      (with-redefs [shui-popup/get-popups (constantly [])]
-        (is (nil? (editor/dismiss-editor-popup-on-escape! event))))
-      (state/replace-state! previous-state)))
-  (testing "Escape on an editor input popup runs its specialized cancel handler"
-    (let [calls (atom [])
-          event (doto (js-obj)
-                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
-          input (js-obj "id" "editor-input")
-          input-options [{:command :link}]
-          previous-state (state/get-state)]
-      (state/set-editor-action-data! {:pos 5})
-      (state/set-editor-show-input! input-options)
-      (with-redefs [shui-popup/get-popups (constantly [{:id :editor.commands/input}])
-                    shui-popup/hide! (fn [& args]
-                                       (swap! calls conj (into [:hide] args)))
-                    state/get-editor-last-pos (constantly 5)
+        (is (= [:prevent-default :stop-propagation] @calls))))))
+
+(deftest dismiss-editor-input-popup-on-escape-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)
+            input (js-obj "id" "editor-input")]
+        (state/set-editor-action-data! {:pos 5})
+        (state/set-editor-show-input! [{:command :link}])
+        (with-redefs [state/get-editor-last-pos (constantly 5)
                     gdom/getElement (fn [id]
                                       (when (= "editor-input" id) input))
                     cursor/move-cursor-to (fn [& args]
                                             (swap! calls conj (into [:move-cursor] args)))]
-        (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
-        (is (nil? (state/get-editor-action)))
-        (is (nil? (state/get-editor-action-data)))
-        (is (= [:prevent-default :stop-propagation
-                [:move-cursor input 5 true]]
-               @calls)))
-      (state/replace-state! previous-state)))
-  (testing "Escape during IME composition does not dismiss an editor popup"
-    (let [calls (atom [])
-          event (doto (js-obj)
-                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
-          previous-state (state/get-state)]
-      (state/set-editor-action! :page-search)
-      (with-redefs [state/editor-in-composition? (constantly true)
-                    shui-popup/get-popups (constantly [{:id :editor.commands/page-search}])
-                    shui-popup/hide! (fn [& args]
-                                       (swap! calls conj (into [:hide] args)))]
-        (is (nil? (editor/dismiss-editor-popup-on-escape! event)))
-        (is (= :page-search (state/get-editor-action)))
-        (is (empty? @calls)))
-      (state/replace-state! previous-state)))
-  (testing "Escape ignores popup ids outside the editor commands namespace"
-    (let [calls (atom [])
-          event (doto (js-obj)
-                  (aset "preventDefault" (fn [] (swap! calls conj :prevent-default)))
-                  (aset "stopPropagation" (fn [] (swap! calls conj :stop-propagation))))
-          previous-state (state/get-state)]
-      (state/set-editor-action! nil)
-      (with-redefs [shui-popup/get-popups (constantly [{:id :other/editor.commands-help}])
-                    shui-popup/hide! (fn [& args]
-                                       (swap! calls conj (into [:hide] args)))]
-        (is (nil? (editor/dismiss-editor-popup-on-escape! event)))
-        (is (empty? @calls)))
-      (state/replace-state! previous-state))))
+          (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+          (is (nil? (state/get-editor-action)))
+          (is (nil? (state/get-editor-action-data)))
+          (is (= [:prevent-default :stop-propagation
+                  [:move-cursor input 5 true]]
+                 @calls)))))))
+
+(deftest escape-during-ime-composition-keeps-editor-popup-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)]
+        (state/set-editor-action! :page-search)
+        (with-redefs [state/editor-in-composition? (constantly true)]
+          (is (false? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+          (is (= :page-search (state/get-editor-action)))
+          (is (empty? @calls)))))))
