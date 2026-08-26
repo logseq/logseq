@@ -60,7 +60,7 @@ or, you can run `bb release:ios-app` to do those steps with one command.
 
 ## Set up development environment
 ### Build the development app
-- Run `pnpm install && pnpm mobile-watch` from the logseq project root directory in terminal.
+- Run `pnpm install && LOGSEQ_SHADOW_HTTPS=true pnpm mobile-watch` from the logseq project root directory in terminal.
 - Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3002/mobile/ pnpm exec cap sync android` in another terminal.
 - Run `pnpm exec cap run android` to install app into your device.
 
