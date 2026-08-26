@@ -413,6 +413,12 @@ let assert_cli_exit_zero name output =
     (Printf.sprintf "%s: expected exit 0, got %d\nstdout:\n%s\nstderr:\n%s" name
        output.code output.stdout output.stderr)
 
+let assert_cli_exit_non_zero name output =
+  assert_true name (output.code <> 0)
+    (Printf.sprintf
+       "%s: expected non-zero exit, got 0\nstdout:\n%s\nstderr:\n%s" name
+       output.stdout output.stderr)
+
 let assert_line_starts_with name text prefix =
   let lines = string_split (string_trim_end text) "\n" in
   assert_true name
@@ -540,5 +546,6 @@ let expect_named_not_contains _name text needle =
 let expect_exit_zero = assert_exit_zero
 let expect_exit_non_zero = assert_exit_non_zero
 let expect_cli_exit_zero = assert_cli_exit_zero
+let expect_cli_exit_non_zero = assert_cli_exit_non_zero
 let expect_line_starts_with = assert_line_starts_with
 let expect_created_at_column_aligned = assert_created_at_column_aligned

@@ -1487,12 +1487,14 @@
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   (p/resolved []))]
-                 (p/let [_ (sync-command/execute {:type :sync-remote-graphs}
+                 (p/let [result (sync-command/execute {:type :sync-remote-graphs}
                                                  {:base-url "http://example"
                                                   :http-base "https://sync.example.com"
                                                   :ws-url "wss://sync.example.com/sync/%s"
                                                   :e2ee-password "pw"
                                                   :root-dir "/tmp"})]
+                   (is (= :ok (:status result)))
+                   (is (= [] (get-in result [:data :graphs])))
                    (is (= [] @ensure-calls))
                    (is (= [{:base-url "http://example"
                             :http-base "https://sync.example.com"
@@ -1505,6 +1507,35 @@
                    (is (= [:thread-api/set-db-sync-config [{:ws-url "wss://sync.example.com/sync/%s"
                                                                    :http-base "https://sync.example.com"}]]
                           (nth @invoke-calls 1)))
+                   (is (= [:thread-api/db-sync-list-remote-graphs []]
+                          (nth @invoke-calls 2)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-remote-graphs-js-error
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-auth/resolve-auth! (fn [_config]
+                                                        (p/resolved {:id-token "resolved-token"
+                                                                     :refresh-token "refresh-token"}))
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved (js/Error. "fetch failed"))
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-remote-graphs}
+                                                      {:base-url "http://example"
+                                                       :http-base "https://sync.example.com"
+                                                       :ws-url "wss://sync.example.com/sync/%s"
+                                                       :root-dir "/tmp"})]
+                   (is (= :error (:status result)))
+                   (is (= :sync-remote-graphs-failed (get-in result [:error :code])))
+                   (is (= "fetch failed" (get-in result [:error :message])))
+                   (is (nil? (get-in result [:data :graphs])))
                    (is (= [:thread-api/db-sync-list-remote-graphs []]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
