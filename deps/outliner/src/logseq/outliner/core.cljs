@@ -778,6 +778,18 @@
                    (:block/uuid block') (assoc (:block/uuid block') level))
                  (rest blocks)))))))
 
+(defn- url-property-value?
+  "URL-type property values are not containers; they must not have child blocks."
+  [block]
+  (= :url (:logseq.property/type (:logseq.property/created-from-property block))))
+
+(defn- url-property-value-child-target?
+  "True when insert/move would make a URL-type property value the parent."
+  [target-block sibling?]
+  (url-property-value? (if sibling?
+                         (:block/parent target-block)
+                         target-block)))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -838,7 +850,8 @@
                                       (:block/title target-block)
                                       (string/blank? (:block/title target-block))
                                       (> (count blocks) 1)))]
-     (when (seq blocks)
+     (when (and (seq blocks)
+                (not (url-property-value-child-target? target-block sibling?)))
        (let [blocks' (let [blocks' (blocks-with-level blocks)]
                        (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                          update-timestamps?
@@ -1147,6 +1160,7 @@
               original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
           (when (and (every? #(move-source-allowed-for-comments? % sibling?) blocks)
                      (move-target-allowed-for-comments? target-block sibling?)
+                     (not (url-property-value-child-target? target-block sibling?))
                      (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                      (not original-position?))
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
