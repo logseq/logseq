@@ -485,18 +485,6 @@
   (p/let [servers (discover-servers config)]
     (servers-for-config config servers)))
 
-(defn compute-revision-mismatches
-  [cli-revision servers]
-  (let [mismatch-servers (->> (or servers [])
-                              (filter (fn [{:keys [revision]}]
-                                        (not= cli-revision revision)))
-                              (mapv (fn [{:keys [repo revision]}]
-                                      {:repo repo
-                                       :revision revision})))]
-    (when (seq mismatch-servers)
-      {:cli-revision cli-revision
-       :servers mismatch-servers})))
-
 (defn- cleanup-target
   [{:keys [repo pid owner-source revision]}]
   {:repo repo
@@ -624,11 +612,3 @@
                 (classify-graph-dir graphs-root (.-name dirent))))
          (filter some?)
          (vec))))
-
-(defn list-graphs
-  [config]
-  (->> (list-graph-items config)
-       (keep (fn [{:keys [kind graph-name]}]
-               (when (= :canonical kind)
-                 graph-name)))
-       (vec)))
