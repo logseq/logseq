@@ -6,9 +6,6 @@
 (def ansi-pattern
   #"\u001b\[[0-9;]*m")
 
-(def ^:private option-pattern
-  #"--[A-Za-z0-9][A-Za-z0-9-]*")
-
 (def ^:dynamic *color-enabled?*
   nil)
 
@@ -55,24 +52,4 @@
 
 (defn bold [value] (apply-style "bold" value))
 (defn dim [value] (apply-style "dim" value))
-(defn red [value] (apply-style "red" value))
 (defn green [value] (apply-style "green" value))
-(defn yellow [value] (apply-style "yellow" value))
-(defn blue [value] (apply-style "blue" value))
-(defn magenta [value] (apply-style "magenta" value))
-(defn cyan [value] (apply-style "cyan" value))
-
-(defn bold-keywords
-  [value keywords]
-  (reduce (fn [acc word]
-            (let [pattern (js/RegExp. (str "\\b" word "\\b") "gi")]
-              (string/replace acc pattern (fn [match]
-                                            (bold match)))))
-          (->text value)
-          keywords))
-
-(defn bold-options
-  [value]
-  (let [text (->text value)]
-    (string/replace text option-pattern (fn [match]
-                                          (bold match)))))
