@@ -2,7 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.util.entity :as entity]
-            [frontend.worker.handler.block]
+            [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.property :as property-handler]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -202,6 +203,8 @@
       (is (map? (:block.temp/positioned-properties block)))
       (is (vector? (:block.temp/breadcrumb block)))
       (is (integer? (:block.temp/refs-count block)))
+      (is (some #{:user.property/priority} (:block.temp/property-keys block))
+          "Own property idents are persisted for collapse.")
       (is (not (contains? block :block/children)))
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
@@ -209,6 +212,7 @@
                     (remove #{:block.temp/order-list-index
                               :block.temp/breadcrumb
                               :block.temp/positioned-properties
+                              :block.temp/property-keys
                               :block.temp/refs-count}
                             (keys block)))))))
 
@@ -560,3 +564,38 @@
         (doseq [value [blocks membership tree]]
           (is (= value
                  (-> value ldb/write-transit-str ldb/read-transit-str))))))))
+
+(deftest block-property-keys-include-own-and-class-properties-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:c1 {:build/class-properties [:p1]}}
+               :properties {:own {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "with-own"
+                           :build/properties {:own "v"}}
+                          {:block/title "with-class"
+                           :build/tags [:c1]}
+                          {:block/title "plain"}]}]})
+        db @conn
+        with-own (db-test/find-block-by-content db "with-own")
+        with-class (db-test/find-block-by-content db "with-class")
+        plain (db-test/find-block-by-content db "plain")
+        own-map (:block (block-handler/get-block-and-children db (:db/id with-own) {:children? false}))
+        class-map (:block (block-handler/get-block-and-children db (:db/id with-class) {:children? false}))
+        plain-map (:block (block-handler/get-block-and-children db (:db/id plain) {:children? false}))]
+    (is (some #{:user.property/own} (property-handler/block-property-keys db with-own)))
+    (is (some #{:user.property/p1} (property-handler/block-property-keys db with-class))
+        "Class-provided properties are included even when the node has no own value.")
+    (is (not-any? #{:user.property/own :user.property/p1}
+                  (property-handler/block-property-keys db plain)))
+    (is (some #{:user.property/own} (:block.temp/property-keys own-map)))
+    (is (some #{:user.property/p1} (:block.temp/property-keys class-map)))
+    (is (not-any? #{:user.property/own :user.property/p1}
+                  (:block.temp/property-keys plain-map)))
+    (when-let [canonical-block (canonical-block-api)]
+      (d/transact! conn [{:db/id (:db/id with-class)
+                          :block/tx-id 1}])
+      (is (some #{:user.property/p1}
+                (:block.temp/property-keys
+                 (canonical-block @conn (d/entity @conn (:db/id with-class)))))
+          "Canonical renderer maps persist class-provided property keys."))))

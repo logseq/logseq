@@ -100,6 +100,12 @@
     (is (not (contains? result :user.property/related)))
     (is (= "Host" (:block/title result)))))
 
+(deftest entity-forward-map-includes-own-property-keys
+  (let [[db host _target-uuid _value-uuid] (property-value-db :default {})
+        result (plain-value/entity-forward-map db host {})]
+    (is (some #{:user.property/related} (:block.temp/property-keys result))
+        "Own property idents are persisted so renderer collapse can see them.")))
+
 (deftest get-block-display-properties-use-resolved-node-values
   (let [[db host target-uuid _value-uuid]
         (property-value-db :node {:block/name "target"
