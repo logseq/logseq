@@ -10,6 +10,7 @@
             [frontend.db.subs :as subs]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "view-resource-test")
@@ -491,3 +492,101 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
+
+(deftest displayed-view-data-keeps-last-payload-while-refetching
+  (let [previous {:partition :flat :count 2 :rows [:a :b]}
+        next {:partition :flat :count 1 :rows [:a]}]
+    (is (nil? (#'views/displayed-view-data nil nil))
+        "Initial load with no payload still shows skeletons.")
+    (is (= previous (#'views/displayed-view-data previous nil)))
+    (is (= previous (#'views/displayed-view-data nil previous))
+        "A nil refetch must keep the last successful view-data.")
+    (is (= next (#'views/displayed-view-data next previous)))))
+
+(deftest search-input-stays-visible-when-query-is-present
+  (is (false? (#'views/search-input-visible? false "")))
+  (is (false? (#'views/search-input-visible? false "   ")))
+  (is (true? (#'views/search-input-visible? true "")))
+  (is (true? (#'views/search-input-visible? false "todo"))
+      "A remounted search with a non-empty query must stay open."))
+
+(deftest table-search-renders-input-when-query-is-non-empty
+  (let [open-markup (render-static
+                     (views/search "todo" {:on-change identity :set-input! identity}))
+        closed-markup (render-static
+                       (views/search "" {:on-change identity :set-input! identity}))]
+    (is (string/includes? open-markup "Type to search")
+        "Remounting search with a typed query must keep the input mounted.")
+    (is (string/includes? open-markup "todo")
+        "The typed filter value is preserved on remount.")
+    (is (not (string/includes? closed-markup "Type to search"))
+        "An empty query still collapses back to the search button.")))
+
+(deftest loaded-view-skeletons-only-on-initial-empty-view-data
+  (let [view-entity {:block/uuid (random-uuid)
+                     :db/id 1
+                     :logseq.property.view/type
+                     {:db/ident :logseq.property.view/type.table}}
+        container-calls (atom [])]
+    (with-redefs [db-hooks/use-resource (constantly nil)
+                  views/view-container
+                  (fn [entity option]
+                    (swap! container-calls conj [entity option])
+                    [:span "view-container"])]
+      (let [markup (render-static
+                    (views/loaded-view-aux view-entity
+                                           {:view-feature-type :class-objects
+                                            :config {}}))]
+        (is (string/includes? markup "h-6 w-full")
+            "The first load with no view-data still shows skeletons.")
+        (is (empty? @container-calls)
+            "view-container must not mount before the first successful payload.")))))
+
+(deftest loaded-view-keeps-toolbar-when-view-data-refetches
+  (let [view-uuid (random-uuid)
+        view-entity {:block/uuid view-uuid
+                     :db/id 1
+                     :logseq.property.view/type
+                     {:db/ident :logseq.property.view/type.table}}
+        view-data {:partition :flat
+                   :count 1
+                   :rows [(random-uuid)]}
+        *last-view-data #js {:current nil}
+        *input #js {:current "todo"}
+        container-calls (atom [])
+        original-use-state hooks/use-state
+        render-view
+        (fn [resource]
+          (with-redefs [db-hooks/use-resource (constantly resource)
+                        hooks/use-ref (fn [_] *last-view-data)
+                        hooks/use-state
+                        (fn [value]
+                          (if (= "" value)
+                            #js [(.-current *input)
+                                 #(set! (.-current *input) %)]
+                            (original-use-state value)))
+                        views/view-container
+                        (fn [entity option]
+                          (swap! container-calls conj [entity option])
+                          [:div.view-action-search "search"])]
+            (render-static
+             (views/loaded-view-aux view-entity
+                                    {:view-feature-type :class-objects
+                                     :config {}}))))]
+    (let [loaded-markup (render-view view-data)]
+      (is (string/includes? loaded-markup "view-action-search"))
+      (is (= 1 (count @container-calls)))
+      (is (= view-data (:view-data (second (first @container-calls))))
+          "The first successful payload is passed to the toolbar.")
+      (is (= "todo" (:input (second (first @container-calls))))))
+    (reset! container-calls [])
+    (let [refetch-markup (render-view nil)]
+      (is (string/includes? refetch-markup "view-action-search")
+          "A search refetch that clears view-data must keep the toolbar mounted.")
+      (is (not (string/includes? refetch-markup "h-6 w-full"))
+          "Skeletons must not replace the toolbar during a refetch.")
+      (is (= 1 (count @container-calls)))
+      (is (= view-data (:view-data (second (first @container-calls))))
+          "The last successful view-data is kept while the refetch is in flight.")
+      (is (= "todo" (:input (second (first @container-calls))))
+          "The typed filter stays on the still-mounted search."))))
