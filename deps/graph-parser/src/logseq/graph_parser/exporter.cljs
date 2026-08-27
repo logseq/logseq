@@ -3094,6 +3094,10 @@
                    (throw e))))))
 
 (def ^:private bulk-page-property-line-re #"^([^\s:][^:]*)::\s*(.*)$")
+(def ^:private fallback-markdown-property-line-re
+  #"^\s*([^\s:][^:]*)::\s*.*$")
+(def ^:private fallback-org-property-line-re
+  #"^\s*:([^:]+):\s*.*$")
 
 (defn- normalize-bulk-property-name
   [property-name]
@@ -3206,6 +3210,54 @@
            :property-pairs property-pairs
            :properties properties})))))
 
+(defn- potential-fallback-property-names
+  [file content]
+  (let [line-re (case (path/file-ext (:path file))
+                  "md" fallback-markdown-property-line-re
+                  "org" fallback-org-property-line-re
+                  nil)]
+    (if (and line-re (string? content))
+      (into #{}
+            (keep (fn [line]
+                    (when-let [[_ property-title] (re-matches line-re line)]
+                      (let [property-name (normalize-bulk-property-name property-title)]
+                        (when (gp-property/valid-property-name? (str property-name))
+                          property-name)))))
+            (string/split-lines content))
+      #{})))
+
+(defn- simple-file-property-names
+  [{:keys [property-pairs]}]
+  (into #{}
+        (comp (map first)
+              (remove #{:title :tags}))
+        property-pairs))
+
+(defn- move-property-conflicting-simple-files
+  [simple-files fallback-files fallback-property-names fallback-properties-unknown?]
+  (loop [remaining-simple-files simple-files
+         moved-simple-files []
+         fallback-property-names (if fallback-properties-unknown?
+                                   (into #{}
+                                         (mapcat simple-file-property-names)
+                                         simple-files)
+                                   fallback-property-names)]
+    (let [{conflicting true non-conflicting false}
+          (group-by #(boolean
+                      (seq (set/intersection fallback-property-names
+                                             (simple-file-property-names %))))
+                    remaining-simple-files)]
+      (if (seq conflicting)
+        (recur (vec non-conflicting)
+               (into moved-simple-files conflicting)
+               (into fallback-property-names
+                     (mapcat simple-file-property-names)
+                     conflicting))
+        {:simple-files (vec remaining-simple-files)
+         :fallback-files (->> (concat fallback-files (map :file moved-simple-files))
+                              (sort-by :idx)
+                              vec)}))))
+
 (defn- <partition-simple-page-property-files
   [doc-files <read-file rpath-key options]
   (let [property-context (bulk-property-context (:user-config options))
@@ -3213,7 +3265,9 @@
         _ (set-ui-state [:graph/importing-state :total] (count doc-files))]
     (p/loop [remaining-files doc-files
              simple-files []
-             fallback-files []]
+             fallback-files []
+             fallback-property-names #{}
+             fallback-properties-unknown? false]
       (if-let [file (first remaining-files)]
         (p/let [_ (set-ui-state [:graph/importing-state :current-idx]
                                 (inc (:idx file)))
@@ -3227,7 +3281,9 @@
             (if (= :failed read-status)
               (p/recur (rest remaining-files)
                        simple-files
-                       (conj fallback-files file))
+                       (conj fallback-files file)
+                       fallback-property-names
+                       true)
               (let [started (extract/performance-now-ms)
                     simple-file (simple-page-property-file
                                  file content rpath-key property-context)
@@ -3239,12 +3295,18 @@
                 (if simple-file
                   (p/recur (rest remaining-files)
                            (conj simple-files simple-file)
-                           fallback-files)
+                           fallback-files
+                           fallback-property-names
+                           fallback-properties-unknown?)
                   (p/recur (rest remaining-files)
                            simple-files
-                           (conj fallback-files file)))))))
-        {:simple-files simple-files
-         :fallback-files fallback-files}))))
+                           (conj fallback-files file)
+                           (into fallback-property-names
+                                 (potential-fallback-property-names file content))
+                           fallback-properties-unknown?))))))
+        (move-property-conflicting-simple-files
+         simple-files fallback-files fallback-property-names
+         fallback-properties-unknown?)))))
 
 (defn- bulk-property-type
   [values]
