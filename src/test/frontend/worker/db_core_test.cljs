@@ -536,13 +536,17 @@
             "Bootstrap transactions must not publish incremental renderer deltas.")
         (db-core/close-db! repo)))))
 
-(deftest new-graph-and-datom-bootstrap-are-canonical-before-listening-test
+(deftest new-graph-bootstrap-is-canonical-before-listening-test
   (async done
          (-> (restoring-worker-state
               (fn []
                 (p/let [_ (<assert-bootstrap-is-canonical! "bootstrap-new-graph" {})
                         _ (<assert-bootstrap-is-canonical! "bootstrap-datoms"
-                                                          {:datoms (bootstrap-datoms)})]
+                                                          {:datoms (bootstrap-datoms)})
+                        _ (<assert-bootstrap-is-canonical!
+                           (file-graph-import/staging-repo
+                            "00000000-0000-4000-8000-000000000003")
+                           {})]
                   nil)))
              (p/catch (fn [error]
                         (is false (str error))))

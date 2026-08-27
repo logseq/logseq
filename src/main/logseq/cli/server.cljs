@@ -185,12 +185,14 @@
     (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
+  [{:keys [repo root-dir owner-source create-empty-db? file-graph-import-staging?
+           embedding-endpoint embedding-model-id]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :root-dir root-dir
                          :owner-source owner-source
                          :create-empty-db? create-empty-db?
+                         :file-graph-import-staging? file-graph-import-staging?
                          :embedding-endpoint embedding-endpoint
                          :embedding-model-id embedding-model-id}))
 
@@ -294,6 +296,7 @@
                                                                   :root-dir root-dir
                                                                   :owner-source requester-owner
                                                                   :create-empty-db? (:create-empty-db? config)
+                                                                  :file-graph-import-staging? (:file-graph-import-staging? config)
                                                                   :embedding-endpoint (:embedding-endpoint config)
                                                                   :embedding-model-id (:embedding-model-id config)})))
                                  (-> (profile/time! profile-session

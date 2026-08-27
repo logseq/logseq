@@ -4,9 +4,9 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.persist-db :as persist-db]
+            [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [logseq.common.file-graph-import :as file-graph-import]
             [promesa.core :as p]))
 
 (defn- local-file-based-graph?
@@ -23,11 +23,12 @@
 (defn get-all-graphs
   []
   (p/let [repos (persist-db/<list-db)
+          active-import-repo (state/get-state [:graph/importing-state :repo])
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
                                 (or (local-file-based-graph? name)
                                     (upload-temp-graph? name)
-                                    (file-graph-import/staging-repo? name))))
+                                    (= active-import-repo name))))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
@@ -38,7 +39,6 @@
       repos'
       (->> (some-> electron-disk-graphs bean/->clj)
            (remove upload-temp-graph?)
-           (remove file-graph-import/staging-repo?)
            (map (fn [repo-name]
                   {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
 

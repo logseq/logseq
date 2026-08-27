@@ -80,6 +80,7 @@
           "--embedding-endpoint" (recur (subvec args 2) (assoc opts :embedding-endpoint (second args)))
           "--embedding-model-id" (recur (subvec args 2) (assoc opts :embedding-model-id (second args)))
           "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
+          "--file-graph-import-staging" (recur (subvec args 1) (assoc opts :file-graph-import-staging? true))
           "--version" (recur (subvec args 1) (assoc opts :version? true))
           "--help" (recur (subvec args 1) (assoc opts :help? true))
           (recur (subvec args 1) opts))))))
@@ -403,6 +404,7 @@
   (println (str "  " (style/bold "--root-dir") " <path>    (required)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
+  (println (str "  " (style/bold "--file-graph-import-staging") "  (start as a file graph import staging graph)"))
   (println (str "  " (style/bold "--embedding-endpoint") " <url>"))
   (println (str "  " (style/bold "--embedding-model-id") " <id>"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
@@ -410,11 +412,14 @@
   (println "  logs: <root-dir>/graphs/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
 (defn- startup-db-opts
-  [{:keys [create-empty-db?]}]
-  (if create-empty-db?
-    {:datoms []
-     :sync-download-graph? true}
-    {}))
+  [{:keys [create-empty-db? file-graph-import-staging?]}]
+  (cond-> {}
+    create-empty-db?
+    (assoc :datoms []
+           :sync-download-graph? true)
+
+    file-graph-import-staging?
+    (assoc :file-graph-import-staging? true)))
 
 (defn- assert-lock-owner!
   []
@@ -607,6 +612,7 @@
                 (start-daemon! {:root-dir root-dir
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
+                                :file-graph-import-staging? (:file-graph-import-staging? opts)
                                 :owner-source owner-source
                                 :embedding-endpoint (:embedding-endpoint opts)
                                 :embedding-model-id (:embedding-model-id opts)

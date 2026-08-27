@@ -159,7 +159,10 @@
   (let [repo (file-graph-import/staging-repo run-id)]
     (p/let [_ (persist-db/<new repo {:config config/config-default-content
                                      :graph-git-sha (build-version/revision)
-                                     :import-type :file-graph})]
+                                     :import-type :file-graph
+                                     :file-graph-import-staging? true})
+            _ (when (util/electron?)
+                (ipc/ipc "markFileGraphImportStaging" repo))]
       repo)))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]

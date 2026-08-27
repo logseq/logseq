@@ -838,7 +838,8 @@
     (bootstrap-transact! conn tx-data)))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
+  [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?
+                file-graph-import-staging?] :as opts}]
   (let [datoms (or datoms
                    (when debug-transit-raw
                      (debug-transit-raw->datoms debug-transit-raw)))]
@@ -915,10 +916,10 @@
             (ensure-canonical-revisions! conn)
 
             (when (and initial-tx-report
-                       (not (file-graph-import/staging-repo? repo)))
+                       (not file-graph-import-staging?))
               (db-sync/handle-local-tx! repo initial-tx-report))
 
-            (when-not (file-graph-import/staging-repo? repo)
+            (when-not file-graph-import-staging?
               (db-listener/listen-db-changes! repo conn))
 
             nil))))))
@@ -928,11 +929,10 @@
   []
   (p/let [storage (platform/storage (platform/current))
           graph-names ((:list-graphs storage))]
-    (p/all (->> graph-names
-                (remove file-graph-import/staging-repo?)
-                (map (fn [graph-name]
-                       (p/let [repo (str sqlite-util/db-version-prefix graph-name)]
-                         {:name repo})))))))
+    (p/all (map (fn [graph-name]
+                  (p/let [repo (str sqlite-util/db-version-prefix graph-name)]
+                    {:name repo}))
+                graph-names))))
 
 (def-thread-api :thread-api/list-db
   []
