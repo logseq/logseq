@@ -237,9 +237,11 @@
 
 (defn- file-content
   [file]
-  (or (:file/content file)
-      (:content file)
-      ""))
+  (if (string? (:file/content file))
+    (:file/content file)
+    (throw (ex-info "Import file content is missing"
+                    {:code :import/file-read-failed
+                     :path (:path file)}))))
 
 (defn- import-file-payload
   [payload]

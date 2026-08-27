@@ -2838,11 +2838,12 @@
             (let [import-file-graph! (get-thread-api :thread-api/import-file-graph)
                   conn (d/create-conn db-schema/schema)
                   pipeline-before @ldb/*transact-pipeline-fn
-                  config-file {:path "logseq/config.edn"
-                               :file/content "{"}
-                  files [config-file
-                         {:path "pages/Home.md"
-                          :file/content "- imported block"}]]
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{"}
+                   files [config-file
+                          {:path "pages/Home.md"
+                           :file/content "- imported block"}
+                          {:path "pages/Missing.md"}]]
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (reset! worker-state/*datascript-conns {test-repo conn})
               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
@@ -2858,8 +2859,8 @@
                                   :default-config "{}"
                                   :user-options {}})]
                    (is (= :completed-with-errors (:status result)))
-                   (is (= [:import/invalid-config]
-                          (mapv :code (:issues result)))))
+                   (is (= #{:import/invalid-config :import/file-read-failed}
+                          (set (map :code (:issues result))))))
                  (p/catch
                   (fn [error]
                     (is false (str error))))
