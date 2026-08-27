@@ -2703,13 +2703,13 @@
    {:path "pages/library.md"
     :file/content (str "title:: Library\n"
                        "rating:: 5\n"
-                       "score:: 5.9\n"
+                       "score:: 5.9   \n"
                        "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
-                       "score:: 6.8\n"
+                       "score:: -6.8\n"
                        "tagline:: A story\n"
                        "cast:: [[Ada]]")}
    {:path "pages/genres.md"

@@ -3173,7 +3173,7 @@
       (let [property-pairs (mapv (fn [[property-title value]]
                                    [(normalize-bulk-property-name property-title)
                                     property-title
-                                    value])
+                                    (string/trim value)])
                                  pairs)
             property-names (mapv first property-pairs)
             properties (into {} (map (fn [[property-name _property-title value]]
@@ -3183,7 +3183,7 @@
             user-property-names (map first user-property-pairs)
             unsupported-built-ins (set/intersection (set user-property-names)
                                                     file-built-in-property-names)
-            values (map second pairs)]
+            values (map last property-pairs)]
         (when (and (= (count property-names) (count (distinct property-names)))
                    (string? (:title properties))
                    (not (string/blank? (:title properties)))
@@ -3246,7 +3246,7 @@
   (cond
     (every? bulk-page-ref-values values) :node
     (every? #(re-matches #"https?://\S+" %) values) :url
-    (every? #(re-matches #"\d+(?:\.\d+)?" %) values) :number
+    (every? #(some? (parse-double %)) values) :number
     :else :default))
 
 (defn- bulk-property-value
@@ -3254,7 +3254,7 @@
   (case property-type
     :node (set (map #(vector :build/page {:block/title %})
                     (bulk-page-ref-values value)))
-    :number (js/Number value)
+    :number (parse-double value)
     value))
 
 (defn- bulk-tag-values
