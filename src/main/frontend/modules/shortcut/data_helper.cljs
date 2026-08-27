@@ -11,10 +11,6 @@
 
 (declare get-group)
 
-(defn- normalize-disabled-binding
-  [binding]
-  (if (= "disabled" binding) false binding))
-
 ;; function vals->bindings is too time-consuming. Here we cache the results.
 (defn- flatten-bindings-by-id
   [config user-shortcuts binding-only?]
@@ -22,9 +18,8 @@
        (apply merge)
        (map (fn [[id {:keys [binding] :as opts}]]
               {id (if binding-only?
-                    (normalize-disabled-binding (get user-shortcuts id binding))
-                    (assoc opts
-                           :user-binding (normalize-disabled-binding (get user-shortcuts id))
+                    (get user-shortcuts id binding)
+                    (assoc opts :user-binding (get user-shortcuts id)
                            :handler-id (get-group id)
                            :id id))}))
        (into {})))
@@ -35,7 +30,7 @@
    (fn [r handler-id vs]
      (reduce-kv
       (fn [r id {:keys [binding]}]
-        (if-let [ks (normalize-disabled-binding (get user-shortcuts id binding))]
+        (if-let [ks (get user-shortcuts id binding)]
           (let [ks (if (sequential? ks) ks [ks])]
             (reduce (fn [a k]
                       (let [k (shortcut-utils/undecorate-binding k)
