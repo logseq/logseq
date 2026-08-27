@@ -18,6 +18,18 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]))
 
+(defn performance-now-ms []
+  #?(:cljs (.now js/performance)
+     :clj (/ (System/nanoTime) 1000000.0)))
+
+(defn record-performance!
+  [options phase started data]
+  (when-let [record-performance (:record-performance options)]
+    (record-performance
+     (merge {:phase phase
+             :elapsed-ms (- (performance-now-ms) started)}
+            data))))
+
 (defn- mldoc-support?
   [format']
   (contains? #{:org :markdown :md} (keyword format')))
