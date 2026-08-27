@@ -2655,17 +2655,36 @@
                    (rest blocks)))
         tx-data))))
 
-(defn <add-file-to-db-graph
-  "Parse file and save parsed data to the given db graph. Options available:
+(defn- build-file-import-blocks-index
+  [blocks-tx]
+  (let [block-ids (into [] (map (fn [block] {:block/uuid (:block/uuid block)})) blocks-tx)
+        block-refs-ids (into [] (comp (mapcat :block/refs)
+                                      (filter block-uuid-ref?)
+                                      (map block-uuid-index))
+                             blocks-tx)
+        block-link-ids (into [] (comp (map :block/link)
+                                      (filter block-uuid-ref?)
+                                      (map block-uuid-index))
+                             blocks-tx)]
+    (set/union (set block-ids) (set block-refs-ids) (set block-link-ids))))
 
-* :extract-options - Options map to pass to extract/extract
-* :user-options - User provided options maps that alter how a file is converted to db graph. Current options
-   are: :tag-classes (set), :property-classes (set), :property-parent-classes (set), :convert-all-tags? (boolean)
-   :remove-inline-tags? (boolean), :extract-code-snippets? (boolean)
-* :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
-* :macros - map of macros for use with macro expansion
-* :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
-* :log-fn - Optional fn which logs developer messages. When omitted, import stays quiet."
+(defn- build-file-import-main-tx
+  [pages-tx'' page-properties-tx property-page-properties-tx
+   classes-tx classes-tx' custom-status-tx blocks-tx]
+  (let [pages-index (into [] (comp (map #(select-keys % [:block/uuid]))
+                                   (distinct))
+                          (concat pages-tx'' classes-tx))
+        blocks-index (build-file-import-blocks-index blocks-tx)]
+    (into [] (comp cat (remove nil?))
+          [pages-index page-properties-tx property-page-properties-tx pages-tx''
+           classes-tx' custom-status-tx blocks-index blocks-tx])))
+
+(defn <add-file-to-db-graph
+  "Parse file and save parsed data to the given db graph.
+
+  Options: :extract-options, :user-options (:tag-classes :property-classes
+  :property-parent-classes :convert-all-tags? :remove-inline-tags?
+  :extract-code-snippets?), :import-state, :macros, :notify-user, and optional :log-fn."
   [conn file content {:keys [notify-user log-fn]
                       :or {notify-user #(println "[WARNING]" (:msg %))}
                       :as *options}]
@@ -2708,22 +2727,8 @@
           (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
           custom-status-tx @(:custom-status-tx tx-options)
-          pages-index (into [] (comp (map #(select-keys % [:block/uuid]))
-                                     (distinct))
-                            (concat pages-tx'' classes-tx))
-          block-ids (into [] (map (fn [block] {:block/uuid (:block/uuid block)})) blocks-tx)
-          block-refs-ids (into [] (comp (mapcat :block/refs)
-                                        (filter block-uuid-ref?)
-                                        (map block-uuid-index))
-                               blocks-tx)
-          block-link-ids (into [] (comp (map :block/link)
-                                        (filter block-uuid-ref?)
-                                        (map block-uuid-index))
-                               blocks-tx)
-          blocks-index (set/union (set block-ids) (set block-refs-ids) (set block-link-ids))
-          tx' (into [] (comp cat (remove nil?))
-                    [pages-index page-properties-tx property-page-properties-tx pages-tx''
-                     classes-tx' custom-status-tx blocks-index blocks-tx])
+          tx' (build-file-import-main-tx pages-tx'' page-properties-tx property-page-properties-tx
+                                         classes-tx classes-tx' custom-status-tx blocks-tx)
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))
           main-tx-report (ldb/transact! conn tx' tx-meta)
@@ -3188,27 +3193,53 @@
                  top-parent-pages)]
     (ldb/transact! repo-or-conn tx-data)))
 
-(defn export-file-graph
-  "Main fn which exports a file graph given its files and imports them
-   into a DB graph. Files is expected to be a seq of maps with a :path key.
-   The user experiences this as an import so all user-facing messages are
-   described as import. options map contains the following keys:
-   * :set-ui-state - fn which updates ui to indicate progress of import
-   * :notify-user - fn which notifies user of important messages with a map
-     containing keys :msg, :level and optionally :ex-data when there is an error
-   * :log-fn - fn which logs developer messages
-   * :rpath-key - keyword used to get relative path in file map. Default to :path
-   * :<read-file - fn which reads a file across multiple steps
-   * :<get-file-stat - fn which returns stat of a file path
-   * :default-config - default config if config is unable to be read
-   * :user-options - map of user specific options. See <add-file-to-db-graph for more
-   * :<save-config-file - fn which saves a config file
-   * :<save-logseq-file - fn which saves a logseq file
-   * :<read-and-copy-asset - fn which reads and copies asset file
-   * :import-timeout-ms - optional total import timeout in ms; enables heartbeat debug logs
-   * :import-heartbeat-ms - optional heartbeat interval in ms (default 5000)
+(defn- partition-graph-files
+  [*files config rpath-key]
+  (let [files (common-config/remove-hidden-files *files config rpath-key)
+        normalized-rpath (fn [f]
+                           (some-> (get f rpath-key) path/path-normalize))
+        logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
+        asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
+        doc-files (->> files
+                       (remove #(or (logseq-file? %) (asset-file? %)))
+                       (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))]
+    {:files files
+     :logseq-files (filter logseq-file? files)
+     :asset-files (filter asset-file? files)
+     :doc-files doc-files}))
 
-   Note: See export-doc-files for additional options that are only for it"
+(defn- <export-file-graph-steps
+  [repo-or-conn conn config {:keys [files logseq-files asset-files doc-files]}
+   <read-file <read-and-copy-asset doc-options options log-fn]
+  (when log-fn (log-fn "Importing" (count doc-files) "files ..."))
+  (p/do!
+   (import-progress! doc-options {:step :logseq-files})
+   (export-logseq-files repo-or-conn logseq-files <read-file
+                        (-> (select-keys options [:notify-user :<save-logseq-file])
+                            (set/rename-keys {:<save-logseq-file :<save-file})))
+   (import-progress! doc-options {:step :assets})
+   (read-and-copy-asset-files asset-files
+                              <read-and-copy-asset
+                              (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
+                                     {:assets (get-in doc-options [:import-state :assets])}))
+   (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
+   (export-doc-files conn doc-files <read-file doc-options)
+   (import-progress! doc-options {:step :favorites})
+   (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
+   (import-progress! doc-options {:step :class-properties})
+   (export-class-properties conn repo-or-conn)
+   (import-progress! doc-options {:step :move-to-library})
+   (move-top-parent-pages-to-library conn repo-or-conn)
+   {:import-state (-> (:import-state doc-options)
+                      (dissoc :assets))
+    :files files}))
+
+(defn export-file-graph
+  "Exports a file graph into a DB graph. Files is a seq of maps with :path.
+  Options include :set-ui-state, :notify-user, :log-fn, :rpath-key, :<read-file,
+  :<get-file-stat, :default-config, :user-options, :<save-config-file,
+  :<save-logseq-file, :<read-and-copy-asset, :import-timeout-ms, and
+  :import-heartbeat-ms. See export-doc-files for additional options."
   [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn import-timeout-ms import-heartbeat-ms verbose]
                                          :or {rpath-key :path
                                               verbose false}
@@ -3226,43 +3257,11 @@
                 config (export-config-file
                         repo-or-conn config-file <read-file
                         (-> (select-keys options [:notify-user :default-config :<save-config-file])
-                            (set/rename-keys {:<save-config-file :<save-file})))]
-          (let [files (common-config/remove-hidden-files *files config rpath-key)
-                ;; Path normalization is needed just for windows
-                normalized-rpath (fn [f]
-                                   (some-> (get f rpath-key) path/path-normalize))
-                logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
-                asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
-                doc-files (->> files
-                               (remove #(or (logseq-file? %) (asset-file? %)))
-                               (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
-                asset-files (filter asset-file? files)
+                            (set/rename-keys {:<save-config-file :<save-file})))
+                partitioned (partition-graph-files *files config rpath-key)
                 doc-options (build-doc-options config options)]
-            (when log-fn (log-fn "Importing" (count doc-files) "files ..."))
-            ;; These export* fns are all the major export/import steps
-            (p/do!
-             (import-progress! doc-options {:step :logseq-files})
-             (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
-                                  (-> (select-keys options [:notify-user :<save-logseq-file])
-                                      (set/rename-keys {:<save-logseq-file :<save-file})))
-             ;; Assets are read first as doc-files need data from them to make Asset blocks.
-             (import-progress! doc-options {:step :assets})
-             (read-and-copy-asset-files asset-files
-                                        <read-and-copy-asset
-                                        (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
-                                               {:assets (get-in doc-options [:import-state :assets])}))
-             (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
-             (export-doc-files conn doc-files <read-file doc-options)
-             (import-progress! doc-options {:step :favorites})
-             (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
-             (import-progress! doc-options {:step :class-properties})
-             (export-class-properties conn repo-or-conn)
-             (import-progress! doc-options {:step :move-to-library})
-             (move-top-parent-pages-to-library conn repo-or-conn)
-             {:import-state (-> (:import-state doc-options)
-                                ;; don't leak full asset content (which could be large) out of this ns
-                                (dissoc :assets))
-              :files files})))
+          (<export-file-graph-steps repo-or-conn conn config partitioned
+                                    <read-file <read-and-copy-asset doc-options options log-fn))
         (import-profile/with-import-watchdog watchdog)
         (p/finally (fn [_]
                      (reset! gp-block/*export-to-db-graph? false)))
