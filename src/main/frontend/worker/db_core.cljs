@@ -484,7 +484,7 @@
                     _ (reset! phase :validate)
                     _ (progress-reporter {:phase :validating :percent 70})
                     validation-result (worker-db-validate/validate-db
-                                       conn :fix false :include-entities? true)
+                                       conn :fix false :include-entities? true :notify? false)
                     _ (when record-performance
                         (record-performance {:phase :validation
                                              :elapsed-ms (- (.now js/performance) validation-started)
