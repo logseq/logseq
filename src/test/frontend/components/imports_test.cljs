@@ -94,7 +94,7 @@
           state-values (atom {})
           lifecycle-ops (atom [])
           notifications (atom [])
-          staging-repo "logseq_db_.logseq-file-graph-import-run"
+          staging-repo (atom nil)
           graph-name "logseq_db_target"
           target-repo "logseq_db_logseq_db_target"
           issue {:code :import/file-parse-failed
@@ -105,7 +105,10 @@
       (is (fn? import-file-graph))
       (-> (p/with-redefs
             [repo-handler/<new-file-graph-import-staging-db!
-             (fn [_run-id] (p/resolved staging-repo))
+             (fn [run-id]
+               (let [repo (file-graph-import/staging-repo run-id)]
+                 (reset! staging-repo repo)
+                 (p/resolved repo)))
              repo-handler/new-db!
              (fn [graph-name _opts]
                (swap! lifecycle-ops conj [:register graph-name])
@@ -150,7 +153,7 @@
            (fn [result]
              (is (= :completed-with-errors (:status result)))
              (is (= {:status :published :repo target-repo} (:publication result)))
-             (is (some #(= [:publish staging-repo target-repo] %) @lifecycle-ops))
+             (is (some #(= [:publish @staging-repo target-repo] %) @lifecycle-ops))
              (is (some #(= [:register graph-name] %) @lifecycle-ops))
              (is (not-any? #(= :discard (first %)) @lifecycle-ops))
              (is (some #(= :warning (second %)) @notifications))
@@ -166,11 +169,14 @@
           state-changes (atom [])
           state-values (atom {})
           lifecycle-ops (atom [])
+          staging-repo (atom nil)
           expected-error (ex-info "worker unavailable" {:code :worker-unavailable})]
       (is (fn? import-file-graph))
       (-> (p/with-redefs [repo-handler/<new-file-graph-import-staging-db!
-                          (fn [_run-id]
-                            (p/resolved "logseq_db_.logseq-file-graph-import-run"))
+                          (fn [run-id]
+                            (let [repo (file-graph-import/staging-repo run-id)]
+                              (reset! staging-repo repo)
+                              (p/resolved repo)))
                           repo-handler/new-db! (fn [& _]
                                                  (swap! lifecycle-ops conj :register-target)
                                                  (p/resolved "logseq_db_target"))
@@ -191,7 +197,7 @@
           (p/then
            (fn [result]
              (is (= :failed (:status result)))
-             (is (= [[:discard "logseq_db_.logseq-file-graph-import-run"]]
+             (is (= [[:discard @staging-repo]]
                     @lifecycle-ops))
              (is (= [[:graph/importing nil]
                      [:graph/importing-state nil]]
