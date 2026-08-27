@@ -435,11 +435,11 @@
 (defn- <import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
-   config-file]
+  config-file]
   (let [run-id (str (random-uuid))
         target-repo (str config/db-version-prefix graph-name)
+        staging-repo (file-graph-import/staging-repo run-id)
         phase (atom :create-staging)
-        staging-repo* (atom nil)
         published? (atom false)
         start-time (t/now)]
     (state/set-state! :graph/importing :file-graph)
@@ -448,8 +448,12 @@
                                                :current-idx 0
                                                :percent 0
                                                :phase :preparing})
-    (-> (p/let [staging-repo (repo-handler/<new-file-graph-import-staging-db! run-id)
-                _ (reset! staging-repo* staging-repo)
+    (-> (p/let [created-staging-repo (repo-handler/<new-file-graph-import-staging-db! run-id)
+                _ (when-not (= staging-repo created-staging-repo)
+                    (throw (ex-info "staging graph identity mismatch"
+                                    {:code :import/staging-graph-mismatch
+                                     :expected-repo staging-repo
+                                     :actual-repo created-staging-repo})))
                 _ (reset! phase :serialize-files)
                 _ (update-file-graph-import-progress! run-id {:repo staging-repo
                                                               :phase :reading-files
@@ -516,8 +520,8 @@
               published-result)))
         (p/catch
          (fn [error]
-           (p/let [_ (when (and @staging-repo* (not @published?))
-                       (<discard-file-graph-import! run-id @staging-repo*))
+           (p/let [_ (when-not @published?
+                       (<discard-file-graph-import! run-id staging-repo))
                    code (import-error-code error)
                    result (cond-> (file-graph-import/failed-result run-id @phase code)
                             @published? (assoc :publication {:status :published

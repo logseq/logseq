@@ -200,3 +200,35 @@
            (fn [error]
              (is false (str "Import failure must be normalized: " error))))
           (p/finally done)))))
+
+(deftest file-graph-import-cleans-up-rejected-staging-creation-test
+  (async done
+    (let [import-file-graph (some-> (resolve 'frontend.components.imports/<import-file-graph)
+                                    deref)
+          staging-repo (atom nil)
+          discarded-repos (atom [])
+          state-values (atom {})]
+      (is (fn? import-file-graph))
+      (-> (p/with-redefs [repo-handler/<new-file-graph-import-staging-db!
+                          (fn [run-id]
+                            (reset! staging-repo (file-graph-import/staging-repo run-id))
+                            (p/rejected (js/Error. "staging setup failed")))
+                          persist-db/<discard-file-graph-import!
+                          (fn [repo]
+                            (swap! discarded-repos conj repo)
+                            (p/resolved nil))
+                          state/get-state
+                          (fn [path]
+                            (get-in @state-values (if (coll? path) path [path])))
+                          state/set-state!
+                          (fn [path value & _]
+                            (swap! state-values assoc-in (if (coll? path) path [path]) value))
+                          notification/show! (fn [& _] nil)]
+            (import-file-graph [] {:graph-name "target"} nil))
+          (p/then (fn [result]
+                    (is (= :failed (:status result)))
+                    (is (= :create-staging (:phase result)))
+                    (is (= [@staging-repo] @discarded-repos))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
