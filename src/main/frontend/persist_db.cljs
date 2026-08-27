@@ -380,42 +380,8 @@
      target-repo)
 
     :else
-    (let [target-owned? (atom false)]
-      (-> (p/let [target-exists? (state/<invoke-db-worker :thread-api/db-exists target-repo)
-                  _ (when target-exists?
-                      (throw (ex-info "target graph already exists"
-                                      {:code :graph-already-exists
-                                       :repo target-repo})))
-                  data (state/<invoke-db-worker :thread-api/export-db-binary staging-repo true)
-                  _ (<close-db staging-repo)
-                  _ (reset! target-owned? true)
-                  _ (state/<invoke-db-worker :thread-api/import-db-binary target-repo data)
-                  _ (state/<invoke-db-worker
-                     :thread-api/finalize-file-graph-import target-repo)
-                  _ (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db staging-repo)
-                        (p/catch (fn [error]
-                                   (log/warn :event :file-graph-import-staging-cleanup-failed
-                                             :repo staging-repo
-                                             :error error))))]
-            target-repo)
-          (p/catch
-           (fn [error]
-             (if @target-owned?
-               (p/let [rollback-result
-                       (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db target-repo)
-                           (p/then (fn [_] {:status :completed}))
-                           (p/catch (fn [rollback-error]
-                                      {:status :failed
-                                       :error rollback-error})))]
-                 (if (= :failed (:status rollback-result))
-                   (throw (ex-info "incomplete import target rollback failed"
-                                   {:code :import/target-rollback-failed
-                                    :repo target-repo
-                                    :preserve-staging? true
-                                    :publication-code (:code (ex-data error))}
-                                   (:error rollback-result)))
-                   (throw error)))
-               (throw error))))))))
+    (state/<invoke-db-worker
+     :thread-api/publish-file-graph-import staging-repo target-repo)))
 
 (defn <export-db
   [repo opts]

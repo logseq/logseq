@@ -137,6 +137,7 @@
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
           :thread-api/export-db-binary :thread-api/import-file-graph :thread-api/finalize-file-graph-import
+          :thread-api/publish-file-graph-import
           :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
           :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
@@ -201,7 +202,7 @@
 (defn- build-test-platform
   ([]
    (build-test-platform {}))
-  ([{:keys [post-message! remove-vfs! runtime import-db embed-texts]
+  ([{:keys [post-message! remove-vfs! runtime import-db embed-texts with-exclusive-lock]
      :or {post-message! (fn [& _] nil)
           remove-vfs! (fn [_] nil)
           runtime :browser
@@ -223,6 +224,7 @@
               :transfer (fn [data _transferables] data)}
     :kv {:get (fn [_] nil)
          :set! (fn [_ _] nil)}
+    :locks {:with-exclusive (or with-exclusive-lock (fn [_lock-name f] (f)))}
     :broadcast {:post-message! post-message!}
     :websocket {:connect (fn [_] #js {})}
     :sqlite {:init! (fn [] nil)
@@ -3445,6 +3447,92 @@
                    (is (= "checkpoint failed" (.-message strict-error))))
                  (p/catch #(is false (str "unexpected error: " %)))))))
         (p/finally done))))
+
+(deftest publish-file-graph-import-serializes-target-ownership
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [publish! (get-thread-api :thread-api/publish-file-graph-import)
+             staging-repo (file-graph-import/staging-repo
+                           "00000000-0000-4000-8000-000000000004")
+             target-repo "logseq_db_publication-target"
+             target-exists? (atom false)
+             import-count (atom 0)
+             fail-finalize? (atom false)
+             rollback-fails? (atom false)
+             deleted-repos (atom [])
+             lock-tail (atom (p/resolved nil))
+             with-exclusive-lock
+             (fn [_lock-name f]
+               (let [result (p/then (p/catch @lock-tail (constantly nil)) f)]
+                 (reset! lock-tail result)
+                 result))
+             capture (fn [promise]
+                       (-> promise
+                           (p/then (fn [value] {:status :resolved :value value}))
+                           (p/catch (fn [error] {:status :rejected :error error}))))]
+         (platform/set-platform!
+          (build-test-platform {:with-exclusive-lock with-exclusive-lock}))
+         (-> (p/with-redefs
+               [db-core/<db-exists?
+                (fn [_repo]
+                  (let [exists? @target-exists?]
+                    (p/let [_ (p/delay 10)]
+                      exists?)))
+                db-core/<export-db-binary!
+                (fn [_repo _strict?] (p/resolved (js/Uint8Array. 0)))
+                db-core/<import-db-binary!
+                (fn [_repo _data]
+                  (swap! import-count inc)
+                  (reset! target-exists? true)
+                  (p/resolved nil))
+                db-core/<finalize-file-graph-import!
+                (fn [_repo]
+                  (if @fail-finalize?
+                    (p/rejected (ex-info "finalization failed"
+                                         {:code :import/finalization-failed}))
+                    (p/resolved nil)))
+                db-core/<unsafe-unlink-db!
+                (fn [repo]
+                  (swap! deleted-repos conj repo)
+                  (if (and @rollback-fails? (= target-repo repo))
+                    (p/rejected (ex-info "rollback failed" {:repo repo}))
+                    (do
+                      (when (= target-repo repo)
+                        (reset! target-exists? false))
+                      (p/resolved nil))))]
+               (p/let [concurrent-results
+                       (p/all [(capture (publish! staging-repo target-repo))
+                               (capture (publish! staging-repo target-repo))])
+                       _ (reset! target-exists? false)
+                       _ (reset! fail-finalize? true)
+                       _ (reset! deleted-repos [])
+                       finalize-failure (capture (publish! staging-repo target-repo))
+                       finalize-deletes @deleted-repos
+                       _ (reset! target-exists? false)
+                       _ (reset! rollback-fails? true)
+                       rollback-failure (capture (publish! staging-repo target-repo))]
+                 {:concurrent-results concurrent-results
+                  :finalize-failure finalize-failure
+                  :finalize-deletes finalize-deletes
+                  :rollback-failure rollback-failure}))
+             (p/then
+              (fn [{:keys [concurrent-results finalize-failure
+                           finalize-deletes rollback-failure]}]
+                (is (= 1 (count (filter #(= :resolved (:status %))
+                                        concurrent-results))))
+                (is (= [:graph-already-exists]
+                       (keep #(some-> % :error ex-data :code)
+                             concurrent-results)))
+                (is (= :rejected (:status finalize-failure)))
+                (is (= [target-repo] finalize-deletes))
+                (is (= :import/target-rollback-failed
+                       (some-> rollback-failure :error ex-data :code)))
+                (is (true? (some-> rollback-failure :error ex-data
+                                   :preserve-staging?)))
+                (is (= 3 @import-count))))
+             (p/catch #(is false (str "unexpected error: " %)))
+             (p/finally done)))))))
 
 ;; ---- list-db thread-api test ----
 

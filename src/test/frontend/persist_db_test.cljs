@@ -1642,37 +1642,16 @@
        "00000000-0000-4000-8000-000000000001"))
 
 (def ^:private publication-target-repo "logseq_db_graph_a")
-(def ^:private publication-payload (.from js/Buffer "sqlite-bytes"))
 
 (defn- <run-browser-file-graph-publication
-  [{:keys [failure-method staging-cleanup-fails? target-cleanup-fails?]}]
+  []
   (let [calls (atom [])]
     (-> (p/with-redefs
           [state/<invoke-db-worker
            (fn [method & args]
              (swap! calls conj [method args])
-             (cond
-               (= method failure-method)
-               (p/rejected (ex-info "publication failed" {:method method}))
-
-               (= method :thread-api/db-exists) (p/resolved false)
-               (= method :thread-api/export-db-binary) (p/resolved publication-payload)
-               (= method :thread-api/close-db) (p/resolved nil)
-               (= method :thread-api/import-db-binary) (p/resolved nil)
-               (= method :thread-api/finalize-file-graph-import) (p/resolved nil)
-               (= method :thread-api/unsafe-unlink-db)
-               (cond
-                 (and staging-cleanup-fails?
-                      (= publication-staging-repo (first args)))
-                 (p/rejected (ex-info "cleanup failed" {:repo publication-staging-repo}))
-
-                 (and target-cleanup-fails?
-                      (= publication-target-repo (first args)))
-                 (p/rejected (ex-info "cleanup failed" {:repo publication-target-repo}))
-
-                 :else
-                 (p/resolved nil))
-               :else
+             (if (= method :thread-api/publish-file-graph-import)
+               (p/resolved publication-target-repo)
                (p/rejected (ex-info "unexpected worker call" {:method method}))))]
           (<capture-result
            (persist-db/<publish-file-graph-import!
@@ -1682,51 +1661,12 @@
 
 (deftest browser-file-graph-publication-waits-for-import-finalization
   (async done
-    (-> (<run-browser-file-graph-publication {})
+    (-> (<run-browser-file-graph-publication)
         (p/then
          (fn [{:keys [result calls]}]
            (is (= {:status :resolved :value publication-target-repo} result))
-           (is (= [[:thread-api/db-exists [publication-target-repo]]
-                 [:thread-api/export-db-binary [publication-staging-repo true]]
-                   [:thread-api/close-db [publication-staging-repo]]
-                   [:thread-api/import-db-binary [publication-target-repo publication-payload]]
-                   [:thread-api/finalize-file-graph-import [publication-target-repo]]
-                   [:thread-api/unsafe-unlink-db [publication-staging-repo]]]
+           (is (= [[:thread-api/publish-file-graph-import
+                    [publication-staging-repo publication-target-repo]]]
                   calls))))
-        (p/catch #(is false (str "unexpected error: " %)))
-        (p/finally done))))
-
-(deftest browser-file-graph-publication-keeps-target-when-staging-cleanup-fails
-  (async done
-    (-> (<run-browser-file-graph-publication {:staging-cleanup-fails? true})
-        (p/then
-         (fn [{:keys [result calls]}]
-           (is (= {:status :resolved :value publication-target-repo} result))
-           (is (not-any? #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
-                         calls))))
-        (p/catch #(is false (str "unexpected error: " %)))
-        (p/finally done))))
-
-(deftest browser-file-graph-publication-rolls-back-incomplete-target
-  (async done
-    (-> (p/let [import-failure (<run-browser-file-graph-publication
-                                {:failure-method :thread-api/import-db-binary})
-                finalize-failure (<run-browser-file-graph-publication
-                                  {:failure-method
-                                   :thread-api/finalize-file-graph-import})
-                rollback-failure (<run-browser-file-graph-publication
-                                  {:failure-method
-                                   :thread-api/finalize-file-graph-import
-                                   :target-cleanup-fails? true})]
-            (doseq [{:keys [result calls]} [import-failure finalize-failure]]
-              (is (= :rejected (:status result)))
-              (is (some #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
-                        calls))
-              (is (not-any? #(= [:thread-api/unsafe-unlink-db [publication-staging-repo]] %)
-                            calls)))
-            (is (= :import/target-rollback-failed
-                   (:code (ex-data (get-in rollback-failure [:result :error])))))
-            (is (true? (:preserve-staging?
-                        (ex-data (get-in rollback-failure [:result :error]))))))
         (p/catch #(is false (str "unexpected error: " %)))
         (p/finally done))))

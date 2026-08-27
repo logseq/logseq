@@ -71,6 +71,12 @@
   [key]
   (kv-set! key nil))
 
+(defn- <with-exclusive-lock
+  [lock-name f]
+  (js/navigator.locks.request lock-name #js {:mode "exclusive"}
+                              (fn [_lock]
+                                (f))))
+
 (defn- install-opfs-pool
   [sqlite pool-name]
   (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
@@ -221,6 +227,7 @@
                          (Comlink/transfer data transferables))}
    :kv {:get kv-get
         :set! kv-set!}
+   :locks {:with-exclusive <with-exclusive-lock}
    :broadcast {:post-message! worker-util/post-message}
    :websocket {:connect websocket-connect}
    :sqlite {:init! init-sqlite!

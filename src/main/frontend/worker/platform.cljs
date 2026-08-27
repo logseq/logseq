@@ -38,6 +38,13 @@
   [platform]
   (:storage platform))
 
+(defn <with-exclusive-lock
+  [platform lock-name f]
+  (if-let [with-exclusive-lock (get-in platform [:locks :with-exclusive])]
+    (with-exclusive-lock lock-name f)
+    (throw (ex-info "platform locks/with-exclusive missing"
+                    {:lock-name lock-name}))))
+
 (defn install-storage-pool
   [platform sqlite pool-name]
   (if-let [f (get-in platform [:storage :install-opfs-pool])]

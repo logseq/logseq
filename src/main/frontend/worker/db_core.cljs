@@ -78,6 +78,8 @@
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
 (def ^:private import-progress-file-steps 40)
+(def ^:private file-graph-import-publication-lock-prefix
+  "logseq-file-graph-import-publication:")
 
 (defn- resolve-initial-config
   [config]
@@ -1016,7 +1018,7 @@
                                     :repo repo})))]
     {:schema (:schema @conn)}))
 
-(def-thread-api :thread-api/unsafe-unlink-db
+(defn- <unsafe-unlink-db!
   [repo]
   (p/let [pool (<get-opfs-pool repo)
           _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
@@ -1024,6 +1026,10 @@
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
+
+(def-thread-api :thread-api/unsafe-unlink-db
+  [repo]
+  (<unsafe-unlink-db! repo))
 
 (def-thread-api :thread-api/close-db
   [repo]
@@ -1076,12 +1082,16 @@
   [repo]
   (<db-exists? repo))
 
-(def-thread-api :thread-api/export-db-binary
-  [repo & [strict-checkpoint?]]
+(defn- <export-db-binary!
+  [repo strict-checkpoint?]
   (p/let [_ (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
               (checkpoint-db! repo db strict-checkpoint?))
           data (<export-db-file repo)]
     (->uint8array data)))
+
+(def-thread-api :thread-api/export-db-binary
+  [repo & [strict-checkpoint?]]
+  (<export-db-binary! repo strict-checkpoint?))
 
 (def-thread-api :thread-api/export-client-ops-db-binary
   [repo]
@@ -1122,7 +1132,7 @@
       (p/let [_ (backup-db-fn db dst-path)]
         {:path dst-path}))))
 
-(def-thread-api :thread-api/import-db-binary
+(defn- <import-db-binary!
   [repo data]
   (when-not (string/blank? repo)
     (p/let [_ (close-db! repo)
@@ -1131,7 +1141,11 @@
             _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
 
-(def-thread-api :thread-api/finalize-file-graph-import
+(def-thread-api :thread-api/import-db-binary
+  [repo data]
+  (<import-db-binary! repo data))
+
+(defn- <finalize-file-graph-import!
   [repo]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (p/let [_ (client-op/update-local-checksum
@@ -1141,6 +1155,70 @@
     (p/rejected (ex-info "graph not opened"
                          {:code :graph-not-opened
                           :repo repo}))))
+
+(def-thread-api :thread-api/finalize-file-graph-import
+  [repo]
+  (<finalize-file-graph-import! repo))
+
+(defn- <publish-file-graph-import!
+  [staging-repo target-repo]
+  (cond
+    (not (file-graph-import/staging-repo? staging-repo))
+    (p/rejected (ex-info "source is not a file graph import staging graph"
+                         {:code :invalid-import-staging-graph
+                          :repo staging-repo}))
+
+    (or (string/blank? target-repo)
+        (file-graph-import/staging-repo? target-repo))
+    (p/rejected (ex-info "target cannot be a file graph import staging graph"
+                         {:code :invalid-import-target-graph
+                          :repo target-repo}))
+
+    :else
+    (platform/<with-exclusive-lock
+     (platform/current)
+     (str file-graph-import-publication-lock-prefix
+          (graph-dir/repo->graph-dir-key target-repo))
+     (fn []
+       (let [target-owned? (atom false)]
+         (-> (p/let [target-exists? (<db-exists? target-repo)
+                     _ (when target-exists?
+                         (throw (ex-info "target graph already exists"
+                                         {:code :graph-already-exists
+                                          :repo target-repo})))
+                     data (<export-db-binary! staging-repo true)
+                     _ (close-db! staging-repo)
+                     _ (reset! target-owned? true)
+                     _ (<import-db-binary! target-repo data)
+                     _ (<finalize-file-graph-import! target-repo)
+                     _ (-> (<unsafe-unlink-db! staging-repo)
+                           (p/catch (fn [error]
+                                      (log/warn :event :file-graph-import-staging-cleanup-failed
+                                                :repo staging-repo
+                                                :error error))))]
+               target-repo)
+             (p/catch
+              (fn [error]
+                (if @target-owned?
+                  (p/let [rollback-result
+                          (-> (<unsafe-unlink-db! target-repo)
+                              (p/then (fn [_] {:status :completed}))
+                              (p/catch (fn [rollback-error]
+                                         {:status :failed
+                                          :error rollback-error})))]
+                    (if (= :failed (:status rollback-result))
+                      (throw (ex-info "incomplete import target rollback failed"
+                                      {:code :import/target-rollback-failed
+                                       :repo target-repo
+                                       :preserve-staging? true
+                                       :publication-code (:code (ex-data error))}
+                                      (:error rollback-result)))
+                      (throw error)))
+                  (throw error))))))))))
+
+(def-thread-api :thread-api/publish-file-graph-import
+  [staging-repo target-repo]
+  (<publish-file-graph-import! staging-repo target-repo))
 
 (def-thread-api :thread-api/import-file-graph
   [repo config-file files opts]
