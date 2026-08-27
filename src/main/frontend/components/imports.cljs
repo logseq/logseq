@@ -548,31 +548,23 @@
               published-result)))
         (p/catch
          (fn [error]
-           (let [preserve-staging? (true? (:preserve-staging? (ex-data error)))]
-             (p/let [_ (when-not @published?
-                         (p/do!
-                          (when-not preserve-staging?
-                            (<discard-file-graph-import! run-id staging-repo))
-                          (<restore-file-graph-import-repo! run-id previous-repo)))
-                     code (import-error-code error)
-                     result (cond-> (file-graph-import/failed-result run-id @phase code)
-                              preserve-staging?
-                              (assoc :publication {:status :rollback-failed
-                                                   :repo target-repo
-                                                   :staging-repo staging-repo})
-
-                              @published?
-                              (assoc :publication {:status :published
-                                                   :repo target-repo}))]
-               (log/error :import-file-graph-failed true
-                          :run-id run-id
-                          :phase @phase
-                          :code code
-                          :error error)
-               (run-file-graph-terminal-effect!
-                run-id :show-failure
-                #(notification/show! (t :import/unexpected-error (name code)) :error))
-               result))))
+           (p/let [_ (when-not @published?
+                       (p/do!
+                        (<discard-file-graph-import! run-id staging-repo)
+                        (<restore-file-graph-import-repo! run-id previous-repo)))
+                   code (import-error-code error)
+                   result (cond-> (file-graph-import/failed-result run-id @phase code)
+                            @published? (assoc :publication {:status :published
+                                                            :repo target-repo}))]
+             (log/error :import-file-graph-failed true
+                        :run-id run-id
+                        :phase @phase
+                        :code code
+                        :error error)
+             (run-file-graph-terminal-effect!
+              run-id :show-failure
+              #(notification/show! (t :import/unexpected-error (name code)) :error))
+             result)))
         (p/finally #(clear-file-graph-import! run-id)))))
 
 (defn import-file-to-db-handler
