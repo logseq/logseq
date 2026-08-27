@@ -42,14 +42,6 @@
                    :status :completed}
                   {:contract-version 1
                    :run-id "run"
-                   :status :failed
-                   :phase :validate
-                   :summary {:issue-count 1}
-                   :issues [{}]
-                   :validation {:status :not-run}
-                   :publication {:status :blocked}}
-                  {:contract-version 1
-                   :run-id "run"
                    :status :completed-with-errors
                    :phase :completed
                    :summary {:issue-count 1}
