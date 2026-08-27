@@ -75,7 +75,8 @@
           lifecycle-ops (atom [])
           notifications (atom [])
           staging-repo "logseq_db_.logseq-file-graph-import-run"
-          target-repo "logseq_db_target"
+          graph-name "logseq_db_target"
+          target-repo "logseq_db_logseq_db_target"
           issue {:code :import/file-parse-failed
                  :severity :error
                  :recoverable? true
@@ -124,13 +125,13 @@
              shui/dialog-close! (fn [& _] nil)
              ui-handler/re-render-root! (fn [] nil)
              util/web-platform? false]
-            (import-file-graph [] {:graph-name "target"} nil))
+            (import-file-graph [] {:graph-name graph-name} nil))
           (p/then
            (fn [result]
              (is (= :completed-with-errors (:status result)))
              (is (= {:status :published :repo target-repo} (:publication result)))
              (is (some #(= [:publish staging-repo target-repo] %) @lifecycle-ops))
-             (is (some #(= [:register "target"] %) @lifecycle-ops))
+             (is (some #(= [:register graph-name] %) @lifecycle-ops))
              (is (not-any? #(= :discard (first %)) @lifecycle-ops))
              (is (some #(= :warning (second %)) @notifications))
              (is (nil? (get @state-values :graph/importing)))

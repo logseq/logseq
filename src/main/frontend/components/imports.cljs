@@ -437,7 +437,7 @@
    {:keys [graph-name] :as user-options}
    config-file]
   (let [run-id (str (random-uuid))
-        target-repo (common-config/canonicalize-db-version-repo graph-name)
+        target-repo (str config/db-version-prefix graph-name)
         phase (atom :create-staging)
         staging-repo* (atom nil)
         published? (atom false)
