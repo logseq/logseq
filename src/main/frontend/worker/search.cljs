@@ -647,11 +647,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- import-entity-tag-idents
   [{:keys [tag-ident-by-id]} entity]
   (let [tag-ids (:block/tags entity)
-        tag-idents (mapv (fn [tag-id]
-                           (if (keyword? tag-id)
-                             tag-id
-                             (tag-ident-by-id tag-id)))
-                         tag-ids)]
+        tag-idents (mapv tag-ident-by-id tag-ids)]
     (when (every? some? tag-idents)
       tag-idents)))
 
