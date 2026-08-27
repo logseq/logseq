@@ -64,6 +64,31 @@
         (reset! state/*db-worker previous-worker)
         (reset! state/*db-worker-thread previous-thread)))))
 
+(deftest file-graph-import-progress-only-updates-the-current-run-test
+  (let [state-values (atom {:graph/importing-state {:run-id "current-run"
+                                                     :phase :preparing
+                                                     :percent 0}})]
+    (with-redefs [state/get-state
+                  (fn [path]
+                    (get-in @state-values (if (coll? path) path [path])))
+                  state/update-state!
+                  (fn [path update-fn]
+                    (swap! state-values update path update-fn))]
+      (worker-handler/handle :file-graph-import-progress nil
+                             {:run-id "current-run"
+                              :progress {:phase :importing-files
+                                         :current-page "pages/Current.md"
+                                         :percent 25}})
+      (worker-handler/handle :file-graph-import-progress nil
+                             {:run-id "stale-run"
+                              :progress {:phase :validating
+                                         :percent 70}})
+      (is (= {:run-id "current-run"
+              :phase :importing-files
+              :current-page "pages/Current.md"
+              :percent 25}
+             (:graph/importing-state @state-values))))))
+
 (deftest db-worker-ui-request-resolve-passes-request-id-and-result-test
   (async done
     (let [calls (atom [])

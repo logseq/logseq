@@ -2682,7 +2682,8 @@
                   files [config-file
                          {:path "pages/Home.md"
                           :file/content "- imported block"}]
-                  checksum-calls (atom [])]
+                  checksum-calls (atom [])
+                  progress-events (atom [])]
               (is (fn? import-file-graph!))
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
               (platform/set-platform! (build-test-platform {:runtime :node}))
@@ -2694,7 +2695,10 @@
                  client-op/update-local-checksum
                  (fn [repo checksum]
                    (swap! checksum-calls conj [repo checksum]))
-                 shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 shared-service/broadcast-to-clients!
+                 (fn [event payload]
+                   (when (= :file-graph-import-progress event)
+                     (swap! progress-events conj payload)))]
                 (->
                  (p/let [result (import-file-graph! test-repo config-file files {:run-id "import-run"
                                                                                 :user-options {}})
@@ -2721,6 +2725,15 @@
                    (is (= "imported block" (:block/title block)))
                    (is (= [[test-repo (sync-checksum/recompute-checksum @conn)]]
                           @checksum-calls))
+                   (is (= #{"import-run"} (set (map :run-id @progress-events))))
+                   (is (= [:importing-files :finalizing-data :validating]
+                          (->> @progress-events
+                               (map #(get-in % [:progress :phase]))
+                               distinct
+                               (take 3))))
+                   (is (some #(= "pages/Home.md"
+                                (get-in % [:progress :current-page]))
+                             @progress-events))
                    (doseq [entity [page block]]
                      (is (nat-int? (:block/tx-id entity)))
                      (is (= (:block/uuid entity)
