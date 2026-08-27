@@ -3210,15 +3210,23 @@
   (let [property-context (bulk-property-context (:user-config options))
         set-ui-state (or (:set-ui-state options) (constantly nil))
         _ (set-ui-state [:graph/importing-state :total] (count doc-files))]
-    #_{:clj-kondo/ignore [:loop-without-recur :invalid-arity]}
+    #_{:clj-kondo/ignore [:unresolved-var]}
     (p/loop [remaining-files doc-files
              simple-files []
              fallback-files []]
       (if-let [file (first remaining-files)]
-        (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx]
-                                    (inc (:idx file)))
-                    _ (set-ui-state [:graph/importing-state :current-page] (:path file))
-                    content (<read-file file)]
+        (p/let [_ (set-ui-state [:graph/importing-state :current-idx]
+                                (inc (:idx file)))
+                _ (set-ui-state [:graph/importing-state :current-page] (:path file))
+                read-result
+                (-> (<read-file file)
+                    (p/then #(vector :completed %))
+                    (p/catch #(vector :failed %)))]
+          (let [[read-status content] read-result]
+            (if (= :failed read-status)
+              (p/recur (rest remaining-files)
+                       simple-files
+                       (conj fallback-files file))
               (let [started (extract/performance-now-ms)
                     simple-file (simple-page-property-file
                                  file content rpath-key property-context)
@@ -3233,11 +3241,7 @@
                            fallback-files)
                   (p/recur (rest remaining-files)
                            simple-files
-                           (conj fallback-files file)))))
-            (p/catch (fn [_error]
-                       (p/recur (rest remaining-files)
-                                simple-files
-                                (conj fallback-files file)))))
+                           (conj fallback-files file)))))))
         {:simple-files simple-files
          :fallback-files fallback-files}))))
 
