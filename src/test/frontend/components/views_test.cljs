@@ -214,6 +214,42 @@
     (is (= block
            (views/gallery-card-asset-block block :block/uuid)))))
 
+(deftest gallery-and-table-cover-hydration-keeps-asset-render-fields-test
+  (let [cover-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        cover {:db/id 9
+               :block/uuid cover-uuid
+               :block/title "poster"
+               :block/tags [{:db/ident :logseq.class/Asset}]
+               :logseq.property.asset/type "webp"}
+        row {:db/id 1
+             :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+             :block/title "Inception"
+             :user.property/cover cover}
+        cover-property {:db/ident :user.property/cover
+                        :block/title "Cover"
+                        :logseq.property/type :asset}
+        columns (views/build-columns
+                 {:view-parent {:db/ident :user.class/Movie}}
+                 [cover-property]
+                 {:with-object-name? false
+                  :add-tags-column? false})
+        cover-column (some #(when (= :user.property/cover (:id %)) %) columns)]
+    (is (= :asset (get-in cover-column [:property :logseq.property/type]))
+        "Cover columns keep the :asset type used by Gallery/Table.")
+    (is (= :user.property/cover
+           (#'views/gallery-asset-property-ident
+            {:logseq.property/view-for {:db/ident :user.class/Movie
+                                        :block/tags [{:db/ident :logseq.class/Tag}]}
+             :logseq.property.view/feature-type :class-objects}
+            columns)))
+    (is (= cover
+           (views/gallery-card-asset-block row :user.property/cover)))
+    (is (uuid? (:block/uuid (views/gallery-card-asset-block row :user.property/cover))))
+    (is (= "webp"
+           (:logseq.property.asset/type
+            (views/gallery-card-asset-block row :user.property/cover)))
+        "Hydrated Cover must keep the type/filename fields asset-cp needs.")))
+
 (deftest view-row-ids-flatten-only-typed-uuid-payloads-test
   (let [row-a (random-uuid)
         row-b (random-uuid)
