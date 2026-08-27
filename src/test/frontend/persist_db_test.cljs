@@ -1659,7 +1659,7 @@
         (p/then (fn [result]
                   {:result result :calls @calls})))))
 
-(deftest browser-file-graph-publication-waits-for-import-finalization
+(deftest browser-file-graph-publication-waits-for-search-index
   (async done
     (-> (<run-browser-file-graph-publication)
         (p/then
