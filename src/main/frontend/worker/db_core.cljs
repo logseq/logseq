@@ -39,6 +39,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.download :as sync-download]
    [frontend.worker.thread-atom]
+   [frontend.worker.ui-request :as ui-request]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
@@ -221,11 +222,34 @@
                [k (if (satisfies? IDeref v) @v v)]))
         import-state))
 
-(defn- file-content
+(def ^:private import-file-read-timeout-ms (* 5 60 1000))
+
+(defn- file-text-content
   [file]
-  (or (:file/content file)
-      (:content file)
-      ""))
+  (or (when (string? (:file/content file))
+        (:file/content file))
+      (when (string? (:content file))
+        (:content file))))
+
+(defn- import-file-meta
+  [file]
+  (select-keys file [:path :last-modified-at :fs-path]))
+
+(defn- index-import-files
+  [files]
+  (into {}
+        (keep (fn [file]
+                (when-let [path (:path file)]
+                  [path file])))
+        files))
+
+(defn- take-indexed-import-file!
+  [*files-by-path path]
+  (when (and *files-by-path path)
+    (let [file (get @*files-by-path path)]
+      (when file
+        (swap! *files-by-path dissoc path))
+      file)))
 
 (defn- import-file-payload
   [payload]
@@ -242,28 +266,70 @@
     :else
     nil))
 
+(defn- <request-import-file
+  [file]
+  (ui-request/<request :read-import-file
+                       {:path (:path file)}
+                       {:timeout-ms import-file-read-timeout-ms
+                        :hint "import-file-graph"}))
+
+(defn- <read-import-file
+  [*files-by-path file]
+  (let [indexed (take-indexed-import-file! *files-by-path (:path file))
+        inline (or (file-text-content file)
+                   (file-text-content indexed))]
+    (if (some? inline)
+      (p/resolved inline)
+      (p/let [resolved (<request-import-file file)]
+        (or (file-text-content resolved) "")))))
+
+(defn- <resolve-import-asset-file
+  [*files-by-path file]
+  (let [indexed (take-indexed-import-file! *files-by-path (:path file))]
+    (cond
+      (some? (import-file-payload (:asset/payload file)))
+      (p/resolved file)
+
+      (some? (import-file-payload (:asset/payload indexed)))
+      (p/resolved indexed)
+
+      :else
+      (<request-import-file file))))
+
+(defn- publish-import-ui-state!
+  [path value]
+  (shared-service/broadcast-to-clients! :set-ui-state [path value]))
+
+(defn- publish-staged-import-asset!
+  [repo asset]
+  (shared-service/broadcast-to-clients! :import-staged-asset {:repo repo
+                                                             :asset asset}))
+
 (defn- <read-and-stage-import-asset
-  [file assets buffer-handler staged-assets]
-  (when-let [payload (some-> file :asset/payload import-file-payload)]
-    (let [buffer (.-buffer payload)
-          asset-type (db-asset/asset-path->type (:path file))
-          asset-id (d/squuid)
-          asset-name (some-> (:path file) gp-exporter/asset-path->name)
-          size (or (:asset/size file) (.-byteLength payload))]
-      (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
-              {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
-              asset-data (with-edn-content
-                           {:size size
-                            :type asset-type
-                            :path (:path file)
-                            :checksum checksum
-                            :asset-id asset-id})]
-        (swap! assets assoc asset-name asset-data)
-        (when-not pdf-annotation?
-          (swap! staged-assets conj {:path (:path file)
-                                     :asset-id asset-id
-                                     :asset-type asset-type
-                                     :payload payload}))))))
+  [repo file assets buffer-handler staged-assets *files-by-path]
+  (p/let [file' (<resolve-import-asset-file *files-by-path file)]
+    (when-let [payload (some-> file' :asset/payload import-file-payload)]
+      (let [buffer (.-buffer payload)
+            asset-type (db-asset/asset-path->type (:path file'))
+            asset-id (d/squuid)
+            asset-name (some-> (:path file') gp-exporter/asset-path->name)
+            size (or (:asset/size file') (.-byteLength payload))]
+        (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+                {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
+                asset-data (with-edn-content
+                             {:size size
+                              :type asset-type
+                              :path (:path file')
+                              :checksum checksum
+                              :asset-id asset-id})]
+          (swap! assets assoc asset-name asset-data)
+          (when-not pdf-annotation?
+            (let [staged {:path (:path file')
+                          :asset-id asset-id
+                          :asset-type asset-type
+                          :payload payload}]
+              (publish-staged-import-asset! repo staged)
+              (swap! staged-assets conj (dissoc staged :payload)))))))))
 
 (defn- finalize-import-render-revisions!
   [conn]
@@ -288,16 +354,29 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [notifications (atom [])
           staged-assets (atom [])
+          *files-by-path (atom (index-import-files (cond-> (vec files)
+                                                     (and (map? config-file) (:path config-file))
+                                                     (conj config-file))))
+          files-meta (mapv import-file-meta files)
+          config-meta (import-file-meta config-file)
+          set-ui-state (if (fn? (:set-ui-state opts))
+                         (:set-ui-state opts)
+                         publish-import-ui-state!)
+          <read-file (if (fn? (:<read-file opts))
+                       (:<read-file opts)
+                       (fn [file]
+                         (<read-import-file *files-by-path file)))
           options (-> opts
+                      (dissoc :set-ui-state :<read-file)
                       (assoc :notify-user #(swap! notifications conj %)
                              :log-fn (fn [& args]
                                        (log/info :import-file-graph {:args args}))
-                             :<read-file (fn [file] (p/resolved (file-content file)))
+                             :set-ui-state set-ui-state
+                             :<read-file <read-file
                              :<get-file-stat (constantly nil)
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-                      (dissoc :set-ui-state))]
-      (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+                                                     (<read-and-stage-import-asset repo file assets buffer-handler staged-assets *files-by-path))))]
+      (p/let [result (gp-exporter/export-file-graph conn conn config-meta files-meta options)
               _ (finalize-import-render-revisions! conn)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
@@ -915,7 +994,9 @@
          :log
          :add-repo
          :rtc-log
-         :rtc-sync-state])))
+         :rtc-sync-state
+         :set-ui-state
+         :import-staged-asset])))
 
 (defn- <init-service!
   [graph start-opts]

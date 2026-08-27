@@ -1692,7 +1692,9 @@
     (is (contains? types "log"))
     (is (contains? types "add-repo"))
     (is (contains? types "rtc-log"))
-    (is (contains? types "rtc-sync-state"))))
+    (is (contains? types "rtc-sync-state"))
+    (is (contains? types "set-ui-state"))
+    (is (contains? types "import-staged-asset"))))
 
 ;; ---- init-core! tests ----
 
@@ -2610,6 +2612,137 @@
                             (:block/uuid (block-handler/canonical-block @conn entity))))
                      (is (contains? published-block-uuids (:block/uuid entity))
                          "Live file imports must publish complete canonical replacements.")))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally (fn []
+                              (reset! ldb/*transact-pipeline-fn pipeline-before)
+                              (done))))))))))
+
+(deftest import-file-graph-streams-files-and-reports-progress
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  ui-state (atom [])
+                  in-flight (atom 0)
+                  max-in-flight (atom 0)
+                  contents {"logseq/config.edn" "{}"
+                            "pages/Home.md" "- imported home"
+                            "pages/Projects.md" "- imported projects"}
+                  config-file {:path "logseq/config.edn"}
+                  files [{:path "logseq/config.edn"}
+                         {:path "pages/Home.md"}
+                         {:path "pages/Projects.md"}]]
+              (is (fn? import-file-graph!))
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 shared-service/broadcast-to-clients! (fn [& _] nil)]
+                (db-listener/listen-db-changes! test-repo conn
+                                                :handler-keys [:sync-db-to-main-thread])
+                (->
+                 (p/let [result (import-file-graph!
+                                 test-repo
+                                 config-file
+                                 files
+                                 {:user-options {}
+                                  :set-ui-state (fn [path value]
+                                                  (swap! ui-state conj [path value]))
+                                  :<read-file (fn [file]
+                                                (swap! in-flight inc)
+                                                (swap! max-in-flight max @in-flight)
+                                                (p/let [_ (p/delay 0)]
+                                                  (swap! in-flight dec)
+                                                  (get contents (:path file))))})
+                         home (some->> (d/q '[:find [?e ...]
+                                              :where [?e :block/name "home"]]
+                                            @conn)
+                                       first
+                                       (d/entity @conn))
+                         projects (some->> (d/q '[:find [?e ...]
+                                                  :where [?e :block/name "projects"]]
+                                                @conn)
+                                           first
+                                           (d/entity @conn))
+                         home-block (db-test/find-block-by-content @conn "imported home")
+                         project-block (db-test/find-block-by-content @conn "imported projects")
+                         current-pages (into []
+                                             (keep (fn [[path value]]
+                                                     (when (= path [:graph/importing-state :current-page])
+                                                       value)))
+                                             @ui-state)
+                         totals (into []
+                                      (keep (fn [[path value]]
+                                              (when (= path [:graph/importing-state :total])
+                                                value)))
+                                      @ui-state)
+                         indexes (into []
+                                       (keep (fn [[path value]]
+                                               (when (= path [:graph/importing-state :current-idx])
+                                                 value)))
+                                       @ui-state)]
+                   (is (= #{"pages/Home.md" "pages/Projects.md" "logseq/config.edn"}
+                          (set (map :path (:files result)))))
+                   (is (every? #(not (contains? % :file/content)) (:files result))
+                       "Worker must not keep document contents on the returned file list.")
+                   (is (= "Home" (:block/title home)))
+                   (is (= "Projects" (:block/title projects)))
+                   (is (= "imported home" (:block/title home-block)))
+                   (is (= "imported projects" (:block/title project-block)))
+                   (is (= 1 @max-in-flight)
+                       "Import must read one file at a time instead of preloading the graph.")
+                   (is (= [2] totals))
+                   (is (= [1 2] indexes))
+                   (is (some #(= % "pages/Home.md") current-pages))
+                   (is (some #(= % "pages/Projects.md") current-pages)))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally (fn []
+                              (reset! ldb/*transact-pipeline-fn pipeline-before)
+                              (done))))))))))
+
+(deftest import-file-graph-publishes-progress-when-set-ui-state-is-not-supplied
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                  conn (d/create-conn db-schema/schema)
+                  pipeline-before @ldb/*transact-pipeline-fn
+                  broadcasts (atom [])
+                  config-file {:path "logseq/config.edn"
+                               :file/content "{}"}
+                  files [config-file
+                         {:path "pages/Home.md"
+                          :file/content "- imported block"}]]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+              (p/with-redefs
+                [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                 db-sync/handle-local-tx! (fn [& _] nil)
+                 shared-service/broadcast-to-clients!
+                 (fn [event payload]
+                   (swap! broadcasts conj [event payload]))]
+                (db-listener/listen-db-changes! test-repo conn
+                                                :handler-keys [:sync-db-to-main-thread])
+                (->
+                 (p/let [_ (import-file-graph! test-repo config-file files {:user-options {}})
+                         ui-events (filter #(= :set-ui-state (first %)) @broadcasts)
+                         pages (into []
+                                     (keep (fn [[_ [path value]]]
+                                             (when (= path [:graph/importing-state :current-page])
+                                               value)))
+                                     ui-events)]
+                   (is (seq ui-events)
+                       "Default import progress must broadcast set-ui-state instead of discarding it.")
+                   (is (some #(= % "pages/Home.md") pages)))
                  (p/catch
                   (fn [error]
                     (is false (str error))))

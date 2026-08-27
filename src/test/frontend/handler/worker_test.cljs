@@ -1,5 +1,6 @@
 (ns frontend.handler.worker-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.worker :as worker-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -112,3 +113,60 @@
             (p/catch (fn [error]
                        (is nil (str "unexpected error: " error))
                        (done))))))))
+
+(deftest db-worker-ui-request-read-import-file-resolves-session-file-test
+  (async done
+    (let [calls (atom [])
+          wrapped-worker (fn [qkw & args]
+                           (swap! calls conj [qkw args])
+                           (p/resolved {:ok true}))]
+      (file-graph-import/set-file-graph-import-session!
+       {:<read-file (fn [path]
+                      (p/resolved {:path path
+                                   :file/content "- streamed"}))})
+      (-> (worker-handler/handle :db-worker/ui-request
+                                 wrapped-worker
+                                 {:request-id "req-import"
+                                  :action :read-import-file
+                                  :payload {:path "pages/Home.md"}})
+          (p/then (fn [_]
+                    (is (= [[:thread-api/resolve-ui-request
+                             ["req-import" {:path "pages/Home.md"
+                                            :file/content "- streamed"}]]]
+                           @calls))))
+          (p/catch (fn [error]
+                     (is nil (str "unexpected error: " error))))
+          (p/finally (fn []
+                       (file-graph-import/clear-file-graph-import-session!)
+                       (done)))))))
+
+(deftest set-ui-state-updates-importing-progress-test
+  (let [updates (atom [])]
+    (with-redefs [state/set-state! (fn [path value]
+                                     (swap! updates conj [path value]))]
+      (worker-handler/handle :set-ui-state nil [[:graph/importing-state :current-page] "pages/Home.md"])
+      (is (= [[[:graph/importing-state :current-page] "pages/Home.md"]]
+             @updates)))))
+
+(deftest import-staged-asset-writes-through-import-session-test
+  (async done
+    (let [writes (atom [])]
+      (file-graph-import/set-file-graph-import-session!
+       {:<write-staged-asset (fn [repo asset]
+                               (swap! writes conj [repo asset])
+                               (p/resolved :written))
+        :pending-asset-writes (atom [])})
+      (-> (p/do
+            (worker-handler/handle :import-staged-asset
+                                   nil
+                                   {:repo "test-repo"
+                                    :asset {:asset-id "one" :asset-type "png"}})
+            (file-graph-import/<await-file-graph-import-asset-writes!))
+          (p/then (fn [_]
+                    (is (= [["test-repo" {:asset-id "one" :asset-type "png"}]]
+                           @writes))))
+          (p/catch (fn [error]
+                     (is nil (str "unexpected error: " error))))
+          (p/finally (fn []
+                       (file-graph-import/clear-file-graph-import-session!)
+                       (done)))))))

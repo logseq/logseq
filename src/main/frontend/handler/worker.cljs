@@ -6,6 +6,7 @@
             [frontend.common.crypt :as crypt]
             [frontend.context.i18n :as i18n]
             [frontend.handler.e2ee :as e2ee-handler]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
@@ -60,6 +61,12 @@
 (defmethod handle :thread-api/search-index-build-progress [_ _worker args]
   (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
     (apply f args)))
+
+(defmethod handle :set-ui-state [_ _worker [path value]]
+  (state/set-state! path value))
+
+(defmethod handle :import-staged-asset [_ _worker {:keys [repo asset]}]
+  (file-graph-import/<write-file-graph-import-staged-asset! repo asset))
 
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
@@ -152,6 +159,15 @@
           (p/resolved {:supported? false})
           (p/let [_ (e2ee-handler/<native-delete-secret! key)]
             {:supported? true}))))
+
+    :read-import-file
+    (let [path (:path payload)]
+      (if-not (string? path)
+        (p/rejected (ex-info "invalid read-import-file payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (file-graph-import/<read-file-graph-import-file path)))
 
     (p/rejected (ex-info "unsupported db-worker ui action"
                          {:code :unsupported-ui-action

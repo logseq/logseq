@@ -18,7 +18,27 @@
                                    "{:meta/version 1}")]
         (is (= options (-> options ldb/write-transit-str ldb/read-transit-str)))
         (is (= #{"Project" "Area"} (get-in options [:user-options :tag-classes])))
-        (is (not (contains? options :notify-user)))))))
+        (is (not (contains? options :notify-user)))
+        (is (not (contains? options :set-ui-state)))))))
+
+(deftest file-graph-import-file-metas-omit-file-contents-test
+  (let [file-meta (some-> (resolve 'frontend.components.imports/import-file-graph-file-meta)
+                          deref)]
+    (is (fn? file-meta))
+    (when (fn? file-meta)
+      (let [meta (file-meta {:path "pages/Home.md"
+                             :last-modified-at 1
+                             :fs-path "/tmp/graph/pages/Home.md"
+                             :file/content "- should not cross the worker boundary"
+                             :asset/payload (js/Uint8Array. 4)
+                             :file-object :renderer-only})]
+        (is (= {:path "pages/Home.md"
+                :last-modified-at 1
+                :fs-path "/tmp/graph/pages/Home.md"}
+               meta))
+        (is (not (contains? meta :file/content)))
+        (is (not (contains? meta :asset/payload)))
+        (is (not (contains? meta :file-object)))))))
 
 (deftest staged-assets-wait-for-directory-and-all-writes-test
   (async done

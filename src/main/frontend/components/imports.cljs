@@ -12,6 +12,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -336,9 +337,17 @@
         (assoc (select-keys file [:path])
                :file/content content)))))
 
-(defn- <serialize-import-files
+(defn- import-file-graph-file-meta
+  [file]
+  (select-keys file [:path :last-modified-at :fs-path]))
+
+(defn- import-files-by-path
   [files]
-  (p/all (mapv <serialize-import-file files)))
+  (into {}
+        (keep (fn [file]
+                (when-let [path (:path file)]
+                  [path file])))
+        files))
 
 (defn- write-staged-assets!
   [repo staged-assets]
@@ -367,22 +376,44 @@
    config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (let [files-by-path (import-files-by-path *files)]
+    (file-graph-import/set-file-graph-import-session!
+     {:<read-file (fn [path]
+                    (if-let [file (get files-by-path path)]
+                      (<serialize-import-file file)
+                      (p/rejected (ex-info "import file not found"
+                                           {:code :import-file-not-found
+                                            :path path}))))
+      :<write-staged-asset (fn [repo asset]
+                             (write-staged-assets! repo [asset]))
+      :pending-asset-writes (atom [])}))
+  (-> (p/let [start-time (t/now)
+              _ (repo-handler/new-db! graph-name {:file-graph-import? true})
+              repo (state/get-current-repo)
+              serialized-config-file (<serialize-import-file config-file)
+              file-metas (mapv import-file-graph-file-meta *files)
+              options (build-file-graph-worker-options user-options config/config-default-content)
+              assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)
+              _ (fs/mkdir-if-not-exists assets-dir)
+              import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
+              _ (doseq [notification (:notifications import-result)]
+                  (show-notification notification))
+              _ (file-graph-import/<await-file-graph-import-asset-writes!)
+              leftover-assets (filter :payload (:staged-assets import-result))
+              _ (write-staged-assets! repo leftover-assets)]
+        (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+        (state/set-state! :graph/importing nil)
+        (state/set-state! :graph/importing-state nil)
+        (validate-imported-data import-result)
+        (state/pub-event! [:graph/ready (state/get-current-repo)])
+        (finished-cb))
+      (p/catch (fn [e]
+                 (log/error :import-file-graph {:error e})
+                 (notification/show! (t :import/unexpected-error (or (ex-message e) (str e))) :error)
+                 (state/set-state! :graph/importing nil)
+                 (state/set-state! :graph/importing-state nil)))
+      (p/finally (fn []
+                   (file-graph-import/clear-file-graph-import-session!)))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
