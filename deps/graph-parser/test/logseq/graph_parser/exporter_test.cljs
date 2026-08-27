@@ -225,7 +225,7 @@
                                              (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
-                        (select-keys options [:verbose]))]
+                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
@@ -943,7 +943,12 @@ abc
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})
+          (import-file-graph-to-db file-graph-dir conn
+                                   {:convert-all-tags? true
+                                    :import-timeout-ms (if js/process.env.CI 60000 30000)
+                                    :import-heartbeat-ms 5000
+                                    :log-fn (fn [tag data]
+                                              (println "[import-debug]" (name tag) (pr-str data)))})
           end-time (cljs.core/system-time)]
 
     ;; Add multiplicative factor for CI as it runs about twice as slow

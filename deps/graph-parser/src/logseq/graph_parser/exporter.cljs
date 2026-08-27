@@ -36,6 +36,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
+            [logseq.graph-parser.import-profile :as import-profile]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
@@ -1967,42 +1968,65 @@
           [block' []])]
     [final-block code-children-tx]))
 
-(defn- <build-block-tx
+(defn- build-block-tx-core
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
-   {:keys [import-state journal-created-ats user-config] :as options}]
-  ;; (prn ::block-in block*)
-  (p/let [walked-ast-blocks (walk-ast-blocks user-config (:block.temp/ast-blocks block*))
-        ;; needs to come before update-block-refs to detect new property schemas
-          {:keys [block properties-tx]}
-          (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
-          {block-after-built-in-props :block deadline-properties-tx :properties-tx}
-          (update-block-deadline-and-scheduled db block page-names-to-uuids options)
-          {block-after-assets :block :keys [asset-blocks-tx]}
-          (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))
-          ;; :block/page should be [:block/page NAME]
+   walked-ast-blocks options]
+  (let [{:keys [block properties-tx]}
+        (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
+        {block-after-built-in-props :block deadline-properties-tx :properties-tx}
+        (update-block-deadline-and-scheduled db block page-names-to-uuids options)]
+    {:block-after-built-in-props block-after-built-in-props
+     :properties-tx (concat properties-tx deadline-properties-tx)}))
 
-          journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
-          prepared-block (cond-> block-after-assets
-                           journal-page-created-at
-                           (assoc :block/created-at journal-page-created-at))
-          block' (-> prepared-block
-                     (fix-pre-block-references pre-blocks page-names-to-uuids)
-                     (fix-block-name-lookup-ref page-names-to-uuids)
-                     (update-block-refs page-names-to-uuids)
-                     dissoc-nil-block-refs
-                     (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                     (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
-                     (handle-quotes (select-keys options [:log-fn]))
-                     (handle-math)
-                     (update-block-marker db options)
-                     (update-block-priority options)
-                     (add-missing-timestamps options)
-                     (dissoc :block/format :block.temp/ast-blocks)
-                  ;;  ((fn [x] (prn ::block-out x) x))
-                     )]
-    (let [[final-block code-children-tx] (handle-code-blocks block' options)]
-      ;; Order matters as previous txs are referenced in block
-      (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
+(defn- complete-block-tx-data
+  [db block* block-after-assets pre-blocks per-file-state walked-ast-blocks
+   {:keys [import-state journal-created-ats] :as options}
+   {:keys [properties-tx]} asset-blocks-tx]
+  (let [{:keys [page-names-to-uuids]} per-file-state
+        journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
+        prepared-block (cond-> block-after-assets
+                         journal-page-created-at
+                         (assoc :block/created-at journal-page-created-at))
+        block' (-> prepared-block
+                   (fix-pre-block-references pre-blocks page-names-to-uuids)
+                   (fix-block-name-lookup-ref page-names-to-uuids)
+                   (update-block-refs page-names-to-uuids)
+                   dissoc-nil-block-refs
+                   (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
+                   (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
+                   (handle-quotes (select-keys options [:log-fn]))
+                   (handle-math)
+                   (update-block-marker db options)
+                   (update-block-priority options)
+                   (add-missing-timestamps options)
+                   (dissoc :block/format :block.temp/ast-blocks))
+        [final-block code-children-tx] (handle-code-blocks block' options)]
+    (concat properties-tx asset-blocks-tx [final-block] code-children-tx)))
+
+(defn- import-progress!
+  [options m]
+  (import-profile/set-import-progress! options m)
+  nil)
+
+(defn- build-block-tx-sync
+  [db block* pre-blocks per-file-state walked-ast-blocks options]
+  (let [core (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)]
+    (complete-block-tx-data db block* (:block-after-built-in-props core) pre-blocks per-file-state
+                            walked-ast-blocks options core nil)))
+
+(defn- <build-block-tx
+  [db block* pre-blocks per-file-state walked-ast-blocks options]
+  (let [core (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)]
+    (if (seq (:asset-links walked-ast-blocks))
+      (p/let [{block-after-assets :block :keys [asset-blocks-tx]}
+              (<handle-assets-in-block (:block-after-built-in-props core)
+                                      walked-ast-blocks
+                                      (:import-state options)
+                                      (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))]
+        (complete-block-tx-data db block* block-after-assets pre-blocks per-file-state
+                                  walked-ast-blocks options core asset-blocks-tx))
+      (p/resolved (complete-block-tx-data db block* (:block-after-built-in-props core) pre-blocks
+                                          per-file-state walked-ast-blocks options core nil)))))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
@@ -2040,6 +2064,15 @@
                  (conj parents' current-parent))
           (vec (reverse parents')))))))
 
+(defn- page-name-lookup-key
+  [p classes-from-property-parents all-existing-page-uuids]
+  (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
+                            (contains? (:block/tags p) :logseq.class/Page))
+                       (not (contains? classes-from-property-parents (:block/title p)))
+                       (get-page-parents p all-existing-page-uuids))]
+    (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
+    (:block/name p)))
+
 (defn- get-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
@@ -2047,19 +2080,36 @@
   [classes-from-property-parents all-existing-page-uuids]
   (->> all-existing-page-uuids
        (map (fn [[_ p]]
-              (vector
-               (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
-                                         (contains? (:block/tags p) :logseq.class/Page))
-                                    ;; These classes have parents now but don't in file graphs (and in extract)
-                                     (not (contains? classes-from-property-parents (:block/title p)))
-                                     (get-page-parents p all-existing-page-uuids))]
-                ;; Build a :block/name for namespace pages that matches data from extract/extract
-                 (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
-                 (:block/name p))
+              [(page-name-lookup-key p classes-from-property-parents all-existing-page-uuids)
                (or (:block/uuid p)
                    (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
-                                   (select-keys p [:block/name :block/tags])))))))
+                                   (select-keys p [:block/name :block/tags]))))]))
        (into {})))
+
+(defn- get-page-names-to-uuids
+  [{:keys [classes-from-property-parents all-existing-page-uuids] :as import-state}]
+  (get-all-existing-page-uuids @classes-from-property-parents @all-existing-page-uuids))
+
+(defn- index-walked-ast-blocks
+  [user-config blocks]
+  (into {}
+        (map (fn [block]
+               [(:block/uuid block)
+                (walk-ast-blocks user-config (:block.temp/ast-blocks block))]))
+        blocks))
+
+(defn- block-has-asset-links?
+  [walked-by-uuid block]
+  (seq (:asset-links (get walked-by-uuid (:block/uuid block)))))
+
+(defn- block-uuid-ref?
+  [ref]
+  (and (vector? ref)
+       (= :block/uuid (first ref))))
+
+(defn- block-uuid-index
+  [ref]
+  {:block/uuid (second ref)})
 
 (defn- journal-file-title
   [path]
@@ -2232,8 +2282,7 @@
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
-        all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
-                                                             @(:all-existing-page-uuids import-state))
+        all-existing-page-uuids (get-page-names-to-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         all-new-page-uuids (->> all-pages
                                 (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
@@ -2364,7 +2413,9 @@
    :assets (atom {})
    ;; Map from alias-page-name (string) to canonical-page-name (string) for duplicate-owner detection.
    ;; Populated as files are imported and used to drop conflicting alias declarations.
-   :alias-owners (atom {})})
+   :alias-owners (atom {})
+   ;; Block uuids referenced during import; used for targeted missing-ref cleanup.
+   :placeholder-ref-uuids (atom #{})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
@@ -2540,7 +2591,6 @@
   "If a page/class tx is an existing property or a new or existing class, ensure that
   it only has one tag by removing :logseq.class/Page from its tx"
   [db pages-tx' classes-tx existing-pages]
-  ;; TODO: Improve perf if we tracked all created classes in atom
   (let [existing-classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                               (map #(d/entity db (:e %)))
                               (map :block/uuid)
@@ -2577,26 +2627,33 @@
   (when-let [nodes (seq (filter :block/name txs))]
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
+(defn- track-placeholder-ref-uuids!
+  [{:keys [placeholder-ref-uuids] :as _import-state} blocks-tx]
+  (when-let [ref-uuids (seq (into #{}
+                                  (comp (mapcat :block/refs)
+                                        (filter block-uuid-ref?)
+                                        (map second))
+                                  blocks-tx))]
+    (swap! placeholder-ref-uuids into ref-uuids)))
+
 (defn- <build-blocks-tx
-  [conn blocks pre-blocks per-file-state tx-options]
-  (p/loop [tx-data []
-           blocks (->> blocks
-                       (remove :block/pre-block?)
-                       (map #(dissoc % :block/pre-block?)))]
-    (if-let [block (first blocks)]
-      (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
-                                             tx-options)]
-        (p/recur (into tx-data block-tx-data) (rest blocks)))
-      tx-data)))
-
-(defn- block-uuid-ref?
-  [ref]
-  (and (vector? ref)
-       (= :block/uuid (first ref))))
-
-(defn- block-uuid-index
-  [ref]
-  {:block/uuid (second ref)})
+  [conn blocks pre-blocks per-file-state tx-options walked-by-uuid]
+  (let [blocks' (->> blocks
+                     (remove :block/pre-block?)
+                     (map #(dissoc % :block/pre-block?)))]
+    (p/loop [tx-data []
+             blocks blocks']
+      (if-let [block (first blocks)]
+        (if (block-has-asset-links? walked-by-uuid block)
+          (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
+                                                 (get walked-by-uuid (:block/uuid block))
+                                                 tx-options)]
+            (p/recur (into tx-data block-tx-data) (rest blocks)))
+          (p/recur (into tx-data (build-block-tx-sync @conn block pre-blocks per-file-state
+                                                    (get walked-by-uuid (:block/uuid block))
+                                                    tx-options))
+                   (rest blocks)))
+        tx-data))))
 
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -2613,31 +2670,45 @@
                       :or {notify-user #(println "[WARNING]" (:msg %))
                            log-fn prn}
                       :as *options}]
-  (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
+  (p/let [file-start (import-profile/now-ms)
+          options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
+          _ (import-progress! options {:phase :parse :file file})
+          parse-start (import-profile/now-ms)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          _ (import-profile/log-phase! log-fn :parse parse-start {:file file})
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
+          walked-by-uuid (index-walked-ast-blocks (or (:user-config options)
+                                                      (get-in options [:extract-options :user-config])
+                                                      {})
+                                                blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
-          ;; Build page and block txs
+          _ (import-progress! options {:phase :pages-tx :file file})
+          pages-start (import-profile/now-ms)
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
+          _ (import-profile/log-phase! log-fn :pages-tx pages-start {:file file})
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-          blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
+          _ (import-progress! options {:phase :blocks-tx :file file})
+          blocks-start (import-profile/now-ms)
+          blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
+          _ (import-profile/log-phase! log-fn :blocks-tx blocks-start {:file file
+                                                                       :blocks (count blocks)})
+          _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
-          ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
-          ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-          ;; Missing block references remain temporary UUID-only entities until post-import cleanup.
           tx-meta {::imported-data? true ::path file ::new-graph? true}
-          main-props-tx-report (ldb/transact! conn property-pages-tx tx-meta)
-          _ (save-from-tx property-pages-tx options)
-
+          _ (import-progress! options {:phase :property-transact :file file})
+          _ (when (seq property-pages-tx)
+              (ldb/transact! conn property-pages-tx tx-meta))
+          _ (when (seq property-pages-tx)
+              (save-from-tx property-pages-tx options))
           classes-tx @(:classes-tx tx-options)
-          {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
+          {:keys [retract-page-tags-tx] pages-tx'' :pages-tx}
+          (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
           custom-status-tx @(:custom-status-tx tx-options)
-          ;; Build indices
           pages-index (into [] (comp (map #(select-keys % [:block/uuid]))
                                      (distinct))
                             (concat pages-tx'' classes-tx))
@@ -2650,29 +2721,26 @@
                                         (filter block-uuid-ref?)
                                         (map block-uuid-index))
                                blocks-tx)
-          ;; To prevent "unique constraint" on datascript
           blocks-index (set/union (set block-ids) (set block-refs-ids) (set block-link-ids))
-          ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
-          ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
           tx' (into [] (comp cat (remove nil?))
                     [pages-index page-properties-tx property-page-properties-tx pages-tx''
                      classes-tx' custom-status-tx blocks-index blocks-tx])
-          ;; _ (prn :tx-counts (map #(vector %1 (count %2))
-          ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
-          ;;                        [pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
-          ;; _ (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'})
+          _ (import-progress! options {:phase :transact :file file})
+          transact-start (import-profile/now-ms)
           main-tx-report (ldb/transact! conn tx' tx-meta)
           _ (save-from-tx tx' options)
-
+          _ (import-profile/log-phase! log-fn :transact transact-start {:file file
+                                                                       :tx-count (count tx')})
+          _ (import-progress! options {:phase :upstream-properties :file file})
           upstream-properties-tx
           (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-          ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
           upstream-tx-report (when (seq upstream-properties-tx)
                                (ldb/transact! conn upstream-properties-tx tx-meta))
-          _ (save-from-tx upstream-properties-tx options)]
+          _ (when (seq upstream-properties-tx)
+              (save-from-tx upstream-properties-tx options))
+          _ (import-profile/log-phase! log-fn :file file-start {:file file})]
 
-    ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
-    [main-props-tx-report main-tx-report upstream-tx-report]))
+    [main-tx-report upstream-tx-report]))
 
 ;; Higher level export fns
 ;; =======================
@@ -2685,6 +2753,10 @@
                         (<add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
     :as options}]
   ;; (prn :export-doc-file path idx)
+  (import-progress! options {:step :doc-files
+                             :phase :read-file
+                             :file path
+                             :file-idx (inc idx)})
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
@@ -2719,56 +2791,64 @@
   (and (:block/uuid entity)
        (nil? (:block/title entity))))
 
+(defn- missing-placeholder-ref-datoms
+  [db attr candidate-ref-uuids]
+  (if (seq candidate-ref-uuids)
+    (mapcat (fn [ref-uuid]
+              (when-let [ref-id (some-> (d/entity db [:block/uuid ref-uuid]) :db/id)]
+                (when (placeholder-block-ref? (d/entity db ref-id))
+                  (for [datom (d/datoms db :avet attr ref-id)]
+                    {:source-id (:e datom)
+                     :ref-id ref-id
+                     :ref-uuid ref-uuid}))))
+            candidate-ref-uuids)
+    (->> (d/datoms db :aevt attr)
+         (keep (fn [datom]
+                 (let [ref-entity (d/entity db (:v datom))]
+                   (when (placeholder-block-ref? ref-entity)
+                     {:source-id (:e datom)
+                      :ref-id (:v datom)
+                      :ref-uuid (:block/uuid ref-entity)})))))))
+
 (defn- cleanup-missing-block-refs-tx
-  [db]
-  (let [missing-ref-datoms
-        (->> (d/datoms db :aevt :block/refs)
-             (keep (fn [datom]
-                     (let [ref-entity (d/entity db (:v datom))]
-                       (when (placeholder-block-ref? ref-entity)
-                         {:source-id (:e datom)
-                          :ref-id (:v datom)
-                          :ref-uuid (:block/uuid ref-entity)})))))
-        missing-link-datoms
-        (->> (d/datoms db :aevt :block/link)
-             (keep (fn [datom]
-                     (let [ref-entity (d/entity db (:v datom))]
-                       (when (placeholder-block-ref? ref-entity)
-                         {:source-id (:e datom)
-                          :ref-id (:v datom)
-                          :ref-uuid (:block/uuid ref-entity)})))))
-        refs-by-source-id (group-by :source-id missing-ref-datoms)
-        retract-ref-tx
-        (mapcat (fn [[source-id refs]]
-                  (map (fn [{:keys [ref-id]}]
-                         [:db/retract source-id :block/refs ref-id])
-                       refs))
-                refs-by-source-id)
-        retract-link-tx
-        (map (fn [{:keys [source-id ref-id]}]
-               [:db/retract source-id :block/link ref-id])
-             missing-link-datoms)
-        update-title-tx
-        (keep (fn [[source-id refs]]
-                (let [source (d/entity db source-id)
-                      title (:block/title source)
-                      title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
-                  (when (and (string? title') (not= title title'))
-                    [:db/add source-id :block/title title'])))
-              refs-by-source-id)
-        retract-placeholder-tx
-        (->> (concat missing-ref-datoms missing-link-datoms)
-             (map (juxt :ref-id :ref-uuid))
-             distinct
-             (map (fn [[ref-id ref-uuid]]
-                    [:db/retract ref-id :block/uuid ref-uuid])))]
-    (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx)))
+  ([db] (cleanup-missing-block-refs-tx db nil))
+  ([db candidate-ref-uuids]
+   (let [missing-ref-datoms (missing-placeholder-ref-datoms db :block/refs candidate-ref-uuids)
+         missing-link-datoms (missing-placeholder-ref-datoms db :block/link candidate-ref-uuids)
+         refs-by-source-id (group-by :source-id missing-ref-datoms)
+         retract-ref-tx
+         (mapcat (fn [[source-id refs]]
+                   (map (fn [{:keys [ref-id]}]
+                          [:db/retract source-id :block/refs ref-id])
+                        refs))
+                 refs-by-source-id)
+         retract-link-tx
+         (map (fn [{:keys [source-id ref-id]}]
+                [:db/retract source-id :block/link ref-id])
+              missing-link-datoms)
+         update-title-tx
+         (keep (fn [[source-id refs]]
+                 (let [source (d/entity db source-id)
+                       title (:block/title source)
+                       title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
+                   (when (and (string? title') (not= title title'))
+                     [:db/add source-id :block/title title'])))
+               refs-by-source-id)
+         retract-placeholder-tx
+         (->> (concat missing-ref-datoms missing-link-datoms)
+              (map (juxt :ref-id :ref-uuid))
+              distinct
+              (map (fn [[ref-id ref-uuid]]
+                     [:db/retract ref-id :block/uuid ref-uuid])))]
+     (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx))))
 
 (defn- cleanup-missing-block-refs!
-  [conn]
-  (let [tx (cleanup-missing-block-refs-tx @conn)]
-    (when (seq tx)
-      (ldb/transact! conn tx {::imported-data? true}))))
+  ([conn] (cleanup-missing-block-refs! conn nil))
+  ([conn import-state]
+   (let [candidate-ref-uuids (when import-state @(:placeholder-ref-uuids import-state))
+         tx (cleanup-missing-block-refs-tx @conn candidate-ref-uuids)]
+     (when (seq tx)
+       (ldb/transact! conn tx {::imported-data? true})))))
 
 (defn- journal-uuid-normalizations
   [db]
@@ -2840,6 +2920,7 @@
                                     on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
+  (import-progress! options {:step :doc-files :total-files (count *doc-files)})
   (let [doc-files (mapv #(assoc %1 :idx %2)
                         ;; Sort files to ensure reproducible import behavior
                         ;; pdf annotation pages sort first because other pages depend on them
@@ -2854,9 +2935,11 @@
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/then (fn [_]
-                  (p/let [normalize-tx-report (normalize-journal-uuids! conn)
+                  (p/let [_ (import-progress! options {:phase :normalize-journal-uuids})
+                          normalize-tx-report (normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
-                          cleanup-tx-report (cleanup-missing-block-refs! conn)
+                          _ (import-progress! options {:phase :cleanup-missing-block-refs})
+                          cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
                           _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
                     cleanup-tx-report)))
         (p/catch (fn [e]
@@ -2970,7 +3053,7 @@
 
 (defn- read-and-copy-asset-files
   "Reads and copies files under assets/"
-  [*asset-files <read-and-copy-asset-file {:keys [notify-user set-ui-state assets rpath-key]
+  [*asset-files <read-and-copy-asset-file {:keys [notify-user set-ui-state assets rpath-key import-watchdog]
                                            :or {set-ui-state (constantly nil)}}]
   (assert <read-and-copy-asset-file "read-and-copy-asset-file fn required")
   (let [asset-files (let [assets (if (keyword? rpath-key)
@@ -2980,7 +3063,13 @@
                             ;; Sort files to ensure reproducible import behavior
                             (sort-by :path assets)
                             (range 0 (count assets))))
-        read-and-copy-asset (fn read-and-copy-asset [{:keys [path] :as file}]
+        read-and-copy-asset (fn read-and-copy-asset [{:keys [path idx] :as file}]
+                              (import-profile/set-import-progress! {:import-watchdog import-watchdog}
+                                                                   {:step :assets
+                                                                    :phase :read-and-copy
+                                                                    :file path
+                                                                    :file-idx (inc idx)
+                                                                    :total-files (count asset-files)})
                               (-> (<read-and-copy-asset-file
                                    file assets
                                    (fn [buffer]
@@ -3077,7 +3166,8 @@
        :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
-      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report]))))
+      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
+                                   :import-watchdog :log-fn :import-timeout-ms :import-heartbeat-ms]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
@@ -3116,54 +3206,70 @@
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<read-and-copy-asset - fn which reads and copies asset file
+   * :import-timeout-ms - optional total import timeout in ms; enables heartbeat debug logs
+   * :import-heartbeat-ms - optional heartbeat interval in ms (default 5000)
 
    Note: See export-doc-files for additional options that are only for it"
-  [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn]
+  [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn import-timeout-ms import-heartbeat-ms]
                                          :or {rpath-key :path log-fn println}
                                          :as options}]
-  (reset! gp-block/*export-to-db-graph? true)
-  (->
-   (p/let [config (export-config-file
-                   repo-or-conn config-file <read-file
-                   (-> (select-keys options [:notify-user :default-config :<save-config-file])
-                       (set/rename-keys {:<save-config-file :<save-file})))]
-     (let [files (common-config/remove-hidden-files *files config rpath-key)
-           ;; Path normalization is needed just for windows
-           normalized-rpath (fn [f]
-                              (some-> (get f rpath-key) path/path-normalize))
-           logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
-           asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
-           doc-files (->> files
-                          (remove #(or (logseq-file? %) (asset-file? %)))
-                          (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
-           asset-files (filter asset-file? files)
-           doc-options (build-doc-options config options)]
-       (log-fn "Importing" (count doc-files) "files ...")
-       ;; These export* fns are all the major export/import steps
-       (p/do!
-        (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
-                             (-> (select-keys options [:notify-user :<save-logseq-file])
-                                 (set/rename-keys {:<save-logseq-file :<save-file})))
-        ;; Assets are read first as doc-files need data from them to make Asset blocks.
-        (read-and-copy-asset-files asset-files
-                                   <read-and-copy-asset
-                                   (merge (select-keys options [:notify-user :set-ui-state :rpath-key])
-                                          {:assets (get-in doc-options [:import-state :assets])}))
-        (export-doc-files conn doc-files <read-file doc-options)
-        (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
-        (export-class-properties conn repo-or-conn)
-        (move-top-parent-pages-to-library conn repo-or-conn)
-        {:import-state (-> (:import-state doc-options)
-                           ;; don't leak full asset content (which could be large) out of this ns
-                           (dissoc :assets))
-         :files files})))
-   (p/finally (fn [_]
-                (reset! gp-block/*export-to-db-graph? false)))
-   (p/catch (fn [e]
-              (reset! gp-block/*export-to-db-graph? false)
-              (js/console.error e)
-              ((:notify-user options)
-               {:msg (str "Import has unexpected error:\n" (.-message e))
-                :level :error
-                :ex-data {:error e}})
-              (throw e)))))
+  (let [watchdog (when import-timeout-ms
+                   (import-profile/new-watchdog
+                    {:timeout-ms import-timeout-ms
+                     :heartbeat-ms import-heartbeat-ms
+                     :log-fn log-fn}))
+        options (cond-> options
+                  watchdog (assoc :import-watchdog watchdog))]
+    (reset! gp-block/*export-to-db-graph? true)
+    (-> (p/let [_ (import-progress! options {:step :config :phase :read-config})
+                config (export-config-file
+                        repo-or-conn config-file <read-file
+                        (-> (select-keys options [:notify-user :default-config :<save-config-file])
+                            (set/rename-keys {:<save-config-file :<save-file})))]
+          (let [files (common-config/remove-hidden-files *files config rpath-key)
+                ;; Path normalization is needed just for windows
+                normalized-rpath (fn [f]
+                                   (some-> (get f rpath-key) path/path-normalize))
+                logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
+                asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
+                doc-files (->> files
+                               (remove #(or (logseq-file? %) (asset-file? %)))
+                               (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
+                asset-files (filter asset-file? files)
+                doc-options (build-doc-options config options)]
+            (log-fn "Importing" (count doc-files) "files ...")
+            ;; These export* fns are all the major export/import steps
+            (p/do!
+             (import-progress! doc-options {:step :logseq-files})
+             (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
+                                  (-> (select-keys options [:notify-user :<save-logseq-file])
+                                      (set/rename-keys {:<save-logseq-file :<save-file})))
+             ;; Assets are read first as doc-files need data from them to make Asset blocks.
+             (import-progress! doc-options {:step :assets})
+             (read-and-copy-asset-files asset-files
+                                        <read-and-copy-asset
+                                        (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
+                                               {:assets (get-in doc-options [:import-state :assets])}))
+             (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
+             (export-doc-files conn doc-files <read-file doc-options)
+             (import-progress! doc-options {:step :favorites})
+             (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
+             (import-progress! doc-options {:step :class-properties})
+             (export-class-properties conn repo-or-conn)
+             (import-progress! doc-options {:step :move-to-library})
+             (move-top-parent-pages-to-library conn repo-or-conn)
+             {:import-state (-> (:import-state doc-options)
+                                ;; don't leak full asset content (which could be large) out of this ns
+                                (dissoc :assets))
+              :files files})))
+        (import-profile/with-import-watchdog watchdog)
+        (p/finally (fn [_]
+                     (reset! gp-block/*export-to-db-graph? false)))
+        (p/catch (fn [e]
+                   (reset! gp-block/*export-to-db-graph? false)
+                   (js/console.error e)
+                   ((:notify-user options)
+                    {:msg (str "Import has unexpected error:\n" (.-message e))
+                     :level :error
+                     :ex-data {:error e}})
+                   (throw e))))))
