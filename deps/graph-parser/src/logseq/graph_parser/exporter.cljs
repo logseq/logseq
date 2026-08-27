@@ -3261,6 +3261,13 @@
     :number (parse-double value)
     value))
 
+(defn- bulk-ignored-property-value
+  [property-type value]
+  (case property-type
+    :node (set (bulk-page-ref-values value))
+    :number (parse-double value)
+    value))
+
 (defn- bulk-tag-values
   [tags]
   (when (string? tags)
@@ -3281,14 +3288,42 @@
         (mapcat (fn [{:keys [property-pairs]}]
                   (remove #(contains? #{:title :tags} (first %)) property-pairs))
                 simple-files)
-        property-pairs (remove (fn [[_property-name _property-title value]]
-                                 (string/blank? value))
-                               all-property-pairs)
-        values-by-property
-        (reduce (fn [result [property-name _property-title value]]
-                  (update result property-name (fnil conj []) value))
-                {}
-                property-pairs)
+        property-plans
+        (reduce-kv
+         (fn [plans file-index {:keys [property-pairs]}]
+           (reduce
+            (fn [plans [property-name _property-title value]]
+              (if (or (contains? #{:title :tags} property-name)
+                      (string/blank? value))
+                plans
+                (let [value-type (bulk-property-type [value])
+                      previous-type (get-in plans [property-name :type])
+                      accept-value #(-> %
+                                        (assoc-in [property-name :type]
+                                                  (or previous-type value-type))
+                                        (update-in [property-name :file-indexes]
+                                                   (fnil conj #{}) file-index))]
+                  (cond
+                    (or (nil? previous-type)
+                        (= previous-type value-type)
+                        (= :default previous-type))
+                    (accept-value plans)
+
+                    (= :default value-type)
+                    (-> (accept-value plans)
+                        (assoc-in [property-name :type] :default))
+
+                    :else
+                    (update-in plans [property-name :ignored-properties]
+                               (fnil conj [])
+                               {:property property-name
+                                :value (bulk-ignored-property-value value-type value)
+                                :schema {:type {:from previous-type
+                                                :to value-type}}})))))
+            plans
+            property-pairs))
+         {}
+         simple-files)
         all-property-titles
         (reduce (fn [result [property-name property-title _value]]
                   (if (contains? result property-name)
@@ -3298,10 +3333,10 @@
                 all-property-pairs)
         empty-property-titles
         (keep (fn [[property-name property-title]]
-                (when-not (contains? values-by-property property-name)
+                (when-not (contains? property-plans property-name)
                   property-title))
               all-property-titles)
-        property-types (update-vals values-by-property bulk-property-type)
+        property-types (update-vals property-plans :type)
         property-schemas
         (update-vals property-types
                      #(cond-> {:logseq.property/type %}
@@ -3319,11 +3354,15 @@
                            (mapcat #(bulk-tag-values (get-in % [:properties :tags]))
                                    simple-files))
         pages-and-blocks
-        (mapv (fn [{:keys [properties]}]
+        (mapv (fn [file-index {:keys [properties]}]
                 (let [user-properties
                       (into {}
                             (keep (fn [[property-name value]]
-                                    (when-not (string/blank? value)
+                                    (when (and (not (string/blank? value))
+                                               (contains?
+                                                (get-in property-plans
+                                                        [property-name :file-indexes])
+                                                file-index))
                                       [property-name
                                        (bulk-property-value (property-types property-name) value)])))
                             (dissoc properties :title :tags))
@@ -3331,6 +3370,7 @@
                   {:page (cond-> {:block/title (:title properties)
                                   :build/properties user-properties}
                            (seq page-tags) (assoc :build/tags page-tags))}))
+              (range)
               simple-files)]
     {:build-options {:pages-and-blocks pages-and-blocks
                      :properties properties
@@ -3341,6 +3381,7 @@
                      :extract-content-refs? false
                      :translate-property-values? true}
      :property-schemas property-schemas
+     :ignored-properties (mapcat :ignored-properties (vals property-plans))
      :ordinary-page-titles (cond-> (vec empty-property-titles)
                              (seq tag-titles) (conj "Tags"))}))
 
@@ -3683,7 +3724,8 @@
                  (set-ui-state [:graph/importing-state :phase] :building-graph)))
             _ (when (seq simple-files)
                 (let [extract-started (extract/performance-now-ms)
-                      {:keys [build-options property-schemas ordinary-page-titles]}
+                      {:keys [build-options property-schemas ignored-properties
+                              ordinary-page-titles]}
                       (build-simple-page-property-options simple-files)
                       _ (extract/record-performance!
                          options :extract-normalize extract-started
@@ -3711,7 +3753,8 @@
                   (reset! conn db)
                   (swap! (::file-import-batch-tx-data options) into new-datoms)
                   (seed-simple-page-property-import-state!
-                   import-state property-schemas (into init-tx block-props-tx))))
+                   import-state property-schemas (into init-tx block-props-tx))
+                  (swap! (:ignored-properties import-state) into ignored-properties)))
             fallback-result (if (seq fallback-files)
                               (export-doc-files conn fallback-files <read-file
                                                 (assoc options :set-ui-state (constantly nil)))

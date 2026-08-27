@@ -2784,12 +2784,14 @@
     :file/content (str "title:: Library\n"
                        "rating:: 5\n"
                        "score:: 5.9   \n"
+                       "mixed-link:: https://example.com/item\n"
                        "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
                        "score:: -6.8\n"
+                       "mixed-link:: 5\n"
                        "tagline:: A story\n"
                        "cast:: [[Ada]]")}
    {:path "pages/genres.md"
@@ -2834,6 +2836,8 @@
     (is (and (empty? canonical-only) (empty? bulk-only))
         (pr-str {:canonical-only (take 20 canonical-only)
                  :bulk-only (take 20 bulk-only)}))
+    (is (= (get-in canonical-result [:import-state :ignored-properties])
+           (get-in result [:import-state :ignored-properties])))
     (is (= [library-id] library-ids))
     (is (= library-id (:db/id library-after)))
     (is (= library-uuid (:block/uuid library-after)))
