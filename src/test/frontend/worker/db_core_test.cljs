@@ -1056,7 +1056,8 @@
                                                         (when (= repo test-repo)
                                                           vector-index))]
             (-> (p/let [result (js/Promise.race
-                                 #js [(build-index! test-repo search-db conn build-id)
+                                 #js [(build-index! test-repo search-db conn build-id
+                                                    {:import-rebuild? true})
                                       (p/delay 50 ::timeout)])
                         _ (<wait-for-progress! progress-calls
                                                (fn [calls]
@@ -1237,24 +1238,41 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
-(deftest search-build-blocks-indice-in-worker-skips-rebuild-when-fts-current-and-vector-metadata-mismatches-test
+(deftest search-build-blocks-indice-in-worker-refreshes-stale-vector-index-test
   (async done
     (->
      (restoring-worker-state
       (fn []
         (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
               conn (d/create-conn db-schema/schema)
+              page-id (random-uuid)
               search-db (fake-db {:user-version search-handler/search-db-version})
-              truncate-calls (atom 0)
+              fts-truncate-calls (atom 0)
+              vector-truncate-calls (atom 0)
+              embedding-fails? (atom true)
+              embedding-attempts (atom [])
               metadata-writes (atom [])
+              vector-builds (deref #'search-handler/*vector-index-rebuild-ids)
               idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
-          (d/transact! conn [{:block/uuid (random-uuid)}])
-          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (d/transact! conn [{:block/uuid page-id
+                              :block/name "page"
+                              :block/title "Page"}
+                             {:block/uuid (random-uuid)
+                              :block/title "Block"
+                              :block/page [:block/uuid page-id]}])
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :embed-texts (fn [texts]
+                            (swap! embedding-attempts conj @embedding-fails?)
+                            (if @embedding-fails?
+                              (p/rejected (js/Error. "embedding unavailable"))
+                              (p/resolved (mapv (fn [_] [0.0]) texts))))}))
           (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
           (reset! worker-state/*datascript-conns {test-repo conn})
           (reset! worker-state/*vector-indexes
                   {test-repo {:upsert! (fn [_docs] nil)
-                              :truncate! (fn [] (swap! truncate-calls inc))
+                              :truncate! (fn [] (swap! vector-truncate-calls inc))
                               :metadata (fn []
                                           {:embedding-model-id "old-model"
                                            :embedding-dimension search/vector-embedding-dimension
@@ -1264,18 +1282,33 @@
           (reset! idle-status-atom {test-repo {:idle? true
                                                :ts (.now js/Date)}})
           (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
-          (with-redefs [search/truncate-table! (fn [_db] nil)
+          (with-redefs [search/truncate-table! (fn [_db]
+                                                 (swap! fts-truncate-calls inc))
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
                         search/block->index (fn [_entity & _opts]
                                               {:id "block-1"
                                                :page "page-1"
-                                               :title "Hello"})]
-            (p/let [result (build-index! test-repo false)
-                    _ (p/delay 10)]
-              (is (= search-handler/search-db-version result))
-              (is (= 0 @truncate-calls))
-              (is (empty? @metadata-writes)))))))
+                                               :title "Hello"
+                                               :vector-title "Hello"})]
+            (p/let [first-result (build-index! test-repo false)
+                    _ (<wait-for-progress! vector-builds
+                                           #(not (contains? % test-repo))
+                                           100)
+                    _ (reset! embedding-fails? false)
+                    second-result (build-index! test-repo false)
+                    _ (<wait-for-progress! vector-builds
+                                           #(not (contains? % test-repo))
+                                           100)]
+              (is (= search-handler/search-db-version first-result second-result))
+              (is (= 0 @fts-truncate-calls))
+              (is (= 2 @vector-truncate-calls))
+              (is (some true? @embedding-attempts))
+              (is (some false? @embedding-attempts))
+              (is (= [{:embedding-model-id "test-model"
+                       :embedding-dimension search/vector-embedding-dimension
+                       :context-version search/vector-context-version}]
+                     @metadata-writes)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))

@@ -510,6 +510,7 @@
                         (reset! phase :search-index)
                         (search-handler/<rebuild-blocks-index!
                          repo {:entities (:entities validation-result)
+                               :rebuild-vector? false
                                :record-performance record-performance}))
                     _ (when (and record-performance (= :passed (:status validation)))
                         (record-performance {:phase :search-total
