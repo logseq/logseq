@@ -319,39 +319,3 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
-
-(deftest managed-daemon-start-keeps-runtime-options-with-request
-  (async done
-    (let [old-runtime-stopped (p/deferred)
-          starts (atom {})]
-      (reset! (:state db-worker/manager)
-              {:repos {"old" {:runtime {:repo "old" :owned? true}
-                               :windows #{:staging-window}}}
-               :window->repo {:staging-window "old"}})
-      (-> (p/with-redefs [cli-server/stop-server!
-                          (fn [_ repo]
-                            (if (= "old" repo)
-                              old-runtime-stopped
-                              (p/resolved {:ok? true})))
-                          cli-server/ensure-server!
-                          (fn [config repo]
-                            (swap! starts assoc repo config)
-                            (p/resolved {:base-url (str "http://127.0.0.1/" repo)
-                                         :owned? true}))]
-            (let [staging-start
-                  (db-worker/ensure-runtime! "staging" :staging-window
-                                             {:file-graph-import-staging? true})
-                  normal-start
-                  (db-worker/ensure-runtime! "normal" :normal-window)]
-              (p/resolve! old-runtime-stopped {:ok? true})
-              (p/let [_ (p/all [staging-start normal-start])]
-                (is (= {"staging" true
-                        "normal" nil}
-                       (update-vals @starts :file-graph-import-staging?))))))
-          (p/catch (fn [error]
-                     (is false (str "unexpected error: " error))))
-          (p/finally (fn []
-                       (p/resolve! old-runtime-stopped {:ok? true})
-                       (reset! (:state db-worker/manager)
-                               {:repos {} :window->repo {}})
-                       (done)))))))

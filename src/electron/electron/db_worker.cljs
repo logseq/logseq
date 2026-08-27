@@ -130,8 +130,8 @@
         (p/resolved true))
       (p/resolved false))))
 
-(defn- ensure-started-with!
-  [{:keys [state stop-daemon! runtime-ready?] :as manager} repo window-id start-daemon!]
+(defn ensure-started!
+  [{:keys [state start-daemon! stop-daemon! runtime-ready?] :as manager} repo window-id]
   (let [key (repo-key repo)]
     (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
             _ (when (and current-repo (not= current-repo key))
@@ -166,10 +166,6 @@
                                                      :windows #{window-id}})
                              (assoc-in [:window->repo window-id] key))))
           runtime)))))
-
-(defn ensure-started!
-  [manager repo window-id]
-  (ensure-started-with! manager repo window-id (:start-daemon! manager)))
 
 (defn- parse-runtime-lock
   [{:keys [base-url]}]
@@ -237,21 +233,21 @@
         (p/resolved true))
       (p/resolved false))))
 
+(defonce ^:private *runtime-opts (atom {}))
+
 (defn- start-managed-daemon!
-  ([repo]
-   (start-managed-daemon! repo {}))
-  ([repo runtime-opts]
-   (let [config (merge {:owner-source :electron}
-                       runtime-opts)]
-     (p/let [_ (when (seq (:embedding-endpoint config))
-                 (-> (cli-server/stop-server! config repo)
-                     (p/catch (fn [_] nil))))
-             config (cli-server/ensure-server! config
-                                               repo)]
-       {:repo repo
-        :base-url (:base-url config)
-        :auth-token nil
-        :owned? (:owned? config)}))))
+  [repo]
+  (let [config (merge {:owner-source :electron}
+                      @*runtime-opts)]
+    (p/let [_ (when (seq (:embedding-endpoint config))
+                (-> (cli-server/stop-server! config repo)
+                    (p/catch (fn [_] nil))))
+            config (cli-server/ensure-server! config
+                                            repo)]
+      {:repo repo
+       :base-url (:base-url config)
+       :auth-token nil
+       :owned? (:owned? config)})))
 
 (defn- stop-managed-daemon!
   [{:keys [repo]}]
@@ -268,8 +264,8 @@
   ([repo window-id]
    (ensure-started! manager repo window-id))
   ([repo window-id opts]
-   (ensure-started-with! manager repo window-id
-                         #(start-managed-daemon! % opts))))
+   (reset! *runtime-opts opts)
+   (ensure-started! manager repo window-id)))
 
 (defn release-window!
   [window-id]
