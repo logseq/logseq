@@ -3412,23 +3412,23 @@
 
 (deftest export-db-binary-checkpoint-failure-contract
   (async done
-    (restoring-worker-state
-     (fn []
-       (let [export-db! (get @thread-api/*thread-apis :thread-api/export-db-binary)
-             capture (fn [promise]
-                       (-> promise
-                           (p/then #(vector :resolved %))
-                           (p/catch #(vector :rejected %))))
-             db #js {:exec (fn [_]
-                             (throw (js/Error. "checkpoint failed")))}]
-         (reset! worker-state/*sqlite-conns {test-repo {:db db}})
-         (-> (p/let [[default-status] (capture (export-db! test-repo))
-                     [strict-status strict-error] (capture (export-db! test-repo true))]
-               (is (= :resolved default-status))
-               (is (= :rejected strict-status))
-               (is (= "checkpoint failed" (.-message strict-error))))
-             (p/catch #(is false (str "unexpected error: " %)))
-             (p/finally done)))))))
+    (-> (restoring-worker-state
+         (fn []
+           (let [export-db! (get @thread-api/*thread-apis :thread-api/export-db-binary)
+                 capture (fn [promise]
+                           (-> promise
+                               (p/then #(vector :resolved %))
+                               (p/catch #(vector :rejected %))))
+                 db #js {:exec (fn [_]
+                                 (throw (js/Error. "checkpoint failed")))}]
+             (reset! worker-state/*sqlite-conns {test-repo {:db db}})
+             (-> (p/let [[default-status] (capture (export-db! test-repo))
+                         [strict-status strict-error] (capture (export-db! test-repo true))]
+                   (is (= :resolved default-status))
+                   (is (= :rejected strict-status))
+                   (is (= "checkpoint failed" (.-message strict-error))))
+                 (p/catch #(is false (str "unexpected error: " %)))))))
+        (p/finally done))))
 
 ;; ---- list-db thread-api test ----
 
