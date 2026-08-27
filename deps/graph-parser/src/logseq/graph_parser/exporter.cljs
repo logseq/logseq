@@ -3736,9 +3736,7 @@
                               ::file-import-batch-tx-data *batch-tx-data
                               :on-tx-report (constantly nil))
                        export-result
-                       ((if (:simple-page-property-batch? options)
-                          <export-doc-files-with-simple-page-property-batch
-                          export-doc-files)
+                       (<export-doc-files-with-simple-page-property-batch
                         temp-conn doc-files <read-file export-options)]
                  (reset! result export-result))))]
       (when tx-report
@@ -3960,7 +3958,7 @@
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
-                                   :record-issue :recoverable-error? :rpath-key :simple-page-property-batch?
+                                   :record-issue :recoverable-error? :rpath-key
                                    :record-performance]))))
 
 (defn- move-top-parent-pages-to-library

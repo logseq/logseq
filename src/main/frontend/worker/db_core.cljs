@@ -432,7 +432,6 @@
                :record-issue #(swap! issues conj %)
                :recoverable-error? recoverable-file-import-error-codes
                :single-persistent-document-batch? true
-               :simple-page-property-batch? true
                :set-ui-state progress-reporter
                :log-fn (fn [& args]
                          (log/info :import-file-graph {:args args}))

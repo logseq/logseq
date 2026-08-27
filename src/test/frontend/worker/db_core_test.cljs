@@ -2881,7 +2881,7 @@
                               (fn [repo-or-conn target-conn config doc-files options]
                                 (export-file-graph
                                  repo-or-conn target-conn config doc-files
-                                 (assoc options :simple-page-property-batch? false)))]
+                                 (dissoc options :single-persistent-document-batch?)))]
                              (import-file-graph!
                               canonical-repo bulk-property-semantics-config-file
                               bulk-property-semantics-files
