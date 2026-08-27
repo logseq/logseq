@@ -2618,7 +2618,7 @@
                       :or {notify-user #(println "[WARNING]" (:msg %))
                            log-fn prn}
                       :as *options}]
-  (p/let [import-file (or (:file-import-path *options) file)
+  (p/let [import-file (or (:file *options) file)
           options (assoc *options :notify-user notify-user :log-fn log-fn :file import-file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn import-file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
@@ -2835,7 +2835,7 @@
               modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
               m {:file/path path :file/content content}
               export-options (cond-> (assoc (dissoc options :set-ui-state :<export-file)
-                                             :file-import-path (document-import-path file rpath-key))
+                                             :file (document-import-path file rpath-key))
                                created-at (assoc :file-created-at (.getTime created-at))
                                modified-at (assoc :file-updated-at (.getTime modified-at)))
               _ (<atomic-export-file conn m export-options <export-file)]
