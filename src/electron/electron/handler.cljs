@@ -240,8 +240,8 @@
      repo)))
 
 (defmethod handle :publishFileGraphImport [_window [_ staging-graph target-graph]]
-  (let [staging-repo (canonical-repo staging-graph)
-        target-repo (canonical-repo target-graph)]
+  (let [staging-repo staging-graph
+        target-repo target-graph]
     (p/let [_ (db-worker/release-repo! staging-repo)
             _ (db-worker/release-repo! target-repo)]
       (cli-common/publish-file-graph-import!
