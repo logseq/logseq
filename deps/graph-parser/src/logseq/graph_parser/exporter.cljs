@@ -1969,7 +1969,7 @@
     [final-block code-children-tx]))
 
 (defn- build-block-tx-core
-  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
+  [db block* _pre-blocks {:keys [page-names-to-uuids] :as _per-file-state}
    walked-ast-blocks options]
   (let [{:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
@@ -2087,7 +2087,7 @@
        (into {})))
 
 (defn- get-page-names-to-uuids
-  [{:keys [classes-from-property-parents all-existing-page-uuids] :as import-state}]
+  [{:keys [classes-from-property-parents all-existing-page-uuids]}]
   (get-all-existing-page-uuids @classes-from-property-parents @all-existing-page-uuids))
 
 (defn- index-walked-ast-blocks
