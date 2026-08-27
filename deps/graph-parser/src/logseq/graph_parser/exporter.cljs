@@ -3718,7 +3718,7 @@
                               {:issues []})]
       fallback-result)))
 
-(defn <export-doc-files-atomically
+(defn- <export-doc-files-atomically
   "Exports document files on one isolated connection and publishes the completed
   batch once. A recoverable file error restores that file's database savepoint
   before the remaining files continue."
