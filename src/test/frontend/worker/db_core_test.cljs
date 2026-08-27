@@ -3532,7 +3532,7 @@
                                    :preserve-staging?)))
                 (is (= 3 @import-count))))
              (p/catch #(is false (str "unexpected error: " %)))
-             (p/finally done)))))))
+             (p/finally #(complete-after-promise-finalizers! done))))))))
 
 ;; ---- list-db thread-api test ----
 
