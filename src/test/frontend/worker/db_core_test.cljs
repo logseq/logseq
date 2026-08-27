@@ -2791,6 +2791,7 @@
    {:path "pages/a-mixed.md"
     :file/content (str "title:: Mixed Fallback\n"
                        "ordered-value:: https://example.com/item\n"
+                       "rating:: 1\n"
                        "- body")}
    {:path "pages/b-mixed.md"
     :file/content (str "title:: Mixed Simple\n"
@@ -2852,6 +2853,12 @@
         bulk-only (set/difference bulk-datoms canonical-datoms)]
     (is (= :completed (:status result)))
     (is (= :completed (:status canonical-result)))
+    (is (= 3
+           (->> (:performance-events result)
+                (filter #(and (= :extract-normalize (:phase %))
+                              (= :simple-page-properties (:parser %))))
+                (keep :files)
+                (reduce + 0))))
     (is (and (empty? canonical-only) (empty? bulk-only))
         (pr-str {:canonical-only (take 20 canonical-only)
                  :bulk-only (take 20 bulk-only)}))
@@ -2910,10 +2917,11 @@
                    client-op/update-local-checksum (fn [& _] nil)
                    shared-service/broadcast-to-clients! (fn [& _] nil)]
                   (->
-                   (p/let [result (import-file-graph!
+                           (p/let [result (import-file-graph!
                                    test-repo bulk-property-semantics-config-file
                                    bulk-property-semantics-files
                                    {:run-id "identity-run"
+                                    :performance-diagnostics? true
                                     :user-options {}})
                            canonical-result
                            (p/with-redefs
