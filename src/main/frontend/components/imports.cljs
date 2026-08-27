@@ -433,6 +433,40 @@
                    :code (import-error-code error))
          nil))))
 
+(defn- <publish-file-graph-import!
+  [{:keys [run-id graph-name target-repo staging-repo phase published? terminal-result]}]
+  (p/let [staged-asset-issues (if (util/electron?)
+                                (do
+                                  (reset! phase :stage-assets)
+                                  (update-file-graph-import-progress!
+                                   run-id {:phase :publishing :percent 95})
+                                  (<write-staged-assets! staging-repo (:staged-assets terminal-result)))
+                                [])
+          _ (reset! phase :publish)
+          _ (update-file-graph-import-progress! run-id {:phase :publishing
+                                                        :percent 96})
+          _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
+          _ (reset! published? true)
+          _ (reset! phase :register-graph)
+          _ (update-file-graph-import-progress! run-id {:phase :finishing
+                                                        :percent 98})
+          repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+          _ (when-not (= target-repo repo)
+              (throw (ex-info "imported graph registration failed"
+                              {:code :import/graph-registration-failed
+                               :repo target-repo})))
+          written-asset-issues (if-not (util/electron?)
+                                 (do
+                                   (reset! phase :write-assets)
+                                   (<write-staged-assets! repo (:staged-assets terminal-result)))
+                                 [])
+          completed-result (file-graph-import/completed-result
+                            run-id
+                            (update terminal-result :issues into
+                                    (concat staged-asset-issues written-asset-issues)))]
+    (assoc completed-result :publication {:status :published
+                                          :repo repo})))
+
 (defn- <import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
@@ -472,37 +506,15 @@
             (p/let [_ (<discard-file-graph-import! run-id staging-repo)]
               (show-import-terminal-failure! terminal-result)
               terminal-result)
-            (p/let [staged-asset-issues (if (util/electron?)
-                                          (do
-                                            (reset! phase :stage-assets)
-                                            (update-file-graph-import-progress!
-                                             run-id {:phase :publishing :percent 95})
-                                            (<write-staged-assets! staging-repo (:staged-assets terminal-result)))
-                                          [])
-                    _ (reset! phase :publish)
-                    _ (update-file-graph-import-progress! run-id {:phase :publishing
-                                                                 :percent 96})
-                    _ (persist-db/<publish-file-graph-import! staging-repo target-repo)
-                    _ (reset! published? true)
-                    _ (reset! phase :register-graph)
-                    _ (update-file-graph-import-progress! run-id {:phase :finishing
-                                                                 :percent 98})
-                    repo (repo-handler/new-db! graph-name {:file-graph-import? true})
-                    _ (when-not (= target-repo repo)
-                        (throw (ex-info "imported graph registration failed"
-                                        {:code :import/graph-registration-failed
-                                         :repo target-repo})))
-                    written-asset-issues (if-not (util/electron?)
-                                           (do
-                                             (reset! phase :write-assets)
-                                             (<write-staged-assets! repo (:staged-assets terminal-result)))
-                                           [])
-                    terminal-result' (file-graph-import/completed-result
-                                      run-id
-                                      (update terminal-result :issues into
-                                              (concat staged-asset-issues written-asset-issues)))
-                    published-result (assoc terminal-result' :publication {:status :published
-                                                                           :repo repo})]
+            (p/let [published-result (<publish-file-graph-import!
+                                      {:run-id run-id
+                                       :graph-name graph-name
+                                       :target-repo target-repo
+                                       :staging-repo staging-repo
+                                       :phase phase
+                                       :published? published?
+                                       :terminal-result terminal-result})
+                    repo (get-in published-result [:publication :repo])]
               (reset! phase :terminal)
               (update-file-graph-import-progress! run-id {:phase :finishing :percent 100})
               (log/info :import-file-graph-finished true
