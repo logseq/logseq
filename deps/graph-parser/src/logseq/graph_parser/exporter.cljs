@@ -3355,7 +3355,7 @@
                            (mapcat #(bulk-tag-values (get-in % [:properties :tags]))
                                    simple-files))
         pages-and-blocks
-        (mapv (fn [file-index {:keys [properties]}]
+        (mapv (fn [file-index {:keys [file properties]}]
                 (let [user-properties
                       (into {}
                             (keep (fn [[property-name value]]
@@ -3367,9 +3367,11 @@
                                       [property-name
                                        (bulk-property-value (property-types property-name) value)])))
                             (dissoc properties :title :tags))
-                      page-tags (mapv keyword (bulk-tag-names (:tags properties)))]
+                      page-tags (mapv keyword (bulk-tag-names (:tags properties)))
+                      modified-at (:last-modified-at file)]
                   {:page (cond-> {:block/title (:title properties)
                                   :build/properties user-properties}
+                           modified-at (assoc :block/updated-at (.getTime modified-at))
                            (seq page-tags) (assoc :build/tags page-tags))}))
               (range)
               simple-files)]

@@ -2778,6 +2778,9 @@
   {:path "logseq/config.edn"
    :file/content "{:property/separated-by-commas #{:authors}}"})
 
+(def ^:private bulk-property-semantics-modified-at
+  (js/Date. "2021-06-07T08:09:10.000Z"))
+
 (def ^:private bulk-property-semantics-files
   [bulk-property-semantics-config-file
    {:path "pages/library.md"
@@ -2788,6 +2791,7 @@
                        "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
+    :last-modified-at bulk-property-semantics-modified-at
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
                        "score:: -6.8\n"
@@ -2819,6 +2823,8 @@
         authors-property (ldb/get-page @conn "authors")
         watched-property (ldb/get-page @conn "watched")
         metadata-page (ldb/get-page @conn "metadata")
+        film-page (ldb/get-page @conn "film")
+        canonical-film-page (ldb/get-page @canonical-conn "film")
         genres-page (ldb/get-page @conn "genres")
         cast-values (get library-after (:db/ident cast-property))
         authors-value (get metadata-page (:db/ident authors-property))
@@ -2838,6 +2844,9 @@
                  :bulk-only (take 20 bulk-only)}))
     (is (= (get-in canonical-result [:import-state :ignored-properties])
            (get-in result [:import-state :ignored-properties])))
+    (is (= (.getTime bulk-property-semantics-modified-at)
+           (:block/updated-at film-page)
+           (:block/updated-at canonical-film-page)))
     (is (= [library-id] library-ids))
     (is (= library-id (:db/id library-after)))
     (is (= library-uuid (:block/uuid library-after)))
