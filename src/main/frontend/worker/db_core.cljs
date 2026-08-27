@@ -495,24 +495,30 @@
                                 :errors (:errors validation-result)
                                 :invalid-entity-ids (:invalid-entity-ids validation-result)}
                     checksum-started (.now js/performance)
-                    _ (when (= :passed (:status validation))
+                    _ (when (and (= :passed (:status validation))
+                                 (node-runtime?))
                         (reset! phase :sync-checksum)
                         (progress-reporter {:phase :finalizing-data :percent 75})
                         (client-op/update-local-checksum
                          repo
                          (sync-checksum/recompute-checksum-from-entities
                           @conn (:entities validation-result))))
-                    _ (when (and record-performance (= :passed (:status validation)))
+                    _ (when (and record-performance
+                                 (= :passed (:status validation))
+                                 (node-runtime?))
                         (record-performance {:phase :sync-checksum
                                              :elapsed-ms (- (.now js/performance) checksum-started)}))
                     search-started (.now js/performance)
-                    _ (when (= :passed (:status validation))
+                    _ (when (and (= :passed (:status validation))
+                                 (node-runtime?))
                         (reset! phase :search-index)
                         (search-handler/<rebuild-blocks-index!
                          repo {:entities (:entities validation-result)
                                :rebuild-vector? false
                                :record-performance record-performance}))
-                    _ (when (and record-performance (= :passed (:status validation)))
+                    _ (when (and record-performance
+                                 (= :passed (:status validation))
+                                 (node-runtime?))
                         (record-performance {:phase :search-total
                                              :elapsed-ms (- (.now js/performance) search-started)}))]
               (if (= :failed (:status validation))
@@ -1124,6 +1130,17 @@
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
+
+(def-thread-api :thread-api/finalize-file-graph-import
+  [repo]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (p/let [_ (client-op/update-local-checksum
+               repo (sync-checksum/recompute-checksum @conn))
+            _ (search-handler/<rebuild-blocks-index! repo)]
+      nil)
+    (p/rejected (ex-info "graph not opened"
+                         {:code :graph-not-opened
+                          :repo repo}))))
 
 (def-thread-api :thread-api/import-file-graph
   [repo config-file files opts]

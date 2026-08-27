@@ -136,7 +136,7 @@
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-binary :thread-api/import-file-graph
+          :thread-api/export-db-binary :thread-api/import-file-graph :thread-api/finalize-file-graph-import
           :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
           :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
@@ -2685,6 +2685,7 @@
                   checksum-calls (atom [])]
               (is (fn? import-file-graph!))
               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (platform/set-platform! (build-test-platform {:runtime :node}))
               (reset! worker-state/*datascript-conns {test-repo conn})
               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
               (p/with-redefs
@@ -2730,6 +2731,35 @@
                  (p/finally (fn []
                               (reset! ldb/*transact-pipeline-fn pipeline-before)
                               (complete-after-promise-finalizers! done))))))))))
+
+(deftest finalize-file-graph-import-updates-checksum-and-search-index
+  (async done
+    (-> (restoring-worker-state
+         (fn []
+           (let [finalize! (get @thread-api/*thread-apis :thread-api/finalize-file-graph-import)
+                 conn (d/create-conn db-schema/schema)
+                 calls (atom [])]
+             (is (fn? finalize!))
+             (when (fn? finalize!)
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (p/with-redefs
+                 [sync-checksum/recompute-checksum
+                  (fn [db]
+                    (is (identical? @conn db))
+                    :expected-checksum)
+                  client-op/update-local-checksum
+                  (fn [repo checksum]
+                    (swap! calls conj [:checksum repo checksum]))
+                  search-handler/<rebuild-blocks-index!
+                  (fn [repo]
+                    (swap! calls conj [:search repo])
+                    (p/resolved nil))]
+                 (p/let [_ (finalize! test-repo)]
+                   (is (= [[:checksum test-repo :expected-checksum]
+                           [:search test-repo]]
+                          @calls))))))))
+        (p/catch #(is false (str "unexpected error: " %)))
+        (p/finally #(complete-after-promise-finalizers! done)))))
 
 (def ^:private bulk-property-semantics-config-file
   {:path "logseq/config.edn"

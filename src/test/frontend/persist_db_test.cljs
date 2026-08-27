@@ -1659,7 +1659,7 @@
                (= method :thread-api/export-db-binary) (p/resolved publication-payload)
                (= method :thread-api/close-db) (p/resolved nil)
                (= method :thread-api/import-db-binary) (p/resolved nil)
-               (= method :thread-api/search-build-blocks-indice-in-worker) (p/resolved nil)
+               (= method :thread-api/finalize-file-graph-import) (p/resolved nil)
                (= method :thread-api/unsafe-unlink-db)
                (cond
                  (and staging-cleanup-fails?
@@ -1680,7 +1680,7 @@
         (p/then (fn [result]
                   {:result result :calls @calls})))))
 
-(deftest browser-file-graph-publication-waits-for-search-index
+(deftest browser-file-graph-publication-waits-for-import-finalization
   (async done
     (-> (<run-browser-file-graph-publication {})
         (p/then
@@ -1690,8 +1690,7 @@
                  [:thread-api/export-db-binary [publication-staging-repo true]]
                    [:thread-api/close-db [publication-staging-repo]]
                    [:thread-api/import-db-binary [publication-target-repo publication-payload]]
-                   [:thread-api/search-build-blocks-indice-in-worker
-                    [publication-target-repo true true]]
+                   [:thread-api/finalize-file-graph-import [publication-target-repo]]
                    [:thread-api/unsafe-unlink-db [publication-staging-repo]]]
                   calls))))
         (p/catch #(is false (str "unexpected error: " %)))
@@ -1712,14 +1711,14 @@
   (async done
     (-> (p/let [import-failure (<run-browser-file-graph-publication
                                 {:failure-method :thread-api/import-db-binary})
-                search-failure (<run-browser-file-graph-publication
-                                {:failure-method
-                                 :thread-api/search-build-blocks-indice-in-worker})
+                finalize-failure (<run-browser-file-graph-publication
+                                  {:failure-method
+                                   :thread-api/finalize-file-graph-import})
                 rollback-failure (<run-browser-file-graph-publication
                                   {:failure-method
-                                   :thread-api/search-build-blocks-indice-in-worker
+                                   :thread-api/finalize-file-graph-import
                                    :target-cleanup-fails? true})]
-            (doseq [{:keys [result calls]} [import-failure search-failure]]
+            (doseq [{:keys [result calls]} [import-failure finalize-failure]]
               (is (= :rejected (:status result)))
               (is (some #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
                         calls))
