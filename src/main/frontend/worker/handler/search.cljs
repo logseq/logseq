@@ -371,53 +371,19 @@
     {:blocks blocks
      :import-index-context import-index-context}))
 
-(defn- vector-index-current?
-  [repo]
-  (if-let [vector-index (worker-state/get-vector-index repo)]
-    (when-let [metadata (:metadata vector-index)]
-      (= (expected-vector-index-metadata) (metadata)))
-    true))
-
-(defn- schedule-vector-index-refresh!
-  [repo conn]
-  (when (and (worker-state/get-vector-index repo)
-             (not (contains? @*vector-index-rebuild-ids repo)))
-    (let [build-id (str (random-uuid))]
-      (start-vector-index-rebuild! repo build-id)
-      (-> (p/delay 0)
-          (p/then
-           (fn []
-             (when (active-vector-index-rebuild? repo build-id)
-               (let [db @conn
-                     {:keys [blocks]} (prepare-block-index-input db nil nil)
-                     indexed-blocks (vec (keep #(search/block->index
-                                                 % {:include-vector-title? true})
-                                               blocks))]
-                 (search/truncate-vector-index! (worker-state/get-vector-index repo))
-                 (<rebuild-vector-index! repo build-id indexed-blocks)))))
-          (p/catch (fn [error]
-                     (when (active-vector-index-rebuild? repo build-id)
-                       (log/error :search/vector-index-refresh-failed {:repo repo
-                                                                       :error error}))))
-          (p/finally #(clear-vector-index-rebuild! repo build-id))))))
-
 (defn- <build-blocks-index!
-  "Build the FTS index in yielding batches and optionally schedule a vector-index rebuild.
-  Sets `user_version` when the FTS rebuild completes."
+  "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   ([repo search-db conn build-id]
    (<build-blocks-index! repo search-db conn build-id nil))
-  ([repo search-db conn build-id {:keys [batch-size entities import-rebuild? rebuild-vector?
-                                         record-performance time-budget-ms]
+  ([repo search-db conn build-id {:keys [batch-size entities import-rebuild? record-performance time-budget-ms]
                                   :or {batch-size search-index-build-batch-size
-                                       rebuild-vector? true
                                        time-budget-ms search-index-build-time-budget-ms}}]
    (ensure-active-search-index-build! repo build-id)
    (let [db @conn
          {:keys [blocks import-index-context]}
          (prepare-block-index-input db entities record-performance)
          total (count blocks)
-         vector-index (when rebuild-vector?
-                        (worker-state/get-vector-index repo))
+         vector-index (worker-state/get-vector-index repo)
          index-opts {:include-vector-title? (some? vector-index)}
          progress-for-fts (fn [processed]
                             (if (zero? total)
@@ -493,16 +459,18 @@
                                       :operation :fts-finalize
                                       :elapsed-ms (- (.now js/performance) started)
                                       :rows total}))))
-           (when vector-index
-             (schedule-vector-index-rebuild! repo build-id indexed-blocks))
-           (.exec search-db (str "PRAGMA user_version = " search-db-version))
-           (report-search-index-progress! repo {:build-id build-id
-                                                :status :completed
-                                                :stage :search-index
-                                                :progress 100
-                                                :processed total
-                                                :total total})
-           nil)))))))
+           (p/let [_ (if import-rebuild?
+                       (<rebuild-vector-index! repo build-id indexed-blocks)
+                       (schedule-vector-index-rebuild! repo build-id indexed-blocks))
+                   _ (do
+                       (.exec search-db (str "PRAGMA user_version = " search-db-version))
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :completed
+                                                            :stage :search-index
+                                                            :progress 100
+                                                            :processed total
+                                                            :total total}))]
+             nil))))))))
 
 (defn- <run-blocks-index-build!
   [repo search-db conn build-options]
@@ -524,8 +492,7 @@
                      (clear-search-index-build! repo build-id))))))
 
 (defn <rebuild-blocks-index!
-  [repo & [{:keys [entities rebuild-vector? record-performance]
-            :or {rebuild-vector? true}}]]
+  [repo & [{:keys [entities record-performance]}]]
   (p/let [search-db (get-search-db repo)
           conn (worker-state/get-datascript-conn repo)]
     (when (and search-db conn)
@@ -534,7 +501,6 @@
        {:batch-size import-search-index-build-batch-size
         :entities entities
         :import-rebuild? true
-        :rebuild-vector? rebuild-vector?
         :record-performance record-performance}))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
@@ -544,11 +510,7 @@
       (let [version (search-index-version search-db)]
         (if (and (= version search-db-version)
                  (not force?))
-          (do
-            (when-let [conn (and (not (vector-index-current? repo))
-                                 (worker-state/get-datascript-conn repo))]
-              (schedule-vector-index-refresh! repo conn))
-            version)
+          version
           (if await-completion?
             (<rebuild-blocks-index! repo)
             (when-let [conn (worker-state/get-datascript-conn repo)]
