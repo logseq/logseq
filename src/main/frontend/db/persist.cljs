@@ -6,6 +6,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.file-graph-import :as file-graph-import]
             [promesa.core :as p]))
 
 (defn- local-file-based-graph?
@@ -25,7 +26,8 @@
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
                                 (or (local-file-based-graph? name)
-                                    (upload-temp-graph? name))))
+                                    (upload-temp-graph? name)
+                                    (file-graph-import/staging-repo? name))))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
@@ -36,6 +38,7 @@
       repos'
       (->> (some-> electron-disk-graphs bean/->clj)
            (remove upload-temp-graph?)
+           (remove file-graph-import/staging-repo?)
            (map (fn [repo-name]
                   {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
 

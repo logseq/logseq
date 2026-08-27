@@ -224,13 +224,11 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo root-dir owner-source create-empty-db? file-graph-import-staging?
-           embedding-endpoint embedding-model-id]}]
+  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
                         create-empty-db? (conj "--create-empty-db")
-                        file-graph-import-staging? (conj "--file-graph-import-staging")
                         (seq embedding-endpoint) (conj "--embedding-endpoint" embedding-endpoint)
                         (seq embedding-model-id) (conj "--embedding-model-id" embedding-model-id)))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]

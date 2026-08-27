@@ -413,15 +413,13 @@
     (is (nil? (:rtc-ws-url result)))
     (is (= "logseq_db_parse_args" (:repo result)))))
 
-(deftest db-worker-node-parse-args-recognizes-startup-flags
+(deftest db-worker-node-parse-args-recognizes-create-empty-db
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "dist/db-worker-node.js"
                                 "--repo" "logseq_db_parse_args"
-                                "--create-empty-db"
-                                "--file-graph-import-staging"])]
+                                "--create-empty-db"])]
     (is (= "logseq_db_parse_args" (:repo result)))
-    (is (= true (:create-empty-db? result)))
-    (is (= true (:file-graph-import-staging? result)))))
+    (is (= true (:create-empty-db? result)))))
 
 (deftest db-worker-node-parse-args-ignores-server-list-file
   (let [parse-args #'db-worker-node/parse-args

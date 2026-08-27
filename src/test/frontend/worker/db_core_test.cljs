@@ -538,17 +538,13 @@
             "Bootstrap transactions must not publish incremental renderer deltas.")
         (db-core/close-db! repo)))))
 
-(deftest new-graph-bootstrap-is-canonical-before-listening-test
+(deftest new-graph-and-datom-bootstrap-are-canonical-before-listening-test
   (async done
          (-> (restoring-worker-state
               (fn []
                 (p/let [_ (<assert-bootstrap-is-canonical! "bootstrap-new-graph" {})
                         _ (<assert-bootstrap-is-canonical! "bootstrap-datoms"
-                                                          {:datoms (bootstrap-datoms)})
-                        _ (<assert-bootstrap-is-canonical!
-                           (file-graph-import/staging-repo
-                            "00000000-0000-4000-8000-000000000003")
-                           {})]
+                                                          {:datoms (bootstrap-datoms)})]
                   nil)))
              (p/catch (fn [error]
                         (is false (str error))))
@@ -3477,8 +3473,6 @@
                       exists?)))
                 db-core/<export-db-binary!
                 (fn [_repo _strict?] (p/resolved (js/Uint8Array. 0)))
-                db-core/<file-graph-import-staging-owned?
-                (fn [_repo] (p/resolved true))
                 db-core/<import-db-binary!
                 (fn [_repo _data]
                   (swap! import-count inc)
@@ -3548,45 +3542,6 @@
                         ;; list-db may fail if platform not fully initialized, that's ok
                         (is (some? e))))
              (p/finally done)))))))
-
-(deftest list-db-hides-only-owned-file-graph-import-staging-graphs
-  (async done
-    (restoring-worker-state
-     (fn []
-       (let [list-db! (get-thread-api :thread-api/list-db)
-             owned-repo (file-graph-import/staging-repo
-                         "00000000-0000-4000-8000-000000000005")
-             unowned-repo (file-graph-import/staging-repo
-                           "00000000-0000-4000-8000-000000000006")
-             normal-repo "logseq_db_notes"
-             kv-store (atom {})
-             platform' (-> (build-test-platform)
-                           (assoc-in [:storage :list-graphs]
-                                     (fn []
-                                       (p/resolved
-                                        (mapv #(subs % (count "logseq_db_"))
-                                              [owned-repo unowned-repo normal-repo]))))
-                           (assoc-in [:kv :get]
-                                     (fn [key]
-                                       (p/resolved (get @kv-store key))))
-                           (assoc-in [:kv :set!]
-                                     (fn [key value]
-                                       (swap! kv-store assoc key value)
-                                       (p/resolved nil))))]
-         (platform/set-platform! platform')
-         (-> (p/let [_ (#'db-core/<mark-file-graph-import-staging! owned-repo)
-                     repos-with-marker (list-db!)
-                     _ (#'db-core/<clear-file-graph-import-staging! owned-repo)
-                     repos-after-clear (list-db!)]
-               (is (= #{{:name unowned-repo}
-                        {:name normal-repo}}
-                      (set repos-with-marker)))
-               (is (= #{{:name owned-repo}
-                        {:name unowned-repo}
-                        {:name normal-repo}}
-                      (set repos-after-clear))))
-             (p/catch #(is false (str "unexpected error: " %)))
-             (p/finally #(complete-after-promise-finalizers! done))))))))
 
 ;; ---- set-context thread-api test ----
 

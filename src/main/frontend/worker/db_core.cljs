@@ -80,8 +80,6 @@
 (def ^:private import-progress-file-steps 40)
 (def ^:private file-graph-import-publication-lock-prefix
   "logseq-file-graph-import-publication:")
-(def ^:private file-graph-import-staging-owner-prefix
-  "file-graph-import-staging-owner:")
 
 (defn- resolve-initial-config
   [config]
@@ -226,45 +224,6 @@
   [^js pool data]
   (let [storage (platform/storage (platform/current))]
     ((:import-db storage) pool repo-path data)))
-
-(defn- file-graph-import-staging-owner-key
-  [repo]
-  (str file-graph-import-staging-owner-prefix
-       (graph-dir/repo->graph-dir-key repo)))
-
-(defn- <file-graph-import-staging-owned?
-  [repo]
-  (if (and (not (node-runtime?))
-           (file-graph-import/staging-repo? repo))
-    (p/let [owner (platform/kv-get
-                   (platform/current)
-                   (file-graph-import-staging-owner-key repo))]
-      (graph-dir/same-repo? repo owner))
-    (p/resolved false)))
-
-(defn- <mark-file-graph-import-staging!
-  [repo]
-  (cond
-    (node-runtime?)
-    nil
-
-    (not (file-graph-import/staging-repo? repo))
-    (p/rejected (ex-info "graph is not a file graph import staging graph"
-                         {:code :invalid-import-staging-graph
-                          :repo repo}))
-
-    :else
-    (platform/kv-set! (platform/current)
-                      (file-graph-import-staging-owner-key repo)
-                      repo)))
-
-(defn- <clear-file-graph-import-staging!
-  [repo]
-  (when (and (not (node-runtime?))
-             (file-graph-import/staging-repo? repo))
-    (platform/kv-set! (platform/current)
-                      (file-graph-import-staging-owner-key repo)
-                      nil)))
 
 (defn- import-state-summary
   [import-state]
@@ -888,8 +847,7 @@
     (bootstrap-transact! conn tx-data)))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?
-                file-graph-import-staging?] :as opts}]
+  [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
   (let [datoms (or datoms
                    (when debug-transit-raw
                      (debug-transit-raw->datoms debug-transit-raw)))]
@@ -966,29 +924,24 @@
             (ensure-canonical-revisions! conn)
 
             (when (and initial-tx-report
-                       (not file-graph-import-staging?))
+                       (not (file-graph-import/staging-repo? repo)))
               (db-sync/handle-local-tx! repo initial-tx-report))
 
-            (when-not file-graph-import-staging?
+            (when-not (file-graph-import/staging-repo? repo)
               (db-listener/listen-db-changes! repo conn))
 
-            (if file-graph-import-staging?
-              (<mark-file-graph-import-staging! repo)
-              nil)))))))
+            nil))))))
 
 
 (defn- <list-all-dbs
   []
   (p/let [storage (platform/storage (platform/current))
-          graph-names ((:list-graphs storage))
-          repos (p/all
-                 (map (fn [graph-name]
-                        (p/let [repo (str sqlite-util/db-version-prefix graph-name)
-                                staging-owned? (<file-graph-import-staging-owned? repo)]
-                          (when-not staging-owned?
-                            {:name repo})))
-                      graph-names))]
-    (into [] (remove nil?) repos)))
+          graph-names ((:list-graphs storage))]
+    (p/all (->> graph-names
+                (remove file-graph-import/staging-repo?)
+                (map (fn [graph-name]
+                       (p/let [repo (str sqlite-util/db-version-prefix graph-name)]
+                         {:name repo})))))))
 
 (def-thread-api :thread-api/list-db
   []
@@ -1071,8 +1024,7 @@
           _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
                                              :repo repo})
           _ (close-db! repo)
-          _result (remove-vfs! pool)
-          _ (<clear-file-graph-import-staging! repo)]
+          _result (remove-vfs! pool)]
     nil))
 
 (def-thread-api :thread-api/unsafe-unlink-db
@@ -1229,12 +1181,7 @@
           (graph-dir/repo->graph-dir-key target-repo))
      (fn []
        (let [target-owned? (atom false)]
-         (-> (p/let [staging-owned? (<file-graph-import-staging-owned? staging-repo)
-                     _ (when-not staging-owned?
-                         (throw (ex-info "source is not owned by a file graph import"
-                                         {:code :invalid-import-staging-graph
-                                          :repo staging-repo})))
-                     target-exists? (<db-exists? target-repo)
+         (-> (p/let [target-exists? (<db-exists? target-repo)
                      _ (when target-exists?
                          (throw (ex-info "target graph already exists"
                                          {:code :graph-already-exists

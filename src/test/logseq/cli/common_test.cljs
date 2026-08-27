@@ -68,21 +68,6 @@
                (str common-config/db-version-prefix
                     ".logseq-file-graph-import-user-notes")))))
 
-(deftest cleanup-file-graph-imports-requires-an-ownership-marker
-  (let [graphs-dir (node-helper/create-tmp-dir "cleanup-file-graph-import")
-        user-run-id "00000000-0000-4000-8000-000000000001"
-        staging-run-id "00000000-0000-4000-8000-000000000002"
-        staging-repo (file-graph-import/staging-repo staging-run-id)
-        user-path (node-path/join graphs-dir (str ".logseq-file-graph-import-" user-run-id))
-        staging-path (node-path/join graphs-dir (str ".logseq-file-graph-import-" staging-run-id))]
-    (fs/mkdirSync user-path #js {:recursive true})
-    (fs/mkdirSync staging-path #js {:recursive true})
-    (cli-common/mark-file-graph-import-staging! graphs-dir staging-repo)
-    (is (= 1 (count (cli-common/cleanup-file-graph-imports! graphs-dir))))
-    (is (fs/existsSync user-path)
-        "A user graph with a staging-shaped name must not be cleaned up")
-    (is (not (fs/existsSync staging-path)))))
-
 (deftest publish-file-graph-import-preserves-the-target-boundary
   (let [run-id "00000000-0000-4000-8000-000000000001"
         graphs-dir (node-helper/create-tmp-dir "publish-file-graph-import")
@@ -92,13 +77,11 @@
         target-path (node-path/join graphs-dir "target")]
     (fs/mkdirSync staging-path #js {:recursive true})
     (fs/writeFileSync (node-path/join staging-path "db.sqlite") "imported-data")
-    (cli-common/mark-file-graph-import-staging! graphs-dir staging-repo)
     (cli-common/publish-file-graph-import! graphs-dir staging-repo target-repo)
     (is (not (fs/existsSync staging-path)))
     (is (= "imported-data"
            (fs/readFileSync (node-path/join target-path "db.sqlite") "utf8")))
     (fs/mkdirSync staging-path #js {:recursive true})
-    (cli-common/mark-file-graph-import-staging! graphs-dir staging-repo)
     (is (thrown-with-msg? js/Error #"target graph already exists"
                           (cli-common/publish-file-graph-import!
                            graphs-dir staging-repo target-repo)))))

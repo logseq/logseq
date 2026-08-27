@@ -219,7 +219,7 @@
 
 (defn- <ensure-remote!
   ([repo] (<ensure-remote! repo nil))
-  ([repo {:keys [only-if-current? runtime-opts]}]
+  ([repo {:keys [only-if-current?]}]
    (let [current-for-repo? #(same-remote-repo? repo (state/get-current-repo))]
      (cond
        (nil? repo)
@@ -244,9 +244,7 @@
                (log/warn :event :db-worker-ensure-remote-stale
                          :repo repo :phase :before-runtime)
                nil)
-             (p/let [runtime (if (seq runtime-opts)
-                              (ipc/ipc "db-worker-runtime" repo runtime-opts)
-                              (ipc/ipc "db-worker-runtime" repo))
+             (p/let [runtime (ipc/ipc "db-worker-runtime" repo)
                      client (remote/start! (assoc runtime
                                                   :repo repo
                                                   :event-handler worker-handler/handle
@@ -411,9 +409,7 @@
 (defn <new [repo opts]
   {:pre [(<= (count repo) 128)]}
   (p/let [impl (if (electron-runtime?)
-                 (<ensure-remote!
-                  repo
-                  {:runtime-opts (select-keys opts [:file-graph-import-staging?])})
+                 (<ensure-remote! repo)
                  (p/resolved (get-impl)))
           _ (protocol/<new impl repo opts)]
     (<export-db repo {})))

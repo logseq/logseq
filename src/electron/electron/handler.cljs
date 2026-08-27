@@ -33,6 +33,7 @@
             [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
+            [logseq.common.file-graph-import :as file-graph-import]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-registry :as graph-registry]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -196,10 +197,9 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (let [graphs-dir (common-graph/get-db-graphs-dir)]
-    (->> (common-graph/get-db-based-graphs)
-         (remove #(cli-common/file-graph-import-staging-owned? graphs-dir %))
-         (distinct))))
+  (->> (common-graph/get-db-based-graphs)
+       (remove file-graph-import/staging-repo?)
+       (distinct)))
 
 (defn- canonical-repo
   [graph]
@@ -233,12 +233,6 @@
     (p/let [_ (db-worker/release-repo! repo)]
       (cli-common/unlink-graph! repo))))
 
-(defmethod handle :markFileGraphImportStaging [_window [_ graph]]
-  (when-let [repo (canonical-repo graph)]
-    (cli-common/mark-file-graph-import-staging!
-     (common-graph/get-db-graphs-dir)
-     repo)))
-
 (defmethod handle :publishFileGraphImport [_window [_ staging-graph target-graph]]
   (let [staging-repo staging-graph
         target-repo target-graph]
@@ -256,7 +250,7 @@
   []
   (db-worker/stop-all-managed!))
 
-(defmethod handle :db-worker-runtime [^js window [_ repo runtime-opts]]
+(defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
     (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
@@ -266,10 +260,7 @@
                                  (cond-> {}
                                    embedding-endpoint
                                    (assoc :embedding-endpoint embedding-endpoint
-                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env))
-
-                                   (:file-graph-import-staging? runtime-opts)
-                                   (assoc :file-graph-import-staging? true))))))
+                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)))))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)
