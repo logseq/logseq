@@ -78,8 +78,6 @@
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 (def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
 (def ^:private import-progress-file-steps 40)
-(def ^:private file-graph-import-publication-lock-prefix
-  "logseq-file-graph-import-publication:")
 
 (defn- resolve-initial-config
   [config]
@@ -1153,46 +1151,33 @@
                           :repo target-repo}))
 
     :else
-    (platform/<with-exclusive-lock
-     (platform/current)
-     (str file-graph-import-publication-lock-prefix
-          (graph-dir/repo->graph-dir-key target-repo))
-     (fn []
-       (let [target-owned? (atom false)]
-         (-> (p/let [target-exists? (<db-exists? target-repo)
-                     _ (when target-exists?
-                         (throw (ex-info "target graph already exists"
-                                         {:code :graph-already-exists
-                                          :repo target-repo})))
-                     data (<export-db-binary! staging-repo true)
-                     _ (close-db! staging-repo)
-                     _ (reset! target-owned? true)
-                     _ (<import-db-binary! target-repo data)
-                     _ (search-handler/<rebuild-blocks-index! target-repo)
-                     _ (-> (<unsafe-unlink-db! staging-repo)
-                           (p/catch (fn [error]
-                                      (log/warn :event :file-graph-import-staging-cleanup-failed
-                                                :repo staging-repo
-                                                :error error))))]
-               target-repo)
-             (p/catch
-              (fn [error]
-                (if @target-owned?
-                  (p/let [rollback-result
-                          (-> (<unsafe-unlink-db! target-repo)
-                              (p/then (fn [_] {:status :completed}))
-                              (p/catch (fn [rollback-error]
-                                         {:status :failed
-                                          :error rollback-error})))]
-                    (if (= :failed (:status rollback-result))
-                      (throw (ex-info "incomplete import target rollback failed"
-                                      {:code :import/target-rollback-failed
-                                       :repo target-repo
-                                       :preserve-staging? true
-                                       :publication-code (:code (ex-data error))}
-                                      (:error rollback-result)))
-                      (throw error)))
-                  (throw error))))))))))
+    (let [target-owned? (atom false)]
+      (-> (p/let [target-exists? (<db-exists? target-repo)
+                  _ (when target-exists?
+                      (throw (ex-info "target graph already exists"
+                                      {:code :graph-already-exists
+                                       :repo target-repo})))
+                  data (<export-db-binary! staging-repo true)
+                  _ (close-db! staging-repo)
+                  _ (reset! target-owned? true)
+                  _ (<import-db-binary! target-repo data)
+                  _ (search-handler/<rebuild-blocks-index! target-repo)
+                  _ (-> (<unsafe-unlink-db! staging-repo)
+                        (p/catch (fn [error]
+                                   (log/warn :event :file-graph-import-staging-cleanup-failed
+                                             :repo staging-repo
+                                             :error error))))]
+            target-repo)
+          (p/catch
+           (fn [error]
+             (p/let [_ (when @target-owned?
+                         (-> (<unsafe-unlink-db! target-repo)
+                             (p/catch
+                              (fn [rollback-error]
+                                (log/warn :event :file-graph-import-target-rollback-failed
+                                          :repo target-repo
+                                          :error rollback-error)))))]
+               (throw error))))))))
 
 (def-thread-api :thread-api/publish-file-graph-import
   [staging-repo target-repo]
