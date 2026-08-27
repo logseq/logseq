@@ -319,6 +319,15 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
+(defn- electron-lazy-import?
+  [files]
+  (and (util/electron?)
+       (boolean (some :fs-path files))))
+
+(defn- import-file-descriptor
+  [file]
+  (select-keys file [:path :fs-path :last-modified-at]))
+
 (defn- <serialize-import-file
   [file]
   (let [^js file-object (:file-object file)]
@@ -327,18 +336,24 @@
         (let [path (pr-str (:path file))]
           (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
           (notification/show! (t :import/asset-too-large-warning path) :info false)
-          (select-keys file [:path]))
+          (p/resolved (select-keys file [:path :fs-path])))
         (p/let [buffer (.arrayBuffer file-object)]
-          (assoc (select-keys file [:path])
-                 :asset/payload (js/Uint8Array. buffer)
-                 :asset/size (.-size file-object))))
+          (p/resolved (assoc (select-keys file [:path :fs-path])
+                             :asset/payload (js/Uint8Array. buffer)
+                             :asset/size (.-size file-object)))))
       (p/let [content (.text file-object)]
-        (assoc (select-keys file [:path])
-               :file/content content)))))
+        (p/resolved (assoc (select-keys file [:path :fs-path])
+                           :file/content content))))))
+
+(defn- <prepare-import-files
+  [files]
+  (if (electron-lazy-import? files)
+    (p/resolved (mapv import-file-descriptor files))
+    (p/all (mapv <serialize-import-file files))))
 
 (defn- <serialize-import-files
   [files]
-  (p/all (mapv <serialize-import-file files)))
+  (<prepare-import-files files))
 
 (defn- write-staged-assets!
   [repo staged-assets]
