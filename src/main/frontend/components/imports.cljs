@@ -317,7 +317,8 @@
   (when (seq issues)
     (log/warn :import-completed-with-errors true
               :issue-count (count issues)
-              :issues issues)))
+              :issue-codes (frequencies (map :code issues))
+              :issue-samples (vec (take 20 issues)))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
