@@ -3219,7 +3219,8 @@
                                 (inc (:idx file)))
                 _ (set-ui-state [:graph/importing-state :current-page] (:path file))
                 read-result
-                (-> (<read-file file)
+                (-> (p/resolved nil)
+                    (p/then (fn [_] (<read-file file)))
                     (p/then #(vector :completed %))
                     (p/catch #(vector :failed %)))]
           (let [[read-status content] read-result]
