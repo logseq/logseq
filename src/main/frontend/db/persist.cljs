@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.persist-db :as persist-db]
-            [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [promesa.core :as p]))
@@ -23,12 +22,10 @@
 (defn get-all-graphs
   []
   (p/let [repos (persist-db/<list-db)
-          active-import-repo (state/get-state [:graph/importing-state :repo])
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
                                 (or (local-file-based-graph? name)
-                                    (upload-temp-graph? name)
-                                    (= active-import-repo name))))
+                                    (upload-temp-graph? name))))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
