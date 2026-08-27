@@ -818,7 +818,6 @@ abc
 (deftest-async simple-page-property-classifier-errors-stop-the-import
   (let [classifier-error (ex-info "classifier failed" {:code :classifier-failed})]
     (p/let [result
-            #_{:clj-kondo/ignore [:private-call]}
             (p/with-redefs
               [gp-exporter/simple-page-property-file
                (fn [& _]
