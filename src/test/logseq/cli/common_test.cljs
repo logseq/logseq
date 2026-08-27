@@ -14,10 +14,18 @@
                :recoverable? true
                :phase :import-file
                :parameters {:path "pages/example.md"}}
-        result (file-graph-import/completed-result "run" {:issues [issue]})]
+        result (file-graph-import/completed-result
+                "run" {:validation {:status :passed}
+                       :issues [issue]})]
     (is (= :completed-with-errors (:status result)))
     (is (= {:issue-count 1} (:summary result)))
-    (is (= [issue] (:issues result)))))
+    (is (= [issue] (:issues result)))
+    (is (= :import/invalid-completed-result
+           (try
+             (file-graph-import/completed-result "run" {:issues []})
+             nil
+             (catch :default error
+               (:code (ex-data error))))))))
 
 (deftest file-graph-import-terminal-result-validates-the-contract
   (doseq [result [{}

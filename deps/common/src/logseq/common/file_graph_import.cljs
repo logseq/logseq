@@ -41,6 +41,10 @@
 
 (defn completed-result
   [run-id result]
+  (when-not (= :passed (get-in result [:validation :status]))
+    (throw (ex-info "completed import result requires passed validation"
+                    {:code :import/invalid-completed-result
+                     :run-id run-id})))
   (let [issues (vec (:issues result))]
     (assoc result
            :contract-version terminal-contract-version
