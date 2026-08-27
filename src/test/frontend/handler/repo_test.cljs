@@ -47,35 +47,18 @@
                           (fn [metadata]
                             (swap! calls conj [:metadata (keys metadata)])
                             (p/resolved nil))]
-            (-> (#'repo-handler/create-db "logseq_db_created" {})
-                (p/then
-                 (fn [repo]
-                   (is (= "logseq_db_created" repo))
-                   (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))))
-                (p/catch
-                 (fn [error]
-                   (is false (str error))))))
-          (p/finally done)))))
-
-(deftest create-db-keeps-restored-file-import-config-test
-  (async done
-    (let [config-writes (atom [])]
-      (-> (p/with-redefs [persist-db/<new (fn [& _] (p/resolved nil))
-                          state/add-repo! (fn [& _] (p/resolved nil))
-                          repo-handler/restore-and-setup-repo! (fn [& _] (p/resolved nil))
-                          route-handler/redirect-to-home! (fn [] nil)
-                          repo-config-handler/set-repo-config-state!
-                          (fn [repo content]
-                            (swap! config-writes conj [repo content]))
-                          state/pub-event! (fn [& _] nil)
-                          ui-handler/re-render-root! (fn [] nil)
-                          graph-handler/settle-metadata-to-local! (fn [& _] (p/resolved nil))]
-            (-> (#'repo-handler/create-db
-                 "logseq_db_imported"
-                 {:file-graph-import? true})
-                (p/then (fn [repo]
-                          (is (= "logseq_db_imported" repo))
-                          (is (empty? @config-writes))))
+            (-> (p/let [created-repo (#'repo-handler/create-db "logseq_db_created" {})
+                        imported-repo (#'repo-handler/create-db
+                                       "logseq_db_imported"
+                                       {:file-graph-import? true})]
+                  (is (= "logseq_db_created" created-repo))
+                  (is (= "logseq_db_imported" imported-repo))
+                  (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %)
+                            @calls))
+                  (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %)
+                            @calls))
+                  (is (some #(= [:repo-config "logseq_db_created"] %) @calls))
+                  (is (not-any? #(= [:repo-config "logseq_db_imported"] %) @calls)))
                 (p/catch (fn [error]
                            (is false (str error))))))
           (p/finally done)))))
