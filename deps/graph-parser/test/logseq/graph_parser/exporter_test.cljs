@@ -668,18 +668,18 @@ abc
             missing-block (db-test/find-block-by-content @conn #"Missing ref")
             existing-block (db-test/find-block-by-content @conn #"Existing ref")
             target-block (db-test/find-block-by-content @conn "Target block")
-            preserved-property-block (db-test/find-block-by-content
-                                      @conn
-                                      (str "`((" empty-title-property-uuid "))`"))
-            preserved-parent-block (db-test/find-block-by-content
-                                    @conn
-                                    (str "`((" empty-title-parent-uuid "))`"))]
+            empty-title-property-block
+            (some->> (d/q '[:find ?block .
+                            :where [?block :logseq.property/heading true]]
+                          @conn)
+                     (d/entity @conn))
+            child-block (db-test/find-block-by-content @conn "Child survives")
+            empty-title-parent-block (:block/parent child-block)]
       (is (empty? (filter #(= :block/pre-block? (:a %))
                           (d/datoms @conn :eavt)))
           "Legacy pre-block markers are never transacted")
-      (is (= (str "Missing ref `((" missing-uuid "))`")
-             (:block/title missing-block))
-          "Missing OG block ref text remains visible after structural cleanup")
+      (is (= "Missing ref" (:block/title missing-block))
+          "Missing OG block ref text is removed during structural cleanup")
       (is (empty? (:block/refs missing-block))
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
@@ -695,13 +695,15 @@ abc
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (true? (:logseq.property/heading preserved-property-block))
-          "Blocks with preserved missing refs keep imported heading properties")
+      (is (= "" (:block/title empty-title-property-block)))
+      (is (true? (:logseq.property/heading empty-title-property-block))
+          "Blocks with removed missing refs keep imported heading properties")
       (is (= "yellow"
-             (:logseq.property/background-color (db-test/readable-properties preserved-property-block)))
-          "Blocks with preserved missing refs keep imported background colors")
-      (is (= ["Child survives"] (mapv :block/title (ordered-children preserved-parent-block)))
-          "Blocks with preserved missing refs keep their children")
+             (:logseq.property/background-color (db-test/readable-properties empty-title-property-block)))
+          "Blocks with removed missing refs keep imported background colors")
+      (is (= "" (:block/title empty-title-parent-block)))
+      (is (= ["Child survives"] (mapv :block/title (ordered-children empty-title-parent-block)))
+          "Blocks with removed missing refs keep their children")
       (is (= [(:db/id target-block)] (mapv :db/id (:block/refs existing-block)))
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))

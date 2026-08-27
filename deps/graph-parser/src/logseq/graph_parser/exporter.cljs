@@ -2853,14 +2853,15 @@
                                      :ex-data {:path path :error error}})
                        (throw error))))))))
 
-(defn- preserve-missing-block-ref-text
+(defn- remove-missing-block-ref-text
   [title block-uuids]
   (when (string? title)
     (reduce (fn [text block-uuid]
-              (let [preserved-ref (str "`" (block-ref/->block-ref block-uuid) "`")]
-                (-> text
-                    (string/replace (block-ref/->block-ref block-uuid) preserved-ref)
-                    (string/replace (page-ref/->page-ref block-uuid) preserved-ref))))
+              (-> text
+                  (string/replace (block-ref/->block-ref block-uuid) "")
+                  (string/replace (page-ref/->page-ref block-uuid) "")
+                  (string/replace #" {2,}" " ")
+                  string/trim))
             title
             block-uuids)))
 
@@ -2899,7 +2900,7 @@
                       links (get links-by-source-id source-id)
                       source (d/entity db source-id)
                       title (:block/title source)
-                      title' (preserve-missing-block-ref-text title (map :ref-uuid refs))]
+                      title' (remove-missing-block-ref-text title (map :ref-uuid refs))]
                   {:parameters {:entity-id source-id}
                    :tx (vec
                         (concat
