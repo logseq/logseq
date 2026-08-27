@@ -3340,7 +3340,7 @@
                      (shui/popup-show! (.-target e)
                                        (fn [] (status-history-cp history))
                                        {:align :end}))}
-        label)]))))
+        label)])))
 
 (defn- sync-conflict-attr-label
   [attr]

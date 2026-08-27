@@ -46,12 +46,16 @@
                (d/pull @conn selector)
                (common-initial-data/with-parent @conn)))))
 
+(defn- history-ref-entity
+  [db history-id]
+  (when-let [value (:v (first (d/datoms db :eavt history-id :logseq.property.history/ref-value)))]
+    (d/entity db value)))
+
 (defn- history-item
   [db history-id created-at property-id]
   (let [property (d/entity db property-id)
-        history (d/entity db history-id)
-        ref-value (:logseq.property.history/ref-value history)
-        scalar-value (:logseq.property.history/scalar-value history)]
+        ref-value (history-ref-entity db history-id)
+        scalar-value (:v (first (d/datoms db :eavt history-id :logseq.property.history/scalar-value)))]
     (cond-> {:db/id history-id
              :block/created-at created-at
              :logseq.property.history/property-ident (:db/ident property)}

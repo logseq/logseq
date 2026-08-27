@@ -1166,7 +1166,8 @@
                              :in $ ?block ?property
                              :where
                              [?e :logseq.property.history/block ?block]
-                             [?e :logseq.property.history/property ?property]]
+                             [?e :logseq.property.history/property ?prop]
+                             [?prop :db/ident ?property]]
                            @conn
                            (:db/id block)
                            property-ident))]
