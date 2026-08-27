@@ -57,6 +57,29 @@
                (is false (str error))))
             (p/finally done))))))
 
+(deftest create-db-keeps-restored-file-import-config-test
+  (async done
+    (let [config-writes (atom [])]
+      (p/with-redefs [persist-db/<new (fn [& _] (p/resolved nil))
+                      state/add-repo! (fn [& _] (p/resolved nil))
+                      repo-handler/restore-and-setup-repo! (fn [& _] (p/resolved nil))
+                      route-handler/redirect-to-home! (fn [] nil)
+                      repo-config-handler/set-repo-config-state!
+                      (fn [repo content]
+                        (swap! config-writes conj [repo content]))
+                      state/pub-event! (fn [& _] nil)
+                      ui-handler/re-render-root! (fn [] nil)
+                      graph-handler/settle-metadata-to-local! (fn [& _] (p/resolved nil))]
+        (-> (#'repo-handler/create-db
+             "logseq_db_imported"
+             {:file-graph-import? true})
+            (p/then (fn [repo]
+                      (is (= "logseq_db_imported" repo))
+                      (is (empty? @config-writes))))
+            (p/catch (fn [error]
+                       (is false (str error))))
+            (p/finally done))))))
+
 (deftest removing-current-repo-pauses-renderer-subscriptions-test
   (async done
          (let [repo {:url "logseq_db_current"}

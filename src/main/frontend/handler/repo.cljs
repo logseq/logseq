@@ -173,7 +173,8 @@
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
-           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+           _ (when-not file-graph-import?
+               (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content))
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
