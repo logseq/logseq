@@ -244,7 +244,9 @@
                (log/warn :event :db-worker-ensure-remote-stale
                          :repo repo :phase :before-runtime)
                nil)
-             (p/let [runtime (ipc/ipc "db-worker-runtime" repo runtime-opts)
+             (p/let [runtime (if (seq runtime-opts)
+                              (ipc/ipc "db-worker-runtime" repo runtime-opts)
+                              (ipc/ipc "db-worker-runtime" repo))
                      client (remote/start! (assoc runtime
                                                   :repo repo
                                                   :event-handler worker-handler/handle
