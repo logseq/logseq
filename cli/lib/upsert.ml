@@ -2921,10 +2921,16 @@ let execute_create_block mode (action : block_create) config =
                                                 Error.Add_id_resolution_failed
                                                 "unable to resolve created ids"))
                                     | Some ids ->
-                                        bind
-                                          (resolve_block_uuids_by_id
-                                             invoke_config action.repo ids)
-                                          (function
+                                        let block_uuids =
+                                          block_uuids_of_add_action add_action
+                                        in
+                                        let resolved_uuids =
+                                          if Vec.is_empty block_uuids then
+                                            resolve_block_uuids_by_id
+                                              invoke_config action.repo ids
+                                          else pure (Ok block_uuids)
+                                        in
+                                        bind resolved_uuids (function
                                           | Error err ->
                                               pure
                                                 (Cli_result.error
