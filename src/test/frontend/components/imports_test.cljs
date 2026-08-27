@@ -170,6 +170,7 @@
           state-values (atom {})
           lifecycle-ops (atom [])
           staging-repo (atom nil)
+          previous-repo "logseq_db_previous"
           expected-error (ex-info "worker unavailable" {:code :worker-unavailable})]
       (is (fn? import-file-graph))
       (-> (p/with-redefs [repo-handler/<new-file-graph-import-staging-db!
@@ -180,6 +181,10 @@
                           repo-handler/new-db! (fn [& _]
                                                  (swap! lifecycle-ops conj :register-target)
                                                  (p/resolved "logseq_db_target"))
+                          repo-handler/restore-and-setup-repo!
+                          (fn [repo & _]
+                            (swap! lifecycle-ops conj [:restore repo])
+                            (p/resolved nil))
                           persist-db/<discard-file-graph-import!
                           (fn [repo]
                             (swap! lifecycle-ops conj [:discard repo])
@@ -188,6 +193,7 @@
                                                     (p/rejected expected-error))
                           state/get-state (fn [path]
                                             (get-in @state-values (if (coll? path) path [path])))
+                          state/get-current-repo (constantly previous-repo)
                           state/set-state! (fn [path value & _]
                                              (let [state-path (if (coll? path) path [path])]
                                                (swap! state-values assoc-in state-path value)
@@ -197,7 +203,8 @@
           (p/then
            (fn [result]
              (is (= :failed (:status result)))
-             (is (= [[:discard @staging-repo]]
+             (is (= [[:discard @staging-repo]
+                     [:restore previous-repo]]
                     @lifecycle-ops))
              (is (= [[:graph/importing nil]
                      [:graph/importing-state nil]]

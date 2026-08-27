@@ -433,6 +433,19 @@
                    :code (import-error-code error))
          nil))))
 
+(defn- <restore-file-graph-import-repo!
+  [run-id repo]
+  (if repo
+    (-> (repo-handler/restore-and-setup-repo! repo)
+        (p/catch
+         (fn [error]
+           (log/warn :import-previous-graph-restore-failed true
+                     :run-id run-id
+                     :repo repo
+                     :code (import-error-code error))
+           nil)))
+    (p/resolved nil)))
+
 (defn- <publish-file-graph-import!
   [{:keys [run-id graph-name target-repo staging-repo phase published? terminal-result]}]
   (p/let [staged-asset-issues (if (util/electron?)
@@ -476,6 +489,7 @@
         staging-repo (file-graph-import/staging-repo run-id)
         phase (atom :create-staging)
         published? (atom false)
+        previous-repo (state/get-current-repo)
         start-time (t/now)]
     (state/set-state! :graph/importing :file-graph)
     (state/set-state! :graph/importing-state {:run-id run-id
@@ -503,7 +517,8 @@
                 import-result (state/<invoke-db-worker :thread-api/import-file-graph staging-repo serialized-config-file serialized-files options)
                 terminal-result (file-graph-import/normalize-terminal-result run-id import-result)]
           (if (= :failed (:status terminal-result))
-            (p/let [_ (<discard-file-graph-import! run-id staging-repo)]
+            (p/let [_ (<discard-file-graph-import! run-id staging-repo)
+                    _ (<restore-file-graph-import-repo! run-id previous-repo)]
               (show-import-terminal-failure! terminal-result)
               terminal-result)
             (p/let [published-result (<publish-file-graph-import!
@@ -534,9 +549,11 @@
         (p/catch
          (fn [error]
            (let [preserve-staging? (true? (:preserve-staging? (ex-data error)))]
-             (p/let [_ (when (and (not @published?)
-                                  (not preserve-staging?))
-                       (<discard-file-graph-import! run-id staging-repo))
+             (p/let [_ (when-not @published?
+                         (p/do!
+                          (when-not preserve-staging?
+                            (<discard-file-graph-import! run-id staging-repo))
+                          (<restore-file-graph-import-repo! run-id previous-repo)))
                      code (import-error-code error)
                      result (cond-> (file-graph-import/failed-result run-id @phase code)
                               preserve-staging?
