@@ -2106,6 +2106,58 @@
          (is (not-any? #(contains? % :logseq.property.history/ref-value) history))
          (is (not-any? #(contains? % :logseq.property.history/property) history))))))))
 
+(deftest task-spent-time-includes-non-status-property-history
+  (restoring-worker-state
+   (fn []
+     (let [spent-time! (get-thread-api :thread-api/task-spent-time)
+           conn (d/create-conn task-spent-time-schema)
+           block-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+       (d/transact! conn [{:db/ident :logseq.property/status}
+                          {:db/ident :logseq.property/status.doing
+                           :block/title "Doing"}
+                          {:db/ident :logseq.property/status.done
+                           :block/title "Done"}
+                          {:db/ident :logseq.property/priority}
+                          {:db/ident :logseq.property/priority.high
+                           :block/title "High"}
+                          {:block/uuid block-uuid
+                           :block/title "task"}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [block-id (ffirst (d/q '[:find ?b
+                                     :in $ ?uuid
+                                     :where [?b :block/uuid ?uuid]]
+                                   @conn
+                                   block-uuid))]
+         (d/transact! conn [{:block/created-at 1000
+                             :logseq.property.history/block block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.doing}
+                            {:block/created-at 2500
+                             :logseq.property.history/block block-id
+                             :logseq.property.history/property :logseq.property/priority
+                             :logseq.property.history/ref-value :logseq.property/priority.high}
+                            {:block/created-at 4000
+                             :logseq.property.history/block block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.done}])
+         (let [[history seconds] (spent-time! test-repo block-id)]
+           (is (= 3 seconds)
+               "Status spent time is unchanged when other enable-history properties are present")
+           (is (= [{:created-at 1000
+                    :property-ident :logseq.property/status
+                    :status-ident :logseq.property/status.doing}
+                   {:created-at 2500
+                    :property-ident :logseq.property/priority
+                    :status-ident :logseq.property/priority.high}
+                   {:created-at 4000
+                    :property-ident :logseq.property/status
+                    :status-ident :logseq.property/status.done}]
+                  (mapv (fn [item]
+                          {:created-at (:block/created-at item)
+                           :property-ident (:logseq.property.history/property-ident item)
+                           :status-ident (:logseq.property.history/ref-value-ident item)})
+                        history)))))))))
+
 (deftest get-display-properties-keeps-other-position-properties-for-page-properties
   (restoring-worker-state
    (fn []
