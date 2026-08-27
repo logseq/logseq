@@ -376,7 +376,7 @@
           (p/catch #(vector (asset-write-issue nil %)))))
     (p/resolved [])))
 
-(defn build-file-graph-worker-options
+(defn- build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
    default-config]
   {:user-options
