@@ -55,6 +55,15 @@
            :issues issues
            :publication (or (:publication result) {:status :pending}))))
 
+(defn- valid-issue?
+  [issue]
+  (and (map? issue)
+       (keyword? (:code issue))
+       (keyword? (:severity issue))
+       (boolean? (:recoverable? issue))
+       (keyword? (:phase issue))
+       (map? (:parameters issue))))
+
 (defn- valid-terminal-result?
   [run-id result]
   (let [status (:status result)
@@ -63,6 +72,7 @@
          (= run-id (:run-id result))
          (contains? terminal-statuses status)
          (vector? issues)
+         (every? valid-issue? issues)
          (= (count issues) (get-in result [:summary :issue-count]))
          (map? (:validation result))
          (map? (:publication result))

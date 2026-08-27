@@ -42,6 +42,14 @@
                    :status :completed}
                   {:contract-version 1
                    :run-id "run"
+                   :status :failed
+                   :phase :validate
+                   :summary {:issue-count 1}
+                   :issues [{}]
+                   :validation {:status :not-run}
+                   :publication {:status :blocked}}
+                  {:contract-version 1
+                   :run-id "run"
                    :status :unknown}]]
     (is (= {:status :failed
             :phase :worker-import
