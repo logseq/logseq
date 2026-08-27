@@ -836,6 +836,21 @@ abc
       (is (= (.getTime modified-at) (:block/updated-at page) (:block/updated-at block)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async export-doc-files-uses-configured-relative-path
+  (p/let [file (write-temp-graph-file "source.md" "- imported\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          doc-options (gp-exporter/build-doc-options
+                       {:macros {} :file/name-format :triple-lowbar}
+                       (merge default-export-options
+                              {:user-options {:convert-all-tags? false}}))
+          _ (gp-exporter/export-doc-files
+             conn
+             [{:path file ::rpath "pages/logical.md"}]
+             <read-file
+             doc-options)]
+    (is (some? (ldb/get-page @conn "logical")))))
+
 (deftest update-asset-links-in-block-title
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))

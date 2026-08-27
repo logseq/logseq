@@ -3956,7 +3956,7 @@
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
-                                   :record-issue :recoverable-error? :simple-page-property-batch?
+                                   :record-issue :recoverable-error? :rpath-key :simple-page-property-batch?
                                    :record-performance]))))
 
 (defn- move-top-parent-pages-to-library
