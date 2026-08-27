@@ -93,12 +93,9 @@
     (into #{}
           (keep (fn [datom]
                   (let [attribute (:a datom)
-                        value (:v datom)
-                        entity-key (semantic-import-entity-key db (:e datom))]
-                    (when-not (or (contains? semantic-import-ignored-attrs attribute)
-                                  (and (= :block/order attribute)
-                                       (= :property (first entity-key))))
-                      [entity-key
+                        value (:v datom)]
+                    (when-not (contains? semantic-import-ignored-attrs attribute)
+                      [(semantic-import-entity-key db (:e datom))
                        (semantic-import-attribute db attribute)
                        (cond
                          (= :block/order attribute) (order-ranks (:e datom))
@@ -2788,19 +2785,10 @@
 
 (def ^:private bulk-property-semantics-files
   [bulk-property-semantics-config-file
-   {:path "pages/a-mixed.md"
-    :file/content (str "title:: Mixed Fallback\n"
-                       "ordered-value:: https://example.com/item\n"
-                       "rating:: 1\n"
-                       "- body")}
-   {:path "pages/b-mixed.md"
-    :file/content (str "title:: Mixed Simple\n"
-                       "ordered-value:: 5")}
    {:path "pages/library.md"
     :file/content (str "title:: Library\n"
                        "rating:: 5\n"
                        "score:: 5.9   \n"
-                       "mixed-link:: https://example.com/item\n"
                        "tagline:: \n"
                        "cast:: [[Ada]], [[Grace]]")}
    {:path "pages/film.md"
@@ -2808,7 +2796,6 @@
     :file/content (str "title:: Film\n"
                        "rating:: unrated\n"
                        "score:: -6.8\n"
-                       "mixed-link:: 5\n"
                        "tagline:: A story\n"
                        "cast:: [[Ada]]")}
    {:path "pages/genres.md"
@@ -2830,7 +2817,6 @@
                          @conn)
         library-after (d/entity @conn (first library-ids))
         rating-property (ldb/get-page @conn "rating")
-        ordered-value-property (ldb/get-page @conn "ordered-value")
         cast-property (ldb/get-page @conn "cast")
         flag-property (ldb/get-page @conn "flag")
         link-property (ldb/get-page @conn "link")
@@ -2853,17 +2839,9 @@
         bulk-only (set/difference bulk-datoms canonical-datoms)]
     (is (= :completed (:status result)))
     (is (= :completed (:status canonical-result)))
-    (is (= 3
-           (->> (:performance-events result)
-                (filter #(and (= :extract-normalize (:phase %))
-                              (= :simple-page-properties (:parser %))))
-                (keep :files)
-                (reduce + 0))))
     (is (and (empty? canonical-only) (empty? bulk-only))
         (pr-str {:canonical-only (take 20 canonical-only)
                  :bulk-only (take 20 bulk-only)}))
-    (is (= (set (get-in canonical-result [:import-state :ignored-properties]))
-           (set (get-in result [:import-state :ignored-properties]))))
     (is (= (.getTime bulk-property-semantics-modified-at)
            (:block/updated-at film-page)
            (:block/updated-at canonical-film-page)))
@@ -2871,7 +2849,6 @@
     (is (= library-id (:db/id library-after)))
     (is (= library-uuid (:block/uuid library-after)))
     (is (= :default (:logseq.property/type rating-property)))
-    (is (= :url (:logseq.property/type ordered-value-property)))
     (is (= {:logseq.property/type :node
             :db/cardinality :db.cardinality/many}
            (select-keys cast-property [:logseq.property/type :db/cardinality])))
@@ -2917,11 +2894,10 @@
                    client-op/update-local-checksum (fn [& _] nil)
                    shared-service/broadcast-to-clients! (fn [& _] nil)]
                   (->
-                           (p/let [result (import-file-graph!
+                   (p/let [result (import-file-graph!
                                    test-repo bulk-property-semantics-config-file
                                    bulk-property-semantics-files
                                    {:run-id "identity-run"
-                                    :performance-diagnostics? true
                                     :user-options {}})
                            canonical-result
                            (p/with-redefs

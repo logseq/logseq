@@ -3063,37 +3063,30 @@
                  doc-files)
         (range)))
 
-(defn- <export-ordered-doc-files
-  [conn doc-files <read-file options]
-  (p/loop [remaining-files doc-files
-           issues []]
-    (if-let [file (first remaining-files)]
-      (p/let [result (export-doc-file file conn <read-file options)]
-        (p/recur (rest remaining-files) (into issues (:issues result))))
-      {:issues issues})))
-
-(defn- <finalize-export-doc-files
-  [conn file-result {:keys [on-tx-report record-issue]
-                     :or {on-tx-report (constantly nil)}}]
-  (p/let [normalize-tx-report (normalize-journal-uuids! conn)
-          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
-          cleanup-result (cleanup-missing-block-refs!
-                          conn
-                          {:on-tx-report on-tx-report
-                           :record-issue record-issue})]
-    {:issues (into (:issues file-result) (:issues cleanup-result))}))
-
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                               :or {set-ui-state (constantly nil) notify-user prn}
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
+                               :or {set-ui-state (constantly nil) notify-user prn
+                                    on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (ordered-doc-files *doc-files)]
     (index-journal-page-name-uuids! doc-files (:import-state options))
-    (-> (<export-ordered-doc-files conn doc-files <read-file options)
-        (p/then #(<finalize-export-doc-files conn % options))
+    (-> (p/loop [remaining-files doc-files
+                 issues []]
+          (if-let [file (first remaining-files)]
+            (p/let [result (export-doc-file file conn <read-file options)]
+              (p/recur (rest remaining-files) (into issues (:issues result))))
+            {:issues issues}))
+        (p/then (fn [file-result]
+                  (p/let [normalize-tx-report (normalize-journal-uuids! conn)
+                          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
+                          cleanup-result (cleanup-missing-block-refs!
+                                          conn
+                                          {:on-tx-report on-tx-report
+                                           :record-issue (:record-issue options)})]
+                    {:issues (into (:issues file-result) (:issues cleanup-result))})))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
@@ -3213,20 +3206,14 @@
            :property-pairs property-pairs
            :properties properties})))))
 
-(defn- import-file-groups
-  [classified-files]
-  (mapv (fn [group]
-          {:kind (:kind (first group))
-           :files (mapv :value group)})
-        (partition-by :kind classified-files)))
-
 (defn- <partition-simple-page-property-files
   [doc-files <read-file rpath-key options]
   (let [property-context (bulk-property-context (:user-config options))
         set-ui-state (or (:set-ui-state options) (constantly nil))
         _ (set-ui-state [:graph/importing-state :total] (count doc-files))]
     (p/loop [remaining-files doc-files
-             classified-files []]
+             simple-files []
+             fallback-files []]
       (if-let [file (first remaining-files)]
         (p/let [_ (set-ui-state [:graph/importing-state :current-idx]
                                 (inc (:idx file)))
@@ -3239,7 +3226,8 @@
           (let [[read-status content] read-result]
             (if (= :failed read-status)
               (p/recur (rest remaining-files)
-                       (conj classified-files {:kind :fallback :value file}))
+                       simple-files
+                       (conj fallback-files file))
               (let [started (extract/performance-now-ms)
                     simple-file (simple-page-property-file
                                  file content rpath-key property-context)
@@ -3250,10 +3238,13 @@
                         :parser :simple-page-properties})]
                 (if simple-file
                   (p/recur (rest remaining-files)
-                           (conj classified-files {:kind :simple :value simple-file}))
+                           (conj simple-files simple-file)
+                           fallback-files)
                   (p/recur (rest remaining-files)
-                           (conj classified-files {:kind :fallback :value file})))))))
-        (import-file-groups classified-files)))))
+                           simple-files
+                           (conj fallback-files file)))))))
+        {:simple-files simple-files
+         :fallback-files fallback-files}))))
 
 (defn- bulk-property-type
   [values]
@@ -3271,13 +3262,6 @@
     :number (parse-double value)
     value))
 
-(defn- bulk-ignored-property-value
-  [property-type value]
-  (case property-type
-    :node (set (bulk-page-ref-values value))
-    :number (parse-double value)
-    value))
-
 (defn- bulk-tag-values
   [tags]
   (when (string? tags)
@@ -3292,99 +3276,20 @@
   [tags]
   (mapv common-util/page-name-sanity-lc (bulk-tag-values tags)))
 
-(defn- existing-property-plans
-  [db property-pairs]
-  (into {}
-        (keep (fn [[property-name _property-title _value]]
-                (when-let [property (ldb/get-page db (name property-name))]
-                  (when (entity-util/property? property)
-                    [property-name
-                     {:type (or (:logseq.property/type property) :default)}]))))
-        property-pairs))
-
-(defn- bulk-property-plan-step
-  [previous-type value-type]
-  (cond
-    (or (nil? previous-type)
-        (= previous-type value-type)
-        (= :default previous-type))
-    {:accept? true :type (or previous-type value-type)}
-
-    (= :default value-type)
-    {:accept? true :type :default}
-
-    :else
-    {:accept? false :type previous-type}))
-
-(defn- simple-files-before-property-migration
-  [db simple-files]
-  (let [initial-plans
-        (existing-property-plans db (mapcat :property-pairs simple-files))]
-    (loop [remaining-files simple-files
-           accepted-files []
-           property-plans initial-plans]
-      (if-let [{:keys [property-pairs] :as file} (first remaining-files)]
-        (let [{:keys [migration? property-plans]}
-              (reduce
-               (fn [{:keys [property-plans] :as state}
-                    [property-name _property-title value]]
-                 (if (or (contains? #{:title :tags} property-name)
-                         (string/blank? value))
-                   state
-                   (let [previous-type (get-in property-plans [property-name :type])
-                         value-type (bulk-property-type [value])
-                         {:keys [type]} (bulk-property-plan-step previous-type value-type)]
-                     {:migration? (or (:migration? state)
-                                      (and (some? previous-type)
-                                           (not= :default previous-type)
-                                           (= :default type)))
-                      :property-plans (assoc-in property-plans [property-name :type] type)})))
-               {:migration? false :property-plans property-plans}
-               property-pairs)]
-          (if migration?
-            {:simple-files accepted-files
-             :remaining-files remaining-files}
-            (recur (rest remaining-files)
-                   (conj accepted-files file)
-                   property-plans)))
-        {:simple-files accepted-files
-         :remaining-files []}))))
-
 (defn- build-simple-page-property-options
-  [db simple-files]
+  [simple-files]
   (let [all-property-pairs
         (mapcat (fn [{:keys [property-pairs]}]
                   (remove #(contains? #{:title :tags} (first %)) property-pairs))
                 simple-files)
-        initial-property-plans (existing-property-plans db all-property-pairs)
-        property-plans
-        (reduce-kv
-         (fn [plans file-index {:keys [property-pairs]}]
-           (reduce
-            (fn [plans [property-name _property-title value]]
-              (if (or (contains? #{:title :tags} property-name)
-                      (string/blank? value))
-                plans
-                (let [value-type (bulk-property-type [value])
-                      previous-type (get-in plans [property-name :type])
-                      {:keys [accept? type]}
-                      (bulk-property-plan-step previous-type value-type)
-                      accept-value #(-> %
-                                        (assoc-in [property-name :type] type)
-                                        (update-in [property-name :file-indexes]
-                                                   (fnil conj #{}) file-index))]
-                  (if accept?
-                    (accept-value plans)
-                    (update-in plans [property-name :ignored-properties]
-                               (fnil conj [])
-                               {:property property-name
-                                :value (bulk-ignored-property-value value-type value)
-                                :schema {:type {:from previous-type
-                                                :to value-type}}})))))
-            plans
-            property-pairs))
-         initial-property-plans
-         simple-files)
+        property-pairs (remove (fn [[_property-name _property-title value]]
+                                 (string/blank? value))
+                               all-property-pairs)
+        values-by-property
+        (reduce (fn [result [property-name _property-title value]]
+                  (update result property-name (fnil conj []) value))
+                {}
+                property-pairs)
         all-property-titles
         (reduce (fn [result [property-name property-title _value]]
                   (if (contains? result property-name)
@@ -3394,10 +3299,10 @@
                 all-property-pairs)
         empty-property-titles
         (keep (fn [[property-name property-title]]
-                (when-not (contains? property-plans property-name)
+                (when-not (contains? values-by-property property-name)
                   property-title))
               all-property-titles)
-        property-types (update-vals property-plans :type)
+        property-types (update-vals values-by-property bulk-property-type)
         property-schemas
         (update-vals property-types
                      #(cond-> {:logseq.property/type %}
@@ -3415,15 +3320,11 @@
                            (mapcat #(bulk-tag-values (get-in % [:properties :tags]))
                                    simple-files))
         pages-and-blocks
-        (mapv (fn [file-index {:keys [file properties]}]
+        (mapv (fn [{:keys [file properties]}]
                 (let [user-properties
                       (into {}
                             (keep (fn [[property-name value]]
-                                    (when (and (not (string/blank? value))
-                                               (contains?
-                                                (get-in property-plans
-                                                        [property-name :file-indexes])
-                                                file-index))
+                                    (when-not (string/blank? value)
                                       [property-name
                                        (bulk-property-value (property-types property-name) value)])))
                             (dissoc properties :title :tags))
@@ -3433,7 +3334,6 @@
                                   :build/properties user-properties}
                            modified-at (assoc :block/updated-at (.getTime modified-at))
                            (seq page-tags) (assoc :build/tags page-tags))}))
-              (range)
               simple-files)]
     {:build-options {:pages-and-blocks pages-and-blocks
                      :properties properties
@@ -3444,7 +3344,6 @@
                      :extract-content-refs? false
                      :translate-property-values? true}
      :property-schemas property-schemas
-     :ignored-properties (mapcat :ignored-properties (vals property-plans))
      :ordinary-page-titles (cond-> (vec empty-property-titles)
                              (seq tag-titles) (conj "Tags"))}))
 
@@ -3772,89 +3671,55 @@
        (empty? (:property-classes user-options))
        (empty? (:property-parent-classes user-options))))
 
-(defn- import-simple-page-property-files!
-  [conn simple-files {:keys [import-state] :as options}]
-  (let [extract-started (extract/performance-now-ms)
-        base-db @conn
-        {:keys [build-options property-schemas ignored-properties ordinary-page-titles]}
-        (build-simple-page-property-options base-db simple-files)
-        _ (extract/record-performance!
-           options :extract-normalize extract-started
-           {:files (count simple-files)
-            :parser :simple-page-properties})
-        construct-started (extract/performance-now-ms)
-        {:keys [init-tx block-props-tx]}
-        (sqlite-build/build-blocks-tx build-options)
-        init-tx (into init-tx (map ordinary-page) ordinary-page-titles)
-        init-tx-id (inc (:max-tx base-db))
-        properties-tx-id (inc init-tx-id)
-        init-tx (prepare-simple-page-init-tx
-                 init-tx block-props-tx init-tx-id)
-        block-props-tx' (prepare-simple-page-properties-tx
-                         init-tx block-props-tx property-schemas properties-tx-id)
-        _ (extract/record-performance!
-           options :graph-tx-construct construct-started
-           {:files (count simple-files)
-            :init-entities (count init-tx)
-            :property-entities (count block-props-tx')})
-        {:keys [db new-datoms]}
-        (build-direct-import-db
-         base-db init-tx block-props-tx' init-tx-id properties-tx-id options)]
-    (reset! conn db)
-    (swap! (::file-import-batch-tx-data options) into new-datoms)
-    (seed-simple-page-property-import-state!
-     import-state property-schemas (into init-tx block-props-tx))
-    (swap! (:ignored-properties import-state) into ignored-properties)))
-
-(defn- <export-simple-page-property-files
-  [conn simple-files <read-file {:keys [set-ui-state]
-                                 :or {set-ui-state (constantly nil)}
-                                 :as options}]
-  (p/loop [remaining-files simple-files
-           issues []]
-    (if (seq remaining-files)
-      (let [{:keys [simple-files remaining-files]}
-            (simple-files-before-property-migration @conn remaining-files)]
-        (if (seq simple-files)
-          (p/let [_ (set-ui-state [:graph/importing-state :percent] 55)
-                  _ (set-ui-state [:graph/importing-state :phase] :building-graph)
-                  _ (import-simple-page-property-files! conn simple-files options)]
-            (p/recur remaining-files issues))
-          (p/let [result (<export-ordered-doc-files
-                          conn [(:file (first remaining-files))] <read-file
-                          (assoc options :set-ui-state (constantly nil)))]
-            (p/recur (rest remaining-files) (into issues (:issues result))))))
-      {:issues issues})))
-
-(defn- <export-page-property-file-groups
-  [conn groups <read-file options]
-  (p/loop [remaining-groups groups
-           issues []]
-    (if-let [{:keys [kind files]} (first remaining-groups)]
-      (p/let [result
-              (case kind
-                :simple
-                (<export-simple-page-property-files conn files <read-file options)
-
-                :fallback
-                (<export-ordered-doc-files
-                 conn files <read-file
-                 (assoc options :set-ui-state (constantly nil))))]
-        (p/recur (rest remaining-groups) (into issues (:issues result))))
-      {:issues issues})))
-
 (defn- <export-doc-files-with-simple-page-property-batch
-  [conn doc-files <read-file {:keys [rpath-key import-state]
+  [conn doc-files <read-file {:keys [rpath-key import-state set-ui-state]
+                              :or {set-ui-state (constantly nil)}
                               :as options}]
   (if-not (simple-page-property-import-supported? doc-files options)
     (export-doc-files conn doc-files <read-file options)
-    (let [doc-files (ordered-doc-files doc-files)]
-      (index-journal-page-name-uuids! doc-files import-state)
-      (p/let [groups (<partition-simple-page-property-files
-                       doc-files <read-file rpath-key options)
-              file-result (<export-page-property-file-groups
-                           conn groups <read-file options)]
-        (<finalize-export-doc-files conn file-result options)))))
+    (p/let [{:keys [simple-files fallback-files]}
+            (<partition-simple-page-property-files
+             (ordered-doc-files doc-files) <read-file rpath-key options)
+            _ (when (seq simple-files)
+                (p/do!
+                 (set-ui-state [:graph/importing-state :percent] 55)
+                 (set-ui-state [:graph/importing-state :phase] :building-graph)))
+            _ (when (seq simple-files)
+                (let [extract-started (extract/performance-now-ms)
+                      {:keys [build-options property-schemas ordinary-page-titles]}
+                      (build-simple-page-property-options simple-files)
+                      _ (extract/record-performance!
+                         options :extract-normalize extract-started
+                         {:files (count simple-files)
+                          :parser :simple-page-properties})
+                      construct-started (extract/performance-now-ms)
+                      {:keys [init-tx block-props-tx]}
+                      (sqlite-build/build-blocks-tx build-options)
+                      init-tx (into init-tx (map ordinary-page) ordinary-page-titles)
+                      base-db @conn
+                      init-tx-id (inc (:max-tx base-db))
+                      properties-tx-id (inc init-tx-id)
+                      init-tx (prepare-simple-page-init-tx
+                               init-tx block-props-tx init-tx-id)
+                      block-props-tx' (prepare-simple-page-properties-tx
+                                       init-tx block-props-tx property-schemas properties-tx-id)
+                      _ (extract/record-performance!
+                         options :graph-tx-construct construct-started
+                         {:files (count simple-files)
+                          :init-entities (count init-tx)
+                          :property-entities (count block-props-tx')})
+                      {:keys [db new-datoms]}
+                      (build-direct-import-db
+                       base-db init-tx block-props-tx' init-tx-id properties-tx-id options)]
+                  (reset! conn db)
+                  (swap! (::file-import-batch-tx-data options) into new-datoms)
+                  (seed-simple-page-property-import-state!
+                   import-state property-schemas (into init-tx block-props-tx))))
+            fallback-result (if (seq fallback-files)
+                              (export-doc-files conn fallback-files <read-file
+                                                (assoc options :set-ui-state (constantly nil)))
+                              {:issues []})]
+      fallback-result)))
 
 (defn- <export-doc-files-atomically
   "Exports document files on one isolated connection and publishes the completed
