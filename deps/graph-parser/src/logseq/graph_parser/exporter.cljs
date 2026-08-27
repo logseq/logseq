@@ -2855,7 +2855,7 @@
                              :file-idx (inc idx)})
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
-              content (<read-file file)
+              content (or (:content file) (<read-file file))
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
               created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
@@ -3017,6 +3017,36 @@
                  doc-files)
         (range)))
 
+(defn export-doc-files
+  "Exports all user created files i.e. under journals/ and pages/.
+   Recommended to use build-doc-options and pass that as options"
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
+                               :or {set-ui-state (constantly nil) notify-user prn
+                                    on-tx-report (constantly nil)}
+                               :as options}]
+  (set-ui-state [:graph/importing-state :total] (count *doc-files))
+  (import-progress! options {:step :doc-files :total-files (count *doc-files)})
+  (let [doc-files (ordered-doc-files *doc-files)]
+    (index-journal-page-name-uuids! doc-files (:import-state options))
+    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
+                 i 0]
+          (when-not (>= i (dec (count doc-files)))
+            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
+                     (inc i))))
+        (p/then (fn [_]
+                  (p/let [_ (import-progress! options {:phase :normalize-journal-uuids})
+                          normalize-tx-report (normalize-journal-uuids! conn)
+                          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
+                          _ (import-progress! options {:phase :cleanup-missing-block-refs})
+                          cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
+                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
+                    cleanup-tx-report)))
+        (p/catch (fn [e]
+                   (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
+                                 :level :error
+                                 :ex-data {:error e}})
+                   (throw e))))))
+
 (def ^:private bulk-page-property-line-re #"^([^\s:][^:]*)::\s*(.*)$")
 
 (defn- normalize-bulk-property-name
@@ -3166,7 +3196,7 @@
                            fallback-files)
                   (p/recur (rest remaining-files)
                            simple-files
-                           (conj fallback-files file)))))))
+                           (conj fallback-files (assoc file :content content))))))))
         {:simple-files simple-files
          :fallback-files fallback-files}))))
 
@@ -3591,7 +3621,7 @@
        (some? rpath-key)
        (not-any? #(string/starts-with? (node-path/basename (:path %)) "hls__") doc-files)
        (true? (:convert-all-tags? user-options))
-       (true? (:remove-inline-tags? user-options))
+       (not (false? (:remove-inline-tags? user-options)))
        (empty? (:tag-classes user-options))
        (empty? (:property-classes user-options))
        (empty? (:property-parent-classes user-options))))
@@ -3651,37 +3681,6 @@
                                       _ (when cleanup-tx-report ((or (:on-tx-report options) (constantly nil)) cleanup-tx-report))]
                                 cleanup-tx-report))]
       fallback-result)))
-
-(defn export-doc-files
-  "Exports all user created files i.e. under journals/ and pages/.
-   Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
-                               :or {set-ui-state (constantly nil) notify-user prn
-                                    on-tx-report (constantly nil)}
-                               :as options}]
-  (set-ui-state [:graph/importing-state :total] (count *doc-files))
-  (import-progress! options {:step :doc-files :total-files (count *doc-files)})
-  (let [doc-files (ordered-doc-files *doc-files)]
-    (index-journal-page-name-uuids! doc-files (:import-state options))
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
-                 i 0]
-          (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
-                     (inc i))))
-        (p/then (fn [_]
-                  (p/let [_ (import-progress! options {:phase :normalize-journal-uuids})
-                          normalize-tx-report (normalize-journal-uuids! conn)
-                          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
-                          _ (import-progress! options {:phase :cleanup-missing-block-refs})
-                          cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
-                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
-                    cleanup-tx-report)))
-        (p/catch (fn [e]
-                   (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
-                                 :level :error
-                                 :ex-data {:error e}})
-                   (throw e))))))
-
 (defn- <export-doc-files-atomically
   "Exports document files on an isolated connection and persists once at the end."
   [conn *doc-files <read-file options]
@@ -3699,7 +3698,6 @@
                        :on-tx-report (constantly nil)))))]
       (when tx-report
         (on-tx-report tx-report)))))
-
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
                         :file/content content
