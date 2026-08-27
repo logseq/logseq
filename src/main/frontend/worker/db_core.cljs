@@ -337,6 +337,7 @@
                          :import-state {}
                          :notifications []
                          :issues []
+                         :staged-assets []
                          :performance-events []}
         failures (atom [])
         recovered-data

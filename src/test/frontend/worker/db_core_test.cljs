@@ -2955,15 +2955,18 @@
                 run-id
                 {:validation {:status :passed}
                  :issues []
-                 :import-state {:diagnostic (fn [])}})
+                 :import-state {:diagnostic (fn [])}
+                 :staged-assets [{:payload (fn [])}]})
         recovered (#'db-core/ensure-serializable-import-terminal-result run-id result)]
     (is (= {:status :completed-with-errors
             :phase :completed
             :validation {:status :passed}
+            :staged-assets []
             :issue-codes [:import/recoverable-step-failed]}
            {:status (:status recovered)
             :phase (:phase recovered)
             :validation (:validation recovered)
+            :staged-assets (:staged-assets recovered)
             :issue-codes (mapv :code (:issues recovered))}))
     (is (= recovered
            (file-graph-import/normalize-terminal-result run-id recovered)))
